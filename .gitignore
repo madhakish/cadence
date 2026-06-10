@@ -61,3 +61,10 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
+
+# XcodeGen — Comeback.xcodeproj is generated from project.yml
+*.xcodeproj
+
+.DS_Store
+.swiftpm/
+DerivedData/

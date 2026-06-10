@@ -1,0 +1,241 @@
+import Foundation
+import SwiftData
+import ComebackCore
+
+/// First-launch seed: exercise library, gym, program state, and the real
+/// training history so charts, PRs, and suggestions work on day one.
+enum Seeder {
+
+    static func seedIfNeeded(context: ModelContext) {
+        let existing = (try? context.fetch(FetchDescriptor<AppSettings>())) ?? []
+        if let settings = existing.first, settings.seededAt != nil { return }
+
+        let settings = existing.first ?? {
+            let s = AppSettings()
+            context.insert(s)
+            return s
+        }()
+
+        let exercises = seedExercises(context: context)
+        seedGym(context: context)
+        seedBodyweight(context: context)
+        seedHistory(context: context, exercises: exercises)
+        seedTracks(context: context)
+
+        settings.seededAt = .now
+        try? context.save()
+    }
+
+    // MARK: - Exercise library (exact seed list)
+
+    private static func seedExercises(context: ModelContext) -> [String: Exercise] {
+        let main: [Exercise] = [
+            Exercise(name: "Deadlift", category: .main, type: .barbell, defaultRestSeconds: 300),
+            Exercise(name: "Back Squat", category: .main, type: .barbell, defaultRestSeconds: 300, watchSite: .leftHip),
+            Exercise(
+                name: "Barbell Bench", category: .main, type: .barbell, defaultRestSeconds: 300,
+                isShelved: true,
+                shelvedNote: "Shelved — left shoulder. Re-entry test: symmetric DB pressing, no 'not there' feeling.",
+                watchSite: .leftShoulder
+            ),
+            Exercise(name: "Incline DB Press", category: .main, type: .dumbbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Flat DB Press", category: .main, type: .dumbbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Seated Upright DB Press", category: .main, type: .dumbbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Overhead DB Press", category: .main, type: .dumbbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Push Press", category: .main, type: .barbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
+        ]
+        let accessory: [Exercise] = [
+            Exercise(name: "Turkish Get-up", category: .accessory, type: .kettlebell, isUnilateral: true, defaultRestSeconds: 90),
+            Exercise(name: "Single-arm DB Row", category: .accessory, type: .dumbbell, isUnilateral: true, defaultRestSeconds: 90),
+            Exercise(name: "Lat Pulldown", category: .accessory, type: .machine, defaultRestSeconds: 90),
+            Exercise(name: "Chest-supported Row", category: .accessory, type: .machine, defaultRestSeconds: 90),
+            Exercise(name: "Ring Row", category: .accessory, type: .bodyweight, defaultRestSeconds: 90, notes: "Face-pull style"),
+            Exercise(name: "Band Pull-aparts", category: .accessory, type: .band, defaultRestSeconds: 60),
+            Exercise(name: "Face Pulls", category: .accessory, type: .machine, defaultRestSeconds: 90),
+            Exercise(name: "Y-T-W Raises", category: .accessory, type: .dumbbell, defaultRestSeconds: 60),
+            Exercise(name: "Band External Rotation", category: .accessory, type: .band, isUnilateral: true, defaultRestSeconds: 60, watchSite: .leftShoulder),
+            Exercise(name: "DB Curls", category: .accessory, type: .dumbbell, defaultRestSeconds: 90),
+            Exercise(name: "DB Overhead Triceps Extension", category: .accessory, type: .dumbbell, defaultRestSeconds: 90),
+            Exercise(name: "Walking Lunges", category: .accessory, type: .bodyweight, isUnilateral: true, defaultRestSeconds: 90, watchSite: .leftHip),
+            Exercise(name: "GHD Sit-up", category: .accessory, type: .bodyweight, defaultRestSeconds: 90),
+            Exercise(name: "Plank", category: .accessory, type: .timed, defaultRestSeconds: 60),
+            Exercise(name: "Side Plank", category: .accessory, type: .timed, isUnilateral: true, defaultRestSeconds: 60),
+            Exercise(name: "KB Swing", category: .accessory, type: .kettlebell, defaultRestSeconds: 90),
+            Exercise(name: "KB Clean", category: .accessory, type: .kettlebell, isUnilateral: true, defaultRestSeconds: 90),
+            Exercise(name: "Dips", category: .accessory, type: .bodyweight, defaultRestSeconds: 90, watchSite: .leftShoulder),
+        ]
+        let conditioning: [Exercise] = [
+            Exercise(name: "Walk", category: .conditioning, type: .conditioning, defaultRestSeconds: 0, notes: "Distance / time / incline"),
+            Exercise(name: "Run-Walk Intervals", category: .conditioning, type: .conditioning, defaultRestSeconds: 0,
+                     notes: "Jog min / walk min × rounds", watchSite: .rightKnee),
+            Exercise(name: "Bike", category: .conditioning, type: .conditioning, defaultRestSeconds: 0),
+            Exercise(name: "Ruck", category: .conditioning, type: .conditioning, defaultRestSeconds: 0),
+        ]
+
+        var byName: [String: Exercise] = [:]
+        for ex in main + accessory + conditioning {
+            context.insert(ex)
+            byName[ex.name] = ex
+        }
+        return byName
+    }
+
+    private static func seedGym(context: ModelContext) {
+        let gym = Gym(name: "Main Gym", isDefault: true, defaultBar: .bar45lb)
+        context.insert(gym)
+    }
+
+    private static func seedBodyweight(context: ModelContext) {
+        context.insert(BodyweightEntry(date: date(2026, 1, 10), weightLb: 168, milestoneLabel: "Discharge"))
+        context.insert(BodyweightEntry(date: date(2026, 5, 12), weightLb: 190))
+        context.insert(BodyweightEntry(date: date(2026, 6, 7), weightLb: 194))
+    }
+
+    // MARK: - Program state on first launch
+
+    private static func seedTracks(context: ModelContext) {
+        // Deadlift just banked Wk2 Load → next Wk3 Peak 3×3 (~245).
+        context.insert(LiftTrack(
+            exerciseName: "Deadlift", mode: .cycle, cycleNumber: 1,
+            baseWeightLb: 210, nextPhase: .peak, incrementLb: 10
+        ))
+        // Squat banked Wk1 Volume at 175 → next Wk2 Load 5×3 (~195).
+        context.insert(LiftTrack(
+            exerciseName: "Back Squat", mode: .cycle, cycleNumber: 1,
+            baseWeightLb: 175, nextPhase: .load, incrementLb: 10
+        ))
+        // DB press progressing linearly at 45s.
+        context.insert(LiftTrack(
+            exerciseName: "Incline DB Press", mode: .linear,
+            baseWeightLb: 45, incrementLb: 5
+        ))
+    }
+
+    // MARK: - Session history (exact seed log, 2026)
+
+    private static func seedHistory(context: ModelContext, exercises ex: [String: Exercise]) {
+        func session(_ m: Int, _ d: Int, note: String = "") -> WorkoutSession {
+            let s = WorkoutSession(date: date(2026, m, d), notes: note, gymName: "Main Gym")
+            s.isCompleted = true
+            context.insert(s)
+            return s
+        }
+
+        func entry(_ s: WorkoutSession, _ order: Int, _ name: String, note: String = "") -> SessionExercise {
+            let e = SessionExercise(order: order, exercise: ex[name], notes: note)
+            e.session = s
+            context.insert(e)
+            s.exercises.append(e)
+            return e
+        }
+
+        @discardableResult
+        func add(_ e: SessionExercise, _ w: Double, _ r: Int, sets n: Int = 1,
+                 warm: Bool = false, perSide: Bool = false, flags: [SetFlag] = [],
+                 site: BodySite? = nil, siteNote: String? = nil) -> SessionExercise {
+            for _ in 0..<n {
+                let set = SetEntry(
+                    order: e.sets.count, weightLb: w, reps: r, isWarmup: warm,
+                    isPerSide: perSide, flags: flags, bodyFlagSite: site, bodyFlagNote: siteNote
+                )
+                set.sessionExercise = e
+                context.insert(set)
+                e.sets.append(set)
+            }
+            return e
+        }
+
+        // May 9 — Deadlift ramp + 221×3. Push press 88 3×3.
+        let s1 = session(5, 9)
+        let dl1 = entry(s1, 0, "Deadlift")
+        add(dl1, 133, 5, warm: true); add(dl1, 155, 5, warm: true)
+        add(dl1, 177, 5, warm: true); add(dl1, 199, 3, warm: true)
+        add(dl1, 221, 3)
+        add(entry(s1, 1, "Push Press"), 88, 3, sets: 3)
+
+        // May 12 — Squat. Bench. Incline DB stopped on wobble.
+        let s2 = session(5, 12)
+        let sq2 = entry(s2, 0, "Back Squat")
+        add(sq2, 145, 3); add(sq2, 155, 3, sets: 2)
+        add(entry(s2, 1, "Barbell Bench"), 135, 5)
+        let idb2 = entry(s2, 2, "Incline DB Press")
+        add(idb2, 35, 5); add(idb2, 40, 5)
+        add(idb2, 45, 3, sets: 2, flags: [.wobble, .stoppedEarly])
+
+        // May 15 — Deadlift 221×3. TGU. GHD. Incline DB.
+        let s3 = session(5, 15)
+        add(entry(s3, 0, "Deadlift"), 221, 3)
+        add(entry(s3, 1, "Turkish Get-up"), 35, 3, perSide: true)
+        add(entry(s3, 2, "GHD Sit-up"), 0, 5, sets: 3)
+        add(entry(s3, 3, "Incline DB Press"), 40, 5, sets: 3)
+
+        // May 19 — Squat. Bench autoregulated from 140 plan.
+        let s4 = session(5, 19)
+        let sq4 = entry(s4, 0, "Back Squat")
+        add(sq4, 165, 3, sets: 2); add(sq4, 175, 3)
+        let bb4 = entry(s4, 1, "Barbell Bench", note: "Autoregulated from 140 plan")
+        bb4.plannedWeightLb = 140
+        add(bb4, 135, 5, sets: 2)
+
+        // May 22 — Deadlift volume + heavy doubles. Incline DB. Triceps.
+        let s5 = session(5, 22)
+        let dl5 = entry(s5, 0, "Deadlift")
+        add(dl5, 210, 5, sets: 3); add(dl5, 221, 2, sets: 3)
+        add(entry(s5, 1, "Incline DB Press"), 45, 5, sets: 3)
+        add(entry(s5, 2, "DB Overhead Triceps Extension"), 45, 10, sets: 3)
+
+        // May 26 — Squat 155 5×5. Seated press. Rows. Lunges.
+        let s6 = session(5, 26)
+        add(entry(s6, 0, "Back Squat"), 155, 5, sets: 5)
+        add(entry(s6, 1, "Seated Upright DB Press"), 40, 5, sets: 5)
+        add(entry(s6, 2, "Single-arm DB Row"), 60, 8, sets: 3, perSide: true)
+        add(entry(s6, 3, "Walking Lunges"), 0, 8, perSide: true)
+
+        // May 29 — Deadlift Cycle 1 Wk1 Volume. 90°F gym, cut short.
+        let s7 = session(5, 29, note: "90°F gym, cut short")
+        let dl7 = entry(s7, 0, "Deadlift")
+        dl7.phase = .volume
+        add(dl7, 210, 5, sets: 5)
+        add(entry(s7, 1, "Overhead DB Press"), 35, 6, sets: 3)
+        add(entry(s7, 2, "Turkish Get-up"), 45, 3, perSide: true)
+
+        // Jun 1 — Squat Wk1 Volume at 175 (milestone).
+        let s8 = session(6, 1)
+        let sq8 = entry(s8, 0, "Back Squat")
+        sq8.phase = .volume
+        add(sq8, 175, 5, sets: 5)
+        add(entry(s8, 1, "Overhead DB Press"), 30, 10, sets: 3)
+        add(entry(s8, 2, "DB Curls"), 35, 5, sets: 3)
+        add(entry(s8, 3, "Walking Lunges"), 0, 10, perSide: true)
+        context.insert(Milestone(
+            date: date(2026, 6, 1), exerciseName: "Back Squat",
+            kind: .heaviestSet, label: "175×5×5 — Wk1 Volume banked"
+        ))
+
+        // Jun 4 — Barbell bench shelved on left-shoulder signal.
+        let s9 = session(6, 4, note: "Left shoulder 'not there' on barbell bench — shelved. DB pressing from here.")
+        let bb9 = entry(s9, 0, "Barbell Bench")
+        add(bb9, 135, 3, sets: 4, site: .leftShoulder, siteNote: "'Not there' feeling — shelving barbell bench")
+        add(entry(s9, 1, "Flat DB Press", note: "Switched after shelving barbell"), 45, 5, sets: 3)
+        add(entry(s9, 2, "Single-arm DB Row"), 65, 8, sets: 5, perSide: true)
+        add(entry(s9, 3, "GHD Sit-up"), 0, 5, sets: 4)
+
+        // Jun 7 — Deadlift Wk2 Load 232×5×3, heaviest of the comeback.
+        let s10 = session(6, 7)
+        let dl10 = entry(s10, 0, "Deadlift")
+        dl10.phase = .load
+        add(dl10, 232, 3, sets: 5)
+        add(entry(s10, 1, "Turkish Get-up"), 45, 3, perSide: true)
+        add(entry(s10, 2, "Incline DB Press"), 45, 5, sets: 3)
+        context.insert(Milestone(
+            date: date(2026, 6, 7), exerciseName: "Deadlift",
+            kind: .heaviestSet, label: "232×5×3 — heaviest pull of the comeback"
+        ))
+    }
+
+    private static func date(_ y: Int, _ m: Int, _ d: Int, hour: Int = 17) -> Date {
+        var comps = DateComponents()
+        comps.year = y; comps.month = m; comps.day = d; comps.hour = hour
+        return Calendar.current.date(from: comps) ?? .now
+    }
+}
