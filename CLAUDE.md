@@ -32,6 +32,9 @@ ARE the version-bump and changelog mechanism. Use them correctly:
 - Never hand-bump versions. (`MARKETING_VERSION` in `project.yml` is currently
   static; the released tag/filenames carry the real version.)
 - Scopes are fine: `fix(ci):`, `feat(release):`, etc.
+- Avoid `#word` tokens in commit messages (e.g. write "the Predicate macro",
+  not "#Predicate") — the release-notes generator parses them as issue
+  references and emits bogus "closes #…" links.
 
 ## Build & Test
 
