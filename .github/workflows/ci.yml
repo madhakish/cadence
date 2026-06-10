@@ -61,3 +61,27 @@ jobs:
             dist/Comeback-unsigned.ipa
             dist/Comeback-simulator.app.zip
           if-no-files-found: error
+
+  release:
+    name: Semantic release
+    needs: [core-tests, app-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Download installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: Comeback-installer
+          path: dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx --yes -p semantic-release@24 -p @semantic-release/exec@6 semantic-release
