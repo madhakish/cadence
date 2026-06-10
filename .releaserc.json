@@ -1,0 +1,25 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "mkdir -p release-assets && cp dist/Comeback-unsigned.ipa release-assets/Comeback-${nextRelease.version}-unsigned.ipa && cp dist/Comeback-simulator.app.zip release-assets/Comeback-${nextRelease.version}-simulator.app.zip"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          { "path": "release-assets/*-unsigned.ipa", "label": "Unsigned device build (re-sign to sideload)" },
+          { "path": "release-assets/*-simulator.app.zip", "label": "iOS Simulator app" }
+        ],
+        "successComment": false,
+        "failComment": false
+      }
+    ]
+  ]
+}
