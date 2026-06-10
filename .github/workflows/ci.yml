@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:5.10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run unit tests
         working-directory: ComebackCore
         run: swift test
@@ -21,7 +21,7 @@ jobs:
     name: App build (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
