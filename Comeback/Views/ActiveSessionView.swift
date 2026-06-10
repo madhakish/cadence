@@ -260,7 +260,8 @@ private struct FlagToggle: View {
     let flag: SetFlag
     var onLogged: () -> Void
 
-    private var isOn: Bool { set.flags.contains(flag) }
+    // `self.` keeps the parser from reading `set` as a setter declaration
+    private var isOn: Bool { self.set.flags.contains(flag) }
 
     var body: some View {
         Button {

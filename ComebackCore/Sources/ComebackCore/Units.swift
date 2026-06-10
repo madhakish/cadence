@@ -32,7 +32,10 @@ public enum Weight {
         if rounded == rounded.rounded() {
             return String(format: "%.0f", rounded)
         }
-        return String(format: "%.\(decimals)f", rounded)
+        var s = String(format: "%.\(decimals)f", rounded)
+        while s.hasSuffix("0") { s.removeLast() }
+        if s.hasSuffix(".") { s.removeLast() }
+        return s
     }
 
     /// "232 lb / 105.4 kg"
