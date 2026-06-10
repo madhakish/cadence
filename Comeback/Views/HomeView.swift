@@ -123,8 +123,10 @@ struct HomeView: View {
         let session = WorkoutSession(gymName: defaultGym?.name)
         context.insert(session)
 
+        // #Predicate can't reference properties of captured objects; capture the value
+        let exerciseName = track.exerciseName
         let descriptor = FetchDescriptor<Exercise>(
-            predicate: #Predicate { $0.name == track.exerciseName }
+            predicate: #Predicate { $0.name == exerciseName }
         )
         let exercise = try? context.fetch(descriptor).first
 
