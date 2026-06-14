@@ -68,3 +68,7 @@ fastlane/test_output
 .DS_Store
 .swiftpm/
 DerivedData/
+
+# Web PWA (node only used for tests; no build step)
+node_modules/
+web/node_modules/

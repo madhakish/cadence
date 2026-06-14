@@ -1,0 +1,180 @@
+// Port of the ComebackCore XCTest suite. Run: node tests/core.test.mjs
+// Keeps the JS math in lockstep with the Swift source of truth.
+import * as C from "../js/core.js";
+
+let pass = 0, fail = 0;
+const approx = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
+function ok(cond, msg) { if (cond) { pass++; } else { fail++; console.error("FAIL:", msg); } }
+function eq(a, b, msg) { ok(a === b, `${msg} (got ${a}, want ${b})`); }
+function near(a, b, eps, msg) { ok(approx(a, b, eps), `${msg} (got ${a}, want ${b}±${eps})`); }
+const kgPerSide = (sol) => sol.perSide.reduce((s, pc) => s + pc.plate.value * pc.count, 0);
+
+// ---- Units ----
+near(C.kgFromLb(C.lbFromKg(42.5)), 42.5, 1e-9, "kg/lb round trip");
+near(C.lbFromKg(20), 44.0924, 0.001, "20kg→lb");
+near(C.kgFromLb(45), 20.4117, 0.001, "45lb→kg");
+near(C.toLb(100, "lb"), 100, 1e-9, "toLb lb");
+near(C.toLb(100, "kg"), 220.462, 0.001, "toLb kg");
+eq(C.trim(232.0), "232", "trim integer");
+eq(C.trim(232.39), "232.4", "trim 1dp");
+eq(C.trim(2.5, 2), "2.5", "trim 2dp trailing zero");
+eq(C.trim(1.25, 2), "1.25", "trim 2dp");
+eq(C.both(232), "232 lb / 105.2 kg", "both format");
+eq(C.unitFormat("lbPrimary", 232), "232 lb", "lbPrimary");
+eq(C.unitFormat("kgPrimary", 232), "105.2 kg", "kgPrimary");
+eq(C.unitFormat("both", 232), "232 lb / 105.2 kg", "both mode");
+
+// ---- Rounding ----
+eq(C.roundTo(192.5, 5), 195, "round 192.5");
+eq(C.roundTo(246.75, 5), 245, "round 246.75");
+eq(C.roundTo(162.75, 5), 165, "round 162.75");
+
+// ---- Plate math ----
+let s = C.solve(135, C.BARS.bar45lb, C.STANDARD_LB);
+near(s.totalLb, 135, 1e-9, "135 total");
+ok(!s.isOffTarget, "135 on target");
+eq(s.perSide.length, 1, "135 one denom");
+eq(s.perSide[0].plate.value, 45, "135 uses 45");
+eq(s.perSide[0].count, 1, "135 one plate");
+
+s = C.solve(225, C.BARS.bar45lb, C.STANDARD_LB);
+near(s.totalLb, 225, 1e-9, "225 total");
+eq(s.perSide[0].plate.value, 45, "225 uses 45");
+eq(s.perSide[0].count, 2, "225 two 45s");
+
+s = C.solve(232, C.BARS.bar45lb, C.STANDARD_KG);
+near(s.totalLb, 232.39, 0.01, "232 kg total");
+ok(!s.isOffTarget, "232 on target");
+near(kgPerSide(s), 42.5, 1e-9, "232 → 42.5kg/side");
+near(C.kgFromLb(s.totalLb), 105.41, 0.01, "232 kg readout");
+
+let plates = [{ value: 45, unit: "lb" }, { value: 15, unit: "kg" }];
+s = C.solve(200, C.BARS.bar45lb, plates);
+near(s.totalLb, 201.14, 0.01, "mixed 200 total");
+ok(!s.isOffTarget, "mixed 200 on target");
+ok(new Set(s.perSide.map((pc) => pc.plate.unit)).size === 2, "mixed units on a side");
+
+s = C.solve(156, C.BARS.bar45lb, [...C.STANDARD_LB, { value: 25, unit: "kg" }]);
+eq(s.perSide.length, 1, "156 one denom");
+eq(s.perSide[0].plate.unit, "kg", "156 picks kg 25");
+ok(!s.isOffTarget, "156 on target");
+
+s = C.solve(100, C.BARS.bar45lb, [{ value: 45, unit: "lb" }]);
+near(s.totalLb, 135, 1e-9, "100→135");
+ok(s.isOffTarget, "100 off target");
+near(s.deviationLb, 35, 1e-9, "100 dev 35");
+
+s = C.solve(40, C.BARS.bar45lb, C.STANDARD_LB);
+ok(s.perSide.length === 0, "40 bar only");
+near(s.totalLb, 45, 1e-9, "40→45");
+ok(s.isOffTarget, "40 off target");
+
+s = C.solve(137, C.BARS.bar45lb, [{ value: 45, unit: "lb" }]);
+near(s.totalLb, 135, 1e-9, "137→135");
+ok(!s.isOffTarget, "137 exactly 2lb off, no warn");
+
+s = C.solve(95, C.BARS.bar45lb, C.STANDARD_LB);
+eq(s.perSide.length, 1, "95 fewer plates");
+eq(s.perSide[0].plate.value, 25, "95 uses one 25");
+
+let perSide = [
+  { plate: { value: 45, unit: "lb" }, count: 1 },
+  { plate: { value: 15, unit: "kg" }, count: 1 },
+];
+near(C.totalOnBar(C.BARS.bar45lb, perSide), 201.14, 0.01, "reverse mixed total");
+near(C.kgFromLb(C.totalOnBar(C.BARS.bar45lb, perSide)), 91.23, 0.01, "reverse mixed kg");
+near(C.totalOnBar(C.BARS.bar20kg, []), 44.09, 0.01, "reverse bar only 20kg");
+
+s = C.solve(C.lbFromKg(100), C.BARS.bar20kg, C.STANDARD_KG);
+near(s.deviationLb, 0, 1e-9, "100kg exact");
+near(kgPerSide(s), 40, 1e-9, "100kg→40kg/side");
+
+// ---- Warmup ramp ----
+let r = C.warmupRamp(245);
+ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45, 100, 135, 170, 210]), "ramp 245 weights");
+ok(JSON.stringify(r.map((x) => x.reps)) === JSON.stringify([10, 5, 3, 2, 1]), "ramp 245 reps");
+r = C.warmupRamp(65);
+ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45, 55]), "ramp 65");
+r = C.warmupRamp(45);
+ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45]) && r[0].reps === 10, "ramp 45 bar only");
+for (let w = 50; w <= 500; w += 7.5) {
+  for (const set of C.warmupRamp(w).slice(1)) ok(set.weightLb < w, `ramp ${w} below working`);
+}
+
+// ---- Program engine ----
+let plan = C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 3, incrementLb: 10 });
+eq(plan.weightLb, 245, "DL peak weight"); eq(plan.sets, 3, "DL peak sets");
+eq(plan.reps, 3, "DL peak reps"); eq(plan.phase, 3, "DL peak phase");
+plan = C.planFor({ cycleNumber: 1, baseWeightLb: 175, nextPhase: 2, incrementLb: 10 });
+eq(plan.weightLb, 195, "SQ load weight"); eq(plan.sets, 5, "SQ load sets"); eq(plan.reps, 3, "SQ load reps");
+plan = C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 1, incrementLb: 10 });
+eq(plan.weightLb, 210, "volume = base"); eq(plan.sets, 5, "vol sets"); eq(plan.reps, 5, "vol reps");
+plan = C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 4, incrementLb: 10 });
+eq(plan.weightLb, 165, "deload weight"); eq(plan.sets, 3, "deload sets"); eq(plan.reps, 5, "deload reps");
+ok(plan.weightLb / 210 >= 0.75 && plan.weightLb / 210 <= 0.80, "deload band");
+
+let st = { cycleNumber: 1, baseWeightLb: 210, nextPhase: 1, incrementLb: 10 };
+st = C.advancing(st, 1); eq(st.nextPhase, 2, "advance vol→load");
+st = C.advancing(st, 2); eq(st.nextPhase, 3, "advance load→peak");
+st = C.advancing(st, 3); eq(st.nextPhase, 4, "advance peak→deload");
+eq(st.baseWeightLb, 210, "no mid-cycle base change"); eq(st.cycleNumber, 1, "no mid-cycle number change");
+let lower = C.advancing({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 4, incrementLb: 10 }, 4);
+eq(lower.cycleNumber, 2, "rollover cycle"); eq(lower.baseWeightLb, 220, "rollover +10"); eq(lower.nextPhase, 1, "rollover→volume");
+let upper = C.advancing({ cycleNumber: 1, baseWeightLb: 95, nextPhase: 4, incrementLb: 5 }, 4);
+eq(upper.baseWeightLb, 100, "upper rollover +5");
+
+eq(C.droppedLoad(232), 215, "drop 232");
+eq(C.droppedLoad(100), 95, "drop 100");
+eq(C.droppedLoad(50), 45, "drop never below bar");
+eq(C.droppedLoad(45), 45, "drop at bar");
+ok(C.droppedLoad(65) < 65 && C.droppedLoad(65) >= 45, "drop always drops above bar");
+
+// ---- PR detection ----
+const dlHistory = [
+  { weightLb: 221, reps: 3 }, { weightLb: 221, reps: 3 },
+  ...Array(3).fill({ weightLb: 210, reps: 5 }),
+  ...Array(3).fill({ weightLb: 221, reps: 2 }),
+  ...Array(5).fill({ weightLb: 210, reps: 5 }),
+];
+const dlVolumes = [221 * 3, 221 * 3, 210 * 3 * 5 + 221 * 3 * 2, 210 * 5 * 5];
+
+let ev = C.prEvaluate({
+  exercise: "Deadlift",
+  sessionSets: Array(5).fill({ weightLb: 232, reps: 3 }),
+  historySets: dlHistory, historyVolumes: dlVolumes, historySchemes: ["1×3", "3×2", "5×5"],
+});
+let heaviest = ev.find((e) => e.kind === "heaviestSet");
+ok(heaviest, "Jun7 heaviest exists");
+eq(heaviest?.label, "232×5×3 — heaviest deadlift of the comeback", "Jun7 heaviest label");
+ok(ev.some((e) => e.kind === "firstScheme"), "Jun7 first scheme");
+ok(!ev.some((e) => e.kind === "volumePR"), "Jun7 not volume PR");
+
+ev = C.prEvaluate({
+  exercise: "Deadlift",
+  sessionSets: [{ weightLb: 200, reps: 5 }],
+  historySets: dlHistory, historyVolumes: dlVolumes, historySchemes: ["1×3", "3×2", "5×5", "1×5"],
+});
+ok(ev.length === 0, "nothing new → no events");
+
+ev = C.prEvaluate({
+  exercise: "Deadlift",
+  sessionSets: Array(5).fill({ weightLb: 210, reps: 5 }),
+  historySets: [{ weightLb: 221, reps: 3 }], historyVolumes: [663], historySchemes: ["1×3"],
+});
+ok(ev.some((e) => e.kind === "volumePR"), "volume PR detected");
+ok(!ev.some((e) => e.kind === "heaviestSet"), "no heaviest when lighter");
+
+ev = C.prEvaluate({
+  exercise: "Back Squat",
+  sessionSets: Array(5).fill({ weightLb: 175, reps: 5 }),
+  historySets: [], historyVolumes: [], historySchemes: [],
+});
+ok(ev.some((e) => e.kind === "heaviestSet"), "first session heaviest");
+ok(ev.some((e) => e.kind === "firstScheme"), "first session scheme");
+ok(!ev.some((e) => e.kind === "volumePR"), "first session not volume PR");
+
+let top = C.prTopScheme([...Array(5).fill({ weightLb: 175, reps: 5 }), { weightLb: 155, reps: 8 }]);
+eq(top.weightLb, 175, "top weight group"); eq(top.sets, 5, "top sets"); eq(top.reps, 5, "top reps");
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);

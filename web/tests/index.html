@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Comeback — core tests</title>
+  <style>
+    body { background: #0d0d0f; color: #f2f2f4; font: 15px/1.5 -apple-system, system-ui, sans-serif; padding: 16px; }
+    h1 { font-size: 18px; } pre { white-space: pre-wrap; }
+    .ok { color: #34c759; } .fail { color: #ff3b30; }
+  </style>
+</head>
+<body>
+  <h1>Core math parity</h1>
+  <pre id="out">running…</pre>
+  <script type="module">
+    // Mirrors tests/core.test.mjs but in-browser; useful as a sanity check
+    // on a real device. The Node suite is the authoritative one in CI.
+    import * as C from "../js/core.js";
+    const out = document.getElementById("out");
+    let pass = 0, fail = 0; const log = [];
+    const near = (a, b, e = 1e-9) => Math.abs(a - b) <= e;
+    const t = (c, m) => { if (c) pass++; else { fail++; log.push("FAIL: " + m); } };
+    t(C.both(232) === "232 lb / 105.2 kg", "both(232)");
+    t(near(C.solve(225, C.BARS.bar45lb, C.STANDARD_LB).totalLb, 225), "225 solves");
+    t(C.sessionPlanLabel(C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 3, incrementLb: 10 })) === "245 × 3×3 — Wk3 Peak", "DL peak plan");
+    t(C.droppedLoad(232) === 215, "dropped 232→215");
+    t(JSON.stringify(C.warmupRamp(245).map((x) => x.weightLb)) === JSON.stringify([45, 100, 135, 170, 210]), "ramp 245");
+    out.className = fail ? "fail" : "ok";
+    out.textContent = `${pass} passed, ${fail} failed\n` + log.join("\n");
+  </script>
+</body>
+</html>
