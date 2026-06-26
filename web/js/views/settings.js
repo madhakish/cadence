@@ -3,10 +3,10 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
-import { Settings, Gyms, Tracks, Exercises, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded } from "../db.js";
+import { Settings, Gyms, Tracks, Exercises, Programs, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded } from "../db.js";
 
 export async function render(host) {
-  const [settings, gyms, tracks, exercises] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all()]);
+  const [settings, gyms, tracks, exercises, programs] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all(), Programs.all()]);
   const root = ui.h("div");
   const saveS = async () => { await Settings.save(settings); ui.prefs.unitDisplay = settings.unitDisplay; };
 
@@ -46,7 +46,19 @@ export async function render(host) {
   } }));
 
   // Progression
-  root.append(ui.h("div", { class: "section-title", text: "Progression" }));
+  // Program
+  root.append(ui.h("div", { class: "section-title", text: "Program" }));
+  const progList = ui.h("div", { class: "card list" });
+  if (!programs.length) progList.append(ui.h("div", { class: "muted", text: "No program." }));
+  for (const p of programs) {
+    progList.append(ui.h("div", { class: "row", onClick: () => programEditor(p) },
+      ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: p.name }),
+        ui.h("span", { class: "sub", text: `${p.focus} · ${p.days.length} days · Cycle ${p.cycleNumber}, Wk${p.currentWeek}${p.isActive ? " · active" : ""}` })),
+      ui.h("span", { class: "chev" })));
+  }
+  root.append(progList);
+
+  root.append(ui.h("div", { class: "section-title", text: "Progression (standalone lifts)" }));
   const trackList = ui.h("div", { class: "card list" });
   if (!tracks.length) trackList.append(ui.h("div", { class: "muted", text: "No tracked lifts." }));
   for (const t of tracks) {
@@ -119,6 +131,63 @@ function gymEditor(g) {
         body.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "12px" }, text: "Delete gym", onClick: async () => { await Gyms.del(g.name); api.close(); ui.nav.refresh(); } }));
       };
       draw();
+    },
+  });
+}
+
+function programEditor(p) {
+  ui.pushScreen({
+    title: p.name,
+    build: (body) => {
+      body.append(ui.field("Training focus", ui.seg(
+        [{ value: "strength", label: "Strength" }, { value: "hypertrophy", label: "Hypertrophy" }, { value: "maintain", label: "Maintain" }],
+        p.focus, async (v) => { p.focus = v; await Programs.save(p); })));
+      body.append(ui.h("div", { class: "card" },
+        ui.h("div", { class: "row" }, ui.h("span", { text: "Rounding" }),
+          ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
+        ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Active" }),
+          ui.toggle(p.isActive, async (v) => { p.isActive = v; await Programs.save(p); }))));
+      body.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: `Cycle ${p.cycleNumber}, week ${p.currentWeek}. Lifts progress automatically — weights here are the current week-1 base.` }));
+      body.append(ui.h("div", { class: "section-title", text: "Days" }));
+      const list = ui.h("div", { class: "card list" });
+      for (const day of [...p.days].sort((a, b) => a.order - b.order)) {
+        list.append(ui.h("div", { class: "row", onClick: () => programDayEditor(p, day) },
+          ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: day.name }),
+            ui.h("span", { class: "sub", text: day.lifts.map((l) => l.exerciseName).join(" + ") })),
+          ui.h("span", { class: "chev" })));
+      }
+      body.append(list);
+    },
+  });
+}
+
+function programDayEditor(p, day) {
+  ui.pushScreen({
+    title: day.name,
+    build: (body) => {
+      body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
+      for (const l of [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1))) {
+        body.append(ui.h("div", { class: "card" },
+          ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
+            ui.h("span", { class: "title", text: l.exerciseName }), ui.h("span", { class: "pill", text: l.role })),
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Week-1 base" }),
+            ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: p.roundingLb, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
+          ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
+            ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } }))));
+      }
+      body.append(ui.h("div", { class: "section-title", text: "Accessories" }));
+      for (const a of day.accessories) {
+        body.append(ui.h("div", { class: "card" },
+          ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } }, ui.h("span", { class: "title", text: a.exerciseName })),
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Weight" }),
+            ui.stepper(a.weightLb, { min: 0, max: 500, step: 2.5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { a.weightLb = v; await Programs.save(p); } })),
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Sets" }),
+            ui.stepper(a.sets, { min: 1, max: 8, format: (v) => `${v}`, onChange: async (v) => { a.sets = v; await Programs.save(p); } })),
+          ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Rep range" }),
+            ui.h("div", { class: "btn-row" },
+              ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => { a.minReps = v; if (a.currentReps < v) a.currentReps = v; await Programs.save(p); } }),
+              ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => { a.maxReps = v; await Programs.save(p); } })))));
+      }
     },
   });
 }

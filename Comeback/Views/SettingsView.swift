@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Query private var settingsList: [AppSettings]
     @Query(sort: \Gym.name) private var gyms: [Gym]
     @Query(sort: \LiftTrack.exerciseName) private var tracks: [LiftTrack]
+    @Query private var programs: [Program]
 
     @State private var exportJSON: Data?
     @State private var exportCSV: Data?
@@ -87,7 +88,22 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Progression") {
+                Section("Program") {
+                    ForEach(programs) { program in
+                        NavigationLink {
+                            ProgramEditorView(program: program)
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(program.name)
+                                Text("\(program.focus.rawValue) · \(program.days.count) days · Cycle \(program.cycleNumber), Wk\(program.currentWeek)\(program.isActive ? " · active" : "")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
+                Section("Progression (standalone lifts)") {
                     ForEach(tracks) { track in
                         NavigationLink {
                             TrackEditorView(track: track)
@@ -264,5 +280,95 @@ struct TrackEditorView: View {
             }
         }
         .navigationTitle(track.exerciseName)
+    }
+}
+
+// MARK: - Program editor
+
+struct ProgramEditorView: View {
+    @Bindable var program: Program
+
+    var body: some View {
+        Form {
+            Section("Training focus") {
+                Picker("Focus", selection: Binding(get: { program.focus }, set: { program.focus = $0 })) {
+                    Text("Strength").tag(TrainingFocus.strength)
+                    Text("Hypertrophy").tag(TrainingFocus.hypertrophy)
+                    Text("Maintain").tag(TrainingFocus.maintain)
+                }
+                Stepper("Rounding: \(Weight.trim(program.roundingLb)) lb", value: $program.roundingLb, in: 2.5...10, step: 2.5)
+                Toggle("Active", isOn: $program.isActive)
+            }
+            Section {
+                Text("Cycle \(program.cycleNumber), week \(program.currentWeek). Lifts progress automatically — weights are the current week-1 base.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Days") {
+                ForEach(program.orderedDays) { day in
+                    NavigationLink {
+                        ProgramDayEditorView(day: day, step: program.roundingLb)
+                    } label: {
+                        VStack(alignment: .leading) {
+                            Text(day.name)
+                            Text(day.lifts.map(\.exerciseName).joined(separator: " + "))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(program.name)
+    }
+}
+
+struct ProgramDayEditorView: View {
+    @Bindable var day: ProgramDay
+    let step: Double
+
+    var body: some View {
+        Form {
+            Section("Lifts") {
+                ForEach(day.orderedLifts) { lift in
+                    ProgramLiftRow(lift: lift, step: step)
+                }
+            }
+            Section("Accessories") {
+                ForEach(day.accessories) { accessory in
+                    ProgramAccessoryRow(accessory: accessory)
+                }
+            }
+        }
+        .navigationTitle(day.name)
+    }
+}
+
+private struct ProgramLiftRow: View {
+    @Bindable var lift: ProgramLift
+    let step: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(lift.exerciseName).font(.headline)
+                Spacer()
+                Text(lift.role.rawValue).font(.caption).foregroundStyle(.secondary)
+            }
+            Stepper("Week-1 base: \(Weight.trim(lift.baseWeightLb)) lb", value: $lift.baseWeightLb, in: 0...1000, step: step)
+            Stepper("Est. 1RM: \(Weight.trim(lift.estimatedMaxLb)) lb", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
+        }
+    }
+}
+
+private struct ProgramAccessoryRow: View {
+    @Bindable var accessory: ProgramAccessory
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(accessory.exerciseName).font(.headline)
+            Stepper("Weight: \(Weight.trim(accessory.weightLb)) lb", value: $accessory.weightLb, in: 0...500, step: 2.5)
+            Stepper("Sets: \(accessory.sets)", value: $accessory.sets, in: 1...8)
+            Stepper("Min reps: \(accessory.minReps)", value: $accessory.minReps, in: 1...20)
+            Stepper("Max reps: \(accessory.maxReps)", value: $accessory.maxReps, in: 1...30)
+        }
     }
 }

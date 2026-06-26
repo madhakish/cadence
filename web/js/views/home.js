@@ -1,12 +1,12 @@
 // Today — resume/open session, next-up suggestions, gym tag, protein.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { Sessions, Tracks, Gyms, Settings, Protein, iso } from "../db.js";
-import { createSessionFromTrack, createBlankSession, openSession } from "./session.js";
+import { Sessions, Tracks, Gyms, Settings, Protein, Programs, iso } from "../db.js";
+import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, openSession } from "./session.js";
 
 export async function render(host) {
-  const [open, tracks, gym, settings, proteinTotal] = await Promise.all([
-    Sessions.open(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(),
+  const [open, tracks, gym, settings, proteinTotal, program] = await Promise.all([
+    Sessions.open(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(), Programs.active(),
   ]);
   const root = ui.h("div");
 
@@ -15,12 +15,36 @@ export async function render(host) {
       ui.h("button", { class: "btn primary wide", text: `▶︎ Resume session — ${ui.fmtDate(open.date)}`, onClick: () => openSession(open.id) })));
   }
 
-  // Next up
-  root.append(ui.h("div", { class: "section-title", text: "Next up" }));
+  // Program — the next scheduled day
+  const ownedNames = new Set();
+  if (program && program.days.length) {
+    const day = program.days.find((d) => d.order === program.nextDayIndex) || program.days[0];
+    for (const d of program.days) for (const l of d.lifts) ownedNames.add(l.exerciseName);
+    const phase = C.PHASES[program.currentWeek] || C.PHASES[1];
+    root.append(ui.h("div", { class: "section-title", text: `${program.name} · Cycle ${program.cycleNumber}` }));
+    const card = ui.h("div", { class: "card" },
+      ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
+        ui.h("span", { class: "title", text: day.name }),
+        ui.h("span", { class: "pill accent", text: `Wk${program.currentWeek} ${phase.name}` })));
+    const lifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
+    for (const l of lifts) {
+      const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
+      card.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
+        ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: l.exerciseName }),
+          ui.h("span", { class: "sub", text: `${l.role} · ${C.sessionPlanLabel(plan)}` }))));
+    }
+    if (day.accessories.length) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: `+ ${day.accessories.map((a) => a.exerciseName).join(", ")}` }));
+    card.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "10px" }, text: `Start ${day.name}`, onClick: async () => openSession(await createSessionFromProgramDay(program, day)) }));
+    root.append(card);
+  }
+
+  // Next up — standalone tracked lifts not owned by the program
+  const orphanTracks = tracks.filter((t) => !ownedNames.has(t.exerciseName));
+  root.append(ui.h("div", { class: "section-title", text: program ? "Other tracked lifts" : "Next up" }));
   const list = ui.h("div", { class: "card list" });
-  tracks.sort((a, b) => a.exerciseName.localeCompare(b.exerciseName));
-  if (!tracks.length) list.append(ui.h("div", { class: "muted", text: "No tracked lifts yet. Add progression in Settings." }));
-  for (const t of tracks) {
+  orphanTracks.sort((a, b) => a.exerciseName.localeCompare(b.exerciseName));
+  if (!orphanTracks.length) list.append(ui.h("div", { class: "muted", text: program ? "All your tracked lifts are in the program." : "No tracked lifts yet. Add progression in Settings." }));
+  for (const t of orphanTracks) {
     const sug = t.mode === "cycle" ? C.planFor({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb }) : C.linearPlan(t.baseWeightLb);
     list.append(ui.h("div", { class: "row", onClick: () => start(t) },
       ui.h("div", { class: "lead" },

@@ -7,6 +7,7 @@ import ComebackCore
 struct HomeView: View {
     @Environment(\.modelContext) private var context
     @Query private var tracks: [LiftTrack]
+    @Query private var programs: [Program]
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
     @Query private var proteinEntries: [ProteinEntry]
@@ -18,6 +19,23 @@ struct HomeView: View {
 
     private var settings: AppSettings? { settingsList.first }
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
+    private var activeProgram: Program? { programs.first { $0.isActive } ?? programs.first }
+    private var ownedLiftNames: Set<String> {
+        guard let p = activeProgram else { return [] }
+        return Set(p.days.flatMap { $0.lifts.map(\.exerciseName) })
+    }
+
+    private func nextDay(_ program: Program) -> ProgramDay? {
+        program.orderedDays.first { $0.order == program.nextDayIndex } ?? program.orderedDays.first
+    }
+
+    private func programPlanLabel(_ program: Program, _ lift: ProgramLift) -> String {
+        let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
+        let plan = ProgramEngine.plan(
+            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
+            roundingLb: program.roundingLb)
+        return plan.label
+    }
 
     private var todayProtein: Double {
         let cal = Calendar.current
@@ -41,8 +59,37 @@ struct HomeView: View {
                     }
                 }
 
-                Section("Next up") {
-                    ForEach(tracks.sorted { $0.exerciseName < $1.exerciseName }) { track in
+                if let program = activeProgram, let day = nextDay(program) {
+                    Section("\(program.name) · Cycle \(program.cycleNumber)") {
+                        HStack {
+                            Text(day.name).font(.headline)
+                            Spacer()
+                            Text("Wk\(program.currentWeek) \(CyclePhase(rawValue: program.currentWeek)?.name ?? "")")
+                                .font(.caption.bold())
+                                .foregroundStyle(Theme.accent)
+                        }
+                        ForEach(day.orderedLifts) { lift in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(lift.exerciseName).font(.subheadline.bold())
+                                Text("\(lift.role.rawValue) · \(programPlanLabel(program, lift))")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        if !day.accessories.isEmpty {
+                            Text("+ " + day.accessories.map(\.exerciseName).joined(separator: ", "))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Button {
+                            startProgramDay(program, day)
+                        } label: {
+                            Text("Start \(day.name)").frame(maxWidth: .infinity).font(.headline)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+
+                Section(activeProgram == nil ? "Next up" : "Other tracked lifts") {
+                    ForEach(tracks.filter { !ownedLiftNames.contains($0.exerciseName) }.sorted { $0.exerciseName < $1.exerciseName }) { track in
                         Button {
                             startSession(with: track)
                         } label: {
@@ -163,6 +210,12 @@ struct HomeView: View {
     private func startBlankSession() {
         let session = WorkoutSession(gymName: defaultGym?.name)
         context.insert(session)
+        try? context.save()
+        activeSession = session
+    }
+
+    private func startProgramDay(_ program: Program, _ day: ProgramDay) {
+        let session = ProgramSession.make(program: program, day: day, context: context)
         try? context.save()
         activeSession = session
     }
