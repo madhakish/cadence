@@ -21,6 +21,7 @@ enum Seeder {
         seedBodyweight(context: context)
         seedHistory(context: context, exercises: exercises)
         seedTracks(context: context)
+        seedProgram(context: context)
 
         settings.seededAt = .now
         try? context.save()
@@ -109,6 +110,44 @@ enum Seeder {
             exerciseName: "Incline DB Press", mode: .linear,
             baseWeightLb: 45, incrementLb: 5
         ))
+    }
+
+    // MARK: - Default 4-day Upper/Lower program (mirrors web seed.js)
+
+    private static func seedProgram(context: ModelContext) {
+        let program = Program(name: "Upper/Lower 4-Day", focus: .strength)
+        context.insert(program)
+
+        func cyc(_ name: String, _ role: LiftRole, _ base: Double, _ e1rm: Double) -> ProgramLift {
+            ProgramLift(exerciseName: name, role: role, baseWeightLb: base, estimatedMaxLb: e1rm)
+        }
+        func acc(_ name: String, _ weight: Double, _ inc: Double = 5) -> ProgramAccessory {
+            ProgramAccessory(exerciseName: name, sets: 3, minReps: 8, maxReps: 12,
+                             currentReps: 8, weightLb: weight, incrementLb: inc)
+        }
+        func day(_ name: String, _ order: Int, _ lifts: [ProgramLift], _ accessories: [ProgramAccessory]) {
+            let d = ProgramDay(name: name, order: order)
+            d.program = program
+            program.days.append(d)
+            context.insert(d)
+            for l in lifts { l.day = d; d.lifts.append(l); context.insert(l) }
+            for a in accessories { a.day = d; d.accessories.append(a); context.insert(a) }
+        }
+
+        // Squat & deadlift each appear as a heavy (main) and lighter (complementary)
+        // slot across the two lower days — independent program-lift states.
+        day("Lower A", 0,
+            [cyc("Back Squat", .main, 175, 204), cyc("Deadlift", .complementary, 185, 255)],
+            [acc("Walking Lunges", 0, 0), acc("GHD Sit-up", 0, 0), acc("Plank", 0, 0)])
+        day("Upper A", 1,
+            [cyc("Incline DB Press", .main, 45, 52), cyc("Single-arm DB Row", .complementary, 65, 80)],
+            [acc("Face Pulls", 40), acc("DB Curls", 35), acc("Band Pull-aparts", 0, 0)])
+        day("Lower B", 2,
+            [cyc("Deadlift", .main, 210, 255), cyc("Back Squat", .complementary, 150, 204)],
+            [acc("KB Swing", 53), acc("Side Plank", 0, 0), acc("Walking Lunges", 0, 0)])
+        day("Upper B", 3,
+            [cyc("Overhead DB Press", .main, 35, 42), cyc("Chest-supported Row", .complementary, 90, 110)],
+            [acc("Y-T-W Raises", 10), acc("DB Overhead Triceps Extension", 45), acc("Band External Rotation", 0, 0)])
     }
 
     // MARK: - Session history (exact seed log, 2026)

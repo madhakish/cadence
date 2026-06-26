@@ -5,7 +5,7 @@ import * as C from "./core.js";
 import { SEED } from "./seed.js";
 
 const DB_NAME = "comeback";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -16,6 +16,7 @@ const STORES = {
   protein: { keyPath: "id", autoIncrement: true },
   checkins: { keyPath: "id", autoIncrement: true },
   milestones: { keyPath: "id", autoIncrement: true },
+  programs: { keyPath: "id", autoIncrement: true },
 };
 
 let _db = null;
@@ -125,6 +126,13 @@ export const Milestones = {
   all: () => getAll("milestones"),
   add: (m) => put("milestones", m),
 };
+export const Programs = {
+  all: () => getAll("programs"),
+  get: (id) => get("programs", id),
+  save: (p) => put("programs", p),
+  del: (id) => del("programs", id),
+  async active() { const all = await getAll("programs"); return all.find((p) => p.isActive) || all[0] || null; },
+};
 
 // ---- Session helpers (working with embedded docs) ----
 export function topSet(sessionExercise) {
@@ -146,6 +154,7 @@ export async function ensureSeeded() {
   for (const t of SEED.tracks) await put("tracks", t);
   for (const b of SEED.bodyweight) await put("bodyweight", b);
   for (const m of SEED.milestones) await put("milestones", m);
+  for (const p of SEED.programs || []) await put("programs", p);
   for (const sess of SEED.sessions) await put("sessions", sess);
   s.seededAt = iso(new Date());
   await Settings.save(s);
@@ -153,8 +162,8 @@ export async function ensureSeeded() {
 
 // ---- Export / Import ----
 export async function exportBundle() {
-  const [sessions, bodyweight, protein, checkins, milestones] = await Promise.all([
-    Sessions.completed(), Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(),
+  const [sessions, bodyweight, protein, checkins, milestones, programs] = await Promise.all([
+    Sessions.completed(), Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
   ]);
   return {
     exportedAt: iso(new Date()),
@@ -176,6 +185,15 @@ export async function exportBundle() {
     protein: protein.map((p) => ({ date: iso(p.date), grams: p.grams, label: p.label })),
     checkIns: checkins.map((c) => ({ date: iso(c.date), site: c.site, response: c.response, note: c.note || "" })),
     milestones: milestones.map((m) => ({ date: iso(m.date), exercise: m.exerciseName || null, kind: m.kind, label: m.label })),
+    programs: programs.map((p) => ({
+      name: p.name, focus: p.focus, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
+      nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: !!p.isActive,
+      days: (p.days || []).map((d) => ({
+        name: d.name, order: d.order,
+        lifts: (d.lifts || []).map((l) => ({ exerciseName: l.exerciseName, role: l.role, baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb, stallCount: l.stallCount || 0, lastIncrementLb: l.lastIncrementLb || 0 })),
+        accessories: (d.accessories || []).map((a) => ({ exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0 })),
+      })),
+    })),
   };
 }
 export const exportJSON = async () => JSON.stringify(await exportBundle(), null, 2);
@@ -202,7 +220,7 @@ export async function exportCSV() {
 const recoverPhase = (label) => { const m = /Wk(\d)/.exec(label || ""); return m ? Number(m[1]) : null; };
 
 export async function importBundle(bundle) {
-  for (const st of ["sessions", "bodyweight", "protein", "checkins", "milestones"]) await clear(st);
+  for (const st of ["sessions", "bodyweight", "protein", "checkins", "milestones", "programs"]) await clear(st);
   for (const s of bundle.sessions || []) {
     await put("sessions", {
       date: s.date, notes: s.notes || "", isCompleted: true, gymName: s.gym || null,
@@ -221,6 +239,7 @@ export async function importBundle(bundle) {
   for (const p of bundle.protein || []) await put("protein", { date: p.date, grams: p.grams, label: p.label });
   for (const c of bundle.checkIns || []) await put("checkins", { date: c.date, site: c.site, response: c.response, note: c.note || "" });
   for (const m of bundle.milestones || []) await put("milestones", { date: m.date, exerciseName: m.exercise || null, kind: m.kind, label: m.label });
+  for (const p of bundle.programs || []) await put("programs", p);
 }
 
 export async function wipeAll() { for (const st of Object.keys(STORES)) await clear(st); _db = null; }

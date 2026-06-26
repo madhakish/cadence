@@ -152,4 +152,37 @@ function buildSessions() {
   return out;
 }
 
-export const SEED = { exercises, gyms, tracks, bodyweight, milestones, sessions: buildSessions() };
+// ---- Default 4-day Upper/Lower program ----
+// Each day pairs a main + a complementary cycle-lift with accessories. Squat &
+// deadlift each appear as a heavy (main) and a lighter (complementary) slot
+// across the two lower days; these are independent program-lift states.
+const cyc = (exerciseName, role, baseWeightLb, estimatedMaxLb) =>
+  ({ exerciseName, role, baseWeightLb, estimatedMaxLb, stallCount: 0, lastIncrementLb: 0 });
+const acc = (exerciseName, weightLb, incrementLb = 5, sets = 3, minReps = 8, maxReps = 12) =>
+  ({ exerciseName, sets, minReps, maxReps, currentReps: minReps, weightLb, incrementLb, stallCount: 0 });
+
+const programs = [{
+  name: "Upper/Lower 4-Day",
+  focus: "strength",
+  cycleNumber: 1,
+  currentWeek: 1,
+  nextDayIndex: 0,
+  roundingLb: 5,
+  isActive: true,
+  days: [
+    { name: "Lower A", order: 0,
+      lifts: [cyc("Back Squat", "main", 175, 204), cyc("Deadlift", "complementary", 185, 255)],
+      accessories: [acc("Walking Lunges", 0, 0), acc("GHD Sit-up", 0, 0), acc("Plank", 0, 0)] },
+    { name: "Upper A", order: 1,
+      lifts: [cyc("Incline DB Press", "main", 45, 52), cyc("Single-arm DB Row", "complementary", 65, 80)],
+      accessories: [acc("Face Pulls", 40), acc("DB Curls", 35), acc("Band Pull-aparts", 0, 0)] },
+    { name: "Lower B", order: 2,
+      lifts: [cyc("Deadlift", "main", 210, 255), cyc("Back Squat", "complementary", 150, 204)],
+      accessories: [acc("KB Swing", 53), acc("Side Plank", 0, 0), acc("Walking Lunges", 0, 0)] },
+    { name: "Upper B", order: 3,
+      lifts: [cyc("Overhead DB Press", "main", 35, 42), cyc("Chest-supported Row", "complementary", 90, 110)],
+      accessories: [acc("Y-T-W Raises", 10), acc("DB Overhead Triceps Extension", 45), acc("Band External Rotation", 0, 0)] },
+  ],
+}];
+
+export const SEED = { exercises, gyms, tracks, bodyweight, milestones, programs, sessions: buildSessions() };
