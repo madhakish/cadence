@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, SET_FLAGS, CATEGORIES, watchNote, COPY } from "../constants.js";
-import { Sessions, Exercises, Tracks, Gyms, Milestones, iso } from "../db.js";
+import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, iso } from "../db.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -240,7 +240,7 @@ export async function openSession(id) {
 }
 
 // ---- completion + PR detection ----
-async function completeSession(session) {
+export async function completeSession(session) {
   const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date));
   const lines = [], milestones = [];
   for (const se of session.exercises) {
@@ -261,7 +261,8 @@ async function completeSession(session) {
     const events = C.prEvaluate({ exercise: se.exerciseName, sessionSets: working, historySets, historyVolumes, historySchemes });
     for (const e of events) { await Milestones.add({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
 
-    const track = await Tracks.byName(se.exerciseName);
+    // Program-owned exercises advance via the program, never the standalone track.
+    const track = se.programRole ? null : await Tracks.byName(se.exerciseName);
     if (track) {
       track.lastCompletedAt = iso(new Date());
       if (track.mode === "cycle") {
@@ -273,9 +274,123 @@ async function completeSession(session) {
     const top = working.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
     lines.push({ exerciseName: se.exerciseName, topSetLabel: `${C.trim(top.weightLb)}×${top.reps}`, volumeLb: working.reduce((a, s) => a + s.weightLb * s.reps, 0) });
   }
+
+  if (session.programTag) await advanceProgram(session, milestones);
+
   session.isCompleted = true;
   await Sessions.save(session);
   return { lines, milestones };
+}
+
+// ---- Performance summaries (built from logged sets, consumed by the core) ----
+function cyclePerf(se) {
+  const w = se.sets.filter((s) => !s.isWarmup);
+  const presReps = se.plannedReps || (w.length ? Math.max(...w.map((s) => s.reps)) : 0);
+  const top = w.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
+  return {
+    prescribedSets: se.plannedSets || w.length, prescribedReps: presReps,
+    completedSets: w.filter((s) => s.reps >= presReps).length,
+    anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
+    anyDroppedLoad: w.some((s) => !!s.autoregReason),
+    grindyOrWobbleSets: w.filter((s) => (s.flags || []).some((f) => f === "grindy" || f === "wobble")).length,
+    topSetWeightLb: top ? top.weightLb : 0, topSetReps: top ? top.reps : 0,
+  };
+}
+function accPerf(se) {
+  const w = se.sets.filter((s) => !s.isWarmup);
+  return {
+    completedSets: w.length,
+    minRepsAchieved: w.length ? Math.min(...w.map((s) => s.reps)) : 0,
+    anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
+  };
+}
+
+// ---- Program day/week/cycle advancement on bank ----
+async function advanceProgram(session, milestones) {
+  const tag = session.programTag;
+  const program = await Programs.get(tag.programId);
+  if (!program) return;
+  const day = program.days.find((d) => d.order === tag.dayIndex);
+  if (!day) return;
+  const note = (label, name) => milestones.push({ kind: "programNote", exercise: name, label, _persist: { exerciseName: name, label } });
+
+  // Accessories: double progression, evaluated every bank.
+  for (const acc of day.accessories || []) {
+    const se = session.exercises.find((e) => e.programRole === "accessory" && e.exerciseName === acc.exerciseName);
+    if (se) Object.assign(acc, C.advanceAccessory(acc, accPerf(se)));
+  }
+  // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
+  if (tag.week === 3) {
+    for (const lift of day.lifts || []) {
+      const se = session.exercises.find((e) => e.exerciseName === lift.exerciseName && e.programRole === lift.role);
+      if (se) lift.pending = C.advanceCycleLift(lift, cyclePerf(se), program.focus, program.roundingLb);
+    }
+  }
+
+  const lastDay = tag.dayIndex === program.days.length - 1;
+  program.nextDayIndex = (tag.dayIndex + 1) % program.days.length;
+  if (lastDay) {
+    if (program.currentWeek < 4) {
+      program.currentWeek += 1;
+    } else {
+      // Rollover: apply each lift's pending (or treat a skipped peak as a stall).
+      for (const d of program.days) {
+        for (const lift of d.lifts || []) {
+          if (lift.pending) {
+            const p = lift.pending.state;
+            lift.baseWeightLb = p.baseWeightLb; lift.estimatedMaxLb = p.estimatedMaxLb;
+            lift.stallCount = p.stallCount; lift.lastIncrementLb = p.lastIncrementLb;
+            if (lift.pending.note) note(`${lift.exerciseName}: ${lift.pending.note}`, lift.exerciseName);
+            delete lift.pending;
+          } else {
+            lift.stallCount = (lift.stallCount || 0) + 1; lift.lastIncrementLb = 0;
+            if (lift.stallCount >= C.STALL_LIMIT) {
+              const old = lift.baseWeightLb;
+              lift.baseWeightLb = C.roundTo(old * C.DELOAD_REBUILD_FRACTION, program.roundingLb);
+              lift.stallCount = 0;
+              note(`${lift.exerciseName}: skipped peak — deloaded ${C.trim(old)}→${C.trim(lift.baseWeightLb)} lb.`, lift.exerciseName);
+            }
+          }
+        }
+      }
+      program.cycleNumber += 1;
+      program.currentWeek = 1;
+    }
+  }
+  await Programs.save(program);
+  // Persist program notes as milestones so the explanation shows in History.
+  for (const m of milestones) {
+    if (m.kind === "programNote" && m._persist) { await Milestones.add({ date: iso(new Date(session.date)), exerciseName: m._persist.exerciseName, kind: "programNote", label: m._persist.label }); delete m._persist; }
+  }
+}
+
+// ---- Build a session from a program day ----
+export async function createSessionFromProgramDay(program, day) {
+  const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
+  const exercises = [];
+  let order = 0;
+  const lifts = [...(day.lifts || [])].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
+  for (const lift of lifts) {
+    const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
+    const ex = exMap.get(lift.exerciseName);
+    const sets = [];
+    let so = 0;
+    if (ex && ex.type === "barbell") for (const wu of C.warmupRamp(plan.weightLb)) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true }));
+    for (let i = 0; i < plan.sets; i += 1) sets.push(mkSet(so++, plan.weightLb, plan.reps, { perSide: ex && ex.isUnilateral }));
+    exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek, plannedWeightLb: plan.weightLb, plannedSets: plan.sets, plannedReps: plan.reps, programRole: lift.role, sets });
+  }
+  for (const acc of day.accessories || []) {
+    const ex = exMap.get(acc.exerciseName);
+    const sets = [];
+    for (let i = 0; i < acc.sets; i += 1) sets.push(mkSet(i, acc.weightLb, acc.currentReps, { perSide: ex && ex.isUnilateral }));
+    exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null, plannedWeightLb: acc.weightLb, plannedSets: acc.sets, plannedReps: acc.currentReps, programRole: "accessory", sets });
+  }
+  const id = await Sessions.save({
+    date: iso(new Date()), notes: "", isCompleted: false, gymName: await defaultGymName(),
+    programTag: { programId: program.id, cycleNumber: program.cycleNumber, week: program.currentWeek, dayIndex: day.order },
+    exercises,
+  });
+  return id;
 }
 
 function showSummary(summary, onDone) {

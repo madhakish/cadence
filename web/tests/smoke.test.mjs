@@ -87,5 +87,39 @@ ok((await db.Sessions.completed()).length === 11, "import round trip preserves s
 await db.Protein.add({ date: new Date().toISOString(), grams: 45, label: "Shake" });
 ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 
+// ---- program: bank a full 4-week cycle, assert adaptive progression ----
+{
+  const sqTrackBase = (await db.Tracks.byName("Back Squat")).baseWeightLb; // standalone, must not move
+  let prog = await db.Programs.active();
+  ok(prog && prog.currentWeek === 1 && prog.cycleNumber === 1, "program starts wk1 cyc1");
+  const squatBase0 = prog.days[0].lifts.find((l) => l.role === "main").baseWeightLb; // 175
+  const accReps0 = prog.days[1].accessories[0].currentReps;
+
+  const day0 = prog.days.find((d) => d.order === 0);
+  const sId = await session.createSessionFromProgramDay(prog, day0);
+  const built = await db.Sessions.get(sId);
+  ok(built.programTag && built.programTag.week === 1, "program session is tagged");
+  const roles = built.exercises.map((e) => e.programRole);
+  ok(roles.includes("main") && roles.includes("complementary") && roles.includes("accessory"), "day has main+complementary+accessories");
+  await session.completeSession(built); // i=0 banked (Lower A, week 1)
+
+  for (let i = 1; i < 16; i++) {        // remaining of 4 weeks × 4 days
+    prog = await db.Programs.active();
+    const day = prog.days.find((d) => d.order === prog.nextDayIndex);
+    const id = await session.createSessionFromProgramDay(prog, day);
+    const sess = await db.Sessions.get(id);
+    await session.completeSession(sess); // pre-filled working sets at target = a clean cycle
+  }
+
+  prog = await db.Programs.active();
+  ok(prog.cycleNumber === 2, `cycle rolled over (cyc=${prog.cycleNumber})`);
+  ok(prog.currentWeek === 1, `wave reset to week 1 (wk=${prog.currentWeek})`);
+  const squatMain = prog.days[0].lifts.find((l) => l.role === "main");
+  ok(squatMain.baseWeightLb === squatBase0 + 5, `clean cycle bumped squat ${squatBase0}→${squatMain.baseWeightLb}`);
+  ok(squatMain.estimatedMaxLb > 204, "e1RM updated from the peak");
+  ok(prog.days[1].accessories[0].currentReps > accReps0, "accessory reps progressed (double progression)");
+  ok((await db.Tracks.byName("Back Squat")).baseWeightLb === sqTrackBase, "standalone Back Squat track NOT double-advanced");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

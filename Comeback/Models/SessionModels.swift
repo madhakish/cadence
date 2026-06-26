@@ -16,6 +16,12 @@ final class WorkoutSession {
     var notes: String
     var isCompleted: Bool
     var gymName: String?
+    // Set when this session was generated from a program day, so completion
+    // advances PROGRAM state (not standalone tracks).
+    var programName: String?
+    var programCycleNumber: Int?
+    var programWeek: Int?
+    var programDayIndex: Int?
     @Relationship(deleteRule: .cascade, inverse: \SessionExercise.session)
     var exercises: [SessionExercise]
 
@@ -54,6 +60,8 @@ final class SessionExercise {
     var plannedSets: Int?
     var plannedReps: Int?
     var phaseRaw: Int?
+    /// "main" / "complementary" / "accessory" when part of a program day; nil otherwise.
+    var programRole: String?
 
     init(order: Int, exercise: Exercise?, notes: String = "") {
         self.order = order
