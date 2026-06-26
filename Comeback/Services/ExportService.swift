@@ -43,6 +43,7 @@ enum ExportService {
         let protein: [ExportProtein]
         let checkIns: [ExportCheckIn]
         let milestones: [ExportMilestone]
+        let programs: [ExportProgram]
     }
 
     struct ExportBodyweight: Codable {
@@ -70,6 +71,44 @@ enum ExportService {
         let exercise: String?
         let kind: String
         let label: String
+    }
+
+    struct ExportProgramLift: Codable {
+        let exerciseName: String
+        let role: String
+        let baseWeightLb: Double
+        let estimatedMaxLb: Double
+        let stallCount: Int
+        let lastIncrementLb: Double
+    }
+
+    struct ExportProgramAccessory: Codable {
+        let exerciseName: String
+        let sets: Int
+        let minReps: Int
+        let maxReps: Int
+        let currentReps: Int
+        let weightLb: Double
+        let incrementLb: Double
+        let stallCount: Int
+    }
+
+    struct ExportProgramDay: Codable {
+        let name: String
+        let order: Int
+        let lifts: [ExportProgramLift]
+        let accessories: [ExportProgramAccessory]
+    }
+
+    struct ExportProgram: Codable {
+        let name: String
+        let focus: String
+        let cycleNumber: Int
+        let currentWeek: Int
+        let nextDayIndex: Int
+        let roundingLb: Double
+        let isActive: Bool
+        let days: [ExportProgramDay]
     }
 
     // MARK: - JSON
@@ -138,6 +177,9 @@ enum ExportService {
         let milestones = try context.fetch(
             FetchDescriptor<Milestone>(sortBy: [SortDescriptor(\.date)])
         )
+        let programs = try context.fetch(
+            FetchDescriptor<Program>(sortBy: [SortDescriptor(\.name)])
+        )
 
         return ExportBundle(
             exportedAt: .now,
@@ -180,6 +222,25 @@ enum ExportService {
             },
             milestones: milestones.map {
                 ExportMilestone(date: $0.date, exercise: $0.exerciseName, kind: $0.kindRaw, label: $0.label)
+            },
+            programs: programs.map { p in
+                ExportProgram(
+                    name: p.name, focus: p.focusRaw, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
+                    nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: p.isActive,
+                    days: p.orderedDays.map { d in
+                        ExportProgramDay(
+                            name: d.name, order: d.order,
+                            lifts: d.orderedLifts.map { l in
+                                ExportProgramLift(exerciseName: l.exerciseName, role: l.roleRaw, baseWeightLb: l.baseWeightLb,
+                                                  estimatedMaxLb: l.estimatedMaxLb, stallCount: l.stallCount, lastIncrementLb: l.lastIncrementLb)
+                            },
+                            accessories: d.accessories.map { a in
+                                ExportProgramAccessory(exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
+                                                       currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount)
+                            }
+                        )
+                    }
+                )
             }
         )
     }
