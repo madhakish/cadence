@@ -287,3 +287,96 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
   }
   return events;
 }
+
+// ---- Adaptive program progression --------------------------------------------
+// Cross-cycle progression that is performance-gated, tapers toward an estimated
+// ceiling, and auto-deloads on repeated stalls. Pure & deterministic — consumes
+// a performance SUMMARY (never a session), no clock/random. Mirrors
+// ComebackCore/Sources/ComebackCore/ProgramProgression.swift exactly.
+
+export const QUALITY_FLAG_TOLERANCE = 1;   // ≤1 grindy/wobble set still SUCCESS
+export const STALL_LIMIT = 2;              // 2 consecutive non-success → auto deload
+export const DELOAD_REBUILD_FRACTION = 0.90;
+
+// focus → { tm: training-max as fraction of e1RM, inc: increment fraction of base }
+export const FOCUS = {
+  strength: { tm: 0.90, inc: 0.025 },
+  hypertrophy: { tm: 0.78, inc: 0.015 },
+  maintain: { tm: 0.0, inc: 0.0 },
+};
+export const focusParams = (focus) => FOCUS[focus] || FOCUS.strength;
+
+export const epleyE1RM = (weightLb, reps) => (reps >= 1 ? weightLb * (1 + reps / 30.0) : weightLb);
+export const smoothE1RM = (prior, sample) => (prior <= 0 ? sample : 0.7 * prior + 0.3 * sample);
+
+// perf: { prescribedSets, prescribedReps, completedSets, anyStoppedEarly,
+//         anyDroppedLoad, grindyOrWobbleSets, topSetWeightLb, topSetReps }
+export function gradeCycle(perf) {
+  if (perf.completedSets < perf.prescribedSets || perf.anyStoppedEarly || perf.anyDroppedLoad) return "fail";
+  if (perf.grindyOrWobbleSets > QUALITY_FLAG_TOLERANCE) return "hold";
+  return "success";
+}
+
+// Increment = fraction of base × headroom-to-ceiling, floored at plate granularity,
+// 0 at/over the focus-dependent training-max ceiling.
+export function taperedIncrement(baseWeightLb, estimatedMaxLb, focus, roundingLb = DEFAULT_ROUNDING_LB) {
+  const fp = focusParams(focus);
+  if (fp.inc <= 0) return 0; // maintain never increments
+  const ceiling = estimatedMaxLb * fp.tm;
+  if (ceiling <= 0 || baseWeightLb >= ceiling) return 0;
+  const headroom = Math.max(0, Math.min(1, (ceiling - baseWeightLb) / ceiling));
+  const raw = baseWeightLb * fp.inc * headroom;
+  let inc = Math.floor(raw / roundingLb) * roundingLb;
+  if (inc < roundingLb && headroom > 0.02) inc = roundingLb; // guarantee a loadable bump unless basically at ceiling
+  if (baseWeightLb + inc > ceiling) inc = Math.max(0, Math.floor((ceiling - baseWeightLb) / roundingLb) * roundingLb);
+  return inc;
+}
+
+// state: { baseWeightLb, estimatedMaxLb, stallCount, role, lastIncrementLb }
+// returns { state, grade, note }
+export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDING_LB) {
+  const grade = gradeCycle(perf);
+  const sample = epleyE1RM(perf.topSetWeightLb, perf.topSetReps);
+  const estimatedMaxLb = smoothE1RM(state.estimatedMaxLb, sample);
+  const next = { ...state, estimatedMaxLb };
+  let note = null;
+
+  if (grade === "success") {
+    next.stallCount = 0;
+    const inc = taperedIncrement(state.baseWeightLb, estimatedMaxLb, focus, roundingLb);
+    next.baseWeightLb = state.baseWeightLb + inc;
+    next.lastIncrementLb = inc;
+    if (inc === 0) note = focusParams(focus).inc <= 0 ? "Maintaining — holding weight." : "At training-max ceiling — holding weight.";
+  } else {
+    next.stallCount = state.stallCount + 1;
+    next.lastIncrementLb = 0;
+    if (next.stallCount >= STALL_LIMIT) {
+      const old = next.baseWeightLb;
+      next.baseWeightLb = roundTo(old * DELOAD_REBUILD_FRACTION, roundingLb);
+      next.stallCount = 0;
+      note = `Two cycles without a clean peak — deloaded ${trim(old)}→${trim(next.baseWeightLb)} lb to rebuild.`;
+    } else {
+      note = grade === "fail" ? "Missed peak work — holding weight, retry the cycle."
+                              : "Grindy peak — holding weight, retry the cycle.";
+    }
+  }
+  return { state: next, grade, note };
+}
+
+// Accessory double progression. state: { sets, minReps, maxReps, currentReps,
+// weightLb, incrementLb, stallCount }; perf: { completedSets, minRepsAchieved, anyStoppedEarly }
+export function advanceAccessory(state, perf) {
+  const next = { ...state };
+  const hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= state.currentReps && !perf.anyStoppedEarly;
+  if (hitAll && state.currentReps >= state.maxReps) {
+    next.weightLb = state.weightLb + state.incrementLb;
+    next.currentReps = state.minReps;
+    next.stallCount = 0;
+  } else if (hitAll) {
+    next.currentReps = Math.min(state.currentReps + 1, state.maxReps);
+    next.stallCount = 0;
+  } else {
+    next.stallCount = state.stallCount + 1;
+  }
+  return next;
+}

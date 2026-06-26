@@ -176,5 +176,61 @@ ok(!ev.some((e) => e.kind === "volumePR"), "first session not volume PR");
 let top = C.prTopScheme([...Array(5).fill({ weightLb: 175, reps: 5 }), { weightLb: 155, reps: 8 }]);
 eq(top.weightLb, 175, "top weight group"); eq(top.sets, 5, "top sets"); eq(top.reps, 5, "top reps");
 
+// ---- Adaptive program progression ----
+const cleanPerf = { prescribedSets: 3, prescribedReps: 3, completedSets: 3, anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0, topSetWeightLb: 206, topSetReps: 3 };
+const liftState = () => ({ baseWeightLb: 175, estimatedMaxLb: 226, stallCount: 0, role: "main", lastIncrementLb: 0 });
+
+// e1RM math
+eq(C.epleyE1RM(225, 5), 262.5, "epley 225x5");
+eq(C.smoothE1RM(0, 262.5), 262.5, "e1rm cold start");
+eq(C.smoothE1RM(200, 300), 230, "e1rm smoothing 0.7/0.3");
+
+// grading
+eq(C.gradeCycle(cleanPerf), "success", "clean → success");
+eq(C.gradeCycle({ ...cleanPerf, grindyOrWobbleSets: 1 }), "success", "1 grindy still success (boundary)");
+eq(C.gradeCycle({ ...cleanPerf, grindyOrWobbleSets: 2 }), "hold", "2 grindy → hold");
+eq(C.gradeCycle({ ...cleanPerf, completedSets: 2 }), "fail", "missed set → fail");
+eq(C.gradeCycle({ ...cleanPerf, anyStoppedEarly: true }), "fail", "stopped early → fail");
+eq(C.gradeCycle({ ...cleanPerf, anyDroppedLoad: true }), "fail", "dropped load → fail");
+
+// clean cycle → tapered increment
+let pres = C.advanceCycleLift(liftState(), cleanPerf, "strength", 5);
+eq(pres.grade, "success", "advance clean grade");
+eq(pres.state.baseWeightLb, 180, "clean cycle adds one plate");
+eq(pres.state.stallCount, 0, "clean resets stall");
+eq(pres.state.lastIncrementLb, 5, "increment recorded");
+
+// grindy → HOLD
+pres = C.advanceCycleLift(liftState(), { ...cleanPerf, grindyOrWobbleSets: 3 }, "strength", 5);
+eq(pres.grade, "hold", "grindy → hold grade");
+eq(pres.state.baseWeightLb, 175, "hold keeps weight");
+eq(pres.state.stallCount, 1, "hold increments stall");
+
+// two stalls → auto deload −10%
+let st1 = C.advanceCycleLift(liftState(), { ...cleanPerf, grindyOrWobbleSets: 3 }, "strength", 5).state; // stall 1
+let st2 = C.advanceCycleLift(st1, { ...cleanPerf, completedSets: 1 }, "strength", 5);                     // stall 2 → deload
+eq(st2.state.baseWeightLb, 160, "two stalls → −10% deload (175→160)");
+eq(st2.state.stallCount, 0, "deload resets stall");
+ok(/deloaded/.test(st2.note || ""), "deload note present");
+
+// taper: far below ceiling bumps, near/over ceiling does not
+eq(C.taperedIncrement(150, 226, "strength", 5), 5, "far below ceiling → +5");
+eq(C.taperedIncrement(200, 226, "strength", 5), 0, "near ceiling → 0 (tapered out)");
+eq(C.taperedIncrement(210, 226, "strength", 5), 0, "over ceiling → 0");
+
+// maintain never increments
+pres = C.advanceCycleLift(liftState(), cleanPerf, "maintain", 5);
+eq(pres.state.baseWeightLb, 175, "maintain holds weight on success");
+eq(pres.state.stallCount, 0, "maintain success resets stall");
+
+// accessory double progression
+let acc = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 50, incrementLb: 5, stallCount: 0 };
+let ac = C.advanceAccessory(acc, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
+ok(ac.weightLb === 55 && ac.currentReps === 8, "accessory at max reps → +weight, reset reps");
+ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minRepsAchieved: 10, anyStoppedEarly: false });
+ok(ac.weightLb === 50 && ac.currentReps === 11, "accessory below max → +1 rep, hold weight");
+ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 2, minRepsAchieved: 10, anyStoppedEarly: false });
+ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "accessory miss → hold + stall");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
