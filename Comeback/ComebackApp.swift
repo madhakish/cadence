@@ -18,7 +18,11 @@ struct ComebackApp: App {
                 CheckIn.self,
                 Milestone.self,
                 Gym.self,
-                AppSettings.self
+                AppSettings.self,
+                Program.self,
+                ProgramDay.self,
+                ProgramLift.self,
+                ProgramAccessory.self
             )
             Seeder.seedIfNeeded(context: container.mainContext)
         } catch {
