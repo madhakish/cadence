@@ -79,6 +79,12 @@ final class ProgramLift {
     var estimatedMaxLb: Double
     var stallCount: Int
     var lastIncrementLb: Double
+    // Week-3 grade is stashed here and applied at cycle rollover (deload week end).
+    var pendingBaseWeightLb: Double?
+    var pendingEstimatedMaxLb: Double?
+    var pendingStallCount: Int?
+    var pendingLastIncrementLb: Double?
+    var pendingNote: String?
     var day: ProgramDay?
 
     init(exerciseName: String, role: LiftRole, baseWeightLb: Double, estimatedMaxLb: Double,

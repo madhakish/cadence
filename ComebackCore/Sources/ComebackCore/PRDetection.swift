@@ -17,6 +17,7 @@ public struct PREvent: Hashable, Codable, Sendable {
         case heaviestSet
         case volumePR
         case firstScheme
+        case programNote   // adaptive-progression explanation (deload/ceiling), not a PR
     }
 
     public let kind: Kind
