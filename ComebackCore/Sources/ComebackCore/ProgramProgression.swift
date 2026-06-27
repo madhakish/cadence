@@ -191,15 +191,18 @@ public enum ProgramProgression {
     public static func advanceAccessory(_ state: AccessoryState, perf: AccessoryPerformance) -> AccessoryState {
         var next = state
         let hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= state.currentReps && !perf.anyStoppedEarly
-        if hitAll && state.currentReps >= state.maxReps {
-            next.weightLb = state.weightLb + state.incrementLb
+        let weighted = state.incrementLb > 0
+        if !hitAll {
+            next.stallCount = state.stallCount + 1
+        } else if weighted && state.currentReps >= state.maxReps {
+            next.weightLb = state.weightLb + state.incrementLb   // earned the rep range → add load, reset reps
             next.currentReps = state.minReps
             next.stallCount = 0
-        } else if hitAll {
-            next.currentReps = Swift.min(state.currentReps + 1, state.maxReps)
-            next.stallCount = 0
         } else {
-            next.stallCount = state.stallCount + 1
+            // weighted: climb to the cap. bodyweight/timed (no loadable increment):
+            // keep climbing reps — maxReps is advisory, since there's no weight to add.
+            next.currentReps = weighted ? Swift.min(state.currentReps + 1, state.maxReps) : state.currentReps + 1
+            next.stallCount = 0
         }
         return next
     }
