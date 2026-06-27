@@ -161,3 +161,12 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .flagbtn.on-grindy, .flagbtn.on-wobble { background: var(--warn); color: #221c00; }
 .gym-img { width: 100%; background: #fff; border-radius: 12px; padding: 12px; }
 .annot { font-size: 12px; }
+
+/* service-worker update prompt */
+#update-banner {
+  position: fixed; left: 12px; right: 12px; bottom: calc(80px + var(--safe-bottom)); z-index: 70;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+}
+#update-banner span { flex: 1; font-size: 14px; }
