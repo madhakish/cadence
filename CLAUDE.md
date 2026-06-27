@@ -87,6 +87,40 @@ Existing entries — don't reintroduce these patterns:
   encodes real training history — don't casually regenerate it.
 - HealthKit is optional and write-only by design; the app reads nothing.
 
+## Workout Program (adaptive progression)
+
+A structured plan layered on top of the per-lift cycle engine. There are now two
+progression systems: standalone `LiftTrack`s (independent per-lift cycles, the
+"Next up"/Progression list) and a **Program** that bundles training days.
+
+- **Model** (`Comeback/Models/ProgramModels.swift`, mirrored as the embedded
+  `programs` IndexedDB store in `web/js/db.js`): `Program` (focus, cycleNumber,
+  currentWeek 1–4, nextDayIndex, roundingLb, isActive) → `ProgramDay` (name, order)
+  → `ProgramLift` (main/complementary, baseWeightLb, estimatedMaxLb, stallCount) +
+  `ProgramAccessory` (sets, min/max/currentReps, weightLb, incrementLb). The
+  program owns its lifts' state and drives ONE 4-week wave; program lifts are
+  filtered out of the standalone "Next up" and are NOT advanced as `LiftTrack`s.
+- **Adaptive engine** lives in `ComebackCore/Sources/ComebackCore/ProgramProgression.swift`,
+  mirrored 1:1 in `web/js/core.js` with identical assertions in
+  `ProgramProgressionTests.swift` and `web/tests/core.test.mjs`. It is pure and
+  deterministic — it consumes a performance *summary*, never a session or a clock.
+  - `gradeCycle`: SUCCESS only on a clean Peak (all sets at target reps, no
+    stopped-early/dropped-load, ≤`QUALITY_FLAG_TOLERANCE` grindy/wobble); else HOLD/FAIL.
+  - `taperedIncrement`: a fraction of base × headroom to a focus-dependent ceiling
+    (`estimatedMax × tmFraction`), floored at plate granularity, 0 at/over the ceiling.
+  - `advanceCycleLift`: clean → tapered bump; non-success → stall, and at
+    `STALL_LIMIT` (2) auto-deload by `DELOAD_REBUILD_FRACTION` (−10%) with a note.
+  - `advanceAccessory`: weighted → double progression (earn the rep range, add load,
+    reset); bodyweight (`incrementLb <= 0`) → keep adding reps (maxReps advisory).
+  - Training focus (strength/hypertrophy/maintain) sets the ceiling + increment;
+    maintain never increments. Don't add nondeterminism to these functions.
+- **Generation + rollover**: `ProgramSession.make` / web `createSessionFromProgramDay`
+  build a tagged session (program/cycle/week/day + per-exercise role). Completion
+  (`SessionCompletion.swift` / web `completeSession`) grades each lift at the
+  **week-3 Peak** into a pending result and APPLIES it at the deload week's end
+  (rollover: cycle++, week→1, deload/ceiling notes written as `programNote`
+  milestones). Accessories double-progress every bank.
+
 ## Housekeeping
 
 - Never commit: `Comeback.xcodeproj` (generated), `.build/`, `DerivedData/`,
