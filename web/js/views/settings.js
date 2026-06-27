@@ -58,6 +58,10 @@ export async function render(host) {
       ui.h("span", { class: "chev" })));
   }
   root.append(progList);
+  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add program", onClick: async () => {
+    await Programs.save({ name: `Program ${programs.length + 1}`, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, roundingLb: 5, isActive: programs.length === 0, days: [] });
+    ui.nav.refresh();
+  } }));
 
   root.append(ui.h("div", { class: "section-title", text: "Progression (standalone lifts)" }));
   const trackList = ui.h("div", { class: "card list" });
@@ -155,20 +159,29 @@ function removeDay(p, day) {
   if (p.nextDayIndex >= p.days.length) p.nextDayIndex = 0;
 }
 
+async function activateProgram(p) {
+  const all = await Programs.all();
+  for (const x of all) { const want = x.id === p.id; if (x.isActive !== want) { x.isActive = want; await Programs.save(x); } }
+  p.isActive = true;
+}
+
 function programEditor(p) {
   ui.pushScreen({
     title: p.name,
-    build: (body) => {
+    build: (body, api) => {
       const draw = () => {
         ui.clear(body);
+        const nameInput = ui.h("input", { type: "text", value: p.name });
+        nameInput.addEventListener("change", async () => { p.name = nameInput.value || p.name; api.setTitle(p.name); await Programs.save(p); });
+        body.append(ui.field("Program name", nameInput));
         body.append(ui.field("Training focus", ui.seg(
           [{ value: "strength", label: "Strength" }, { value: "hypertrophy", label: "Hypertrophy" }, { value: "maintain", label: "Maintain" }],
           p.focus, async (v) => { p.focus = v; await Programs.save(p); })));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Rounding" }),
             ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
-          ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Active" }),
-            ui.toggle(p.isActive, async (v) => { p.isActive = v; await Programs.save(p); }))));
+          ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Active (drives Today)" }),
+            ui.toggle(p.isActive, async (v) => { if (v) await activateProgram(p); else p.isActive = false; await Programs.save(p); }))));
         body.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: `Cycle ${p.cycleNumber}, week ${p.currentWeek}. Lifts progress automatically — weights here are the current week-1 base.` }));
         body.append(ui.h("div", { class: "section-title", text: "Days" }));
         const list = ui.h("div", { class: "card list" });
@@ -185,6 +198,9 @@ function programEditor(p) {
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add day", onClick: async () => {
           p.days.push({ name: `Day ${p.days.length + 1}`, order: p.days.length, lifts: [], accessories: [] });
           await Programs.save(p); draw();
+        } }));
+        body.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "12px" }, text: "Delete program", onClick: () => {
+          ui.actionSheet("Delete this program?", [{ label: "Delete", role: "danger", onClick: async () => { await Programs.del(p.id); api.close(); ui.nav.refresh(); } }]);
         } }));
       };
       draw();
