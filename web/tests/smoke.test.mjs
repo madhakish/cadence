@@ -121,5 +121,27 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok((await db.Tracks.byName("Back Squat")).baseWeightLb === sqTrackBase, "standalone Back Squat track NOT double-advanced");
 }
 
+// ---- structural editing: add a day with a lift + accessory, generate, then remove ----
+{
+  let prog = await db.Programs.active();
+  const before = prog.days.length;
+  prog.days.push({
+    name: "Extra Day", order: prog.days.length,
+    lifts: [{ exerciseName: "Push Press", role: "main", baseWeightLb: 95, estimatedMaxLb: 115, stallCount: 0, lastIncrementLb: 0 }],
+    accessories: [{ exerciseName: "Dips", sets: 3, minReps: 8, maxReps: 12, currentReps: 8, weightLb: 0, incrementLb: 0, stallCount: 0 }],
+  });
+  await db.Programs.save(prog);
+  prog = await db.Programs.active();
+  ok(prog.days.length === before + 1, "added a program day");
+  const newDay = prog.days.find((d) => d.name === "Extra Day");
+  const id = await session.createSessionFromProgramDay(prog, newDay);
+  const built = await db.Sessions.get(id);
+  ok(built.exercises.some((e) => e.exerciseName === "Push Press" && e.programRole === "main"), "new day's lift appears in the session");
+  ok(built.exercises.some((e) => e.exerciseName === "Dips" && e.programRole === "accessory"), "new day's accessory appears in the session");
+  newDay.lifts = newDay.lifts.filter((l) => l.exerciseName !== "Push Press");
+  await db.Programs.save(prog);
+  ok((await db.Programs.active()).days.find((d) => d.name === "Extra Day").lifts.length === 0, "removed a lift from the day");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

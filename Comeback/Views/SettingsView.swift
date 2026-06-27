@@ -286,6 +286,7 @@ struct TrackEditorView: View {
 // MARK: - Program editor
 
 struct ProgramEditorView: View {
+    @Environment(\.modelContext) private var context
     @Bindable var program: Program
 
     var body: some View {
@@ -315,30 +316,79 @@ struct ProgramEditorView: View {
                         }
                     }
                 }
+                .onDelete(perform: deleteDays)
+                Button {
+                    let day = ProgramDay(name: "Day \(program.days.count + 1)", order: program.days.count)
+                    day.program = program
+                    program.days.append(day)
+                    context.insert(day)
+                } label: {
+                    Label("Add day", systemImage: "plus")
+                }
             }
         }
         .navigationTitle(program.name)
     }
+
+    private func deleteDays(at offsets: IndexSet) {
+        let ordered = program.orderedDays
+        for i in offsets { context.delete(ordered[i]) }
+        for (i, day) in program.orderedDays.enumerated() { day.order = i }
+        if program.nextDayIndex >= program.days.count { program.nextDayIndex = 0 }
+    }
 }
 
 struct ProgramDayEditorView: View {
+    @Environment(\.modelContext) private var context
     @Bindable var day: ProgramDay
     let step: Double
+    @State private var picking: PickTarget?
+
+    private enum PickTarget: Identifiable { case lift, accessory; var id: Int { hashValue } }
 
     var body: some View {
         Form {
+            Section("Day") {
+                TextField("Name", text: $day.name)
+            }
             Section("Lifts") {
                 ForEach(day.orderedLifts) { lift in
                     ProgramLiftRow(lift: lift, step: step)
                 }
+                .onDelete { offsets in
+                    let ordered = day.orderedLifts
+                    for i in offsets { context.delete(ordered[i]) }
+                }
+                Button { picking = .lift } label: { Label("Add lift", systemImage: "plus") }
             }
             Section("Accessories") {
                 ForEach(day.accessories) { accessory in
                     ProgramAccessoryRow(accessory: accessory)
                 }
+                .onDelete { offsets in
+                    for i in offsets { context.delete(day.accessories[i]) }
+                }
+                Button { picking = .accessory } label: { Label("Add accessory", systemImage: "plus") }
             }
         }
         .navigationTitle(day.name)
+        .sheet(item: $picking) { target in
+            ExercisePickerSheetView { name in
+                switch target {
+                case .lift:
+                    let lift = ProgramLift(exerciseName: name, role: .complementary, baseWeightLb: 45, estimatedMaxLb: 52)
+                    lift.day = day
+                    day.lifts.append(lift)
+                    context.insert(lift)
+                case .accessory:
+                    let acc = ProgramAccessory(exerciseName: name, sets: 3, minReps: 8, maxReps: 12, currentReps: 8, weightLb: 0, incrementLb: 0)
+                    acc.day = day
+                    day.accessories.append(acc)
+                    context.insert(acc)
+                }
+                picking = nil
+            }
+        }
     }
 }
 
@@ -348,11 +398,12 @@ private struct ProgramLiftRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(lift.exerciseName).font(.headline)
-                Spacer()
-                Text(lift.role.rawValue).font(.caption).foregroundStyle(.secondary)
+            Text(lift.exerciseName).font(.headline)
+            Picker("Role", selection: Binding(get: { lift.role }, set: { lift.role = $0 })) {
+                Text("Main").tag(LiftRole.main)
+                Text("Complementary").tag(LiftRole.complementary)
             }
+            .pickerStyle(.segmented)
             Stepper("Week-1 base: \(Weight.trim(lift.baseWeightLb)) lb", value: $lift.baseWeightLb, in: 0...1000, step: step)
             Stepper("Est. 1RM: \(Weight.trim(lift.estimatedMaxLb)) lb", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
         }
@@ -369,6 +420,33 @@ private struct ProgramAccessoryRow: View {
             Stepper("Sets: \(accessory.sets)", value: $accessory.sets, in: 1...8)
             Stepper("Min reps: \(accessory.minReps)", value: $accessory.minReps, in: 1...20)
             Stepper("Max reps: \(accessory.maxReps)", value: $accessory.maxReps, in: 1...30)
+            Stepper("Load step: +\(Weight.trim(accessory.incrementLb)) lb (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
+        }
+    }
+}
+
+/// Exercise picker used by the program day editor.
+private struct ExercisePickerSheetView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Exercise.name) private var exercises: [Exercise]
+    let onPick: (String) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(ExerciseCategory.allCases, id: \.self) { category in
+                    let inCategory = exercises.filter { $0.category == category }
+                    if !inCategory.isEmpty {
+                        Section(category.rawValue) {
+                            ForEach(inCategory) { exercise in
+                                Button(exercise.name) { onPick(exercise.name); dismiss() }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Pick exercise")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
     }
 }
