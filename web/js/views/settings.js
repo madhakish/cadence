@@ -24,6 +24,7 @@ export async function render(host) {
   restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Accessory" }),
     ui.stepper(settings.accessoryRestSeconds, { min: 30, max: 300, step: 15, format: ui.mmss, onChange: async (v) => { settings.accessoryRestSeconds = v; await saveS(); } })));
   root.append(restCard);
+  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Fallback when an exercise has no rest of its own. Set per-exercise rest in the logger (⏱) or the library." }));
 
   // Protein
   root.append(ui.h("div", { class: "section-title", text: "Protein" }));

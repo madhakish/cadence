@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, SET_FLAGS, CATEGORIES, watchNote, COPY } from "../constants.js";
-import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, iso } from "../db.js";
+import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, iso } from "../db.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -70,22 +70,33 @@ export async function openSession(id) {
   const session = await Sessions.get(id);
   if (!session) { ui.toast("Session not found."); return; }
   const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
+  const settings = await Settings.get();
   const save = () => Sessions.save(session);
+
+  // Per-exercise rest, with the global main/accessory defaults as a fallback.
+  function restFor(ex) {
+    if (ex && ex.defaultRestSeconds > 0) return ex.defaultRestSeconds;
+    const cat = ex ? ex.category : "Accessory";
+    return (cat === "Main" ? settings.mainLiftRestSeconds : settings.accessoryRestSeconds) || 90;
+  }
 
   const rest = makeRestTimer(() => paintRest(), () => { ui.toast("Rest over."); beep(); paintRest(); });
   let restEl = null;
+  let restLabel = "";
   function paintRest() {
     if (!restEl) return;
     if (!rest.running) { restEl.style.display = "none"; return; }
     restEl.style.display = "";
+    restEl.querySelector(".rest-label").textContent = restLabel ? `Resting · ${restLabel}` : "Resting";
     restEl.querySelector(".big-time").textContent = ui.mmss(rest.remaining);
     restEl.querySelector(".progress > i").style.width = `${Math.min(100, rest.progress * 100)}%`;
   }
-  function armRest(seconds) { rest.start(seconds || 90); }
+  function armRest(seconds, label) { restLabel = label || ""; rest.start(seconds || 90); paintRest(); }
 
   function renderBody(body) {
     ui.clear(body);
     restEl = ui.h("div", { class: "rest-bar", style: { display: "none" } },
+      ui.h("div", { class: "sub rest-label", text: "Resting" }),
       ui.h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
         ui.h("span", { class: "big-time mono", text: "0:00" }),
         ui.h("div", { class: "btn-row" },
@@ -113,7 +124,9 @@ export async function openSession(id) {
       ui.h("div", { class: "lead" },
         ui.h("span", { class: "title", text: se.exerciseName }),
         se.phase ? ui.h("span", { class: "sub accent", text: C.phaseLabel(se.phase) }) : null),
-      ex && ex.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null);
+      ui.h("div", { class: "btn-row" },
+        ui.h("button", { class: "btn sm ghost", text: `⏱ ${ui.mmss(restFor(ex))}`, onClick: () => editRest(se, ex, body) }),
+        ex && ex.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null));
     const card = ui.h("div", { class: "card" }, head);
 
     se.sets.sort((a, b) => a.order - b.order);
@@ -121,10 +134,23 @@ export async function openSession(id) {
 
     card.append(ui.h("div", { class: "btn-row", style: { marginTop: "10px" } },
       ui.h("button", { class: "btn sm", text: "+ Set", onClick: () => { addSet(se); save(); renderBody(body); } }),
+      ui.h("button", { class: "btn sm ghost", text: "Rest", onClick: () => armRest(restFor(ex), se.exerciseName) }),
       ui.h("button", { class: "btn sm ghost warn", text: "↓ Dropping load", onClick: () => dropLoad(se, body) })));
 
     if (ex && ex.watchSite) card.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: `Watch: ${ex.watchSite.toLowerCase()} — ${watchNote(ex.watchSite)}` }));
     return card;
+  }
+
+  function editRest(se, ex, body) {
+    if (!ex) { ui.toast("No library entry for this exercise."); return; }
+    ui.sheet({
+      title: `Rest — ${ex.name}`,
+      build: (c) => {
+        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
+          ui.stepper(restFor(ex), { min: 0, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
+        c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used." }));
+      },
+    });
   }
 
   function setRow(se, s, body) {
@@ -148,7 +174,7 @@ export async function openSession(id) {
   function toggleFlag(se, s, name, body) {
     const had = s.flags.includes(name);
     s.flags = had ? s.flags.filter((f) => f !== name) : [...s.flags, name];
-    if (!had && !rest.running) { const ex = exMap.get(se.exerciseName); armRest(ex ? ex.defaultRestSeconds : 90); }
+    if (!had && !rest.running) { armRest(restFor(exMap.get(se.exerciseName)), se.exerciseName); }
     save(); renderBody(body);
   }
 

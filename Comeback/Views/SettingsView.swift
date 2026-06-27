@@ -27,7 +27,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    Section("Rest timer defaults") {
+                    Section {
                         Stepper(
                             "Main lifts: \(timeLabel(settings.mainLiftRestSeconds))",
                             value: bindable.mainLiftRestSeconds, in: 60...600, step: 30
@@ -36,6 +36,10 @@ struct SettingsView: View {
                             "Accessory: \(timeLabel(settings.accessoryRestSeconds))",
                             value: bindable.accessoryRestSeconds, in: 30...300, step: 15
                         )
+                    } header: {
+                        Text("Rest timer defaults")
+                    } footer: {
+                        Text("Fallback when an exercise has no rest of its own. Set per-exercise rest in the logger or the library.")
                     }
 
                     Section("Protein") {
