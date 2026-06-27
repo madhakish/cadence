@@ -43,6 +43,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: actions/configure-pages@v5
+      - name: Stamp build version into the service worker
+        # Changes sw.js every deploy → browsers install the new worker and
+        # refresh the cached app. Without this, installed phones never update.
+        run: sed -i "s/__BUILD__/${GITHUB_SHA::12}/" web/sw.js
       - name: Upload web/ as Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

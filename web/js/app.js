@@ -62,9 +62,46 @@ async function boot() {
   buildChrome();
   await navigate("home");
 
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW registration failed", e));
-  }
+  registerServiceWorker();
+}
+
+// Register the SW and surface a one-tap "Refresh" when a new build is deployed.
+// On a cold launch the new worker takes over on its own; this prompt is for when
+// an update lands while you're using the app.
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  });
+
+  navigator.serviceWorker.register("sw.js").then((reg) => {
+    reg.addEventListener("updatefound", () => {
+      const incoming = reg.installing;
+      if (!incoming) return;
+      incoming.addEventListener("statechange", () => {
+        // "installed" + an existing controller ⇒ this is an update, not first install.
+        if (incoming.state === "installed" && navigator.serviceWorker.controller) {
+          showUpdateBanner(reg);
+        }
+      });
+    });
+  }).catch((e) => console.warn("SW registration failed", e));
+}
+
+function showUpdateBanner(reg) {
+  if (document.getElementById("update-banner")) return;
+  const banner = ui.h("div", { id: "update-banner" },
+    ui.h("span", { text: "New version available" }),
+    ui.h("button", { class: "btn sm primary", text: "Refresh", onClick: () => {
+      const w = reg.waiting || reg.installing;
+      if (w) w.postMessage({ type: "SKIP_WAITING" }); // triggers controllerchange → reload
+    } }),
+    ui.h("button", { class: "btn sm ghost", text: "Later", onClick: () => banner.remove() }));
+  document.body.append(banner);
 }
 
 boot();
