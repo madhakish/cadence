@@ -72,3 +72,13 @@ DerivedData/
 # Web PWA (node only used for tests; no build step)
 node_modules/
 web/node_modules/
+
+# fastlane / iOS signing (never commit credentials or generated outputs)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output/
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+*.certSigningRequest

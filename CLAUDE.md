@@ -61,8 +61,14 @@ Three jobs on push to `main` (first two also on PRs):
    installer files from the same run's artifact.
 
 The `.ipa` is unsigned (no signing certs in CI) — it must be re-signed to
-sideload (AltStore/Sideloadly). TestFlight distribution would need an Apple
-Developer account + fastlane and is not set up.
+sideload (AltStore/Sideloadly).
+
+**TestFlight** distribution is scaffolded and fully Mac-free: the `testflight`
+job runs `fastlane beta` (`fastlane/Fastfile`) on the macOS runner to sign and
+upload. It's **dormant** until you set the repo variable `TESTFLIGHT_ENABLED=true`
+and add the Apple secrets — see `docs/TESTFLIGHT.md`. Signing uses an App Store
+Connect API key + `fastlane match` (certs in a private repo); never commit the
+`.p8`, PAT, or `MATCH_PASSWORD`.
 
 ## Compile failures become tests
 

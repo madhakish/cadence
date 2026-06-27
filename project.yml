@@ -40,6 +40,7 @@ targets:
           phone can stand in for the keychain tag.
     settings:
       base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.comeback.Comeback
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: false

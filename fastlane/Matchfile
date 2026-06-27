@@ -1,0 +1,8 @@
+# Signing certificates + provisioning profiles are generated once via the App
+# Store Connect API and stored (encrypted) in a separate private git repo, so
+# CI can fetch them on every run. No Mac, no Keychain, no manual cert wrangling.
+git_url(ENV["MATCH_GIT_URL"])
+storage_mode("git")
+type("appstore")
+app_identifier([ENV["APP_IDENTIFIER"] || "com.comeback.Comeback"])
+readonly(false) # first run creates the cert + profile; safe to keep false

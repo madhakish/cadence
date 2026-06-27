@@ -88,3 +88,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx --yes -p semantic-release@24 -p @semantic-release/exec@6 semantic-release
+
+  testflight:
+    name: TestFlight (fastlane)
+    needs: [app-build]
+    # Dormant until you opt in: set the repo variable TESTFLIGHT_ENABLED=true
+    # (and add the Apple secrets). Until then this job is skipped — main stays green.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build & upload to TestFlight
+        env:
+          APP_IDENTIFIER: ${{ vars.APP_IDENTIFIER }}
+          DEVELOPER_TEAM_ID: ${{ secrets.DEVELOPER_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        run: bundle exec fastlane beta
