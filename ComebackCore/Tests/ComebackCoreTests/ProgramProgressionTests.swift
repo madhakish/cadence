@@ -88,4 +88,13 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(c.currentReps, 10)
         XCTAssertEqual(c.stallCount, 1)
     }
+
+    func testBodyweightAccessoryClimbsPastMax() {
+        // No loadable increment → keep adding reps, never reset, never add weight.
+        let bw = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0)
+        let a = P.advanceAccessory(bw, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false))
+        XCTAssertEqual(a.weightLb, 0, accuracy: 1e-9)
+        XCTAssertEqual(a.currentReps, 13)
+        XCTAssertEqual(a.stallCount, 0)
+    }
 }

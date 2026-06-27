@@ -231,6 +231,10 @@ ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minReps
 ok(ac.weightLb === 50 && ac.currentReps === 11, "accessory below max → +1 rep, hold weight");
 ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 2, minRepsAchieved: 10, anyStoppedEarly: false });
 ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "accessory miss → hold + stall");
+// bodyweight/timed accessory (0 increment) climbs reps past max — no reset, no weight added
+let bw = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0, stallCount: 0 };
+let bwa = C.advanceAccessory(bw, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
+ok(bwa.weightLb === 0 && bwa.currentReps === 13 && bwa.stallCount === 0, "bodyweight accessory climbs past max, no reset");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
