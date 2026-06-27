@@ -105,6 +105,13 @@ struct SettingsView: View {
                             }
                         }
                     }
+                    Button {
+                        let program = Program(name: "Program \(programs.count + 1)", isActive: programs.isEmpty)
+                        context.insert(program)
+                        try? context.save()
+                    } label: {
+                        Label("Add program", systemImage: "plus")
+                    }
                 }
 
                 Section("Progression (standalone lifts)") {
@@ -291,10 +298,15 @@ struct TrackEditorView: View {
 
 struct ProgramEditorView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Query private var allPrograms: [Program]
     @Bindable var program: Program
 
     var body: some View {
         Form {
+            Section("Name") {
+                TextField("Program name", text: $program.name)
+            }
             Section("Training focus") {
                 Picker("Focus", selection: Binding(get: { program.focus }, set: { program.focus = $0 })) {
                     Text("Strength").tag(TrainingFocus.strength)
@@ -302,7 +314,10 @@ struct ProgramEditorView: View {
                     Text("Maintain").tag(TrainingFocus.maintain)
                 }
                 Stepper("Rounding: \(Weight.trim(program.roundingLb)) lb", value: $program.roundingLb, in: 2.5...10, step: 2.5)
-                Toggle("Active", isOn: $program.isActive)
+                // Activation is exclusive — only one program drives Today.
+                Toggle("Active", isOn: Binding(get: { program.isActive }, set: { on in
+                    if on { for p in allPrograms { p.isActive = (p === program) } } else { program.isActive = false }
+                }))
             }
             Section {
                 Text("Cycle \(program.cycleNumber), week \(program.currentWeek). Lifts progress automatically — weights are the current week-1 base.")
@@ -328,6 +343,15 @@ struct ProgramEditorView: View {
                     context.insert(day)
                 } label: {
                     Label("Add day", systemImage: "plus")
+                }
+            }
+            Section {
+                Button(role: .destructive) {
+                    context.delete(program)
+                    try? context.save()
+                    dismiss()
+                } label: {
+                    Text("Delete program")
                 }
             }
         }

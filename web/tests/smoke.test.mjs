@@ -146,5 +146,18 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok((await db.Programs.active()).days.find((d) => d.name === "Extra Day").lifts.length === 0, "removed a lift from the day");
 }
 
+// ---- multiple programs: create, exclusively activate, delete ----
+{
+  await db.Programs.save({ name: "Cut Block", focus: "maintain", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, roundingLb: 5, isActive: false, days: [] });
+  let all = await db.Programs.all();
+  ok(all.length === 2, "second program created");
+  const second = all.find((p) => p.name === "Cut Block");
+  for (const x of all) { x.isActive = x.id === second.id; await db.Programs.save(x); } // exclusive activate
+  ok((await db.Programs.active()).name === "Cut Block", "activating switches the active program");
+  ok((await db.Programs.all()).filter((p) => p.isActive).length === 1, "exactly one program active");
+  await db.Programs.del(second.id);
+  ok((await db.Programs.all()).length === 1, "program deleted");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
