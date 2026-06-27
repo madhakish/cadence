@@ -9,6 +9,7 @@ final class RestTimer {
     private(set) var remaining: TimeInterval = 0
     private(set) var total: TimeInterval = 0
     private(set) var isRunning = false
+    private(set) var exerciseName = ""
     private var endDate: Date?
     private var timer: Timer?
 
@@ -24,6 +25,7 @@ final class RestTimer {
     func start(seconds: Int, exerciseName: String) {
         stop()
         guard seconds > 0 else { return }
+        self.exerciseName = exerciseName
         total = TimeInterval(seconds)
         remaining = total
         endDate = Date().addingTimeInterval(total)

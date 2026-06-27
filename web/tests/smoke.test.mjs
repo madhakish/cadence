@@ -63,7 +63,10 @@ ok(warm.length === 5 && warm[0].weightLb === 45, "deadlift got a warmup ramp");
 ok(work.length === 3 && work.every((s) => s.weightLb === 245 && s.reps === 3), "3 working sets at 245×3");
 
 await session.openSession(id); await tick();
-const bank = [...document.querySelectorAll("#overlays .overlay button")].find((b) => b.textContent === "Bank it.");
+const overlayButtons = () => [...document.querySelectorAll("#overlays .overlay button")];
+ok(overlayButtons().some((b) => b.textContent === "Rest"), "per-exercise Rest button present in logger");
+ok(overlayButtons().some((b) => b.textContent.startsWith("⏱")), "per-exercise rest chip shows duration");
+const bank = overlayButtons().find((b) => b.textContent === "Bank it.");
 ok(!!bank, "Bank it. button present");
 bank.click(); await tick();
 

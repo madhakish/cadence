@@ -126,16 +126,28 @@ private struct SummaryBox: Identifiable {
 private struct ExerciseSection: View {
     @Environment(\.modelContext) private var context
     @Environment(RestTimer.self) private var restTimer
+    @Query private var settingsList: [AppSettings]
 
     @Bindable var entry: SessionExercise
     let onDropLoad: () -> Void
+
+    // Per-exercise rest, falling back to the global main/accessory defaults.
+    private var restSeconds: Int {
+        guard let ex = entry.exercise else { return 90 }
+        if ex.defaultRestSeconds > 0 { return ex.defaultRestSeconds }
+        let s = settingsList.first
+        return ex.category == .main ? (s?.mainLiftRestSeconds ?? 300) : (s?.accessoryRestSeconds ?? 90)
+    }
+    private var restBinding: Binding<Int> {
+        Binding(get: { restSeconds }, set: { entry.exercise?.defaultRestSeconds = $0 })
+    }
+    private func timeLabel(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
 
     var body: some View {
         Section {
             ForEach(entry.orderedSets) { set in
                 SetRow(set: set, onLogged: {
-                    let rest = entry.exercise?.defaultRestSeconds ?? 90
-                    restTimer.start(seconds: set.isWarmup ? 60 : rest,
+                    restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
                                     exerciseName: entry.exercise?.name ?? "")
                 })
             }
@@ -153,6 +165,13 @@ private struct ExerciseSection: View {
                 }
                 .buttonStyle(.bordered)
 
+                Button {
+                    restTimer.start(seconds: restSeconds, exerciseName: entry.exercise?.name ?? "")
+                } label: {
+                    Label("Rest", systemImage: "timer")
+                }
+                .buttonStyle(.bordered)
+
                 Spacer()
 
                 Button {
@@ -163,6 +182,9 @@ private struct ExerciseSection: View {
                 .buttonStyle(.bordered)
                 .tint(Theme.warn)
             }
+
+            Stepper("Rest between sets: \(timeLabel(restSeconds))", value: restBinding, in: 0...600, step: 15)
+                .font(.caption)
         } header: {
             HStack {
                 Text(entry.exercise?.name ?? "Exercise")
@@ -387,8 +409,14 @@ struct RestTimerBar: View {
 
     var body: some View {
         HStack {
-            Text(restTimer.display)
-                .font(.system(size: 32, weight: .heavy, design: .rounded).monospacedDigit())
+            VStack(alignment: .leading, spacing: 0) {
+                if !restTimer.exerciseName.isEmpty {
+                    Text("Resting · \(restTimer.exerciseName)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Text(restTimer.display)
+                    .font(.system(size: 32, weight: .heavy, design: .rounded).monospacedDigit())
+            }
             Spacer()
             Button("+30s") { restTimer.add(seconds: 30) }
                 .buttonStyle(.bordered)
