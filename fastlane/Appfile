@@ -1,0 +1,5 @@
+# Bundle id is set via the APP_IDENTIFIER repo variable (defaults below).
+# Authentication is via an App Store Connect API key (see Fastfile) — no Apple
+# ID / password / 2FA needed, which is what makes this fully headless.
+app_identifier(ENV["APP_IDENTIFIER"] || "com.comeback.Comeback")
+team_id(ENV["DEVELOPER_TEAM_ID"]) if ENV["DEVELOPER_TEAM_ID"]
