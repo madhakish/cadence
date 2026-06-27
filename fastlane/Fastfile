@@ -12,24 +12,16 @@ platform :ios do
     api_key = app_store_connect_api_key(
       key_id: ENV["ASC_KEY_ID"],
       issuer_id: ENV["ASC_ISSUER_ID"],
-      key_content: ENV["ASC_KEY_CONTENT"], # raw contents of the .p8 file
-      is_key_content_base64: false
+      key_content: ENV["ASC_KEY_CONTENT"], # base64 of the .p8 (robust for multiline secrets)
+      is_key_content_base64: true
     )
 
     # Generate Comeback.xcodeproj from the XcodeGen spec (gitignored in repo).
     sh("cd .. && xcodegen generate")
 
-    # Ensure the App ID + App Store Connect record exist (idempotent).
-    begin
-      produce(
-        app_identifier: APP_ID,
-        app_name: "Comeback",
-        api_key: api_key,
-        enable_services: { health_kit: "on" }
-      )
-    rescue => e
-      UI.important("produce skipped (app likely already exists): #{e.message}")
-    end
+    # NOTE: the App ID (com.comeback.Comeback, with HealthKit enabled) and the
+    # App Store Connect app record are created once by hand — see docs/TESTFLIGHT.md.
+    # That's more reliable than headless `produce`.
 
     # Fetch (or create on first run) the distribution cert + provisioning profile.
     match(type: "appstore", app_identifier: APP_ID, api_key: api_key, readonly: false)

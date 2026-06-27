@@ -33,10 +33,16 @@ that certs repo. CI authenticates to it via `MATCH_GIT_BASIC_AUTHORIZATION` =
 `base64("<github-username>:<PAT>")` (no newline), e.g.:
 `printf 'madhakish:ghp_xxx' | base64`
 
-### 4. (App record) — optional
-The pipeline runs fastlane `produce` to create the App ID + App Store Connect
-record automatically on first run. You can also create it by hand in App Store
-Connect with bundle id `com.comeback.Comeback` if you prefer.
+### 4. Register the App ID + app record (one-time, ~3 min)
+Two quick browser steps (more reliable than doing it headless):
+1. **Developer portal → Certificates, IDs & Profiles → Identifiers → +** →
+   App IDs → App → description "Comeback", Bundle ID **explicit**
+   `com.comeback.Comeback`, and tick **HealthKit** under Capabilities. Register.
+2. **App Store Connect → Apps → + → New App** → iOS, name "Comeback", the
+   bundle id above, SKU `comeback`, your primary language. Create.
+
+(`fastlane match` then makes the signing cert + profile for that App ID
+automatically on the first CI run.)
 
 ## Configure the repo
 
@@ -54,7 +60,7 @@ Repository **secrets**:
 | `DEVELOPER_TEAM_ID` | your 10-char Team ID |
 | `ASC_KEY_ID` | API Key ID |
 | `ASC_ISSUER_ID` | API Issuer ID |
-| `ASC_KEY_CONTENT` | the full contents of the `.p8` file (paste as-is) |
+| `ASC_KEY_CONTENT` | **base64** of the `.p8` file — Linux/macOS: `base64 -w0 AuthKey_XXXX.p8` (macOS: `base64 -i AuthKey_XXXX.p8`); Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("AuthKey_XXXX.p8"))` |
 | `MATCH_GIT_URL` | HTTPS URL of the private certs repo |
 | `MATCH_GIT_BASIC_AUTHORIZATION` | `base64("user:PAT")` for that repo |
 | `MATCH_PASSWORD` | a passphrase you choose (encrypts the certs) |
