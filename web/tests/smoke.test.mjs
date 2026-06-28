@@ -66,6 +66,8 @@ await session.openSession(id); await tick();
 const overlayButtons = () => [...document.querySelectorAll("#overlays .overlay button")];
 ok(overlayButtons().some((b) => b.textContent === "Rest"), "per-exercise Rest button present in logger");
 ok(overlayButtons().some((b) => b.textContent.startsWith("⏱")), "per-exercise rest chip shows duration");
+ok(document.querySelector("#overlays .overlay svg.barbell"), "barbell plate visualization renders for a barbell lift");
+ok([...document.querySelectorAll("#overlays .overlay select.bar-select option")].some((o) => o.textContent.includes("45 lb")), "bar selector offers 45 lb");
 const bank = overlayButtons().find((b) => b.textContent === "Bank it.");
 ok(!!bank, "Bank it. button present");
 bank.click(); await tick();
