@@ -162,6 +162,11 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .gym-img { width: 100%; background: #fff; border-radius: 12px; padding: 12px; }
 .annot { font-size: 12px; }
 
+/* barbell plate visualization */
+.barbell-wrap { display: flex; align-items: center; gap: 8px; padding: 0 0 8px 4px; }
+svg.barbell { height: 30px; max-width: 70%; }
+select.bar-select { width: auto; min-width: 96px; padding: 6px 8px; font-size: 13px; }
+
 /* service-worker update prompt */
 #update-banner {
   position: fixed; left: 12px; right: 12px; bottom: calc(80px + var(--safe-bottom)); z-index: 70;

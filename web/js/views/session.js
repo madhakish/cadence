@@ -4,6 +4,7 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, SET_FLAGS, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, iso } from "../db.js";
+import { barbellSVG } from "../barbell.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -71,7 +72,16 @@ export async function openSession(id) {
   if (!session) { ui.toast("Session not found."); return; }
   const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
   const settings = await Settings.get();
+  const gym = await Gyms.default();
   const save = () => Sessions.save(session);
+
+  // Per-exercise entry/display unit + bar. Session-local. The bar is chosen
+  // independently of the plate unit (most bars are 45 lb whatever you load).
+  const unitByEx = {};
+  const exUnit = (se) => unitByEx[se.exerciseName] || "lb";
+  const barByEx = {};
+  const defaultBar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
+  const barFor = (se) => barByEx[se.exerciseName] || defaultBar;
 
   // Per-exercise rest, with the global main/accessory defaults as a fallback.
   function restFor(ex) {
@@ -124,7 +134,10 @@ export async function openSession(id) {
       ui.h("div", { class: "lead" },
         ui.h("span", { class: "title", text: se.exerciseName }),
         se.phase ? ui.h("span", { class: "sub accent", text: C.phaseLabel(se.phase) }) : null),
-      ui.h("div", { class: "btn-row" },
+      ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
+        ui.h("div", { style: { width: "100px" } },
+          ui.seg([{ value: "lb", label: "lb" }, { value: "kg", label: "kg" }], exUnit(se), (u) => { unitByEx[se.exerciseName] = u; renderBody(body); })),
+        ex && ex.type === "barbell" ? barSelect(se, body) : null,
         ui.h("button", { class: "btn sm ghost", text: `⏱ ${ui.mmss(restFor(ex))}`, onClick: () => editRest(se, ex, body) }),
         ex && ex.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null));
     const card = ui.h("div", { class: "card" }, head);
@@ -153,9 +166,19 @@ export async function openSession(id) {
     });
   }
 
+  function barSelect(se, body) {
+    const sel = ui.h("select", { class: "bar-select" },
+      ...C.ALL_BARS.map((b) => ui.h("option", { value: C.barId(b), text: C.barLabel(b), selected: C.barId(b) === C.barId(barFor(se)) })));
+    sel.addEventListener("change", () => { barByEx[se.exerciseName] = C.barById(sel.value); renderBody(body); });
+    return sel;
+  }
+
   function setRow(se, s, body) {
+    const ex = exMap.get(se.exerciseName);
+    const u = exUnit(se);
+    const wlabel = s.weightLb === 0 ? "BW" : `${C.trim(u === "kg" ? C.kgFromLb(s.weightLb) : s.weightLb)} ${u}`;
     const wt = ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editSet(se, s, body) },
-      ui.h("span", { class: "wt mono" + (s.isWarmup ? " muted" : ""), text: setWeightLabel(s) }),
+      ui.h("span", { class: "wt mono" + (s.isWarmup ? " muted" : ""), text: wlabel }),
       ui.h("span", { class: "sub mono", text: ` × ${s.reps}${s.isPerSide ? "/side" : ""}` }));
     const tags = ui.h("span", { class: "sub" });
     if (s.isWarmup) tags.append(ui.h("span", { class: "pill", text: "warmup" }));
@@ -167,8 +190,20 @@ export async function openSession(id) {
       text: name === "clean" ? "✓" : name[0].toUpperCase(),
       onClick: () => toggleFlag(se, s, name, body),
     });
-    return ui.h("div", { class: "setrow" }, wt, tags,
+    const row = ui.h("div", { class: "setrow" }, wt, tags,
       ui.h("div", { class: "flagbtns" }, flag("clean", "clean"), flag("grindy", "grindy"), flag("wobble", "wobble")));
+
+    // Barbell plate visualization (barbell lifts only).
+    if (ex && ex.type === "barbell" && s.weightLb > 0) {
+      const { svg, solution } = barbellSVG(s.weightLb, u, barFor(se), gym);
+      const wrap = ui.h("div", { class: "barbell-wrap" }, svg);
+      if (solution.isOffTarget) {
+        const t = u === "kg" ? C.kgFromLb(solution.totalLb) : solution.totalLb;
+        wrap.append(ui.h("span", { class: "sub warn", text: `≈ closest ${C.trim(t)} ${u}` }));
+      }
+      return ui.h("div", {}, row, wrap);
+    }
+    return row;
   }
 
   function toggleFlag(se, s, name, body) {
@@ -183,7 +218,9 @@ export async function openSession(id) {
     const ex = exMap.get(se.exerciseName);
     const w = last ? last.weightLb : (se.plannedWeightLb ?? 45);
     const r = last ? last.reps : (se.plannedReps ?? 5);
-    se.sets.push(mkSet(se.sets.length, w, r, { perSide: ex && ex.isUnilateral }));
+    const set = mkSet(se.sets.length, w, r, { perSide: ex && ex.isUnilateral });
+    set.enteredUnit = exUnit(se);
+    se.sets.push(set);
   }
 
   function dropLoad(se, body) {
@@ -204,7 +241,7 @@ export async function openSession(id) {
     ui.sheet({
       title: "Edit set",
       build: (c, api) => {
-        let unit = s.enteredUnit;
+        let unit = exUnit(se);
         const shown = unit === "kg" ? C.kgFromLb(s.weightLb) : s.weightLb;
         const wInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "0.5", value: s.weightLb === 0 ? "" : C.trim(shown, 2) });
         c.append(ui.field("Weight (0 = bodyweight)", wInput));
@@ -225,6 +262,7 @@ export async function openSession(id) {
             s.weightLb = val === 0 ? 0 : C.toLb(val, unit);
             s.enteredUnit = unit; s.reps = reps; s.isWarmup = warm; s.isPerSide = per;
             s.bodyFlagSite = site; s.bodyFlagNote = site ? (noteInput.value || null) : null;
+            unitByEx[se.exerciseName] = unit; // keep the row display in the unit you just used
             api.close(); save(); renderBody(body);
           },
         }));

@@ -236,5 +236,18 @@ let bw = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incre
 let bwa = C.advanceAccessory(bw, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
 ok(bwa.weightLb === 0 && bwa.currentReps === 13 && bwa.stallCount === 0, "bodyweight accessory climbs past max, no reset");
 
+// ---- plate colours (gym scheme) ----
+eq(C.plateColorToken({ value: 55, unit: "lb" }), "red", "55 lb red");
+eq(C.plateColorToken({ value: 45, unit: "lb" }), "blue", "45 lb blue");
+eq(C.plateColorToken({ value: 35, unit: "lb" }), "yellow", "35 lb yellow");
+eq(C.plateColorToken({ value: 25, unit: "lb" }), "green", "25 lb green");
+eq(C.plateColorToken({ value: 10, unit: "lb" }), "white", "10 lb white");
+eq(C.plateColorToken({ value: 5, unit: "lb" }), "black", "5 lb black");
+eq(C.plateColorToken({ value: 2.5, unit: "lb" }), "black", "2.5 lb black");
+eq(C.plateColorToken({ value: 25, unit: "kg" }), "red", "25 kg red");
+eq(C.plateColorToken({ value: 20, unit: "kg" }), "blue", "20 kg blue");
+eq(C.plateColorToken({ value: 15, unit: "kg" }), "green", "15 kg green");
+ok(C.plateSizeFactor({ value: 45, unit: "lb" }) > C.plateSizeFactor({ value: 10, unit: "lb" }), "bigger plate draws taller");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

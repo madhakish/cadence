@@ -49,6 +49,37 @@ export const plateLb = (p) => toLb(p.value, p.unit);
 export const plateId = (p) => `${p.value}-${p.unit}`;
 export const plateLabel = (p) => `${trim(p.value, 2)} ${p.unit}`;
 
+// Plate colour token (the user's gym scheme). The UI maps the token → a hex.
+// 55 lb / 25 kg red · 45 lb / 20 kg blue · 25 lb / 15 kg green · 10 lb / 10 kg white ·
+// everything 5 lb and under (and fractional) is black iron · 35 lb yellow.
+export function plateColorToken(plate) {
+  if (plate.unit === "lb") {
+    if (plate.value >= 55) return "red";
+    if (plate.value === 45) return "blue";
+    if (plate.value === 35) return "yellow";
+    if (plate.value === 25) return "green";
+    if (plate.value === 10) return "white";
+    return "black"; // 5, 2.5, fractional
+  }
+  if (plate.value >= 25) return "red";
+  if (plate.value === 20) return "blue";
+  if (plate.value === 15) return "green";
+  if (plate.value === 10) return "white";
+  return "black"; // 5, 2.5, 1.25
+}
+
+// Relative drawn diameter of a plate (0.4–1.0), by canonical pounds, so the
+// barbell graphic looks physically right regardless of unit.
+export function plateSizeFactor(plate) {
+  const lb = plateLb(plate);
+  if (lb >= 44) return 1.0;   // 45/55 lb, 20/25 kg
+  if (lb >= 33) return 0.9;   // 35 lb, 15 kg
+  if (lb >= 22) return 0.78;  // 25 lb, 10 kg
+  if (lb >= 11) return 0.62;  // 10 lb, 5 kg
+  if (lb >= 5) return 0.5;    // 5 lb
+  return 0.4;                 // 2.5 lb / fractional
+}
+
 const mkPlates = (vals, unit) => vals.map((value) => ({ value, unit }));
 export const STANDARD_KG = mkPlates([25, 20, 15, 10, 5, 2.5, 1.25], "kg");
 export const STANDARD_LB = mkPlates([45, 35, 25, 10, 5, 2.5], "lb");
@@ -58,8 +89,9 @@ export const BARS = {
   bar45lb: { value: 45, unit: "lb" },
   bar35lb: { value: 35, unit: "lb" },
   bar20kg: { value: 20, unit: "kg" },
+  bar15kg: { value: 15, unit: "kg" },
 };
-export const ALL_BARS = [BARS.bar45lb, BARS.bar35lb, BARS.bar20kg];
+export const ALL_BARS = [BARS.bar45lb, BARS.bar35lb, BARS.bar20kg, BARS.bar15kg];
 export const barLb = (b) => toLb(b.value, b.unit);
 export const barId = (b) => `${b.value}-${b.unit}`;
 export const barLabel = (b) => `${trim(b.value)} ${b.unit} bar`;
