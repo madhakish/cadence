@@ -1,9 +1,15 @@
 # Cadence — Project Instructions
 
-Repo for **Comeback**, a native iOS workout-tracking app (SwiftUI + SwiftData,
-iOS 17+, single user, local-first — no backend, no accounts). The repo is named
-Cadence; the app target, module, and bundle are named Comeback. Migrated here
-from its temporary home in the-greenhouse repo.
+Repo for **Comeback**, a single-user, local-first workout-tracking app (no
+backend, no accounts). The repo is named Cadence; the app target, module, and
+bundle are named Comeback. Migrated here from its temporary home in the-greenhouse repo.
+
+It ships as **two apps that share one brain**: a **native iOS app** (SwiftUI +
+SwiftData, iOS 17+) and a **web PWA** (`web/` — vanilla JS, IndexedDB, no build
+step; the live daily driver at `madhakish.github.io/cadence/`). ALL computational
+logic lives in `ComebackCore` (pure Swift, Foundation-only, Linux-testable) and
+is **mirrored 1:1 in `web/js/core.js`** with identical tests (XCTest ≡ the node
+suite). That parity is non-negotiable — it's why the two apps can't drift.
 
 ## Layout
 
@@ -12,8 +18,11 @@ from its temporary home in the-greenhouse repo.
 | `project.yml` | XcodeGen spec. `xcodegen generate` produces `Comeback.xcodeproj` (gitignored — never commit it) |
 | `ComebackCore/` | Pure-Swift package: plate math, program engine, warmup ramp, PR detection, units. ALL testable logic lives here |
 | `ComebackCore/Tests/` | Unit tests, including `CompileRegressionTests.swift` (see below) |
-| `Comeback/` | App target: SwiftUI views, SwiftData `@Model` classes, services, seed data |
-| `.github/workflows/ci.yml` | CI + release pipeline |
+| `Comeback/` | Native app target: SwiftUI views, SwiftData `@Model` classes, services, seed data |
+| `web/` | Web PWA: `js/core.js` (mirror of ComebackCore), `js/db.js` (IndexedDB), views, service worker. No build step |
+| `web/tests/` | `core.test.mjs` (parity checks vs XCTest) + `smoke.test.mjs` (jsdom + fake-indexeddb) |
+| `fastlane/`, `docs/TESTFLIGHT.md` | Mac-free TestFlight pipeline (dormant until configured) |
+| `.github/workflows/ci.yml`, `pages.yml` | CI + release pipeline; web tests + Pages deploy |
 | `.releaserc.json` | semantic-release config |
 
 ## Conventional Commits — REQUIRED
@@ -126,6 +135,58 @@ progression systems: standalone `LiftTrack`s (independent per-lift cycles, the
   **week-3 Peak** into a pending result and APPLIES it at the deload week's end
   (rollover: cycle++, week→1, deload/ceiling notes written as `programNote`
   milestones). Accessories double-progress every bank.
+
+## Design principles
+
+The app holds an opinion about training; these constraints keep it coherent.
+
+- **Adherence dominates outcome.** A simple, consistent plan gets executed.
+  Complexity lives *inside* the autoregulation, triggered by data — never exposed
+  as knobs.
+- **Guide, don't interrogate.** Minimize inputs; pre-fill everything predictable
+  (a program day pre-fills weight/sets/reps for one-tap confirm); every required
+  tap must earn itself.
+- **Knows when it doesn't know.** Prefer logging silently when confident and
+  asking one light question when not. Wrong auto-detection is worse than manual
+  entry — it corrupts the log.
+- **The program is the prior.** A known plan collapses "which of 470 exercises"
+  into "which of today's five." Lean on it.
+- **n=1.** Built for one user, ~30 movements, one gym. Refuse speculative
+  generality; generalize later from a working app + real data.
+- **Logic in ComebackCore, pure + tested + mirrored to JS.** Platform I/O
+  (HealthKit, IndexedDB/SwiftData, sensors) stays at the edges so the reasoning
+  is deterministic and unit-testable.
+
+## Roadmap
+
+Build order is deliberately easy-first — never build the hard sensor-fusion
+thing before there's a working, distributed app.
+
+- **Phase 0 — simple logger + clear the Apple pipeline.** ~Done: the logger is
+  live (web) and the TestFlight pipeline is wired (dormant — see
+  `docs/TESTFLIGHT.md`). Deliverable is the credential + template, not revenue.
+- **Phase 1 — Program Engine + Readiness Engine.**
+  - Program Engine: **built** (adaptive progression above). Today's autoregulation
+    is *in-session only* (quality flags + dropped-load), not yet RPE/RIR shifting
+    with *pre-session* readiness.
+  - Readiness Engine: **not built.** Pivotal change — it needs **HealthKit READ**
+    (HRV, resting HR, sleep, respiratory rate, wrist temp), reversing the current
+    write-only stance; **native-only** (the web PWA can't read Apple Health).
+    Encode the math as **pure ComebackCore functions** (Banister fitness-fatigue,
+    acute:chronic workload ratio, MEV/MAV/MRV volume landmarks, RPE/RIR), with
+    constants **refit to the user's own data** (population norms transfer poorly).
+    Ship it as a **gentle nudge first** (RPE ±0.5, go/hold — never a dramatic
+    override) and **watch before it prescribes**: show the score would have been
+    right before it's allowed to move load.
+- **Phase 2 — ambient capture.** Geofence → `HKWorkoutSession` → set/rest
+  detection → wrist-IMU exercise classification *under the day's program as a
+  strong prior* (5-way, not 470-from-scratch) → load **predicted** from program +
+  last session (unobservable from the wrist; not passive). Far off; watchOS.
+
+Open questions to resolve while building Phase 1: HRV/sleep/RHR/temp weighting +
+the user's personal baselines; deload trigger (scheduled vs readiness vs hybrid)
+and its hysteresis; confirming watchOS high-rate capture needs an active
+`HKWorkoutSession`; the confidence threshold for silent-log vs ask.
 
 ## Housekeeping
 
