@@ -131,12 +131,13 @@ private struct ExerciseSection: View {
     @Bindable var entry: SessionExercise
     let onDropLoad: () -> Void
 
-    // Per-exercise rest, falling back to the global main/accessory defaults.
+    // Smart per-exercise rest by category/movement (shared ComebackCore logic);
+    // accessories fall back to the accessory setting, then 90s.
     private var restSeconds: Int {
         guard let ex = entry.exercise else { return 90 }
-        if ex.defaultRestSeconds > 0 { return ex.defaultRestSeconds }
-        let s = settingsList.first
-        return ex.category == .main ? (s?.mainLiftRestSeconds ?? 300) : (s?.accessoryRestSeconds ?? 90)
+        let accFallback = ex.category == .accessory ? (settingsList.first?.accessoryRestSeconds ?? 0) : 0
+        let override = ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : accFallback
+        return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name, exerciseDefaultRest: override)
     }
     private var restBinding: Binding<Int> {
         Binding(get: { restSeconds }, set: { entry.exercise?.defaultRestSeconds = $0 })

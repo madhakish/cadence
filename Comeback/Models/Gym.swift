@@ -53,7 +53,6 @@ final class Gym {
 final class AppSettings {
     var unitDisplayRaw: String
     var proteinTargetGrams: Double
-    var mainLiftRestSeconds: Int
     var accessoryRestSeconds: Int
     var healthKitEnabled: Bool
     var seededAt: Date?
@@ -61,7 +60,6 @@ final class AppSettings {
     init() {
         self.unitDisplayRaw = UnitDisplay.lbPrimary.rawValue
         self.proteinTargetGrams = 175
-        self.mainLiftRestSeconds = 300
         self.accessoryRestSeconds = 90
         self.healthKitEnabled = false
         self.seededAt = nil

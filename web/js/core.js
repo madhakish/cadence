@@ -415,3 +415,20 @@ export function advanceAccessory(state, perf) {
   }
   return next;
 }
+
+// ---- Rest defaults ---------------------------------------------------------
+// Smart per-exercise rest (seconds) by category + movement, not per-screen
+// magic. A per-exercise override (exerciseDefaultRest > 0) wins for ANY
+// movement; otherwise: main lower 5:00, oly/explosive 4:00, main upper 3:00,
+// accessory 1:30, conditioning none. Pure; mirrored in
+// ComebackCore/RestDefaults.swift.
+export function restDefaultSeconds(category, name, exerciseDefaultRest = 0) {
+  if (exerciseDefaultRest > 0) return exerciseDefaultRest; // per-exercise override wins everywhere
+  if (category === "Conditioning") return 0;
+  if (category === "Main") {
+    if (name.includes("Deadlift") || name.includes("Squat")) return 300;
+    if (name.includes("Clean") || name.includes("Snatch") || name.includes("Push Press")) return 240;
+    return 180;
+  }
+  return 90;
+}

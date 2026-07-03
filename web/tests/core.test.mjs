@@ -249,5 +249,19 @@ eq(C.plateColorToken({ value: 20, unit: "kg" }), "blue", "20 kg blue");
 eq(C.plateColorToken({ value: 15, unit: "kg" }), "green", "15 kg green");
 ok(C.plateSizeFactor({ value: 45, unit: "lb" }) > C.plateSizeFactor({ value: 10, unit: "lb" }), "bigger plate draws taller");
 
+// ---- rest defaults ----
+eq(C.restDefaultSeconds("Main", "Deadlift", 0), 300, "deadlift 5:00");
+eq(C.restDefaultSeconds("Main", "Back Squat", 0), 300, "squat 5:00");
+eq(C.restDefaultSeconds("Main", "Push Press", 0), 240, "push press 4:00");
+eq(C.restDefaultSeconds("Main", "Power Clean", 0), 240, "clean 4:00");
+eq(C.restDefaultSeconds("Main", "Incline DB Press", 0), 180, "main upper 3:00");
+eq(C.restDefaultSeconds("Main", "Barbell Bench", 0), 180, "bench 3:00");
+eq(C.restDefaultSeconds("Accessory", "DB Curls", 0), 90, "accessory 1:30");
+eq(C.restDefaultSeconds("Accessory", "Face Pulls", 120), 120, "accessory honors its own override");
+eq(C.restDefaultSeconds("Main", "Barbell Bench", 120), 120, "main lift honors its per-exercise override");
+eq(C.restDefaultSeconds("Main", "Deadlift", 360), 360, "override beats the main-lift movement default");
+eq(C.restDefaultSeconds("Conditioning", "Run-Walk Intervals", 0), 0, "conditioning no rest");
+eq(C.restDefaultSeconds("Conditioning", "Sled Push", 120), 120, "conditioning honors an explicit override");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

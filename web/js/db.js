@@ -75,8 +75,9 @@ function defaultSettings() {
   return {
     unitDisplay: "lbPrimary",
     proteinTargetGrams: 175,
-    mainLiftRestSeconds: 300,
     accessoryRestSeconds: 90,
+    autoStartRest: false, // manual start by default — auto lies if you rested first
+    haptics: true,
     seededAt: null,
   };
 }
