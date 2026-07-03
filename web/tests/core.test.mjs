@@ -258,7 +258,10 @@ eq(C.restDefaultSeconds("Main", "Incline DB Press", 0), 180, "main upper 3:00");
 eq(C.restDefaultSeconds("Main", "Barbell Bench", 0), 180, "bench 3:00");
 eq(C.restDefaultSeconds("Accessory", "DB Curls", 0), 90, "accessory 1:30");
 eq(C.restDefaultSeconds("Accessory", "Face Pulls", 120), 120, "accessory honors its own override");
+eq(C.restDefaultSeconds("Main", "Barbell Bench", 120), 120, "main lift honors its per-exercise override");
+eq(C.restDefaultSeconds("Main", "Deadlift", 360), 360, "override beats the main-lift movement default");
 eq(C.restDefaultSeconds("Conditioning", "Run-Walk Intervals", 0), 0, "conditioning no rest");
+eq(C.restDefaultSeconds("Conditioning", "Sled Push", 120), 120, "conditioning honors an explicit override");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

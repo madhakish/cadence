@@ -98,7 +98,7 @@ export async function openSession(id) {
   const rest = makeRestTimer(() => paintBar(), () => onRestDone());
   let restLabel = "";
   let barEls = null;                          // bottom-bar refs, filled after pushScreen
-  function armRest(seconds, label) { restLabel = label || ""; rest.start(seconds || 90); paintBar(); }
+  function armRest(seconds, label) { if (!(seconds > 0)) return; restLabel = label || ""; rest.start(seconds); paintBar(); } // 0/none (conditioning) arms nothing
   function onRestDone() { ui.toast(restLabel ? `Rest over · ${restLabel}.` : "Rest over."); beep(settings.haptics !== false); paintBar(); }
 
   function paintBar() {

@@ -29,17 +29,13 @@ struct SettingsView: View {
 
                     Section {
                         Stepper(
-                            "Main lifts: \(timeLabel(settings.mainLiftRestSeconds))",
-                            value: bindable.mainLiftRestSeconds, in: 60...600, step: 30
-                        )
-                        Stepper(
                             "Accessory: \(timeLabel(settings.accessoryRestSeconds))",
                             value: bindable.accessoryRestSeconds, in: 30...300, step: 15
                         )
                     } header: {
                         Text("Rest timer defaults")
                     } footer: {
-                        Text("Fallback when an exercise has no rest of its own. Set per-exercise rest in the logger or the library.")
+                        Text("Rest is smart by movement (lower 5:00 · oly 4:00 · upper 3:00 · accessory 1:30). This is the accessory fallback; a per-exercise rest set in the logger or library overrides the default for any movement.")
                     }
 
                     Section("Protein") {
