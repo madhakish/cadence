@@ -23,8 +23,12 @@ export async function render(host) {
     ui.stepper(settings.mainLiftRestSeconds, { min: 60, max: 600, step: 30, format: ui.mmss, onChange: async (v) => { settings.mainLiftRestSeconds = v; await saveS(); } })));
   restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Accessory" }),
     ui.stepper(settings.accessoryRestSeconds, { min: 30, max: 300, step: 15, format: ui.mmss, onChange: async (v) => { settings.accessoryRestSeconds = v; await saveS(); } })));
+  restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Auto-start rest after a set" }),
+    ui.toggle(settings.autoStartRest, async (v) => { settings.autoStartRest = v; await saveS(); })));
+  restCard.append(ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Haptics" }),
+    ui.toggle(settings.haptics !== false, async (v) => { settings.haptics = v; await saveS(); })));
   root.append(restCard);
-  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Fallback when an exercise has no rest of its own. Set per-exercise rest in the logger (⏱) or the library." }));
+  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Rest defaults are smart by movement (lower 5:00 · oly 4:00 · upper 3:00 · accessory 1:30). The steppers above set the accessory fallback; per-exercise rest lives in the logger (⏱) or library. Auto-start off = tap Rest yourself." }));
 
   // Protein
   root.append(ui.h("div", { class: "section-title", text: "Protein" }));
