@@ -22,12 +22,15 @@ enum SessionCompletion {
     /// workout to HealthKit (when enabled and finished live), and arm the
     /// next-morning knee check-in if the session included running.
     ///
-    /// `startedAt` is the logger's ephemeral session-clock origin; pass it when
-    /// finishing live so the Health workout gets a real duration. Backfilled
-    /// completions (no `startedAt`) are not mirrored — a made-up duration is
-    /// worse than no sample.
+    /// `startedAt` is the logger's ephemeral session-clock origin (view-open
+    /// time). The Health workout is written only when that origin falls on the
+    /// session's own day — a session resumed and banked days later is a
+    /// backfill, and a made-up duration is worse than no sample.
     @discardableResult
     static func finish(_ session: WorkoutSession, context: ModelContext, startedAt: Date? = nil) -> SessionSummary {
+        // Idempotence backstop (mirrors web completeSession): finishing twice
+        // would duplicate milestones and double-advance tracks/programs.
+        guard !session.isCompleted else { return SessionSummary(lines: [], milestones: []) }
         session.isCompleted = true
 
         var lines: [SessionSummary.LiftLine] = []
@@ -76,7 +79,12 @@ enum SessionCompletion {
             NotificationService.scheduleKneeCheckIn(afterSessionOn: session.date)
         }
 
-        if let start = startedAt, healthKitEnabled(context) {
+        // Mirror to Health only when the session was finished live on its own
+        // day — a session resumed days later would otherwise produce a bogus
+        // seconds-long workout dated today (sessionStart is view-open time).
+        if let start = startedAt,
+           Calendar.current.isDate(start, inSameDayAs: session.date),
+           healthKitEnabled(context) {
             let end = Date()
             Task { await HealthKitService.shared.saveStrengthWorkout(start: start, end: end) }
         }

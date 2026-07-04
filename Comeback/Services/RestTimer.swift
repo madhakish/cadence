@@ -29,8 +29,10 @@ final class RestTimer {
     }
 
     func start(seconds: Int, exerciseName: String) {
-        stop()
+        // Guard BEFORE stop(): arming a zero-rest movement (conditioning) must
+        // not kill a countdown already running (mirrors web armRest).
         guard seconds > 0 else { return }
+        stop()
         self.exerciseName = exerciseName
         total = TimeInterval(seconds)
         remaining = total
@@ -53,8 +55,13 @@ final class RestTimer {
 
     func add(seconds: Int) {
         guard isRunning, let end = endDate else { return }
-        endDate = end.addingTimeInterval(TimeInterval(seconds))
+        let newEnd = end.addingTimeInterval(TimeInterval(seconds))
+        endDate = newEnd
         total += TimeInterval(seconds)
+        // Reschedule the local notification or it fires at the ORIGINAL end —
+        // a minute early after +1:00, defeating the face-down-phone design.
+        NotificationService.cancelRestDone()
+        NotificationService.scheduleRestDone(in: max(0, newEnd.timeIntervalSinceNow), exerciseName: exerciseName)
         tick()
     }
 

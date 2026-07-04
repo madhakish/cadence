@@ -19,6 +19,7 @@ struct ActiveSessionView: View {
     @State private var summary: SessionSummary?
     @State private var sessionStart = Date()            // session stopwatch origin (ephemeral)
     @State private var currentEntry: SessionExercise?   // the exercise you're actively working
+    @State private var banking = false                  // double-tap on Bank it would run completion twice
 
     private var currentOrFirst: SessionExercise? { currentEntry ?? session.orderedExercises.first }
 
@@ -47,12 +48,16 @@ struct ActiveSessionView: View {
 
             Section {
                 Button {
+                    guard !banking else { return }
+                    banking = true
                     summary = SessionCompletion.finish(session, context: context, startedAt: sessionStart)
+                    restTimer.stop() // the workout is over; don't fire "Rest over" for a banked session
                 } label: {
                     Text(Copy.sessionDone)
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: Theme.bigTap - 16)
                 }
+                .disabled(banking)
                 .buttonStyle(.borderedProminent)
                 .listRowBackground(Color.clear)
             }
@@ -107,18 +112,20 @@ struct ActiveSessionView: View {
         try? context.save()
     }
 
-    /// One tap mid-session: recalc the not-yet-performed sets, log the reason.
-    /// Only unflagged working sets are touched — rewriting a set you already
-    /// did corrupts the log of what you actually lifted.
+    /// One tap mid-session: apply the shared drop plan (core parity) — only
+    /// not-yet-performed sets are touched, each dropped from its own weight.
     private func dropLoad(_ entry: SessionExercise, reason: AutoregReason) {
-        let remaining = entry.workingSets.filter { $0.flags.isEmpty }
-        guard let base = remaining.map(\.weightLb).max() else { return }
-        let dropped = ProgramEngine.droppedLoad(from: base)
-        for (i, set) in remaining.enumerated() {
-            set.weightLb = dropped
-            if i == 0 { set.autoregReason = reason }
+        let ordered = entry.orderedSets
+        let plan = ProgramEngine.dropLoadPlan(
+            sets: ordered.map { (weightLb: $0.weightLb, isWarmup: $0.isWarmup, isFlagged: !$0.flags.isEmpty) }
+        )
+        guard !plan.isEmpty else { return }
+        for (i, target) in plan.enumerated() {
+            ordered[target.index].weightLb = target.weightLb
+            if i == 0 { ordered[target.index].autoregReason = reason }
         }
-        entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \(Weight.trim(dropped)) — \(reason.rawValue)."
+        let top = plan.map(\.weightLb).max() ?? 0
+        entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \(Weight.trim(top)) — \(reason.rawValue)."
         try? context.save()
     }
 }
@@ -204,7 +211,10 @@ private struct ExerciseSection: View {
                 .tint(Theme.warn)
             }
 
-            Stepper("Rest between sets: \(timeLabel(restSeconds))", value: restBinding, in: 0...600, step: 15)
+            // Floor 15, not 0: this shows the EFFECTIVE rest and 0 means "use
+            // the smart default" — stepping to 0 would snap the display back
+            // up to the movement default. Clear an override in the library.
+            Stepper("Rest between sets: \(timeLabel(restSeconds))", value: restBinding, in: 15...600, step: 15)
                 .font(.caption)
         } header: {
             HStack {
