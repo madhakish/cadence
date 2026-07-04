@@ -162,6 +162,14 @@ private struct ExerciseSection: View {
         Binding(get: { restSeconds },
                 set: { entry.exercise?.defaultRestSeconds = $0; try? context.save() })
     }
+    // Stepper floor: writing 0 clears the override, and the stepper displays
+    // the EFFECTIVE rest — so 0 is only offered where clearing lands on 0
+    // (conditioning, whose smart default IS none); elsewhere a decrement to 0
+    // would snap the display up to the movement default.
+    private var restFloor: Int {
+        guard let ex = entry.exercise else { return 15 }
+        return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name) == 0 ? 0 : 15
+    }
     private func timeLabel(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
 
     var body: some View {
@@ -211,10 +219,7 @@ private struct ExerciseSection: View {
                 .tint(Theme.warn)
             }
 
-            // Floor 15, not 0: this shows the EFFECTIVE rest and 0 means "use
-            // the smart default" — stepping to 0 would snap the display back
-            // up to the movement default. Clear an override in the library.
-            Stepper("Rest between sets: \(timeLabel(restSeconds))", value: restBinding, in: 15...600, step: 15)
+            Stepper("Rest between sets: \(timeLabel(restSeconds))", value: restBinding, in: restFloor...600, step: 15)
                 .font(.caption)
         } header: {
             HStack {

@@ -187,12 +187,13 @@ export async function openSession(id) {
     ui.sheet({
       title: `Rest — ${ex.name}`,
       build: (c) => {
-        // Floor 15, not 0: this stepper shows the EFFECTIVE rest, and writing 0
-        // means "use the smart default" — stepping 0:15 → 0 would snap the
-        // display back up to the movement default (bizarre). Clear an override
-        // from the library's raw editor instead.
+        // Floor: writing 0 clears the override, and this stepper shows the
+        // EFFECTIVE rest — so 0 is only offered where clearing lands on 0
+        // (conditioning, whose smart default IS none); elsewhere stepping to 0
+        // would snap the display up to the movement default.
+        const floor = C.restDefaultSeconds(ex.category, ex.name, 0) === 0 ? 0 : 15;
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
-          ui.stepper(restFor(ex), { min: 15, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
+          ui.stepper(restFor(ex), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
         c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used." }));
       },
     });
