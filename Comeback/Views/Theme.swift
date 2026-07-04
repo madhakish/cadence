@@ -31,3 +31,6 @@ extension View {
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 12))
     }
 }
+
+/// The one mm:ss formatter for the app (web equivalent: ui.mmss).
+func mmss(_ seconds: Int) -> String { String(format: "%d:%02d", seconds / 60, seconds % 60) }

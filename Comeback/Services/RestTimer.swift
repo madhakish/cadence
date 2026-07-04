@@ -23,10 +23,7 @@ final class RestTimer {
         total > 0 ? max(0, remaining / total) : 0
     }
 
-    var display: String {
-        let r = Int(remaining.rounded())
-        return String(format: "%d:%02d", r / 60, r % 60)
-    }
+    var display: String { mmss(Int(remaining.rounded())) }
 
     func start(seconds: Int, exerciseName: String) {
         // Guard BEFORE stop(): arming a zero-rest movement (conditioning) must
@@ -39,9 +36,12 @@ final class RestTimer {
         endDate = Date().addingTimeInterval(total)
         isRunning = true
         NotificationService.scheduleRestDone(in: total, exerciseName: exerciseName)
-        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+        // 0.5s halves the observation churn vs 0.25s — nothing rendered needs
+        // sub-second resolution, and endDate keeps the countdown accurate.
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.tick()
         }
+        timer?.tolerance = 0.1
     }
 
     func stop() {

@@ -138,6 +138,22 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok((await db.Milestones.all()).length === msBefore, "no duplicate milestones from re-completion");
 }
 
+// ---- the same tracked exercise in two sections advances the track twice ----
+// (native parity: SwiftData mutates one context-cached object per section)
+{
+  const before = (await db.Tracks.byName("Incline DB Press")).baseWeightLb; // linear, +5/session
+  const sec = (order) => ({
+    order, exerciseName: "Incline DB Press", notes: "", phase: null, programRole: null,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null,
+    sets: [{ order: 0, weightLb: before, reps: 5, isWarmup: false, isPerSide: false, enteredUnit: "lb",
+             flags: ["clean"], bodyFlagSite: null, bodyFlagNote: null, durationSeconds: null, distanceMiles: null, autoregReason: null }],
+  });
+  const sid = await db.Sessions.save({ date: db.iso(new Date()), notes: "", isCompleted: false, gymName: null, exercises: [sec(0), sec(1)] });
+  await session.completeSession(await db.Sessions.get(sid));
+  const after = (await db.Tracks.byName("Incline DB Press")).baseWeightLb;
+  ok(after === before + 10, `duplicate sections advance the track twice (${before}→${after})`);
+}
+
 // ---- protein add reflects in today's total ----
 await db.Protein.add({ date: new Date().toISOString(), grams: 45, label: "Shake" });
 ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");

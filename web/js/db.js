@@ -35,17 +35,24 @@ function open() {
   });
 }
 
-function run(store, mode, fn) {
+// One transaction over one or more stores. fn receives a store getter and is
+// queued synchronously; a synchronous throw (e.g. put() on a bad record) or a
+// rejection aborts the WHOLE transaction — queued writes must never
+// auto-commit around a failure.
+export function runAll(stores, mode, fn) {
   return open().then((db) => new Promise((resolve, reject) => {
-    const tx = db.transaction(store, mode);
-    const os = tx.objectStore(store);
+    const tx = db.transaction(stores, mode);
     let out;
-    Promise.resolve(fn(os)).then((v) => { out = v; });
     tx.oncomplete = () => resolve(out);
     tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error("transaction aborted"));
+    const abort = (e) => { try { tx.abort(); } catch { /* already aborting */ } reject(e); };
+    try {
+      Promise.resolve(fn((name) => tx.objectStore(name))).then((v) => { out = v; }, abort);
+    } catch (e) { abort(e); }
   }));
 }
+function run(store, mode, fn) { return runAll([store], mode, (os) => fn(os(store))); }
 const reqP = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 
 const getAll = (store) => run(store, "readonly", (os) => reqP(os.getAll()));
@@ -171,6 +178,7 @@ export async function exportBundle() {
     Sessions.completed(), Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
     Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(),
   ]);
+  const { id: _settingsRowId, ...settingsOut } = settings; // strip the fixed row key
   return {
     exportedAt: iso(new Date()),
     appVersion: "web",
@@ -211,7 +219,7 @@ export async function exportBundle() {
       })),
     })),
     tracks, gyms, exercises,
-    settings: (({ id, ...rest }) => rest)(settings),
+    settings: settingsOut,
   };
 }
 export const exportJSON = async () => JSON.stringify(await exportBundle(), null, 2);
@@ -271,24 +279,13 @@ export async function importBundle(bundle) {
 
   const stores = [...writes.keys()];
   if (!stores.length) throw new Error("Not a Comeback backup");
-  const db = await open();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(stores, "readwrite");
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error("import aborted"));
-    try {
-      for (const [store, records] of writes) {
-        const os = tx.objectStore(store);
-        os.clear();
-        for (const r of records) os.put(r);
-      }
-    } catch (e) {
-      // put() throws SYNCHRONOUSLY on a bad record (e.g. missing keyPath key).
-      // Without an explicit abort the already-queued clears would auto-commit
-      // and destroy data while the caller sees a failed import.
-      tx.abort();
-      reject(e);
+  // runAll aborts wholesale on a synchronous put() throw (bad record), so the
+  // queued clears can't auto-commit around a failed import.
+  await runAll(stores, "readwrite", (os) => {
+    for (const [store, records] of writes) {
+      const s = os(store);
+      s.clear();
+      for (const r of records) s.put(r);
     }
   });
 }
