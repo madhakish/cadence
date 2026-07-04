@@ -265,6 +265,20 @@ export function droppedLoad(currentLb, roundingLb = DEFAULT_ROUNDING_LB, barLb =
   return Math.max(result, barLb);
 }
 
+// Which sets a mid-session "dropping load" tap rewrites, and to what. Only
+// not-yet-performed sets (unflagged working sets) are touched — a flagged set
+// is history — and each is dropped from ITS OWN weight, so a lighter back-off
+// set is never raised toward the top set's drop. Mirrors
+// ProgramEngine.dropLoadPlan.
+export function dropLoadPlan(sets, roundingLb = DEFAULT_ROUNDING_LB, barLb = 45) {
+  const out = [];
+  sets.forEach((s, index) => {
+    if (s.isWarmup || s.isFlagged) return;
+    out.push({ index, weightLb: droppedLoad(s.weightLb, roundingLb, barLb) });
+  });
+  return out;
+}
+
 export const AUTOREG_REASONS = ["bar speed", "wobble", "joint signal", "heat", "fatigue"];
 
 // plan: { weightLb, sets, reps, phase? }
