@@ -12,6 +12,7 @@ struct ActiveSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(RestTimer.self) private var restTimer
     @Query private var settingsList: [AppSettings]
+    @Query private var gyms: [Gym]
 
     @Bindable var session: WorkoutSession
     @State private var showExercisePicker = false
@@ -22,12 +23,15 @@ struct ActiveSessionView: View {
     @State private var banking = false                  // double-tap on Bank it would run completion twice
 
     private var currentOrFirst: SessionExercise? { currentEntry ?? session.orderedExercises.first }
+    private var gym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
 
     var body: some View {
         List {
             ForEach(session.orderedExercises) { entry in
                 ExerciseSection(
                     entry: entry,
+                    settings: settingsList.first,
+                    gym: gym,
                     onDropLoad: { autoregEntry = entry },
                     onWork: { currentEntry = $0 }
                 )
@@ -69,8 +73,7 @@ struct ActiveSessionView: View {
                 restSeconds: smartRestSeconds(for: currentOrFirst?.exercise, settings: settingsList.first)
             )
         }
-        .onAppear { restTimer.hapticsEnabled = settingsList.first?.haptics ?? true }
-        .onChange(of: settingsList.first?.haptics) { _, on in restTimer.hapticsEnabled = on ?? true }
+        .onChange(of: settingsList.first?.haptics, initial: true) { _, on in restTimer.hapticsEnabled = on ?? true }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -150,14 +153,22 @@ private struct SummaryBox: Identifiable {
 private struct ExerciseSection: View {
     @Environment(\.modelContext) private var context
     @Environment(RestTimer.self) private var restTimer
-    @Query private var settingsList: [AppSettings]
 
     @Bindable var entry: SessionExercise
+    // Passed down from ActiveSessionView (which already queries them) — a
+    // per-section @Query would register one redundant fetch per exercise.
+    let settings: AppSettings?
+    let gym: Gym?
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
     let onWork: (SessionExercise) -> Void
 
-    private var restSeconds: Int { smartRestSeconds(for: entry.exercise, settings: settingsList.first) }
+    /// Ephemeral bar choice for this exercise (mirrors the web logger's
+    /// per-exercise bar select); nil = the gym's default bar.
+    @State private var pickedBar: Bar?
+    private var effectiveBar: Bar { pickedBar ?? gym?.defaultBar ?? .bar45lb }
+
+    private var restSeconds: Int { smartRestSeconds(for: entry.exercise, settings: settings) }
     private var restBinding: Binding<Int> {
         Binding(get: { restSeconds },
                 set: { entry.exercise?.defaultRestSeconds = $0; try? context.save() })
@@ -170,20 +181,25 @@ private struct ExerciseSection: View {
         guard let ex = entry.exercise else { return 15 }
         return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name) == 0 ? 0 : 15
     }
-    private func timeLabel(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
 
     var body: some View {
         Section {
             ForEach(entry.orderedSets) { set in
-                SetRow(set: set, onLogged: {
-                    onWork(entry)
-                    // Auto-start only if the user opted in (manual is the
-                    // default), and never restart a countdown already running.
-                    if settingsList.first?.autoStartRest == true && !restTimer.isRunning {
-                        restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
-                                        exerciseName: entry.exercise?.name ?? "")
+                VStack(alignment: .leading, spacing: 4) {
+                    SetRow(set: set, onLogged: {
+                        onWork(entry)
+                        // Auto-start only if the user opted in (manual is the
+                        // default), and never restart a countdown already running.
+                        if settings?.autoStartRest == true && !restTimer.isRunning {
+                            restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
+                                            exerciseName: entry.exercise?.name ?? "")
+                        }
+                    })
+                    // Barbell plate visualization (barbell lifts only) — mirrors web.
+                    if entry.exercise?.type == .barbell && set.weightLb > 0 {
+                        BarbellView(weightLb: set.weightLb, unit: set.enteredUnit, bar: effectiveBar, gym: gym)
                     }
-                })
+                }
             }
             .onDelete { offsets in
                 let ordered = entry.orderedSets
@@ -219,7 +235,14 @@ private struct ExerciseSection: View {
                 .tint(Theme.warn)
             }
 
-            Stepper("Rest between sets: \(timeLabel(restSeconds))", value: restBinding, in: restFloor...600, step: 15)
+            if entry.exercise?.type == .barbell {
+                Picker("Bar", selection: Binding(get: { effectiveBar }, set: { pickedBar = $0 })) {
+                    ForEach(Bar.all) { Text($0.label).tag($0) }
+                }
+                .font(.caption)
+            }
+
+            Stepper("Rest between sets: \(mmss(restSeconds))", value: restBinding, in: restFloor...600, step: 15)
                 .font(.caption)
         } header: {
             HStack {
@@ -498,8 +521,6 @@ private struct SessionBottomBar: View {
     private func elapsedLabel(at date: Date) -> String {
         mmss(max(0, Int(date.timeIntervalSince(sessionStart))))
     }
-
-    private func mmss(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
 }
 
 // MARK: - Exercise picker

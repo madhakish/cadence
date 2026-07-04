@@ -29,7 +29,7 @@ struct SettingsView: View {
 
                     Section {
                         Stepper(
-                            "Accessory: \(timeLabel(settings.accessoryRestSeconds))",
+                            "Accessory: \(mmss(settings.accessoryRestSeconds))",
                             value: bindable.accessoryRestSeconds, in: 30...300, step: 15
                         )
                         Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
@@ -158,10 +158,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
-    }
-
-    private func timeLabel(_ seconds: Int) -> String {
-        String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
 
