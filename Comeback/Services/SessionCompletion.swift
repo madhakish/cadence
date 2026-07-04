@@ -89,7 +89,13 @@ enum SessionCompletion {
             Task { await HealthKitService.shared.saveStrengthWorkout(start: start, end: end) }
         }
 
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Keep the session retryable: with the flag left set, a retry
+            // would no-op through the idempotence guard without persisting.
+            session.isCompleted = false
+        }
         return SessionSummary(lines: lines, milestones: allEvents)
     }
 

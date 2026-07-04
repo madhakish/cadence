@@ -357,8 +357,20 @@ export async function openSession(id) {
 // ---- completion + PR detection ----
 export async function completeSession(session) {
   // Idempotence backstop (mirrors SessionCompletion.finish): completing twice
-  // would duplicate milestones and double-advance tracks/programs.
+  // would duplicate milestones and double-advance tracks/programs. Claim the
+  // flag SYNCHRONOUSLY (before the first await) so interleaved calls can't
+  // both pass; reset it on failure so a retry isn't no-opped by this guard.
   if (session.isCompleted) return { lines: [], milestones: [] };
+  session.isCompleted = true;
+  try {
+    return await completeSessionInner(session);
+  } catch (e) {
+    session.isCompleted = false;
+    throw e;
+  }
+}
+
+async function completeSessionInner(session) {
   const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date));
   const lines = [], milestones = [];
   for (const se of session.exercises) {
@@ -395,7 +407,6 @@ export async function completeSession(session) {
 
   if (session.programTag) await advanceProgram(session, milestones);
 
-  session.isCompleted = true;
   await Sessions.save(session);
   return { lines, milestones };
 }
