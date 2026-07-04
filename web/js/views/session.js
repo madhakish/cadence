@@ -50,9 +50,14 @@ function makeRestTimer(onTick, onDone) {
     stop,
   };
 }
+// One shared AudioContext — browsers cap concurrent contexts, so creating one
+// per rest would silence the chime after ~6 rests in a session.
+let _audioCtx = null;
 function beep(haptics = true) {
   try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ac = _audioCtx;
+    if (ac.state === "suspended") ac.resume();
     const o = ac.createOscillator(), g = ac.createGain();
     o.frequency.value = 880; o.connect(g); g.connect(ac.destination);
     g.gain.setValueAtTime(0.001, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.3, ac.currentTime + 0.02);
@@ -249,10 +254,13 @@ export async function openSession(id) {
     ui.actionSheet("Dropping load — why?", C.AUTOREG_REASONS.map((reason) => ({
       label: reason,
       onClick: () => {
-        const working = se.sets.filter((x) => !x.isWarmup);
-        const topW = working.reduce((m, x) => Math.max(m, x.weightLb), 0);
+        // Drop only sets not yet performed (no flags) — rewriting a set you
+        // already did corrupts the log of what you actually lifted.
+        const remaining = se.sets.filter((x) => !x.isWarmup && !(x.flags || []).length);
+        if (!remaining.length) { ui.toast("All sets already logged — nothing to drop."); return; }
+        const topW = remaining.reduce((m, x) => Math.max(m, x.weightLb), 0);
         const dropped = C.droppedLoad(topW);
-        working.filter((x) => Math.abs(x.weightLb - topW) < 1e-9).forEach((x) => { x.weightLb = dropped; x.enteredUnit = "lb"; x.autoregReason = reason; });
+        remaining.forEach((x, i) => { x.weightLb = dropped; x.enteredUnit = "lb"; if (i === 0) x.autoregReason = reason; });
         save(); renderBody(body);
         ui.toast(`Dropped to ${C.trim(dropped)} lb`);
       },
@@ -316,10 +324,18 @@ export async function openSession(id) {
     });
   }
 
+  let finishing = false; // double-tap on Bank it would run completion twice (dup milestones, racy advances)
   async function finish() {
-    const summary = await completeSession(session);
-    rest.stop();
-    showSummary(summary, () => { screen.close(); ui.nav.refresh(); });
+    if (finishing) return;
+    finishing = true;
+    try {
+      const summary = await completeSession(session);
+      rest.stop();
+      showSummary(summary, () => { screen.close(); ui.nav.refresh(); });
+    } catch (e) {
+      finishing = false; // let the user retry on a failed write
+      throw e;
+    }
   }
 
   const screen = ui.pushScreen({ title: ui.fmtDate(session.date), build: (b) => renderBody(b) });
@@ -377,10 +393,10 @@ export async function completeSession(session) {
 // ---- Performance summaries (built from logged sets, consumed by the core) ----
 function cyclePerf(se) {
   const w = se.sets.filter((s) => !s.isWarmup);
-  const presReps = se.plannedReps || (w.length ? Math.max(...w.map((s) => s.reps)) : 0);
+  const presReps = se.plannedReps ?? (w.length ? Math.max(...w.map((s) => s.reps)) : 0); // ?? not ||: mirrors Swift's nil-coalescing
   const top = w.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
   return {
-    prescribedSets: se.plannedSets || w.length, prescribedReps: presReps,
+    prescribedSets: se.plannedSets ?? w.length, prescribedReps: presReps,
     completedSets: w.filter((s) => s.reps >= presReps).length,
     anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
     anyDroppedLoad: w.some((s) => !!s.autoregReason),

@@ -85,10 +85,39 @@ ok(ms.some((m) => m.exerciseName === "Deadlift" && m.kind === "heaviestSet" && m
 const json = await db.exportJSON();
 const parsed = JSON.parse(json);
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
+ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
+ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
+ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 30, "export carries the exercise library");
+ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 const csv = await db.exportCSV();
 ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
-await db.importBundle(parsed);
-ok((await db.Sessions.completed()).length === 11, "import round trip preserves sessions");
+
+// Mutable non-log state must survive the round trip (the Safari-eviction
+// recovery path): advance-then-restore must not reset the track.
+{
+  const dlTrack = await db.Tracks.byName("Deadlift");
+  ok(dlTrack.nextPhase === 4, "deadlift track advanced pre-export");
+  dlTrack.nextPhase = 1; dlTrack.baseWeightLb = 100; await db.Tracks.save(dlTrack); // simulate lost state
+  await db.importBundle(parsed);
+  ok((await db.Sessions.completed()).length === 11, "import round trip preserves sessions");
+  const restored = await db.Tracks.byName("Deadlift");
+  ok(restored.nextPhase === 4 && restored.baseWeightLb !== 100, "import restores live track progression");
+  const sets = (await db.Sessions.completed())[0].exercises[0].sets;
+  ok(sets.every((s) => s.enteredUnit === "lb" || s.enteredUnit === "kg"), "sets keep their entered unit through the round trip");
+}
+
+// A backup missing a store's key must leave that store untouched (old-format
+// bundles), and a malformed bundle must not wipe anything.
+{
+  const progsBefore = (await db.Programs.all()).length;
+  const partial = { sessions: parsed.sessions }; // no programs/tracks/gyms keys
+  await db.importBundle(partial);
+  ok((await db.Programs.all()).length === progsBefore, "import without a programs key leaves programs alone");
+  let threw = false;
+  try { await db.importBundle({ nonsense: true }); } catch { threw = true; }
+  ok(threw, "importing a non-backup throws instead of wiping");
+  ok((await db.Sessions.completed()).length === 11, "failed import left sessions intact");
+}
 
 // ---- protein add reflects in today's total ----
 await db.Protein.add({ date: new Date().toISOString(), grams: 45, label: "Shake" });

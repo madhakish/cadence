@@ -162,20 +162,29 @@ export async function ensureSeeded() {
 }
 
 // ---- Export / Import ----
+// The bundle is the Safari-eviction recovery path: it must round-trip ALL
+// mutable state, not just the log — tracks (live per-lift progression), gyms
+// (barcode image, plate inventory, default bar), the exercise library (rest,
+// shelved, watch sites), and settings ride along with sessions.
 export async function exportBundle() {
-  const [sessions, bodyweight, protein, checkins, milestones, programs] = await Promise.all([
+  const [sessions, bodyweight, protein, checkins, milestones, programs, tracks, gyms, exercises, settings] = await Promise.all([
     Sessions.completed(), Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
+    Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(),
   ]);
   return {
     exportedAt: iso(new Date()),
     appVersion: "web",
     sessions: sessions.map((s) => ({
       date: iso(s.date), notes: s.notes || "", gym: s.gymName || null,
+      programTag: s.programTag || null,
       exercises: (s.exercises || []).map((e) => ({
         name: e.exerciseName, notes: e.notes || "",
         phase: e.phase ? C.phaseLabel(e.phase) : null,
+        role: e.programRole || null,
+        plannedWeightLb: e.plannedWeightLb ?? null, plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
         sets: (e.sets || []).map((x) => ({
           weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
+          enteredUnit: x.enteredUnit || "lb",
           flags: x.flags || [], bodyFlagSite: x.bodyFlagSite || null, bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
           autoregReason: x.autoregReason || null,
@@ -187,14 +196,22 @@ export async function exportBundle() {
     checkIns: checkins.map((c) => ({ date: iso(c.date), site: c.site, response: c.response, note: c.note || "" })),
     milestones: milestones.map((m) => ({ date: iso(m.date), exercise: m.exerciseName || null, kind: m.kind, label: m.label })),
     programs: programs.map((p) => ({
-      name: p.name, focus: p.focus, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
+      id: p.id, name: p.name, focus: p.focus, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
       nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: !!p.isActive,
       days: (p.days || []).map((d) => ({
         name: d.name, order: d.order,
-        lifts: (d.lifts || []).map((l) => ({ exerciseName: l.exerciseName, role: l.role, baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb, stallCount: l.stallCount || 0, lastIncrementLb: l.lastIncrementLb || 0 })),
+        lifts: (d.lifts || []).map((l) => ({
+          exerciseName: l.exerciseName, role: l.role, baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb,
+          stallCount: l.stallCount || 0, lastIncrementLb: l.lastIncrementLb || 0,
+          // Mid-cycle backup: the week-3 Peak stashes a pending result that is
+          // applied at rollover — losing it turns the next rollover into a stall.
+          pending: l.pending || null,
+        })),
         accessories: (d.accessories || []).map((a) => ({ exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0 })),
       })),
     })),
+    tracks, gyms, exercises,
+    settings: (({ id, ...rest }) => rest)(settings),
   };
 }
 export const exportJSON = async () => JSON.stringify(await exportBundle(), null, 2);
@@ -220,27 +237,52 @@ export async function exportCSV() {
 
 const recoverPhase = (label) => { const m = /Wk(\d)/.exec(label || ""); return m ? Number(m[1]) : null; };
 
+// Restore a backup in ONE transaction: only stores present in the bundle are
+// touched (an old backup without e.g. `gyms` leaves current gyms alone), and a
+// malformed bundle aborts wholesale instead of leaving stores cleared.
 export async function importBundle(bundle) {
-  for (const st of ["sessions", "bodyweight", "protein", "checkins", "milestones", "programs"]) await clear(st);
-  for (const s of bundle.sessions || []) {
-    await put("sessions", {
+  const writes = new Map(); // store name -> records to clear+put
+
+  if (bundle.sessions) {
+    writes.set("sessions", bundle.sessions.map((s) => ({
       date: s.date, notes: s.notes || "", isCompleted: true, gymName: s.gym || null,
+      programTag: s.programTag || null,
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, notes: e.notes || "", phase: recoverPhase(e.phase),
-        plannedWeightLb: null, plannedSets: null, plannedReps: null,
+        programRole: e.role || null,
+        plannedWeightLb: e.plannedWeightLb ?? null, plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
         sets: (e.sets || []).map((x, si) => ({
           order: si, weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
-          enteredUnit: "lb", flags: x.flags || [], bodyFlagSite: x.bodyFlagSite || null, bodyFlagNote: x.bodyFlagNote || null,
+          enteredUnit: x.enteredUnit || "lb", flags: x.flags || [], bodyFlagSite: x.bodyFlagSite || null, bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null, autoregReason: x.autoregReason || null,
         })),
       })),
-    });
+    })));
   }
-  for (const b of bundle.bodyweight || []) await put("bodyweight", { date: b.date, weightLb: b.weightLb, bodyFatPercent: b.bodyFatPercent ?? null, milestoneLabel: b.milestoneLabel || null });
-  for (const p of bundle.protein || []) await put("protein", { date: p.date, grams: p.grams, label: p.label });
-  for (const c of bundle.checkIns || []) await put("checkins", { date: c.date, site: c.site, response: c.response, note: c.note || "" });
-  for (const m of bundle.milestones || []) await put("milestones", { date: m.date, exerciseName: m.exercise || null, kind: m.kind, label: m.label });
-  for (const p of bundle.programs || []) await put("programs", p);
+  if (bundle.bodyweight) writes.set("bodyweight", bundle.bodyweight.map((b) => ({ date: b.date, weightLb: b.weightLb, bodyFatPercent: b.bodyFatPercent ?? null, milestoneLabel: b.milestoneLabel || null })));
+  if (bundle.protein) writes.set("protein", bundle.protein.map((p) => ({ date: p.date, grams: p.grams, label: p.label })));
+  if (bundle.checkIns) writes.set("checkins", bundle.checkIns.map((c) => ({ date: c.date, site: c.site, response: c.response, note: c.note || "" })));
+  if (bundle.milestones) writes.set("milestones", bundle.milestones.map((m) => ({ date: m.date, exerciseName: m.exercise || null, kind: m.kind, label: m.label })));
+  if (bundle.programs) writes.set("programs", bundle.programs);
+  if (bundle.tracks) writes.set("tracks", bundle.tracks);
+  if (bundle.gyms) writes.set("gyms", bundle.gyms);
+  if (bundle.exercises) writes.set("exercises", bundle.exercises);
+  if (bundle.settings) writes.set("settings", [{ ...bundle.settings, id: "app" }]);
+
+  const stores = [...writes.keys()];
+  if (!stores.length) throw new Error("Not a Comeback backup");
+  const db = await open();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, "readwrite");
+    for (const [store, records] of writes) {
+      const os = tx.objectStore(store);
+      os.clear();
+      for (const r of records) os.put(r);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error("import aborted"));
+  });
 }
 
 export async function wipeAll() { for (const st of Object.keys(STORES)) await clear(st); _db = null; }
