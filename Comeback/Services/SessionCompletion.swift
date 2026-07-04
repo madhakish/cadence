@@ -18,10 +18,16 @@ struct SessionSummary {
 enum SessionCompletion {
 
     /// Close out a session: detect PRs against all prior completed sessions,
-    /// persist milestones, advance any matching lift tracks, and arm the
+    /// persist milestones, advance any matching lift tracks, mirror the
+    /// workout to HealthKit (when enabled and finished live), and arm the
     /// next-morning knee check-in if the session included running.
+    ///
+    /// `startedAt` is the logger's ephemeral session-clock origin; pass it when
+    /// finishing live so the Health workout gets a real duration. Backfilled
+    /// completions (no `startedAt`) are not mirrored — a made-up duration is
+    /// worse than no sample.
     @discardableResult
-    static func finish(_ session: WorkoutSession, context: ModelContext) -> SessionSummary {
+    static func finish(_ session: WorkoutSession, context: ModelContext, startedAt: Date? = nil) -> SessionSummary {
         session.isCompleted = true
 
         var lines: [SessionSummary.LiftLine] = []
@@ -70,8 +76,18 @@ enum SessionCompletion {
             NotificationService.scheduleKneeCheckIn(afterSessionOn: session.date)
         }
 
+        if let start = startedAt, healthKitEnabled(context) {
+            let end = Date()
+            Task { await HealthKitService.shared.saveStrengthWorkout(start: start, end: end) }
+        }
+
         try? context.save()
         return SessionSummary(lines: lines, milestones: allEvents)
+    }
+
+    private static func healthKitEnabled(_ context: ModelContext) -> Bool {
+        let descriptor = FetchDescriptor<AppSettings>()
+        return (try? context.fetch(descriptor).first?.healthKitEnabled) ?? false
     }
 
     // MARK: - Program day/week/cycle advancement (mirrors web advanceProgram)

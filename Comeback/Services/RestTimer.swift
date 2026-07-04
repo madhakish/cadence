@@ -1,15 +1,21 @@
 import Foundation
 import Observation
+#if canImport(UIKit)
+import UIKit
+#endif
 
-/// Countdown between sets. Defaults: 5:00 main-lift work sets, 1:30 accessory,
-/// overridable per exercise. Schedules a local notification so the phone can
-/// sit face-down on the chalk bucket.
+/// Countdown between sets. Manual by default — armed from the Rest buttons or
+/// the bottom bar; only auto-armed after a set when the auto-start setting is
+/// on. Schedules a local notification so the phone can sit face-down on the
+/// chalk bucket, and buzzes on finish when haptics are enabled.
 @Observable
 final class RestTimer {
     private(set) var remaining: TimeInterval = 0
     private(set) var total: TimeInterval = 0
     private(set) var isRunning = false
     private(set) var exerciseName = ""
+    /// Mirrors the haptics setting; the session view keeps it in sync.
+    var hapticsEnabled = true
     private var endDate: Date?
     private var timer: Timer?
 
@@ -59,6 +65,11 @@ final class RestTimer {
             timer?.invalidate()
             timer = nil
             isRunning = false
+            if hapticsEnabled {
+                #if canImport(UIKit)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                #endif
+            }
         }
     }
 }

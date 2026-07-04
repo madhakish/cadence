@@ -3,29 +3,32 @@ import SwiftData
 import ComebackCore
 
 /// The logger. Pre-filled from the plan; everything editable in place.
-/// Autoregulation is one tap. Rest timer arms itself after each working set.
+/// Autoregulation is one tap. Rest is manual by default — armed from the Rest
+/// buttons or the sticky bottom bar (session clock + countdown); it only
+/// auto-arms after a set when the auto-start setting is on. Mirrors the web
+/// logger (web/js/views/session.js).
 struct ActiveSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(RestTimer.self) private var restTimer
+    @Query private var settingsList: [AppSettings]
 
     @Bindable var session: WorkoutSession
     @State private var showExercisePicker = false
     @State private var autoregEntry: SessionExercise?
     @State private var summary: SessionSummary?
+    @State private var sessionStart = Date()            // session stopwatch origin (ephemeral)
+    @State private var currentEntry: SessionExercise?   // the exercise you're actively working
+
+    private var currentOrFirst: SessionExercise? { currentEntry ?? session.orderedExercises.first }
 
     var body: some View {
         List {
-            if restTimer.isRunning {
-                Section {
-                    RestTimerBar()
-                }
-            }
-
             ForEach(session.orderedExercises) { entry in
                 ExerciseSection(
                     entry: entry,
-                    onDropLoad: { autoregEntry = entry }
+                    onDropLoad: { autoregEntry = entry },
+                    onWork: { currentEntry = $0 }
                 )
             }
 
@@ -44,7 +47,7 @@ struct ActiveSessionView: View {
 
             Section {
                 Button {
-                    summary = SessionCompletion.finish(session, context: context)
+                    summary = SessionCompletion.finish(session, context: context, startedAt: sessionStart)
                 } label: {
                     Text(Copy.sessionDone)
                         .font(.headline)
@@ -54,6 +57,15 @@ struct ActiveSessionView: View {
                 .listRowBackground(Color.clear)
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            SessionBottomBar(
+                sessionStart: sessionStart,
+                restLabel: currentOrFirst?.exercise?.name ?? "",
+                restSeconds: smartRestSeconds(for: currentOrFirst?.exercise, settings: settingsList.first)
+            )
+        }
+        .onAppear { restTimer.hapticsEnabled = settingsList.first?.haptics ?? true }
+        .onChange(of: settingsList.first?.haptics) { _, on in restTimer.hapticsEnabled = on ?? true }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -95,11 +107,13 @@ struct ActiveSessionView: View {
         try? context.save()
     }
 
-    /// One tap mid-session: recalc remaining sets, log the reason.
+    /// One tap mid-session: recalc the not-yet-performed sets, log the reason.
+    /// Only unflagged working sets are touched — rewriting a set you already
+    /// did corrupts the log of what you actually lifted.
     private func dropLoad(_ entry: SessionExercise, reason: AutoregReason) {
-        let remaining = entry.workingSets.suffix(from: completedCount(entry))
-        guard let current = remaining.first?.weightLb else { return }
-        let dropped = ProgramEngine.droppedLoad(from: current)
+        let remaining = entry.workingSets.filter { $0.flags.isEmpty }
+        guard let base = remaining.map(\.weightLb).max() else { return }
+        let dropped = ProgramEngine.droppedLoad(from: base)
         for (i, set) in remaining.enumerated() {
             set.weightLb = dropped
             if i == 0 { set.autoregReason = reason }
@@ -107,12 +121,15 @@ struct ActiveSessionView: View {
         entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \(Weight.trim(dropped)) — \(reason.rawValue)."
         try? context.save()
     }
+}
 
-    /// Heuristic: sets with any flag set are "done"; otherwise assume the
-    /// drop applies from the first unflagged working set onward.
-    private func completedCount(_ entry: SessionExercise) -> Int {
-        entry.workingSets.prefix { !$0.flags.isEmpty }.count
-    }
+/// Smart per-exercise rest by category/movement (shared ComebackCore logic);
+/// accessories fall back to the accessory setting, then 90s.
+private func smartRestSeconds(for exercise: Exercise?, settings: AppSettings?) -> Int {
+    guard let ex = exercise else { return 90 }
+    let accFallback = ex.category == .accessory ? (settings?.accessoryRestSeconds ?? 0) : 0
+    let override = ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : accFallback
+    return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name, exerciseDefaultRest: override)
 }
 
 /// Identifiable wrapper so the summary sheet can drive off .sheet(item:).
@@ -130,17 +147,13 @@ private struct ExerciseSection: View {
 
     @Bindable var entry: SessionExercise
     let onDropLoad: () -> Void
+    /// Marks this exercise as the one being actively worked (drives the bottom bar).
+    let onWork: (SessionExercise) -> Void
 
-    // Smart per-exercise rest by category/movement (shared ComebackCore logic);
-    // accessories fall back to the accessory setting, then 90s.
-    private var restSeconds: Int {
-        guard let ex = entry.exercise else { return 90 }
-        let accFallback = ex.category == .accessory ? (settingsList.first?.accessoryRestSeconds ?? 0) : 0
-        let override = ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : accFallback
-        return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name, exerciseDefaultRest: override)
-    }
+    private var restSeconds: Int { smartRestSeconds(for: entry.exercise, settings: settingsList.first) }
     private var restBinding: Binding<Int> {
-        Binding(get: { restSeconds }, set: { entry.exercise?.defaultRestSeconds = $0 })
+        Binding(get: { restSeconds },
+                set: { entry.exercise?.defaultRestSeconds = $0; try? context.save() })
     }
     private func timeLabel(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
 
@@ -148,8 +161,13 @@ private struct ExerciseSection: View {
         Section {
             ForEach(entry.orderedSets) { set in
                 SetRow(set: set, onLogged: {
-                    restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
-                                    exerciseName: entry.exercise?.name ?? "")
+                    onWork(entry)
+                    // Auto-start only if the user opted in (manual is the
+                    // default), and never restart a countdown already running.
+                    if settingsList.first?.autoStartRest == true && !restTimer.isRunning {
+                        restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
+                                        exerciseName: entry.exercise?.name ?? "")
+                    }
                 })
             }
             .onDelete { offsets in
@@ -160,6 +178,7 @@ private struct ExerciseSection: View {
 
             HStack {
                 Button {
+                    onWork(entry)
                     addSet()
                 } label: {
                     Label("Set", systemImage: "plus")
@@ -167,6 +186,7 @@ private struct ExerciseSection: View {
                 .buttonStyle(.bordered)
 
                 Button {
+                    onWork(entry)
                     restTimer.start(seconds: restSeconds, exerciseName: entry.exercise?.name ?? "")
                 } label: {
                     Label("Rest", systemImage: "timer")
@@ -403,33 +423,68 @@ private struct SetDetailSheet: View {
     }
 }
 
-// MARK: - Rest timer bar
+// MARK: - Sticky bottom bar (session clock + rest)
 
-struct RestTimerBar: View {
+/// Mirrors the web logger's #session-bar: session stopwatch on the left; while
+/// resting, the countdown with +1:00 / Skip and a progress fill; when idle, a
+/// Rest button for the lift you're working.
+private struct SessionBottomBar: View {
     @Environment(RestTimer.self) private var restTimer
+    let sessionStart: Date
+    let restLabel: String
+    let restSeconds: Int
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 0) {
-                if !restTimer.exerciseName.isEmpty {
-                    Text("Resting · \(restTimer.exerciseName)")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Text(restTimer.display)
-                    .font(.system(size: 32, weight: .heavy, design: .rounded).monospacedDigit())
-            }
-            Spacer()
-            Button("+30s") { restTimer.add(seconds: 30) }
-                .buttonStyle(.bordered)
-            Button("Skip") { restTimer.stop() }
-                .buttonStyle(.bordered)
-        }
-        .padding(.vertical, 4)
-        .overlay(alignment: .bottom) {
-            ProgressView(value: 1 - restTimer.progress)
+        VStack(spacing: 0) {
+            ProgressView(value: restTimer.isRunning ? min(1, 1 - restTimer.progress) : 0)
                 .tint(Theme.accent)
+
+            HStack(spacing: 12) {
+                TimelineView(.periodic(from: sessionStart, by: 1)) { timeline in
+                    Text("\(elapsedLabel(at: timeline.date)) session")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if restTimer.isRunning {
+                    if !restTimer.exerciseName.isEmpty {
+                        Text(restTimer.exerciseName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Text(restTimer.display)
+                        .font(.title3.bold().monospacedDigit())
+                    Button("+1:00") { restTimer.add(seconds: 60) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    Button("Skip") { restTimer.stop() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                } else {
+                    Button {
+                        restTimer.start(seconds: restSeconds, exerciseName: restLabel)
+                    } label: {
+                        Text("Rest \(mmss(restSeconds))")
+                            .monospacedDigit()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
         }
+        .background(.bar)
     }
+
+    private func elapsedLabel(at date: Date) -> String {
+        mmss(max(0, Int(date.timeIntervalSince(sessionStart))))
+    }
+
+    private func mmss(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
 }
 
 // MARK: - Exercise picker

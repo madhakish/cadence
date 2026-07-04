@@ -54,6 +54,10 @@ final class AppSettings {
     var unitDisplayRaw: String
     var proteinTargetGrams: Double
     var accessoryRestSeconds: Int
+    // Manual rest by default — auto-start lies if you log a set after you've
+    // already been resting. Mirrors web defaultSettings (db.js).
+    var autoStartRest: Bool = false
+    var haptics: Bool = true
     var healthKitEnabled: Bool
     var seededAt: Date?
 
@@ -61,6 +65,8 @@ final class AppSettings {
         self.unitDisplayRaw = UnitDisplay.lbPrimary.rawValue
         self.proteinTargetGrams = 175
         self.accessoryRestSeconds = 90
+        self.autoStartRest = false
+        self.haptics = true
         self.healthKitEnabled = false
         self.seededAt = nil
     }

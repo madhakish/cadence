@@ -32,10 +32,12 @@ struct SettingsView: View {
                             "Accessory: \(timeLabel(settings.accessoryRestSeconds))",
                             value: bindable.accessoryRestSeconds, in: 30...300, step: 15
                         )
+                        Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
+                        Toggle("Haptics", isOn: bindable.haptics)
                     } header: {
-                        Text("Rest timer defaults")
+                        Text("Rest timer")
                     } footer: {
-                        Text("Rest is smart by movement (lower 5:00 · oly 4:00 · upper 3:00 · accessory 1:30). This is the accessory fallback; a per-exercise rest set in the logger or library overrides the default for any movement.")
+                        Text("Rest is smart by movement (lower 5:00 · oly 4:00 · upper 3:00 · accessory 1:30). The stepper is the accessory fallback; a per-exercise rest set in the logger or library overrides the default for any movement. Auto-start off = tap Rest yourself.")
                     }
 
                     Section("Protein") {
@@ -337,6 +339,7 @@ struct ProgramEditorView: View {
                     day.program = program
                     program.days.append(day)
                     context.insert(day)
+                    try? context.save()
                 } label: {
                     Label("Add day", systemImage: "plus")
                 }
@@ -359,6 +362,7 @@ struct ProgramEditorView: View {
         for i in offsets { context.delete(ordered[i]) }
         for (i, day) in program.orderedDays.enumerated() { day.order = i }
         if program.nextDayIndex >= program.days.count { program.nextDayIndex = 0 }
+        try? context.save()
     }
 }
 
