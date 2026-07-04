@@ -115,4 +115,34 @@ final class PlateMathTests: XCTestCase {
         let kgPerSide = s.loadout.perSide.reduce(0.0) { $0 + $1.plate.value * Double($1.count) }
         XCTAssertEqual(kgPerSide, 40, accuracy: 1e-9)
     }
+
+    // MARK: - Bar list + id parity (mirrors web ALL_BARS / barId / barById)
+
+    func testBarListMatchesWeb() {
+        XCTAssertEqual(Bar.all.map(\.id), ["45-lb", "35-lb", "20-kg", "15-kg"])
+        XCTAssertEqual(Bar.bar15kg.lb, 33.069, accuracy: 0.001)
+        XCTAssertEqual(Bar.by(id: "15-kg"), .bar15kg)
+        XCTAssertEqual(Bar.by(id: "nonsense"), .bar45lb, "unknown id falls back to the 45 lb bar")
+        XCTAssertEqual(Plate(value: 45, unit: .lb).id, "45-lb")
+        XCTAssertEqual(Plate(value: 2.5, unit: .lb).id, "2.5-lb")
+        XCTAssertEqual(Plate(value: 1.25, unit: .kg).id, "1.25-kg")
+    }
+
+    // MARK: - Plate colours + drawn size (mirrors the web "plate colours" block)
+
+    func testPlateColorTokens() {
+        XCTAssertEqual(Plate(value: 55, unit: .lb).colorToken, "red")
+        XCTAssertEqual(Plate(value: 45, unit: .lb).colorToken, "blue")
+        XCTAssertEqual(Plate(value: 35, unit: .lb).colorToken, "yellow")
+        XCTAssertEqual(Plate(value: 25, unit: .lb).colorToken, "green")
+        XCTAssertEqual(Plate(value: 10, unit: .lb).colorToken, "white")
+        XCTAssertEqual(Plate(value: 5, unit: .lb).colorToken, "black")
+        XCTAssertEqual(Plate(value: 2.5, unit: .lb).colorToken, "black")
+        XCTAssertEqual(Plate(value: 25, unit: .kg).colorToken, "red")
+        XCTAssertEqual(Plate(value: 20, unit: .kg).colorToken, "blue")
+        XCTAssertEqual(Plate(value: 15, unit: .kg).colorToken, "green")
+        XCTAssertGreaterThan(Plate(value: 45, unit: .lb).sizeFactor,
+                             Plate(value: 10, unit: .lb).sizeFactor,
+                             "bigger plate draws taller")
+    }
 }

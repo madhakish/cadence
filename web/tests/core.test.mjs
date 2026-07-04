@@ -249,6 +249,14 @@ eq(C.plateColorToken({ value: 20, unit: "kg" }), "blue", "20 kg blue");
 eq(C.plateColorToken({ value: 15, unit: "kg" }), "green", "15 kg green");
 ok(C.plateSizeFactor({ value: 45, unit: "lb" }) > C.plateSizeFactor({ value: 10, unit: "lb" }), "bigger plate draws taller");
 
+// ---- bar list + id parity (mirrors PlateMathTests.testBarListMatchesWeb) ----
+eq(C.ALL_BARS.map(C.barId).join(","), "45-lb,35-lb,20-kg,15-kg", "bar list matches Swift Bar.all");
+ok(Math.abs(C.barLb(C.BARS.bar15kg) - 33.069) < 0.001, "15 kg bar in lb");
+eq(C.barById("15-kg"), C.BARS.bar15kg, "barById resolves the 15 kg bar");
+eq(C.barById("nonsense"), C.BARS.bar45lb, "unknown id falls back to 45 lb bar");
+eq(C.plateId({ value: 45, unit: "lb" }), "45-lb", "plate id format");
+eq(C.plateId({ value: 1.25, unit: "kg" }), "1.25-kg", "fractional plate id format");
+
 // ---- rest defaults ----
 eq(C.restDefaultSeconds("Main", "Deadlift", 0), 300, "deadlift 5:00");
 eq(C.restDefaultSeconds("Main", "Back Squat", 0), 300, "squat 5:00");
