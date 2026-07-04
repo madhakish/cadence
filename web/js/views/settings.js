@@ -358,7 +358,7 @@ function importData() {
     r.readAsText(f);
   });
   ui.sheet({ title: "Import JSON backup", build: (c, api) => {
-    c.append(ui.h("div", { class: "muted", text: "This replaces sessions, bodyweight, protein, check-ins, and milestones with the contents of the backup." }));
+    c.append(ui.h("div", { class: "muted", text: "This replaces everything the backup contains: sessions, bodyweight, protein, check-ins, milestones, programs, lift progression, gyms (incl. barcode + plates), the exercise library, and settings. Data missing from the backup is left untouched." }));
     c.append(ui.field("Backup file", file));
     c.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Close", onClick: () => api.close() }));
   } });

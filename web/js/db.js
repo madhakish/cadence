@@ -274,14 +274,22 @@ export async function importBundle(bundle) {
   const db = await open();
   await new Promise((resolve, reject) => {
     const tx = db.transaction(stores, "readwrite");
-    for (const [store, records] of writes) {
-      const os = tx.objectStore(store);
-      os.clear();
-      for (const r of records) os.put(r);
-    }
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error || new Error("import aborted"));
+    try {
+      for (const [store, records] of writes) {
+        const os = tx.objectStore(store);
+        os.clear();
+        for (const r of records) os.put(r);
+      }
+    } catch (e) {
+      // put() throws SYNCHRONOUSLY on a bad record (e.g. missing keyPath key).
+      // Without an explicit abort the already-queued clears would auto-commit
+      // and destroy data while the caller sees a failed import.
+      tx.abort();
+      reject(e);
+    }
   });
 }
 
