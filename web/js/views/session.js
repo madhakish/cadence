@@ -55,9 +55,12 @@ function makeRestTimer(onTick, onDone) {
 let _audioCtx = null;
 function beep(haptics = true) {
   try {
+    // A context torn down by the OS (state "closed") never recovers — rebuild
+    // it; "interrupted" (iOS phone call/backgrounding) needs resume() too.
+    if (_audioCtx && _audioCtx.state === "closed") _audioCtx = null;
     _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const ac = _audioCtx;
-    if (ac.state === "suspended") ac.resume().catch(() => {}); // async rejection escapes the try/catch
+    if (ac.state !== "running") ac.resume().catch(() => {}); // async rejection escapes the try/catch
     const o = ac.createOscillator(), g = ac.createGain();
     o.frequency.value = 880; o.connect(g); g.connect(ac.destination);
     g.gain.setValueAtTime(0.001, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.3, ac.currentTime + 0.02);
@@ -184,8 +187,13 @@ export async function openSession(id) {
     ui.sheet({
       title: `Rest — ${ex.name}`,
       build: (c) => {
+        // Floor: writing 0 clears the override, and this stepper shows the
+        // EFFECTIVE rest — so 0 is only offered where clearing lands on 0
+        // (conditioning, whose smart default IS none); elsewhere stepping to 0
+        // would snap the display up to the movement default.
+        const floor = C.restDefaultSeconds(ex.category, ex.name, 0) === 0 ? 0 : 15;
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
-          ui.stepper(restFor(ex), { min: 0, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
+          ui.stepper(restFor(ex), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
         c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used." }));
       },
     });
@@ -254,15 +262,13 @@ export async function openSession(id) {
     ui.actionSheet("Dropping load — why?", C.AUTOREG_REASONS.map((reason) => ({
       label: reason,
       onClick: () => {
-        // Drop only sets not yet performed (no flags) — rewriting a set you
-        // already did corrupts the log of what you actually lifted.
-        const remaining = se.sets.filter((x) => !x.isWarmup && !(x.flags || []).length);
-        if (!remaining.length) { ui.toast("All sets already logged — nothing to drop."); return; }
-        const topW = remaining.reduce((m, x) => Math.max(m, x.weightLb), 0);
-        const dropped = C.droppedLoad(topW);
-        remaining.forEach((x, i) => { x.weightLb = dropped; x.enteredUnit = "lb"; if (i === 0) x.autoregReason = reason; });
+        // Shared plan (core parity): unflagged working sets only, each dropped
+        // from its own weight — a back-off set is never raised.
+        const plan = C.dropLoadPlan(se.sets.map((x) => ({ weightLb: x.weightLb, isWarmup: !!x.isWarmup, isFlagged: !!(x.flags || []).length })));
+        if (!plan.length) { ui.toast("All sets already logged — nothing to drop."); return; }
+        plan.forEach((p, i) => { const x = se.sets[p.index]; x.weightLb = p.weightLb; x.enteredUnit = "lb"; if (i === 0) x.autoregReason = reason; });
         save(); renderBody(body);
-        ui.toast(`Dropped to ${C.trim(dropped)} lb`);
+        ui.toast(`Dropped to ${C.trim(Math.max(...plan.map((p) => p.weightLb)))} lb`);
       },
     })));
   }
@@ -334,7 +340,8 @@ export async function openSession(id) {
       showSummary(summary, () => { screen.close(); ui.nav.refresh(); });
     } catch (e) {
       finishing = false; // let the user retry on a failed write
-      throw e;
+      console.error(e);
+      ui.toast("Couldn't bank the session — try again.");
     }
   }
 
@@ -349,6 +356,21 @@ export async function openSession(id) {
 
 // ---- completion + PR detection ----
 export async function completeSession(session) {
+  // Idempotence backstop (mirrors SessionCompletion.finish): completing twice
+  // would duplicate milestones and double-advance tracks/programs. Claim the
+  // flag SYNCHRONOUSLY (before the first await) so interleaved calls can't
+  // both pass; reset it on failure so a retry isn't no-opped by this guard.
+  if (session.isCompleted) return { lines: [], milestones: [] };
+  session.isCompleted = true;
+  try {
+    return await completeSessionInner(session);
+  } catch (e) {
+    session.isCompleted = false;
+    throw e;
+  }
+}
+
+async function completeSessionInner(session) {
   const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date));
   const lines = [], milestones = [];
   for (const se of session.exercises) {
@@ -385,7 +407,6 @@ export async function completeSession(session) {
 
   if (session.programTag) await advanceProgram(session, milestones);
 
-  session.isCompleted = true;
   await Sessions.save(session);
   return { lines, milestones };
 }

@@ -128,6 +128,20 @@ eq(C.droppedLoad(100), 95, "drop 100");
 eq(C.droppedLoad(50), 45, "drop never below bar");
 eq(C.droppedLoad(45), 45, "drop at bar");
 ok(C.droppedLoad(65) < 65 && C.droppedLoad(65) >= 45, "drop always drops above bar");
+{
+  // mirrors ProgramEngineTests.testDropLoadPlan…: unflagged working sets only,
+  // each dropped from its OWN weight (back-offs never raised toward the top's drop)
+  const plan = C.dropLoadPlan([
+    { weightLb: 45, isWarmup: true, isFlagged: false },
+    { weightLb: 300, isWarmup: false, isFlagged: false },
+    { weightLb: 240, isWarmup: false, isFlagged: false },
+    { weightLb: 240, isWarmup: false, isFlagged: true },
+  ]);
+  eq(plan.map((p) => p.index).join(","), "1,2", "plan targets unflagged working sets");
+  eq(plan[0].weightLb, 280, "top set 300 drops to 280");
+  eq(plan[1].weightLb, 225, "back-off 240 drops to 225, not raised to 280");
+  eq(C.dropLoadPlan([{ weightLb: 225, isWarmup: false, isFlagged: true }]).length, 0, "all performed → empty plan");
+}
 
 // ---- PR detection ----
 const dlHistory = [

@@ -117,6 +117,25 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   try { await db.importBundle({ nonsense: true }); } catch { threw = true; }
   ok(threw, "importing a non-backup throws instead of wiping");
   ok((await db.Sessions.completed()).length === 11, "failed import left sessions intact");
+
+  // A malformed record INSIDE a store array makes put() throw synchronously —
+  // the transaction must abort wholesale, not commit the already-queued clears.
+  const gymsBefore = await db.Gyms.all();
+  ok(gymsBefore.length > 0, "have gyms before the poisoned import");
+  let threwMid = false;
+  try { await db.importBundle({ sessions: parsed.sessions, gyms: [{}] }); } catch { threwMid = true; }
+  ok(threwMid, "poisoned record rejects the import");
+  ok((await db.Sessions.completed()).length === 11, "poisoned import did not clear sessions");
+  ok((await db.Gyms.all()).length === gymsBefore.length, "poisoned import did not clear gyms");
+}
+
+// ---- completion is idempotent (double-tap backstop) ----
+{
+  const msBefore = (await db.Milestones.all()).length;
+  const done = (await db.Sessions.completed())[0];
+  const again = await session.completeSession(done);
+  ok(again.lines.length === 0 && again.milestones.length === 0, "re-completing a banked session is a no-op");
+  ok((await db.Milestones.all()).length === msBefore, "no duplicate milestones from re-completion");
 }
 
 // ---- protein add reflects in today's total ----

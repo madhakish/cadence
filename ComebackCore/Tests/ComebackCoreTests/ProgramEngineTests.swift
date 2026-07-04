@@ -97,6 +97,29 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(dropped, 45)
     }
 
+    func testDropLoadPlanTargetsUnperformedSetsFromTheirOwnWeight() {
+        // Warmup 45, top 300, back-offs 240 (one already flagged/done):
+        // plan drops the two unflagged working sets, EACH from its own weight —
+        // a lighter back-off must never be raised toward the top set's drop.
+        let plan = ProgramEngine.dropLoadPlan(sets: [
+            (weightLb: 45, isWarmup: true, isFlagged: false),
+            (weightLb: 300, isWarmup: false, isFlagged: false),
+            (weightLb: 240, isWarmup: false, isFlagged: false),
+            (weightLb: 240, isWarmup: false, isFlagged: true),
+        ])
+        XCTAssertEqual(plan.map(\.index), [1, 2])
+        XCTAssertEqual(plan[0].weightLb, 280) // 300·0.93 = 279 → 280
+        XCTAssertEqual(plan[1].weightLb, 225) // 240·0.93 = 223.2 → 225, NOT 280
+    }
+
+    func testDropLoadPlanEmptyWhenAllSetsPerformed() {
+        let plan = ProgramEngine.dropLoadPlan(sets: [
+            (weightLb: 225, isWarmup: false, isFlagged: true),
+            (weightLb: 225, isWarmup: false, isFlagged: true),
+        ])
+        XCTAssertTrue(plan.isEmpty)
+    }
+
     // MARK: - Rounding
 
     func testRoundingToFive() {
