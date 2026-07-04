@@ -164,7 +164,9 @@ private struct ExerciseSection: View {
     let onWork: (SessionExercise) -> Void
 
     /// Ephemeral bar choice for this exercise (mirrors the web logger's
-    /// per-exercise bar select); nil = the gym's default bar.
+    /// per-exercise bar select, which is equally sticky once touched). Starts
+    /// out tracking the gym's default bar; a pick — including re-picking the
+    /// default, a value-identical Bar — pins it for this screen's lifetime.
     @State private var pickedBar: Bar?
     private var effectiveBar: Bar { pickedBar ?? gym?.defaultBar ?? .bar45lb }
 
