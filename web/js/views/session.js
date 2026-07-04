@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, SET_FLAGS, CATEGORIES, watchNote, COPY } from "../constants.js";
-import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, iso } from "../db.js";
+import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, iso, runAll } from "../db.js";
 import { barbellSVG } from "../barbell.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
@@ -350,7 +350,7 @@ export async function openSession(id) {
   paintBar();
   const barTick = setInterval(() => {
     if (!document.body.contains(screen.el)) { clearInterval(barTick); rest.stop(); return; }
-    paintBar();
+    if (!rest.running) paintBar(); // while resting the rest timer's own tick paints
   }, 500);
 }
 
@@ -372,7 +372,7 @@ export async function completeSession(session) {
 
 async function completeSessionInner(session) {
   const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date));
-  const lines = [], milestones = [];
+  const lines = [], milestones = [], milestoneRecords = [], trackWrites = [];
   for (const se of session.exercises) {
     const working = se.sets.filter((s) => !s.isWarmup).map((s) => ({ weightLb: s.weightLb, reps: s.reps }));
     if (!working.length) continue;
@@ -389,7 +389,7 @@ async function completeSessionInner(session) {
       }
     }
     const events = C.prEvaluate({ exercise: se.exerciseName, sessionSets: working, historySets, historyVolumes, historySchemes });
-    for (const e of events) { await Milestones.add({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
+    for (const e of events) { milestoneRecords.push({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
 
     // Program-owned exercises advance via the program, never the standalone track.
     const track = se.programRole ? null : await Tracks.byName(se.exerciseName);
@@ -399,15 +399,24 @@ async function completeSessionInner(session) {
         const adv = C.advancing(trackState(track), track.nextPhase);
         track.cycleNumber = adv.cycleNumber; track.baseWeightLb = adv.baseWeightLb; track.nextPhase = adv.nextPhase;
       } else { track.baseWeightLb += track.incrementLb; }
-      await Tracks.save(track);
+      trackWrites.push(track);
     }
     const top = working.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
     lines.push({ exerciseName: se.exerciseName, topSetLabel: `${C.trim(top.weightLb)}×${top.reps}`, volumeLb: working.reduce((a, s) => a + s.weightLb * s.reps, 0) });
   }
 
-  if (session.programTag) await advanceProgram(session, milestones);
+  const prog = session.programTag ? await advanceProgram(session, milestones) : null;
+  if (prog) milestoneRecords.push(...prog.noteRecords);
 
-  await Sessions.save(session);
+  // One transaction: milestones, track advances, program state, and the
+  // completed session commit or roll back TOGETHER — a mid-write failure
+  // can't leave progression half-advanced against an unbanked session.
+  await runAll(["milestones", "tracks", "programs", "sessions"], "readwrite", (os) => {
+    for (const m of milestoneRecords) os("milestones").put(m);
+    for (const t of trackWrites) os("tracks").put(t);
+    if (prog && prog.program) os("programs").put(prog.program);
+    os("sessions").put(session);
+  });
   return { lines, milestones };
 }
 
@@ -435,12 +444,14 @@ function accPerf(se) {
 }
 
 // ---- Program day/week/cycle advancement on bank ----
+// Mutates the program in memory and returns { program, noteRecords } for the
+// caller's single completion transaction — no writes of its own.
 async function advanceProgram(session, milestones) {
   const tag = session.programTag;
   const program = await Programs.get(tag.programId);
-  if (!program) return;
+  if (!program) return null;
   const day = program.days.find((d) => d.order === tag.dayIndex);
-  if (!day) return;
+  if (!day) return null;
   const note = (label, name) => milestones.push({ kind: "programNote", exercise: name, label, _persist: { exerciseName: name, label } });
 
   // Accessories: double progression, evaluated every bank.
@@ -486,11 +497,13 @@ async function advanceProgram(session, milestones) {
       program.currentWeek = 1;
     }
   }
-  await Programs.save(program);
-  // Persist program notes as milestones so the explanation shows in History.
+  // Program notes become milestones so the explanation shows in History; the
+  // caller persists them with the rest of the completion transaction.
+  const noteRecords = [];
   for (const m of milestones) {
-    if (m.kind === "programNote" && m._persist) { await Milestones.add({ date: iso(new Date(session.date)), exerciseName: m._persist.exerciseName, kind: "programNote", label: m._persist.label }); delete m._persist; }
+    if (m.kind === "programNote" && m._persist) { noteRecords.push({ date: iso(new Date(session.date)), exerciseName: m._persist.exerciseName, kind: "programNote", label: m._persist.label }); delete m._persist; }
   }
+  return { program, noteRecords };
 }
 
 // ---- Build a session from a program day ----
