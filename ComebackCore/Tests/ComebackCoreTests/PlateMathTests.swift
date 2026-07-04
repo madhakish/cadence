@@ -123,6 +123,11 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(Bar.bar15kg.lb, 33.069, accuracy: 0.001)
         XCTAssertEqual(Bar.by(id: "15-kg"), .bar15kg)
         XCTAssertEqual(Bar.by(id: "nonsense"), .bar45lb, "unknown id falls back to the 45 lb bar")
+        // Legacy untrimmed ids written by older builds (SwiftData gyms) must
+        // still resolve — Swift-only concern; web never wrote this format.
+        XCTAssertEqual(Bar.by(id: "20.0-kg"), .bar20kg)
+        XCTAssertEqual(Bar.by(id: "35.0-lb"), .bar35lb)
+        XCTAssertEqual(Bar.by(id: "45.0-lb"), .bar45lb)
         XCTAssertEqual(Plate(value: 45, unit: .lb).id, "45-lb")
         XCTAssertEqual(Plate(value: 2.5, unit: .lb).id, "2.5-lb")
         XCTAssertEqual(Plate(value: 1.25, unit: .kg).id, "1.25-kg")

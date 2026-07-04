@@ -22,7 +22,8 @@ struct PlateToggle: Codable, Hashable, Identifiable {
 final class Gym {
     @Attribute(.unique) var name: String
     var isDefault: Bool
-    /// Bar id, e.g. "45.0-lb" — see `Bar.id`.
+    /// Bar id, e.g. "45-lb" — see `Bar.id`. Older builds wrote untrimmed ids
+    /// ("45.0-lb"); `Bar.by(id:)` accepts both.
     var defaultBarID: String
     var plateToggles: [PlateToggle]
     /// Photo of the membership barcode/key tag, so a second car key ring
@@ -39,7 +40,7 @@ final class Gym {
     }
 
     var defaultBar: Bar {
-        get { Bar.all.first { $0.id == defaultBarID } ?? .bar45lb }
+        get { Bar.by(id: defaultBarID) }
         set { defaultBarID = newValue.id }
     }
 

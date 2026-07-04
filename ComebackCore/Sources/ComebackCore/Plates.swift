@@ -89,7 +89,16 @@ public struct Bar: Hashable, Codable, Sendable, Identifiable {
     public static let all: [Bar] = [.bar45lb, .bar35lb, .bar20kg, .bar15kg]
 
     /// Resolve a persisted id, falling back to the 45 lb bar like web `barById`.
-    public static func by(id: String) -> Bar { all.first { $0.id == id } ?? .bar45lb }
+    /// Also accepts legacy untrimmed ids ("20.0-kg") written by builds where
+    /// `id` interpolated the raw Double — SwiftData gyms persisted those.
+    public static func by(id: String) -> Bar {
+        if let bar = all.first(where: { $0.id == id }) { return bar }
+        let parts = id.split(separator: "-", maxSplits: 1)
+        guard parts.count == 2,
+              let value = Double(parts[0]),
+              let unit = WeightUnit(rawValue: String(parts[1])) else { return .bar45lb }
+        return all.first { $0.value == value && $0.unit == unit } ?? .bar45lb
+    }
 }
 
 /// N of one plate denomination on ONE side of the bar.
