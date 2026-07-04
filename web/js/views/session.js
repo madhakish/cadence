@@ -372,7 +372,12 @@ export async function completeSession(session) {
 
 async function completeSessionInner(session) {
   const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date));
-  const lines = [], milestones = [], milestoneRecords = [], trackWrites = [];
+  const lines = [], milestones = [], milestoneRecords = [];
+  // Keyed, not a list: a session with the same tracked exercise in two
+  // sections must advance the SAME in-memory track twice (as native does with
+  // its context-cached object) — re-reading the store would advance from the
+  // same base twice and commit only the last put.
+  const trackByName = new Map();
   for (const se of session.exercises) {
     const working = se.sets.filter((s) => !s.isWarmup).map((s) => ({ weightLb: s.weightLb, reps: s.reps }));
     if (!working.length) continue;
@@ -392,14 +397,14 @@ async function completeSessionInner(session) {
     for (const e of events) { milestoneRecords.push({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
 
     // Program-owned exercises advance via the program, never the standalone track.
-    const track = se.programRole ? null : await Tracks.byName(se.exerciseName);
+    const track = se.programRole ? null : (trackByName.get(se.exerciseName) ?? await Tracks.byName(se.exerciseName));
     if (track) {
       track.lastCompletedAt = iso(new Date());
       if (track.mode === "cycle") {
         const adv = C.advancing(trackState(track), track.nextPhase);
         track.cycleNumber = adv.cycleNumber; track.baseWeightLb = adv.baseWeightLb; track.nextPhase = adv.nextPhase;
       } else { track.baseWeightLb += track.incrementLb; }
-      trackWrites.push(track);
+      trackByName.set(se.exerciseName, track);
     }
     const top = working.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
     lines.push({ exerciseName: se.exerciseName, topSetLabel: `${C.trim(top.weightLb)}×${top.reps}`, volumeLb: working.reduce((a, s) => a + s.weightLb * s.reps, 0) });
@@ -413,7 +418,7 @@ async function completeSessionInner(session) {
   // can't leave progression half-advanced against an unbanked session.
   await runAll(["milestones", "tracks", "programs", "sessions"], "readwrite", (os) => {
     for (const m of milestoneRecords) os("milestones").put(m);
-    for (const t of trackWrites) os("tracks").put(t);
+    for (const t of trackByName.values()) os("tracks").put(t);
     if (prog && prog.program) os("programs").put(prog.program);
     os("sessions").put(session);
   });
