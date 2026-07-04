@@ -57,7 +57,7 @@ function beep(haptics = true) {
   try {
     _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const ac = _audioCtx;
-    if (ac.state === "suspended") ac.resume();
+    if (ac.state === "suspended") ac.resume().catch(() => {}); // async rejection escapes the try/catch
     const o = ac.createOscillator(), g = ac.createGain();
     o.frequency.value = 880; o.connect(g); g.connect(ac.destination);
     g.gain.setValueAtTime(0.001, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.3, ac.currentTime + 0.02);
