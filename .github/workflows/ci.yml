@@ -8,13 +8,13 @@ on:
 
 jobs:
   core-tests:
-    name: ComebackCore tests (Linux)
+    name: CadenceCore tests (Linux)
     runs-on: ubuntu-latest
     container: swift:5.10
     steps:
       - uses: actions/checkout@v5
       - name: Run unit tests
-        working-directory: ComebackCore
+        working-directory: CadenceCore
         run: swift test
 
   app-build:
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Run unit tests (Darwin)
-        working-directory: ComebackCore
+        working-directory: CadenceCore
         run: swift test
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -32,8 +32,8 @@ jobs:
       - name: Build for iOS Simulator
         run: >-
           xcodebuild build
-          -project Comeback.xcodeproj
-          -scheme Comeback
+          -project Cadence.xcodeproj
+          -scheme Cadence
           -configuration Release
           -destination 'generic/platform=iOS Simulator'
           -derivedDataPath build/sim
@@ -41,8 +41,8 @@ jobs:
       - name: Build unsigned device app
         run: >-
           xcodebuild build
-          -project Comeback.xcodeproj
-          -scheme Comeback
+          -project Cadence.xcodeproj
+          -scheme Cadence
           -configuration Release
           -destination 'generic/platform=iOS'
           -derivedDataPath build/device
@@ -50,16 +50,16 @@ jobs:
       - name: Package installer artifacts
         run: |
           mkdir -p dist/Payload
-          cp -R build/device/Build/Products/Release-iphoneos/Comeback.app dist/Payload/
-          (cd dist && zip -qry Comeback-unsigned.ipa Payload)
-          (cd build/sim/Build/Products/Release-iphonesimulator && zip -qry "$GITHUB_WORKSPACE/dist/Comeback-simulator.app.zip" Comeback.app)
+          cp -R build/device/Build/Products/Release-iphoneos/Cadence.app dist/Payload/
+          (cd dist && zip -qry Cadence-unsigned.ipa Payload)
+          (cd build/sim/Build/Products/Release-iphonesimulator && zip -qry "$GITHUB_WORKSPACE/dist/Cadence-simulator.app.zip" Cadence.app)
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Comeback-installer
+          name: Cadence-installer
           path: |
-            dist/Comeback-unsigned.ipa
-            dist/Comeback-simulator.app.zip
+            dist/Cadence-unsigned.ipa
+            dist/Cadence-simulator.app.zip
           if-no-files-found: error
 
   release:
@@ -79,7 +79,7 @@ jobs:
       - name: Download installer artifacts
         uses: actions/download-artifact@v4
         with:
-          name: Comeback-installer
+          name: Cadence-installer
           path: dist
       - uses: actions/setup-node@v4
         with:

@@ -1,6 +1,6 @@
 // First-launch seed: exercise library, gym, program state, and the real
 // training history so charts, PRs, and suggestions work on day one.
-// Ported verbatim from Comeback/Seed/Seeder.swift — don't casually regenerate.
+// Ported verbatim from Cadence/Seed/Seeder.swift — don't casually regenerate.
 import * as C from "./core.js";
 
 const D = (y, m, d, h = 17) => new Date(y, m - 1, d, h).toISOString();

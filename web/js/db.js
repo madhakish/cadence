@@ -4,7 +4,7 @@
 import * as C from "./core.js";
 import { SEED } from "./seed.js";
 
-const DB_NAME = "comeback";
+const DB_NAME = "cadence";
 const DB_VERSION = 2;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
@@ -278,7 +278,7 @@ export async function importBundle(bundle) {
   if (bundle.settings) writes.set("settings", [{ ...bundle.settings, id: "app" }]);
 
   const stores = [...writes.keys()];
-  if (!stores.length) throw new Error("Not a Comeback backup");
+  if (!stores.length) throw new Error("Not a Cadence backup");
   // runAll aborts wholesale on a synchronous put() throw (bad record), so the
   // queued clears can't auto-commit around a failed import.
   await runAll(stores, "readwrite", (os) => {

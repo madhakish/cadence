@@ -6,7 +6,7 @@
 // release, which is what causes the browser to install the new worker, refresh
 // the cached assets, and drop the old cache — i.e. how updates actually reach
 // an installed phone.
-const CACHE = "comeback-__BUILD__";
+const CACHE = "cadence-__BUILD__";
 const ASSETS = [
   "./", "index.html", "styles.css", "manifest.webmanifest",
   "js/app.js", "js/core.js", "js/db.js", "js/seed.js", "js/ui.js", "js/charts.js", "js/constants.js", "js/barbell.js",

@@ -1,4 +1,4 @@
-// Port of the ComebackCore XCTest suite. Run: node tests/core.test.mjs
+// Port of the CadenceCore XCTest suite. Run: node tests/core.test.mjs
 // Keeps the JS math in lockstep with the Swift source of truth.
 import * as C from "../js/core.js";
 

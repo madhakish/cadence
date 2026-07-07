@@ -87,8 +87,8 @@ export async function render(host) {
   root.append(ui.h("div", { class: "section-title", text: "Data" }));
   root.append(ui.h("div", { class: "card" },
     ui.h("div", { class: "btn-row" },
-      ui.h("button", { class: "btn", text: "Export JSON", onClick: async () => ui.download("comeback-export.json", await exportJSON()) }),
-      ui.h("button", { class: "btn", text: "Export CSV", onClick: async () => ui.download("comeback-sets.csv", await exportCSV(), "text/csv") }),
+      ui.h("button", { class: "btn", text: "Export JSON", onClick: async () => ui.download("cadence-export.json", await exportJSON()) }),
+      ui.h("button", { class: "btn", text: "Export CSV", onClick: async () => ui.download("cadence-sets.csv", await exportCSV(), "text/csv") }),
       ui.h("button", { class: "btn ghost", text: "Import JSON", onClick: () => importData() })),
     ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Export regularly — iOS Safari can clear local data. Import restores from a JSON backup." })));
   root.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "10px" }, text: "Reset all data", onClick: () => resetData() }));
