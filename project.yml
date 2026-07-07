@@ -1,46 +1,46 @@
 # XcodeGen spec. Run `xcodegen generate` in this directory to produce
-# Comeback.xcodeproj (install: `brew install xcodegen`).
-name: Comeback
+# Cadence.xcodeproj (install: `brew install xcodegen`).
+name: Cadence
 options:
-  bundleIdPrefix: com.comeback
+  bundleIdPrefix: com.madhakish
   deploymentTarget:
     iOS: "17.0"
   xcodeVersion: "15.0"
 
 packages:
-  ComebackCore:
-    path: ComebackCore
+  CadenceCore:
+    path: CadenceCore
 
 targets:
-  Comeback:
+  Cadence:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
     sources:
-      - Comeback
+      - Cadence
     dependencies:
-      - package: ComebackCore
+      - package: CadenceCore
     entitlements:
-      path: Comeback/Comeback.entitlements
+      path: Cadence/Cadence.entitlements
       properties:
         com.apple.developer.healthkit: true
     info:
-      path: Comeback/Info.plist
+      path: Cadence/Info.plist
       properties:
-        CFBundleDisplayName: Comeback
+        CFBundleDisplayName: Cadence
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIUserInterfaceStyle: Dark
         NSHealthUpdateUsageDescription: >-
           Optionally writes completed workouts and bodyweight to Health.
-          Comeback reads nothing from Health.
+          Cadence reads nothing from Health.
         NSPhotoLibraryUsageDescription: >-
           Lets you store a photo of your gym membership barcode so your
           phone can stand in for the keychain tag.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.comeback.Comeback
+        PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.Cadence
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: false
@@ -49,10 +49,10 @@ targets:
         MARKETING_VERSION: 0.1.0
 
 schemes:
-  Comeback:
+  Cadence:
     build:
       targets:
-        Comeback: all
+        Cadence: all
     test:
       targets:
-        - package: ComebackCore/ComebackCoreTests
+        - package: CadenceCore/CadenceCoreTests

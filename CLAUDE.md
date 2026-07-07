@@ -1,13 +1,13 @@
 # Cadence — Project Instructions
 
-Repo for **Comeback**, a single-user, local-first workout-tracking app (no
-backend, no accounts). The repo is named Cadence; the app target, module, and
-bundle are named Comeback. Migrated here from its temporary home in the-greenhouse repo.
+Repo and app are both named **Cadence**. Single-user, local-first workout-tracking
+app (no backend, no accounts). Migrated here from its temporary home in the-greenhouse
+repo (previously alpha-named Comeback).
 
 It ships as **two apps that share one brain**: a **native iOS app** (SwiftUI +
 SwiftData, iOS 17+) and a **web PWA** (`web/` — vanilla JS, IndexedDB, no build
 step; the live daily driver at `madhakish.github.io/cadence/`). ALL computational
-logic lives in `ComebackCore` (pure Swift, Foundation-only, Linux-testable) and
+logic lives in `CadenceCore` (pure Swift, Foundation-only, Linux-testable) and
 is **mirrored 1:1 in `web/js/core.js`** with identical tests (XCTest ≡ the node
 suite). That parity is non-negotiable — it's why the two apps can't drift.
 
@@ -15,11 +15,11 @@ suite). That parity is non-negotiable — it's why the two apps can't drift.
 
 | Path | Purpose |
 |------|---------|
-| `project.yml` | XcodeGen spec. `xcodegen generate` produces `Comeback.xcodeproj` (gitignored — never commit it) |
-| `ComebackCore/` | Pure-Swift package: plate math, program engine, warmup ramp, PR detection, units. ALL testable logic lives here |
-| `ComebackCore/Tests/` | Unit tests, including `CompileRegressionTests.swift` (see below) |
-| `Comeback/` | Native app target: SwiftUI views, SwiftData `@Model` classes, services, seed data |
-| `web/` | Web PWA: `js/core.js` (mirror of ComebackCore), `js/db.js` (IndexedDB), views, service worker. No build step |
+| `project.yml` | XcodeGen spec. `xcodegen generate` produces `Cadence.xcodeproj` (gitignored — never commit it) |
+| `CadenceCore/` | Pure-Swift package: plate math, program engine, warmup ramp, PR detection, units. ALL testable logic lives here |
+| `CadenceCore/Tests/` | Unit tests, including `CompileRegressionTests.swift` (see below) |
+| `Cadence/` | Native app target: SwiftUI views, SwiftData `@Model` classes, services, seed data |
+| `web/` | Web PWA: `js/core.js` (mirror of CadenceCore), `js/db.js` (IndexedDB), views, service worker. No build step |
 | `web/tests/` | `core.test.mjs` (parity checks vs XCTest) + `smoke.test.mjs` (jsdom + fake-indexeddb) |
 | `fastlane/`, `docs/TESTFLIGHT.md` | Mac-free TestFlight pipeline (dormant until configured) |
 | `.github/workflows/ci.yml`, `pages.yml` | CI + release pipeline; web tests + Pages deploy |
@@ -47,12 +47,12 @@ ARE the version-bump and changelog mechanism. Use them correctly:
 
 ## Build & Test
 
-- **Core logic (any OS, including Linux):** `cd ComebackCore && swift test`.
-  ComebackCore must stay Foundation-only so it keeps building and testing on
+- **Core logic (any OS, including Linux):** `cd CadenceCore && swift test`.
+  CadenceCore must stay Foundation-only so it keeps building and testing on
   Linux — no SwiftUI/SwiftData/UIKit/HealthKit imports in the package.
   Darwin-only tests go behind `#if canImport(Darwin)`.
 - **App (Mac with Xcode 15+ only):**
-  `brew install xcodegen && xcodegen generate && open Comeback.xcodeproj`.
+  `brew install xcodegen && xcodegen generate && open Cadence.xcodeproj`.
 - This environment has no Apple toolchain; CI is the compiler. Expect to
   iterate via Actions logs when touching app-target code.
 
@@ -63,8 +63,8 @@ Three jobs on push to `main` (first two also on PRs):
 1. `core-tests` — `swift test` in the `swift:5.10` Linux container.
 2. `app-build` (macos-latest) — `swift test` on Darwin, XcodeGen, Release
    builds for iOS Simulator and unsigned device, uploads the
-   `Comeback-installer` artifact (`Comeback-unsigned.ipa` +
-   `Comeback-simulator.app.zip`).
+   `Cadence-installer` artifact (`Cadence-unsigned.ipa` +
+   `Cadence-simulator.app.zip`).
 3. `release` — only on green `main` pushes: semantic-release tags the next
    version, creates the GitHub Release, and attaches the version-stamped
    installer files from the same run's artifact.
@@ -82,7 +82,7 @@ Connect API key + `fastlane match` (certs in a private repo); never commit the
 ## Compile failures become tests
 
 Every compile failure found in CI gets its root cause captured in
-`ComebackCore/Tests/ComebackCoreTests/CompileRegressionTests.swift` as a
+`CadenceCore/Tests/CadenceCoreTests/CompileRegressionTests.swift` as a
 minimal fixture that stops compiling (or fails) if the pattern returns.
 Existing entries — don't reintroduce these patterns:
 
@@ -96,9 +96,9 @@ Existing entries — don't reintroduce these patterns:
 ## App conventions
 
 - **All weights stored canonically in pounds (`Double`).** kg exists only at
-  entry/display boundaries via `Weight`/`UnitDisplay` in ComebackCore.
-- New computational logic goes in ComebackCore with tests, not in views.
-- SwiftData models live in `Comeback/Models/`; seed data in `Seed/Seeder.swift`
+  entry/display boundaries via `Weight`/`UnitDisplay` in CadenceCore.
+- New computational logic goes in CadenceCore with tests, not in views.
+- SwiftData models live in `Cadence/Models/`; seed data in `Seed/Seeder.swift`
   encodes real training history — don't casually regenerate it.
 - HealthKit is optional and write-only by design; the app reads nothing.
 
@@ -108,14 +108,14 @@ A structured plan layered on top of the per-lift cycle engine. There are now two
 progression systems: standalone `LiftTrack`s (independent per-lift cycles, the
 "Next up"/Progression list) and a **Program** that bundles training days.
 
-- **Model** (`Comeback/Models/ProgramModels.swift`, mirrored as the embedded
+- **Model** (`Cadence/Models/ProgramModels.swift`, mirrored as the embedded
   `programs` IndexedDB store in `web/js/db.js`): `Program` (focus, cycleNumber,
   currentWeek 1–4, nextDayIndex, roundingLb, isActive) → `ProgramDay` (name, order)
   → `ProgramLift` (main/complementary, baseWeightLb, estimatedMaxLb, stallCount) +
   `ProgramAccessory` (sets, min/max/currentReps, weightLb, incrementLb). The
   program owns its lifts' state and drives ONE 4-week wave; program lifts are
   filtered out of the standalone "Next up" and are NOT advanced as `LiftTrack`s.
-- **Adaptive engine** lives in `ComebackCore/Sources/ComebackCore/ProgramProgression.swift`,
+- **Adaptive engine** lives in `CadenceCore/Sources/CadenceCore/ProgramProgression.swift`,
   mirrored 1:1 in `web/js/core.js` with identical assertions in
   `ProgramProgressionTests.swift` and `web/tests/core.test.mjs`. It is pure and
   deterministic — it consumes a performance *summary*, never a session or a clock.
@@ -153,7 +153,7 @@ The app holds an opinion about training; these constraints keep it coherent.
   into "which of today's five." Lean on it.
 - **n=1.** Built for one user, ~30 movements, one gym. Refuse speculative
   generality; generalize later from a working app + real data.
-- **Logic in ComebackCore, pure + tested + mirrored to JS.** Platform I/O
+- **Logic in CadenceCore, pure + tested + mirrored to JS.** Platform I/O
   (HealthKit, IndexedDB/SwiftData, sensors) stays at the edges so the reasoning
   is deterministic and unit-testable.
 
@@ -172,7 +172,7 @@ thing before there's a working, distributed app.
   - Readiness Engine: **not built.** Pivotal change — it needs **HealthKit READ**
     (HRV, resting HR, sleep, respiratory rate, wrist temp), reversing the current
     write-only stance; **native-only** (the web PWA can't read Apple Health).
-    Encode the math as **pure ComebackCore functions** (Banister fitness-fatigue,
+    Encode the math as **pure CadenceCore functions** (Banister fitness-fatigue,
     acute:chronic workload ratio, MEV/MAV/MRV volume landmarks, RPE/RIR), with
     constants **refit to the user's own data** (population norms transfer poorly).
     Ship it as a **gentle nudge first** (RPE ±0.5, go/hold — never a dramatic
@@ -190,9 +190,9 @@ and its hysteresis; confirming watchOS high-rate capture needs an active
 
 ## Housekeeping
 
-- Never commit: `Comeback.xcodeproj` (generated), `.build/`, `DerivedData/`,
+- Never commit: `Cadence.xcodeproj` (generated), `.build/`, `DerivedData/`,
   secrets/API keys of any kind.
-- Run `swift test` in `ComebackCore/` before pushing when Swift is available.
+- Run `swift test` in `CadenceCore/` before pushing when Swift is available.
 - Keep CI green on `main`; broken `main` blocks all releases.
 - GitHub Actions runners deprecate Node versions periodically — bump
   `actions/*` versions when CI warns.

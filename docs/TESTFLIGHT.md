@@ -24,7 +24,7 @@ Team Keys** → generate a key with the **App Manager** role. Save:
 - the **`.p8` file** (downloadable once — keep it)
 
 ### 3. A private repo to hold signing certs (for fastlane match)
-Create an empty **private** GitHub repo, e.g. `comeback-certs`. fastlane stores the
+Create an empty **private** GitHub repo, e.g. `cadence-certs`. fastlane stores the
 encrypted distribution certificate + provisioning profile there and CI fetches
 them each run. You never generate certs by hand.
 
@@ -36,10 +36,10 @@ that certs repo. CI authenticates to it via `MATCH_GIT_BASIC_AUTHORIZATION` =
 ### 4. Register the App ID + app record (one-time, ~3 min)
 Two quick browser steps (more reliable than doing it headless):
 1. **Developer portal → Certificates, IDs & Profiles → Identifiers → +** →
-   App IDs → App → description "Comeback", Bundle ID **explicit**
-   `com.comeback.Comeback`, and tick **HealthKit** under Capabilities. Register.
-2. **App Store Connect → Apps → + → New App** → iOS, name "Comeback", the
-   bundle id above, SKU `comeback`, your primary language. Create.
+   App IDs → App → description "Cadence", Bundle ID **explicit**
+   `com.madhakish.Cadence`, and tick **HealthKit** under Capabilities. Register.
+2. **App Store Connect → Apps → + → New App** → iOS, name "Cadence", the
+   bundle id above, SKU `cadence`, your primary language. Create.
 
 (`fastlane match` then makes the signing cert + profile for that App ID
 automatically on the first CI run.)
@@ -52,7 +52,7 @@ Repository **variables**:
 | Name | Value |
 |------|-------|
 | `TESTFLIGHT_ENABLED` | `true` |
-| `APP_IDENTIFIER` | `com.comeback.Comeback` (or your own reverse-DNS id) |
+| `APP_IDENTIFIER` | `com.madhakish.Cadence` (or your own reverse-DNS id) |
 
 Repository **secrets**:
 | Name | Value |

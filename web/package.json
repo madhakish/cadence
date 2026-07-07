@@ -1,9 +1,9 @@
 {
-  "name": "comeback-web",
+  "name": "cadence-web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Comeback PWA — static web app, no build step. package.json only marks ESM for Node-run tests.",
+  "description": "Cadence PWA — static web app, no build step. package.json only marks ESM for Node-run tests.",
   "scripts": {
     "test": "node tests/core.test.mjs"
   }

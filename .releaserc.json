@@ -7,7 +7,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "mkdir -p release-assets && cp dist/Comeback-unsigned.ipa release-assets/Comeback-${nextRelease.version}-unsigned.ipa && cp dist/Comeback-simulator.app.zip release-assets/Comeback-${nextRelease.version}-simulator.app.zip"
+        "prepareCmd": "mkdir -p release-assets && cp dist/Cadence-unsigned.ipa release-assets/Cadence-${nextRelease.version}-unsigned.ipa && cp dist/Cadence-simulator.app.zip release-assets/Cadence-${nextRelease.version}-simulator.app.zip"
       }
     ],
     [

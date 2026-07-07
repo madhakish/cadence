@@ -4,9 +4,6 @@ A coach's logbook for a structured barbell comeback. Native iOS (SwiftUI +
 SwiftData), iOS 17+, single user, local-first. No backend, no accounts, no
 streaks, no badges, no quotes.
 
-The app target and module are named **Comeback** (migrated here from its
-temporary home in the-greenhouse repo).
-
 ## What it does
 
 - **Plate math calculator** — the killer feature, one tap from anywhere
@@ -45,18 +42,18 @@ and next-session suggestions work on first launch: Deadlift → Wk3 Peak 3×3
 
 ```
 .
-├── project.yml              # XcodeGen spec → Comeback.xcodeproj
-├── ComebackCore/            # Pure-Swift package: all testable logic
-│   ├── Sources/ComebackCore/
+├── project.yml              # XcodeGen spec → Cadence.xcodeproj
+├── CadenceCore/             # Pure-Swift package: all testable logic
+│   ├── Sources/CadenceCore/
 │   │   ├── Units.swift          # lb↔kg, canonical-lb storage, formatting
 │   │   ├── Plates.swift         # plate/bar/loadout types, standard sets
 │   │   ├── PlateMath.swift      # mixed-unit solver + reverse mode
 │   │   ├── ProgramEngine.swift  # cycle phases, suggestions, autoreg drop
 │   │   ├── WarmupRamp.swift     # bar×10 + 40/55/70/85% ramp
 │   │   └── PRDetection.swift    # heaviest set / volume PR / first scheme
-│   └── Tests/ComebackCoreTests/ # 40+ unit tests
-└── Comeback/                # App target (SwiftUI + SwiftData)
-    ├── ComebackApp.swift
+│   └── Tests/CadenceCoreTests/  # 40+ unit tests
+└── Cadence/                 # App target (SwiftUI + SwiftData)
+    ├── CadenceApp.swift
     ├── Models/              # @Model classes (canonical lb everywhere)
     ├── Seed/Seeder.swift    # exact training history + program state
     ├── Services/            # notifications, rest timer, completion/PRs,
@@ -71,14 +68,14 @@ Requires a Mac with Xcode 15+.
 ```bash
 brew install xcodegen
 xcodegen generate
-open Comeback.xcodeproj
+open Cadence.xcodeproj
 ```
 
 Run tests (plate math, progression, PR detection, warmup ramp, units):
 
 ```bash
-cd ComebackCore && swift test
-# or run the ComebackCore test plan inside Xcode (⌘U)
+cd CadenceCore && swift test
+# or run the CadenceCore test plan inside Xcode (⌘U)
 ```
 
 Notes:

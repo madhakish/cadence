@@ -1,5 +1,5 @@
-// ComebackCore, ported to JS. Pure functions, no DOM, no storage.
-// This mirrors ComebackCore/Sources/ComebackCore/*.swift exactly; the
+// CadenceCore, ported to JS. Pure functions, no DOM, no storage.
+// This mirrors CadenceCore/Sources/CadenceCore/*.swift exactly; the
 // companion test (web/tests/core.test.mjs) re-runs the Swift suite's
 // assertions to keep them in lockstep. All weights are pounds (Double).
 
@@ -338,7 +338,7 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
 // Cross-cycle progression that is performance-gated, tapers toward an estimated
 // ceiling, and auto-deloads on repeated stalls. Pure & deterministic — consumes
 // a performance SUMMARY (never a session), no clock/random. Mirrors
-// ComebackCore/Sources/ComebackCore/ProgramProgression.swift exactly.
+// CadenceCore/Sources/CadenceCore/ProgramProgression.swift exactly.
 
 export const QUALITY_FLAG_TOLERANCE = 1;   // ≤1 grindy/wobble set still SUCCESS
 export const STALL_LIMIT = 2;              // 2 consecutive non-success → auto deload
@@ -435,7 +435,7 @@ export function advanceAccessory(state, perf) {
 // magic. A per-exercise override (exerciseDefaultRest > 0) wins for ANY
 // movement; otherwise: main lower 5:00, oly/explosive 4:00, main upper 3:00,
 // accessory 1:30, conditioning none. Pure; mirrored in
-// ComebackCore/RestDefaults.swift.
+// CadenceCore/RestDefaults.swift.
 export function restDefaultSeconds(category, name, exerciseDefaultRest = 0) {
   if (exerciseDefaultRest > 0) return exerciseDefaultRest; // per-exercise override wins everywhere
   if (category === "Conditioning") return 0;
