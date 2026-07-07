@@ -102,6 +102,13 @@ jobs:
         with:
           ruby-version: "3.3"
           bundler-cache: true
+      - name: Select the latest stable Xcode
+        # App Store upload now requires the iOS 26 SDK (Xcode 26+); macos-latest
+        # still defaults to an older Xcode (iOS 18.5 SDK), which altool rejects
+        # with a 409 "SDK version issue". Pin the newest stable Xcode installed.
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Build & upload to TestFlight
