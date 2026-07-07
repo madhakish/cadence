@@ -2,7 +2,7 @@
 # Cadence.xcodeproj (install: `brew install xcodegen`).
 name: Cadence
 options:
-  bundleIdPrefix: com.cadence
+  bundleIdPrefix: com.madhakish
   deploymentTarget:
     iOS: "17.0"
   xcodeVersion: "15.0"
@@ -40,7 +40,7 @@ targets:
           phone can stand in for the keychain tag.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.cadence.Cadence
+        PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.Cadence
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: false

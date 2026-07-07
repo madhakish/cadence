@@ -37,7 +37,7 @@ that certs repo. CI authenticates to it via `MATCH_GIT_BASIC_AUTHORIZATION` =
 Two quick browser steps (more reliable than doing it headless):
 1. **Developer portal → Certificates, IDs & Profiles → Identifiers → +** →
    App IDs → App → description "Cadence", Bundle ID **explicit**
-   `com.cadence.Cadence`, and tick **HealthKit** under Capabilities. Register.
+   `com.madhakish.Cadence`, and tick **HealthKit** under Capabilities. Register.
 2. **App Store Connect → Apps → + → New App** → iOS, name "Cadence", the
    bundle id above, SKU `cadence`, your primary language. Create.
 
@@ -52,7 +52,7 @@ Repository **variables**:
 | Name | Value |
 |------|-------|
 | `TESTFLIGHT_ENABLED` | `true` |
-| `APP_IDENTIFIER` | `com.cadence.Cadence` (or your own reverse-DNS id) |
+| `APP_IDENTIFIER` | `com.madhakish.Cadence` (or your own reverse-DNS id) |
 
 Repository **secrets**:
 | Name | Value |

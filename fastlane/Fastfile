@@ -4,7 +4,7 @@ default_platform(:ios)
 # All credentials come from env (GitHub Actions secrets/vars); nothing
 # interactive, no Apple ID password, no 2FA.
 
-APP_ID = ENV["APP_IDENTIFIER"] || "com.cadence.Cadence"
+APP_ID = ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence"
 
 platform :ios do
   desc "Build a Release archive and upload it to TestFlight"
@@ -19,7 +19,7 @@ platform :ios do
     # Generate Cadence.xcodeproj from the XcodeGen spec (gitignored in repo).
     sh("cd .. && xcodegen generate")
 
-    # NOTE: the App ID (com.cadence.Cadence, with HealthKit enabled) and the
+    # NOTE: the App ID (com.madhakish.Cadence, with HealthKit enabled) and the
     # App Store Connect app record are created once by hand — see docs/TESTFLIGHT.md.
     # That's more reliable than headless `produce`.
 
