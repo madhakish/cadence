@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import UniformTypeIdentifiers
 import CadenceCore
 
 struct SettingsView: View {
@@ -12,6 +13,8 @@ struct SettingsView: View {
 
     @State private var exportJSON: Data?
     @State private var exportCSV: Data?
+    @State private var showImporter = false
+    @State private var importAlert: String?
 
     var body: some View {
         NavigationStack {
@@ -155,8 +158,45 @@ struct SettingsView: View {
                         }
                     }
                 }
+
+                Section {
+                    Button {
+                        showImporter = true
+                    } label: {
+                        Label("Import JSON backup", systemImage: "square.and.arrow.down")
+                    }
+                } header: {
+                    Text("Import")
+                } footer: {
+                    Text("Restores a backup, replacing the data it contains and leaving anything it doesn't alone. Export first if you're unsure.")
+                }
             }
             .navigationTitle("Settings")
+            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+                importAlert = restore(from: result)
+            }
+            .alert("Import", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } })) {
+                Button("OK") { importAlert = nil }
+            } message: {
+                Text(importAlert ?? "")
+            }
+        }
+    }
+
+    private func restore(from result: Result<URL, Error>) -> String {
+        switch result {
+        case .failure(let err):
+            return err.localizedDescription
+        case .success(let url):
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                let s = try ImportService.load(data, into: context)
+                return "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+            } catch {
+                return error.localizedDescription
+            }
         }
     }
 }
