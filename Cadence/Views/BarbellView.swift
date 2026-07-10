@@ -13,12 +13,12 @@ struct BarbellView: View {
     let gym: Gym?
 
     private static let fill: [String: Color] = [
-        "red": Color(rgb: 0xD23B3B), "blue": Color(rgb: 0x2F6FED), "green": Color(rgb: 0x1FAA52),
-        "yellow": Color(rgb: 0xE8B008), "white": Color(rgb: 0xEDEDED), "black": Color(rgb: 0x1C1D22),
+        "red": Color(hex: 0xD23B3B), "blue": Color(hex: 0x2F6FED), "green": Color(hex: 0x1FAA52),
+        "yellow": Color(hex: 0xE8B008), "white": Color(hex: 0xEDEDED), "black": Color(hex: 0x1C1D22),
     ]
     private static let stroke: [String: Color] = [
-        "red": Color(rgb: 0x7A1F1F), "blue": Color(rgb: 0x1B3F8F), "green": Color(rgb: 0x10632F),
-        "yellow": Color(rgb: 0x8A6A04), "white": Color(rgb: 0x9A9A9A), "black": Color(rgb: 0x3A3B42),
+        "red": Color(hex: 0x7A1F1F), "blue": Color(hex: 0x1B3F8F), "green": Color(hex: 0x10632F),
+        "yellow": Color(hex: 0x8A6A04), "white": Color(hex: 0x9A9A9A), "black": Color(hex: 0x3A3B42),
     ]
 
     // Geometry shared with the web SVG.
@@ -46,16 +46,16 @@ struct BarbellView: View {
                 let h = Self.height
                 // bar shaft + sleeve face
                 ctx.fill(Path(roundedRect: CGRect(x: 0, y: h / 2 - 1.5, width: Self.sleeve + 4, height: 3), cornerRadius: 1.5),
-                         with: .color(Color(rgb: 0x9AA0AA)))
+                         with: .color(Color(hex: 0x9AA0AA)))
                 ctx.fill(Path(roundedRect: CGRect(x: Self.sleeve, y: h / 2 - 6, width: 3, height: 12), cornerRadius: 1),
-                         with: .color(Color(rgb: 0x7C828C)))
+                         with: .color(Color(hex: 0x7C828C)))
 
                 var x = Self.sleeve + 5
                 for plate in plates {
                     let tok = plate.colorToken
                     let ph = (h - 4) * CGFloat(plate.sizeFactor)
                     let rect = Path(roundedRect: CGRect(x: x, y: (h - ph) / 2, width: Self.plateW, height: ph), cornerRadius: 1.5)
-                    ctx.fill(rect, with: .color(Self.fill[tok] ?? Color(rgb: 0x888888)))
+                    ctx.fill(rect, with: .color(Self.fill[tok] ?? Color(hex: 0x888888)))
                     ctx.stroke(rect, with: .color(Self.stroke[tok] ?? .black.opacity(0.3)), lineWidth: 0.75)
                     x += Self.plateW + Self.gap
                 }
@@ -76,11 +76,4 @@ struct BarbellView: View {
         .accessibilityLabel("Barbell: \(solution.loadout.perSideLabel) per side on \(bar.label)")
     }
 }
-
-private extension Color {
-    init(rgb: UInt32) {
-        self.init(red: Double((rgb >> 16) & 0xFF) / 255,
-                  green: Double((rgb >> 8) & 0xFF) / 255,
-                  blue: Double(rgb & 0xFF) / 255)
-    }
-}
+// Plate colours use the shared Color(hex:) from Theme.swift.
