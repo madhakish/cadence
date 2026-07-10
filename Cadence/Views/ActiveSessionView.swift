@@ -628,6 +628,11 @@ private struct SessionBottomBar: View {
                             .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
                             .foregroundStyle(Theme.accent)
                     }
+                    Button {
+                        restTimer.isPaused ? restTimer.resume() : restTimer.pause()
+                    } label: { Image(systemName: restTimer.isPaused ? "play.fill" : "pause.fill") }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel(restTimer.isPaused ? "Resume rest" : "Pause rest")
                     Button("+1:00") { restTimer.add(seconds: 60) }
                         .buttonStyle(.bordered)
                     Button {
