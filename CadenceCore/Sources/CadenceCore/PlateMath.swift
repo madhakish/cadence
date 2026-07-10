@@ -64,18 +64,6 @@ public enum PlateMath {
         var best: Candidate? = nil
         var nodes = 0
 
-        func metrics(_ remaining: Double) -> Candidate {
-            let signed = -remaining * 2.0 // achieved − target (total lb)
-            var used = 0, distinct = 0
-            var hasKg = false, hasLb = false
-            for i in counts.indices where counts[i] > 0 {
-                used += counts[i]
-                distinct += 1
-                if sorted[i].unit == .kg { hasKg = true } else { hasLb = true }
-            }
-            return (dev: abs(signed), signed: signed, used: used, distinct: distinct, mixed: hasKg && hasLb)
-        }
-
         func isBetter(_ c: Candidate, than b: Candidate?) -> Bool {
             guard let b else { return true }
             let tol = toleranceLb + 1e-9
@@ -94,17 +82,21 @@ public enum PlateMath {
             return c.signed < b.signed - 1e-9
         }
 
-        func consider(_ remaining: Double) {
-            let c = metrics(remaining)
+        // used/distinct/kg/lb are threaded through the recursion so each node is
+        // O(1) (no per-node rescan of counts) — solve runs on every keystroke.
+        func consider(_ remaining: Double, _ used: Int, _ distinct: Int, _ mixed: Bool) {
+            let signed = -remaining * 2.0 // achieved − target (total lb)
+            let c: Candidate = (dev: abs(signed), signed: signed, used: used, distinct: distinct, mixed: mixed)
             if isBetter(c, than: best) { best = c; bestCounts = counts }
         }
 
-        func search(_ index: Int, _ remaining: Double) {
+        func search(_ index: Int, _ remaining: Double, _ used: Int, _ distinct: Int, _ kg: Int, _ lb: Int) {
             nodes += 1
             guard nodes < 300_000 else { return }
-            consider(remaining)
+            consider(remaining, used, distinct, kg > 0 && lb > 0)
             guard index < values.count, remaining > 1e-9 else { return }
             let v = values[index]
+            let isKg = sorted[index].unit == .kg
             // +1 allows one plate of overshoot so "closest over" is reachable.
             let maxCount = min(maxPerPlateSide, Int((remaining / v).rounded(.down)) + 1)
             // Prune overshoots past the good-enough band AND the best deviation
@@ -118,13 +110,14 @@ public enum PlateMath {
                     continue
                 }
                 counts[index] = c
-                search(index + 1, next)
+                let d = distinct + (c > 0 ? 1 : 0)
+                search(index + 1, next, used + c, d, kg + (c > 0 && isKg ? 1 : 0), lb + (c > 0 && !isKg ? 1 : 0))
                 c -= 1
             }
             counts[index] = 0
         }
 
-        search(0, perSideTarget)
+        search(0, perSideTarget, 0, 0, 0, 0)
 
         let perSide = zip(sorted, bestCounts).compactMap { plate, count in
             count > 0 ? PlateCount(plate: plate, count: count) : nil

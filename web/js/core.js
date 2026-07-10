@@ -145,19 +145,6 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
   let best = null; // { dev, signed, used, distinct, mixed }
   let nodes = 0;
 
-  const metrics = (remaining) => {
-    const signed = -remaining * 2.0; // achieved − target (total lb)
-    let used = 0, distinct = 0, hasKg = false, hasLb = false;
-    for (let i = 0; i < counts.length; i += 1) {
-      if (counts[i] > 0) {
-        used += counts[i];
-        distinct += 1;
-        if (sorted[i].unit === "kg") hasKg = true; else hasLb = true;
-      }
-    }
-    return { dev: Math.abs(signed), signed, used, distinct, mixed: hasKg && hasLb };
-  };
-
   const isBetter = (c, b) => {
     if (!b) return true;
     const tol = TOLERANCE_LB + 1e-9;
@@ -176,17 +163,21 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
     return c.signed < b.signed - 1e-9;
   };
 
-  const consider = (remaining) => {
-    const c = metrics(remaining);
+  // used/distinct/kg/lb are threaded through the recursion so each node is O(1)
+  // (no per-node rescan of counts) — solve() runs on every plate-calculator keystroke.
+  const consider = (remaining, used, distinct, mixed) => {
+    const signed = -remaining * 2.0; // achieved − target (total lb)
+    const c = { dev: Math.abs(signed), signed, used, distinct, mixed };
     if (isBetter(c, best)) { best = c; bestCounts = counts.slice(); }
   };
 
-  const search = (index, remaining) => {
+  const search = (index, remaining, used, distinct, kg, lb) => {
     nodes += 1;
     if (nodes >= 300000) return;
-    consider(remaining);
+    consider(remaining, used, distinct, kg > 0 && lb > 0);
     if (index >= values.length || !(remaining > 1e-9)) return;
     const v = values[index];
+    const isKg = sorted[index].unit === "kg";
     const maxCount = Math.min(maxPerPlateSide, Math.floor(remaining / v) + 1);
     // Prune overshoots past the good-enough band AND the best deviation so far,
     // so cleaner in-tolerance loads are never pruned away.
@@ -195,12 +186,13 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
       const next = remaining - c * v;
       if (next < 0 && -next * 2.0 > bound + 1e-9) continue; // overshoot past the band
       counts[index] = c;
-      search(index + 1, next);
+      const d = distinct + (c > 0 ? 1 : 0);
+      search(index + 1, next, used + c, d, kg + (c > 0 && isKg ? 1 : 0), lb + (c > 0 && !isKg ? 1 : 0));
     }
     counts[index] = 0;
   };
 
-  search(0, perSideTarget);
+  search(0, perSideTarget, 0, 0, 0, 0);
 
   const perSide = [];
   for (let i = 0; i < sorted.length; i += 1) {
