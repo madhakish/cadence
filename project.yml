@@ -28,6 +28,12 @@ targets:
       path: Cadence/Info.plist
       properties:
         CFBundleDisplayName: Cadence
+        # Reference the build settings (don't let XcodeGen bake literal
+        # "1.0"/"1"): the TestFlight lane overrides MARKETING_VERSION /
+        # CURRENT_PROJECT_VERSION at archive time, and a literal here would
+        # silently win — which is why every upload read v1.0 regardless.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # No custom/non-exempt encryption — only standard OS + HTTPS, which is
         # export-exempt. Declaring this clears the "Missing Compliance" hold on
         # every TestFlight/App Store upload (no per-build manual answer).
