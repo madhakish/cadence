@@ -1,5 +1,6 @@
 /* Cadence themes. Selectable via [data-theme] on <html>; default is Memento
-   (the gym-mural direction). Mirrors the native palettes in Theme.swift.
+   (the gym-mural direction). Memento matches the native Theme.swift tokens;
+   Carbon / Slate / System are web-only until the native picker lands.
    Accent = the single interactive/active signal. warn/good/hard stay
    semantic (grindy·wobble / clean / hard stop) and separate from accent. */
 :root, :root[data-theme="memento"] {   /* Memento — brass on warm near-black (default) */
@@ -23,7 +24,7 @@
   --bg: #0d1117; --card: #161b22; --card2: #1e252e; --text: #eaeef4; --muted: #8a97a6; --line: #2a323c;
 }
 :root[data-theme="system"] {           /* System — follows OS; light by default, dark below */
-  --accent: #c81e1e; --warn: #b8860b; --hard: #c81e1e; --good: #1a8f43;
+  --accent: #c81e1e; --warn: #b8860b; --hard: #a51111; --good: #1a8f43;
   --bg: #f5f5f7; --card: #ffffff; --card2: #ececee; --text: #1a1a1c; --muted: #66666e; --line: #d9d9de;
 }
 @media (prefers-color-scheme: dark) {
