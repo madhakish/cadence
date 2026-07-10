@@ -13,6 +13,7 @@ struct ActiveSessionView: View {
     @Environment(RestTimer.self) private var restTimer
     @Query private var settingsList: [AppSettings]
     @Query private var gyms: [Gym]
+    @Query(sort: \Exercise.name) private var allExercises: [Exercise]
 
     @Bindable var session: WorkoutSession
     @State private var showExercisePicker = false
@@ -32,6 +33,7 @@ struct ActiveSessionView: View {
                     entry: entry,
                     settings: settingsList.first,
                     gym: gym,
+                    allExercises: allExercises,
                     onDropLoad: { autoregEntry = entry },
                     onWork: { currentEntry = $0 }
                 )
@@ -159,9 +161,24 @@ private struct ExerciseSection: View {
     // per-section @Query would register one redundant fetch per exercise.
     let settings: AppSettings?
     let gym: Gym?
+    let allExercises: [Exercise]
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
     let onWork: (SessionExercise) -> Void
+
+    /// Same-movement-pattern lifts you can swap in (all presses, squat/hinge
+    /// variants, the oly lifts). Empty group ⇒ no swaps offered.
+    private var alternatives: [Exercise] {
+        guard let g = entry.exercise?.movementGroup, !g.isEmpty else { return [] }
+        return allExercises.filter { $0.movementGroup == g && $0.name != entry.exercise?.name }
+    }
+
+    private func swap(to newExercise: Exercise) {
+        entry.exercise = newExercise
+        entry.sets.forEach { $0.isPerSide = newExercise.isUnilateral }
+        try? context.save()
+        onWork(entry)
+    }
 
     /// Ephemeral bar choice for this exercise (mirrors the web logger's
     /// per-exercise bar select, which is equally sticky once touched). Starts
@@ -188,7 +205,8 @@ private struct ExerciseSection: View {
         Section {
             ForEach(entry.orderedSets) { set in
                 VStack(alignment: .leading, spacing: 4) {
-                    SetRow(set: set, onLogged: {
+                    SetRow(set: set, exercise: entry.exercise, gym: gym, bar: effectiveBar,
+                           targetLb: entry.plannedWeightLb, onLogged: {
                         onWork(entry)
                         // Auto-start only if the user opted in (manual is the
                         // default), and never restart a countdown already running.
@@ -255,6 +273,18 @@ private struct ExerciseSection: View {
                 if entry.exercise?.isShelved == true {
                     Text(Copy.shelved).foregroundStyle(Theme.hardStop)
                 }
+                Spacer()
+                if !alternatives.isEmpty {
+                    Menu {
+                        ForEach(alternatives) { alt in
+                            Button(alt.name) { swap(to: alt) }
+                        }
+                    } label: {
+                        Label("Swap", systemImage: "arrow.left.arrow.right")
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(Theme.accent)
+                    }
+                }
             }
         } footer: {
             if let site = entry.exercise?.watchSite {
@@ -282,6 +312,11 @@ private struct ExerciseSection: View {
 
 private struct SetRow: View {
     @Bindable var set: SetEntry
+    let exercise: Exercise?
+    let gym: Gym?
+    let bar: Bar
+    /// The program/track weight this session recommends — the picker anchors here.
+    let targetLb: Double?
     var onLogged: () -> Void
 
     @State private var showDetail = false
@@ -324,8 +359,8 @@ private struct SetRow: View {
             }
         }
         .sheet(isPresented: $showDetail) {
-            SetDetailSheet(set: set)
-                .presentationDetents([.medium])
+            SetDetailSheet(set: set, exercise: exercise, gym: gym, bar: bar, targetLb: targetLb)
+                .presentationDetents([.large])
         }
     }
 
@@ -390,25 +425,90 @@ private struct FlagToggle: View {
 private struct SetDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
+    let exercise: Exercise?
+    let gym: Gym?
+    let bar: Bar
+    let targetLb: Double?
 
-    @State private var weightText = ""
+    // Edited live (canonical pounds) so the plate graphic tracks every tap;
+    // committed on Done. Starts at the set's weight, which the program/track
+    // pre-fills to this session's recommendation.
+    @State private var lb: Double = 0
     @State private var unit: WeightUnit = .lb
+
+    private var isBarbell: Bool { exercise?.type == .barbell }
+
+    /// One tap = one plate change per side: 2× the smallest plate available at
+    /// the gym in the current unit (barbell); a sensible fixed step otherwise.
+    private var stepLb: Double {
+        if isBarbell, let gym {
+            let plates = gym.availablePlates.filter { $0.unit == unit }.map(\.value)
+            if let smallest = plates.min() { return Weight.toLb(smallest * 2, from: unit) }
+        }
+        return unit == .kg ? Weight.toLb(2.5, from: .kg) : 5
+    }
+
+    private var displayValue: Double { unit == .lb ? lb : Weight.kg(fromLb: lb) }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Weight") {
+                Section {
+                    // Big readout with plate ± on either side.
                     HStack {
-                        TextField("Weight", text: $weightText)
-                            .keyboardType(.decimalPad)
-                            .font(.title2.bold())
-                        Picker("", selection: $unit) {
-                            Text("lb").tag(WeightUnit.lb)
-                            Text("kg").tag(WeightUnit.kg)
+                        Button { adjust(-1) } label: { Image(systemName: "minus").font(.title2) }
+                            .buttonStyle(.bordered)
+                        Spacer()
+                        VStack(spacing: 0) {
+                            Text(lb == 0 ? "BW" : Weight.trim(displayValue))
+                                .font(.system(size: 44, weight: .heavy, design: .rounded).monospacedDigit())
+                            Text(lb == 0 ? "bodyweight" : unit.rawValue)
+                                .font(.caption).foregroundStyle(.secondary)
                         }
-                        .pickerStyle(.segmented)
-                        .frame(width: 110)
+                        Spacer()
+                        Button { adjust(1) } label: { Image(systemName: "plus").font(.title2) }
+                            .buttonStyle(.bordered)
                     }
+
+                    if isBarbell && lb > 0 {
+                        BarbellView(weightLb: lb, unit: unit, bar: bar, gym: gym)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+
+                    Picker("", selection: Binding(get: { unit }, set: { setUnit($0) })) {
+                        Text("lb").tag(WeightUnit.lb)
+                        Text("kg").tag(WeightUnit.kg)
+                    }
+                    .pickerStyle(.segmented)
+
+                    if let targetLb, targetLb > 0, abs(targetLb - lb) > 0.01 {
+                        Button {
+                            lb = targetLb
+                        } label: {
+                            Label("Session target: \(Weight.trim(unit == .lb ? targetLb : Weight.kg(fromLb: targetLb))) \(unit.rawValue)",
+                                  systemImage: "scope")
+                                .font(.callout)
+                        }
+                    }
+
+                    // Type an exact value if the steps don't land it.
+                    HStack {
+                        Text("Type").foregroundStyle(.secondary)
+                        Spacer()
+                        TextField("weight", text: Binding(
+                            get: { lb == 0 ? "" : Weight.trim(displayValue, decimals: 2) },
+                            set: { if let v = Double($0.replacingOccurrences(of: ",", with: ".")) { lb = Weight.toLb(v, from: unit) } else if $0.isEmpty { lb = 0 } }
+                        ))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 90)
+                    }
+                    .font(.callout)
+                } header: {
+                    Text("Weight — 0 = bodyweight")
+                }
+
+                Section {
                     Stepper("Reps: \(set.reps)", value: Bindable(set).reps, in: 0...100)
                     Toggle("Warmup", isOn: Bindable(set).isWarmup)
                     Toggle("Per side", isOn: Bindable(set).isPerSide)
@@ -443,23 +543,25 @@ private struct SetDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        commitWeight()
+                        set.weightLb = lb       // stored canonically in lb
+                        set.enteredUnit = unit
                         dismiss()
                     }
                 }
             }
             .onAppear {
                 unit = set.enteredUnit
-                let display = unit == .lb ? set.weightLb : Weight.kg(fromLb: set.weightLb)
-                weightText = Weight.trim(display, decimals: 2)
+                lb = set.weightLb
             }
         }
     }
 
-    private func commitWeight() {
-        guard let value = Double(weightText.replacingOccurrences(of: ",", with: ".")) else { return }
-        set.weightLb = Weight.toLb(value, from: unit) // stored canonically in lb
-        set.enteredUnit = unit
+    private func adjust(_ dir: Double) {
+        lb = max(0, lb + dir * stepLb)
+    }
+
+    private func setUnit(_ newUnit: WeightUnit) {
+        unit = newUnit // lb is canonical, so the readout just re-renders in the new unit
     }
 }
 
@@ -476,46 +578,54 @@ private struct SessionBottomBar: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Divider()
+            // A tall progress bar during rest so the countdown reads at a glance.
             ProgressView(value: restTimer.isRunning ? min(1, 1 - restTimer.progress) : 0)
                 .tint(Theme.accent)
+                .scaleEffect(x: 1, y: restTimer.isRunning ? 2 : 1, anchor: .top)
+                .animation(.default, value: restTimer.isRunning)
 
             HStack(spacing: 12) {
+                // Session stopwatch — always visible, with an icon so it reads
+                // as a running clock.
                 TimelineView(.periodic(from: sessionStart, by: 1)) { timeline in
-                    Text("\(elapsedLabel(at: timeline.date)) session")
-                        .font(.callout.monospacedDigit())
+                    Label(elapsedLabel(at: timeline.date), systemImage: "stopwatch")
+                        .font(.callout.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
                 if restTimer.isRunning {
-                    if !restTimer.exerciseName.isEmpty {
-                        Text(restTimer.exerciseName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        if !restTimer.exerciseName.isEmpty {
+                            Text("resting · \(restTimer.exerciseName)")
+                                .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Text(restTimer.display)
+                            .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
+                            .foregroundStyle(Theme.accent)
                     }
-                    Text(restTimer.display)
-                        .font(.title3.bold().monospacedDigit())
                     Button("+1:00") { restTimer.add(seconds: 60) }
                         .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    Button("Skip") { restTimer.stop() }
+                    Button {
+                        restTimer.stop()
+                    } label: { Image(systemName: "xmark") }
                         .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        .accessibilityLabel("Skip rest")
                 } else {
                     Button {
                         restTimer.start(seconds: restSeconds, exerciseName: restLabel)
                     } label: {
-                        Text("Rest \(mmss(restSeconds))")
-                            .monospacedDigit()
+                        Label("Rest \(mmss(restSeconds))", systemImage: "timer")
+                            .font(.body.weight(.semibold).monospacedDigit())
+                            .padding(.horizontal, 4)
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                 }
             }
             .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.vertical, 10)
         }
         .background(.bar)
     }
