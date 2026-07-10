@@ -3,6 +3,7 @@ import SwiftData
 
 struct RootView: View {
     @Binding var selection: Int
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showPlateCalc = false
     @State private var restTimer = RestTimer()
 
@@ -46,6 +47,11 @@ struct RootView: View {
         .environment(restTimer)
         .task {
             _ = await NotificationService.requestAuthorization()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // The user may have paused/resumed/extended/ended the rest from the
+            // Lock Screen while we were backgrounded — adopt the activity's state.
+            if phase == .active { restTimer.reconcileFromActivity() }
         }
     }
 }

@@ -41,7 +41,15 @@ Two quick browser steps (more reliable than doing it headless):
 2. **App Store Connect → Apps → + → New App** → iOS, name "Cadence", the
    bundle id above, SKU `cadence`, your primary language. Create.
 
-(`fastlane match` then makes the signing cert + profile for that App ID
+The **rest Live Activity** ships in an embedded widget extension with its own
+App ID, `com.madhakish.Cadence.Widgets`. `fastlane match` (with `readonly:
+false`) will register it and mint its profile on the next CI run — but if your
+App Store Connect API key can't create identifiers, register it by hand too:
+**Identifiers → + → App IDs → App**, explicit Bundle ID
+`com.madhakish.Cadence.Widgets`, no extra capabilities. (No separate ASC *app
+record* — the extension ships inside the Cadence app.)
+
+(`fastlane match` then makes the signing cert + profiles for both App IDs
 automatically on the first CI run.)
 
 ## Configure the repo

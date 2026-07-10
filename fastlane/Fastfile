@@ -5,6 +5,9 @@ default_platform(:ios)
 # interactive, no Apple ID password, no 2FA.
 
 APP_ID = ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence"
+# The Live Activity ships in an embedded widget extension with its own App ID,
+# which needs its own distribution profile or the archive won't sign.
+WIDGET_ID = "#{APP_ID}.Widgets"
 
 platform :ios do
   desc "Build a Release archive and upload it to TestFlight"
@@ -30,10 +33,14 @@ platform :ios do
     # App Store Connect app record are created once by hand — see docs/TESTFLIGHT.md.
     # That's more reliable than headless `produce`.
 
-    # Fetch (or create on first run) the distribution cert + provisioning profile.
-    match(type: "appstore", app_identifier: APP_ID, api_key: api_key, readonly: false)
+    # Fetch (or create on first run) the distribution cert + provisioning
+    # profiles for BOTH the app and the widget extension. If the widget App ID
+    # (com.madhakish.Cadence.Widgets) doesn't yet exist, `readonly: false` +
+    # the API key registers it — or create it by hand like the main App ID
+    # (see docs/TESTFLIGHT.md).
+    match(type: "appstore", app_identifier: [APP_ID, WIDGET_ID], api_key: api_key, readonly: false)
 
-    # Switch the target to manual signing with the match profile.
+    # Switch each target to manual signing with its match profile.
     update_code_signing_settings(
       use_automatic_signing: false,
       path: "Cadence.xcodeproj",
@@ -41,6 +48,14 @@ platform :ios do
       team_id: ENV["DEVELOPER_TEAM_ID"],
       code_sign_identity: "Apple Distribution",
       profile_name: ENV["sigh_#{APP_ID}_appstore_profile-name"]
+    )
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Cadence.xcodeproj",
+      targets: ["CadenceWidgets"],
+      team_id: ENV["DEVELOPER_TEAM_ID"],
+      code_sign_identity: "Apple Distribution",
+      profile_name: ENV["sigh_#{WIDGET_ID}_appstore_profile-name"]
     )
 
     # Version + build number are driven entirely by build-setting overrides at
@@ -62,7 +77,10 @@ platform :ios do
       configuration: "Release",
       export_method: "app-store",
       export_options: {
-        provisioningProfiles: { APP_ID => ENV["sigh_#{APP_ID}_appstore_profile-name"] }
+        provisioningProfiles: {
+          APP_ID => ENV["sigh_#{APP_ID}_appstore_profile-name"],
+          WIDGET_ID => ENV["sigh_#{WIDGET_ID}_appstore_profile-name"]
+        }
       },
       xcargs: "-allowProvisioningUpdates CURRENT_PROJECT_VERSION=#{next_build}#{version_arg}"
     )
