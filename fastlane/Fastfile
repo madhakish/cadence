@@ -43,16 +43,16 @@ platform :ios do
       profile_name: ENV["sigh_#{APP_ID}_appstore_profile-name"]
     )
 
-    # Monotonic build number from whatever TestFlight already has.
+    # Version + build number are driven entirely by build-setting overrides at
+    # archive time, which the generated Info.plist references via
+    # $(MARKETING_VERSION) / $(CURRENT_PROJECT_VERSION). This is deterministic
+    # and avoids agvtool touching a literal Info.plist.
+    #   - MARKETING_VERSION → the semantic-release version (APP_VERSION = the v*
+    #     tag minus "v"), so TestFlight maps 1:1 to the released version.
+    #   - CURRENT_PROJECT_VERSION → a monotonic build number from TestFlight.
     next_build = latest_testflight_build_number(
       api_key: api_key, app_identifier: APP_ID, initial_build_number: 0
     ) + 1
-    increment_build_number(build_number: next_build, xcodeproj: "Cadence.xcodeproj")
-
-    # Marketing version (CFBundleShortVersionString) tracks the semantic-release
-    # version passed in as APP_VERSION (the v* tag, minus the "v"), overriding
-    # the static project.yml value at build time so TestFlight maps 1:1 to the
-    # released version. Empty ⇒ keep the project.yml fallback.
     app_version = ENV["APP_VERSION"].to_s.strip
     version_arg = app_version.empty? ? "" : " MARKETING_VERSION=#{app_version}"
 
@@ -64,7 +64,7 @@ platform :ios do
       export_options: {
         provisioningProfiles: { APP_ID => ENV["sigh_#{APP_ID}_appstore_profile-name"] }
       },
-      xcargs: "-allowProvisioningUpdates#{version_arg}"
+      xcargs: "-allowProvisioningUpdates CURRENT_PROJECT_VERSION=#{next_build}#{version_arg}"
     )
 
     upload_to_testflight(
