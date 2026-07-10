@@ -174,10 +174,30 @@ private struct ExerciseSection: View {
     }
 
     private func swap(to newExercise: Exercise) {
+        let oldName = entry.exercise?.name
+        // If this section fills a program slot, repoint the slot at the lift
+        // you're actually doing. Completion matches program lifts/accessories
+        // by name+role, so without this the swapped lift wouldn't be graded and
+        // the original would be treated as a missed peak (false stall/deload) at
+        // rollover. The slot keeps its progression state as the starting load.
+        if let role = entry.programRole, let name = entry.session?.programName,
+           let program = fetchProgram(named: name),
+           let day = program.days.first(where: { $0.order == (entry.session?.programDayIndex ?? 0) }) {
+            if role == "accessory" {
+                day.accessories.first { $0.exerciseName == oldName }?.exerciseName = newExercise.name
+            } else {
+                day.lifts.first { $0.exerciseName == oldName && $0.roleRaw == role }?.exerciseName = newExercise.name
+            }
+        }
         entry.exercise = newExercise
         entry.sets.forEach { $0.isPerSide = newExercise.isUnilateral }
         try? context.save()
         onWork(entry)
+    }
+
+    private func fetchProgram(named name: String) -> Program? {
+        let n = name // hoist: #Predicate can't read a captured property
+        return (try? context.fetch(FetchDescriptor<Program>(predicate: #Predicate { $0.name == n })))?.first
     }
 
     /// Ephemeral bar choice for this exercise (mirrors the web logger's
@@ -458,6 +478,7 @@ private struct SetDetailSheet: View {
                     HStack {
                         Button { adjust(-1) } label: { Image(systemName: "minus").font(.title2) }
                             .buttonStyle(.bordered)
+                            .accessibilityLabel("Decrease weight")
                         Spacer()
                         VStack(spacing: 0) {
                             Text(lb == 0 ? "BW" : Weight.trim(displayValue))
@@ -468,6 +489,7 @@ private struct SetDetailSheet: View {
                         Spacer()
                         Button { adjust(1) } label: { Image(systemName: "plus").font(.title2) }
                             .buttonStyle(.bordered)
+                            .accessibilityLabel("Increase weight")
                     }
 
                     if isBarbell && lb > 0 {
