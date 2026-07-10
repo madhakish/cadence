@@ -100,7 +100,7 @@ struct SettingsView: View {
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(program.name)
-                                Text("\(program.focus.rawValue) · \(program.days.count) days · Cycle \(program.cycleNumber), Wk\(program.currentWeek)\(program.isActive ? " · active" : "")")
+                                Text("\(program.focus.rawValue) · \(program.days.count) days · Cycle \(program.cycleNumber), Rotation \(program.currentWeek)\(program.isActive ? " · active" : "")")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -296,7 +296,7 @@ struct TrackEditorView: View {
                     get: { track.mode },
                     set: { track.mode = $0 }
                 )) {
-                    Text("4-week cycle").tag(TrackMode.cycle)
+                    Text("4-rotation cycle").tag(TrackMode.cycle)
                     Text("Linear").tag(TrackMode.linear)
                 }
                 Stepper(
@@ -304,7 +304,7 @@ struct TrackEditorView: View {
                     value: $track.incrementLb, in: 2.5...25, step: 2.5
                 )
                 Stepper(
-                    "\(track.mode == .cycle ? "Week 1 weight" : "Current weight"): \(Weight.trim(track.baseWeightLb)) lb",
+                    "\(track.mode == .cycle ? "Rotation 1 weight" : "Current weight"): \(Weight.trim(track.baseWeightLb)) lb",
                     value: $track.baseWeightLb, in: 0...1000, step: 5
                 )
                 if track.mode == .cycle {
@@ -354,8 +354,20 @@ struct ProgramEditorView: View {
                 }))
             }
             Section {
-                Text("Cycle \(program.cycleNumber), week \(program.currentWeek). Lifts progress automatically — weights are the current week-1 base.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Stepper("Cycle: \(program.cycleNumber)", value: $program.cycleNumber, in: 1...99)
+                Stepper("Rotation: \(program.currentWeek) of 4 · \((CyclePhase(rawValue: program.currentWeek) ?? .volume).name)",
+                        value: Binding(get: { program.currentWeek }, set: { positionAtRotation($0) }), in: 1...4)
+                if !program.orderedDays.isEmpty {
+                    Picker("Next day", selection: Binding(get: { program.nextDayIndex }, set: { program.nextDayIndex = $0 })) {
+                        ForEach(program.orderedDays) { day in
+                            Text(day.name).tag(day.order)
+                        }
+                    }
+                }
+            } header: {
+                Text("Where you are")
+            } footer: {
+                Text("Set your position mid-cycle. Rotations 1–3 are working (volume/load/peak), rotation 4 is the rest rotation, then the cycle bumps. Lifts progress automatically — weights are the rotation-1 base.")
             }
             Section("Days") {
                 ForEach(program.orderedDays) { day in
@@ -391,6 +403,26 @@ struct ProgramEditorView: View {
             }
         }
         .navigationTitle(program.name)
+    }
+
+    /// Move the program to a rotation. Placing at/after Peak (rotation 3) with no
+    /// banked Peak result would otherwise make the next rollover treat the skipped
+    /// Peak as a stall and deload; seed a neutral hold (carry current state forward,
+    /// no note) for any lift lacking pending so manual positioning never penalizes.
+    /// A real Peak session logged in rotation 3 overwrites this hold with its grade.
+    private func positionAtRotation(_ newValue: Int) {
+        program.currentWeek = newValue
+        guard newValue >= 3 else { return }
+        for day in program.days {
+            for lift in day.lifts where lift.pendingBaseWeightLb == nil {
+                lift.pendingBaseWeightLb = lift.baseWeightLb
+                lift.pendingEstimatedMaxLb = lift.estimatedMaxLb
+                lift.pendingStallCount = lift.stallCount
+                lift.pendingLastIncrementLb = lift.lastIncrementLb
+                lift.pendingNote = nil
+            }
+        }
+        try? context.save()
     }
 
     private func deleteDays(at offsets: IndexSet) {
@@ -468,7 +500,7 @@ private struct ProgramLiftRow: View {
                 Text("Complementary").tag(LiftRole.complementary)
             }
             .pickerStyle(.segmented)
-            Stepper("Week-1 base: \(Weight.trim(lift.baseWeightLb)) lb", value: $lift.baseWeightLb, in: 0...1000, step: step)
+            Stepper("Rotation-1 base: \(Weight.trim(lift.baseWeightLb)) lb", value: $lift.baseWeightLb, in: 0...1000, step: step)
             Stepper("Est. 1RM: \(Weight.trim(lift.estimatedMaxLb)) lb", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
         }
     }

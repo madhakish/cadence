@@ -25,7 +25,7 @@ export async function render(host) {
     const card = ui.h("div", { class: "card" },
       ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
         ui.h("span", { class: "title", text: day.name }),
-        ui.h("span", { class: "pill accent", text: `Wk${program.currentWeek} ${phase.name}` })));
+        ui.h("span", { class: "pill accent", text: `R${program.currentWeek} ${phase.name}` })));
     const lifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
     for (const l of lifts) {
       const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);

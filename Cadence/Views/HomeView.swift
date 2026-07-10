@@ -64,7 +64,7 @@ struct HomeView: View {
                         HStack {
                             Text(day.name).font(.headline)
                             Spacer()
-                            Text("Wk\(program.currentWeek) \(CyclePhase(rawValue: program.currentWeek)?.name ?? "")")
+                            Text("Rotation \(program.currentWeek) · \((CyclePhase(rawValue: program.currentWeek) ?? .volume).name)")
                                 .font(.caption.bold())
                                 .foregroundStyle(Theme.accent)
                         }

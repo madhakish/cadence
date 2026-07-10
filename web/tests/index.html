@@ -23,7 +23,7 @@
     const t = (c, m) => { if (c) pass++; else { fail++; log.push("FAIL: " + m); } };
     t(C.both(232) === "232 lb / 105.2 kg", "both(232)");
     t(near(C.solve(225, C.BARS.bar45lb, C.STANDARD_LB).totalLb, 225), "225 solves");
-    t(C.sessionPlanLabel(C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 3, incrementLb: 10 })) === "245 × 3×3 — Wk3 Peak", "DL peak plan");
+    t(C.sessionPlanLabel(C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 3, incrementLb: 10 })) === "245 × 3×3 — R3 Peak", "DL peak plan");
     t(C.droppedLoad(232) === 215, "dropped 232→215");
     t(JSON.stringify(C.warmupRamp(245).map((x) => x.weightLb)) === JSON.stringify([45, 100, 135, 170, 210]), "ramp 245");
     out.className = fail ? "fail" : "ok";

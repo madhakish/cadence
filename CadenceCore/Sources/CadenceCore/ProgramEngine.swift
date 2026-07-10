@@ -45,8 +45,8 @@ public enum CyclePhase: Int, Codable, CaseIterable, Sendable {
         CyclePhase(rawValue: rawValue + 1) ?? .volume
     }
 
-    /// "Wk2 Load 5×3"
-    public var label: String { "Wk\(rawValue) \(name) \(sets)×\(reps)" }
+    /// "R2 Load 5×3"
+    public var label: String { "R\(rawValue) \(name) \(sets)×\(reps)" }
 }
 
 /// Linear vs 4-week cycle progression.
@@ -88,10 +88,10 @@ public struct SessionPlan: Hashable, Sendable {
         self.cycleNumber = cycleNumber
     }
 
-    /// "245 × 3×3 — Wk3 Peak"
+    /// "245 × 3×3 — R3 Peak"
     public var label: String {
         let base = "\(Weight.trim(weightLb)) × \(sets)×\(reps)"
-        if let phase { return "\(base) — Wk\(phase.rawValue) \(phase.name)" }
+        if let phase { return "\(base) — R\(phase.rawValue) \(phase.name)" }
         return base
     }
 }

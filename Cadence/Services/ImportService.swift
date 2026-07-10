@@ -310,10 +310,12 @@ enum ImportService {
         settings.seededAt = st.seededAt ?? settings.seededAt ?? .now
     }
 
-    /// Recover a cycle-phase number from an exported phase label ("… Wk3 …").
+    /// Recover a cycle-phase number from an exported phase label ("… R3 …").
+    /// Accepts the current "R{n}" prefix and legacy "Wk{n}" from older backups.
     private static func recoverPhase(_ label: String?) -> Int? {
-        guard let label, let r = label.range(of: #"Wk(\d+)"#, options: .regularExpression) else { return nil }
-        return Int(label[r].dropFirst(2))
+        guard let label,
+              let r = label.range(of: #"(?:R|Wk)(\d+)"#, options: .regularExpression) else { return nil }
+        return Int(label[r].drop(while: { !$0.isNumber }))
     }
 
     /// Decode a `data:...;base64,XXXX` URL back to bytes (the gym barcode photo).

@@ -231,7 +231,7 @@ export const PHASES = {
 export const phaseNext = (p) => (p >= 4 ? 1 : p + 1);
 export const phaseLabel = (p) => {
   const ph = PHASES[p];
-  return `Wk${p} ${ph.name} ${ph.sets}×${ph.reps}`;
+  return `R${p} ${ph.name} ${ph.sets}×${ph.reps}`;
 };
 
 export const DEFAULT_ROUNDING_LB = 5.0;
@@ -287,7 +287,7 @@ export const AUTOREG_REASONS = ["bar speed", "wobble", "joint signal", "heat", "
 // plan: { weightLb, sets, reps, phase? }
 export function sessionPlanLabel(plan) {
   const base = `${trim(plan.weightLb)} × ${plan.sets}×${plan.reps}`;
-  if (plan.phase) return `${base} — Wk${plan.phase} ${PHASES[plan.phase].name}`;
+  if (plan.phase) return `${base} — R${plan.phase} ${PHASES[plan.phase].name}`;
   return base;
 }
 
