@@ -30,4 +30,15 @@ final class UnitsTests: XCTestCase {
         XCTAssertEqual(UnitDisplay.kgPrimary.format(lb: 232), "105.2 kg")
         XCTAssertEqual(UnitDisplay.both.format(lb: 232), "232 lb / 105.2 kg")
     }
+
+    func testBarLoadableSnapsPerSideToStep() {
+        // 150 on a 45 bar → 52.5/side, which needs a lonely 2.5. Snap per-side
+        // to the step so it loads 45+10/side = 155.
+        XCTAssertEqual(Weight.barLoadable(150, barLb: 45, stepLb: 5), 155)
+        XCTAssertEqual(Weight.barLoadable(155, barLb: 45, stepLb: 5), 155) // already clean
+        XCTAssertEqual(Weight.barLoadable(145, barLb: 45, stepLb: 5), 145)
+        XCTAssertEqual(Weight.barLoadable(160, barLb: 45, stepLb: 5), 165)
+        XCTAssertEqual(Weight.barLoadable(100, barLb: 45, stepLb: 5), 105)
+        XCTAssertEqual(Weight.barLoadable(30, barLb: 45, stepLb: 5), 45) // below the bar
+    }
 }

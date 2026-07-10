@@ -29,6 +29,14 @@ eq(C.roundTo(192.5, 5), 195, "round 192.5");
 eq(C.roundTo(246.75, 5), 245, "round 246.75");
 eq(C.roundTo(162.75, 5), 165, "round 162.75");
 
+// ---- Bar-loadable rounding (per-side snaps to the step, no lonely 2.5) ----
+eq(C.barLoadable(150, 45, 5), 155, "150 on 45 bar → 155 (45+10/side)");
+eq(C.barLoadable(155, 45, 5), 155, "155 already bar-loadable");
+eq(C.barLoadable(145, 45, 5), 145, "145 already bar-loadable");
+eq(C.barLoadable(160, 45, 5), 165, "160 → 165");
+eq(C.barLoadable(100, 45, 5), 105, "100 → 105");
+eq(C.barLoadable(30, 45, 5), 45, "target below bar → bar weight");
+
 // ---- Plate math ----
 let s = C.solve(135, C.BARS.bar45lb, C.STANDARD_LB);
 near(s.totalLb, 135, 1e-9, "135 total");

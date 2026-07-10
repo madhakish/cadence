@@ -26,6 +26,17 @@ public enum Weight {
         return (valueLb / increment).rounded() * increment
     }
 
+    /// Round a target TOTAL to the nearest weight cleanly loadable on `barLb` —
+    /// the per-side load snaps to `stepLb`, so there's no lonely 2.5 lb change
+    /// plate (e.g. 150 on a 45 bar → 155 = 45+10/side, not 45+5+2.5). Never
+    /// below the bar. For secondary/accessory barbell work where grabbing a neat
+    /// weight beats hitting an exact number. Mirrored in web core.js.
+    public static func barLoadable(_ targetLb: Double, barLb: Double, stepLb: Double) -> Double {
+        guard stepLb > 0, targetLb > barLb else { return Swift.max(targetLb, barLb) }
+        let perSide = round((targetLb - barLb) / 2.0, to: stepLb)
+        return barLb + 2.0 * perSide
+    }
+
     /// "232" or "232.4" — drop trailing .0
     public static func trim(_ value: Double, decimals: Int = 1) -> String {
         let rounded = (value * pow(10, Double(decimals))).rounded() / pow(10, Double(decimals))

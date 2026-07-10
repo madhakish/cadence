@@ -8,6 +8,7 @@ struct HomeView: View {
     @Environment(\.modelContext) private var context
     @Query private var tracks: [LiftTrack]
     @Query private var programs: [Program]
+    @Query private var exercises: [Exercise]
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
     @Query private var proteinEntries: [ProteinEntry]
@@ -34,7 +35,12 @@ struct HomeView: View {
         let plan = ProgramEngine.plan(
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
             roundingLb: program.roundingLb)
-        return plan.label
+        // Preview the same snapped weight the session will store (secondary barbell lifts).
+        let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
+        let isBarbell = exercises.first { $0.name == lift.exerciseName }?.type == .barbell
+        let weightLb = ProgramSession.neatWeight(plan.weightLb, isBarbell: isBarbell,
+                                                 isMain: lift.role.rawValue == "main", barLb: barLb, stepLb: program.roundingLb)
+        return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps, phase: plan.phase, cycleNumber: plan.cycleNumber).label
     }
 
     private var todayProtein: Double {

@@ -512,25 +512,38 @@ async function advanceProgram(session, milestones) {
 }
 
 // ---- Build a session from a program day ----
+// Secondary/accessory barbell work snaps to a neat bar-loadable weight (no
+// lonely 2.5); main lifts keep their fine progression, and non-barbell work is
+// left alone. Shared by session creation AND the Home preview so the "Start"
+// card and the stored prescription never disagree.
+export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb) {
+  return (!isMain && exercise && exercise.type === "barbell") ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
+}
+
 export async function createSessionFromProgramDay(program, day) {
   const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
+  const gym = await Gyms.default();
+  const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
+  const neat = (weightLb, ex, isMain) => neatProgramWeight(weightLb, ex, isMain, barLb, program.roundingLb);
   const exercises = [];
   let order = 0;
   const lifts = [...(day.lifts || [])].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
   for (const lift of lifts) {
     const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
     const ex = exMap.get(lift.exerciseName);
+    const weightLb = neat(plan.weightLb, ex, lift.role === "main");
     const sets = [];
     let so = 0;
-    if (ex && ex.type === "barbell") for (const wu of C.warmupRamp(plan.weightLb)) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true }));
-    for (let i = 0; i < plan.sets; i += 1) sets.push(mkSet(so++, plan.weightLb, plan.reps, { perSide: ex && ex.isUnilateral }));
-    exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek, plannedWeightLb: plan.weightLb, plannedSets: plan.sets, plannedReps: plan.reps, programRole: lift.role, sets });
+    if (ex && ex.type === "barbell") for (const wu of C.warmupRamp(weightLb, barLb, program.roundingLb)) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true }));
+    for (let i = 0; i < plan.sets; i += 1) sets.push(mkSet(so++, weightLb, plan.reps, { perSide: ex && ex.isUnilateral }));
+    exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps, programRole: lift.role, sets });
   }
   for (const acc of day.accessories || []) {
     const ex = exMap.get(acc.exerciseName);
+    const weightLb = neat(acc.weightLb, ex, false);
     const sets = [];
-    for (let i = 0; i < acc.sets; i += 1) sets.push(mkSet(i, acc.weightLb, acc.currentReps, { perSide: ex && ex.isUnilateral }));
-    exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null, plannedWeightLb: acc.weightLb, plannedSets: acc.sets, plannedReps: acc.currentReps, programRole: "accessory", sets });
+    for (let i = 0; i < acc.sets; i += 1) sets.push(mkSet(i, weightLb, acc.currentReps, { perSide: ex && ex.isUnilateral }));
+    exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null, plannedWeightLb: weightLb, plannedSets: acc.sets, plannedReps: acc.currentReps, programRole: "accessory", sets });
   }
   const id = await Sessions.save({
     date: iso(new Date()), notes: "", isCompleted: false, gymName: await defaultGymName(),

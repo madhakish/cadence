@@ -20,6 +20,16 @@ export function roundTo(valueLb, increment) {
   return roundHalfAway(valueLb / increment) * increment;
 }
 
+// Round a target TOTAL to the nearest weight cleanly loadable on `barLb`: the
+// per-side load snaps to `stepLb`, so no lonely 2.5 lb change plate (e.g. 150 on
+// a 45 bar → 155 = 45+10/side). Never below the bar. For secondary/accessory
+// barbell work where a neat weight beats an exact number. Mirrors Weight.barLoadable.
+export function barLoadable(targetLb, barLb, stepLb) {
+  if (!(stepLb > 0) || !(targetLb > barLb)) return Math.max(targetLb, barLb);
+  const perSide = roundTo((targetLb - barLb) / 2.0, stepLb);
+  return barLb + 2.0 * perSide;
+}
+
 // "232" or "232.4" — drop trailing zeros.
 export function trim(value, decimals = 1) {
   const f = Math.pow(10, decimals);
