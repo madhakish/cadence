@@ -93,6 +93,16 @@ eq(s.perSide.length, 1, "315 one denom");
 eq(s.perSide[0].plate.value, 45, "315 uses 45lb");
 eq(s.perSide[0].count, 3, "315 three 45s");
 
+// 405 is exactly 45×4/side: the greedy seed reaches it even though a naive
+// search would exhaust its node budget in the 25kg branches and settle for a
+// 25kg×2 + 35lb×2 frankenstack.
+s = C.solve(405, C.BARS.bar45lb, C.ALL_STANDARD);
+eq(s.perSide.length, 1, "405 one denom");
+eq(s.perSide[0].plate.value, 45, "405 uses 45lb");
+eq(s.perSide[0].count, 4, "405 four 45s");
+near(s.deviationLb, 0, 1e-9, "405 exact");
+eq(new Set(s.perSide.map((pc) => pc.plate.unit)).size, 1, "405 no unit mix");
+
 let perSide = [
   { plate: { value: 45, unit: "lb" }, count: 1 },
   { plate: { value: 15, unit: "kg" }, count: 1 },

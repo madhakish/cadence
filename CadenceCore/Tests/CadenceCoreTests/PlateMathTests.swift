@@ -108,6 +108,17 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(Set(s.loadout.perSide.map(\.plate.unit)).count, 1)
     }
 
+    func testHeavyLoadReachesCleanStackDespiteNodeCap() {
+        // 405 on a 45 lb bar is exactly 45×4/side. The greedy single-unit seed
+        // guarantees that clean stack even though a naive branch-and-bound would
+        // exhaust its node budget in the 25 kg-heavy branches first and settle
+        // for a kg+lb frankenstack (25 kg×2 + 35 lb×2).
+        let s = PlateMath.solve(targetLb: 405, bar: .bar45lb, plates: Plate.allStandard)
+        XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 45, unit: .lb), count: 4)])
+        XCTAssertEqual(s.deviationLb, 0, accuracy: 1e-9)
+        XCTAssertEqual(Set(s.loadout.perSide.map(\.plate.unit)).count, 1)
+    }
+
     // MARK: - Reverse mode
 
     func testReverseModeMixedUnits() {

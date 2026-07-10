@@ -117,6 +117,23 @@ public enum PlateMath {
             counts[index] = 0
         }
 
+        // Seed best with a clean single-unit greedy fill per unit system: a
+        // tight bound from the first node, and never a worse-than-simple stack
+        // if the 300k cap trips on a heavy mixed inventory (e.g. 405 → 45×4,
+        // not a kg+lb frankenstack).
+        func seedGreedy(_ unit: WeightUnit) {
+            for i in counts.indices { counts[i] = 0 }
+            var remaining = perSideTarget, used = 0, distinct = 0
+            for i in sorted.indices where sorted[i].unit == unit {
+                let c = min(maxPerPlateSide, Int((remaining / values[i] + 1e-9).rounded(.down)))
+                if c > 0 { counts[i] = c; remaining -= Double(c) * values[i]; used += c; distinct += 1 }
+            }
+            if used > 0 { consider(remaining, used, distinct, false) }
+        }
+        seedGreedy(.lb)
+        seedGreedy(.kg)
+        for i in counts.indices { counts[i] = 0 }
+
         search(0, perSideTarget, 0, 0, 0, 0)
 
         let perSide = zip(sorted, bestCounts).compactMap { plate, count in

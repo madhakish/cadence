@@ -192,6 +192,24 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
     counts[index] = 0;
   };
 
+  // Seed best with a clean single-unit greedy fill per unit system. Gives the
+  // search a tight bound from the first node AND guarantees we never return a
+  // worse-than-simple stack if the 300k-node cap trips on a heavy mixed
+  // inventory (e.g. 405 → 45×4, not a kg+lb frankenstack).
+  const seedGreedy = (unit) => {
+    counts.fill(0);
+    let remaining = perSideTarget, used = 0, distinct = 0;
+    for (let i = 0; i < sorted.length; i += 1) {
+      if (sorted[i].unit !== unit) continue;
+      const c = Math.min(maxPerPlateSide, Math.floor(remaining / values[i] + 1e-9));
+      if (c > 0) { counts[i] = c; remaining -= c * values[i]; used += c; distinct += 1; }
+    }
+    if (used > 0) consider(remaining, used, distinct, false);
+  };
+  seedGreedy("lb");
+  seedGreedy("kg");
+  counts.fill(0);
+
   search(0, perSideTarget, 0, 0, 0, 0);
 
   const perSide = [];
