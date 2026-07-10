@@ -61,6 +61,9 @@ final class AppSettings {
     var haptics: Bool = true
     var healthKitEnabled: Bool
     var seededAt: Date?
+    /// Selected theme, raw value of `ThemeName` (mirrors web `settings.theme`).
+    /// Stored as a String so this model stays free of the SwiftUI view layer.
+    var themeNameRaw: String = "carbon"
 
     init() {
         self.unitDisplayRaw = UnitDisplay.lbPrimary.rawValue
@@ -70,6 +73,7 @@ final class AppSettings {
         self.haptics = true
         self.healthKitEnabled = false
         self.seededAt = nil
+        self.themeNameRaw = "carbon"
     }
 
     var unitDisplay: UnitDisplay {

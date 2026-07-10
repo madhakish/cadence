@@ -102,7 +102,7 @@ ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries l
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
 ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 47, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
-ok(parsed.settings.theme === "memento", "theme defaults to memento and round-trips");
+ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
 const csv = await db.exportCSV();
 ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 

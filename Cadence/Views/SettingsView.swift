@@ -22,6 +22,24 @@ struct SettingsView: View {
                 if let settings = settingsList.first {
                     let bindable = Bindable(settings)
 
+                    Section("Theme") {
+                        Picker("Theme", selection: Binding(
+                            get: { ThemeName(rawValue: settings.themeNameRaw) ?? .carbon },
+                            set: { settings.themeNameRaw = $0.rawValue }
+                        )) {
+                            ForEach(ThemeName.allCases) { theme in
+                                Label {
+                                    Text(theme.label)
+                                } icon: {
+                                    Circle().fill(theme.palette.accent).frame(width: 14, height: 14)
+                                }
+                                .tag(theme)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                    }
+
                     Section("Units") {
                         Picker("Display", selection: bindable.unitDisplayRaw) {
                             Text("lb primary").tag(UnitDisplay.lbPrimary.rawValue)
