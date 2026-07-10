@@ -81,6 +81,7 @@ export const Settings = {
 function defaultSettings() {
   return {
     unitDisplay: "lbPrimary",
+    theme: "memento",
     proteinTargetGrams: 175,
     accessoryRestSeconds: 90,
     autoStartRest: false, // manual start by default — auto lies if you rested first

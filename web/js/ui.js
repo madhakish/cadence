@@ -159,3 +159,19 @@ export function download(filename, text, type = "application/json") {
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// ---- Theme ----
+export const THEMES = [
+  { value: "memento", label: "Memento" },
+  { value: "carbon", label: "Carbon" },
+  { value: "slate", label: "Slate" },
+  { value: "system", label: "System" },
+];
+// Apply a theme by name: set [data-theme] on <html> and sync the PWA
+// status-bar colour to the theme's ground.
+export function applyTheme(name) {
+  document.documentElement.dataset.theme = name || "memento";
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta && bg) meta.setAttribute("content", bg);
+}
