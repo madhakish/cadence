@@ -28,6 +28,10 @@ targets:
       path: Cadence/Info.plist
       properties:
         CFBundleDisplayName: Cadence
+        # No custom/non-exempt encryption — only standard OS + HTTPS, which is
+        # export-exempt. Declaring this clears the "Missing Compliance" hold on
+        # every TestFlight/App Store upload (no per-build manual answer).
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
