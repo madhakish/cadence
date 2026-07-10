@@ -27,58 +27,101 @@ enum Seeder {
         try? context.save()
     }
 
-    // MARK: - Exercise library (exact seed list)
+    // MARK: - Exercise library (exact seed list; movementGroup enables swap)
 
-    private static func seedExercises(context: ModelContext) -> [String: Exercise] {
-        let main: [Exercise] = [
-            Exercise(name: "Deadlift", category: .main, type: .barbell, defaultRestSeconds: 300),
-            Exercise(name: "Back Squat", category: .main, type: .barbell, defaultRestSeconds: 300, watchSite: .leftHip),
+    /// Fresh (un-inserted) Exercise objects for the whole library — mirror of
+    /// web `seed.js` exercises. Used by the first-run seed and by `syncLibrary`
+    /// to top up older installs. Groups: squat, hinge, press, olympic, pull,
+    /// shoulder, arms, core, conditioning.
+    static func libraryDefinitions() -> [Exercise] {
+        [
+            // Main barbell + press
+            Exercise(name: "Deadlift", category: .main, type: .barbell, movementGroup: "hinge", defaultRestSeconds: 300),
+            Exercise(name: "Back Squat", category: .main, type: .barbell, movementGroup: "squat", defaultRestSeconds: 300, watchSite: .leftHip),
+            Exercise(name: "Front Squat", category: .main, type: .barbell, movementGroup: "squat", defaultRestSeconds: 300, watchSite: .leftHip),
+            Exercise(name: "Overhead Squat", category: .main, type: .barbell, movementGroup: "squat", defaultRestSeconds: 300, watchSite: .leftShoulder),
             Exercise(
-                name: "Barbell Bench", category: .main, type: .barbell, defaultRestSeconds: 300,
+                name: "Barbell Bench", category: .main, type: .barbell, movementGroup: "press", defaultRestSeconds: 300,
                 isShelved: true,
                 shelvedNote: "Shelved — left shoulder. Re-entry test: symmetric DB pressing, no 'not there' feeling.",
                 watchSite: .leftShoulder
             ),
-            Exercise(name: "Incline DB Press", category: .main, type: .dumbbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
-            Exercise(name: "Flat DB Press", category: .main, type: .dumbbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
-            Exercise(name: "Seated Upright DB Press", category: .main, type: .dumbbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
-            Exercise(name: "Overhead DB Press", category: .main, type: .dumbbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
-            Exercise(name: "Push Press", category: .main, type: .barbell, defaultRestSeconds: 300, watchSite: .leftShoulder),
-        ]
-        let accessory: [Exercise] = [
-            Exercise(name: "Turkish Get-up", category: .accessory, type: .kettlebell, isUnilateral: true, defaultRestSeconds: 90),
-            Exercise(name: "Single-arm DB Row", category: .accessory, type: .dumbbell, isUnilateral: true, defaultRestSeconds: 90),
-            Exercise(name: "Lat Pulldown", category: .accessory, type: .machine, defaultRestSeconds: 90),
-            Exercise(name: "Chest-supported Row", category: .accessory, type: .machine, defaultRestSeconds: 90),
-            Exercise(name: "Ring Row", category: .accessory, type: .bodyweight, defaultRestSeconds: 90, notes: "Face-pull style"),
-            Exercise(name: "Band Pull-aparts", category: .accessory, type: .band, defaultRestSeconds: 60),
-            Exercise(name: "Face Pulls", category: .accessory, type: .machine, defaultRestSeconds: 90),
-            Exercise(name: "Y-T-W Raises", category: .accessory, type: .dumbbell, defaultRestSeconds: 60),
-            Exercise(name: "Band External Rotation", category: .accessory, type: .band, isUnilateral: true, defaultRestSeconds: 60, watchSite: .leftShoulder),
-            Exercise(name: "DB Curls", category: .accessory, type: .dumbbell, defaultRestSeconds: 90),
-            Exercise(name: "DB Overhead Triceps Extension", category: .accessory, type: .dumbbell, defaultRestSeconds: 90),
-            Exercise(name: "Walking Lunges", category: .accessory, type: .bodyweight, isUnilateral: true, defaultRestSeconds: 90, watchSite: .leftHip),
-            Exercise(name: "GHD Sit-up", category: .accessory, type: .bodyweight, defaultRestSeconds: 90),
-            Exercise(name: "Plank", category: .accessory, type: .timed, defaultRestSeconds: 60),
-            Exercise(name: "Side Plank", category: .accessory, type: .timed, isUnilateral: true, defaultRestSeconds: 60),
-            Exercise(name: "KB Swing", category: .accessory, type: .kettlebell, defaultRestSeconds: 90),
-            Exercise(name: "KB Clean", category: .accessory, type: .kettlebell, isUnilateral: true, defaultRestSeconds: 90),
-            Exercise(name: "Dips", category: .accessory, type: .bodyweight, defaultRestSeconds: 90, watchSite: .leftShoulder),
-        ]
-        let conditioning: [Exercise] = [
-            Exercise(name: "Walk", category: .conditioning, type: .conditioning, defaultRestSeconds: 0, notes: "Distance / time / incline"),
-            Exercise(name: "Run-Walk Intervals", category: .conditioning, type: .conditioning, defaultRestSeconds: 0,
+            Exercise(name: "Overhead Press", category: .main, type: .barbell, movementGroup: "press", defaultRestSeconds: 300, notes: "Strict barbell press", watchSite: .leftShoulder),
+            Exercise(name: "Push Press", category: .main, type: .barbell, movementGroup: "press", defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Push Jerk", category: .main, type: .barbell, movementGroup: "press", defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Split Jerk", category: .main, type: .barbell, movementGroup: "press", defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Incline DB Press", category: .main, type: .dumbbell, movementGroup: "press", defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Flat DB Press", category: .main, type: .dumbbell, movementGroup: "press", defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Seated Upright DB Press", category: .main, type: .dumbbell, movementGroup: "press", defaultRestSeconds: 300, watchSite: .leftShoulder),
+            Exercise(name: "Overhead DB Press", category: .main, type: .dumbbell, movementGroup: "press", defaultRestSeconds: 300, watchSite: .leftShoulder),
+            // Olympic lifts + supporting pulls
+            Exercise(name: "Snatch", category: .main, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 240, watchSite: .leftShoulder),
+            Exercise(name: "Clean & Jerk", category: .main, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 240, watchSite: .leftShoulder),
+            Exercise(name: "Clean", category: .main, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 240),
+            Exercise(name: "Power Clean", category: .main, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 240),
+            Exercise(name: "Power Snatch", category: .main, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 240, watchSite: .leftShoulder),
+            Exercise(name: "Hang Power Clean", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
+            Exercise(name: "Hang Power Snatch", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180, watchSite: .leftShoulder),
+            Exercise(name: "Clean Pull", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
+            Exercise(name: "Snatch Pull", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
+            // Hinge supporting
+            Exercise(name: "Romanian Deadlift", category: .accessory, type: .barbell, movementGroup: "hinge", defaultRestSeconds: 180),
+            Exercise(name: "Snatch-grip Deadlift", category: .accessory, type: .barbell, movementGroup: "hinge", defaultRestSeconds: 180),
+            Exercise(name: "Good Morning", category: .accessory, type: .barbell, movementGroup: "hinge", defaultRestSeconds: 120, watchSite: .leftHip),
+            // Accessories
+            Exercise(name: "Turkish Get-up", category: .accessory, type: .kettlebell, movementGroup: "core", isUnilateral: true, defaultRestSeconds: 90),
+            Exercise(name: "Single-arm DB Row", category: .accessory, type: .dumbbell, movementGroup: "pull", isUnilateral: true, defaultRestSeconds: 90),
+            Exercise(name: "Lat Pulldown", category: .accessory, type: .machine, movementGroup: "pull", defaultRestSeconds: 90),
+            Exercise(name: "Chest-supported Row", category: .accessory, type: .machine, movementGroup: "pull", defaultRestSeconds: 90),
+            Exercise(name: "Ring Row", category: .accessory, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 90, notes: "Face-pull style"),
+            Exercise(name: "Band Pull-aparts", category: .accessory, type: .band, movementGroup: "pull", defaultRestSeconds: 60),
+            Exercise(name: "Face Pulls", category: .accessory, type: .machine, movementGroup: "pull", defaultRestSeconds: 90),
+            Exercise(name: "Y-T-W Raises", category: .accessory, type: .dumbbell, movementGroup: "shoulder", defaultRestSeconds: 60),
+            Exercise(name: "Band External Rotation", category: .accessory, type: .band, movementGroup: "shoulder", isUnilateral: true, defaultRestSeconds: 60, watchSite: .leftShoulder),
+            Exercise(name: "DB Curls", category: .accessory, type: .dumbbell, movementGroup: "arms", defaultRestSeconds: 90),
+            Exercise(name: "DB Overhead Triceps Extension", category: .accessory, type: .dumbbell, movementGroup: "arms", defaultRestSeconds: 90),
+            Exercise(name: "Walking Lunges", category: .accessory, type: .bodyweight, movementGroup: "squat", isUnilateral: true, defaultRestSeconds: 90, watchSite: .leftHip),
+            Exercise(name: "GHD Sit-up", category: .accessory, type: .bodyweight, movementGroup: "core", defaultRestSeconds: 90),
+            Exercise(name: "Plank", category: .accessory, type: .timed, movementGroup: "core", defaultRestSeconds: 60),
+            Exercise(name: "Side Plank", category: .accessory, type: .timed, movementGroup: "core", isUnilateral: true, defaultRestSeconds: 60),
+            Exercise(name: "KB Swing", category: .accessory, type: .kettlebell, movementGroup: "hinge", defaultRestSeconds: 90),
+            Exercise(name: "KB Clean", category: .accessory, type: .kettlebell, movementGroup: "olympic", isUnilateral: true, defaultRestSeconds: 90),
+            Exercise(name: "Dips", category: .accessory, type: .bodyweight, movementGroup: "press", defaultRestSeconds: 90, watchSite: .leftShoulder),
+            // Conditioning
+            Exercise(name: "Walk", category: .conditioning, type: .conditioning, movementGroup: "conditioning", defaultRestSeconds: 0, notes: "Distance / time / incline"),
+            Exercise(name: "Run-Walk Intervals", category: .conditioning, type: .conditioning, movementGroup: "conditioning", defaultRestSeconds: 0,
                      notes: "Jog min / walk min × rounds", watchSite: .rightKnee),
-            Exercise(name: "Bike", category: .conditioning, type: .conditioning, defaultRestSeconds: 0),
-            Exercise(name: "Ruck", category: .conditioning, type: .conditioning, defaultRestSeconds: 0),
+            Exercise(name: "Bike", category: .conditioning, type: .conditioning, movementGroup: "conditioning", defaultRestSeconds: 0),
+            Exercise(name: "Ruck", category: .conditioning, type: .conditioning, movementGroup: "conditioning", defaultRestSeconds: 0),
         ]
+    }
 
+    private static func seedExercises(context: ModelContext) -> [String: Exercise] {
         var byName: [String: Exercise] = [:]
-        for ex in main + accessory + conditioning {
+        for ex in libraryDefinitions() {
             context.insert(ex)
             byName[ex.name] = ex
         }
         return byName
+    }
+
+    /// Idempotent library top-up, run every launch (mirror of web `syncLibrary`):
+    /// insert movements an older install is missing and backfill `movementGroup`
+    /// on existing records — never clobbering user edits to exercises that
+    /// already exist (rest, shelved, watch site, etc.).
+    static func syncLibrary(context: ModelContext) {
+        let existing = (try? context.fetch(FetchDescriptor<Exercise>())) ?? []
+        var byName: [String: Exercise] = [:]
+        for ex in existing { byName[ex.name] = ex }
+        for def in libraryDefinitions() {
+            if let cur = byName[def.name] {
+                if cur.movementGroup.isEmpty && !def.movementGroup.isEmpty { cur.movementGroup = def.movementGroup }
+            } else {
+                context.insert(def)
+                byName[def.name] = def
+            }
+        }
+        try? context.save()
     }
 
     private static func seedGym(context: ModelContext) {

@@ -25,6 +25,7 @@ struct CadenceApp: App {
                 ProgramAccessory.self
             )
             Seeder.seedIfNeeded(context: container.mainContext)
+            Seeder.syncLibrary(context: container.mainContext) // top up the library on already-seeded installs
         } catch {
             fatalError("Failed to create model container: \(error)")
         }

@@ -1,6 +1,6 @@
 // Bootstrap: service worker, seed, settings, tab bar, router, FAB.
 import * as ui from "./ui.js";
-import { Settings, ensureSeeded } from "./db.js";
+import { Settings, ensureSeeded, syncLibrary } from "./db.js";
 import * as home from "./views/home.js";
 import * as history from "./views/history.js";
 import * as body from "./views/body.js";
@@ -56,6 +56,7 @@ async function boot() {
   ui.nav.openSession = (id) => openSession(id);
 
   await ensureSeeded();
+  await syncLibrary(); // top up the exercise library on already-seeded installs
   const s = await Settings.get();
   ui.prefs.unitDisplay = s.unitDisplay;
 

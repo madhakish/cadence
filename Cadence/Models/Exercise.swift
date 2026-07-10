@@ -43,12 +43,16 @@ final class Exercise {
     var shelvedNote: String
     /// Body site to watch when doing this movement, if any.
     var watchSiteRaw: String?
+    /// Movement pattern for swap-a-similar-lift (all presses, squat/hinge
+    /// variants, the oly lifts). Mirrors web `movementGroup`. Empty = ungrouped.
+    var movementGroup: String = ""
     var createdAt: Date
 
     init(
         name: String,
         category: ExerciseCategory,
         type: ExerciseType,
+        movementGroup: String = "",
         isUnilateral: Bool = false,
         defaultRestSeconds: Int = 90,
         notes: String = "",
@@ -59,6 +63,7 @@ final class Exercise {
         self.name = name
         self.categoryRaw = category.rawValue
         self.typeRaw = type.rawValue
+        self.movementGroup = movementGroup
         self.isUnilateral = isUnilateral
         self.defaultRestSeconds = defaultRestSeconds
         self.notes = notes
