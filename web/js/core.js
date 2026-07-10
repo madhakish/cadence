@@ -122,8 +122,12 @@ export function perSideLabel(perSide) {
 
 export const TOLERANCE_LB = 2.0;
 
-// Branch-and-bound closest per-side load. Ties prefer fewer plates, then
-// erring under the target. Mirrors PlateMath.solve.
+// Branch-and-bound closest per-side load, loaded the way a human loads: within
+// TOLERANCE_LB of the target the fewest plates win, then the fewest distinct
+// denominations (matched pairs), then a single unit system (no kg+lb
+// frankenstacks), then closeness, then erring under. Outside that band it falls
+// back to plain closest-then-fewest. Mixed units still appear when they're the
+// only way to get close. Mirrors PlateMath.solve.
 export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
   const perSideTarget = (targetLb - barLb(bar)) / 2.0;
 
@@ -138,44 +142,75 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
   const values = sorted.map(plateLb);
   const counts = new Array(sorted.length).fill(0);
   let bestCounts = counts.slice();
-  let bestDev = perSideTarget * 2.0;
-  let bestSigned = -perSideTarget * 2.0;
-  let bestPlates = 0;
+  let best = null; // { dev, signed, used, distinct, mixed }
   let nodes = 0;
 
-  const consider = (remaining, used) => {
-    const signed = -remaining * 2.0; // achieved − target
-    const dev = Math.abs(signed);
-    let better;
-    if (dev < bestDev - 1e-9) better = true;
-    else if (Math.abs(dev - bestDev) <= 1e-9) {
-      if (used < bestPlates) better = true;
-      else if (used === bestPlates && signed < bestSigned - 1e-9) better = true;
-      else better = false;
-    } else better = false;
-    if (better) {
-      bestDev = dev; bestSigned = signed; bestPlates = used;
-      bestCounts = counts.slice();
+  const isBetter = (c, b) => {
+    if (!b) return true;
+    const tol = TOLERANCE_LB + 1e-9;
+    const cIn = c.dev <= tol, bIn = b.dev <= tol;
+    if (cIn !== bIn) return cIn; // a good-enough load beats an out-of-band one
+    if (cIn) { // both good enough → cleanest to load
+      if (c.used !== b.used) return c.used < b.used;
+      if (c.distinct !== b.distinct) return c.distinct < b.distinct;
+      if (c.mixed !== b.mixed) return !c.mixed;
+      if (Math.abs(c.dev - b.dev) > 1e-9) return c.dev < b.dev;
+      return c.signed < b.signed - 1e-9; // equal miss: prefer under target
     }
+    // both out of band → closest, then fewest plates, then under
+    if (Math.abs(c.dev - b.dev) > 1e-9) return c.dev < b.dev;
+    if (c.used !== b.used) return c.used < b.used;
+    return c.signed < b.signed - 1e-9;
   };
 
-  const search = (index, remaining, used) => {
+  // used/distinct/kg/lb are threaded through the recursion so each node is O(1)
+  // (no per-node rescan of counts) — solve() runs on every plate-calculator keystroke.
+  const consider = (remaining, used, distinct, mixed) => {
+    const signed = -remaining * 2.0; // achieved − target (total lb)
+    const c = { dev: Math.abs(signed), signed, used, distinct, mixed };
+    if (isBetter(c, best)) { best = c; bestCounts = counts.slice(); }
+  };
+
+  const search = (index, remaining, used, distinct, kg, lb) => {
     nodes += 1;
     if (nodes >= 300000) return;
-    consider(remaining, used);
+    consider(remaining, used, distinct, kg > 0 && lb > 0);
     if (index >= values.length || !(remaining > 1e-9)) return;
     const v = values[index];
+    const isKg = sorted[index].unit === "kg";
     const maxCount = Math.min(maxPerPlateSide, Math.floor(remaining / v) + 1);
+    // Prune overshoots past the good-enough band AND the best deviation so far,
+    // so cleaner in-tolerance loads are never pruned away.
+    const bound = Math.max(TOLERANCE_LB, best ? best.dev : perSideTarget * 2.0);
     for (let c = maxCount; c >= 0; c -= 1) {
       const next = remaining - c * v;
-      if (next < 0 && -next * 2.0 > bestDev + 1e-9) continue; // overshoot worse
+      if (next < 0 && -next * 2.0 > bound + 1e-9) continue; // overshoot past the band
       counts[index] = c;
-      search(index + 1, next, used + c);
+      const d = distinct + (c > 0 ? 1 : 0);
+      search(index + 1, next, used + c, d, kg + (c > 0 && isKg ? 1 : 0), lb + (c > 0 && !isKg ? 1 : 0));
     }
     counts[index] = 0;
   };
 
-  search(0, perSideTarget, 0);
+  // Seed best with a clean single-unit greedy fill per unit system. Gives the
+  // search a tight bound from the first node AND guarantees we never return a
+  // worse-than-simple stack if the 300k-node cap trips on a heavy mixed
+  // inventory (e.g. 405 → 45×4, not a kg+lb frankenstack).
+  const seedGreedy = (unit) => {
+    counts.fill(0);
+    let remaining = perSideTarget, used = 0, distinct = 0;
+    for (let i = 0; i < sorted.length; i += 1) {
+      if (sorted[i].unit !== unit) continue;
+      const c = Math.min(maxPerPlateSide, Math.floor(remaining / values[i] + 1e-9));
+      if (c > 0) { counts[i] = c; remaining -= c * values[i]; used += c; distinct += 1; }
+    }
+    if (used > 0) consider(remaining, used, distinct, false);
+  };
+  seedGreedy("lb");
+  seedGreedy("kg");
+  counts.fill(0);
+
+  search(0, perSideTarget, 0, 0, 0, 0);
 
   const perSide = [];
   for (let i = 0; i < sorted.length; i += 1) {
