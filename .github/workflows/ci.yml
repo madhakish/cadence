@@ -91,13 +91,23 @@ jobs:
 
   testflight:
     name: TestFlight (fastlane)
-    needs: [app-build]
+    # Runs after release so the version tag semantic-release just cut is on
+    # origin and maps into the uploaded build (CFBundleShortVersionString).
+    needs: [app-build, release]
     # Dormant until you opt in: set the repo variable TESTFLIGHT_ENABLED=true
     # (and add the Apple secrets). Until then this job is skipped — main stays green.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # need tags to resolve the semantic version
+      - name: Resolve app version from the latest release tag
+        id: ver
+        # The tag semantic-release owns (e.g. v1.13.0) becomes the marketing
+        # version, so TestFlight builds track the semantic version 1:1. Falls
+        # back to the project.yml value before the first release.
+        run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.1.0)" >> "$GITHUB_OUTPUT"
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
@@ -113,6 +123,7 @@ jobs:
         run: brew install xcodegen
       - name: Build & upload to TestFlight
         env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
           APP_IDENTIFIER: ${{ vars.APP_IDENTIFIER }}
           DEVELOPER_TEAM_ID: ${{ secrets.DEVELOPER_TEAM_ID }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}

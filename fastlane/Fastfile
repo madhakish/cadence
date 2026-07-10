@@ -49,6 +49,13 @@ platform :ios do
     ) + 1
     increment_build_number(build_number: next_build, xcodeproj: "Cadence.xcodeproj")
 
+    # Marketing version (CFBundleShortVersionString) tracks the semantic-release
+    # version passed in as APP_VERSION (the v* tag, minus the "v"), overriding
+    # the static project.yml value at build time so TestFlight maps 1:1 to the
+    # released version. Empty ⇒ keep the project.yml fallback.
+    app_version = ENV["APP_VERSION"].to_s.strip
+    version_arg = app_version.empty? ? "" : " MARKETING_VERSION=#{app_version}"
+
     build_app(
       scheme: "Cadence",
       project: "Cadence.xcodeproj",
@@ -57,7 +64,7 @@ platform :ios do
       export_options: {
         provisioningProfiles: { APP_ID => ENV["sigh_#{APP_ID}_appstore_profile-name"] }
       },
-      xcargs: "-allowProvisioningUpdates"
+      xcargs: "-allowProvisioningUpdates#{version_arg}"
     )
 
     upload_to_testflight(

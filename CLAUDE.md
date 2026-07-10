@@ -38,8 +38,11 @@ ARE the version-bump and changelog mechanism. Use them correctly:
 | `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `style:` | no release |
 
 - Never hand-create `v*` tags or GitHub Releases — semantic-release owns them.
-- Never hand-bump versions. (`MARKETING_VERSION` in `project.yml` is currently
-  static; the released tag/filenames carry the real version.)
+- Never hand-bump versions. (`MARKETING_VERSION` in `project.yml` is only a
+  fallback; the TestFlight `beta` lane stamps `CFBundleShortVersionString` from
+  the released `v*` tag via `APP_VERSION`, so builds track the semantic version
+  1:1, and the sideload release filenames carry it too. Build number is
+  `latest_testflight_build_number + 1`.)
 - Scopes are fine: `fix(ci):`, `feat(release):`, etc.
 - Avoid `#word` tokens in commit messages (e.g. write "the Predicate macro",
   not "#Predicate") — the release-notes generator parses them as issue
