@@ -257,7 +257,8 @@ export async function exportCSV() {
   return rows.join("\n");
 }
 
-const recoverPhase = (label) => { const m = /Wk(\d)/.exec(label || ""); return m ? Number(m[1]) : null; };
+// Accepts both the current "R{n}" prefix and legacy "Wk{n}" from older backups.
+const recoverPhase = (label) => { const m = /(?:R|Wk)(\d)/.exec(label || ""); return m ? Number(m[1]) : null; };
 
 // Restore a backup in ONE transaction: only stores present in the bundle are
 // touched (an old backup without e.g. `gyms` leaves current gyms alone), and a

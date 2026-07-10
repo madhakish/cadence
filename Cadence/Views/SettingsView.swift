@@ -296,7 +296,7 @@ struct TrackEditorView: View {
                     get: { track.mode },
                     set: { track.mode = $0 }
                 )) {
-                    Text("4-week cycle").tag(TrackMode.cycle)
+                    Text("4-rotation cycle").tag(TrackMode.cycle)
                     Text("Linear").tag(TrackMode.linear)
                 }
                 Stepper(
@@ -355,8 +355,8 @@ struct ProgramEditorView: View {
             }
             Section {
                 Stepper("Cycle: \(program.cycleNumber)", value: $program.cycleNumber, in: 1...99)
-                Stepper("Rotation: \(program.currentWeek) of 4 · \(CyclePhase(rawValue: program.currentWeek)?.name ?? "")",
-                        value: $program.currentWeek, in: 1...4)
+                Stepper("Rotation: \(program.currentWeek) of 4 · \((CyclePhase(rawValue: program.currentWeek) ?? .volume).name)",
+                        value: Binding(get: { program.currentWeek }, set: { positionAtRotation($0) }), in: 1...4)
                 if !program.orderedDays.isEmpty {
                     Picker("Next day", selection: Binding(get: { program.nextDayIndex }, set: { program.nextDayIndex = $0 })) {
                         ForEach(program.orderedDays) { day in
@@ -403,6 +403,26 @@ struct ProgramEditorView: View {
             }
         }
         .navigationTitle(program.name)
+    }
+
+    /// Move the program to a rotation. Placing at/after Peak (rotation 3) with no
+    /// banked Peak result would otherwise make the next rollover treat the skipped
+    /// Peak as a stall and deload; seed a neutral hold (carry current state forward,
+    /// no note) for any lift lacking pending so manual positioning never penalizes.
+    /// A real Peak session logged in rotation 3 overwrites this hold with its grade.
+    private func positionAtRotation(_ newValue: Int) {
+        program.currentWeek = newValue
+        guard newValue >= 3 else { return }
+        for day in program.days {
+            for lift in day.lifts where lift.pendingBaseWeightLb == nil {
+                lift.pendingBaseWeightLb = lift.baseWeightLb
+                lift.pendingEstimatedMaxLb = lift.estimatedMaxLb
+                lift.pendingStallCount = lift.stallCount
+                lift.pendingLastIncrementLb = lift.lastIncrementLb
+                lift.pendingNote = nil
+            }
+        }
+        try? context.save()
     }
 
     private func deleteDays(at offsets: IndexSet) {

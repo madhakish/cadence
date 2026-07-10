@@ -5,6 +5,32 @@ import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
 import { Settings, Gyms, Tracks, Exercises, Programs, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded } from "../db.js";
 
+// Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
+// Peak result would otherwise make the next rollover treat the skipped Peak as a
+// stall and deload; seed a neutral hold (carry current state forward, no note) for
+// any lift lacking pending so manual positioning never penalizes. A real Peak
+// session logged in rotation 3 overwrites this hold with its grade. Mirrors the
+// native ProgramEditorView.positionAtRotation.
+function positionAtRotation(program, rotation) {
+  program.currentWeek = rotation;
+  if (rotation < 3) return;
+  for (const day of program.days || []) {
+    for (const lift of day.lifts || []) {
+      if (lift.pending) continue;
+      lift.pending = {
+        state: {
+          baseWeightLb: lift.baseWeightLb,
+          estimatedMaxLb: lift.estimatedMaxLb,
+          stallCount: lift.stallCount || 0,
+          lastIncrementLb: lift.lastIncrementLb || 0,
+        },
+        grade: "hold",
+        note: null,
+      };
+    }
+  }
+}
+
 export async function render(host) {
   const [settings, gyms, tracks, exercises, programs] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all(), Programs.all()]);
   const root = ui.h("div");
@@ -196,7 +222,7 @@ function programEditor(p) {
         pos.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Cycle" }),
           ui.stepper(p.cycleNumber, { min: 1, max: 99, step: 1, onChange: async (v) => { p.cycleNumber = v; await Programs.save(p); } })));
         pos.append(ui.h("div", { class: "row", style: { borderBottom: sortedDays.length ? undefined : "0" } }, ui.h("span", { text: "Rotation" }),
-          ui.stepper(p.currentWeek, { min: 1, max: 4, step: 1, format: (v) => `${v} of 4 · ${PHASE[v]}`, onChange: async (v) => { p.currentWeek = v; await Programs.save(p); } })));
+          ui.stepper(p.currentWeek, { min: 1, max: 4, step: 1, format: (v) => `${v} of 4 · ${PHASE[v]}`, onChange: async (v) => { positionAtRotation(p, v); await Programs.save(p); } })));
         if (sortedDays.length) {
           const daySel = ui.h("select", {}, ...sortedDays.map((d) => ui.h("option", { value: String(d.order), text: d.name, selected: d.order === p.nextDayIndex })));
           daySel.addEventListener("change", async () => { p.nextDayIndex = Number(daySel.value); await Programs.save(p); });
@@ -290,7 +316,7 @@ function trackEditor(t) {
     build: (body) => {
       const draw = () => {
         ui.clear(body);
-        body.append(ui.field("Mode", ui.seg([{ value: "cycle", label: "4-week cycle" }, { value: "linear", label: "Linear" }], t.mode, async (m) => { t.mode = m; await Tracks.save(t); draw(); })));
+        body.append(ui.field("Mode", ui.seg([{ value: "cycle", label: "4-rotation cycle" }, { value: "linear", label: "Linear" }], t.mode, async (m) => { t.mode = m; await Tracks.save(t); draw(); })));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Increment" }), ui.stepper(t.incrementLb, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${C.trim(v)} lb`, onChange: async (v) => { t.incrementLb = v; await Tracks.save(t); refreshSug(); } })),
           ui.h("div", { class: "row" }, ui.h("span", { text: t.mode === "cycle" ? "Rotation-1 weight" : "Current weight" }), ui.stepper(t.baseWeightLb, { min: 0, max: 1000, step: 5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { t.baseWeightLb = v; await Tracks.save(t); refreshSug(); } }))));
