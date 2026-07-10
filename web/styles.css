@@ -1,15 +1,16 @@
-/* Cadence — dark, orange accent, thumb-friendly. Mirrors Theme.swift. */
+/* Cadence — "Carbon": neutral greyscale ground, red as the single signal.
+   Mirrors Theme.swift. */
 :root {
-  --accent: #ff9500;      /* orange */
-  --warn: #ffcc00;        /* yellow */
-  --hard: #ff3b30;        /* red */
-  --good: #34c759;        /* green */
-  --bg: #0d0d0f;
-  --card: #1c1c1f;
-  --card2: #2a2a2e;
-  --text: #f2f2f4;
-  --muted: #98989f;
-  --line: #313135;
+  --accent: #ef4444;      /* red — active / rest / progress / interactive */
+  --warn: #eab308;        /* amber — grindy / wobble (semantic) */
+  --hard: #dc2626;        /* deep red — hard stop (semantic critical) */
+  --good: #4ade80;        /* green — clean rep (semantic) */
+  --bg: #0c0d0e;
+  --card: #17181a;
+  --card2: #202225;
+  --text: #fafafa;
+  --muted: #8b9196;
+  --line: #2b2e31;
   --bigtap: 56px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
