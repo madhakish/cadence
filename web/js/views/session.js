@@ -512,14 +512,19 @@ async function advanceProgram(session, milestones) {
 }
 
 // ---- Build a session from a program day ----
+// Secondary/accessory barbell work snaps to a neat bar-loadable weight (no
+// lonely 2.5); main lifts keep their fine progression, and non-barbell work is
+// left alone. Shared by session creation AND the Home preview so the "Start"
+// card and the stored prescription never disagree.
+export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb) {
+  return (!isMain && exercise && exercise.type === "barbell") ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
+}
+
 export async function createSessionFromProgramDay(program, day) {
   const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
   const gym = await Gyms.default();
   const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
-  // Secondary/accessory barbell work snaps to a neat bar-loadable weight (no
-  // lonely 2.5); main lifts keep their fine 5-lb progression.
-  const neat = (weightLb, ex, isMain) =>
-    (!isMain && ex && ex.type === "barbell") ? C.barLoadable(weightLb, barLb, program.roundingLb) : weightLb;
+  const neat = (weightLb, ex, isMain) => neatProgramWeight(weightLb, ex, isMain, barLb, program.roundingLb);
   const exercises = [];
   let order = 0;
   const lifts = [...(day.lifts || [])].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));

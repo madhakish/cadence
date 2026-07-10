@@ -12,10 +12,8 @@ enum ProgramSession {
         let defaultGym = (try? context.fetch(FetchDescriptor<Gym>()))?.first(where: { $0.isDefault })
         let session = WorkoutSession(gymName: defaultGym?.name)
         let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
-        // Secondary/accessory barbell work snaps to a neat bar-loadable weight
-        // (no lonely 2.5); main lifts keep their fine progression. Mirrors web.
         func neat(_ weightLb: Double, _ exercise: Exercise?, isMain: Bool) -> Double {
-            (!isMain && exercise?.type == .barbell) ? Weight.barLoadable(weightLb, barLb: barLb, stepLb: program.roundingLb) : weightLb
+            neatWeight(weightLb, isBarbell: exercise?.type == .barbell, isMain: isMain, barLb: barLb, stepLb: program.roundingLb)
         }
         session.programName = program.name
         session.programCycleNumber = program.cycleNumber
@@ -75,6 +73,13 @@ enum ProgramSession {
         }
 
         return session
+    }
+
+    /// Secondary/accessory barbell prescriptions snap to a neat bar-loadable
+    /// weight; mains and non-barbell work are left as-is. Shared with HomeView's
+    /// preview so the card and the started session agree. Mirrors web `neatProgramWeight`.
+    static func neatWeight(_ weightLb: Double, isBarbell: Bool, isMain: Bool, barLb: Double, stepLb: Double) -> Double {
+        (!isMain && isBarbell) ? Weight.barLoadable(weightLb, barLb: barLb, stepLb: stepLb) : weightLb
     }
 
     private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool, perSide: Bool, context: ModelContext) {

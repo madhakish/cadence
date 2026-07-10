@@ -1,13 +1,15 @@
 // Today — resume/open session, next-up suggestions, gym tag, protein.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { Sessions, Tracks, Gyms, Settings, Protein, Programs, iso } from "../db.js";
-import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, openSession } from "./session.js";
+import { Sessions, Tracks, Gyms, Settings, Protein, Programs, Exercises, iso } from "../db.js";
+import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession } from "./session.js";
 
 export async function render(host) {
-  const [open, tracks, gym, settings, proteinTotal, program] = await Promise.all([
-    Sessions.open(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(), Programs.active(),
+  const [open, tracks, gym, settings, proteinTotal, program, allExercises] = await Promise.all([
+    Sessions.open(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(), Programs.active(), Exercises.all(),
   ]);
+  const exMap = new Map(allExercises.map((e) => [e.name, e]));
+  const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
   const root = ui.h("div");
 
   if (open) {
@@ -29,6 +31,8 @@ export async function render(host) {
     const lifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
     for (const l of lifts) {
       const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
+      // Preview the same snapped weight the session will store (secondary barbell lifts).
+      plan.weightLb = neatProgramWeight(plan.weightLb, exMap.get(l.exerciseName), l.role === "main", barLb, program.roundingLb);
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
         ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: l.exerciseName }),
           ui.h("span", { class: "sub", text: `${l.role} · ${C.sessionPlanLabel(plan)}` }))));
