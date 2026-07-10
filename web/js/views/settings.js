@@ -61,7 +61,7 @@ export async function render(host) {
   for (const p of programs) {
     progList.append(ui.h("div", { class: "row", onClick: () => programEditor(p) },
       ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: p.name }),
-        ui.h("span", { class: "sub", text: `${p.focus} · ${p.days.length} days · Cycle ${p.cycleNumber}, Wk${p.currentWeek}${p.isActive ? " · active" : ""}` })),
+        ui.h("span", { class: "sub", text: `${p.focus} · ${p.days.length} days · Cycle ${p.cycleNumber}, Rotation ${p.currentWeek}${p.isActive ? " · active" : ""}` })),
       ui.h("span", { class: "chev" })));
   }
   root.append(progList);
@@ -189,7 +189,21 @@ function programEditor(p) {
             ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
           ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Active (drives Today)" }),
             ui.toggle(p.isActive, async (v) => { if (v) await activateProgram(p); else p.isActive = false; await Programs.save(p); }))));
-        body.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: `Cycle ${p.cycleNumber}, week ${p.currentWeek}. Lifts progress automatically — weights here are the current week-1 base.` }));
+        body.append(ui.h("div", { class: "section-title", text: "Where you are" }));
+        const PHASE = ["", "Volume", "Load", "Peak", "Deload"];
+        const sortedDays = [...p.days].sort((a, b) => a.order - b.order);
+        const pos = ui.h("div", { class: "card" });
+        pos.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Cycle" }),
+          ui.stepper(p.cycleNumber, { min: 1, max: 99, step: 1, onChange: async (v) => { p.cycleNumber = v; await Programs.save(p); } })));
+        pos.append(ui.h("div", { class: "row", style: { borderBottom: sortedDays.length ? undefined : "0" } }, ui.h("span", { text: "Rotation" }),
+          ui.stepper(p.currentWeek, { min: 1, max: 4, step: 1, format: (v) => `${v} of 4 · ${PHASE[v]}`, onChange: async (v) => { p.currentWeek = v; await Programs.save(p); } })));
+        if (sortedDays.length) {
+          const daySel = ui.h("select", {}, ...sortedDays.map((d) => ui.h("option", { value: String(d.order), text: d.name, selected: d.order === p.nextDayIndex })));
+          daySel.addEventListener("change", async () => { p.nextDayIndex = Number(daySel.value); await Programs.save(p); });
+          pos.append(ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Next day" }), daySel));
+        }
+        body.append(pos);
+        body.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Set your position mid-cycle. Rotations 1–3 are working (volume/load/peak), rotation 4 is the rest rotation, then the cycle bumps. Lifts progress automatically — weights are the rotation-1 base." }));
         body.append(ui.h("div", { class: "section-title", text: "Days" }));
         const list = ui.h("div", { class: "card list" });
         const days = [...p.days].sort((a, b) => a.order - b.order);
@@ -233,7 +247,7 @@ function programDayEditor(p, day) {
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.lifts = day.lifts.filter((x) => x !== l); await Programs.save(p); draw(); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
               ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); })),
-            ui.h("div", { class: "row" }, ui.h("span", { text: "Week-1 base" }),
+            ui.h("div", { class: "row" }, ui.h("span", { text: "Rotation-1 base" }),
               ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: p.roundingLb, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
               ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } }))));
@@ -279,7 +293,7 @@ function trackEditor(t) {
         body.append(ui.field("Mode", ui.seg([{ value: "cycle", label: "4-week cycle" }, { value: "linear", label: "Linear" }], t.mode, async (m) => { t.mode = m; await Tracks.save(t); draw(); })));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Increment" }), ui.stepper(t.incrementLb, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${C.trim(v)} lb`, onChange: async (v) => { t.incrementLb = v; await Tracks.save(t); refreshSug(); } })),
-          ui.h("div", { class: "row" }, ui.h("span", { text: t.mode === "cycle" ? "Week-1 weight" : "Current weight" }), ui.stepper(t.baseWeightLb, { min: 0, max: 1000, step: 5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { t.baseWeightLb = v; await Tracks.save(t); refreshSug(); } }))));
+          ui.h("div", { class: "row" }, ui.h("span", { text: t.mode === "cycle" ? "Rotation-1 weight" : "Current weight" }), ui.stepper(t.baseWeightLb, { min: 0, max: 1000, step: 5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { t.baseWeightLb = v; await Tracks.save(t); refreshSug(); } }))));
         if (t.mode === "cycle") {
           const sel = ui.h("select", {}, ...[1, 2, 3, 4].map((p) => ui.h("option", { value: p, text: C.PHASES[p].name, selected: p === t.nextPhase })));
           sel.addEventListener("change", async () => { t.nextPhase = Number(sel.value); await Tracks.save(t); refreshSug(); });
