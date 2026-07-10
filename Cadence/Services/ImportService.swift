@@ -305,7 +305,9 @@ enum ImportService {
         if let v = st.accessoryRestSeconds { settings.accessoryRestSeconds = v }
         if let v = st.autoStartRest { settings.autoStartRest = v }
         if let v = st.haptics { settings.haptics = v }
-        if let v = st.theme, !v.isEmpty { settings.themeNameRaw = v }
+        // Only accept a known theme; an unknown value would round-trip as
+        // garbage on the next export (the UI would silently show Carbon anyway).
+        if let v = st.theme, ThemeName(rawValue: v) != nil { settings.themeNameRaw = v }
         // Keep the install marked seeded so a restore isn't re-seeded over
         // (Seeder.seedIfNeeded gates on seededAt != nil).
         settings.seededAt = st.seededAt ?? settings.seededAt ?? .now

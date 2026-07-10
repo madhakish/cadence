@@ -41,7 +41,10 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        UIUserInterfaceStyle: Dark
+        # No forced UIUserInterfaceStyle: the theme picker drives appearance via
+        # SwiftUI .preferredColorScheme — .dark for the three dark themes, nil
+        # (follow the OS) for System. A hard "Dark" here would override that and
+        # keep System from ever going light.
         NSHealthUpdateUsageDescription: >-
           Optionally writes completed workouts and bodyweight to Health.
           Cadence reads nothing from Health.

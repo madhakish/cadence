@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 /// The selectable themes. Raw values match the web `[data-theme]` keys and the
-/// persisted `AppSettings.theme`, so the two apps stay in lockstep.
+/// persisted `AppSettings.themeNameRaw`, so the two apps stay in lockstep.
 enum ThemeName: String, CaseIterable, Identifiable, Codable {
     case memento, carbon, slate, system
 
@@ -48,8 +48,10 @@ struct Palette {
 }
 
 /// Dark, minimal, chalk-hands-friendly. No streaks, no badges, no quotes.
-/// `Theme.name` mirrors the persisted `AppSettings.theme`; the root view keeps
-/// it in sync each render so every static read below returns the active palette.
+/// `Theme.name` mirrors the persisted `AppSettings.themeNameRaw`; the root view
+/// keeps it in sync each render so every static read below returns the active
+/// palette. Main-actor isolated — it's read/written only from SwiftUI (UI) code.
+@MainActor
 enum Theme {
     /// Kept in sync with the persisted setting by `ThemedRoot`. Default Carbon
     /// (greyscale + red). A plain static var — assigning it triggers no
