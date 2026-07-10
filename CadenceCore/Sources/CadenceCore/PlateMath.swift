@@ -24,11 +24,21 @@ public struct PlateSolution: Hashable, Codable, Sendable {
 }
 
 public enum PlateMath {
-    /// Warn when achieved differs from target by more than this.
+    /// Warn when achieved differs from target by more than this. Also the
+    /// "good enough" band: any load within this of the target is treated as
+    /// interchangeable, so a human rounds to a clean stack rather than chasing
+    /// the last pound with change plates.
     public static let toleranceLb = 2.0
 
-    /// Find the per-side plate combination (mixed units allowed) closest to the
-    /// target total. Ties prefer fewer plates, then erring under the target.
+    private typealias Candidate = (dev: Double, signed: Double, used: Int, distinct: Int, mixed: Bool)
+
+    /// Find the per-side plate combination closest to the target total, loaded
+    /// the way a human actually loads: within `toleranceLb` of the target, the
+    /// fewest plates win, then the fewest distinct denominations (matched
+    /// pairs), then a single unit system (no kg+lb frankenstacks), then
+    /// closeness, then erring under. Outside that band it falls back to plain
+    /// closest-then-fewest. Mixed units are still produced when they're the only
+    /// way to get close.
     ///
     /// - Parameters:
     ///   - targetLb: desired TOTAL bar weight in lb (convert kg before calling).
@@ -51,60 +61,70 @@ public enum PlateMath {
         let values = sorted.map(\.lb)
         var counts = [Int](repeating: 0, count: sorted.count)
         var bestCounts = counts
-        var bestDev = perSideTarget * 2.0 // empty-bar baseline
-        var bestSigned = -perSideTarget * 2.0
-        var bestPlates = 0
+        var best: Candidate? = nil
         var nodes = 0
 
-        func consider(remaining: Double, used: Int) {
-            let signed = -remaining * 2.0 // achieved − target
-            let dev = abs(signed)
-            let better: Bool
-            if dev < bestDev - 1e-9 {
-                better = true
-            } else if abs(dev - bestDev) <= 1e-9 {
-                if used < bestPlates {
-                    better = true
-                } else if used == bestPlates && signed < bestSigned - 1e-9 {
-                    better = true // equal miss: prefer under target
-                } else {
-                    better = false
-                }
-            } else {
-                better = false
+        func metrics(_ remaining: Double) -> Candidate {
+            let signed = -remaining * 2.0 // achieved − target (total lb)
+            var used = 0, distinct = 0
+            var hasKg = false, hasLb = false
+            for i in counts.indices where counts[i] > 0 {
+                used += counts[i]
+                distinct += 1
+                if sorted[i].unit == .kg { hasKg = true } else { hasLb = true }
             }
-            if better {
-                bestDev = dev
-                bestSigned = signed
-                bestPlates = used
-                bestCounts = counts
-            }
+            return (dev: abs(signed), signed: signed, used: used, distinct: distinct, mixed: hasKg && hasLb)
         }
 
-        func search(_ index: Int, _ remaining: Double, _ used: Int) {
+        func isBetter(_ c: Candidate, than b: Candidate?) -> Bool {
+            guard let b else { return true }
+            let tol = toleranceLb + 1e-9
+            let cIn = c.dev <= tol, bIn = b.dev <= tol
+            if cIn != bIn { return cIn } // a good-enough load beats an out-of-band one
+            if cIn { // both good enough → cleanest to load
+                if c.used != b.used { return c.used < b.used }
+                if c.distinct != b.distinct { return c.distinct < b.distinct }
+                if c.mixed != b.mixed { return !c.mixed }
+                if abs(c.dev - b.dev) > 1e-9 { return c.dev < b.dev }
+                return c.signed < b.signed - 1e-9 // equal miss: prefer under target
+            }
+            // both out of band → closest, then fewest plates, then under
+            if abs(c.dev - b.dev) > 1e-9 { return c.dev < b.dev }
+            if c.used != b.used { return c.used < b.used }
+            return c.signed < b.signed - 1e-9
+        }
+
+        func consider(_ remaining: Double) {
+            let c = metrics(remaining)
+            if isBetter(c, than: best) { best = c; bestCounts = counts }
+        }
+
+        func search(_ index: Int, _ remaining: Double) {
             nodes += 1
             guard nodes < 300_000 else { return }
-            consider(remaining: remaining, used: used)
+            consider(remaining)
             guard index < values.count, remaining > 1e-9 else { return }
             let v = values[index]
             // +1 allows one plate of overshoot so "closest over" is reachable.
             let maxCount = min(maxPerPlateSide, Int((remaining / v).rounded(.down)) + 1)
+            // Prune overshoots past the good-enough band AND the best deviation
+            // so far, so cleaner in-tolerance loads are never pruned away.
+            let bound = max(toleranceLb, best?.dev ?? perSideTarget * 2.0)
             var c = maxCount
             while c >= 0 {
                 let next = remaining - Double(c) * v
-                // Overshoot already worse than best: smaller counts may still win.
-                if next < 0 && -next * 2.0 > bestDev + 1e-9 {
+                if next < 0 && -next * 2.0 > bound + 1e-9 {
                     c -= 1
                     continue
                 }
                 counts[index] = c
-                search(index + 1, next, used + c)
+                search(index + 1, next)
                 c -= 1
             }
             counts[index] = 0
         }
 
-        search(0, perSideTarget, 0)
+        search(0, perSideTarget)
 
         let perSide = zip(sorted, bestCounts).compactMap { plate, count in
             count > 0 ? PlateCount(plate: plate, count: count) : nil

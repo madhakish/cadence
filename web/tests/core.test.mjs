@@ -77,6 +77,22 @@ s = C.solve(95, C.BARS.bar45lb, C.STANDARD_LB);
 eq(s.perSide.length, 1, "95 fewer plates");
 eq(s.perSide[0].plate.value, 25, "95 uses one 25");
 
+// Realistic loading: 220 on a 45# bar → 2× 20kg blue per side (~220.5), NOT the
+// exact-but-ugly 45+35+5+2.5. Within the 2 lb band, fewest plates + one unit win.
+s = C.solve(220, C.BARS.bar45lb, C.ALL_STANDARD);
+eq(s.perSide.length, 1, "220 one denom");
+eq(s.perSide[0].plate.value, 20, "220 uses 20kg");
+eq(s.perSide[0].plate.unit, "kg", "220 kg bumper");
+eq(s.perSide[0].count, 2, "220 two 20kg");
+ok(!s.isOffTarget, "220 within tolerance");
+eq(new Set(s.perSide.map((pc) => pc.plate.unit)).size, 1, "220 no unit mix");
+
+// 315 keeps a clean single-unit stack (3× 45), no kg/lb intermixing.
+s = C.solve(315, C.BARS.bar45lb, C.ALL_STANDARD);
+eq(s.perSide.length, 1, "315 one denom");
+eq(s.perSide[0].plate.value, 45, "315 uses 45lb");
+eq(s.perSide[0].count, 3, "315 three 45s");
+
 let perSide = [
   { plate: { value: 45, unit: "lb" }, count: 1 },
   { plate: { value: 15, unit: "kg" }, count: 1 },

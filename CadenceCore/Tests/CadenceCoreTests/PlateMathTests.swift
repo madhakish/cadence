@@ -24,7 +24,7 @@ final class PlateMathTests: XCTestCase {
 
     func test232TargetOnKgPlates() {
         // 232 lb on a 45 lb bar with kg plates: best is 42.5 kg/side
-        // (25 + 15 + 2.5) = 93.696 lb/side → 232.39 lb total.
+        // (20 + 20 + 2.5, a matched pair) = 93.696 lb/side → 232.39 lb total.
         let s = PlateMath.solve(targetLb: 232, bar: .bar45lb, plates: Plate.standardKg)
         XCTAssertEqual(s.loadout.totalLb, 232.39, accuracy: 0.01)
         XCTAssertFalse(s.isOffTarget)
@@ -86,6 +86,26 @@ final class PlateMathTests: XCTestCase {
         // 95 lb: one 25/side, not 10+10+5.
         let s = PlateMath.solve(targetLb: 95, bar: .bar45lb, plates: Plate.standardLb)
         XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 25, unit: .lb), count: 1)])
+    }
+
+    // MARK: - Realistic loading (round to a clean stack, not exact-to-the-pound)
+
+    func testRoundsToCleanMatchedPair() {
+        // 220 on a 45 lb bar: load 2× 20 kg blue per side (~220.5 lb), NOT the
+        // exact-but-awful 45 + 35 + 5 + 2.5 lb. Within the 2 lb band, fewest
+        // plates + a single unit system win.
+        let s = PlateMath.solve(targetLb: 220, bar: .bar45lb, plates: Plate.allStandard)
+        XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 20, unit: .kg), count: 2)])
+        XCTAssertFalse(s.isOffTarget)
+        XCTAssertEqual(Set(s.loadout.perSide.map(\.plate.unit)).count, 1, "no kg+lb frankenstack")
+    }
+
+    func testNoFrankenstackAcrossUnits() {
+        // With the full mixed inventory, a mid load still picks one unit rather
+        // than intermixing kg and lb change plates to nail an exact number.
+        let s = PlateMath.solve(targetLb: 315, bar: .bar45lb, plates: Plate.allStandard)
+        XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 45, unit: .lb), count: 3)])
+        XCTAssertEqual(Set(s.loadout.perSide.map(\.plate.unit)).count, 1)
     }
 
     // MARK: - Reverse mode

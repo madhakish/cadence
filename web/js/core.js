@@ -122,8 +122,12 @@ export function perSideLabel(perSide) {
 
 export const TOLERANCE_LB = 2.0;
 
-// Branch-and-bound closest per-side load. Ties prefer fewer plates, then
-// erring under the target. Mirrors PlateMath.solve.
+// Branch-and-bound closest per-side load, loaded the way a human loads: within
+// TOLERANCE_LB of the target the fewest plates win, then the fewest distinct
+// denominations (matched pairs), then a single unit system (no kg+lb
+// frankenstacks), then closeness, then erring under. Outside that band it falls
+// back to plain closest-then-fewest. Mixed units still appear when they're the
+// only way to get close. Mirrors PlateMath.solve.
 export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
   const perSideTarget = (targetLb - barLb(bar)) / 2.0;
 
@@ -138,44 +142,65 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
   const values = sorted.map(plateLb);
   const counts = new Array(sorted.length).fill(0);
   let bestCounts = counts.slice();
-  let bestDev = perSideTarget * 2.0;
-  let bestSigned = -perSideTarget * 2.0;
-  let bestPlates = 0;
+  let best = null; // { dev, signed, used, distinct, mixed }
   let nodes = 0;
 
-  const consider = (remaining, used) => {
-    const signed = -remaining * 2.0; // achieved − target
-    const dev = Math.abs(signed);
-    let better;
-    if (dev < bestDev - 1e-9) better = true;
-    else if (Math.abs(dev - bestDev) <= 1e-9) {
-      if (used < bestPlates) better = true;
-      else if (used === bestPlates && signed < bestSigned - 1e-9) better = true;
-      else better = false;
-    } else better = false;
-    if (better) {
-      bestDev = dev; bestSigned = signed; bestPlates = used;
-      bestCounts = counts.slice();
+  const metrics = (remaining) => {
+    const signed = -remaining * 2.0; // achieved − target (total lb)
+    let used = 0, distinct = 0, hasKg = false, hasLb = false;
+    for (let i = 0; i < counts.length; i += 1) {
+      if (counts[i] > 0) {
+        used += counts[i];
+        distinct += 1;
+        if (sorted[i].unit === "kg") hasKg = true; else hasLb = true;
+      }
     }
+    return { dev: Math.abs(signed), signed, used, distinct, mixed: hasKg && hasLb };
   };
 
-  const search = (index, remaining, used) => {
+  const isBetter = (c, b) => {
+    if (!b) return true;
+    const tol = TOLERANCE_LB + 1e-9;
+    const cIn = c.dev <= tol, bIn = b.dev <= tol;
+    if (cIn !== bIn) return cIn; // a good-enough load beats an out-of-band one
+    if (cIn) { // both good enough → cleanest to load
+      if (c.used !== b.used) return c.used < b.used;
+      if (c.distinct !== b.distinct) return c.distinct < b.distinct;
+      if (c.mixed !== b.mixed) return !c.mixed;
+      if (Math.abs(c.dev - b.dev) > 1e-9) return c.dev < b.dev;
+      return c.signed < b.signed - 1e-9; // equal miss: prefer under target
+    }
+    // both out of band → closest, then fewest plates, then under
+    if (Math.abs(c.dev - b.dev) > 1e-9) return c.dev < b.dev;
+    if (c.used !== b.used) return c.used < b.used;
+    return c.signed < b.signed - 1e-9;
+  };
+
+  const consider = (remaining) => {
+    const c = metrics(remaining);
+    if (isBetter(c, best)) { best = c; bestCounts = counts.slice(); }
+  };
+
+  const search = (index, remaining) => {
     nodes += 1;
     if (nodes >= 300000) return;
-    consider(remaining, used);
+    consider(remaining);
     if (index >= values.length || !(remaining > 1e-9)) return;
     const v = values[index];
     const maxCount = Math.min(maxPerPlateSide, Math.floor(remaining / v) + 1);
+    // Prune overshoots past the good-enough band AND the best deviation so far,
+    // so cleaner in-tolerance loads are never pruned away.
+    const bound = Math.max(TOLERANCE_LB, best ? best.dev : perSideTarget * 2.0);
     for (let c = maxCount; c >= 0; c -= 1) {
       const next = remaining - c * v;
-      if (next < 0 && -next * 2.0 > bestDev + 1e-9) continue; // overshoot worse
+      if (next < 0 && -next * 2.0 > bound + 1e-9) continue; // overshoot past the band
       counts[index] = c;
-      search(index + 1, next, used + c);
+      search(index + 1, next);
     }
     counts[index] = 0;
   };
 
-  search(0, perSideTarget, 0);
+  search(0, perSideTarget);
 
   const perSide = [];
   for (let i = 0; i < sorted.length; i += 1) {
