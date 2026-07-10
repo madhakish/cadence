@@ -22,8 +22,9 @@ public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
     public var label: String { "\(Weight.trim(value, decimals: 2)) \(unit.rawValue)" }
 
     /// Plate colour token (the user's gym scheme); the UI maps token → hex.
-    /// 55 lb / 25 kg red · 45 lb / 20 kg blue · 25 lb / 15 kg green ·
-    /// 10 lb / 10 kg white · 35 lb yellow · 5 lb and under (and fractional) black iron.
+    /// kg is IWF: 25 red · 20 blue · 15 yellow · 10 green · 5 white · 2.5 red change plate.
+    /// lb (colour bumpers): 55 red · 45 blue · 35 yellow · 25 green · 10 white ·
+    /// 5 and under (and fractional) black iron.
     /// Mirrored 1:1 in web/js/core.js `plateColorToken`.
     public var colorToken: String {
         if unit == .lb {

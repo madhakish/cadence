@@ -50,8 +50,9 @@ export const plateId = (p) => `${p.value}-${p.unit}`;
 export const plateLabel = (p) => `${trim(p.value, 2)} ${p.unit}`;
 
 // Plate colour token (the user's gym scheme). The UI maps the token → a hex.
-// 55 lb / 25 kg red · 45 lb / 20 kg blue · 25 lb / 15 kg green · 10 lb / 10 kg white ·
-// everything 5 lb and under (and fractional) is black iron · 35 lb yellow.
+// kg is IWF: 25 red · 20 blue · 15 yellow · 10 green · 5 white · 2.5 red change plate.
+// lb (colour bumpers): 55 red · 45 blue · 35 yellow · 25 green · 10 white ·
+// 5 and under (and fractional) black iron.
 export function plateColorToken(plate) {
   if (plate.unit === "lb") {
     if (plate.value >= 55) return "red";
