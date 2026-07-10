@@ -83,7 +83,16 @@ enum ImportService {
     @discardableResult
     static func load(_ data: Data, into context: ModelContext) throws -> Summary {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        // Accept BOTH ISO-8601 forms: native ExportService writes no fractional
+        // seconds, the web PWA's Date.toISOString() writes ".000Z". A single
+        // strategy that rejects fractions would fail every web-origin backup.
+        let fractional = ISO8601DateFormatter(); fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter(); plain.formatOptions = [.withInternetDateTime]
+        decoder.dateDecodingStrategy = .custom { d in
+            let s = try d.singleValueContainer().decode(String.self)
+            if let date = fractional.date(from: s) ?? plain.date(from: s) { return date }
+            throw DecodingError.dataCorrupted(.init(codingPath: d.codingPath, debugDescription: "Unrecognised date: \(s)"))
+        }
         guard let bundle = try? decoder.decode(Bundle.self, from: data) else { throw ImportError.notABackup }
 
         let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
@@ -99,8 +108,12 @@ enum ImportService {
                 var byName: [String: Exercise] = [:]
                 for e in (try context.fetch(FetchDescriptor<Exercise>())) { byName[e.name] = e }
                 for d in defs {
-                    if let existing = byName[d.name ?? ""] { update(existing, from: d) }
-                    else { let e = makeExercise(d); context.insert(e); byName[e.name] = e }
+                    // Exercise.name is @Attribute(.unique); an unnamed def can't
+                    // own a key, and two of them would collide on save.
+                    let name = (d.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty else { continue }
+                    if let existing = byName[name] { update(existing, from: d) }
+                    else { let e = makeExercise(d); context.insert(e); byName[name] = e }
                 }
             }
             let exByName: [String: Exercise] = {
@@ -189,7 +202,7 @@ enum ImportService {
         if let v = d.notes { e.notes = v }
         if let v = d.isShelved { e.isShelved = v }
         if let v = d.shelvedNote { e.shelvedNote = v }
-        e.watchSiteRaw = d.watchSite
+        if let v = d.watchSite { e.watchSiteRaw = v } // lenient: don't clear when the key is omitted
     }
 
     private static func makeGym(_ g: GymDTO) -> Gym {
@@ -292,11 +305,14 @@ enum ImportService {
         if let v = st.accessoryRestSeconds { settings.accessoryRestSeconds = v }
         if let v = st.autoStartRest { settings.autoStartRest = v }
         if let v = st.haptics { settings.haptics = v }
+        // Keep the install marked seeded so a restore isn't re-seeded over
+        // (Seeder.seedIfNeeded gates on seededAt != nil).
+        settings.seededAt = st.seededAt ?? settings.seededAt ?? .now
     }
 
     /// Recover a cycle-phase number from an exported phase label ("… Wk3 …").
     private static func recoverPhase(_ label: String?) -> Int? {
-        guard let label, let r = label.range(of: #"Wk(\d)"#, options: .regularExpression) else { return nil }
+        guard let label, let r = label.range(of: #"Wk(\d+)"#, options: .regularExpression) else { return nil }
         return Int(label[r].dropFirst(2))
     }
 
