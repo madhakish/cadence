@@ -30,10 +30,14 @@ final class RestTimer {
     var display: String { mmss(Int(remaining.rounded())) }
 
     func start(seconds: Int, exerciseName: String) {
-        // Guard BEFORE stop(): arming a zero-rest movement (conditioning) must
+        // Guard BEFORE clearing: arming a zero-rest movement (conditioning) must
         // not kill a countdown already running (mirrors web armRest).
         guard seconds > 0 else { return }
-        stop()
+        // Clear only LOCAL state — do NOT fire the controller's finish here. It
+        // runs in its own task and could land after begin()'s task, tearing down
+        // the rest we're about to start. begin() ends any prior activity and
+        // reschedules the notification in-order, so it owns the teardown.
+        stopLocalOnly()
         self.exerciseName = exerciseName
         total = TimeInterval(seconds)
         remaining = total
@@ -88,12 +92,16 @@ final class RestTimer {
     /// Adopt the Live Activity's state after the user may have driven the timer
     /// from the Lock Screen while the app was backgrounded. Call on foreground.
     func reconcileFromActivity() {
+        // No Live Activities on this device/setting → the in-app timer and its
+        // notification are the whole story; never clear them from here.
+        guard RestActivityController.isSupported else { return }
         guard let snap = RestActivityController.snapshot else {
             if isRunning { stopLocalOnly() } // ended from the Lock Screen
             return
         }
         exerciseName = snap.exerciseName
         total = snap.state.total
+        endDate = snap.state.endDate // keep even while paused, so in-app +time can push it
         isRunning = true
         if snap.state.isPaused {
             isPaused = true
@@ -102,7 +110,6 @@ final class RestTimer {
             invalidate()
         } else {
             isPaused = false
-            endDate = snap.state.endDate
             startTicking()
         }
     }

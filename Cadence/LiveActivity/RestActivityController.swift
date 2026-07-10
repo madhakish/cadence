@@ -120,7 +120,9 @@ enum RestActivityController {
     private static func scheduleNotification(at endDate: Date, exerciseName: String) {
         let seconds = endDate.timeIntervalSinceNow
         cancelNotification()
-        guard seconds > 0 else { return }
+        // UNTimeIntervalNotificationTrigger requires an interval >= 1s or it
+        // throws; under a second the rest is effectively over — skip it.
+        guard seconds >= 1 else { return }
         let content = UNMutableNotificationContent()
         content.title = "Rest over."
         content.body = "\(exerciseName) — next set."

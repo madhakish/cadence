@@ -52,7 +52,7 @@ struct RestActivityWidget: Widget {
             } minimal: {
                 Image(systemName: "timer").foregroundStyle(restAccent)
             }
-            .widgetURL(URL(string: "cadence://rest"))
+            // Tapping the activity opens the app by default; no deep link handled.
         }
     }
 }
