@@ -9,8 +9,14 @@ import CadenceCore
 enum ProgramSession {
 
     static func make(program: Program, day: ProgramDay, context: ModelContext) -> WorkoutSession {
-        let gymName = (try? context.fetch(FetchDescriptor<Gym>()))?.first(where: { $0.isDefault })?.name
-        let session = WorkoutSession(gymName: gymName)
+        let defaultGym = (try? context.fetch(FetchDescriptor<Gym>()))?.first(where: { $0.isDefault })
+        let session = WorkoutSession(gymName: defaultGym?.name)
+        let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
+        // Secondary/accessory barbell work snaps to a neat bar-loadable weight
+        // (no lonely 2.5); main lifts keep their fine progression. Mirrors web.
+        func neat(_ weightLb: Double, _ exercise: Exercise?, isMain: Bool) -> Double {
+            (!isMain && exercise?.type == .barbell) ? Weight.barLoadable(weightLb, barLb: barLb, stepLb: program.roundingLb) : weightLb
+        }
         session.programName = program.name
         session.programCycleNumber = program.cycleNumber
         session.programWeek = program.currentWeek
@@ -26,9 +32,10 @@ enum ProgramSession {
                 roundingLb: program.roundingLb
             )
             let exercise = findExercise(named: lift.exerciseName, context: context)
+            let weightLb = neat(plan.weightLb, exercise, isMain: lift.role.rawValue == "main")
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = lift.role.rawValue
-            entry.plannedWeightLb = plan.weightLb
+            entry.plannedWeightLb = weightLb
             entry.plannedSets = plan.sets
             entry.plannedReps = plan.reps
             entry.phase = phase
@@ -38,13 +45,13 @@ enum ProgramSession {
 
             var so = 0
             if exercise?.type == .barbell {
-                for wu in WarmupRamp.ramp(workingLb: plan.weightLb, roundingLb: program.roundingLb) {
+                for wu in WarmupRamp.ramp(workingLb: weightLb, roundingLb: program.roundingLb) {
                     insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true, perSide: false, context: context)
                     so += 1
                 }
             }
             for _ in 0..<plan.sets {
-                insertSet(entry, order: so, weight: plan.weightLb, reps: plan.reps, warmup: false, perSide: exercise?.isUnilateral ?? false, context: context)
+                insertSet(entry, order: so, weight: weightLb, reps: plan.reps, warmup: false, perSide: exercise?.isUnilateral ?? false, context: context)
                 so += 1
             }
             order += 1
@@ -52,16 +59,17 @@ enum ProgramSession {
 
         for acc in day.orderedAccessories {
             let exercise = findExercise(named: acc.exerciseName, context: context)
+            let weightLb = neat(acc.weightLb, exercise, isMain: false)
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = "accessory"
-            entry.plannedWeightLb = acc.weightLb
+            entry.plannedWeightLb = weightLb
             entry.plannedSets = acc.sets
             entry.plannedReps = acc.currentReps
             entry.session = session
             context.insert(entry)
             session.exercises.append(entry)
             for i in 0..<acc.sets {
-                insertSet(entry, order: i, weight: acc.weightLb, reps: acc.currentReps, warmup: false, perSide: exercise?.isUnilateral ?? false, context: context)
+                insertSet(entry, order: i, weight: weightLb, reps: acc.currentReps, warmup: false, perSide: exercise?.isUnilateral ?? false, context: context)
             }
             order += 1
         }
