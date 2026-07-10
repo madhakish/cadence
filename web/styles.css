@@ -1,16 +1,39 @@
-/* Cadence — "Carbon": neutral greyscale ground, red as the single signal.
-   Mirrors Theme.swift. */
+/* Cadence themes. Selectable via [data-theme] on <html>; default is Memento
+   (the gym-mural direction). Memento matches the native Theme.swift tokens;
+   Carbon / Slate / System are web-only until the native picker lands.
+   Accent = the single interactive/active signal. warn/good/hard stay
+   semantic (grindy·wobble / clean / hard stop) and separate from accent. */
+:root, :root[data-theme="memento"] {   /* Memento — brass on warm near-black (default) */
+  --accent: #c9a24b;
+  --warn: #d29a3a;
+  --hard: #d5352b;
+  --good: #5ba06a;
+  --bg: #0a0908;
+  --card: #16130d;
+  --card2: #221c12;
+  --text: #efe6d2;
+  --muted: #9a8f77;
+  --line: #2f2718;
+}
+:root[data-theme="carbon"] {           /* Carbon — greyscale + red signal */
+  --accent: #ef4444; --warn: #eab308; --hard: #dc2626; --good: #4ade80;
+  --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
+}
+:root[data-theme="slate"] {            /* Slate — cool gunmetal + crimson */
+  --accent: #e5484d; --warn: #d29922; --hard: #da3633; --good: #3fb950;
+  --bg: #0d1117; --card: #161b22; --card2: #1e252e; --text: #eaeef4; --muted: #8a97a6; --line: #2a323c;
+}
+:root[data-theme="system"] {           /* System — follows OS; light by default, dark below */
+  --accent: #c81e1e; --warn: #b8860b; --hard: #a51111; --good: #1a8f43;
+  --bg: #f5f5f7; --card: #ffffff; --card2: #ececee; --text: #1a1a1c; --muted: #66666e; --line: #d9d9de;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --accent: #ef4444; --warn: #eab308; --hard: #f0554f; --good: #4ade80;
+    --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
+  }
+}
 :root {
-  --accent: #ef4444;      /* red — active / rest / progress / interactive */
-  --warn: #eab308;        /* amber — grindy / wobble (semantic) */
-  --hard: #dc2626;        /* deep red — hard stop (semantic critical) */
-  --good: #4ade80;        /* green — clean rep (semantic) */
-  --bg: #0c0d0e;
-  --card: #17181a;
-  --card2: #202225;
-  --text: #fafafa;
-  --muted: #8b9196;
-  --line: #2b2e31;
   --bigtap: 56px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);

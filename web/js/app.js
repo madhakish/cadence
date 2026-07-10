@@ -59,6 +59,7 @@ async function boot() {
   await syncLibrary(); // top up the exercise library on already-seeded installs
   const s = await Settings.get();
   ui.prefs.unitDisplay = s.unitDisplay;
+  ui.applyTheme(s.theme);
 
   buildChrome();
   await navigate("home");

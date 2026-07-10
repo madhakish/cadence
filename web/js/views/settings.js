@@ -10,6 +10,11 @@ export async function render(host) {
   const root = ui.h("div");
   const saveS = async () => { await Settings.save(settings); ui.prefs.unitDisplay = settings.unitDisplay; };
 
+  // Theme
+  root.append(ui.h("div", { class: "section-title", text: "Theme" }));
+  root.append(ui.h("div", { class: "card" },
+    ui.seg(ui.THEMES, settings.theme || "memento", async (v) => { settings.theme = v; ui.applyTheme(v); await saveS(); })));
+
   // Units
   root.append(ui.h("div", { class: "section-title", text: "Units" }));
   root.append(ui.h("div", { class: "card" },
