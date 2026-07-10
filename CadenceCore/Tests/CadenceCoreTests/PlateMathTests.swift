@@ -145,7 +145,10 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(Plate(value: 2.5, unit: .lb).colorToken, "black")
         XCTAssertEqual(Plate(value: 25, unit: .kg).colorToken, "red")
         XCTAssertEqual(Plate(value: 20, unit: .kg).colorToken, "blue")
-        XCTAssertEqual(Plate(value: 15, unit: .kg).colorToken, "green")
+        XCTAssertEqual(Plate(value: 15, unit: .kg).colorToken, "yellow")
+        XCTAssertEqual(Plate(value: 10, unit: .kg).colorToken, "green")
+        XCTAssertEqual(Plate(value: 5, unit: .kg).colorToken, "white")
+        XCTAssertEqual(Plate(value: 2.5, unit: .kg).colorToken, "red")
         XCTAssertGreaterThan(Plate(value: 45, unit: .lb).sizeFactor,
                              Plate(value: 10, unit: .lb).sizeFactor,
                              "bigger plate draws taller")

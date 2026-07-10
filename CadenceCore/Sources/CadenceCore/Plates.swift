@@ -36,9 +36,11 @@ public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
         }
         if value >= 25 { return "red" }
         if value == 20 { return "blue" }
-        if value == 15 { return "green" }
-        if value == 10 { return "white" }
-        return "black" // 5, 2.5, 1.25
+        if value == 15 { return "yellow" }
+        if value == 10 { return "green" }
+        if value == 5 { return "white" }
+        if value == 2.5 { return "red" } // IWF change plate
+        return "black" // 1.25 + misc
     }
 
     /// Relative drawn diameter (0.4–1.0) by canonical pounds, so a barbell

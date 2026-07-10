@@ -63,9 +63,11 @@ export function plateColorToken(plate) {
   }
   if (plate.value >= 25) return "red";
   if (plate.value === 20) return "blue";
-  if (plate.value === 15) return "green";
-  if (plate.value === 10) return "white";
-  return "black"; // 5, 2.5, 1.25
+  if (plate.value === 15) return "yellow";
+  if (plate.value === 10) return "green";
+  if (plate.value === 5) return "white";
+  if (plate.value === 2.5) return "red"; // IWF change plate
+  return "black"; // 1.25 + misc
 }
 
 // Relative drawn diameter of a plate (0.4–1.0), by canonical pounds, so the

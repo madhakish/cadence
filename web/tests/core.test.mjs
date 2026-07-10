@@ -260,7 +260,10 @@ eq(C.plateColorToken({ value: 5, unit: "lb" }), "black", "5 lb black");
 eq(C.plateColorToken({ value: 2.5, unit: "lb" }), "black", "2.5 lb black");
 eq(C.plateColorToken({ value: 25, unit: "kg" }), "red", "25 kg red");
 eq(C.plateColorToken({ value: 20, unit: "kg" }), "blue", "20 kg blue");
-eq(C.plateColorToken({ value: 15, unit: "kg" }), "green", "15 kg green");
+eq(C.plateColorToken({ value: 15, unit: "kg" }), "yellow", "15 kg yellow (IWF)");
+eq(C.plateColorToken({ value: 10, unit: "kg" }), "green", "10 kg green (IWF)");
+eq(C.plateColorToken({ value: 5, unit: "kg" }), "white", "5 kg white (IWF)");
+eq(C.plateColorToken({ value: 2.5, unit: "kg" }), "red", "2.5 kg red change plate");
 ok(C.plateSizeFactor({ value: 45, unit: "lb" }) > C.plateSizeFactor({ value: 10, unit: "lb" }), "bigger plate draws taller");
 
 // ---- bar list + id parity (mirrors PlateMathTests.testBarListMatchesWeb) ----
