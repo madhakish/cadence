@@ -45,7 +45,7 @@ enum ProgramSession {
 
             var so = 0
             if exercise?.type == .barbell {
-                for wu in WarmupRamp.ramp(workingLb: weightLb, roundingLb: program.roundingLb) {
+                for wu in WarmupRamp.ramp(workingLb: weightLb, barLb: barLb, roundingLb: program.roundingLb) {
                     insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true, perSide: false, context: context)
                     so += 1
                 }

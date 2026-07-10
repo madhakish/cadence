@@ -529,7 +529,7 @@ export async function createSessionFromProgramDay(program, day) {
     const weightLb = neat(plan.weightLb, ex, lift.role === "main");
     const sets = [];
     let so = 0;
-    if (ex && ex.type === "barbell") for (const wu of C.warmupRamp(weightLb)) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true }));
+    if (ex && ex.type === "barbell") for (const wu of C.warmupRamp(weightLb, barLb, program.roundingLb)) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true }));
     for (let i = 0; i < plan.sets; i += 1) sets.push(mkSet(so++, weightLb, plan.reps, { perSide: ex && ex.isUnilateral }));
     exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps, programRole: lift.role, sets });
   }
