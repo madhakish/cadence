@@ -169,9 +169,9 @@ export const THEMES = [
 ];
 // Apply a theme by name: set [data-theme] on <html> and sync the PWA
 // status-bar colour to the theme's ground. Unknown/corrupt values fall back
-// to memento so the app state and the Settings segment stay consistent.
+// to carbon so the app state and the Settings segment stay consistent.
 export function applyTheme(name) {
-  document.documentElement.dataset.theme = THEMES.some((t) => t.value === name) ? name : "memento";
+  document.documentElement.dataset.theme = THEMES.some((t) => t.value === name) ? name : "carbon";
   const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && bg) meta.setAttribute("content", bg);

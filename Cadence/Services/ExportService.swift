@@ -119,6 +119,7 @@ enum ExportService {
         let autoStartRest: Bool
         let haptics: Bool
         let seededAt: Date?
+        let theme: String?
     }
 
     struct ExportBodyweight: Codable {
@@ -391,7 +392,7 @@ enum ExportService {
             settings: settings.map { s in
                 ExportSettings(unitDisplay: s.unitDisplayRaw, proteinTargetGrams: s.proteinTargetGrams,
                                accessoryRestSeconds: s.accessoryRestSeconds, autoStartRest: s.autoStartRest,
-                               haptics: s.haptics, seededAt: s.seededAt)
+                               haptics: s.haptics, seededAt: s.seededAt, theme: s.themeNameRaw)
             }
         )
     }

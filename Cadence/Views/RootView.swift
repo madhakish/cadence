@@ -2,22 +2,28 @@ import SwiftUI
 import SwiftData
 
 struct RootView: View {
+    @Binding var selection: Int
     @State private var showPlateCalc = false
     @State private var restTimer = RestTimer()
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            TabView {
+            TabView(selection: $selection) {
                 HomeView()
                     .tabItem { Label("Today", systemImage: "figure.strengthtraining.traditional") }
+                    .tag(0)
                 HistoryView()
                     .tabItem { Label("History", systemImage: "calendar") }
+                    .tag(1)
                 BodyView()
                     .tabItem { Label("Body", systemImage: "scalemass") }
+                    .tag(2)
                 InjuryTimelineView()
                     .tabItem { Label("Signals", systemImage: "bolt.heart") }
+                    .tag(3)
                 SettingsView()
                     .tabItem { Label("Settings", systemImage: "gearshape") }
+                    .tag(4)
             }
 
             // Plate math is one tap from anywhere. Non-negotiable.

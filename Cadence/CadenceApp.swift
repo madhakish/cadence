@@ -33,10 +33,29 @@ struct CadenceApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .preferredColorScheme(.dark)
-                .tint(Theme.accent)
+            ThemedRoot()
         }
         .modelContainer(container)
+    }
+}
+
+/// Reads the persisted theme, mirrors it into `Theme.name`, and applies the
+/// tint + colour scheme app-wide. The tab selection is hoisted ABOVE the
+/// `.id(theme)` refresh so switching themes (from Settings) rebuilds the tree
+/// with the new palette without bouncing you back to the first tab.
+struct ThemedRoot: View {
+    @Query private var settings: [AppSettings]
+    @State private var tab = 0
+
+    private var theme: ThemeName {
+        ThemeName(rawValue: settings.first?.themeNameRaw ?? "carbon") ?? .carbon
+    }
+
+    var body: some View {
+        Theme.name = theme // keep the static mirror current for every read this render
+        return RootView(selection: $tab)
+            .tint(Theme.accent)
+            .preferredColorScheme(theme.colorScheme)
+            .id(theme)
     }
 }
