@@ -101,6 +101,7 @@ enum ExportService {
         let name: String
         let category: String
         let type: String
+        let movementGroup: String
         let isUnilateral: Bool
         let defaultRestSeconds: Int
         let notes: String
@@ -383,9 +384,9 @@ enum ExportService {
                 )
             },
             exercises: exerciseDefs.map { e in
-                ExportExerciseDef(name: e.name, category: e.categoryRaw, type: e.typeRaw, isUnilateral: e.isUnilateral,
-                                  defaultRestSeconds: e.defaultRestSeconds, notes: e.notes, isShelved: e.isShelved,
-                                  shelvedNote: e.shelvedNote, watchSite: e.watchSiteRaw, createdAt: e.createdAt)
+                ExportExerciseDef(name: e.name, category: e.categoryRaw, type: e.typeRaw, movementGroup: e.movementGroup,
+                                  isUnilateral: e.isUnilateral, defaultRestSeconds: e.defaultRestSeconds, notes: e.notes,
+                                  isShelved: e.isShelved, shelvedNote: e.shelvedNote, watchSite: e.watchSiteRaw, createdAt: e.createdAt)
             },
             settings: settings.map { s in
                 ExportSettings(unitDisplay: s.unitDisplayRaw, proteinTargetGrams: s.proteinTargetGrams,

@@ -29,11 +29,24 @@ const plates = await import("../js/views/plates.js");
 
 // ---- seed ----
 await db.ensureSeeded();
-ok((await db.Exercises.all()).length === 30, "seeded 30 exercises");
+ok((await db.Exercises.all()).length === 47, "seeded 47 exercises");
+ok((await db.Exercises.all()).every((e) => e.movementGroup), "every seeded exercise has a movement group");
 ok((await db.Sessions.completed()).length === 10, "seeded 10 sessions");
 ok((await db.Tracks.all()).length === 3, "seeded 3 tracks");
 await db.ensureSeeded(); // idempotent
 ok((await db.Sessions.completed()).length === 10, "re-seed is a no-op");
+
+// ---- library sync tops up an already-seeded (older) install ----
+{
+  // Simulate an old install: blank a movement group and edit an exercise's
+  // rest, then prove sync backfills the group WITHOUT clobbering the edit.
+  const dl = await db.Exercises.byName("Deadlift");
+  dl.movementGroup = ""; dl.defaultRestSeconds = 222; await db.Exercises.save(dl);
+  await db.syncLibrary();
+  ok((await db.Exercises.byName("Deadlift")).movementGroup === "hinge", "sync backfills a missing movement group");
+  ok((await db.Exercises.byName("Deadlift")).defaultRestSeconds === 222, "sync does NOT clobber user edits");
+  ok((await db.Exercises.all()).length === 47, "sync leaves the count whole (no dupes)");
+}
 
 // ---- render every tab without throwing ----
 for (const [name, view] of [["home", home], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
@@ -87,7 +100,7 @@ const parsed = JSON.parse(json);
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
-ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 30, "export carries the exercise library");
+ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 47, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 const csv = await db.exportCSV();
 ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");

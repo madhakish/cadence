@@ -168,6 +168,19 @@ export async function ensureSeeded() {
   await Settings.save(s);
 }
 
+// Idempotent library top-up, run every launch: adds any SEED exercises an
+// already-seeded install is missing (new movements ship over time) and
+// backfills movementGroup on older records — WITHOUT clobbering user edits to
+// exercises that already exist (rest, shelved, watch site, etc.).
+export async function syncLibrary() {
+  const have = new Map((await Exercises.all()).map((e) => [e.name, e]));
+  for (const seed of SEED.exercises) {
+    const cur = have.get(seed.name);
+    if (!cur) { await put("exercises", seed); continue; }
+    if (!cur.movementGroup && seed.movementGroup) { cur.movementGroup = seed.movementGroup; await put("exercises", cur); }
+  }
+}
+
 // ---- Export / Import ----
 // The bundle is the Safari-eviction recovery path: it must round-trip ALL
 // mutable state, not just the log — tracks (live per-lift progression), gyms
