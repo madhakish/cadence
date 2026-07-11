@@ -88,12 +88,23 @@ eq(s.perSide[0].plate.value, 25, "95 uses one 25");
 // Realistic loading: 220 on a 45# bar → 2× 20kg blue per side (~220.5), NOT the
 // exact-but-ugly 45+35+5+2.5. Within the 2 lb band, fewest plates + one unit win.
 s = C.solve(220, C.BARS.bar45lb, C.ALL_STANDARD);
-eq(s.perSide.length, 1, "220 one denom");
-eq(s.perSide[0].plate.value, 20, "220 uses 20kg");
-eq(s.perSide[0].plate.unit, "kg", "220 kg bumper");
-eq(s.perSide[0].count, 2, "220 two 20kg");
+// Heaviest first, competition style: 25+15 kg per side (~221.4), not 20×2
+// and not the exact-but-awful 45+35+5+2.5 lb.
+eq(s.perSide.length, 2, "220 two denoms, heaviest first");
+eq(s.perSide[0].plate.value, 25, "220 leads with the 25kg");
+eq(s.perSide[1].plate.value, 15, "220 fills with the 15kg");
 ok(!s.isOffTarget, "220 within tolerance");
 eq(new Set(s.perSide.map((pc) => pc.plate.unit)).size, 1, "220 no unit mix");
+
+// Heaviest-first beats fewest-plates: 255 is 45+45+10+5 per side, never 35×3
+// (equal weight, fewer plates, but nobody skips the 45s).
+s = C.solve(255, C.BARS.bar45lb, C.STANDARD_LB);
+eq(s.perSide.map((pc) => `${pc.plate.value}x${pc.count}`).join(" "), "45x2 10x1 5x1", "255 loads the 45s first");
+ok(!s.isOffTarget, "255 exact");
+
+// Same principle mid-weight: 195 is 45+25+5, not 25×3.
+s = C.solve(195, C.BARS.bar45lb, C.STANDARD_LB);
+eq(s.perSide.map((pc) => `${pc.plate.value}x${pc.count}`).join(" "), "45x1 25x1 5x1", "195 loads the 45 first");
 
 // 315 keeps a clean single-unit stack (3× 45), no kg/lb intermixing.
 s = C.solve(315, C.BARS.bar45lb, C.ALL_STANDARD);

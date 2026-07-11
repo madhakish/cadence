@@ -19,13 +19,16 @@ export function stationPlates(unit, gym) {
 
 // Returns { svg, solution }. svg is a per-side barbell (heaviest plate inboard).
 // `bar` is explicit (selectable); `unit` only chooses the plate denominations.
-export function barbellSVG(weightLb, unit, bar, gym) {
-  const solution = C.solve(weightLb, bar, stationPlates(unit, gym));
+// Pass `preSolved` to DRAW an existing solution (or user-entered stack) instead
+// of re-solving — the plate calculator's hero must match its own answer, which
+// may span both unit systems.
+export function barbellSVG(weightLb, unit, bar, gym, preSolved = null) {
+  const solution = preSolved || C.solve(weightLb, bar, stationPlates(unit, gym));
   const plates = [];
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);
 
   const H = 30, plateW = 7, gap = 1.5, sleeve = 18;
-  const W = Math.max(46, sleeve + 6 + plates.length * (plateW + gap) + 4);
+  const W = Math.max(plates.length ? 46 : 74, sleeve + 6 + plates.length * (plateW + gap) + 4); // bar-only needs room for its label
   const svg = el("svg", { class: "barbell", viewBox: `0 0 ${W} ${H}`, height: H, preserveAspectRatio: "xMinYMid meet", role: "img" });
 
   // bar shaft + sleeve face

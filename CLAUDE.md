@@ -95,6 +95,12 @@ Existing entries — don't reintroduce these patterns:
   object (`track.exerciseName`); hoist the value into a local `let` first.
 - `Weight.trim` must strip trailing zeros at any precision (runtime, not
   compile — caught by the Linux test job on the first ever run).
+- A large SwiftUI `ViewBuilder` closure holding a `let` binding plus a
+  many-argument view call can exceed the type-checker's budget ("unable to
+  type-check this expression in reasonable time") — hoist the content into a
+  computed property and do lookups via plain helper funcs. Not expressible as
+  a CadenceCore fixture (no SwiftUI in the package); pattern hit in
+  ActiveSessionView's List.
 
 ## App conventions
 

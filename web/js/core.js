@@ -138,6 +138,10 @@ export const TOLERANCE_LB = 2.0;
 // frankenstacks), then closeness, then erring under. Outside that band it falls
 // back to plain closest-then-fewest. Mixed units still appear when they're the
 // only way to get close. Mirrors PlateMath.solve.
+// Loaded the way a human actually loads: within the band, a stack that IS the
+// heaviest-first greedy fill of its own weight (in its own unit system) beats
+// any re-shuffled stack — 105/side is 45+45+10+5, never 35×3. Between greedy
+// stacks the fewest plates win (220 → 2×20 kg, not 45+35+5+2.5).
 export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
   const perSideTarget = (targetLb - barLb(bar)) / 2.0;
 
@@ -160,7 +164,8 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
     const tol = TOLERANCE_LB + 1e-9;
     const cIn = c.dev <= tol, bIn = b.dev <= tol;
     if (cIn !== bIn) return cIn; // a good-enough load beats an out-of-band one
-    if (cIn) { // both good enough → cleanest to load
+    if (cIn) { // both good enough → cleanest to load, heaviest plates first
+      if (c.canonical !== b.canonical) return c.canonical;
       if (c.used !== b.used) return c.used < b.used;
       if (c.distinct !== b.distinct) return c.distinct < b.distinct;
       if (c.mixed !== b.mixed) return !c.mixed;
@@ -173,11 +178,33 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
     return c.signed < b.signed - 1e-9;
   };
 
+  // True when the stack IS the heaviest-first greedy fill of its own achieved
+  // weight within one unit system — how a human racks plates (max out the
+  // 45s, then work down). Mixed stacks are never canonical.
+  const isGreedyCanonical = (achieved, mixed, used) => {
+    if (used === 0) return true;
+    if (mixed) return false;
+    const first = sorted.findIndex((_, i) => counts[i] > 0);
+    if (first < 0) return true;
+    const system = sorted[first].unit;
+    let rem = achieved;
+    for (let i = 0; i < sorted.length; i += 1) {
+      if (sorted[i].unit !== system) continue;
+      const c = Math.min(maxPerPlateSide, Math.floor(rem / values[i] + 1e-9));
+      if (counts[i] !== c) return false;
+      rem -= c * values[i];
+    }
+    return true;
+  };
+
   // used/distinct/kg/lb are threaded through the recursion so each node is O(1)
   // (no per-node rescan of counts) — solve() runs on every plate-calculator keystroke.
   const consider = (remaining, used, distinct, mixed) => {
     const signed = -remaining * 2.0; // achieved − target (total lb)
-    const c = { dev: Math.abs(signed), signed, used, distinct, mixed };
+    // Canonicality only matters inside the band — skip the walk elsewhere.
+    const canonical = Math.abs(signed) <= TOLERANCE_LB + 1e-9
+      && isGreedyCanonical(perSideTarget - remaining, mixed, used);
+    const c = { dev: Math.abs(signed), signed, used, distinct, mixed, canonical };
     if (isBetter(c, best)) { best = c; bestCounts = counts.slice(); }
   };
 

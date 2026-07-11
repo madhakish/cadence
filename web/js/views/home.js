@@ -1,13 +1,28 @@
 // Today — resume/open session, next-up suggestions, gym tag, protein.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { Sessions, Tracks, Gyms, Settings, Protein, Programs, Exercises, iso } from "../db.js";
+import { sparkline } from "../charts.js";
+import { barbellSVG } from "../barbell.js";
+import { Sessions, Tracks, Gyms, Settings, Protein, Programs, Exercises, iso, topSet } from "../db.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession } from "./session.js";
 
 export async function render(host) {
-  const [open, tracks, gym, settings, proteinTotal, program, allExercises] = await Promise.all([
-    Sessions.open(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(), Programs.active(), Exercises.all(),
+  const [open, tracks, gym, settings, proteinTotal, program, allExercises, completed] = await Promise.all([
+    Sessions.open(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(), Programs.active(), Exercises.all(), Sessions.completed(),
   ]);
+  // Last 8 top working weights for a lift, oldest→newest (sparkline source).
+  const topsFor = (name) => completed
+    .map((s) => ({
+      d: new Date(s.date),
+      // max across ALL entries of the lift that day (a session can hold the
+      // same exercise in two sections)
+      top: Math.max(...(s.exercises || []).filter((x) => x.exerciseName === name)
+        .map((x) => topSet(x)).filter(Boolean).map((t) => t.weightLb), -Infinity),
+    }))
+    .filter((x) => x.top > -Infinity)
+    .sort((a, b) => a.d - b.d)
+    .map((x) => x.top)
+    .slice(-8);
   const exMap = new Map(allExercises.map((e) => [e.name, e]));
   const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
   const root = ui.h("div");
@@ -27,15 +42,27 @@ export async function render(host) {
     const card = ui.h("div", { class: "card" },
       ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
         ui.h("span", { class: "title", text: day.name }),
-        ui.h("span", { class: "pill accent", text: `R${program.currentWeek} ${phase.name}` })));
+        ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
+          ui.wave(program.currentWeek),
+          ui.h("span", { class: "sub accent", text: phase.name }))));
     const lifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
     for (const l of lifts) {
       const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
+      const ex = exMap.get(l.exerciseName);
       // Preview the same snapped weight the session will store (secondary barbell lifts).
-      plan.weightLb = neatProgramWeight(plan.weightLb, exMap.get(l.exerciseName), l.role === "main", barLb, program.roundingLb);
+      plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb);
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
-        ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: l.exerciseName }),
-          ui.h("span", { class: "sub", text: `${l.role} · ${C.sessionPlanLabel(plan)}` }))));
+        ui.h("div", { class: "lead" },
+          ui.h("span", { class: "title", text: l.exerciseName }),
+          ui.h("span", { class: "sub", text: l.role })),
+        ui.h("div", { style: { textAlign: "right" } },
+          ui.h("div", { class: "wt-big mono", text: `${C.trim(plan.weightLb)} lb` }),
+          ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
+      // The bar you'll actually load — mains only, keeps the card calm.
+      if (l.role === "main" && ex && ex.type === "barbell" && plan.weightLb > 0) {
+        card.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
+          barbellSVG(plan.weightLb, "lb", gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb, gym).svg));
+      }
     }
     if (day.accessories.length) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: `+ ${day.accessories.map((a) => a.exerciseName).join(", ")}` }));
     card.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "10px" }, text: `Start ${day.name}`, onClick: async () => openSession(await createSessionFromProgramDay(program, day)) }));
@@ -50,11 +77,13 @@ export async function render(host) {
   if (!orphanTracks.length) list.append(ui.h("div", { class: "muted", text: program ? "All your tracked lifts are in the program." : "No tracked lifts yet. Add progression in Settings." }));
   for (const t of orphanTracks) {
     const sug = t.mode === "cycle" ? C.planFor({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb }) : C.linearPlan(t.baseWeightLb);
+    const tops = topsFor(t.exerciseName);
     list.append(ui.h("div", { class: "row", onClick: () => start(t) },
       ui.h("div", { class: "lead" },
         ui.h("span", { class: "title", text: t.exerciseName }),
         ui.h("span", { class: "sub accent", text: C.sessionPlanLabel(sug) }),
         t.mode === "cycle" ? ui.h("span", { class: "sub", text: `Cycle ${t.cycleNumber} · advances when you bank it` }) : null),
+      tops.length >= 2 ? sparkline(tops) : null,
       ui.h("span", { class: "chev" })));
   }
   root.append(list);

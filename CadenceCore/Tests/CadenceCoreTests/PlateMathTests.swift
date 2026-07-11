@@ -24,7 +24,7 @@ final class PlateMathTests: XCTestCase {
 
     func test232TargetOnKgPlates() {
         // 232 lb on a 45 lb bar with kg plates: best is 42.5 kg/side
-        // (20 + 20 + 2.5, a matched pair) = 93.696 lb/side → 232.39 lb total.
+        // (25 + 15 + 2.5, heaviest first) = 93.696 lb/side → 232.39 lb total.
         let s = PlateMath.solve(targetLb: 232, bar: .bar45lb, plates: Plate.standardKg)
         XCTAssertEqual(s.loadout.totalLb, 232.39, accuracy: 0.01)
         XCTAssertFalse(s.isOffTarget)
@@ -88,16 +88,37 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 25, unit: .lb), count: 1)])
     }
 
-    // MARK: - Realistic loading (round to a clean stack, not exact-to-the-pound)
+    // MARK: - Realistic loading (heaviest plates first, clean stack over exact-to-the-pound)
 
-    func testRoundsToCleanMatchedPair() {
-        // 220 on a 45 lb bar: load 2× 20 kg blue per side (~220.5 lb), NOT the
-        // exact-but-awful 45 + 35 + 5 + 2.5 lb. Within the 2 lb band, fewest
-        // plates + a single unit system win.
+    func testRoundsToCleanHeaviestFirstStack() {
+        // 220 on a 45 lb bar: 25 + 15 kg per side (~221.4 lb), competition
+        // style — heaviest plate first — NOT the exact-but-awful
+        // 45 + 35 + 5 + 2.5 lb. Within the 2 lb band, the greedy stack of a
+        // single unit system wins.
         let s = PlateMath.solve(targetLb: 220, bar: .bar45lb, plates: Plate.allStandard)
-        XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 20, unit: .kg), count: 2)])
+        XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 25, unit: .kg), count: 1),
+                                           PlateCount(plate: Plate(value: 15, unit: .kg), count: 1)])
         XCTAssertFalse(s.isOffTarget)
         XCTAssertEqual(Set(s.loadout.perSide.map(\.plate.unit)).count, 1, "no kg+lb frankenstack")
+    }
+
+    func testHeaviestFirstBeatsFewestPlates() {
+        // 255: per-side 105 = 45+45+10+5, never 35×3 — equal weight and fewer
+        // plates, but nobody skips the 45s.
+        let s = PlateMath.solve(targetLb: 255, bar: .bar45lb, plates: Plate.standardLb)
+        XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 45, unit: .lb), count: 2),
+                                           PlateCount(plate: Plate(value: 10, unit: .lb), count: 1),
+                                           PlateCount(plate: Plate(value: 5, unit: .lb), count: 1)])
+        XCTAssertEqual(s.deviationLb, 0, accuracy: 1e-9)
+    }
+
+    func testHeaviestFirstMidWeight() {
+        // 195: per-side 75 = 45+25+5, not 25×3.
+        let s = PlateMath.solve(targetLb: 195, bar: .bar45lb, plates: Plate.standardLb)
+        XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 45, unit: .lb), count: 1),
+                                           PlateCount(plate: Plate(value: 25, unit: .lb), count: 1),
+                                           PlateCount(plate: Plate(value: 5, unit: .lb), count: 1)])
+        XCTAssertEqual(s.deviationLb, 0, accuracy: 1e-9)
     }
 
     func testNoFrankenstackAcrossUnits() {

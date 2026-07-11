@@ -15,6 +15,8 @@ struct ActiveSessionView: View {
     @Query private var settingsList: [AppSettings]
     @Query private var gyms: [Gym]
     @Query(sort: \Exercise.name) private var allExercises: [Exercise]
+    @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date, order: .reverse)
+    private var completedSessions: [WorkoutSession]
 
     @Bindable var session: WorkoutSession
     @State private var showExercisePicker = false
@@ -34,16 +36,7 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
-            ForEach(session.orderedExercises) { entry in
-                ExerciseSection(
-                    entry: entry,
-                    settings: settingsList.first,
-                    gym: gym,
-                    allExercises: allExercises,
-                    onDropLoad: { autoregEntry = entry },
-                    onWork: { currentEntry = $0 }
-                )
-            }
+            exerciseSections
 
             Section {
                 Button {
@@ -128,9 +121,56 @@ struct ActiveSessionView: View {
         }
     }
 
+    /// Extracted from `body` — the seven-argument section call plus the recall
+    /// lookup pushed the List builder past the type-checker's budget.
+    private var exerciseSections: some View {
+        let recall = recallLines()
+        return ForEach(session.orderedExercises) { entry in
+            ExerciseSection(
+                entry: entry,
+                settings: settingsList.first,
+                gym: gym,
+                allExercises: allExercises,
+                lastTime: recallLine(for: entry, in: recall),
+                onDropLoad: { autoregEntry = entry },
+                onWork: { currentEntry = $0 }
+            )
+        }
+    }
+
+    private func recallLine(for entry: SessionExercise, in recall: [String: String]) -> String? {
+        guard let name = entry.exercise?.name else { return nil }
+        return recall[name]
+    }
+
     private func pushActivityContext() {
         workoutClock.updateContext(currentLift: currentOrFirst?.exercise?.name ?? "",
                                    defaultRestSeconds: currentRestSeconds)
+    }
+
+    /// "Last: 225×5 · Jun 12 (3w ago)" per lift in THIS session — when and how
+    /// heavy each was last time, searched across ALL history (not just this
+    /// program), so a lift you swapped away from months ago still tells you
+    /// where you left off. One newest-first pass over history, stopping as
+    /// soon as every lift on today's card has an answer.
+    private func recallLines() -> [String: String] {
+        var wanted = Set(session.orderedExercises.compactMap { $0.exercise?.name })
+        var lines: [String: String] = [:]
+        guard !wanted.isEmpty else { return lines }
+        for past in completedSessions where past.persistentModelID != session.persistentModelID {
+            for entry in past.exercises {
+                guard let name = entry.exercise?.name, wanted.contains(name),
+                      let top = entry.topSet else { continue }
+                let better = past.exercises.filter { $0.exercise?.name == name }.compactMap(\.topSet)
+                    .max { $0.weightLb < $1.weightLb } ?? top
+                let weight = better.weightLb == 0 ? "BW" : Weight.trim(better.weightLb)
+                let when = past.date.formatted(date: .abbreviated, time: .omitted)
+                lines[name] = "Last: \(weight)×\(better.reps) · \(when) (\(agoLabel(past.date)))"
+                wanted.remove(name)
+            }
+            if wanted.isEmpty { break }
+        }
+        return lines
     }
 
     private func addExercise(_ exercise: Exercise) {
@@ -168,6 +208,16 @@ private func smartRestSeconds(for exercise: Exercise?, role: String? = nil, sett
                                 exerciseDefaultRest: ex.defaultRestSeconds)
 }
 
+/// Compact "how long ago" for the last-session recall line.
+private func agoLabel(_ date: Date) -> String {
+    let days = max(0, Calendar.current.dateComponents([.day], from: date, to: .now).day ?? 0)
+    if days == 0 { return "today" }
+    if days == 1 { return "yesterday" }
+    if days < 14 { return "\(days)d ago" }
+    if days < 70 { return "\(days / 7)w ago" }
+    return "\(days / 30)mo ago"
+}
+
 /// Identifiable wrapper so the summary sheet can drive off .sheet(item:).
 private struct SummaryBox: Identifiable {
     let id = UUID()
@@ -186,6 +236,8 @@ private struct ExerciseSection: View {
     let settings: AppSettings?
     let gym: Gym?
     let allExercises: [Exercise]
+    /// "Last: 225×5 · Jun 12 (3w ago)", or nil for a first-ever lift.
+    let lastTime: String?
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
     let onWork: (SessionExercise) -> Void
@@ -250,8 +302,12 @@ private struct ExerciseSection: View {
     var body: some View {
         Section {
             ForEach(entry.orderedSets) { set in
+                // The set you're ON — the first WORKING set with no verdict
+                // yet. Warmups sit quiet (and often go unflagged, so they must
+                // not hold the rail hostage).
+                let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.flags.isEmpty }?.persistentModelID == set.persistentModelID
                 VStack(alignment: .leading, spacing: 4) {
-                    SetRow(set: set, exercise: entry.exercise, gym: gym, bar: effectiveBar,
+                    SetRow(set: set, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
                            targetLb: entry.plannedWeightLb, onLogged: {
                         onWork(entry)
                         // Auto-start only if the user opted in (manual is the
@@ -316,6 +372,9 @@ private struct ExerciseSection: View {
                 if let phase = entry.phase {
                     Text(phase.label).foregroundStyle(Theme.accent)
                 }
+                if let lastTime {
+                    Text(lastTime).textCase(nil)
+                }
                 if entry.exercise?.isShelved == true {
                     Text(Copy.shelved).foregroundStyle(Theme.hardStop)
                 }
@@ -361,6 +420,8 @@ private struct SetRow: View {
     let exercise: Exercise?
     let gym: Gym?
     let bar: Bar
+    /// The set you're ON (first with no verdict yet) — gets the accent rail.
+    let isCurrent: Bool
     /// The program/track weight this session recommends — the picker anchors here.
     let targetLb: Double?
     var onLogged: () -> Void
@@ -369,6 +430,12 @@ private struct SetRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            if isCurrent {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Theme.accent)
+                    .frame(width: 3, height: 34)
+                    .accessibilityLabel("Current set")
+            }
             // Weight, shown in the unit it was entered in.
             Button {
                 showDetail = true

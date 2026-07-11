@@ -11,6 +11,10 @@ struct BarbellView: View {
     let unit: WeightUnit
     let bar: Bar
     let gym: Gym?
+    /// Draw THIS loadout instead of re-solving — the plate calculator's hero
+    /// must match its own answer (which may span both unit systems), and
+    /// reverse mode must draw exactly what the user says is on the bar.
+    var loadout: Loadout? = nil
 
     private static let fill: [String: Color] = [
         "red": Color(hex: 0xD23B3B), "blue": Color(hex: 0x2F6FED), "green": Color(hex: 0x1FAA52),
@@ -37,7 +41,8 @@ struct BarbellView: View {
     }
 
     var body: some View {
-        let solution = PlateMath.solve(targetLb: weightLb, bar: bar, plates: stationPlates)
+        let solution = loadout.map { PlateSolution(loadout: $0, targetLb: weightLb) }
+            ?? PlateMath.solve(targetLb: weightLb, bar: bar, plates: stationPlates)
         let plates = solution.loadout.perSide.flatMap { Array(repeating: $0.plate, count: $0.count) }
         let width = max(46, Self.sleeve + 6 + CGFloat(plates.count) * (Self.plateW + Self.gap) + 4)
 
