@@ -1,8 +1,9 @@
 // History — session log (grouped by month), progression charts, milestones.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { lineChart } from "../charts.js";
+import { lineChart, multiLineChart } from "../charts.js";
 import { Sessions, Milestones, Exercises, topSet, workingVolume } from "../db.js";
+
 import { COPY } from "../constants.js";
 
 let mode = "log";
@@ -25,15 +26,31 @@ function setLabel(s) { return s.weightLb === 0 ? "BW" : ui.fmtWeight(s.weightLb)
 
 function renderLog(panel, sessions) {
   if (!sessions.length) { panel.append(ui.empty("📋", COPY.emptyHistory)); return; }
+  // Session volume relative to the biggest session on record — the thin bar
+  // under each card makes trends scannable while scrolling.
+  const volumeOf = (s) => (s.exercises || []).reduce((a, e) => a + workingVolume(e), 0);
+  const maxVolume = Math.max(1, ...sessions.map(volumeOf));
   let currentMonth = "";
   for (const s of sessions) {
     const my = ui.monthYear(s.date);
     if (my !== currentMonth) { currentMonth = my; panel.append(ui.h("div", { class: "section-title", text: my })); }
-    const summary = (s.exercises || []).map((e) => { const t = topSet(e); return t ? `${e.exerciseName} ${C.trim(t.weightLb)}×${t.reps}` : e.exerciseName; }).join(" · ");
+    // Lead with the heaviest lift of the day; the rest ride in the sub line.
+    const tops = (s.exercises || []).map((e) => ({ e, t: topSet(e) })).filter((x) => x.t);
+    const lead = [...tops].sort((a, b) => b.t.weightLb - a.t.weightLb)[0];
+    const rest = tops.filter((x) => x !== lead)
+      .map((x) => `${x.e.exerciseName} ${C.trim(x.t.weightLb)}×${x.t.reps}`).join(" · ");
+    const vol = volumeOf(s);
+    const bar = ui.h("div", { class: "volbar" }, ui.h("i", { style: { width: `${Math.max(2, (vol / maxVolume) * 100)}%` } }));
     panel.append(ui.h("div", { class: "card list", style: { margin: "6px 0" } },
       ui.h("div", { class: "row", style: { borderBottom: "0" }, onClick: () => openDetail(s) },
-        ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: ui.fmtDate(s.date) }), ui.h("span", { class: "sub", text: summary || "—" })),
-        ui.h("span", { class: "chev" }))));
+        ui.h("div", { class: "lead" },
+          ui.h("span", { class: "sub", text: ui.fmtDate(s.date) }),
+          lead ? ui.h("span", {},
+            ui.h("span", { class: "title", text: `${lead.e.exerciseName} ` }),
+            ui.h("span", { class: "wt-big mono accent", text: lead.t.weightLb > 0 ? `${C.trim(lead.t.weightLb)}×${lead.t.reps}` : `BW×${lead.t.reps}` })) : ui.h("span", { class: "title", text: "—" }),
+          rest ? ui.h("span", { class: "sub", text: rest }) : null),
+        ui.h("span", { class: "chev" })),
+      vol > 0 ? bar : null));
   }
 }
 
@@ -62,7 +79,7 @@ function openDetail(s) {
   });
 }
 
-let chartEx = null, chartMetric = "weight";
+let chartEx = null, chartMetric = "weight", chartSplit = false;
 function renderCharts(panel, sessions, exercises) {
   const mains = exercises.filter((e) => e.category === "Main").map((e) => e.name).sort();
   if (!mains.length) { panel.append(ui.empty("📈", COPY.emptyHistory)); return; }
@@ -70,6 +87,11 @@ function renderCharts(panel, sessions, exercises) {
 
   panel.append(ui.field("Exercise", (() => { const sel = ui.h("select", {}, ...mains.map((n) => ui.h("option", { value: n, text: n, selected: n === chartEx }))); sel.addEventListener("change", () => { chartEx = sel.value; renderInner(); }); return sel; })()));
   panel.append(ui.seg([{ value: "weight", label: "Working weight" }, { value: "volume", label: "Volume" }], chartMetric, (m) => { chartMetric = m; renderInner(); }));
+  // One line per rotation: compare this cycle's R1 against last cycle's R1
+  // instead of reading a sawtooth.
+  panel.append(ui.h("div", { class: "row", style: { padding: "8px 4px" } },
+    ui.h("span", { class: "sub", text: "Split by rotation" }),
+    ui.toggle(chartSplit, (v) => { chartSplit = v; renderInner(); })));
   const slot = ui.h("div", { class: "card" });
   panel.append(slot);
   renderInner();
@@ -79,12 +101,22 @@ function renderCharts(panel, sessions, exercises) {
     for (const s of [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date))) {
       const e = (s.exercises || []).find((x) => x.exerciseName === chartEx);
       if (!e) continue;
-      if (chartMetric === "weight") { const t = topSet(e); if (t) series.push({ t: new Date(s.date).getTime(), y: t.weightLb }); }
-      else { const v = workingVolume(e); if (v > 0) series.push({ t: new Date(s.date).getTime(), y: v }); }
+      // The session point's rotation (R1–R4), for the split view. Sessions
+      // logged outside a cycle bucket as "Untracked".
+      const rot = e.phase ? `R${e.phase} ${(C.PHASES[e.phase] || {}).name || ""}`.trim() : "Untracked";
+      if (chartMetric === "weight") { const t = topSet(e); if (t) series.push({ t: new Date(s.date).getTime(), y: t.weightLb, rot }); }
+      else { const v = workingVolume(e); if (v > 0) series.push({ t: new Date(s.date).getTime(), y: v, rot }); }
     }
     ui.clear(slot);
-    if (!series.length) slot.append(ui.empty("📈", COPY.emptyHistory));
-    else { slot.append(lineChart(series, { fmtY: (v) => C.trim(chartMetric === "weight" ? v : v) })); slot.append(ui.h("div", { class: "muted", style: { textAlign: "center", fontSize: "12px" }, text: chartMetric === "weight" ? "Top working weight per session (lb)" : "Working volume per session (lb)" })); }
+    if (!series.length) { slot.append(ui.empty("📈", COPY.emptyHistory)); return; }
+    if (chartSplit) {
+      const byRot = {};
+      for (const p of series) (byRot[p.rot] = byRot[p.rot] || []).push(p);
+      slot.append(multiLineChart(byRot, { fmtY: (v) => C.trim(v) }));
+    } else {
+      slot.append(lineChart(series, { fmtY: (v) => C.trim(v) }));
+    }
+    slot.append(ui.h("div", { class: "muted", style: { textAlign: "center", fontSize: "12px" }, text: chartMetric === "weight" ? "Top working weight per session (lb)" : "Working volume per session (lb)" }));
   }
 }
 

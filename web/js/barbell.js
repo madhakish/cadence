@@ -25,7 +25,7 @@ export function barbellSVG(weightLb, unit, bar, gym) {
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);
 
   const H = 30, plateW = 7, gap = 1.5, sleeve = 18;
-  const W = Math.max(46, sleeve + 6 + plates.length * (plateW + gap) + 4);
+  const W = Math.max(plates.length ? 46 : 74, sleeve + 6 + plates.length * (plateW + gap) + 4); // bar-only needs room for its label
   const svg = el("svg", { class: "barbell", viewBox: `0 0 ${W} ${H}`, height: H, preserveAspectRatio: "xMinYMid meet", role: "img" });
 
   // bar shaft + sleeve face

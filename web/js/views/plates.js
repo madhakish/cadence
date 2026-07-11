@@ -2,6 +2,7 @@
 // from the floating action button.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
+import { barbellSVG } from "../barbell.js";
 import { Gyms } from "../db.js";
 
 export async function openPlateCalculator() {
@@ -51,6 +52,11 @@ export async function openPlateCalculator() {
           const targetLb = C.toLb(targetVal, unit);
           const sol = C.solve(targetLb, bar, availablePlates());
           ui.clear(out);
+          // The answer, drawn: the loaded bar itself, big — the list below
+          // is the detail, not the deliverable.
+          if (targetLb > 0) {
+            out.append(ui.h("div", { class: "barbell-hero" }, barbellSVG(targetLb, unit, bar, gym).svg));
+          }
           out.append(ui.h("div", { class: "section-title", text: "Per side" }));
           if (!sol.perSide.length) out.append(ui.h("div", { class: "big", text: "Bar only" }));
           for (const pc of sol.perSide) {

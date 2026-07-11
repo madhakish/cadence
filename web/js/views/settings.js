@@ -95,7 +95,9 @@ export async function render(host) {
   for (const p of programs) {
     progList.append(ui.h("div", { class: "row", onClick: () => programEditor(p) },
       ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: p.name }),
-        ui.h("span", { class: "sub", text: `${p.focus} · ${p.days.length} days · Cycle ${p.cycleNumber}, Rotation ${p.currentWeek}${p.isActive ? " · active" : ""}` })),
+        ui.h("span", { class: "sub", style: { display: "flex", alignItems: "center", gap: "6px" } },
+          ui.wave(p.currentWeek),
+          ui.h("span", { text: `${p.focus} · ${p.days.length} days · Cycle ${p.cycleNumber}${p.isActive ? " · active" : ""}` }))),
       ui.h("span", { class: "chev" })));
   }
   root.append(progList);

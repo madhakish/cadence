@@ -56,7 +56,7 @@ body {
 #screen-title { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
 #topbar-actions { display: flex; gap: 8px; }
 
-#view { flex: 1; padding: 4px 16px calc(150px + var(--safe-bottom)); }
+#view { flex: 1; padding: 4px 16px calc(190px + var(--safe-bottom)); }
 
 /* tab bar */
 #tabbar {
@@ -78,11 +78,11 @@ body {
 #fab {
   position: fixed; right: 18px; bottom: calc(74px + var(--safe-bottom)); z-index: 21;
   width: var(--bigtap); height: var(--bigtap); border-radius: 50%; border: 0;
-  background: linear-gradient(145deg, #ffb340, var(--accent)); color: #1a1200;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 72%, white), var(--accent)); color: #16090a;
   box-shadow: 0 6px 18px rgba(0,0,0,0.5); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
-#fab svg { width: 30px; height: 30px; fill: #1a1200; }
+#fab svg { width: 30px; height: 30px; fill: #16090a; }
 
 /* cards & lists */
 .card { background: var(--card); border-radius: 14px; padding: 14px 16px; margin: 10px 0; }
@@ -125,13 +125,13 @@ button.btn:active, a.btn:active { filter: brightness(1.2); }
 label.field { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; font-size: 13px; color: var(--muted); }
 input, select, textarea {
   background: var(--card2); border: 1px solid var(--line); color: var(--text);
-  border-radius: 10px; padding: 11px 12px; font-size: 17px; font-family: inherit; width: 100%;
+  border-radius: 11px; padding: 11px 12px; font-size: 17px; font-family: inherit; width: 100%;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
-.seg { display: flex; background: var(--card2); border-radius: 10px; padding: 3px; gap: 3px; }
+.seg { display: flex; background: var(--card2); border-radius: 11px; padding: 3px; gap: 3px; }
 .seg button { flex: 1; border: 0; background: none; color: var(--muted); padding: 8px 6px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }
-.seg button.on { background: var(--accent); color: #1a1200; }
+.seg button.on { background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--accent); }
 .stepper { display: flex; align-items: center; gap: 12px; }
 .stepper button { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--card2); color: var(--text); font-size: 22px; cursor: pointer; }
 .toggle { position: relative; width: 50px; height: 30px; border-radius: 999px; background: var(--card2); border: 0; cursor: pointer; flex: none; }
@@ -173,7 +173,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 /* rest timer bar */
 .rest-bar { background: var(--card); border-radius: 14px; padding: 12px 16px; margin: 8px 0; position: sticky; top: calc(var(--safe-top) + 52px); z-index: 8; }
 .rest-bar .big-time { font-size: 34px; font-weight: 800; }
-.progress { height: 6px; border-radius: 3px; background: var(--card2); overflow: hidden; margin-top: 8px; }
+.progress { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text) 14%, transparent); overflow: hidden; margin-top: 8px; }
 .progress > i { display: block; height: 100%; background: var(--accent); }
 
 /* set rows in logger */
@@ -193,9 +193,34 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 #session-bar .rest-time { font-size: 22px; font-weight: 800; color: var(--accent); margin-right: 4px; }
 #session-bar .progress { margin-top: 8px; }
 
+/* logger set states: the set you're ON gets the rail; warmups sit quiet */
+.setrow.warm { opacity: 0.72; }
+.setrow.warm .wt { font-size: 15px; }
+.setrow.current { border-left: 3px solid var(--accent); padding-left: 9px; margin-left: -12px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%); }
+
+/* wave-position glyph: the 4-week cycle (V/L/P/D), current rotation lit */
+.wave { display: inline-flex; gap: 3px; align-items: flex-end; height: 16px; }
+.wave i { width: 5px; border-radius: 2px; background: color-mix(in srgb, var(--text) 22%, transparent); display: block; }
+.wave i.on { background: var(--accent); }
+
+/* emphasized weight readouts */
+.wt-big { font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; }
+
+/* multi-series chart legend */
+.chart-legend { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chart-legend i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+
+/* per-session volume bar (history log) */
+.volbar { height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--text) 10%, transparent); margin-top: 9px; overflow: hidden; }
+.volbar > i { display: block; height: 100%; background: var(--accent); opacity: 0.75; }
+
 /* barbell plate visualization */
 .barbell-wrap { display: flex; align-items: center; gap: 8px; padding: 0 0 8px 4px; }
-svg.barbell { height: 30px; max-width: 70%; }
+svg.barbell { height: 36px; max-width: 100%; }
+.barbell-hero { padding: 10px 0 4px; }
+.barbell-hero svg.barbell { height: 54px; }
 select.bar-select { width: auto; min-width: 96px; padding: 6px 8px; font-size: 13px; }
 
 /* service-worker update prompt */

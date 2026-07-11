@@ -75,6 +75,19 @@ function beep(haptics = true) {
   if (haptics && navigator.vibrate) navigator.vibrate(200);
 }
 
+const topSetOf = (e) => (e.sets || []).filter((x) => !x.isWarmup)
+  .reduce((b, x) => (!b || x.weightLb > b.weightLb ? x : b), null);
+
+// Compact "how long ago" for the last-session recall line.
+function agoLabel(date) {
+  const days = Math.max(0, Math.floor((Date.now() - new Date(date)) / 86400000));
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 14) return `${days}d ago`;
+  if (days < 70) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
 const setWeightLabel = (s) => {
   if (s.weightLb === 0) return "BW";
   return s.enteredUnit === "kg" ? `${C.trim(C.kgFromLb(s.weightLb))} kg` : `${C.trim(s.weightLb)} lb`;
@@ -86,7 +99,25 @@ export async function openSession(id) {
   const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
   const settings = await Settings.get();
   const gym = await Gyms.default();
+  const priorSessions = (await Sessions.completed()).filter((s) => s.id !== session.id);
   const save = () => Sessions.save(session);
+
+  // "Last: 225×5 · Jun 12 (3w ago)" — when and how heavy this lift last was,
+  // searched across ALL history (not just this program), so a lift you
+  // swapped away from months ago still tells you where you left off.
+  // Mirrors the native ActiveSessionView.lastTime.
+  function lastTimeLine(name) {
+    const past = [...priorSessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+    for (const p of past) {
+      const entries = (p.exercises || []).filter((e) => e.exerciseName === name);
+      const tops = entries.map((e) => topSetOf(e)).filter(Boolean);
+      if (!tops.length) continue;
+      const top = tops.reduce((b, t) => (t.weightLb > b.weightLb ? t : b));
+      const w = top.weightLb === 0 ? "BW" : C.trim(top.weightLb);
+      return `Last: ${w}×${top.reps} · ${ui.fmtDate(p.date)} (${agoLabel(p.date)})`;
+    }
+    return null;
+  }
 
   // Per-exercise entry/display unit + bar. Session-local. The bar is chosen
   // independently of the plate unit (most bars are 45 lb whatever you load).
@@ -175,6 +206,8 @@ export async function openSession(id) {
         ui.h("button", { class: "btn sm ghost", text: `⏱ ${ui.mmss(restFor(ex, se.programRole))}`, onClick: () => editRest(se, ex, body) }),
         ex && ex.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null));
     const card = ui.h("div", { class: "card" }, head);
+    const last = lastTimeLine(se.exerciseName);
+    if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
 
     se.sets.sort((a, b) => a.order - b.order);
     se.sets.forEach((s) => card.append(setRow(se, s, body)));
@@ -229,7 +262,10 @@ export async function openSession(id) {
       text: name === "clean" ? "✓" : name[0].toUpperCase(),
       onClick: () => toggleFlag(se, s, name, body),
     });
-    const row = ui.h("div", { class: "setrow" }, wt, tags,
+    // The set you're ON (first with no verdict yet) gets the accent rail;
+    // warmups sit quiet so working sets carry the visual weight.
+    const isCurrent = se.sets.find((x) => !(x.flags || []).length) === s;
+    const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "") + (isCurrent ? " current" : "") }, wt, tags,
       ui.h("div", { class: "flagbtns" }, flag("clean", "clean"), flag("grindy", "grindy"), flag("wobble", "wobble")));
 
     // Barbell plate visualization (barbell lifts only).

@@ -14,6 +14,8 @@ struct HomeView: View {
     @Query private var proteinEntries: [ProteinEntry]
     @Query(filter: #Predicate<WorkoutSession> { !$0.isCompleted })
     private var openSessions: [WorkoutSession]
+    @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date)
+    private var completedSessions: [WorkoutSession]
 
     @State private var activeSession: WorkoutSession?
     @State private var showGymCard = false
@@ -30,7 +32,7 @@ struct HomeView: View {
         program.orderedDays.first { $0.order == program.nextDayIndex } ?? program.orderedDays.first
     }
 
-    private func programPlanLabel(_ program: Program, _ lift: ProgramLift) -> String {
+    private func programPlan(_ program: Program, _ lift: ProgramLift) -> SessionPlan {
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         let plan = ProgramEngine.plan(
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
@@ -40,7 +42,17 @@ struct HomeView: View {
         let isBarbell = exercises.first { $0.name == lift.exerciseName }?.type == .barbell
         let weightLb = ProgramSession.neatWeight(plan.weightLb, isBarbell: isBarbell,
                                                  isMain: lift.role.rawValue == "main", barLb: barLb, stepLb: program.roundingLb)
-        return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps, phase: plan.phase, cycleNumber: plan.cycleNumber).label
+        return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps, phase: plan.phase, cycleNumber: plan.cycleNumber)
+    }
+
+    /// Last 8 top working weights for a lift, oldest → newest (sparkline source).
+    private func recentTops(_ name: String) -> [Double] {
+        Array(completedSessions
+            .compactMap { session -> Double? in
+                let tops = session.exercises.filter { $0.exercise?.name == name }.compactMap(\.topSet?.weightLb)
+                return tops.max()
+            }
+            .suffix(8))
     }
 
     private var todayProtein: Double {
@@ -67,18 +79,37 @@ struct HomeView: View {
 
                 if let program = activeProgram, let day = nextDay(program) {
                     Section("\(program.name) · Cycle \(program.cycleNumber)") {
-                        HStack {
+                        HStack(spacing: 8) {
                             Text(day.name).font(.headline)
                             Spacer()
-                            Text("Rotation \(program.currentWeek) · \((CyclePhase(rawValue: program.currentWeek) ?? .volume).name)")
+                            WaveGlyph(week: program.currentWeek)
+                            Text((CyclePhase(rawValue: program.currentWeek) ?? .volume).name)
                                 .font(.caption.bold())
                                 .foregroundStyle(Theme.accent)
                         }
                         ForEach(day.orderedLifts) { lift in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(lift.exerciseName).font(.subheadline.bold())
-                                Text("\(lift.role.rawValue) · \(programPlanLabel(program, lift))")
-                                    .font(.caption).foregroundStyle(.secondary)
+                            let plan = programPlan(program, lift)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(lift.exerciseName).font(.subheadline.bold())
+                                        Text(lift.role.rawValue).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        Text("\(Weight.trim(plan.weightLb)) lb")
+                                            .font(.body.bold().monospacedDigit())
+                                        Text("\(plan.sets)×\(plan.reps)")
+                                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                    }
+                                }
+                                // The bar you'll actually load — mains only, keeps the card calm.
+                                if lift.role.rawValue == "main",
+                                   exercises.first(where: { $0.name == lift.exerciseName })?.type == .barbell,
+                                   plan.weightLb > 0 {
+                                    BarbellView(weightLb: plan.weightLb, unit: .lb,
+                                                bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
+                                }
                             }
                         }
                         if !day.accessories.isEmpty {
@@ -99,17 +130,24 @@ struct HomeView: View {
                         Button {
                             startSession(with: track)
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(track.exerciseName)
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
-                                Text(track.suggestion.label)
-                                    .font(.title3.bold())
-                                    .foregroundStyle(Theme.accent)
-                                if track.mode == .cycle {
-                                    Text("Cycle \(track.cycleNumber) · advances when you bank it")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(track.exerciseName)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    Text(track.suggestion.label)
+                                        .font(.title3.bold())
+                                        .foregroundStyle(Theme.accent)
+                                    if track.mode == .cycle {
+                                        Text("Cycle \(track.cycleNumber) · advances when you bank it")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                let tops = recentTops(track.exerciseName)
+                                if tops.count >= 2 {
+                                    Sparkline(values: tops)
                                 }
                             }
                             .padding(.vertical, 4)

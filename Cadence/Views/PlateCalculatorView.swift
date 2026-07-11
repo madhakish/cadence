@@ -88,6 +88,13 @@ struct PlateCalculatorView: View {
         }
 
         if let solution {
+            // The answer, drawn: the loaded bar itself — the list below is
+            // the detail, not the deliverable.
+            Section {
+                BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym)
+                    .scaleEffect(1.6, anchor: .leading)
+                    .frame(height: 52, alignment: .leading)
+            }
             Section("Per side") {
                 if solution.loadout.perSide.isEmpty {
                     Text("Bar only").font(.title2.bold())
@@ -156,6 +163,9 @@ struct PlateCalculatorView: View {
             }
             let total = PlateMath.total(bar: bar, perSide: perSide)
             VStack(alignment: .leading, spacing: 6) {
+                BarbellView(weightLb: total, unit: .lb, bar: bar, gym: gym)
+                    .scaleEffect(1.6, anchor: .leading)
+                    .frame(height: 52, alignment: .leading)
                 Text(Weight.both(lb: total))
                     .font(.system(size: 30, weight: .heavy, design: .rounded))
                 Text("total on \(bar.label)")

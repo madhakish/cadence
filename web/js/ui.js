@@ -176,3 +176,19 @@ export function applyTheme(name) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && bg) meta.setAttribute("content", bg);
 }
+
+// ---- Wave-position glyph ----
+// The 4-week cycle at a glance: Volume / Load / Peak / Deload as rising bars
+// with the deload dropped low, current rotation lit in accent. Mirrors the
+// native WaveGlyph (Cadence/Views/Glyphs.swift).
+export function wave(week) {
+  const heights = [8, 12, 16, 6];
+  const el = h("span", { class: "wave", title: `Rotation ${week} of 4` });
+  for (let i = 1; i <= 4; i += 1) {
+    const bar = h("i");
+    bar.style.height = `${heights[i - 1]}px`;
+    if (i === week) bar.classList.add("on");
+    el.append(bar);
+  }
+  return el;
+}

@@ -124,9 +124,12 @@ struct SettingsView: View {
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(program.name)
-                                Text("\(program.focus.rawValue) · \(program.days.count) days · Cycle \(program.cycleNumber), Rotation \(program.currentWeek)\(program.isActive ? " · active" : "")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    WaveGlyph(week: program.currentWeek)
+                                    Text("\(program.focus.rawValue) · \(program.days.count) days · Cycle \(program.cycleNumber)\(program.isActive ? " · active" : "")")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
