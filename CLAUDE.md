@@ -20,7 +20,7 @@ suite). That parity is non-negotiable — it's why the two apps can't drift.
 | `CadenceCore/Tests/` | Unit tests, including `CompileRegressionTests.swift` (see below) |
 | `Cadence/` | Native app target: SwiftUI views, SwiftData `@Model` classes, services, seed data |
 | `web/` | Web PWA: `js/core.js` (mirror of CadenceCore), `js/db.js` (IndexedDB), views, service worker. No build step |
-| `web/tests/` | `core.test.mjs` (parity checks vs XCTest) + `smoke.test.mjs` (jsdom + fake-indexeddb) |
+| `web/tests/` | `core.test.mjs` (parity checks vs XCTest) + `smoke.test.mjs` (jsdom + fake-indexeddb) + `fixtures/synthetic-backup.json` (broad-coverage dataset; regenerate with `web/tools/generate-synthetic-backup.mjs`, restores into BOTH apps) |
 | `fastlane/`, `docs/TESTFLIGHT.md` | Mac-free TestFlight pipeline (dormant until configured) |
 | `.github/workflows/ci.yml`, `pages.yml` | CI + release pipeline; web tests + Pages deploy |
 | `.releaserc.json` | semantic-release config |
@@ -190,6 +190,15 @@ thing before there's a working, distributed app.
     Ship it as a **gentle nudge first** (RPE ±0.5, go/hold — never a dramatic
     override) and **watch before it prescribes**: show the score would have been
     right before it's allowed to move load.
+- **Phase 1.5 — durability + reach (planned).** Auto-backup first (scheduled
+  export of the bundle: iCloud/Files on iOS, download/File System Access on
+  web) so nobody loses data; then an **online portal** — login, synced app
+  data, and a bigger-screen UI for program/preference management. This
+  deliberately reverses the "no backend, no accounts" stance; the backup
+  bundle is already the cross-platform interchange and is the natural sync
+  payload. An **Android app** is also planned — before the portal, decide how
+  core logic ships to a third platform (Kotlin mirror vs a compiled shared
+  core), because the 1:1-mirror discipline gets expensive at three copies.
 - **Phase 2 — ambient capture.** Geofence → `HKWorkoutSession` → set/rest
   detection → wrist-IMU exercise classification *under the day's program as a
   strong prior* (5-way, not 470-from-scratch) → load **predicted** from program +
