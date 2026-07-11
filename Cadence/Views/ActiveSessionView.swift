@@ -89,12 +89,12 @@ struct ActiveSessionView: View {
                                currentLift: currentOrFirst?.exercise?.name ?? "",
                                defaultRestSeconds: currentRestSeconds)
         }
-        .onChange(of: currentEntry?.persistentModelID) {
-            // Working a different lift — keep the activity's elapsed face and
-            // its quick-rest default honest.
-            workoutClock.updateContext(currentLift: currentOrFirst?.exercise?.name ?? "",
-                                       defaultRestSeconds: currentRestSeconds)
-        }
+        // Keep the activity's elapsed face and its quick-rest default honest.
+        // Watch the derived VALUES, not the entry's identity: swapping the
+        // exercise in place or editing its rest stepper changes the lift
+        // name / default rest without changing which SessionExercise is current.
+        .onChange(of: currentOrFirst?.exercise?.name) { pushActivityContext() }
+        .onChange(of: currentRestSeconds) { pushActivityContext() }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -126,6 +126,11 @@ struct ActiveSessionView: View {
                 dismiss()
             }
         }
+    }
+
+    private func pushActivityContext() {
+        workoutClock.updateContext(currentLift: currentOrFirst?.exercise?.name ?? "",
+                                   defaultRestSeconds: currentRestSeconds)
     }
 
     private func addExercise(_ exercise: Exercise) {
