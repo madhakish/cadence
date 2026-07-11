@@ -82,7 +82,6 @@ const mkSet = (order, w, r, o = {}) => ({
 // ---- 0. seed (library, Main Gym, 3 tracks, the strength program, real history) ----
 await db.ensureSeeded();
 const lib = await db.Exercises.all();
-const byCat = (cat) => lib.filter((e) => e.category === cat).map((e) => e.name).sort();
 
 // ---- 1. a second gym: kg plates only (stresses kg plate math + gym switching) ----
 await db.Gyms.save({

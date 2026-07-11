@@ -269,7 +269,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 // the iOS app via ImportService.)
 {
   const fs = await import("node:fs");
-  const fixture = JSON.parse(fs.readFileSync(new URL("./fixtures/synthetic-backup.json", import.meta.url)));
+  const fixture = JSON.parse(fs.readFileSync(new URL("./fixtures/synthetic-backup.json", import.meta.url), "utf8"));
   await db.importBundle(fixture);
   const sessions = await db.Sessions.completed();
   ok(sessions.length >= 75, `fixture carries a deep log (${sessions.length} sessions)`);
@@ -309,10 +309,22 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(new Set(tracks.filter((t) => t.mode === "cycle").map((t) => t.nextPhase)).size >= 3, "cycle tracks sit at varied phases");
   ok((await db.Gyms.all()).length === 2, "two gyms (lb + kg plate inventories)");
 
-  // The fixture must itself round-trip: re-export equals what was imported.
+  // The fixture must itself round-trip: import → re-export reproduces the
+  // bundle EXACTLY (deep compare with sorted keys), minus the wall-clock
+  // stamps the exporter refreshes. Catches dropped fields/stores, not just
+  // counts.
+  const stable = (v) => (v && typeof v === "object" && !Array.isArray(v))
+    ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])]))
+    : Array.isArray(v) ? v.map(stable) : v;
+  const canon = (bundle) => {
+    const b = stable(bundle);
+    delete b.exportedAt; delete b.appVersion;
+    if (b.settings) delete b.settings.seededAt;
+    for (const t of b.tracks || []) delete t.lastCompletedAt;
+    return JSON.stringify(b);
+  };
   const again = await db.exportBundle();
-  ok(again.sessions.length === fixture.sessions.length && again.milestones.length === fixture.milestones.length,
-    "fixture re-exports at full fidelity");
+  ok(canon(again) === canon(fixture), "fixture re-exports byte-for-byte (sans wall-clock stamps)");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
