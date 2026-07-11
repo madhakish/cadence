@@ -507,3 +507,39 @@ export function restDefaultSeconds(category, name, role = null, config = REST_DE
   }
   return config.accessorySeconds;
 }
+
+// ---- Rest clock ------------------------------------------------------------
+// Pure state math for the between-sets rest countdown — one implementation of
+// pause/resume/extend shared by the logger's timer here and (mirrored 1:1)
+// CadenceCore/RestClock.swift, which also drives the native Live Activity.
+// Deterministic: every transition takes `now` (epoch SECONDS) explicitly.
+// State: { endEpoch, paused, pausedRemaining, total }.
+export function restClockStart(total, now) {
+  const t = Math.max(0, total);
+  return { endEpoch: now + t, paused: false, pausedRemaining: 0, total: t };
+}
+// Idempotent: pausing a paused clock changes nothing (a second tap must not
+// re-freeze a stale remaining).
+export function restClockPause(s, now) {
+  if (s.paused) return s;
+  return { ...s, paused: true, pausedRemaining: Math.max(0, s.endEpoch - now) };
+}
+// Idempotent: resuming a running clock changes nothing.
+export function restClockResume(s, now) {
+  if (!s.paused) return s;
+  return { ...s, paused: false, endEpoch: now + Math.max(0, s.pausedRemaining) };
+}
+// Extend (or shrink, negative): the frozen remaining moves while paused, the
+// end moves while running. Both floor at 0.
+export function restClockAdd(s, seconds) {
+  const total = Math.max(0, s.total + seconds);
+  if (s.paused) return { ...s, total, pausedRemaining: Math.max(0, s.pausedRemaining + seconds) };
+  return { ...s, total, endEpoch: s.endEpoch + seconds };
+}
+export function restClockRemaining(s, now) {
+  return s.paused ? s.pausedRemaining : Math.max(0, s.endEpoch - now);
+}
+// 1 at the start of the rest, 0 when it's over (the progress-ring source).
+export function restClockFractionRemaining(s, now) {
+  return s.total > 0 ? Math.min(1, Math.max(0, restClockRemaining(s, now) / s.total)) : 0;
+}

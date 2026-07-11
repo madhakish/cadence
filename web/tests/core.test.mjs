@@ -332,5 +332,76 @@ eq(C.restDefaultSeconds("Main", "Deadlift", "main", rc), 210, "configurable main
 eq(C.restDefaultSeconds("Main", "Deadlift", "complementary", rc), 120, "configurable secondary");
 eq(C.restDefaultSeconds("Accessory", "DB Curls", null, rc), 60, "configurable accessory");
 
+// ---- RestClock parity (RestClockTests.swift) ----
+{
+  // start counts down from total
+  let s = C.restClockStart(180, 1000);
+  eq(s.endEpoch, 1180, "restClock start endEpoch");
+  eq(s.paused, false, "restClock starts running");
+  eq(C.restClockRemaining(s, 1000), 180, "full remaining at start");
+  eq(C.restClockRemaining(s, 1005), 175, "remaining ticks down");
+  eq(C.restClockRemaining(s, 1300), 0, "remaining floors at 0 after the end");
+
+  // negative total clamps
+  const neg = C.restClockStart(-5, 1000);
+  eq(neg.total, 0, "negative total clamps to 0");
+  eq(C.restClockRemaining(neg, 1000), 0, "clamped start has nothing left");
+
+  // pause freezes remaining
+  s = C.restClockStart(180, 1000);
+  s = C.restClockPause(s, 1060);
+  eq(s.paused, true, "pause pauses");
+  eq(s.pausedRemaining, 120, "pause freezes remaining");
+  eq(C.restClockRemaining(s, 2000), 120, "paused remaining ignores the clock");
+  ok(C.restClockPause(s, 2000) === s, "second pause must not re-freeze a stale remaining");
+
+  // resume restarts from the frozen remaining
+  s = C.restClockResume(s, 2000);
+  eq(s.paused, false, "resume resumes");
+  eq(s.endEpoch, 2120, "resume recomputes the end");
+  eq(C.restClockRemaining(s, 2060), 60, "resumed countdown ticks");
+  ok(C.restClockResume(s, 2100) === s, "resume is idempotent");
+
+  // add while running moves the end
+  s = C.restClockStart(60, 0);
+  s = C.restClockAdd(s, 30);
+  eq(s.endEpoch, 90, "add moves the end");
+  eq(s.total, 90, "add grows the total");
+  eq(C.restClockRemaining(s, 10), 80, "remaining reflects the extension");
+
+  // add while paused moves the frozen remaining
+  s = C.restClockStart(60, 0);
+  s = C.restClockPause(s, 45); // 15 left
+  s = C.restClockAdd(s, 30);
+  eq(s.pausedRemaining, 45, "paused add moves the frozen remaining");
+  eq(s.total, 90, "paused add grows the total");
+  eq(C.restClockRemaining(s, 500), 45, "paused extension holds");
+
+  // negative add floors at zero
+  s = C.restClockStart(60, 0);
+  s = C.restClockPause(s, 55); // 5 left
+  s = C.restClockAdd(s, -30);
+  eq(s.pausedRemaining, 0, "negative add floors remaining at 0");
+  eq(s.total, 30, "negative add shrinks the total");
+
+  // fraction remaining
+  s = C.restClockStart(100, 0);
+  eq(C.restClockFractionRemaining(s, 0), 1, "fraction 1 at start");
+  eq(C.restClockFractionRemaining(s, 75), 0.25, "fraction 0.25 at 75s");
+  eq(C.restClockFractionRemaining(s, 100), 0, "fraction 0 at the end");
+  eq(C.restClockFractionRemaining(s, 500), 0, "fraction 0 after the end");
+  eq(C.restClockFractionRemaining(C.restClockStart(0, 0), 0), 0, "zero-length rest has no progress");
+
+  // pause/resume round trip preserves the total rest delivered
+  s = C.restClockStart(180, 0);
+  s = C.restClockPause(s, 30);   // 150 left, frozen
+  s = C.restClockResume(s, 100); // runs 100->250
+  s = C.restClockPause(s, 200);  // 50 left
+  s = C.restClockResume(s, 300); // runs 300->350
+  eq(s.endEpoch, 350, "interruptions still deliver the full rest");
+  eq(C.restClockRemaining(s, 300), 50, "post-round-trip remaining");
+  eq(s.total, 180, "total untouched by pause/resume");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

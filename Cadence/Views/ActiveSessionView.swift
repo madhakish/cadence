@@ -11,6 +11,7 @@ struct ActiveSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(RestTimer.self) private var restTimer
+    @Environment(WorkoutClock.self) private var workoutClock
     @Query private var settingsList: [AppSettings]
     @Query private var gyms: [Gym]
     @Query(sort: \Exercise.name) private var allExercises: [Exercise]
@@ -19,12 +20,17 @@ struct ActiveSessionView: View {
     @State private var showExercisePicker = false
     @State private var autoregEntry: SessionExercise?
     @State private var summary: SessionSummary?
-    @State private var sessionStart = Date()            // session stopwatch origin (ephemeral)
     @State private var currentEntry: SessionExercise?   // the exercise you're actively working
     @State private var banking = false                  // double-tap on Bank it would run completion twice
 
     private var currentOrFirst: SessionExercise? { currentEntry ?? session.orderedExercises.first }
     private var gym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
+    /// The stopwatch origin lives in WorkoutClock (root-scoped), so it survives
+    /// leaving this screen — and, via the Live Activity, app relaunch.
+    private var sessionStart: Date { workoutClock.startDate ?? .now }
+    private var currentRestSeconds: Int {
+        smartRestSeconds(for: currentOrFirst?.exercise, role: currentOrFirst?.programRole, settings: settingsList.first)
+    }
 
     var body: some View {
         List {
@@ -57,7 +63,8 @@ struct ActiveSessionView: View {
                     guard !banking else { return }
                     banking = true
                     summary = SessionCompletion.finish(session, context: context, startedAt: sessionStart)
-                    restTimer.stop() // the workout is over; don't fire "Rest over" for a banked session
+                    restTimer.stop()   // the workout is over; don't fire "Rest over" for a banked session
+                    workoutClock.end() // stop the stopwatch + end the Live Activity
                 } label: {
                     Text(Copy.sessionDone)
                         .font(.headline)
@@ -72,10 +79,22 @@ struct ActiveSessionView: View {
             SessionBottomBar(
                 sessionStart: sessionStart,
                 restLabel: currentOrFirst?.exercise?.name ?? "",
-                restSeconds: smartRestSeconds(for: currentOrFirst?.exercise, role: currentOrFirst?.programRole, settings: settingsList.first)
+                restSeconds: currentRestSeconds
             )
         }
         .onChange(of: settingsList.first?.haptics, initial: true) { _, on in restTimer.hapticsEnabled = on ?? true }
+        .onAppear {
+            // Start (or continue) the workout stopwatch + Live Activity.
+            workoutClock.begin(for: session,
+                               currentLift: currentOrFirst?.exercise?.name ?? "",
+                               defaultRestSeconds: currentRestSeconds)
+        }
+        .onChange(of: currentEntry?.persistentModelID) {
+            // Working a different lift — keep the activity's elapsed face and
+            // its quick-rest default honest.
+            workoutClock.updateContext(currentLift: currentOrFirst?.exercise?.name ?? "",
+                                       defaultRestSeconds: currentRestSeconds)
+        }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

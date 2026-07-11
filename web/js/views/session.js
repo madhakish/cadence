@@ -33,20 +33,25 @@ export async function createBlankSession() {
 }
 
 // ---- Rest timer ----
+// Display/interval shell over the shared RestClock state math (core.js,
+// mirrored 1:1 in CadenceCore/RestClock.swift — the same transitions drive
+// the native timer and its Live Activity). `progress` is the ELAPSED
+// fraction, what the bar fill wants.
 function makeRestTimer(onTick, onDone) {
-  let endAt = 0, total = 0, handle = null;
-  const stop = () => { if (handle) clearInterval(handle); handle = null; endAt = 0; onTick(); };
+  let clock = null, handle = null;
+  const nowS = () => Date.now() / 1000;
+  const stop = () => { if (handle) clearInterval(handle); handle = null; clock = null; onTick(); };
   return {
     get running() { return !!handle; },
-    get remaining() { return Math.max(0, (endAt - Date.now()) / 1000); },
-    get progress() { return total ? 1 - this.remaining / total : 0; },
+    get remaining() { return clock ? C.restClockRemaining(clock, nowS()) : 0; },
+    get progress() { return clock ? 1 - C.restClockFractionRemaining(clock, nowS()) : 0; },
     start(sec) {
-      total = sec; endAt = Date.now() + sec * 1000;
+      clock = C.restClockStart(sec, nowS());
       if (handle) clearInterval(handle);
       handle = setInterval(() => { if (this.remaining <= 0) { stop(); onDone(); } else onTick(); }, 250);
       onTick();
     },
-    add(sec) { if (handle) { endAt += sec * 1000; total += sec; onTick(); } },
+    add(sec) { if (handle && clock) { clock = C.restClockAdd(clock, sec); onTick(); } },
     stop,
   };
 }
