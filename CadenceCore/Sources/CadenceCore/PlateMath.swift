@@ -30,15 +30,18 @@ public enum PlateMath {
     /// the last pound with change plates.
     public static let toleranceLb = 2.0
 
-    private typealias Candidate = (dev: Double, signed: Double, used: Int, distinct: Int, mixed: Bool)
+    private typealias Candidate = (dev: Double, signed: Double, used: Int, distinct: Int, mixed: Bool, canonical: Bool)
 
     /// Find the per-side plate combination closest to the target total, loaded
-    /// the way a human actually loads: within `toleranceLb` of the target, the
-    /// fewest plates win, then the fewest distinct denominations (matched
-    /// pairs), then a single unit system (no kg+lb frankenstacks), then
-    /// closeness, then erring under. Outside that band it falls back to plain
-    /// closest-then-fewest. Mixed units are still produced when they're the only
-    /// way to get close.
+    /// the way a human actually loads: within `toleranceLb` of the target, a
+    /// stack that IS the heaviest-first greedy fill of its own weight (in its
+    /// own unit system) beats any re-shuffled stack — 105/side is 45+45+10+5,
+    /// never 35×3, because the big plates go on first. Between greedy stacks
+    /// the fewest plates win (220 → 2×20 kg, not 45+35+5+2.5), then fewest
+    /// distinct denominations (matched pairs), then a single unit system (no
+    /// kg+lb frankenstacks), then closeness, then erring under. Outside the
+    /// band it falls back to plain closest-then-fewest. Mixed units are still
+    /// produced when they're the only way to get close.
     ///
     /// - Parameters:
     ///   - targetLb: desired TOTAL bar weight in lb (convert kg before calling).
@@ -69,7 +72,8 @@ public enum PlateMath {
             let tol = toleranceLb + 1e-9
             let cIn = c.dev <= tol, bIn = b.dev <= tol
             if cIn != bIn { return cIn } // a good-enough load beats an out-of-band one
-            if cIn { // both good enough → cleanest to load
+            if cIn { // both good enough → cleanest to load, heaviest plates first
+                if c.canonical != b.canonical { return c.canonical }
                 if c.used != b.used { return c.used < b.used }
                 if c.distinct != b.distinct { return c.distinct < b.distinct }
                 if c.mixed != b.mixed { return !c.mixed }
@@ -82,11 +86,31 @@ public enum PlateMath {
             return c.signed < b.signed - 1e-9
         }
 
+        // True when the stack IS the heaviest-first greedy fill of its own
+        // achieved weight within one unit system — how a human racks plates
+        // (max out the 45s, then work down). Mixed stacks are never canonical.
+        func isGreedyCanonical(achieved: Double, mixed: Bool, used: Int) -> Bool {
+            if used == 0 { return true }
+            if mixed { return false }
+            guard let system = zip(sorted, counts).first(where: { $0.1 > 0 })?.0.unit else { return true }
+            var rem = achieved
+            for i in sorted.indices where sorted[i].unit == system {
+                let c = min(maxPerPlateSide, Int((rem / values[i] + 1e-9).rounded(.down)))
+                if counts[i] != c { return false }
+                rem -= Double(c) * values[i]
+            }
+            return true
+        }
+
         // used/distinct/kg/lb are threaded through the recursion so each node is
         // O(1) (no per-node rescan of counts) — solve runs on every keystroke.
         func consider(_ remaining: Double, _ used: Int, _ distinct: Int, _ mixed: Bool) {
             let signed = -remaining * 2.0 // achieved − target (total lb)
-            let c: Candidate = (dev: abs(signed), signed: signed, used: used, distinct: distinct, mixed: mixed)
+            // Canonicality only matters inside the band — skip the O(denoms)
+            // walk everywhere else.
+            let canonical = abs(signed) <= toleranceLb + 1e-9
+                && isGreedyCanonical(achieved: perSideTarget - remaining, mixed: mixed, used: used)
+            let c: Candidate = (dev: abs(signed), signed: signed, used: used, distinct: distinct, mixed: mixed, canonical: canonical)
             if isBetter(c, than: best) { best = c; bestCounts = counts }
         }
 
