@@ -24,14 +24,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned test deps
+        working-directory: web
+        run: npm ci
       - name: Core math parity tests
         working-directory: web
         run: node tests/core.test.mjs
       - name: Runtime smoke test (jsdom + fake-indexeddb)
         working-directory: web
-        run: |
-          npm install --no-save jsdom fake-indexeddb
-          node tests/smoke.test.mjs
+        run: node tests/smoke.test.mjs
 
   deploy:
     name: Deploy to GitHub Pages

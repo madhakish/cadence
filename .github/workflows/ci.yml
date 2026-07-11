@@ -17,6 +17,29 @@ jobs:
         working-directory: CadenceCore
         run: swift test
 
+  # The CadenceCore↔core.js parity mandate is enforced HERE, pre-merge: a PR
+  # that touches either side without its mirror fails these suites. (pages.yml
+  # re-runs them post-merge as the deploy gate.)
+  web-tests:
+    name: Web tests (parity + smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned test deps
+        working-directory: web
+        run: npm ci
+      - name: Core math parity tests
+        working-directory: web
+        run: node tests/core.test.mjs
+      - name: Runtime smoke test (jsdom + fake-indexeddb)
+        working-directory: web
+        run: node tests/smoke.test.mjs
+
   app-build:
     name: App build (macOS)
     runs-on: macos-latest
