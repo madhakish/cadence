@@ -91,8 +91,9 @@ export async function openSession(id) {
   const defaultBar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const barFor = (se) => barByEx[se.exerciseName] || defaultBar;
 
-  // The five configurable rest buckets (migrating the old single accessory field).
-  const restCfg = settings.rest || { ...C.REST_DEFAULTS, accessorySeconds: settings.accessoryRestSeconds ?? C.REST_DEFAULTS.accessorySeconds };
+  // The five configurable rest buckets (migrating the old single accessory
+  // field). Merged over defaults so a partial `rest` object never yields NaN.
+  const restCfg = { ...C.REST_DEFAULTS, accessorySeconds: settings.accessoryRestSeconds ?? C.REST_DEFAULTS.accessorySeconds, ...(settings.rest || {}) };
   // Smart per-exercise rest by role → category → movement + per-exercise override.
   function restFor(ex, role = null) {
     if (!ex) return 90;

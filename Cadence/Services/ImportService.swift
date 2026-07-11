@@ -75,9 +75,15 @@ enum ImportService {
         var isUnilateral: Bool?; var defaultRestSeconds: Int?; var notes: String?
         var isShelved: Bool?; var shelvedNote: String?; var watchSite: String?; var createdAt: Date?
     }
+    /// Web `settings.rest` — the PWA's canonical nested shape for the buckets.
+    private struct RestDTO: Decodable {
+        var mainCompoundSeconds: Int?; var olympicSeconds: Int?; var mainUpperSeconds: Int?
+        var secondarySeconds: Int?; var accessorySeconds: Int?
+    }
     private struct SettingsDTO: Decodable {
         var unitDisplay: String?; var proteinTargetGrams: Double?; var accessoryRestSeconds: Int?
         var mainCompoundRestSeconds: Int?; var olympicRestSeconds: Int?; var mainUpperRestSeconds: Int?; var secondaryRestSeconds: Int?
+        var rest: RestDTO?
         var autoStartRest: Bool?; var haptics: Bool?; var seededAt: Date?; var theme: String?
     }
 
@@ -303,11 +309,19 @@ enum ImportService {
         }()
         if let v = st.unitDisplay { settings.unitDisplayRaw = v }
         if let v = st.proteinTargetGrams { settings.proteinTargetGrams = v }
+        // Rest buckets arrive flat (native backups) or nested under `rest`
+        // (web's canonical shape) — accept both; nested wins when both ride,
+        // since the web keeps the legacy flat accessory key merely in sync.
         if let v = st.accessoryRestSeconds { settings.accessoryRestSeconds = v }
         if let v = st.mainCompoundRestSeconds { settings.mainCompoundRestSeconds = v }
         if let v = st.olympicRestSeconds { settings.olympicRestSeconds = v }
         if let v = st.mainUpperRestSeconds { settings.mainUpperRestSeconds = v }
         if let v = st.secondaryRestSeconds { settings.secondaryRestSeconds = v }
+        if let v = st.rest?.mainCompoundSeconds { settings.mainCompoundRestSeconds = v }
+        if let v = st.rest?.olympicSeconds { settings.olympicRestSeconds = v }
+        if let v = st.rest?.mainUpperSeconds { settings.mainUpperRestSeconds = v }
+        if let v = st.rest?.secondarySeconds { settings.secondaryRestSeconds = v }
+        if let v = st.rest?.accessorySeconds { settings.accessoryRestSeconds = v }
         if let v = st.autoStartRest { settings.autoStartRest = v }
         if let v = st.haptics { settings.haptics = v }
         // Only accept a known theme; an unknown value would round-trip as

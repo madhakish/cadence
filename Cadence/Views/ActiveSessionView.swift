@@ -214,11 +214,13 @@ private struct ExerciseSection: View {
     }
     // Stepper floor: writing 0 clears the override, and the stepper displays
     // the EFFECTIVE rest — so 0 is only offered where clearing lands on 0
-    // (conditioning, whose smart default IS none); elsewhere a decrement to 0
-    // would snap the display up to the movement default.
+    // (conditioning, or a bucket the user zeroed); elsewhere a decrement to 0
+    // would snap the display up to the movement default. Same role + config as
+    // the effective rest (mirrors web editRest's floor).
     private var restFloor: Int {
         guard let ex = entry.exercise else { return 15 }
-        return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name) == 0 ? 0 : 15
+        return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name, role: entry.programRole,
+                                    config: settings?.restConfig ?? .standard) == 0 ? 0 : 15
     }
 
     var body: some View {

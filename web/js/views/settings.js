@@ -49,7 +49,9 @@ export async function render(host) {
 
   // Rest timers — five configurable buckets, each adjustable up or down.
   root.append(ui.h("div", { class: "section-title", text: "Rest timer defaults" }));
-  const rest = settings.rest || (settings.rest = { ...C.REST_DEFAULTS, accessorySeconds: settings.accessoryRestSeconds ?? C.REST_DEFAULTS.accessorySeconds });
+  // Merge over defaults (legacy accessory key first) so a pre-buckets install
+  // or a partial imported `rest` object never renders NaN steppers.
+  const rest = settings.rest = { ...C.REST_DEFAULTS, accessorySeconds: settings.accessoryRestSeconds ?? C.REST_DEFAULTS.accessorySeconds, ...(settings.rest || {}) };
   const restCard = ui.h("div", { class: "card" });
   const restRow = (label, key) => restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: label }),
     ui.stepper(rest[key], { min: 0, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { rest[key] = v; settings.accessoryRestSeconds = rest.accessorySeconds; await saveS(); } })));

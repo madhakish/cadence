@@ -103,6 +103,7 @@ ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
 ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 47, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
+ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
 const csv = await db.exportCSV();
 ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 
@@ -118,6 +119,25 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(restored.nextPhase === 4 && restored.baseWeightLb !== 100, "import restores live track progression");
   const sets = (await db.Sessions.completed())[0].exercises[0].sets;
   ok(sets.every((s) => s.enteredUnit === "lb" || s.enteredUnit === "kg"), "sets keep their entered unit through the round trip");
+}
+
+// Cross-platform settings: a native backup carries the rest buckets FLAT
+// (mainCompoundRestSeconds…, no nested `rest`) — import must normalize them
+// into settings.rest so the buckets survive an iOS → web restore. A partial
+// nested rest must merge over defaults (no NaN holes).
+{
+  const nativeShaped = { ...parsed, settings: { ...parsed.settings, mainCompoundRestSeconds: 210, olympicRestSeconds: 195, mainUpperRestSeconds: 150, secondaryRestSeconds: 120, accessoryRestSeconds: 75 } };
+  delete nativeShaped.settings.rest;
+  await db.importBundle(nativeShaped);
+  const s = await db.Settings.get();
+  ok(s.rest && s.rest.mainCompoundSeconds === 210 && s.rest.secondarySeconds === 120 && s.rest.accessorySeconds === 75,
+    "native flat rest keys normalize into settings.rest on import");
+  const partialRest = { ...parsed, settings: { ...parsed.settings, rest: { secondarySeconds: 135 } } };
+  await db.importBundle(partialRest);
+  const s2 = await db.Settings.get();
+  ok(s2.rest.secondarySeconds === 135 && s2.rest.mainCompoundSeconds === 300 && s2.accessoryRestSeconds === s2.rest.accessorySeconds,
+    "partial nested rest merges over defaults and keeps the legacy key in sync");
+  await db.importBundle(parsed); // restore the canonical settings for later blocks
 }
 
 // A backup missing a store's key must leave that store untouched (old-format
