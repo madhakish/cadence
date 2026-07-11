@@ -36,18 +36,7 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
-            let recall = recallLines()
-            ForEach(session.orderedExercises) { entry in
-                ExerciseSection(
-                    entry: entry,
-                    settings: settingsList.first,
-                    gym: gym,
-                    allExercises: allExercises,
-                    lastTime: entry.exercise?.name.flatMap { recall[$0] },
-                    onDropLoad: { autoregEntry = entry },
-                    onWork: { currentEntry = $0 }
-                )
-            }
+            exerciseSections
 
             Section {
                 Button {
@@ -130,6 +119,28 @@ struct ActiveSessionView: View {
                 dismiss()
             }
         }
+    }
+
+    /// Extracted from `body` — the seven-argument section call plus the recall
+    /// lookup pushed the List builder past the type-checker's budget.
+    private var exerciseSections: some View {
+        let recall = recallLines()
+        return ForEach(session.orderedExercises) { entry in
+            ExerciseSection(
+                entry: entry,
+                settings: settingsList.first,
+                gym: gym,
+                allExercises: allExercises,
+                lastTime: recallLine(for: entry, in: recall),
+                onDropLoad: { autoregEntry = entry },
+                onWork: { currentEntry = $0 }
+            )
+        }
+    }
+
+    private func recallLine(for entry: SessionExercise, in recall: [String: String]) -> String? {
+        guard let name = entry.exercise?.name else { return nil }
+        return recall[name]
     }
 
     private func pushActivityContext() {
