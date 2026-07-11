@@ -98,7 +98,11 @@ final class RestTimer {
         if rest.paused {
             invalidate()
         } else if remaining <= 0 {
-            stopLocalOnly() // expired while backgrounded (the notification already fired)
+            // Expired while backgrounded (the notification already fired):
+            // clear the activity's rest too, or the Lock Screen stays stuck on
+            // a 0:00 rest face — and an ad-hoc activity would never end.
+            stopLocalOnly()
+            WorkoutActivityController.applyRestDetached(nil, exerciseName: snap.state.currentLift)
         } else {
             startTicking()
         }
