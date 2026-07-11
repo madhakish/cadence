@@ -77,6 +77,7 @@ enum ImportService {
     }
     private struct SettingsDTO: Decodable {
         var unitDisplay: String?; var proteinTargetGrams: Double?; var accessoryRestSeconds: Int?
+        var mainCompoundRestSeconds: Int?; var olympicRestSeconds: Int?; var mainUpperRestSeconds: Int?; var secondaryRestSeconds: Int?
         var autoStartRest: Bool?; var haptics: Bool?; var seededAt: Date?; var theme: String?
     }
 
@@ -303,6 +304,10 @@ enum ImportService {
         if let v = st.unitDisplay { settings.unitDisplayRaw = v }
         if let v = st.proteinTargetGrams { settings.proteinTargetGrams = v }
         if let v = st.accessoryRestSeconds { settings.accessoryRestSeconds = v }
+        if let v = st.mainCompoundRestSeconds { settings.mainCompoundRestSeconds = v }
+        if let v = st.olympicRestSeconds { settings.olympicRestSeconds = v }
+        if let v = st.mainUpperRestSeconds { settings.mainUpperRestSeconds = v }
+        if let v = st.secondaryRestSeconds { settings.secondaryRestSeconds = v }
         if let v = st.autoStartRest { settings.autoStartRest = v }
         if let v = st.haptics { settings.haptics = v }
         // Only accept a known theme; an unknown value would round-trip as

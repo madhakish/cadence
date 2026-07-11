@@ -479,18 +479,31 @@ export function advanceAccessory(state, perf) {
 }
 
 // ---- Rest defaults ---------------------------------------------------------
-// Smart per-exercise rest (seconds) by category + movement, not per-screen
-// magic. A per-exercise override (exerciseDefaultRest > 0) wins for ANY
-// movement; otherwise: main lower 5:00, oly/explosive 4:00, main upper 3:00,
-// accessory 1:30, conditioning none. Pure; mirrored in
+// Five user-tunable rest buckets (seconds). Defaults match the old smart
+// values, except `secondary` (complementary lifts), which now rests less than a
+// top main. Mirrors CadenceCore RestConfig.standard.
+export const REST_DEFAULTS = {
+  mainCompoundSeconds: 300, // deadlift / squat
+  olympicSeconds: 240,      // clean / snatch / push press
+  mainUpperSeconds: 180,    // other main lifts
+  secondarySeconds: 180,    // complementary lifts
+  accessorySeconds: 90,     // accessories
+};
+
+// Smart per-exercise rest by role → category → movement, all configurable via
+// `config`. A per-exercise override (exerciseDefaultRest > 0) wins for ANY
+// movement; conditioning is 0; complementary ("secondary") lifts get the
+// secondary bucket regardless of movement. Pure; mirrored in
 // CadenceCore/RestDefaults.swift.
-export function restDefaultSeconds(category, name, exerciseDefaultRest = 0) {
+export function restDefaultSeconds(category, name, role = null, config = REST_DEFAULTS, exerciseDefaultRest = 0) {
   if (exerciseDefaultRest > 0) return exerciseDefaultRest; // per-exercise override wins everywhere
   if (category === "Conditioning") return 0;
+  if (role === "complementary") return config.secondarySeconds;
+  if (role === "accessory") return config.accessorySeconds;
   if (category === "Main") {
-    if (name.includes("Deadlift") || name.includes("Squat")) return 300;
-    if (name.includes("Clean") || name.includes("Snatch") || name.includes("Push Press")) return 240;
-    return 180;
+    if (name.includes("Deadlift") || name.includes("Squat")) return config.mainCompoundSeconds;
+    if (name.includes("Clean") || name.includes("Snatch") || name.includes("Push Press")) return config.olympicSeconds;
+    return config.mainUpperSeconds;
   }
-  return 90;
+  return config.accessorySeconds;
 }

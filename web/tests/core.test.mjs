@@ -308,19 +308,29 @@ eq(C.barById("nonsense"), C.BARS.bar45lb, "unknown id falls back to 45 lb bar");
 eq(C.plateId({ value: 45, unit: "lb" }), "45-lb", "plate id format");
 eq(C.plateId({ value: 1.25, unit: "kg" }), "1.25-kg", "fractional plate id format");
 
-// ---- rest defaults ----
-eq(C.restDefaultSeconds("Main", "Deadlift", 0), 300, "deadlift 5:00");
-eq(C.restDefaultSeconds("Main", "Back Squat", 0), 300, "squat 5:00");
-eq(C.restDefaultSeconds("Main", "Push Press", 0), 240, "push press 4:00");
-eq(C.restDefaultSeconds("Main", "Power Clean", 0), 240, "clean 4:00");
-eq(C.restDefaultSeconds("Main", "Incline DB Press", 0), 180, "main upper 3:00");
-eq(C.restDefaultSeconds("Main", "Barbell Bench", 0), 180, "bench 3:00");
-eq(C.restDefaultSeconds("Accessory", "DB Curls", 0), 90, "accessory 1:30");
-eq(C.restDefaultSeconds("Accessory", "Face Pulls", 120), 120, "accessory honors its own override");
-eq(C.restDefaultSeconds("Main", "Barbell Bench", 120), 120, "main lift honors its per-exercise override");
-eq(C.restDefaultSeconds("Main", "Deadlift", 360), 360, "override beats the main-lift movement default");
-eq(C.restDefaultSeconds("Conditioning", "Run-Walk Intervals", 0), 0, "conditioning no rest");
-eq(C.restDefaultSeconds("Conditioning", "Sled Push", 120), 120, "conditioning honors an explicit override");
+// ---- rest defaults (role → category → movement, all configurable) ----
+eq(C.restDefaultSeconds("Main", "Deadlift"), 300, "deadlift 5:00");
+eq(C.restDefaultSeconds("Main", "Back Squat"), 300, "squat 5:00");
+eq(C.restDefaultSeconds("Main", "Push Press"), 240, "push press 4:00");
+eq(C.restDefaultSeconds("Main", "Power Clean"), 240, "clean 4:00");
+eq(C.restDefaultSeconds("Main", "Incline DB Press"), 180, "main upper 3:00");
+eq(C.restDefaultSeconds("Main", "Barbell Bench"), 180, "bench 3:00");
+eq(C.restDefaultSeconds("Accessory", "DB Curls"), 90, "accessory 1:30");
+eq(C.restDefaultSeconds("Accessory", "Face Pulls", null, C.REST_DEFAULTS, 120), 120, "accessory honors its own override");
+eq(C.restDefaultSeconds("Main", "Barbell Bench", null, C.REST_DEFAULTS, 120), 120, "main lift honors its per-exercise override");
+eq(C.restDefaultSeconds("Main", "Deadlift", null, C.REST_DEFAULTS, 360), 360, "override beats the main-lift movement default");
+eq(C.restDefaultSeconds("Conditioning", "Run-Walk Intervals"), 0, "conditioning no rest");
+eq(C.restDefaultSeconds("Conditioning", "Sled Push", null, C.REST_DEFAULTS, 120), 120, "conditioning honors an explicit override");
+// Secondary/complementary lifts rest at the secondary bucket regardless of movement.
+eq(C.restDefaultSeconds("Main", "Deadlift", "complementary"), 180, "complementary deadlift → secondary 3:00, not 5:00");
+eq(C.restDefaultSeconds("Main", "Back Squat", "complementary"), 180, "complementary squat → secondary 3:00");
+eq(C.restDefaultSeconds("Main", "Deadlift", "main"), 300, "main role keeps the movement default");
+eq(C.restDefaultSeconds("Accessory", "DB Curls", "accessory"), 90, "accessory role → accessory bucket");
+// Configurable buckets override the defaults both directions.
+const rc = { mainCompoundSeconds: 210, olympicSeconds: 200, mainUpperSeconds: 150, secondarySeconds: 120, accessorySeconds: 60 };
+eq(C.restDefaultSeconds("Main", "Deadlift", "main", rc), 210, "configurable main compound");
+eq(C.restDefaultSeconds("Main", "Deadlift", "complementary", rc), 120, "configurable secondary");
+eq(C.restDefaultSeconds("Accessory", "DB Curls", null, rc), 60, "configurable accessory");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

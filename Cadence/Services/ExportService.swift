@@ -116,6 +116,10 @@ enum ExportService {
         let unitDisplay: String
         let proteinTargetGrams: Double
         let accessoryRestSeconds: Int
+        let mainCompoundRestSeconds: Int?
+        let olympicRestSeconds: Int?
+        let mainUpperRestSeconds: Int?
+        let secondaryRestSeconds: Int?
         let autoStartRest: Bool
         let haptics: Bool
         let seededAt: Date?
@@ -391,7 +395,10 @@ enum ExportService {
             },
             settings: settings.map { s in
                 ExportSettings(unitDisplay: s.unitDisplayRaw, proteinTargetGrams: s.proteinTargetGrams,
-                               accessoryRestSeconds: s.accessoryRestSeconds, autoStartRest: s.autoStartRest,
+                               accessoryRestSeconds: s.accessoryRestSeconds,
+                               mainCompoundRestSeconds: s.mainCompoundRestSeconds, olympicRestSeconds: s.olympicRestSeconds,
+                               mainUpperRestSeconds: s.mainUpperRestSeconds, secondaryRestSeconds: s.secondaryRestSeconds,
+                               autoStartRest: s.autoStartRest,
                                haptics: s.haptics, seededAt: s.seededAt, theme: s.themeNameRaw)
             }
         )

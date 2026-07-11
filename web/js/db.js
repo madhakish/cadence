@@ -83,7 +83,9 @@ function defaultSettings() {
     unitDisplay: "lbPrimary",
     theme: "carbon",
     proteinTargetGrams: 175,
-    accessoryRestSeconds: 90,
+    accessoryRestSeconds: 90, // legacy — superseded by rest.accessorySeconds, kept for old exports
+    // Five configurable rest buckets (seconds); secondary rests less than a top main.
+    rest: { mainCompoundSeconds: 300, olympicSeconds: 240, mainUpperSeconds: 180, secondarySeconds: 180, accessorySeconds: 90 },
     autoStartRest: false, // manual start by default — auto lies if you rested first
     haptics: true,
     seededAt: null,

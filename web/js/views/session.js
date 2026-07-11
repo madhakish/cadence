@@ -91,12 +91,12 @@ export async function openSession(id) {
   const defaultBar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const barFor = (se) => barByEx[se.exerciseName] || defaultBar;
 
-  // Smart per-exercise rest (category/movement); accessories fall back to the
-  // accessory setting, then 90s.
-  function restFor(ex) {
+  // The five configurable rest buckets (migrating the old single accessory field).
+  const restCfg = settings.rest || { ...C.REST_DEFAULTS, accessorySeconds: settings.accessoryRestSeconds ?? C.REST_DEFAULTS.accessorySeconds };
+  // Smart per-exercise rest by role → category → movement + per-exercise override.
+  function restFor(ex, role = null) {
     if (!ex) return 90;
-    const accFallback = ex.category === "Accessory" ? (settings.accessoryRestSeconds || 0) : 0;
-    return C.restDefaultSeconds(ex.category, ex.name, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : accFallback);
+    return C.restDefaultSeconds(ex.category, ex.name, role, restCfg, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : 0);
   }
 
   const sessionStart = Date.now();            // session stopwatch origin (ephemeral)
@@ -122,7 +122,7 @@ export async function openSession(id) {
     } else {
       barEls.restTime.style.display = "none";
       barEls.restBtn.style.display = "";
-      barEls.restBtn.textContent = `Rest ${ui.mmss(restFor(currentExercise()))}`;
+      barEls.restBtn.textContent = `Rest ${ui.mmss(restFor(currentExercise(), currentSE?.programRole))}`;
       barEls.addBtn.style.display = "none";
       barEls.skipBtn.style.display = "none";
       barEls.prog.style.width = "0%";
@@ -132,7 +132,7 @@ export async function openSession(id) {
   function buildBottomBar() {
     const clock = ui.h("span", { class: "clock mono" });
     const restTime = ui.h("span", { class: "rest-time mono", style: { display: "none" } });
-    const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex), ex ? ex.name : ""); } });
+    const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex, currentSE?.programRole), ex ? ex.name : ""); } });
     const addBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "+1:00", onClick: () => { rest.add(60); paintBar(); } });
     const skipBtn = ui.h("button", { class: "btn sm ghost", style: { display: "none" }, text: "Skip", onClick: () => { rest.stop(); paintBar(); } });
     const prog = ui.h("i");
@@ -166,7 +166,7 @@ export async function openSession(id) {
         ui.h("div", { style: { width: "100px" } },
           ui.seg([{ value: "lb", label: "lb" }, { value: "kg", label: "kg" }], exUnit(se), (u) => { unitByEx[se.exerciseName] = u; renderBody(body); })),
         ex && ex.type === "barbell" ? barSelect(se, body) : null,
-        ui.h("button", { class: "btn sm ghost", text: `⏱ ${ui.mmss(restFor(ex))}`, onClick: () => editRest(se, ex, body) }),
+        ui.h("button", { class: "btn sm ghost", text: `⏱ ${ui.mmss(restFor(ex, se.programRole))}`, onClick: () => editRest(se, ex, body) }),
         ex && ex.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null));
     const card = ui.h("div", { class: "card" }, head);
 
@@ -175,7 +175,7 @@ export async function openSession(id) {
 
     card.append(ui.h("div", { class: "btn-row", style: { marginTop: "10px" } },
       ui.h("button", { class: "btn sm", text: "+ Set", onClick: () => { currentSE = se; addSet(se); save(); renderBody(body); } }),
-      ui.h("button", { class: "btn sm ghost", text: "Rest", onClick: () => { currentSE = se; armRest(restFor(ex), se.exerciseName); } }),
+      ui.h("button", { class: "btn sm ghost", text: "Rest", onClick: () => { currentSE = se; armRest(restFor(ex, se.programRole), se.exerciseName); } }),
       ui.h("button", { class: "btn sm ghost warn", text: "↓ Dropping load", onClick: () => dropLoad(se, body) })));
 
     if (ex && ex.watchSite) card.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: `Watch: ${ex.watchSite.toLowerCase()} — ${watchNote(ex.watchSite)}` }));
@@ -191,9 +191,9 @@ export async function openSession(id) {
         // EFFECTIVE rest — so 0 is only offered where clearing lands on 0
         // (conditioning, whose smart default IS none); elsewhere stepping to 0
         // would snap the display up to the movement default.
-        const floor = C.restDefaultSeconds(ex.category, ex.name, 0) === 0 ? 0 : 15;
+        const floor = C.restDefaultSeconds(ex.category, ex.name, se.programRole, restCfg, 0) === 0 ? 0 : 15;
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
-          ui.stepper(restFor(ex), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
+          ui.stepper(restFor(ex, se.programRole), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
         c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used." }));
       },
     });
@@ -244,7 +244,7 @@ export async function openSession(id) {
     const had = s.flags.includes(name);
     s.flags = had ? s.flags.filter((f) => f !== name) : [...s.flags, name];
     // Auto-start rest only if the user opted in (manual is the default).
-    if (!had && settings.autoStartRest && !rest.running) { armRest(restFor(exMap.get(se.exerciseName)), se.exerciseName); }
+    if (!had && settings.autoStartRest && !rest.running) { armRest(restFor(exMap.get(se.exerciseName), se.programRole), se.exerciseName); }
     save(); renderBody(body);
   }
 

@@ -55,6 +55,13 @@ final class AppSettings {
     var unitDisplayRaw: String
     var proteinTargetGrams: Double
     var accessoryRestSeconds: Int
+    // The four other configurable rest buckets (seconds). Defaults mirror the
+    // old smart values; secondary rests less than a top main. New properties get
+    // SwiftData defaults so existing stores migrate cleanly.
+    var mainCompoundRestSeconds: Int = 300
+    var olympicRestSeconds: Int = 240
+    var mainUpperRestSeconds: Int = 180
+    var secondaryRestSeconds: Int = 180
     // Manual rest by default — auto-start lies if you log a set after you've
     // already been resting. Mirrors web defaultSettings (db.js).
     var autoStartRest: Bool = false
@@ -69,6 +76,10 @@ final class AppSettings {
         self.unitDisplayRaw = UnitDisplay.lbPrimary.rawValue
         self.proteinTargetGrams = 175
         self.accessoryRestSeconds = 90
+        self.mainCompoundRestSeconds = 300
+        self.olympicRestSeconds = 240
+        self.mainUpperRestSeconds = 180
+        self.secondaryRestSeconds = 180
         self.autoStartRest = false
         self.haptics = true
         self.healthKitEnabled = false
@@ -79,5 +90,12 @@ final class AppSettings {
     var unitDisplay: UnitDisplay {
         get { UnitDisplay(rawValue: unitDisplayRaw) ?? .lbPrimary }
         set { unitDisplayRaw = newValue.rawValue }
+    }
+
+    /// The rest buckets as a `RestConfig` for `RestDefaults.seconds`.
+    var restConfig: RestConfig {
+        RestConfig(mainCompoundSeconds: mainCompoundRestSeconds, olympicSeconds: olympicRestSeconds,
+                   mainUpperSeconds: mainUpperRestSeconds, secondarySeconds: secondaryRestSeconds,
+                   accessorySeconds: accessoryRestSeconds)
     }
 }
