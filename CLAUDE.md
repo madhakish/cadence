@@ -104,6 +104,15 @@ Existing entries — don't reintroduce these patterns:
 - SwiftData models live in `Cadence/Models/`; seed data in `Seed/Seeder.swift`
   encodes real training history — don't casually regenerate it.
 - HealthKit is optional and write-only by design; the app reads nothing.
+- **One workout Live Activity** (Lock Screen + Dynamic Island): a session
+  stopwatch (elapsed + current lift) that swaps to the rest countdown +
+  Pause/+0:30/End while resting. The contract, controller, and App Intents
+  live in `Cadence/LiveActivity/` and are compiled into BOTH the app and the
+  `CadenceWidgets` extension (one definition across processes); the rest
+  state math is `RestClock` in CadenceCore, mirrored as `restClock*` in
+  `web/js/core.js`. Quick rest control (start/skip) is `ToggleRestIntent` —
+  exposed via App Shortcuts (Action Button, Siri) and an iOS 18 Control
+  Center control. Deliberate: no volume/mute-button hijacking.
 
 ## Workout Program (adaptive progression)
 

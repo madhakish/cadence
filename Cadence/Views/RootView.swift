@@ -6,6 +6,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showPlateCalc = false
     @State private var restTimer = RestTimer()
+    @State private var workoutClock = WorkoutClock()
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -45,12 +46,14 @@ struct RootView: View {
             NavigationStack { PlateCalculatorView() }
         }
         .environment(restTimer)
+        .environment(workoutClock)
         .task {
             _ = await NotificationService.requestAuthorization()
         }
         .onChange(of: scenePhase) { _, phase in
-            // The user may have paused/resumed/extended/ended the rest from the
-            // Lock Screen while we were backgrounded — adopt the activity's state.
+            // The user may have paused/resumed/extended/skipped the rest from
+            // the Lock Screen / Action Button while we were backgrounded —
+            // adopt the activity's state.
             if phase == .active { restTimer.reconcileFromActivity() }
         }
     }
