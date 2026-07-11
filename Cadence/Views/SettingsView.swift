@@ -49,16 +49,22 @@ struct SettingsView: View {
                     }
 
                     Section {
-                        Stepper(
-                            "Accessory: \(mmss(settings.accessoryRestSeconds))",
-                            value: bindable.accessoryRestSeconds, in: 30...300, step: 15
-                        )
+                        Stepper("Main compound (squat / deadlift): \(mmss(settings.mainCompoundRestSeconds))",
+                                value: bindable.mainCompoundRestSeconds, in: 0...600, step: 15)
+                        Stepper("Olympic (clean / snatch / push press): \(mmss(settings.olympicRestSeconds))",
+                                value: bindable.olympicRestSeconds, in: 0...600, step: 15)
+                        Stepper("Main upper: \(mmss(settings.mainUpperRestSeconds))",
+                                value: bindable.mainUpperRestSeconds, in: 0...600, step: 15)
+                        Stepper("Secondary (complementary): \(mmss(settings.secondaryRestSeconds))",
+                                value: bindable.secondaryRestSeconds, in: 0...600, step: 15)
+                        Stepper("Accessory: \(mmss(settings.accessoryRestSeconds))",
+                                value: bindable.accessoryRestSeconds, in: 0...600, step: 15)
                         Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
                         Toggle("Haptics", isOn: bindable.haptics)
                     } header: {
                         Text("Rest timer")
                     } footer: {
-                        Text("Rest is smart by movement (lower 5:00 · oly 4:00 · upper 3:00 · accessory 1:30). The stepper is the accessory fallback; a per-exercise rest set in the logger or library overrides the default for any movement. Auto-start off = tap Rest yourself.")
+                        Text("Each bucket is adjustable up or down. Complementary/secondary lifts rest less than a top main. A per-exercise rest set in the logger or library overrides the default for any movement. Auto-start off = tap Rest yourself.")
                     }
 
                     Section("Protein") {

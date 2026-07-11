@@ -111,11 +111,28 @@ enum ExportService {
         let createdAt: Date
     }
 
-    /// Web `settings` row shape (sans row id).
+    /// Web `settings.rest` shape — the five buckets under the key names the
+    /// PWA stores, so a native backup restores the buckets on web directly.
+    struct ExportRest: Codable {
+        let mainCompoundSeconds: Int
+        let olympicSeconds: Int
+        let mainUpperSeconds: Int
+        let secondarySeconds: Int
+        let accessorySeconds: Int
+    }
+
+    /// Web `settings` row shape (sans row id). The rest buckets ride twice:
+    /// nested `rest` (the web's canonical shape) and the flat `*RestSeconds`
+    /// keys (what native importers of the first bucket release read).
     struct ExportSettings: Codable {
         let unitDisplay: String
         let proteinTargetGrams: Double
         let accessoryRestSeconds: Int
+        let mainCompoundRestSeconds: Int?
+        let olympicRestSeconds: Int?
+        let mainUpperRestSeconds: Int?
+        let secondaryRestSeconds: Int?
+        let rest: ExportRest?
         let autoStartRest: Bool
         let haptics: Bool
         let seededAt: Date?
@@ -391,7 +408,15 @@ enum ExportService {
             },
             settings: settings.map { s in
                 ExportSettings(unitDisplay: s.unitDisplayRaw, proteinTargetGrams: s.proteinTargetGrams,
-                               accessoryRestSeconds: s.accessoryRestSeconds, autoStartRest: s.autoStartRest,
+                               accessoryRestSeconds: s.accessoryRestSeconds,
+                               mainCompoundRestSeconds: s.mainCompoundRestSeconds, olympicRestSeconds: s.olympicRestSeconds,
+                               mainUpperRestSeconds: s.mainUpperRestSeconds, secondaryRestSeconds: s.secondaryRestSeconds,
+                               rest: ExportRest(mainCompoundSeconds: s.mainCompoundRestSeconds,
+                                                olympicSeconds: s.olympicRestSeconds,
+                                                mainUpperSeconds: s.mainUpperRestSeconds,
+                                                secondarySeconds: s.secondaryRestSeconds,
+                                                accessorySeconds: s.accessoryRestSeconds),
+                               autoStartRest: s.autoStartRest,
                                haptics: s.haptics, seededAt: s.seededAt, theme: s.themeNameRaw)
             }
         )

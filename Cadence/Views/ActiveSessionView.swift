@@ -72,7 +72,7 @@ struct ActiveSessionView: View {
             SessionBottomBar(
                 sessionStart: sessionStart,
                 restLabel: currentOrFirst?.exercise?.name ?? "",
-                restSeconds: smartRestSeconds(for: currentOrFirst?.exercise, settings: settingsList.first)
+                restSeconds: smartRestSeconds(for: currentOrFirst?.exercise, role: currentOrFirst?.programRole, settings: settingsList.first)
             )
         }
         .onChange(of: settingsList.first?.haptics, initial: true) { _, on in restTimer.hapticsEnabled = on ?? true }
@@ -137,11 +137,11 @@ struct ActiveSessionView: View {
 
 /// Smart per-exercise rest by category/movement (shared CadenceCore logic);
 /// accessories fall back to the accessory setting, then 90s.
-private func smartRestSeconds(for exercise: Exercise?, settings: AppSettings?) -> Int {
+private func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: AppSettings?) -> Int {
     guard let ex = exercise else { return 90 }
-    let accFallback = ex.category == .accessory ? (settings?.accessoryRestSeconds ?? 0) : 0
-    let override = ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : accFallback
-    return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name, exerciseDefaultRest: override)
+    return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name, role: role,
+                                config: settings?.restConfig ?? .standard,
+                                exerciseDefaultRest: ex.defaultRestSeconds)
 }
 
 /// Identifiable wrapper so the summary sheet can drive off .sheet(item:).
@@ -207,18 +207,20 @@ private struct ExerciseSection: View {
     @State private var pickedBar: Bar?
     private var effectiveBar: Bar { pickedBar ?? gym?.defaultBar ?? .bar45lb }
 
-    private var restSeconds: Int { smartRestSeconds(for: entry.exercise, settings: settings) }
+    private var restSeconds: Int { smartRestSeconds(for: entry.exercise, role: entry.programRole, settings: settings) }
     private var restBinding: Binding<Int> {
         Binding(get: { restSeconds },
                 set: { entry.exercise?.defaultRestSeconds = $0; try? context.save() })
     }
     // Stepper floor: writing 0 clears the override, and the stepper displays
     // the EFFECTIVE rest — so 0 is only offered where clearing lands on 0
-    // (conditioning, whose smart default IS none); elsewhere a decrement to 0
-    // would snap the display up to the movement default.
+    // (conditioning, or a bucket the user zeroed); elsewhere a decrement to 0
+    // would snap the display up to the movement default. Same role + config as
+    // the effective rest (mirrors web editRest's floor).
     private var restFloor: Int {
         guard let ex = entry.exercise else { return 15 }
-        return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name) == 0 ? 0 : 15
+        return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name, role: entry.programRole,
+                                    config: settings?.restConfig ?? .standard) == 0 ? 0 : 15
     }
 
     var body: some View {

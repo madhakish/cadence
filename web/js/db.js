@@ -83,7 +83,9 @@ function defaultSettings() {
     unitDisplay: "lbPrimary",
     theme: "carbon",
     proteinTargetGrams: 175,
-    accessoryRestSeconds: 90,
+    accessoryRestSeconds: 90, // legacy — superseded by rest.accessorySeconds, kept for old exports
+    // Five configurable rest buckets (seconds); secondary rests less than a top main.
+    rest: { mainCompoundSeconds: 300, olympicSeconds: 240, mainUpperSeconds: 180, secondarySeconds: 180, accessorySeconds: 90 },
     autoStartRest: false, // manual start by default — auto lies if you rested first
     haptics: true,
     seededAt: null,
@@ -260,6 +262,24 @@ export async function exportCSV() {
 // Accepts both the current "R{n}" prefix and legacy "Wk{n}" from older backups.
 const recoverPhase = (label) => { const m = /(?:R|Wk)(\d)/.exec(label || ""); return m ? Number(m[1]) : null; };
 
+// Rest buckets arrive nested under `rest` (web's canonical shape) or flat as
+// `*RestSeconds` keys (native backups) — normalize to a complete nested object
+// so a restore never leaves missing buckets (which would render as NaN).
+// Precedence: defaults ← legacy accessory ← native flat keys ← nested rest.
+function normalizeSettings(s) {
+  const num = (v) => (Number.isFinite(v) ? v : undefined);
+  const flat = {
+    mainCompoundSeconds: num(s.mainCompoundRestSeconds),
+    olympicSeconds: num(s.olympicRestSeconds),
+    mainUpperSeconds: num(s.mainUpperRestSeconds),
+    secondarySeconds: num(s.secondaryRestSeconds),
+    accessorySeconds: num(s.accessoryRestSeconds),
+  };
+  Object.keys(flat).forEach((k) => flat[k] === undefined && delete flat[k]);
+  const rest = { ...C.REST_DEFAULTS, ...flat, ...(s.rest || {}) };
+  return { ...s, rest, accessoryRestSeconds: rest.accessorySeconds };
+}
+
 // Restore a backup in ONE transaction: only stores present in the bundle are
 // touched (an old backup without e.g. `gyms` leaves current gyms alone), and a
 // malformed bundle aborts wholesale instead of leaving stores cleared.
@@ -290,7 +310,7 @@ export async function importBundle(bundle) {
   if (bundle.tracks) writes.set("tracks", bundle.tracks);
   if (bundle.gyms) writes.set("gyms", bundle.gyms);
   if (bundle.exercises) writes.set("exercises", bundle.exercises);
-  if (bundle.settings) writes.set("settings", [{ ...bundle.settings, id: "app" }]);
+  if (bundle.settings) writes.set("settings", [{ ...normalizeSettings(bundle.settings), id: "app" }]);
 
   const stores = [...writes.keys()];
   if (!stores.length) throw new Error("Not a Cadence backup");

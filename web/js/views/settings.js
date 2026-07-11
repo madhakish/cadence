@@ -47,17 +47,25 @@ export async function render(host) {
     ui.seg([{ value: "lbPrimary", label: "lb" }, { value: "kgPrimary", label: "kg" }, { value: "both", label: "Both" }],
       settings.unitDisplay, async (v) => { settings.unitDisplay = v; await saveS(); ui.nav.refresh(); })));
 
-  // Rest timers
+  // Rest timers — five configurable buckets, each adjustable up or down.
   root.append(ui.h("div", { class: "section-title", text: "Rest timer defaults" }));
+  // Merge over defaults (legacy accessory key first) so a pre-buckets install
+  // or a partial imported `rest` object never renders NaN steppers.
+  const rest = settings.rest = { ...C.REST_DEFAULTS, accessorySeconds: settings.accessoryRestSeconds ?? C.REST_DEFAULTS.accessorySeconds, ...(settings.rest || {}) };
   const restCard = ui.h("div", { class: "card" });
-  restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Accessory" }),
-    ui.stepper(settings.accessoryRestSeconds, { min: 30, max: 300, step: 15, format: ui.mmss, onChange: async (v) => { settings.accessoryRestSeconds = v; await saveS(); } })));
+  const restRow = (label, key) => restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: label }),
+    ui.stepper(rest[key], { min: 0, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { rest[key] = v; settings.accessoryRestSeconds = rest.accessorySeconds; await saveS(); } })));
+  restRow("Main compound (squat / deadlift)", "mainCompoundSeconds");
+  restRow("Olympic (clean / snatch / push press)", "olympicSeconds");
+  restRow("Main upper", "mainUpperSeconds");
+  restRow("Secondary (complementary lifts)", "secondarySeconds");
+  restRow("Accessory", "accessorySeconds");
   restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Auto-start rest after a set" }),
     ui.toggle(settings.autoStartRest, async (v) => { settings.autoStartRest = v; await saveS(); })));
   restCard.append(ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Haptics" }),
     ui.toggle(settings.haptics !== false, async (v) => { settings.haptics = v; await saveS(); })));
   root.append(restCard);
-  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Rest defaults are smart by movement (lower 5:00 · oly 4:00 · upper 3:00 · accessory 1:30). The Accessory stepper is the accessory fallback; a per-exercise rest set in the logger (⏱) or library overrides the default for any movement. Auto-start off = tap Rest yourself." }));
+  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Each bucket is adjustable up or down. Complementary/secondary lifts rest less than a top main. A per-exercise rest set in the logger (⏱) or library overrides the default for any movement. Auto-start off = tap Rest yourself." }));
 
   // Protein
   root.append(ui.h("div", { class: "section-title", text: "Protein" }));
