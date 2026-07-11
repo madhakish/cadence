@@ -36,13 +36,14 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
+            let recall = recallLines()
             ForEach(session.orderedExercises) { entry in
                 ExerciseSection(
                     entry: entry,
                     settings: settingsList.first,
                     gym: gym,
                     allExercises: allExercises,
-                    lastTime: lastTime(entry.exercise?.name),
+                    lastTime: entry.exercise?.name.flatMap { recall[$0] },
                     onDropLoad: { autoregEntry = entry },
                     onWork: { currentEntry = $0 }
                 )
@@ -136,19 +137,29 @@ struct ActiveSessionView: View {
                                    defaultRestSeconds: currentRestSeconds)
     }
 
-    /// "Last: 225×5 · Jun 12 (3w ago)" — when and how heavy this lift last was,
-    /// searched across ALL history (not just this program), so a lift you
-    /// swapped away from months ago still tells you where you left off.
-    private func lastTime(_ name: String?) -> String? {
-        guard let name else { return nil }
+    /// "Last: 225×5 · Jun 12 (3w ago)" per lift in THIS session — when and how
+    /// heavy each was last time, searched across ALL history (not just this
+    /// program), so a lift you swapped away from months ago still tells you
+    /// where you left off. One newest-first pass over history, stopping as
+    /// soon as every lift on today's card has an answer.
+    private func recallLines() -> [String: String] {
+        var wanted = Set(session.orderedExercises.compactMap { $0.exercise?.name })
+        var lines: [String: String] = [:]
+        guard !wanted.isEmpty else { return lines }
         for past in completedSessions where past.persistentModelID != session.persistentModelID {
-            let tops = past.exercises.filter { $0.exercise?.name == name }.compactMap(\.topSet)
-            guard let top = tops.max(by: { $0.weightLb < $1.weightLb }) else { continue }
-            let weight = top.weightLb == 0 ? "BW" : Weight.trim(top.weightLb)
-            let when = past.date.formatted(date: .abbreviated, time: .omitted)
-            return "Last: \(weight)×\(top.reps) · \(when) (\(agoLabel(past.date)))"
+            for entry in past.exercises {
+                guard let name = entry.exercise?.name, wanted.contains(name),
+                      let top = entry.topSet else { continue }
+                let better = past.exercises.filter { $0.exercise?.name == name }.compactMap(\.topSet)
+                    .max { $0.weightLb < $1.weightLb } ?? top
+                let weight = better.weightLb == 0 ? "BW" : Weight.trim(better.weightLb)
+                let when = past.date.formatted(date: .abbreviated, time: .omitted)
+                lines[name] = "Last: \(weight)×\(better.reps) · \(when) (\(agoLabel(past.date)))"
+                wanted.remove(name)
+            }
+            if wanted.isEmpty { break }
         }
-        return nil
+        return lines
     }
 
     private func addExercise(_ exercise: Exercise) {
@@ -280,7 +291,10 @@ private struct ExerciseSection: View {
     var body: some View {
         Section {
             ForEach(entry.orderedSets) { set in
-                let isCurrent = entry.orderedSets.first { $0.flags.isEmpty }?.persistentModelID == set.persistentModelID
+                // The set you're ON — the first WORKING set with no verdict
+                // yet. Warmups sit quiet (and often go unflagged, so they must
+                // not hold the rail hostage).
+                let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.flags.isEmpty }?.persistentModelID == set.persistentModelID
                 VStack(alignment: .leading, spacing: 4) {
                     SetRow(set: set, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
                            targetLb: entry.plannedWeightLb, onLogged: {

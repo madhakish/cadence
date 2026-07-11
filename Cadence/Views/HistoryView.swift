@@ -68,9 +68,11 @@ struct HistoryView: View {
                                 let vol = volumeOf(session)
                                 if vol > 0 {
                                     GeometryReader { geo in
-                                        Capsule().fill(Color(.tertiarySystemFill))
-                                        Capsule().fill(Theme.accent.opacity(0.75))
-                                            .frame(width: max(4, geo.size.width * vol / maxVolume))
+                                        ZStack(alignment: .leading) {
+                                            Capsule().fill(Color(.tertiarySystemFill))
+                                            Capsule().fill(Theme.accent.opacity(0.75))
+                                                .frame(width: max(4, geo.size.width * vol / maxVolume))
+                                        }
                                     }
                                     .frame(height: 3)
                                     .padding(.top, 3)

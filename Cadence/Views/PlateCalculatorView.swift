@@ -88,10 +88,11 @@ struct PlateCalculatorView: View {
         }
 
         if let solution {
-            // The answer, drawn: the loaded bar itself — the list below is
-            // the detail, not the deliverable.
+            // The answer, drawn: the loaded bar itself — the SAME solution as
+            // the list below (which may pick the other unit system).
             Section {
-                BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym)
+                BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym,
+                            loadout: solution.loadout)
                     .scaleEffect(1.6, anchor: .leading)
                     .frame(height: 52, alignment: .leading)
             }
@@ -163,7 +164,9 @@ struct PlateCalculatorView: View {
             }
             let total = PlateMath.total(bar: bar, perSide: perSide)
             VStack(alignment: .leading, spacing: 6) {
-                BarbellView(weightLb: total, unit: .lb, bar: bar, gym: gym)
+                // Draw exactly what the user says is on the bar — never re-solve it.
+                BarbellView(weightLb: total, unit: .lb, bar: bar, gym: gym,
+                            loadout: Loadout(bar: bar, perSide: perSide))
                     .scaleEffect(1.6, anchor: .leading)
                     .frame(height: 52, alignment: .leading)
                 Text(Weight.both(lb: total))

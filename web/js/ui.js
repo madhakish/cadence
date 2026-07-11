@@ -183,7 +183,7 @@ export function applyTheme(name) {
 // native WaveGlyph (Cadence/Views/Glyphs.swift).
 export function wave(week) {
   const heights = [8, 12, 16, 6];
-  const el = h("span", { class: "wave", title: `Rotation ${week} of 4` });
+  const el = h("span", { class: "wave", title: `Rotation ${week} of 4`, role: "img", "aria-label": `Rotation ${week} of 4` });
   for (let i = 1; i <= 4; i += 1) {
     const bar = h("i");
     bar.style.height = `${heights[i - 1]}px`;

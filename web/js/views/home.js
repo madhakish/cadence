@@ -12,12 +12,16 @@ export async function render(host) {
   ]);
   // Last 8 top working weights for a lift, oldest→newest (sparkline source).
   const topsFor = (name) => completed
-    .map((s) => ({ d: new Date(s.date), e: (s.exercises || []).find((x) => x.exerciseName === name) }))
-    .filter((x) => x.e)
+    .map((s) => ({
+      d: new Date(s.date),
+      // max across ALL entries of the lift that day (a session can hold the
+      // same exercise in two sections)
+      top: Math.max(...(s.exercises || []).filter((x) => x.exerciseName === name)
+        .map((x) => topSet(x)).filter(Boolean).map((t) => t.weightLb), -Infinity),
+    }))
+    .filter((x) => x.top > -Infinity)
     .sort((a, b) => a.d - b.d)
-    .map((x) => topSet(x.e))
-    .filter(Boolean)
-    .map((t) => t.weightLb)
+    .map((x) => x.top)
     .slice(-8);
   const exMap = new Map(allExercises.map((e) => [e.name, e]));
   const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);

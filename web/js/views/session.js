@@ -99,7 +99,9 @@ export async function openSession(id) {
   const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
   const settings = await Settings.get();
   const gym = await Gyms.default();
-  const priorSessions = (await Sessions.completed()).filter((s) => s.id !== session.id);
+  const priorSessions = (await Sessions.completed())
+    .filter((s) => s.id !== session.id)
+    .sort((a, b) => new Date(b.date) - new Date(a.date)); // newest first, sorted once
   const save = () => Sessions.save(session);
 
   // "Last: 225×5 · Jun 12 (3w ago)" — when and how heavy this lift last was,
@@ -107,8 +109,7 @@ export async function openSession(id) {
   // swapped away from months ago still tells you where you left off.
   // Mirrors the native ActiveSessionView.lastTime.
   function lastTimeLine(name) {
-    const past = [...priorSessions].sort((a, b) => new Date(b.date) - new Date(a.date));
-    for (const p of past) {
+    for (const p of priorSessions) {
       const entries = (p.exercises || []).filter((e) => e.exerciseName === name);
       const tops = entries.map((e) => topSetOf(e)).filter(Boolean);
       if (!tops.length) continue;
@@ -262,9 +263,10 @@ export async function openSession(id) {
       text: name === "clean" ? "✓" : name[0].toUpperCase(),
       onClick: () => toggleFlag(se, s, name, body),
     });
-    // The set you're ON (first with no verdict yet) gets the accent rail;
-    // warmups sit quiet so working sets carry the visual weight.
-    const isCurrent = se.sets.find((x) => !(x.flags || []).length) === s;
+    // The set you're ON — the first WORKING set with no verdict yet — gets
+    // the accent rail; warmups sit quiet (and often go unflagged, so they
+    // must not hold the rail hostage).
+    const isCurrent = se.sets.find((x) => !x.isWarmup && !(x.flags || []).length) === s;
     const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "") + (isCurrent ? " current" : "") }, wt, tags,
       ui.h("div", { class: "flagbtns" }, flag("clean", "clean"), flag("grindy", "grindy"), flag("wobble", "wobble")));
 

@@ -19,8 +19,11 @@ export function stationPlates(unit, gym) {
 
 // Returns { svg, solution }. svg is a per-side barbell (heaviest plate inboard).
 // `bar` is explicit (selectable); `unit` only chooses the plate denominations.
-export function barbellSVG(weightLb, unit, bar, gym) {
-  const solution = C.solve(weightLb, bar, stationPlates(unit, gym));
+// Pass `preSolved` to DRAW an existing solution (or user-entered stack) instead
+// of re-solving — the plate calculator's hero must match its own answer, which
+// may span both unit systems.
+export function barbellSVG(weightLb, unit, bar, gym, preSolved = null) {
+  const solution = preSolved || C.solve(weightLb, bar, stationPlates(unit, gym));
   const plates = [];
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);
 

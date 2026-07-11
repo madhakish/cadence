@@ -52,10 +52,10 @@ export async function openPlateCalculator() {
           const targetLb = C.toLb(targetVal, unit);
           const sol = C.solve(targetLb, bar, availablePlates());
           ui.clear(out);
-          // The answer, drawn: the loaded bar itself, big — the list below
-          // is the detail, not the deliverable.
+          // The answer, drawn: the loaded bar itself, big — the SAME solution
+          // as the list below (which may pick the other unit system).
           if (targetLb > 0) {
-            out.append(ui.h("div", { class: "barbell-hero" }, barbellSVG(targetLb, unit, bar, gym).svg));
+            out.append(ui.h("div", { class: "barbell-hero" }, barbellSVG(targetLb, unit, bar, gym, sol).svg));
           }
           out.append(ui.h("div", { class: "section-title", text: "Per side" }));
           if (!sol.perSide.length) out.append(ui.h("div", { class: "big", text: "Bar only" }));
@@ -77,11 +77,16 @@ export async function openPlateCalculator() {
       function drawReverse(p) {
         const plates = availablePlates();
         const out = ui.h("div", { class: "card" });
+        const hero = ui.h("div", { class: "barbell-hero" });
         const total = ui.h("div", { class: "big mono" });
         const sub = ui.h("div", { class: "sub" });
         const recompute = () => {
           const perSide = plates.map((pl) => ({ plate: pl, count: counts[C.plateId(pl)] || 0 })).filter((pc) => pc.count > 0);
-          total.textContent = C.both(C.totalOnBar(bar, perSide));
+          const totalLb = C.totalOnBar(bar, perSide);
+          // Draw exactly what the user says is on the bar — never re-solve it.
+          ui.clear(hero);
+          hero.append(barbellSVG(totalLb, "lb", bar, gym, { perSide, totalLb }).svg);
+          total.textContent = C.both(totalLb);
           sub.textContent = `total on ${C.barLabel(bar)}`;
         };
         for (const pl of plates) {
@@ -92,7 +97,7 @@ export async function openPlateCalculator() {
         }
         p.append(out);
         p.append(ui.h("button", { class: "btn ghost wide danger", text: "Clear", onClick: () => { for (const k of Object.keys(counts)) counts[k] = 0; draw(); } }));
-        const totalCard = ui.h("div", { class: "card" }, ui.h("div", { class: "section-title", text: "On the bar" }), total, sub);
+        const totalCard = ui.h("div", { class: "card" }, ui.h("div", { class: "section-title", text: "On the bar" }), hero, total, sub);
         p.append(totalCard);
         recompute();
       }
