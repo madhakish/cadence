@@ -3,8 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Cadence PWA — static web app, no build step. package.json only marks ESM for Node-run tests.",
+  "description": "Cadence PWA — static web app, no build step. package.json marks ESM for Node-run tests and pins the test-only deps (jsdom, fake-indexeddb).",
   "scripts": {
-    "test": "node tests/core.test.mjs"
+    "test": "node tests/core.test.mjs && node tests/smoke.test.mjs"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "6.2.5",
+    "jsdom": "29.1.1"
   }
 }
