@@ -181,20 +181,24 @@ public enum ProgramProgression {
 
     /// Whether an OPEN session may be resumed when the user (re)starts a
     /// program day, rather than building a fresh one. It must be tagged for
-    /// the SAME cycle/week/day AND its exercises must still match that day's
-    /// current plan (same names, same order). Either mismatch means the open
-    /// snapshot is stale — the program was edited (a lift swapped/added/
-    /// removed) or the position moved — so a fresh session must be built,
-    /// never the old content resurfaced. (Bug: after editing Upper B, "Start"
-    /// kept showing the pre-edit complementary lift because the name-only
-    /// resume guard returned the stale session.)
+    /// the SAME cycle/week/day AND the plan it was BUILT from must still equal
+    /// the day's CURRENT plan.
+    ///
+    /// The comparison is snapshot-vs-current-plan, NOT the session's live
+    /// exercises: a session-local remove or a "just this session" swap changes
+    /// the live exercises but not the built-from plan, so that customized
+    /// session is still resumed (its edits preserved). Only a PROGRAM edit
+    /// (swap/add/remove in the editor) or a position move diverges the
+    /// built-from plan from the current one → build fresh, never resurface the
+    /// stale content. `sessionPlanNames` empty (a pre-snapshot session) never
+    /// resumes.
     public static func canResumeSession(
         tagCycle: Int, tagWeek: Int, tagDayIndex: Int,
         cycleNumber: Int, currentWeek: Int, dayIndex: Int,
-        sessionExerciseNames: [String], dayExerciseNames: [String]
+        sessionPlanNames: [String], dayPlanNames: [String]
     ) -> Bool {
         tagCycle == cycleNumber && tagWeek == currentWeek && tagDayIndex == dayIndex
-            && sessionExerciseNames == dayExerciseNames
+            && !sessionPlanNames.isEmpty && sessionPlanNames == dayPlanNames
     }
 
     /// Increment = fraction of base × headroom-to-ceiling, floored at plate

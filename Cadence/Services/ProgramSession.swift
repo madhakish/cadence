@@ -24,12 +24,15 @@ enum ProgramSession {
         let dayNames = day.orderedLifts.map(\.exerciseName) + day.orderedAccessories.map(\.exerciseName)
         if let existing = (try? context.fetch(openDescriptor))?.first(where: { s in
             ProgramProgression.canResumeSession(
-                tagCycle: s.programCycleNumber ?? program.cycleNumber,
-                tagWeek: s.programWeek ?? program.currentWeek,
+                // Missing tag fields → -1 sentinel (never equals a real
+                // 1-based cycle/week/day), so ambiguously-tagged legacy
+                // sessions build fresh rather than resume (Copilot).
+                tagCycle: s.programCycleNumber ?? -1,
+                tagWeek: s.programWeek ?? -1,
                 tagDayIndex: s.programDayIndex ?? -1,
                 cycleNumber: program.cycleNumber, currentWeek: program.currentWeek, dayIndex: day.order,
-                sessionExerciseNames: s.orderedExercises.compactMap { $0.exercise?.name },
-                dayExerciseNames: dayNames)
+                sessionPlanNames: s.programPlanNames ?? [],
+                dayPlanNames: dayNames)
         }) { return existing }
 
         let defaultGym = (try? context.fetch(FetchDescriptor<Gym>()))?.first(where: { $0.isDefault })
@@ -42,6 +45,7 @@ enum ProgramSession {
         session.programCycleNumber = program.cycleNumber
         session.programWeek = program.currentWeek
         session.programDayIndex = day.order
+        session.programPlanNames = dayNames   // the plan this session is built from
         context.insert(session)
 
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume

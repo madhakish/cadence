@@ -607,15 +607,16 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb) {
 
 export async function createSessionFromProgramDay(program, day) {
   // Resume, don't duplicate — but only a session for THIS day at the current
-  // position whose content still matches the plan (issue 17). A name/program-
-  // only match resurrected stale snapshots after a day was edited; canResume
-  // requires the tag AND exercise list to match, else build fresh.
+  // position whose BUILT-FROM plan still matches the current plan (issue 17).
+  // A name/program-only match resurrected stale snapshots after a day was
+  // edited; canResume compares the snapshot (not live exercises) so a
+  // session-local remove/swap is preserved while a program edit builds fresh.
   const sortedLifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
   const dayNames = [...sortedLifts.map((l) => l.exerciseName), ...(day.accessories || []).map((a) => a.exerciseName)];
   const openForDay = (await Sessions.all()).find((s) => !s.isCompleted && s.programTag && s.programTag.programId === program.id
     && C.canResumeSession(s.programTag.cycleNumber, s.programTag.week, s.programTag.dayIndex,
       program.cycleNumber, program.currentWeek, day.order,
-      (s.exercises || []).map((e) => e.exerciseName), dayNames));
+      s.programTag.planNames || [], dayNames));
   if (openForDay) return openForDay.id;
   const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
   const gym = await Gyms.default();
@@ -643,7 +644,7 @@ export async function createSessionFromProgramDay(program, day) {
   }
   const id = await Sessions.save({
     date: iso(new Date()), notes: "", isCompleted: false, gymName: await defaultGymName(),
-    programTag: { programId: program.id, cycleNumber: program.cycleNumber, week: program.currentWeek, dayIndex: day.order },
+    programTag: { programId: program.id, cycleNumber: program.cycleNumber, week: program.currentWeek, dayIndex: day.order, planNames: dayNames },
     exercises,
   });
   return id;

@@ -333,18 +333,21 @@ eq(C.sessionTagCurrent(1, 1, 3, 2, 1, 3), false, "stale cycle → not current");
 eq(C.sessionTagCurrent(2, 1, 3, 2, 2, 3), false, "stale week → not current");
 eq(C.sessionTagCurrent(2, 1, 3, 2, 1, 0), false, "stale day → not current");
 
-// canResumeSession: resume only same-position + same-content open sessions
+// canResumeSession: compares the plan the session was BUILT from (snapshot)
+// against the day's current plan — NOT the live exercises.
 {
-  const names = ["Overhead Press", "Incline DB Press", "Dips"];
-  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, names, names), true, "same position + content → resume");
-  // The reported bug: same day/position, but the day was edited so the open
-  // session still lists the old complementary lift → must NOT resume.
-  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Overhead Press", "Chest-supported Row", "Dips"], names), false, "edited content → build fresh");
-  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Overhead Press", "Dips"], names), false, "removed exercise → build fresh");
-  eq(C.canResumeSession(2, 1, 2, 2, 1, 3, names, names), false, "different day → build fresh");
-  eq(C.canResumeSession(1, 1, 3, 2, 1, 3, names, names), false, "stale cycle → build fresh");
-  eq(C.canResumeSession(2, 2, 3, 2, 1, 3, names, names), false, "stale week → build fresh");
-  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Incline DB Press", "Overhead Press", "Dips"], names), false, "reordered → build fresh");
+  const plan = ["Overhead Press", "Incline DB Press", "Dips"];
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, plan, plan), true, "same position + unchanged plan → resume");
+  // Session-local edits (remove/swap) change live exercises, NOT the built-from
+  // snapshot — so the customized open session still resumes (Codex case).
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, plan, plan), true, "session-local edit still resumes (snapshot unchanged)");
+  // The reported bug: the PROGRAM day was edited, so the snapshot the session
+  // was built from no longer equals the current plan → build fresh.
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Overhead Press", "Chest-supported Row", "Dips"], plan), false, "program-edited plan → build fresh");
+  eq(C.canResumeSession(2, 1, 2, 2, 1, 3, plan, plan), false, "different day → build fresh");
+  eq(C.canResumeSession(1, 1, 3, 2, 1, 3, plan, plan), false, "stale cycle → build fresh");
+  eq(C.canResumeSession(2, 2, 3, 2, 1, 3, plan, plan), false, "stale week → build fresh");
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, [], plan), false, "pre-snapshot session (no plan names) → build fresh");
 }
 
 // RestClock.add shrinks as well as extends, flooring at 0 (subtract control)

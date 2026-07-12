@@ -22,6 +22,11 @@ final class WorkoutSession {
     var programCycleNumber: Int?
     var programWeek: Int?
     var programDayIndex: Int?
+    /// The day plan this session was BUILT from (ordered lift+accessory names).
+    /// Compared against the day's CURRENT plan to decide resume-vs-rebuild:
+    /// unchanged program → resume (preserving session-local removes/swaps);
+    /// edited program → rebuild. nil for pre-snapshot sessions (never resumed).
+    var programPlanNames: [String]?
     @Relationship(deleteRule: .cascade, inverse: \SessionExercise.session)
     var exercises: [SessionExercise]
 
