@@ -230,8 +230,11 @@ export async function exportBundle() {
           // Mid-cycle backup: the week-3 Peak stashes a pending result that is
           // applied at rollover — losing it turns the next rollover into a stall.
           pending: l.pending || null,
+          // Cycle-scoped swap marker: losing it turns a temporary swap into a
+          // permanent rename on restore.
+          revertToExerciseName: l.revertToExerciseName || null,
         })),
-        accessories: (d.accessories || []).map((a) => ({ exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0 })),
+        accessories: (d.accessories || []).map((a) => ({ exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, revertToExerciseName: a.revertToExerciseName || null })),
       })),
     })),
     tracks, gyms, exercises,

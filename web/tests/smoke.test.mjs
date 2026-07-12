@@ -331,6 +331,12 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   }
   await db.Programs.save(prog);
 
+  // The marker must survive a web export taken mid-cycle — dropping it would
+  // turn the temporary swap into a permanent rename on restore.
+  const exported = await db.exportBundle();
+  const exLift = exported.programs.find((p) => p.id === prog.id).days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
+  ok(exLift.revertToExerciseName === originalLift, "cycle-swap marker survives web export");
+
   const startCycle = prog.cycleNumber;
   for (let i = 0; i < 16 && (await db.Programs.active()).cycleNumber === startCycle; i++) {
     const p = await db.Programs.active();

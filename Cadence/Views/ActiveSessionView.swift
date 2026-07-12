@@ -323,6 +323,9 @@ private struct ExerciseSection: View {
         if newExercise.typeRaw != ExerciseType.barbell.rawValue {
             for set in warmups { context.delete(set) }
             entry.sets.removeAll(where: \.isWarmup)
+            // Renumber the survivors: addSet() assigns order = sets.count, so
+            // leftover gaps (3,4,5) would collide with the next added set.
+            for (i, set) in entry.orderedSets.enumerated() { set.order = i }
         } else if warmups.isEmpty {
             let workingLb = entry.plannedWeightLb
                 ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb ?? 45
