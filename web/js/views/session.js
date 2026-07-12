@@ -237,14 +237,23 @@ export async function openSession(id) {
     ui.sheet({
       title: `Rest — ${ex.name}`,
       build: (c) => {
-        // Floor: writing 0 clears the override, and this stepper shows the
-        // EFFECTIVE rest — so 0 is only offered where clearing lands on 0
-        // (conditioning, whose smart default IS none); elsewhere stepping to 0
-        // would snap the display up to the movement default.
-        const floor = C.restDefaultSeconds(ex.category, ex.movementGroup, se.programRole, restCfg, 0) === 0 ? 0 : 15;
-        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
-          ui.stepper(restFor(ex, se.programRole), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
-        c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used." }));
+        const render = () => {
+          ui.clear(c);
+          // Floor: the stepper shows the EFFECTIVE rest, so it can't offer 0
+          // ("Default") without the display snapping to the bucket value —
+          // except where the bucket itself is 0 (conditioning). Clearing an
+          // override back to bucket-driven is the explicit Reset below.
+          const floor = C.restDefaultSeconds(ex.category, ex.movementGroup, se.programRole, restCfg, 0) === 0 ? 0 : 15;
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
+            ui.stepper(restFor(ex, se.programRole), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); render(); } })));
+          if (ex.defaultRestSeconds > 0) {
+            c.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Reset to default", onClick: async () => {
+              ex.defaultRestSeconds = 0; await Exercises.save(ex); renderBody(body); render();
+            } }));
+          }
+          c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used. Default = the rest buckets in Settings." }));
+        };
+        render();
       },
     });
   }

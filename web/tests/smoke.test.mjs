@@ -186,6 +186,23 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed); // restore the canonical settings for later blocks
 }
 
+// restSeedStampsCleared describes the exercise library's migration state, so
+// it must follow the bundle only when the library itself was restored: a
+// settings-only restore keeps the current marker (else the next syncLibrary
+// would re-clear over an untouched library and could eat a user-set rest equal
+// to a retired stamp), while a library restored without settings re-arms it.
+{
+  ok((await db.Settings.get()).restSeedStampsCleared === true, "marker is set before the partial-restore checks");
+  const settingsOnly = { sessions: parsed.sessions, settings: { ...parsed.settings } };
+  delete settingsOnly.settings.restSeedStampsCleared; // a pre-migration, exercise-less backup
+  await db.importBundle(settingsOnly);
+  ok((await db.Settings.get()).restSeedStampsCleared === true, "settings-only restore keeps the stamp-clear marker");
+  await db.importBundle({ exercises: parsed.exercises });
+  ok((await db.Settings.get()).restSeedStampsCleared === false, "library restore without settings re-arms the stamp check");
+  await db.importBundle(parsed); // full post-migration bundle restores the marker
+  ok((await db.Settings.get()).restSeedStampsCleared === true, "full post-migration restore carries the marker");
+}
+
 // A backup missing a store's key must leave that store untouched (old-format
 // bundles), and a malformed bundle must not wipe anything.
 {

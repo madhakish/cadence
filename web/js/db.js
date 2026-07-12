@@ -358,7 +358,25 @@ export async function importBundle(bundle) {
     barcodeImage: isInlineImage(g.barcodeImage) ? g.barcodeImage : null,
   })));
   if (bundle.exercises) writes.set("exercises", bundle.exercises);
-  if (bundle.settings) writes.set("settings", [{ ...normalizeSettings(bundle.settings), id: "app" }]);
+  // restSeedStampsCleared describes the EXERCISE LIBRARY's migration state, so
+  // it follows the bundle only when the library itself was restored from it:
+  // a settings-only restore keeps the store's current marker (else the next
+  // syncLibrary would re-clear over an untouched library — and could eat a
+  // user-set rest that happens to equal a retired stamp), and a library
+  // restored with no settings riding along is of unknown vintage, so the
+  // marker resets and the next launch re-checks the stamps.
+  if (bundle.settings) {
+    const s = { ...normalizeSettings(bundle.settings), id: "app" };
+    if (!bundle.exercises) {
+      const cur = await get("settings", "app");
+      if (cur && cur.restSeedStampsCleared !== undefined) s.restSeedStampsCleared = cur.restSeedStampsCleared;
+      else delete s.restSeedStampsCleared;
+    }
+    writes.set("settings", [s]);
+  } else if (bundle.exercises) {
+    const cur = await get("settings", "app");
+    if (cur) writes.set("settings", [{ ...cur, restSeedStampsCleared: false }]);
+  }
 
   const stores = [...writes.keys()];
   if (!stores.length) throw new Error("Not a Cadence backup");

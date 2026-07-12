@@ -480,6 +480,17 @@ private struct ExerciseSection: View {
 
             Stepper("Rest between sets: \(mmss(restSeconds))", value: restBinding, in: restFloor...600, step: 15)
                 .font(.caption)
+            // The stepper shows the EFFECTIVE rest, so its floor can't offer
+            // 0 ("Default") without the display snapping to the bucket value —
+            // clearing an override back to bucket-driven is an explicit action
+            // instead, offered only while an override exists.
+            if (entry.exercise?.defaultRestSeconds ?? 0) > 0 {
+                Button("Reset rest to default") {
+                    entry.exercise?.defaultRestSeconds = 0
+                    try? context.save()
+                }
+                .font(.caption)
+            }
         } header: {
             HStack {
                 Text(entry.exercise?.name ?? "Exercise")
