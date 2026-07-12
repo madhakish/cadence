@@ -32,6 +32,31 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(P.gradeCycle(p), .fail)
         p = cleanPerf(); p.anyDroppedLoad = true
         XCTAssertEqual(P.gradeCycle(p), .fail)
+        p = cleanPerf(); p.anyBelowPlanLoad = true
+        XCTAssertEqual(P.gradeCycle(p), .fail)
+    }
+
+    func testBelowPlanLoadTolerance() {
+        // Met within half a rounding step; a full step down is a drop (issue 18).
+        XCTAssertFalse(P.belowPlanLoad(actualLb: 175, plannedLb: 175, roundingLb: 5))
+        XCTAssertFalse(P.belowPlanLoad(actualLb: 180, plannedLb: 175, roundingLb: 5), "heavier than plan is fine")
+        XCTAssertFalse(P.belowPlanLoad(actualLb: 172.5, plannedLb: 175, roundingLb: 5), "half a step under is still met (boundary)")
+        XCTAssertTrue(P.belowPlanLoad(actualLb: 172.4, plannedLb: 175, roundingLb: 5), "past half a step is a drop")
+        XCTAssertTrue(P.belowPlanLoad(actualLb: 170, plannedLb: 175, roundingLb: 5), "a full plate step down is a drop")
+        XCTAssertFalse(P.belowPlanLoad(actualLb: 100, plannedLb: nil, roundingLb: 5), "no prescription → nothing to compare")
+        XCTAssertFalse(P.belowPlanLoad(actualLb: 100, plannedLb: 0, roundingLb: 5), "zero plan → nothing to compare")
+    }
+
+    func testBelowPlanWorkFailsCycle() {
+        // Issue 18 repro: 3×3 prescribed at 175 (e1RM 300) but performed at 100
+        // must not grade success, reset the stall, or raise the base weight.
+        var p = cleanPerf(); p.anyBelowPlanLoad = true; p.topSetWeightLb = 100
+        let state = ProgramLiftState(baseWeightLb: 175, estimatedMaxLb: 300, stallCount: 0, role: .main, lastIncrementLb: 0)
+        let r = P.advanceCycleLift(state, perf: p, focus: .strength, roundingLb: 5)
+        XCTAssertEqual(r.grade, .fail, "below-plan cycle fails")
+        XCTAssertEqual(r.state.baseWeightLb, 175, accuracy: 1e-9, "no bump off work that wasn't done")
+        XCTAssertEqual(r.state.stallCount, 1, "below-plan counts as a stall, not a reset")
+        XCTAssertEqual(r.state.lastIncrementLb, 0, accuracy: 1e-9, "no increment recorded")
     }
 
     func testCleanCycleAddsTaperedIncrement() {

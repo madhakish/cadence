@@ -431,11 +431,24 @@ export const epleyE1RM = (weightLb, reps) => (reps >= 1 ? weightLb * (1 + reps /
 export const smoothE1RM = (prior, sample) => (prior <= 0 ? sample : 0.7 * prior + 0.3 * sample);
 
 // perf: { prescribedSets, prescribedReps, completedSets, anyStoppedEarly,
-//         anyDroppedLoad, grindyOrWobbleSets, topSetWeightLb, topSetReps }
+//         anyDroppedLoad, anyBelowPlanLoad, grindyOrWobbleSets, topSetWeightLb, topSetReps }
 export function gradeCycle(perf) {
-  if (perf.completedSets < perf.prescribedSets || perf.anyStoppedEarly || perf.anyDroppedLoad) return "fail";
+  if (perf.completedSets < perf.prescribedSets || perf.anyStoppedEarly || perf.anyDroppedLoad
+      || perf.anyBelowPlanLoad) return "fail";
   if (perf.grindyOrWobbleSets > QUALITY_FLAG_TOLERANCE) return "hold";
   return "success";
+}
+
+// Whether a working set's actual load fell below its prescription. Reps at a
+// reduced weight must not grade as a clean success — that would reset the stall
+// counter and bump the base weight off work that wasn't done. The tolerance is
+// HALF a plate-rounding step: within it counts as met (float noise, kg-entry
+// conversions), a full step down is a genuine drop. Applies to manual edits and
+// autoreg drops alike; heavier than planned is always fine; no prescription
+// (null/zero plan) means nothing to compare against.
+export function belowPlanLoad(actualLb, plannedLb, roundingLb = DEFAULT_ROUNDING_LB) {
+  if (plannedLb == null || plannedLb <= 0) return false;
+  return actualLb < plannedLb - roundingLb / 2;
 }
 
 // Increment = fraction of base × headroom-to-ceiling, floored at plate granularity,
