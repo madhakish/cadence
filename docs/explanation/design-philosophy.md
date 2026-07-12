@@ -39,7 +39,9 @@ the app says *add weight*, you can trust it.
 Your training data lives on your device and moves only in backup files
 you export yourself. This keeps the app fast, private, and free of
 infrastructure — with the trade-off that
-[backups are your job](../how-to/back-up-and-restore.md).
+[backups are your job](../how-to/back-up-and-restore.md). (The roadmap
+contemplates an optional sync portal later; local-first stays the
+default either way.)
 
 ## One brain, two apps
 

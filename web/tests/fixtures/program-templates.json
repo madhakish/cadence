@@ -1,0 +1,474 @@
+[
+  {
+    "id": "strength-upper-lower",
+    "name": "Strength — Upper/Lower",
+    "tagline": "4 days · barbell strength · A/B split over a 4-week wave",
+    "focus": "strength",
+    "roundingLb": 5,
+    "exercises": [
+      {
+        "name": "Chin-ups",
+        "category": "Accessory",
+        "type": "bodyweight",
+        "group": "pull",
+        "isUnilateral": false,
+        "rest": 120
+      },
+      {
+        "name": "Back Extension",
+        "category": "Accessory",
+        "type": "bodyweight",
+        "group": "hinge",
+        "isUnilateral": false,
+        "rest": 90
+      },
+      {
+        "name": "Hanging Knee Raise",
+        "category": "Accessory",
+        "type": "bodyweight",
+        "group": "core",
+        "isUnilateral": false,
+        "rest": 90
+      },
+      {
+        "name": "Push-ups",
+        "category": "Accessory",
+        "type": "bodyweight",
+        "group": "press",
+        "isUnilateral": false,
+        "rest": 90
+      }
+    ],
+    "days": [
+      {
+        "name": "Upper A",
+        "lifts": [
+          {
+            "exercise": "Overhead Press",
+            "role": "main",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 95
+          },
+          {
+            "exercise": "Incline DB Press",
+            "role": "complementary",
+            "baseWeightLb": 50,
+            "estimatedMaxLb": 80
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Chin-ups",
+            "sets": 3,
+            "minReps": 5,
+            "maxReps": 10,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Single-arm DB Row",
+            "sets": 3,
+            "minReps": 8,
+            "maxReps": 12,
+            "weightLb": 40,
+            "incrementLb": 5
+          }
+        ]
+      },
+      {
+        "name": "Lower A",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 135,
+            "estimatedMaxLb": 205
+          },
+          {
+            "exercise": "Romanian Deadlift",
+            "role": "complementary",
+            "baseWeightLb": 95,
+            "estimatedMaxLb": 165
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Walking Lunges",
+            "sets": 3,
+            "minReps": 10,
+            "maxReps": 20,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Hanging Knee Raise",
+            "sets": 3,
+            "minReps": 8,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
+          }
+        ]
+      },
+      {
+        "name": "Upper B",
+        "lifts": [
+          {
+            "exercise": "Push Press",
+            "role": "main",
+            "baseWeightLb": 75,
+            "estimatedMaxLb": 115
+          },
+          {
+            "exercise": "Incline DB Press",
+            "role": "complementary",
+            "baseWeightLb": 50,
+            "estimatedMaxLb": 80
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Push-ups",
+            "sets": 3,
+            "minReps": 10,
+            "maxReps": 25,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Single-arm DB Row",
+            "sets": 3,
+            "minReps": 8,
+            "maxReps": 12,
+            "weightLb": 40,
+            "incrementLb": 5
+          }
+        ]
+      },
+      {
+        "name": "Lower B",
+        "lifts": [
+          {
+            "exercise": "Deadlift",
+            "role": "main",
+            "baseWeightLb": 155,
+            "estimatedMaxLb": 245
+          },
+          {
+            "exercise": "Front Squat",
+            "role": "complementary",
+            "baseWeightLb": 95,
+            "estimatedMaxLb": 155
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Back Extension",
+            "sets": 3,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Hanging Knee Raise",
+            "sets": 3,
+            "minReps": 8,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "olympic-weightlifting",
+    "name": "Olympic Weightlifting",
+    "tagline": "3 days · snatch, clean & jerk, strength base",
+    "focus": "strength",
+    "roundingLb": 5,
+    "exercises": [
+      {
+        "name": "Pull-ups",
+        "category": "Accessory",
+        "type": "bodyweight",
+        "group": "pull",
+        "isUnilateral": false,
+        "rest": 120
+      },
+      {
+        "name": "Back Extension",
+        "category": "Accessory",
+        "type": "bodyweight",
+        "group": "hinge",
+        "isUnilateral": false,
+        "rest": 90
+      },
+      {
+        "name": "Hanging Knee Raise",
+        "category": "Accessory",
+        "type": "bodyweight",
+        "group": "core",
+        "isUnilateral": false,
+        "rest": 90
+      }
+    ],
+    "days": [
+      {
+        "name": "Snatch Day",
+        "lifts": [
+          {
+            "exercise": "Snatch",
+            "role": "main",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 115
+          },
+          {
+            "exercise": "Overhead Squat",
+            "role": "complementary",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 115
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Snatch Pull",
+            "sets": 3,
+            "minReps": 3,
+            "maxReps": 5,
+            "weightLb": 95,
+            "incrementLb": 10
+          },
+          {
+            "exercise": "Hanging Knee Raise",
+            "sets": 3,
+            "minReps": 8,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
+          }
+        ]
+      },
+      {
+        "name": "Clean & Jerk Day",
+        "lifts": [
+          {
+            "exercise": "Clean & Jerk",
+            "role": "main",
+            "baseWeightLb": 85,
+            "estimatedMaxLb": 145
+          },
+          {
+            "exercise": "Front Squat",
+            "role": "complementary",
+            "baseWeightLb": 115,
+            "estimatedMaxLb": 185
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Clean Pull",
+            "sets": 3,
+            "minReps": 3,
+            "maxReps": 5,
+            "weightLb": 115,
+            "incrementLb": 10
+          },
+          {
+            "exercise": "Pull-ups",
+            "sets": 3,
+            "minReps": 5,
+            "maxReps": 10,
+            "weightLb": 0,
+            "incrementLb": 0
+          }
+        ]
+      },
+      {
+        "name": "Strength Day",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 135,
+            "estimatedMaxLb": 225
+          },
+          {
+            "exercise": "Overhead Press",
+            "role": "complementary",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 105
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Back Extension",
+            "sets": 3,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Hanging Knee Raise",
+            "sets": 3,
+            "minReps": 8,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "metabolic-conditioning",
+    "name": "Metabolic Conditioning",
+    "tagline": "3 days · circuits & engine work · reps climb, loads hold",
+    "focus": "maintain",
+    "roundingLb": 5,
+    "exercises": [
+      {
+        "name": "Goblet Squat",
+        "category": "Accessory",
+        "type": "kettlebell",
+        "group": "squat",
+        "isUnilateral": false,
+        "rest": 60
+      },
+      {
+        "name": "Burpees",
+        "category": "Conditioning",
+        "type": "bodyweight",
+        "group": "conditioning",
+        "isUnilateral": false,
+        "rest": 60
+      },
+      {
+        "name": "Push-ups",
+        "category": "Accessory",
+        "type": "bodyweight",
+        "group": "press",
+        "isUnilateral": false,
+        "rest": 60
+      },
+      {
+        "name": "Mountain Climbers",
+        "category": "Conditioning",
+        "type": "bodyweight",
+        "group": "conditioning",
+        "isUnilateral": false,
+        "rest": 45
+      },
+      {
+        "name": "Sit-ups",
+        "category": "Accessory",
+        "type": "bodyweight",
+        "group": "core",
+        "isUnilateral": false,
+        "rest": 45
+      },
+      {
+        "name": "Box Jumps",
+        "category": "Conditioning",
+        "type": "bodyweight",
+        "group": "conditioning",
+        "isUnilateral": false,
+        "rest": 60
+      }
+    ],
+    "days": [
+      {
+        "name": "Engine A",
+        "lifts": [],
+        "accessories": [
+          {
+            "exercise": "KB Swing",
+            "sets": 5,
+            "minReps": 10,
+            "maxReps": 20,
+            "weightLb": 35,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Burpees",
+            "sets": 4,
+            "minReps": 8,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Mountain Climbers",
+            "sets": 4,
+            "minReps": 20,
+            "maxReps": 40,
+            "weightLb": 0,
+            "incrementLb": 0
+          }
+        ]
+      },
+      {
+        "name": "Engine B",
+        "lifts": [],
+        "accessories": [
+          {
+            "exercise": "Push-ups",
+            "sets": 4,
+            "minReps": 10,
+            "maxReps": 25,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Ring Row",
+            "sets": 4,
+            "minReps": 8,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Sit-ups",
+            "sets": 4,
+            "minReps": 15,
+            "maxReps": 30,
+            "weightLb": 0,
+            "incrementLb": 0
+          }
+        ]
+      },
+      {
+        "name": "Engine C",
+        "lifts": [],
+        "accessories": [
+          {
+            "exercise": "Box Jumps",
+            "sets": 4,
+            "minReps": 8,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Goblet Squat",
+            "sets": 4,
+            "minReps": 10,
+            "maxReps": 20,
+            "weightLb": 35,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Walking Lunges",
+            "sets": 4,
+            "minReps": 12,
+            "maxReps": 24,
+            "weightLb": 0,
+            "incrementLb": 0
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -107,7 +107,7 @@ export async function render(host) {
     // created becomes active either way.
     ui.actionSheet("Start from", [
       ...PROGRAM_TEMPLATES.map((t) => ({ label: `${t.name} — ${t.tagline}`, onClick: async () => {
-        await createProgramFromTemplate(t, { makeActive: programs.length === 0 });
+        await createProgramFromTemplate(t);
         ui.nav.refresh();
       } })),
       { label: "Blank program", onClick: async () => {

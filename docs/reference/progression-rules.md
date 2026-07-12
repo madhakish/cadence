@@ -1,7 +1,15 @@
 # Progression rules reference
 
+<!-- MUST MATCH the constants in
+     CadenceCore/Sources/CadenceCore/ProgramProgression.swift (tmFraction,
+     incrementFraction, qualityFlagTolerance, stallLimit,
+     deloadRebuildFraction, belowPlanLoad) ≡ web/js/core.js. Update this page
+     when tuning them. -->
+
 The engine is deterministic: same performance in, same decision out.
-Numbers below are the shipped constants.
+Numbers below are the shipped constants (source of truth:
+`ProgramProgression.swift` and its `core.js` mirror — this page is the
+owner table for docs; other pages link here rather than restating).
 
 ## The 4-week wave
 

@@ -9,7 +9,7 @@
 const CACHE = "cadence-__BUILD__";
 const ASSETS = [
   "./", "index.html", "styles.css", "manifest.webmanifest",
-  "js/app.js", "js/core.js", "js/db.js", "js/seed.js", "js/ui.js", "js/charts.js", "js/constants.js", "js/barbell.js",
+  "js/app.js", "js/core.js", "js/db.js", "js/seed.js", "js/templates.js", "js/ui.js", "js/charts.js", "js/constants.js", "js/barbell.js",
   "js/views/home.js", "js/views/history.js", "js/views/body.js",
   "js/views/signals.js", "js/views/settings.js", "js/views/session.js", "js/views/plates.js",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png",

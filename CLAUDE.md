@@ -22,7 +22,7 @@ suite). That parity is non-negotiable — it's why the two apps can't drift.
 | `web/` | Web PWA: `js/core.js` (mirror of CadenceCore), `js/db.js` (IndexedDB), views, service worker. No build step |
 | `web/tests/` | `core.test.mjs` (parity checks vs XCTest) + `smoke.test.mjs` (jsdom + fake-indexeddb) + `fixtures/synthetic-backup.json` (broad-coverage dataset; regenerate with `web/tools/generate-synthetic-backup.mjs`, restores into BOTH apps) |
 | `docs/` | User documentation, Diátaxis-structured (tutorials/how-to/reference/explanation); `docs/README.md` is the index. Update alongside behavior changes |
-| `web/js/templates.js` ≡ `Cadence/Seed/ProgramTemplates.swift` | Program style templates (data-only, ported 1:1 like the seed) behind the "+ Add program" picker |
+| `web/js/templates.js` ≡ `CadenceCore/…/ProgramTemplateData.swift` | Program style templates (data) behind the "+ Add program" picker. Parity ENFORCED: both suites assert against `web/tests/fixtures/program-templates.json` (regenerate via `web/tools/generate-template-fixture.mjs`). App-side instantiation: `Cadence/Seed/ProgramTemplates.swift`. Template exercises must use canonical seeded names — a variant spelling forks the library |
 | `fastlane/`, `docs/TESTFLIGHT.md` | Mac-free TestFlight pipeline (dormant until configured) |
 | `.github/workflows/ci.yml`, `pages.yml` | CI + release pipeline; web tests + Pages deploy |
 | `.releaserc.json` | semantic-release config |
@@ -186,7 +186,9 @@ The app holds an opinion about training; these constraints keep it coherent.
 - **The program is the prior.** A known plan collapses "which of 470 exercises"
   into "which of today's five." Lean on it.
 - **n=1.** Built for one user, ~30 movements, one gym. Refuse speculative
-  generality; generalize later from a working app + real data.
+  generality; generalize later from a working app + real data. (The program
+  style templates are the one sanctioned exception, added by owner decision —
+  data-only, fixture-locked, and editable into anything after creation.)
 - **Logic in CadenceCore, pure + tested + mirrored to JS.** Platform I/O
   (HealthKit, IndexedDB/SwiftData, sensors) stays at the edges so the reasoning
   is deterministic and unit-testable.

@@ -47,7 +47,8 @@ instead of adding load.
 ## Sanity checklist before day one
 
 - Exactly one **Main** lift per day.
-- Rotation-1 bases honest (comfortable 3×5 today, not aspirational).
+- Rotation-1 bases honest (a comfortable 5×5 today — week 1's actual
+  prescription — not aspirational).
 - Bodyweight accessories have load step 0.
 - The program is **Active** and Rotation shows week 1 unless you're
   intentionally mid-cycle.

@@ -19,11 +19,10 @@ the standalone "Next up" tracks.
 
 ### Focus
 
-| Focus | Training-max ceiling | Per-cycle increment |
-|---|---|---|
-| strength | 90% of est. 1RM | 2.5% of base × headroom |
-| hypertrophy | 78% of est. 1RM | 1.5% of base × headroom |
-| maintain | — | never increments |
+Ceiling and increment values live in
+[Progression rules](progression-rules.md#what-each-grade-does-at-rollover)
+— in short: strength pushes to 90% of est. 1RM with 2.5% increments,
+hypertrophy to 78% with 1.5%, maintain never increments.
 
 ## Lift (per day)
 
