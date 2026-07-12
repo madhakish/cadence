@@ -308,7 +308,16 @@ export async function importBundle(bundle) {
   if (bundle.milestones) writes.set("milestones", bundle.milestones.map((m) => ({ date: m.date, exerciseName: m.exercise || null, kind: m.kind, label: m.label })));
   if (bundle.programs) writes.set("programs", bundle.programs);
   if (bundle.tracks) writes.set("tracks", bundle.tracks);
-  if (bundle.gyms) writes.set("gyms", bundle.gyms);
+  // Gyms are kept as-is except barcodeImage, which must be an inline base64
+  // data:image/* URL — exactly what the gym editor's FileReader produces. A
+  // remote URL smuggled into a backup would otherwise beacon the user's IP to
+  // an attacker-chosen host every time the gym card renders. (SVG-as-img can't
+  // load external resources, so no per-MIME allowlist is needed.)
+  const isInlineImage = (v) => typeof v === "string" && /^data:image\/[\w.+-]+;base64,/i.test(v);
+  if (bundle.gyms) writes.set("gyms", bundle.gyms.map((g) => ({
+    ...g,
+    barcodeImage: isInlineImage(g.barcodeImage) ? g.barcodeImage : null,
+  })));
   if (bundle.exercises) writes.set("exercises", bundle.exercises);
   if (bundle.settings) writes.set("settings", [{ ...normalizeSettings(bundle.settings), id: "app" }]);
 

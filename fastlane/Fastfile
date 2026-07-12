@@ -33,12 +33,14 @@ platform :ios do
     # App Store Connect app record are created once by hand — see docs/TESTFLIGHT.md.
     # That's more reliable than headless `produce`.
 
-    # Fetch (or create on first run) the distribution cert + provisioning
-    # profiles for BOTH the app and the widget extension. If the widget App ID
-    # (com.madhakish.Cadence.Widgets) doesn't yet exist, `readonly: false` +
-    # the API key registers it — or create it by hand like the main App ID
-    # (see docs/TESTFLIGHT.md).
-    match(type: "appstore", app_identifier: [APP_ID, WIDGET_ID], api_key: api_key, readonly: false)
+    # Fetch the distribution cert + provisioning profiles for BOTH the app and
+    # the widget extension. READ-ONLY by default (see Matchfile): routine CI
+    # runs must not be able to rewrite the signing material, which caps the
+    # blast radius of a compromised job or dependency. First-run provisioning
+    # of a new App ID needs a one-off MATCH_READONLY=false + a read/write PAT
+    # (see docs/TESTFLIGHT.md), then revert both.
+    match(type: "appstore", app_identifier: [APP_ID, WIDGET_ID], api_key: api_key,
+          readonly: ENV["MATCH_READONLY"] != "false")
 
     # Switch each target to manual signing with its match profile.
     update_code_signing_settings(

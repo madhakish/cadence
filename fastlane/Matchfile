@@ -8,4 +8,9 @@ app_identifier([
   ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence",
   "#{ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence"}.Widgets" # Live Activity widget extension
 ])
-readonly(false) # first run creates the cert + profile; safe to keep false
+# Read-only by default: routine CI builds must never be able to rewrite the
+# signing material in the certs repo (and the PAT behind
+# MATCH_GIT_BASIC_AUTHORIZATION can be scoped read-only to match). For one-off
+# provisioning of a new cert/profile, set MATCH_READONLY=false and use a
+# read/write PAT, then revert both.
+readonly(ENV["MATCH_READONLY"] != "false")
