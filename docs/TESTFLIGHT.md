@@ -33,8 +33,9 @@ read-only** access and an expiry — steady-state CI only ever *fetches* the
 certs (`match` runs read-only by default; see the Matchfile), so the token in
 CI can't rewrite your signing material even if a job is compromised. CI
 authenticates via `MATCH_GIT_BASIC_AUTHORIZATION` =
-`base64("<github-username>:<PAT>")` (no newline), e.g.:
-`printf 'madhakish:github_pat_xxx' | base64`
+`base64("<github-username>:<PAT>")` — with no newline anywhere, so strip the
+trailing one `base64` emits:
+`printf 'madhakish:github_pat_xxx' | base64 | tr -d '\n'`
 
 For the **first run only** (when `match` must *create* the cert + profiles) you
 need write access: temporarily use a Contents **read-and-write** fine-grained

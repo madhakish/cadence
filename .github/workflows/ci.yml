@@ -168,9 +168,18 @@ jobs:
         # "latest stable" is a version-sorted find + xcode-select. Deliberately
         # NOT a third-party action: this job holds all the Apple signing
         # secrets, and no external maintainer belongs in it.
+        # Version selection in python3 (always on the runner) instead of
+        # `sort -V`, which BSD/macOS sort builds don't reliably support.
         run: |
-          LATEST="$(find /Applications -maxdepth 1 -name 'Xcode_*.app' \
-            | grep -viE 'beta|release[_ .-]?candidate' | sort -V | tail -n1)"
+          LATEST="$(python3 -c '
+          import glob, re, sys
+          apps = [a for a in glob.glob("/Applications/Xcode_*.app")
+                  if not re.search(r"beta|release[_ .-]?candidate", a, re.I)]
+          def ver(a):
+              m = re.search(r"Xcode_([0-9][0-9.]*)", a)
+              return [int(x) for x in m.group(1).strip(".").split(".")] if m else [0]
+          print(max(apps, key=ver) if apps else "")
+          ')"
           if [ -z "$LATEST" ]; then echo "No stable Xcode found on runner" >&2; exit 1; fi
           echo "Selecting $LATEST"
           sudo xcode-select --switch "$LATEST/Contents/Developer"
