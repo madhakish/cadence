@@ -5,6 +5,8 @@ import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
 import { Settings, Gyms, Tracks, Exercises, Programs, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate } from "../templates.js";
+import { muscleProfile, muscleBlurb, figureSVG } from "../anatomy.js";
+import { Sessions } from "../db.js";
 
 // Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
 // Peak result would otherwise make the next rollover treat the skipped Peak as a
@@ -287,10 +289,11 @@ function programDayEditor(p, day) {
         body.append(ui.field("Day name", nameInput));
 
         body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
+        const openDetail = async (name) => { const ex = await Exercises.byName(name); if (ex) exerciseDetail(ex); };
         for (const l of [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1))) {
           body.append(ui.h("div", { class: "card" },
             ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
-              ui.h("span", { class: "title", text: l.exerciseName }),
+              ui.h("span", { class: "title", text: l.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(l.exerciseName) }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.lifts = day.lifts.filter((x) => x !== l); await Programs.save(p); draw(); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
               ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); })),
@@ -308,7 +311,7 @@ function programDayEditor(p, day) {
         for (const a of day.accessories) {
           body.append(ui.h("div", { class: "card" },
             ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
-              ui.h("span", { class: "title", text: a.exerciseName }),
+              ui.h("span", { class: "title", text: a.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(a.exerciseName) }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.accessories = day.accessories.filter((x) => x !== a); await Programs.save(p); draw(); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Weight" }),
               ui.stepper(a.weightLb, { min: 0, max: 500, step: 2.5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { a.weightLb = v; await Programs.save(p); } })),
@@ -379,12 +382,60 @@ function exerciseLibrary(exercises) {
   });
 }
 
+// Program membership, last-performed, and progress for one exercise —
+// assembled async and filled into `wrap` so the screen renders instantly.
+async function exerciseInsight(wrap, e) {
+  const [programs, completed] = await Promise.all([Programs.all(), Sessions.completed()]);
+  const memberships = [];
+  for (const p of programs) {
+    for (const d of p.days || []) {
+      for (const l of d.lifts || []) if (l.exerciseName === e.name) memberships.push(`${p.name} · ${d.name} (${l.role})`);
+      for (const a of d.accessories || []) if (a.exerciseName === e.name) memberships.push(`${p.name} · ${d.name} (accessory)`);
+    }
+  }
+  const hist = []; // newest first (Sessions.completed sorts desc)
+  for (const s of completed) {
+    const se = s.exercises.find((x) => x.exerciseName === e.name);
+    if (!se) continue;
+    const w = se.sets.filter((x) => !x.isWarmup);
+    if (!w.length) continue;
+    const top = w.reduce((b, x) => (!b || x.weightLb > b.weightLb ? x : b), null);
+    const prog = s.programTag ? (programs.find((p) => p.id === s.programTag.programId)?.name ?? "a program") : null;
+    hist.push({ date: s.date, top, prog });
+  }
+  const card = ui.h("div", { class: "card" });
+  const last = hist[0];
+  card.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Last done" }),
+    ui.h("span", { class: "sub", text: last
+      ? `${ui.fmtDate(last.date)} — ${C.trim(last.top.weightLb)} lb × ${last.top.reps}${last.prog ? ` · ${last.prog}` : ""}`
+      : "not yet" })));
+  card.append(ui.h("div", { class: "row" }, ui.h("span", { text: "In programs" }),
+    ui.h("span", { class: "sub", style: { textAlign: "right", whiteSpace: "pre-line" }, text: memberships.join("\n") || "none" })));
+  if (hist.length >= 2) {
+    const series = [...hist].reverse().slice(-24).map((h) => h.top.weightLb);
+    card.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
+      ui.h("span", { text: `Top set, last ${series.length}` }), ui.spark(series)));
+  }
+  wrap.append(card);
+}
+
 function exerciseDetail(e) {
   ui.pushScreen({
     title: e.name,
     build: (body) => {
       const draw = () => {
         ui.clear(body);
+        // Muscles first: primary movers red, supporting blue.
+        const profile = muscleProfile(e.name, e.movementGroup);
+        if (profile) {
+          const svg = figureSVG(profile);
+          svg.style.maxWidth = "280px"; svg.style.width = "100%";
+          body.append(ui.h("div", { class: "card", style: { textAlign: "center", padding: "12px" } },
+            svg, ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: muscleBlurb(profile) })));
+        }
+        const insightWrap = ui.h("div", {});
+        body.append(insightWrap);
+        exerciseInsight(insightWrap, e);
         const typeSel = ui.h("select", {}, ...EX_TYPES.map((t) => ui.h("option", { value: t, text: t, selected: t === e.type })));
         typeSel.addEventListener("change", async () => { e.type = typeSel.value; await Exercises.save(e); });
         body.append(ui.field("Type", typeSel));

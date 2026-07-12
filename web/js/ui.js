@@ -192,3 +192,29 @@ export function wave(week) {
   }
   return el;
 }
+
+// Tiny inline sparkline (SVG polyline) for progress-at-a-glance rows; strokes
+// with currentColor and dots the latest value.
+export function spark(values, { width = 132, height = 30, pad = 3 } = {}) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width); svg.setAttribute("height", height);
+  svg.setAttribute("class", "spark");
+  if (values.length < 2) return svg;
+  const min = Math.min(...values), max = Math.max(...values);
+  const x = (i) => pad + (i * (width - 2 * pad)) / (values.length - 1);
+  const y = (v) => max === min ? height / 2 : height - pad - ((v - min) * (height - 2 * pad)) / (max - min);
+  const line = document.createElementNS(NS, "polyline");
+  line.setAttribute("points", values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" "));
+  line.setAttribute("fill", "none");
+  line.setAttribute("stroke", "currentColor");
+  line.setAttribute("stroke-width", "1.6");
+  const dot = document.createElementNS(NS, "circle");
+  dot.setAttribute("cx", x(values.length - 1).toFixed(1));
+  dot.setAttribute("cy", y(values[values.length - 1]).toFixed(1));
+  dot.setAttribute("r", "2.2");
+  dot.setAttribute("fill", "currentColor");
+  svg.append(line, dot);
+  return svg;
+}

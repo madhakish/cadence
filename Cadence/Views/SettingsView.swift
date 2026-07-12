@@ -548,7 +548,14 @@ private struct ProgramLiftRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(lift.exerciseName).font(.headline)
+                // Tapping the name opens the exercise detail (muscles worked,
+                // history, program membership).
+                NavigationLink {
+                    ExerciseDetailByNameView(name: lift.exerciseName)
+                } label: {
+                    Text(lift.exerciseName).font(.headline)
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 Button(role: .destructive, action: onRemove) {
                     Image(systemName: "trash")
@@ -574,7 +581,12 @@ private struct ProgramAccessoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(accessory.exerciseName).font(.headline)
+                NavigationLink {
+                    ExerciseDetailByNameView(name: accessory.exerciseName)
+                } label: {
+                    Text(accessory.exerciseName).font(.headline)
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 Button(role: .destructive, action: onRemove) {
                     Image(systemName: "trash")

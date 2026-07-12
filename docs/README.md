@@ -20,6 +20,7 @@ section that matches what you're trying to do.
 - [Build a custom program](how-to/build-a-custom-program.md)
 - [Run a training day](how-to/run-a-training-day.md)
 - [Swap an exercise](how-to/swap-an-exercise.md)
+- [See what a lift works — muscles, history, programs](how-to/exercise-details.md)
 - [Edit a program mid-cycle](how-to/edit-a-program-mid-cycle.md)
 - [Back up and restore your data](how-to/back-up-and-restore.md)
 
