@@ -1,0 +1,45 @@
+# Back up and restore your data
+
+Cadence is local-first: your data lives on the device, in the browser's
+IndexedDB (web) or on-device storage (iOS). Nothing is synced anywhere.
+That means **backups are your responsibility** — and on the web
+especially, iOS Safari can evict local storage for sites you haven't
+visited in a while.
+
+## Export
+
+**Settings → Data**:
+
+- **Export JSON** — the full backup bundle: sessions, body log, protein,
+  check-ins, milestones, programs (including mid-cycle state: pending
+  peak grades and cycle-swap markers), tracked lifts, gyms, exercise
+  library, settings.
+- **Export CSV** — sessions flattened for spreadsheets. Not a backup;
+  it can't be re-imported.
+
+Export regularly — after a PR day is a good habit. The JSON is plain
+text; keep it wherever you keep files you care about.
+
+## Restore
+
+**Settings → Data → Import** and pick a backup JSON.
+
+- The bundle is the same format on both platforms: an iOS export
+  restores into the web app and vice versa. This is also the way to
+  move between devices.
+- Restore is transactional and per-section: only the sections present in
+  the bundle are replaced (an old backup without `programs` leaves your
+  programs alone), and a malformed file aborts without changing
+  anything.
+- Mid-cycle program state survives the round trip — pending peak
+  results apply at the next rollover and cycle-scoped swaps still revert
+  on schedule, whichever platform finishes the cycle.
+
+One safety rule on restore: gym barcode images are only accepted as
+inline image data, never as remote URLs, so a tampered backup can't make
+the app phone home.
+
+## Reset
+
+**Settings → Reset all data** wipes the device's copy (the seed data
+returns on next launch). Export first; there is no undo.

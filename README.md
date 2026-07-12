@@ -1,8 +1,15 @@
 # Cadence
 
-A coach's logbook for a structured barbell comeback. Native iOS (SwiftUI +
-SwiftData), iOS 17+, single user, local-first. No backend, no accounts, no
-streaks, no badges, no quotes.
+A coach's logbook for a structured barbell comeback. Two apps sharing one
+brain: native iOS (SwiftUI + SwiftData, iOS 17+) and a web PWA
+([madhakish.github.io/cadence](https://madhakish.github.io/cadence/)).
+Single user, local-first. No backend, no accounts, no streaks, no badges,
+no quotes.
+
+**User documentation** (tutorials, how-to guides, reference) lives in
+[docs/](docs/README.md) — start with
+[Build your first program](docs/tutorials/first-program.md) or
+[pick a pre-programmed style](docs/how-to/start-from-a-style.md).
 
 ## What it does
 
@@ -52,13 +59,16 @@ and next-session suggestions work on first launch: Deadlift → Wk3 Peak 3×3
 │   │   ├── WarmupRamp.swift     # bar×10 + 40/55/70/85% ramp
 │   │   └── PRDetection.swift    # heaviest set / volume PR / first scheme
 │   └── Tests/CadenceCoreTests/  # 40+ unit tests
-└── Cadence/                 # App target (SwiftUI + SwiftData)
-    ├── CadenceApp.swift
-    ├── Models/              # @Model classes (canonical lb everywhere)
-    ├── Seed/Seeder.swift    # exact training history + program state
-    ├── Services/            # notifications, rest timer, completion/PRs,
-    │                        # export, optional HealthKit (write-only)
-    └── Views/               # dark, big targets, terse copy
+├── Cadence/                 # App target (SwiftUI + SwiftData)
+│   ├── CadenceApp.swift
+│   ├── Models/              # @Model classes (canonical lb everywhere)
+│   ├── Seed/                # training history seed + program style templates
+│   ├── Services/            # notifications, rest timer, completion/PRs,
+│   │                        # export, optional HealthKit (write-only)
+│   └── Views/               # dark, big targets, terse copy
+├── web/                     # Web PWA: core.js mirrors CadenceCore 1:1,
+│                            # IndexedDB, no build step, deployed via Pages
+└── docs/                    # User documentation (Diátaxis) + TestFlight guide
 ```
 
 ## Build
@@ -78,11 +88,17 @@ cd CadenceCore && swift test
 # or run the CadenceCore test plan inside Xcode (⌘U)
 ```
 
+Web tests (the parity + smoke suites that keep `web/js/core.js` in
+lockstep with CadenceCore):
+
+```bash
+cd web && npm ci && npm test
+```
+
 Notes:
-- This was authored in a Linux environment without an Apple toolchain, so it
-  has not been compiled yet — expect to fix a handful of compiler nits on
-  first build. The core logic is written to be verified by the test suite
-  first (`swift test` runs on any Mac, no simulator needed).
+- CI builds the app on every push (Linux + macOS jobs) and semantic-release
+  cuts versioned releases with installable artifacts; see `CLAUDE.md` for
+  the pipeline details and `docs/TESTFLIGHT.md` for TestFlight distribution.
 - HealthKit is optional: the capability is declared, the toggle lives in
   Settings, and the app only ever writes (workouts + bodyweight).
 - All weights are stored in lb (`Double`). kg exists only at entry/display.

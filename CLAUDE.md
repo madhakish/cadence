@@ -21,6 +21,8 @@ suite). That parity is non-negotiable — it's why the two apps can't drift.
 | `Cadence/` | Native app target: SwiftUI views, SwiftData `@Model` classes, services, seed data |
 | `web/` | Web PWA: `js/core.js` (mirror of CadenceCore), `js/db.js` (IndexedDB), views, service worker. No build step |
 | `web/tests/` | `core.test.mjs` (parity checks vs XCTest) + `smoke.test.mjs` (jsdom + fake-indexeddb) + `fixtures/synthetic-backup.json` (broad-coverage dataset; regenerate with `web/tools/generate-synthetic-backup.mjs`, restores into BOTH apps) |
+| `docs/` | User documentation, Diátaxis-structured (tutorials/how-to/reference/explanation); `docs/README.md` is the index. Update alongside behavior changes |
+| `web/js/templates.js` ≡ `Cadence/Seed/ProgramTemplates.swift` | Program style templates (data-only, ported 1:1 like the seed) behind the "+ Add program" picker |
 | `fastlane/`, `docs/TESTFLIGHT.md` | Mac-free TestFlight pipeline (dormant until configured) |
 | `.github/workflows/ci.yml`, `pages.yml` | CI + release pipeline; web tests + Pages deploy |
 | `.releaserc.json` | semantic-release config |
