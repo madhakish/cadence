@@ -251,6 +251,32 @@ eq(C.gradeCycle({ ...cleanPerf, grindyOrWobbleSets: 2 }), "hold", "2 grindy → 
 eq(C.gradeCycle({ ...cleanPerf, completedSets: 2 }), "fail", "missed set → fail");
 eq(C.gradeCycle({ ...cleanPerf, anyStoppedEarly: true }), "fail", "stopped early → fail");
 eq(C.gradeCycle({ ...cleanPerf, anyDroppedLoad: true }), "fail", "dropped load → fail");
+eq(C.gradeCycle({ ...cleanPerf, anyBelowPlanLoad: true }), "fail", "below-plan load → fail");
+
+// belowPlanLoad: met within half a rounding step; a full step down is a drop (issue 18)
+eq(C.belowPlanLoad(175, 175, 5), false, "at plan → met");
+eq(C.belowPlanLoad(180, 175, 5), false, "heavier than plan is fine");
+eq(C.belowPlanLoad(172.5, 175, 5), false, "half a step under is still met (boundary)");
+eq(C.belowPlanLoad(172.4, 175, 5), true, "past half a step is a drop");
+eq(C.belowPlanLoad(170, 175, 5), true, "a full plate step down is a drop");
+eq(C.belowPlanLoad(100, null, 5), false, "no prescription → nothing to compare");
+eq(C.belowPlanLoad(100, 0, 5), false, "zero plan → nothing to compare");
+
+// belowPlanWork: the prescription is met by prescribedSets at-plan sets; extras are bonus
+eq(C.belowPlanWork([175, 175, 175], 175, 3, 5), false, "all prescribed sets at plan → met");
+eq(C.belowPlanWork([175, 175, 175, 155], 175, 3, 5), false, "lighter back-off after the planned work is bonus volume");
+eq(C.belowPlanWork([100, 100, 100], 175, 3, 5), true, "whole lift performed light → below plan");
+eq(C.belowPlanWork([175, 175, 155], 175, 3, 5), true, "one prescribed set cut down → below plan");
+eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → nothing to compare");
+
+// issue 18 repro: 3×3 prescribed at 175 (e1RM 300) but performed at 100 must
+// not grade success, reset the stall, or raise the base weight.
+const belowPlanPerf = { ...cleanPerf, anyBelowPlanLoad: true, topSetWeightLb: 100 };
+const rBelow = C.advanceCycleLift({ baseWeightLb: 175, estimatedMaxLb: 300, stallCount: 0, role: "main", lastIncrementLb: 0 }, belowPlanPerf, "strength", 5);
+eq(rBelow.grade, "fail", "below-plan cycle fails");
+eq(rBelow.state.baseWeightLb, 175, "no bump off work that wasn't done");
+eq(rBelow.state.stallCount, 1, "below-plan counts as a stall, not a reset");
+eq(rBelow.state.lastIncrementLb, 0, "no increment recorded");
 
 // clean cycle → tapered increment
 let pres = C.advanceCycleLift(liftState(), cleanPerf, "strength", 5);

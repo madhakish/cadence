@@ -102,7 +102,9 @@ jobs:
 
   release:
     name: Semantic release
-    needs: [core-tests, app-build]
+    # web-tests gates the release too: a tag must never be cut while the JS
+    # mirror of CadenceCore is failing (the parity mandate, issue 21).
+    needs: [core-tests, web-tests, app-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:

@@ -106,7 +106,7 @@ enum SessionCompletion {
 
     // MARK: - Program day/week/cycle advancement (mirrors web advanceProgram)
 
-    private static func cyclePerf(_ entry: SessionExercise) -> CycleLiftPerformance {
+    private static func cyclePerf(_ entry: SessionExercise, roundingLb: Double) -> CycleLiftPerformance {
         let w = entry.workingSets
         let presReps = entry.plannedReps ?? (w.map(\.reps).max() ?? 0)
         let top = w.max { $0.weightLb < $1.weightLb }
@@ -116,6 +116,10 @@ enum SessionCompletion {
             completedSets: w.filter { $0.reps >= presReps }.count,
             anyStoppedEarly: w.contains { $0.flags.contains(.stoppedEarly) },
             anyDroppedLoad: w.contains { $0.autoregReason != nil },
+            anyBelowPlanLoad: ProgramProgression.belowPlanWork(
+                weightsLb: w.map(\.weightLb), plannedLb: entry.plannedWeightLb,
+                prescribedSets: entry.plannedSets ?? w.count, roundingLb: roundingLb
+            ),
             grindyOrWobbleSets: w.filter { $0.flags.contains(.grindy) || $0.flags.contains(.wobble) }.count,
             topSetWeightLb: top?.weightLb ?? 0,
             topSetReps: top?.reps ?? 0
@@ -150,7 +154,7 @@ enum SessionCompletion {
         if week == 3 {
             for lift in day.lifts {
                 if let entry = session.exercises.first(where: { $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue }) {
-                    let result = ProgramProgression.advanceCycleLift(lift.coreState, perf: cyclePerf(entry), focus: program.focus, roundingLb: program.roundingLb)
+                    let result = ProgramProgression.advanceCycleLift(lift.coreState, perf: cyclePerf(entry, roundingLb: program.roundingLb), focus: program.focus, roundingLb: program.roundingLb)
                     lift.pendingBaseWeightLb = result.state.baseWeightLb
                     lift.pendingEstimatedMaxLb = result.state.estimatedMaxLb
                     lift.pendingStallCount = result.state.stallCount

@@ -470,7 +470,7 @@ async function completeSessionInner(session) {
 }
 
 // ---- Performance summaries (built from logged sets, consumed by the core) ----
-function cyclePerf(se) {
+function cyclePerf(se, roundingLb) {
   const w = se.sets.filter((s) => !s.isWarmup);
   const presReps = se.plannedReps ?? (w.length ? Math.max(...w.map((s) => s.reps)) : 0); // ?? not ||: mirrors Swift's nil-coalescing
   const top = w.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
@@ -479,6 +479,7 @@ function cyclePerf(se) {
     completedSets: w.filter((s) => s.reps >= presReps).length,
     anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
     anyDroppedLoad: w.some((s) => !!s.autoregReason),
+    anyBelowPlanLoad: C.belowPlanWork(w.map((s) => s.weightLb), se.plannedWeightLb, se.plannedSets ?? w.length, roundingLb),
     grindyOrWobbleSets: w.filter((s) => (s.flags || []).some((f) => f === "grindy" || f === "wobble")).length,
     topSetWeightLb: top ? top.weightLb : 0, topSetReps: top ? top.reps : 0,
   };
@@ -512,7 +513,7 @@ async function advanceProgram(session, milestones) {
   if (tag.week === 3) {
     for (const lift of day.lifts || []) {
       const se = session.exercises.find((e) => e.exerciseName === lift.exerciseName && e.programRole === lift.role);
-      if (se) lift.pending = C.advanceCycleLift(lift, cyclePerf(se), program.focus, program.roundingLb);
+      if (se) lift.pending = C.advanceCycleLift(lift, cyclePerf(se, program.roundingLb), program.focus, program.roundingLb);
     }
   }
 

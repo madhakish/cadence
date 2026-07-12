@@ -39,17 +39,20 @@ public struct CycleLiftPerformance: Hashable, Sendable {
     public var completedSets: Int          // sets that met or beat target reps
     public var anyStoppedEarly: Bool
     public var anyDroppedLoad: Bool        // a working set carried an autoreg reason
+    public var anyBelowPlanLoad: Bool      // a working set measured below plan (see belowPlanLoad)
     public var grindyOrWobbleSets: Int
     public var topSetWeightLb: Double
     public var topSetReps: Int
 
     public init(prescribedSets: Int, prescribedReps: Int, completedSets: Int, anyStoppedEarly: Bool,
-                anyDroppedLoad: Bool, grindyOrWobbleSets: Int, topSetWeightLb: Double, topSetReps: Int) {
+                anyDroppedLoad: Bool, anyBelowPlanLoad: Bool = false, grindyOrWobbleSets: Int,
+                topSetWeightLb: Double, topSetReps: Int) {
         self.prescribedSets = prescribedSets
         self.prescribedReps = prescribedReps
         self.completedSets = completedSets
         self.anyStoppedEarly = anyStoppedEarly
         self.anyDroppedLoad = anyDroppedLoad
+        self.anyBelowPlanLoad = anyBelowPlanLoad
         self.grindyOrWobbleSets = grindyOrWobbleSets
         self.topSetWeightLb = topSetWeightLb
         self.topSetReps = topSetReps
@@ -128,9 +131,40 @@ public enum ProgramProgression {
     }
 
     public static func gradeCycle(_ perf: CycleLiftPerformance) -> CycleGrade {
-        if perf.completedSets < perf.prescribedSets || perf.anyStoppedEarly || perf.anyDroppedLoad { return .fail }
+        if perf.completedSets < perf.prescribedSets || perf.anyStoppedEarly || perf.anyDroppedLoad
+            || perf.anyBelowPlanLoad { return .fail }
         if perf.grindyOrWobbleSets > qualityFlagTolerance { return .hold }
         return .success
+    }
+
+    /// Whether a working set's actual load fell below its prescription. Reps at
+    /// a reduced weight must not grade as a clean success — that would reset the
+    /// stall counter and bump the base weight off work that wasn't done. The
+    /// tolerance is HALF a plate-rounding step: within it counts as met (float
+    /// noise, kg-entry conversions), a full step down is a genuine drop. Applies
+    /// to manual edits and autoreg drops alike; heavier than planned is always
+    /// fine; no prescription (nil/zero plan) means nothing to compare against.
+    public static func belowPlanLoad(
+        actualLb: Double, plannedLb: Double?,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> Bool {
+        guard let planned = plannedLb, planned > 0 else { return false }
+        return actualLb < planned - roundingLb / 2
+    }
+
+    /// Aggregate for a whole lift: the prescription is met when at least
+    /// `prescribedSets` working sets are at the planned load. Extra sets beyond
+    /// the prescription are bonus volume — a lighter back-off set after
+    /// completing the planned work must not fail the cycle. Fewer at-plan sets
+    /// than prescribed (whole lift performed light, or one prescribed set cut
+    /// down) is below plan.
+    public static func belowPlanWork(
+        weightsLb: [Double], plannedLb: Double?, prescribedSets: Int,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> Bool {
+        guard let planned = plannedLb, planned > 0 else { return false }
+        let atPlan = weightsLb.filter { !belowPlanLoad(actualLb: $0, plannedLb: planned, roundingLb: roundingLb) }.count
+        return atPlan < prescribedSets
     }
 
     /// Increment = fraction of base × headroom-to-ceiling, floored at plate
