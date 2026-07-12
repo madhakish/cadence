@@ -58,32 +58,19 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null) {
 // entered unit) stamped on the handle, so a glance says which pair to grab
 // off the rack. Mirrors Cadence/Views/DumbbellView.swift (same geometry).
 export function dumbbellSVG(weightLb, unit) {
-  const NS = "http://www.w3.org/2000/svg";
   const W = 88, H = 30;
   const value = unit === "kg" ? C.kgFromLb(weightLb) : weightLb;
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.setAttribute("width", W); svg.setAttribute("height", H);
-  svg.setAttribute("class", "dumbbell");
-  const rect = (x, y, w, h, fill, rx = 1.5) => {
-    const r = document.createElementNS(NS, "rect");
-    r.setAttribute("x", x); r.setAttribute("y", y); r.setAttribute("width", w); r.setAttribute("height", h);
-    r.setAttribute("rx", rx); r.setAttribute("fill", fill);
-    r.setAttribute("stroke", "#3A3B42"); r.setAttribute("stroke-width", "0.75");
-    return r;
-  };
+  const svg = el("svg", {
+    viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: "dumbbell",
+    role: "img", "aria-label": `Dumbbell, ${C.trim(value)} ${unit}`,
+  });
+  const plate = (x, y, w, h) => el("rect", { x, y, width: w, height: h, rx: 1.5, fill: "#7C828C", stroke: "#3A3B42", "stroke-width": 0.75 });
   // handle (no stroke — matches the barbell shaft)
-  const handle = rect(15, H / 2 - 3, W - 30, 6, "#9AA0AA", 3);
-  handle.removeAttribute("stroke");
-  svg.append(handle);
+  svg.append(el("rect", { x: 15, y: H / 2 - 3, width: W - 30, height: 6, rx: 3, fill: "#9AA0AA" }));
   // heads: outer + inner plate each side
-  svg.append(rect(0, 3, 7, 24, "#7C828C"), rect(8, 6, 6, 18, "#7C828C"));
-  svg.append(rect(W - 7, 3, 7, 24, "#7C828C"), rect(W - 14, 6, 6, 18, "#7C828C"));
-  const t = document.createElementNS(NS, "text");
-  t.setAttribute("x", W / 2); t.setAttribute("y", H / 2 + 4);
-  t.setAttribute("text-anchor", "middle");
-  t.setAttribute("font-size", "11"); t.setAttribute("font-weight", "700");
-  t.setAttribute("fill", "currentColor");
+  svg.append(plate(0, 3, 7, 24), plate(8, 6, 6, 18));
+  svg.append(plate(W - 7, 3, 7, 24), plate(W - 14, 6, 6, 18));
+  const t = el("text", { x: W / 2, y: H / 2 + 4, "text-anchor": "middle", "font-size": 11, "font-weight": 700, fill: "currentColor" });
   t.textContent = C.trim(value);
   svg.append(t);
   return svg;
