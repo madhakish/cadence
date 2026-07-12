@@ -219,6 +219,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 /* barbell plate visualization */
 .barbell-wrap { display: flex; align-items: center; gap: 8px; padding: 0 0 8px 4px; }
 svg.barbell { height: 36px; max-width: 100%; }
+svg.dumbbell { height: 36px; max-width: 100%; }
 .barbell-hero { padding: 10px 0 4px; }
 .barbell-hero svg.barbell { height: 54px; }
 select.bar-select { width: auto; min-width: 96px; padding: 6px 8px; font-size: 13px; }

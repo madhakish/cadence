@@ -414,9 +414,12 @@ private struct ExerciseSection: View {
                                             exerciseName: entry.exercise?.name ?? "")
                         }
                     })
-                    // Barbell plate visualization (barbell lifts only) — mirrors web.
+                    // Loadout visualization — plates for barbell lifts, the
+                    // rack number for dumbbell lifts. Mirrors web.
                     if entry.exercise?.type == .barbell && set.weightLb > 0 {
                         BarbellView(weightLb: set.weightLb, unit: set.enteredUnit, bar: effectiveBar, gym: gym)
+                    } else if entry.exercise?.type == .dumbbell && set.weightLb > 0 {
+                        DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
                 }
             }
@@ -701,6 +704,9 @@ private struct SetDetailSheet: View {
 
                     if isBarbell && lb > 0 {
                         BarbellView(weightLb: lb, unit: unit, bar: bar, gym: gym)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    } else if exercise?.type == .dumbbell && lb > 0 {
+                        DumbbellView(weightLb: lb, unit: unit)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
 

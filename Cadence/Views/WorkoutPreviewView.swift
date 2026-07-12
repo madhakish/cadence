@@ -64,9 +64,14 @@ struct WorkoutPreviewView: View {
                                 Text("\(p.sets)×\(p.reps)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                             }
                         }
-                        if exercises.first(where: { $0.name == lift.exerciseName })?.type == .barbell, p.weightLb > 0 {
-                            BarbellView(weightLb: p.weightLb, unit: .lb,
-                                        bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
+                        if p.weightLb > 0 {
+                            let type = exercises.first(where: { $0.name == lift.exerciseName })?.type
+                            if type == .barbell {
+                                BarbellView(weightLb: p.weightLb, unit: .lb,
+                                            bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
+                            } else if type == .dumbbell {
+                                DumbbellView(weightLb: p.weightLb, unit: .lb)
+                            }
                         }
                     }
                 }

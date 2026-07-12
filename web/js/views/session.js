@@ -4,7 +4,7 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, SET_FLAGS, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, iso, runAll } from "../db.js";
-import { barbellSVG } from "../barbell.js";
+import { barbellSVG, dumbbellSVG } from "../barbell.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -270,7 +270,8 @@ export async function openSession(id) {
     const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "") + (isCurrent ? " current" : "") }, wt, tags,
       ui.h("div", { class: "flagbtns" }, flag("clean", "clean"), flag("grindy", "grindy"), flag("wobble", "wobble")));
 
-    // Barbell plate visualization (barbell lifts only).
+    // Loadout visualization — plates for barbell lifts, the rack number for
+    // dumbbell lifts. Mirrors native.
     if (ex && ex.type === "barbell" && s.weightLb > 0) {
       const { svg, solution } = barbellSVG(s.weightLb, u, barFor(se), gym);
       const wrap = ui.h("div", { class: "barbell-wrap" }, svg);
@@ -279,6 +280,10 @@ export async function openSession(id) {
         wrap.append(ui.h("span", { class: "sub warn", text: `≈ closest ${C.trim(t)} ${u}` }));
       }
       return ui.h("div", {}, row, wrap);
+    }
+    if (ex && ex.type === "dumbbell" && s.weightLb > 0) {
+      return ui.h("div", {}, row, ui.h("div", { class: "barbell-wrap" },
+        dumbbellSVG(s.weightLb, u), ui.h("span", { class: "sub", text: u })));
     }
     return row;
   }

@@ -52,3 +52,26 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null) {
   }
   return { svg, solution, bar };
 }
+
+// Compact dumbbell graphic for dumbbell lifts — the counterpart of the
+// barbell's plate loadout: heads on both ends, the dumbbell's size (in the
+// entered unit) stamped on the handle, so a glance says which pair to grab
+// off the rack. Mirrors Cadence/Views/DumbbellView.swift (same geometry).
+export function dumbbellSVG(weightLb, unit) {
+  const W = 88, H = 30;
+  const value = unit === "kg" ? C.kgFromLb(weightLb) : weightLb;
+  const svg = el("svg", {
+    viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: "dumbbell",
+    role: "img", "aria-label": `Dumbbell, ${C.trim(value)} ${unit}`,
+  });
+  const plate = (x, y, w, h) => el("rect", { x, y, width: w, height: h, rx: 1.5, fill: "#7C828C", stroke: "#3A3B42", "stroke-width": 0.75 });
+  // handle (no stroke — matches the barbell shaft)
+  svg.append(el("rect", { x: 15, y: H / 2 - 3, width: W - 30, height: 6, rx: 3, fill: "#9AA0AA" }));
+  // heads: outer + inner plate each side
+  svg.append(plate(0, 3, 7, 24), plate(8, 6, 6, 18));
+  svg.append(plate(W - 7, 3, 7, 24), plate(W - 14, 6, 6, 18));
+  const t = el("text", { x: W / 2, y: H / 2 + 4, "text-anchor": "middle", "font-size": 11, "font-weight": 700, fill: "currentColor" });
+  t.textContent = C.trim(value);
+  svg.append(t);
+  return svg;
+}
