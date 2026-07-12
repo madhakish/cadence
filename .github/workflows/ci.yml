@@ -6,13 +6,24 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Default every job's GITHUB_TOKEN to read-only; jobs that need more (release)
+# elevate themselves explicitly.
+permissions:
+  contents: read
+
+# All actions are pinned to full commit SHAs (with the version as a comment) so
+# a moved/re-pointed tag on an action repo can't inject code into these jobs —
+# the tj-actions/changed-files-style supply-chain attack. Dependabot
+# (.github/dependabot.yml) keeps the pins current.
 jobs:
   core-tests:
     name: CadenceCore tests (Linux)
     runs-on: ubuntu-latest
-    container: swift:5.10
+    container: swift:5.10@sha256:ffc42e399ad0cad324f68d58f65e4d5f2c22eb9df73c4dfa249e898d497254b3
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
       - name: Run unit tests
         working-directory: CadenceCore
         run: swift test
@@ -24,8 +35,10 @@ jobs:
     name: Web tests (parity + smoke)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -44,7 +57,9 @@ jobs:
     name: App build (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
       - name: Run unit tests (Darwin)
         working-directory: CadenceCore
         run: swift test
@@ -77,7 +92,7 @@ jobs:
           (cd dist && zip -qry Cadence-unsigned.ipa Payload)
           (cd build/sim/Build/Products/Release-iphonesimulator && zip -qry "$GITHUB_WORKSPACE/dist/Cadence-simulator.app.zip" Cadence.app)
       - name: Upload installer artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Cadence-installer
           path: |
@@ -96,21 +111,31 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
+          # semantic-release authenticates via the GITHUB_TOKEN env var below;
+          # don't leave the job token sitting in .git/config for later steps.
+          persist-credentials: false
       - name: Download installer artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: Cadence-installer
           path: dist
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: .github/release/package-lock.json
+      - name: Install pinned release toolchain
+        # `npm ci` against the committed lockfile — the release toolchain is
+        # content-addressed, not "whatever the registry serves today".
+        working-directory: .github/release
+        run: npm ci
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx --yes -p semantic-release@24 -p @semantic-release/exec@6 semantic-release
+        run: ./.github/release/node_modules/.bin/semantic-release
 
   testflight:
     name: TestFlight (fastlane)
@@ -122,26 +147,34 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0   # need tags to resolve the semantic version
+          persist-credentials: false
       - name: Resolve app version from the latest release tag
         id: ver
         # The tag semantic-release owns (e.g. v1.13.0) becomes the marketing
         # version, so TestFlight builds track the semantic version 1:1. Falls
         # back to the project.yml value before the first release.
         run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.1.0)" >> "$GITHUB_OUTPUT"
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9 # v1.316.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
       - name: Select the latest stable Xcode
-        # App Store upload now requires the iOS 26 SDK (Xcode 26+); macos-latest
-        # still defaults to an older Xcode (iOS 18.5 SDK), which altool rejects
-        # with a 409 "SDK version issue". Pin the newest stable Xcode installed.
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
+        # App Store upload requires the current SDK; macos-latest still defaults
+        # to an older Xcode, which altool rejects with a 409 "SDK version issue".
+        # Every Xcode on the runner is already installed under /Applications, so
+        # "latest stable" is a version-sorted find + xcode-select. Deliberately
+        # NOT a third-party action: this job holds all the Apple signing
+        # secrets, and no external maintainer belongs in it.
+        run: |
+          LATEST="$(find /Applications -maxdepth 1 -name 'Xcode_*.app' \
+            | grep -viE 'beta|release[_ .-]?candidate' | sort -V | tail -n1)"
+          if [ -z "$LATEST" ]; then echo "No stable Xcode found on runner" >&2; exit 1; fi
+          echo "Selecting $LATEST"
+          sudo xcode-select --switch "$LATEST/Contents/Developer"
+          xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Build & upload to TestFlight
@@ -155,4 +188,8 @@ jobs:
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          # Certs are fetched read-only by default (see Fastfile). For one-off
+          # re-provisioning set the repo variable MATCH_READONLY=false and use a
+          # read/write PAT, then revert both.
+          MATCH_READONLY: ${{ vars.MATCH_READONLY }}
         run: bundle exec fastlane beta
