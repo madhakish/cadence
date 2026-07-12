@@ -4,6 +4,7 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
 import { Settings, Gyms, Tracks, Exercises, Programs, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded } from "../db.js";
+import { PROGRAM_TEMPLATES, createProgramFromTemplate } from "../templates.js";
 
 // Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
 // Peak result would otherwise make the next rollover treat the skipped Peak as a
@@ -101,9 +102,19 @@ export async function render(host) {
       ui.h("span", { class: "chev" })));
   }
   root.append(progList);
-  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add program", onClick: async () => {
-    await Programs.save({ name: `Program ${programs.length + 1}`, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, roundingLb: 5, isActive: programs.length === 0, days: [] });
-    ui.nav.refresh();
+  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add program", onClick: () => {
+    // Start from a style (templates.js) or from scratch. The first program
+    // created becomes active either way.
+    ui.actionSheet("Start from", [
+      ...PROGRAM_TEMPLATES.map((t) => ({ label: `${t.name} — ${t.tagline}`, onClick: async () => {
+        await createProgramFromTemplate(t, { makeActive: programs.length === 0 });
+        ui.nav.refresh();
+      } })),
+      { label: "Blank program", onClick: async () => {
+        await Programs.save({ name: `Program ${programs.length + 1}`, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, roundingLb: 5, isActive: programs.length === 0, days: [] });
+        ui.nav.refresh();
+      } },
+    ]);
   } }));
 
   root.append(ui.h("div", { class: "section-title", text: "Progression (standalone lifts)" }));

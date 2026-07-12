@@ -314,6 +314,29 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(staleNotes.length === 1, "a program note explains the skipped advancement");
 }
 
+// ---- program templates: every style instantiates and banks cleanly ----
+{
+  const { PROGRAM_TEMPLATES, createProgramFromTemplate } = await import("../js/templates.js");
+  ok(PROGRAM_TEMPLATES.length >= 3, "styles on offer: strength, oly, metcon");
+  const squatBefore = await db.Exercises.byName("Back Squat"); // seeded — must never be overwritten
+  for (const t of PROGRAM_TEMPLATES) {
+    const id = await createProgramFromTemplate(t);
+    const prog = await db.Programs.get(id);
+    ok(prog && prog.days.length === t.days.length && prog.focus === t.focus, `${t.id}: program created with all days`);
+    ok(!prog.isActive, `${t.id}: not activated over the existing program`);
+    for (const e of t.exercises) ok(!!(await db.Exercises.byName(e.name)), `${t.id}: library has ${e.name}`);
+    // A session from day 0 builds and banks without touching other programs.
+    const sess = await db.Sessions.get(await session.createSessionFromProgramDay(prog, prog.days[0]));
+    const roles = new Set(sess.exercises.map((x) => x.programRole));
+    ok(t.days[0].lifts.length === 0 ? roles.has("accessory") : roles.has("main"), `${t.id}: day 0 session has its work`);
+    await session.completeSession(sess);
+    ok((await db.Programs.get(id)).nextDayIndex === 1 % t.days.length, `${t.id}: banking advances the template program`);
+    await db.Programs.del(id); // leave the world as we found it for later blocks
+  }
+  const squatAfter = await db.Exercises.byName("Back Squat");
+  ok(JSON.stringify(squatAfter) === JSON.stringify(squatBefore), "existing exercises never overwritten by templates");
+}
+
 // ---- program: a cycle-scoped swap reverts at rollover (issue 20) ----
 // The swap gesture is native-only; the reverting state can arrive on web via
 // backup, so the rollover must honor it here identically.

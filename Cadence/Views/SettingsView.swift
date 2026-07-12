@@ -133,10 +133,25 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    Button {
-                        let program = Program(name: "Program \(programs.count + 1)", isActive: programs.isEmpty)
-                        context.insert(program)
-                        try? context.save()
+                    // Start from a style (ProgramTemplates, mirrored in web
+                    // templates.js) or from scratch. First program = active.
+                    Menu {
+                        ForEach(ProgramTemplates.all) { template in
+                            Button {
+                                ProgramTemplates.instantiate(template, makeActive: programs.isEmpty, context: context)
+                                try? context.save()
+                            } label: {
+                                Text(template.name)
+                                Text(template.tagline)
+                            }
+                        }
+                        Button {
+                            let program = Program(name: "Program \(programs.count + 1)", isActive: programs.isEmpty)
+                            context.insert(program)
+                            try? context.save()
+                        } label: {
+                            Text("Blank program")
+                        }
                     } label: {
                         Label("Add program", systemImage: "plus")
                     }
