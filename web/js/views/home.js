@@ -2,7 +2,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { sparkline } from "../charts.js";
-import { barbellSVG } from "../barbell.js";
+import { barbellSVG, dumbbellSVG } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Protein, Programs, Exercises, iso, topSet } from "../db.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession } from "./session.js";
 
@@ -60,10 +60,13 @@ export async function render(host) {
         ui.h("div", { style: { textAlign: "right" } },
           ui.h("div", { class: "wt-big mono", text: `${C.trim(plan.weightLb)} lb` }),
           ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
-      // The bar you'll actually load — mains only, keeps the card calm.
+      // The bar you'll load / the pair you'll grab — mains only, keeps the card calm.
       if (l.role === "main" && ex && ex.type === "barbell" && plan.weightLb > 0) {
         card.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
           barbellSVG(plan.weightLb, "lb", gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb, gym).svg));
+      } else if (l.role === "main" && ex && ex.type === "dumbbell" && plan.weightLb > 0) {
+        card.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
+          dumbbellSVG(plan.weightLb, "lb"), ui.h("span", { class: "sub", text: "lb" })));
       }
     }
     if (day.accessories.length) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: `+ ${day.accessories.map((a) => a.exerciseName).join(", ")}` }));
@@ -170,6 +173,9 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
         if (ex && ex.type === "barbell" && plan.weightLb > 0) {
           liftCard.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
             barbellSVG(plan.weightLb, "lb", gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb, gym).svg));
+        } else if (ex && ex.type === "dumbbell" && plan.weightLb > 0) {
+          liftCard.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
+            dumbbellSVG(plan.weightLb, "lb"), ui.h("span", { class: "sub", text: "lb" })));
         }
       }
       body.append(liftCard);

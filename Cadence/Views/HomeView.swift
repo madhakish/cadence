@@ -114,12 +114,16 @@ struct HomeView: View {
                                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                                     }
                                 }
-                                // The bar you'll actually load — mains only, keeps the card calm.
-                                if lift.role.rawValue == "main",
-                                   exercises.first(where: { $0.name == lift.exerciseName })?.type == .barbell,
-                                   plan.weightLb > 0 {
-                                    BarbellView(weightLb: plan.weightLb, unit: .lb,
-                                                bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
+                                // The bar you'll load / the pair you'll grab —
+                                // mains only, keeps the card calm.
+                                if lift.role.rawValue == "main", plan.weightLb > 0 {
+                                    let type = exercises.first(where: { $0.name == lift.exerciseName })?.type
+                                    if type == .barbell {
+                                        BarbellView(weightLb: plan.weightLb, unit: .lb,
+                                                    bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
+                                    } else if type == .dumbbell {
+                                        DumbbellView(weightLb: plan.weightLb, unit: .lb)
+                                    }
                                 }
                             }
                         }
