@@ -269,6 +269,12 @@ eq(C.belowPlanWork([100, 100, 100], 175, 3, 5), true, "whole lift performed ligh
 eq(C.belowPlanWork([175, 175, 155], 175, 3, 5), true, "one prescribed set cut down → below plan");
 eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → nothing to compare");
 
+// sessionTagCurrent: a session may advance the program only from its live position (issue 17)
+eq(C.sessionTagCurrent(2, 1, 3, 2, 1, 3), true, "tag at the live position → current");
+eq(C.sessionTagCurrent(1, 1, 3, 2, 1, 3), false, "stale cycle → not current");
+eq(C.sessionTagCurrent(2, 1, 3, 2, 2, 3), false, "stale week → not current");
+eq(C.sessionTagCurrent(2, 1, 3, 2, 1, 0), false, "stale day → not current");
+
 // issue 18 repro: 3×3 prescribed at 175 (e1RM 300) but performed at 100 must
 // not grade success, reset the stall, or raise the base weight.
 const belowPlanPerf = { ...cleanPerf, anyBelowPlanLoad: true, topSetWeightLb: 100 };

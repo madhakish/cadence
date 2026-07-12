@@ -278,6 +278,42 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(after.stallCount === 1, "below-plan peak counts as a stall, not a reset");
 }
 
+// ---- program: duplicate/stale sessions cannot advance the schedule twice (issue 17) ----
+{
+  // Walk the fresh week to its final day (bank days 0-2 cleanly).
+  for (let i = 0; i < 3; i++) {
+    const p = await db.Programs.active();
+    const day = p.days.find((d) => d.order === p.nextDayIndex);
+    await session.completeSession(await db.Sessions.get(await session.createSessionFromProgramDay(p, day)));
+  }
+  let prog = await db.Programs.active();
+  const week0 = prog.currentWeek;
+  ok(prog.nextDayIndex === 3, `at the week's final day (wk=${week0} day=${prog.nextDayIndex})`);
+  const day3 = prog.days.find((d) => d.order === 3);
+
+  // Start guard: a second Start while the day's session is open resumes it.
+  const idA = await session.createSessionFromProgramDay(prog, day3);
+  const idAgain = await session.createSessionFromProgramDay(await db.Programs.active(), day3);
+  ok(idAgain === idA, "starting a program day with one already open resumes it");
+
+  // Completion guard: force a true duplicate past the start guard, bank both.
+  const dup = JSON.parse(JSON.stringify(await db.Sessions.get(idA)));
+  delete dup.id;
+  const idB = await db.Sessions.save(dup);
+  await session.completeSession(await db.Sessions.get(idA));
+  prog = await db.Programs.active();
+  ok(prog.currentWeek === week0 + 1 && prog.nextDayIndex === 0, "first bank advances exactly one week");
+  const accReps = prog.days[3].accessories.length ? prog.days[3].accessories[0].currentReps : null;
+  await session.completeSession(await db.Sessions.get(idB));
+  prog = await db.Programs.active();
+  ok(prog.currentWeek === week0 + 1, `stale duplicate did not advance the week again (wk=${prog.currentWeek})`);
+  ok(prog.nextDayIndex === 0, "stale duplicate did not move the day pointer");
+  if (accReps != null) ok(prog.days[3].accessories[0].currentReps === accReps, "stale duplicate did not double-progress accessories");
+  ok((await db.Sessions.get(idB)).isCompleted, "the stale session is still banked as history");
+  const staleNotes = (await db.Milestones.all()).filter((m) => m.kind === "programNote" && /moved on/.test(m.label));
+  ok(staleNotes.length === 1, "a program note explains the skipped advancement");
+}
+
 // ---- structural editing: add a day with a lift + accessory, generate, then remove ----
 {
   let prog = await db.Programs.active();
