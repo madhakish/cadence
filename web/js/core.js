@@ -471,6 +471,20 @@ export function sessionTagCurrent(tagCycle, tagWeek, tagDayIndex, cycleNumber, c
   return tagCycle === cycleNumber && tagWeek === currentWeek && tagDayIndex === nextDayIndex;
 }
 
+// The transactional boundary for banking a session (issue 19), mirroring
+// CadenceCore's CompletionPersistence.commit: save the staged completion batch
+// or roll it back and rethrow, so side effects only ever run after a durable
+// commit. The web app gets this atomicity natively from its single IndexedDB
+// completion transaction; the mirror exists for the native app and parity.
+export function completionCommit(save, rollback) {
+  try {
+    save();
+  } catch (e) {
+    rollback();
+    throw e;
+  }
+}
+
 // Increment = fraction of base × headroom-to-ceiling, floored at plate granularity,
 // 0 at/over the focus-dependent training-max ceiling.
 export function taperedIncrement(baseWeightLb, estimatedMaxLb, focus, roundingLb = DEFAULT_ROUNDING_LB) {
