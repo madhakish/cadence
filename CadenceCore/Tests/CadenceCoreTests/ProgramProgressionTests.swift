@@ -73,6 +73,27 @@ final class ProgramProgressionTests: XCTestCase {
                        "stale day → not current")
     }
 
+    func testCanResumeSession() {
+        // First list is the plan the session was BUILT from (snapshot); second
+        // is the day's current plan. Session-local edits don't touch the
+        // snapshot, so they don't appear here.
+        let plan = ["Overhead Press", "Incline DB Press", "Dips"]
+        func resume(_ tagDay: Int, _ day: Int, _ snapshot: [String], _ current: [String],
+                    cycle: Int = 2, week: Int = 1, tagCycle: Int = 2, tagWeek: Int = 1) -> Bool {
+            P.canResumeSession(tagCycle: tagCycle, tagWeek: tagWeek, tagDayIndex: tagDay,
+                               cycleNumber: cycle, currentWeek: week, dayIndex: day,
+                               sessionPlanNames: snapshot, dayPlanNames: current)
+        }
+        XCTAssertTrue(resume(3, 3, plan, plan), "same position + unchanged plan → resume (session-local edits preserved)")
+        // The reported bug: the PROGRAM day was edited, so the built-from
+        // snapshot no longer equals the current plan → build fresh.
+        XCTAssertFalse(resume(3, 3, ["Overhead Press", "Chest-supported Row", "Dips"], plan), "program-edited plan → build fresh")
+        XCTAssertFalse(resume(2, 3, plan, plan), "different day → build fresh")
+        XCTAssertFalse(resume(3, 3, plan, plan, tagCycle: 1), "stale cycle → build fresh")
+        XCTAssertFalse(resume(3, 3, plan, plan, tagWeek: 2), "stale week → build fresh")
+        XCTAssertFalse(resume(3, 3, [], plan), "pre-snapshot session → build fresh")
+    }
+
     func testBelowPlanWorkFailsCycle() {
         // Issue 18 repro: 3×3 prescribed at 175 (e1RM 300) but performed at 100
         // must not grade success, reset the stall, or raise the base weight.

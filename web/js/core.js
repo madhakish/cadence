@@ -471,6 +471,18 @@ export function sessionTagCurrent(tagCycle, tagWeek, tagDayIndex, cycleNumber, c
   return tagCycle === cycleNumber && tagWeek === currentWeek && tagDayIndex === nextDayIndex;
 }
 
+// Whether an OPEN session may be resumed on (re)Start vs built fresh: same
+// cycle/week/day tag AND the plan it was BUILT from still equals the day's
+// CURRENT plan. Snapshot-vs-current, not the live exercises — so a session-
+// local remove/swap is preserved (resumed), while a PROGRAM edit or position
+// move diverges the built-from plan → build fresh. Empty sessionPlanNames
+// (pre-snapshot session) never resumes. Mirrors CadenceCore canResumeSession.
+export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, currentWeek, dayIndex, sessionPlanNames, dayPlanNames) {
+  return tagCycle === cycleNumber && tagWeek === currentWeek && tagDayIndex === dayIndex
+    && sessionPlanNames.length > 0 && sessionPlanNames.length === dayPlanNames.length
+    && sessionPlanNames.every((n, i) => n === dayPlanNames[i]);
+}
+
 // ---- Swap rules (issue 20) ----------------------------------------------
 // Mirrors CadenceCore's SwapRules. Exercise types that can't carry a weight
 // prescription — a loaded slot must never be offered an unloadable substitute

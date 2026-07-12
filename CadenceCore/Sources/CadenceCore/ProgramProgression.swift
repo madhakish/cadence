@@ -179,6 +179,28 @@ public enum ProgramProgression {
         tagCycle == cycleNumber && tagWeek == currentWeek && tagDayIndex == nextDayIndex
     }
 
+    /// Whether an OPEN session may be resumed when the user (re)starts a
+    /// program day, rather than building a fresh one. It must be tagged for
+    /// the SAME cycle/week/day AND the plan it was BUILT from must still equal
+    /// the day's CURRENT plan.
+    ///
+    /// The comparison is snapshot-vs-current-plan, NOT the session's live
+    /// exercises: a session-local remove or a "just this session" swap changes
+    /// the live exercises but not the built-from plan, so that customized
+    /// session is still resumed (its edits preserved). Only a PROGRAM edit
+    /// (swap/add/remove in the editor) or a position move diverges the
+    /// built-from plan from the current one → build fresh, never resurface the
+    /// stale content. `sessionPlanNames` empty (a pre-snapshot session) never
+    /// resumes.
+    public static func canResumeSession(
+        tagCycle: Int, tagWeek: Int, tagDayIndex: Int,
+        cycleNumber: Int, currentWeek: Int, dayIndex: Int,
+        sessionPlanNames: [String], dayPlanNames: [String]
+    ) -> Bool {
+        tagCycle == cycleNumber && tagWeek == currentWeek && tagDayIndex == dayIndex
+            && !sessionPlanNames.isEmpty && sessionPlanNames == dayPlanNames
+    }
+
     /// Increment = fraction of base × headroom-to-ceiling, floored at plate
     /// granularity, 0 at/over the focus-dependent training-max ceiling.
     public static func taperedIncrement(
