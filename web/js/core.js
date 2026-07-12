@@ -480,7 +480,10 @@ export function completionCommit(save, rollback) {
   try {
     save();
   } catch (e) {
-    rollback();
+    // The save failure is the truth the caller needs; a rollback that also
+    // throws must not mask it. (The Swift mirror gets this for free — its
+    // rollback closure is typed non-throwing.)
+    try { rollback(); } catch { /* keep the save failure */ }
     throw e;
   }
 }

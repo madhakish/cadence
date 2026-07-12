@@ -49,8 +49,14 @@ enum SessionCompletion {
 
         // Checkpoint the logged sets BEFORE staging anything: a rollback on a
         // failed commit then discards only the completion mutations, never the
-        // user's logged work.
-        try? context.save()
+        // user's logged work. If even the checkpoint can't save, the store is
+        // already failing — bail out now, with nothing staged and nothing to
+        // roll back, so the guarantee holds unconditionally.
+        do {
+            try context.save()
+        } catch {
+            throw SaveFailure(underlying: error)
+        }
 
         session.isCompleted = true
 

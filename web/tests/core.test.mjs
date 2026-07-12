@@ -293,6 +293,13 @@ eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → not
   healthy = true;
   attempt();
   eq(rollbacks, 2, "only the failed attempts rolled back");
+
+  // A rollback that itself throws must not mask the save failure.
+  let masked = null;
+  try {
+    C.completionCommit(() => { throw new Error("store down"); }, () => { throw new Error("rollback exploded"); });
+  } catch (e) { masked = e; }
+  ok(masked && /store down/.test(masked.message), "the save failure propagates even when rollback throws");
 }
 
 // sessionTagCurrent: a session may advance the program only from its live position (issue 17)
