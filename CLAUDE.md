@@ -61,16 +61,20 @@ ARE the version-bump and changelog mechanism. Use them correctly:
 
 ## CI & Releases (`.github/workflows/ci.yml`)
 
-Three jobs on push to `main` (first two also on PRs):
+Four jobs on push to `main` (the first three also on PRs):
 
 1. `core-tests` — `swift test` in the `swift:5.10` Linux container.
-2. `app-build` (macos-latest) — `swift test` on Darwin, XcodeGen, Release
+2. `web-tests` — the node parity + smoke suites (`web/tests/`); enforces the
+   CadenceCore↔core.js mirror pre-merge.
+3. `app-build` (macos-latest) — `swift test` on Darwin, XcodeGen, Release
    builds for iOS Simulator and unsigned device, uploads the
    `Cadence-installer` artifact (`Cadence-unsigned.ipa` +
    `Cadence-simulator.app.zip`).
-3. `release` — only on green `main` pushes: semantic-release tags the next
-   version, creates the GitHub Release, and attaches the version-stamped
-   installer files from the same run's artifact.
+4. `release` — only on green `main` pushes, gated on ALL of the above
+   (including `web-tests` — a tag is never cut while the JS mirror fails):
+   semantic-release tags the next version, creates the GitHub Release, and
+   attaches the version-stamped installer files from the same run's artifact.
+   These four job names are also the checks to require in any `main` ruleset.
 
 The `.ipa` is unsigned (no signing certs in CI) — it must be re-signed to
 sideload (AltStore/Sideloadly).
