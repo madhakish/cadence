@@ -20,8 +20,10 @@ lifts appear under "Next up" with their own suggestions.
 - **Confirm sets as you do them.** Everything predictable is pre-filled
   — weight, sets, reps, and a warmup ramp for barbell lifts. Adjust only
   when reality differed.
-- **Rest timer** starts per your settings (main lifts rest longer than
-  accessories; per-exercise overrides win). On iOS the Live Activity
+- **Rest timer** starts per your settings: an exercise's own rest (⏱)
+  wins, then its role today (complementary lifts and accessories rest
+  less than a top main), then its movement type — see
+  [Rest timers](../reference/rest-timers.md). On iOS the Live Activity
   puts the countdown on the Lock Screen/Dynamic Island, and the Action
   Button or Control Center can start/skip rest.
 - **Workout clock controls** (iOS): the stopwatch menu in the session's

@@ -50,25 +50,28 @@ export async function render(host) {
     ui.seg([{ value: "lbPrimary", label: "lb" }, { value: "kgPrimary", label: "kg" }, { value: "both", label: "Both" }],
       settings.unitDisplay, async (v) => { settings.unitDisplay = v; await saveS(); ui.nav.refresh(); })));
 
-  // Rest timers — five configurable buckets, each adjustable up or down.
-  root.append(ui.h("div", { class: "section-title", text: "Rest timer defaults" }));
-  // Merge over defaults (legacy accessory key first) so a pre-buckets install
-  // or a partial imported `rest` object never renders NaN steppers.
-  const rest = settings.rest = { ...C.REST_DEFAULTS, accessorySeconds: settings.accessoryRestSeconds ?? C.REST_DEFAULTS.accessorySeconds, ...(settings.rest || {}) };
+  // Rest timer — the smart defaults an exercise falls to when it has no rest
+  // of its own, listed in the order they're checked: today's program role
+  // first, then movement type. Settings.get() normalized `rest`, so every
+  // bucket key is present (no view-side re-merge). Mirrors SettingsView.
+  root.append(ui.h("div", { class: "section-title", text: "Rest timer" }));
+  const rest = settings.rest;
   const restCard = ui.h("div", { class: "card" });
   const restRow = (label, key) => restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: label }),
-    ui.stepper(rest[key], { min: 0, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { rest[key] = v; settings.accessoryRestSeconds = rest.accessorySeconds; await saveS(); } })));
-  restRow("Main compound (squat / deadlift)", "mainCompoundSeconds");
-  restRow("Olympic (clean / snatch / push press)", "olympicSeconds");
-  restRow("Main upper", "mainUpperSeconds");
-  restRow("Secondary (complementary lifts)", "secondarySeconds");
-  restRow("Accessory", "accessorySeconds");
+    ui.stepper(rest[key], { min: 0, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { rest[key] = v; await saveS(); } })));
+  restCard.append(ui.h("div", { class: "sub", style: { padding: "6px 0 2px" }, text: "In a program day, by role" }));
+  restRow("Complementary lifts", "secondarySeconds");
+  restRow("Accessories", "accessorySeconds");
+  restCard.append(ui.h("div", { class: "sub", style: { padding: "10px 0 2px" }, text: "Everything else, by movement" }));
+  restRow("Squat & deadlift mains", "mainCompoundSeconds");
+  restRow("Olympic lifts", "olympicSeconds");
+  restRow("Other main lifts (presses…)", "mainUpperSeconds");
   restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Auto-start rest after a set" }),
     ui.toggle(settings.autoStartRest, async (v) => { settings.autoStartRest = v; await saveS(); })));
   restCard.append(ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Haptics" }),
     ui.toggle(settings.haptics !== false, async (v) => { settings.haptics = v; await saveS(); })));
   root.append(restCard);
-  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Each bucket is adjustable up or down. Complementary/secondary lifts rest less than a top main. A per-exercise rest set in the logger (⏱) or library overrides the default for any movement. Auto-start off = tap Rest yourself." }));
+  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "These are the fallback timers. An exercise with a rest of its own (set with ⏱ in the logger, or in the library) always uses that instead. 0:00 = no timer. Auto-start off = tap Rest yourself." }));
 
   // Protein
   root.append(ui.h("div", { class: "section-title", text: "Protein" }));
@@ -441,7 +444,9 @@ function exerciseDetail(e) {
         body.append(ui.field("Type", typeSel));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(e.isUnilateral, async (v) => { e.isUnilateral = v; await Exercises.save(e); })),
-          ui.h("div", { class: "row" }, ui.h("span", { text: "Rest" }), ui.stepper(e.defaultRestSeconds, { min: 0, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { e.defaultRestSeconds = v; await Exercises.save(e); } }))));
+          // 0 = no rest of its own → the timer falls to the configurable rest
+          // buckets in Settings; any value set here wins everywhere.
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Rest" }), ui.stepper(e.defaultRestSeconds, { min: 0, max: 600, step: 15, format: (v) => (v === 0 ? "Default" : ui.mmss(v)), onChange: async (v) => { e.defaultRestSeconds = v; await Exercises.save(e); } }))));
         const siteSel = ui.h("select", {}, ui.h("option", { value: "", text: "None", selected: !e.watchSite }), ...BODY_SITES.map((s) => ui.h("option", { value: s, text: s, selected: s === e.watchSite })));
         siteSel.addEventListener("change", async () => { e.watchSite = siteSel.value || null; await Exercises.save(e); });
         body.append(ui.field("Watch site", siteSel));

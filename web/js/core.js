@@ -588,30 +588,36 @@ export function advanceAccessory(state, perf) {
 }
 
 // ---- Rest defaults ---------------------------------------------------------
-// Five user-tunable rest buckets (seconds). Defaults match the old smart
-// values, except `secondary` (complementary lifts), which now rests less than a
-// top main. Mirrors CadenceCore RestConfig.standard.
+// Five user-tunable rest buckets (seconds) — the SMART DEFAULTS an exercise
+// falls to when it has no explicit rest of its own. Mirrors CadenceCore
+// RestConfig.standard.
 export const REST_DEFAULTS = {
-  mainCompoundSeconds: 300, // deadlift / squat
-  olympicSeconds: 240,      // clean / snatch / push press
-  mainUpperSeconds: 180,    // other main lifts
-  secondarySeconds: 180,    // complementary lifts
+  mainCompoundSeconds: 300, // main squat & hinge lifts
+  olympicSeconds: 240,      // main olympic lifts
+  mainUpperSeconds: 180,    // other main lifts (presses etc.)
+  secondarySeconds: 180,    // complementary program lifts
   accessorySeconds: 90,     // accessories
 };
 
-// Smart per-exercise rest by role → category → movement, all configurable via
-// `config`. A per-exercise override (exerciseDefaultRest > 0) wins for ANY
-// movement; conditioning is 0; complementary ("secondary") lifts get the
-// secondary bucket regardless of movement. Pure; mirrored in
-// CadenceCore/RestDefaults.swift.
-export function restDefaultSeconds(category, name, role = null, config = REST_DEFAULTS, exerciseDefaultRest = 0) {
-  if (exerciseDefaultRest > 0) return exerciseDefaultRest; // per-exercise override wins everywhere
-  if (category === "Conditioning") return 0;
+// Smart per-exercise rest, resolved in a fixed precedence order:
+//   1. the exercise's own rest (exerciseDefaultRest > 0) wins everywhere —
+//      the deliberate exception (set via ⏱ in the logger or the library);
+//   2. conditioning never rests;
+//   3. the exercise's role in today's program (complementary → secondary
+//      bucket, accessory → accessory bucket);
+//   4. otherwise the movement decides, keyed on movementGroup (the same
+//      data-driven grouping that powers swaps — never name matching):
+//      main squat/hinge → mainCompound, main olympic → olympic, any other
+//      main → mainUpper, everything else → accessory.
+// Pure; mirrored 1:1 in CadenceCore/RestDefaults.swift.
+export function restDefaultSeconds(category, movementGroup, role = null, config = REST_DEFAULTS, exerciseDefaultRest = 0) {
+  if (exerciseDefaultRest > 0) return exerciseDefaultRest; // per-exercise rest wins everywhere
+  if (category === "Conditioning" || movementGroup === "conditioning") return 0;
   if (role === "complementary") return config.secondarySeconds;
   if (role === "accessory") return config.accessorySeconds;
   if (category === "Main") {
-    if (name.includes("Deadlift") || name.includes("Squat")) return config.mainCompoundSeconds;
-    if (name.includes("Clean") || name.includes("Snatch") || name.includes("Push Press")) return config.olympicSeconds;
+    if (movementGroup === "squat" || movementGroup === "hinge") return config.mainCompoundSeconds;
+    if (movementGroup === "olympic") return config.olympicSeconds;
     return config.mainUpperSeconds;
   }
   return config.accessorySeconds;

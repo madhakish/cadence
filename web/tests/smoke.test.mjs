@@ -48,6 +48,52 @@ ok((await db.Sessions.completed()).length === 10, "re-seed is a no-op");
   ok((await db.Exercises.all()).length === 47, "sync leaves the count whole (no dupes)");
 }
 
+// ---- retired rest stamps: one-shot clear un-freezes the rest buckets ----
+{
+  // Simulate a pre-bucket install: the old seed stamped every exercise with a
+  // rest (which, as the per-exercise override, made the settings steppers
+  // dead controls), and the migration flag doesn't exist yet.
+  const squat = await db.Exercises.byName("Back Squat");
+  const ohp = await db.Exercises.byName("Overhead Press");
+  squat.defaultRestSeconds = 300; await db.Exercises.save(squat);   // = its retired stamp
+  ohp.defaultRestSeconds = 240; await db.Exercises.save(ohp);       // user-edited (stamp was 300)
+  let s = await db.Settings.get();
+  delete s.restSeedStampsCleared;
+  await db.Settings.save(s);
+  await db.syncLibrary();
+  ok((await db.Exercises.byName("Back Squat")).defaultRestSeconds === 0, "a value equal to its retired stamp is cleared to bucket-driven");
+  ok((await db.Exercises.byName("Overhead Press")).defaultRestSeconds === 240, "a user-edited value survives the clear");
+  ok((await db.Exercises.byName("Deadlift")).defaultRestSeconds === 222, "an earlier user edit also survives");
+  ok((await db.Settings.get()).restSeedStampsCleared === true, "the clear marks itself done");
+  // One-shot: re-stamping after the flag is set must stick.
+  squat.defaultRestSeconds = 300; await db.Exercises.save(squat);
+  await db.syncLibrary();
+  ok((await db.Exercises.byName("Back Squat")).defaultRestSeconds === 300, "the clear never re-runs once flagged");
+  squat.defaultRestSeconds = 0; await db.Exercises.save(squat);      // back to bucket-driven
+  ohp.defaultRestSeconds = 0; await db.Exercises.save(ohp);
+}
+
+// ---- rest buckets are live: session rest follows settings, role, override ----
+{
+  const s = await db.Settings.get();
+  const stockMain = s.rest.mainCompoundSeconds;
+  s.rest.mainCompoundSeconds = 240; // turn the "Squat & deadlift mains" stepper
+  await db.Settings.save(s);
+  const prog = await db.Programs.active();
+  const day = [...prog.days].sort((a, b) => a.order - b.order)[0]; // Lower A: Back Squat main, Deadlift complementary
+  const sid = await session.createSessionFromProgramDay(prog, day);
+  await session.openSession(sid); await tick();
+  const restBtn = [...document.querySelectorAll("#session-bar button")].find((b) => b.textContent.startsWith("Rest "));
+  ok(restBtn && restBtn.textContent === "Rest 4:00", `main squat rest follows the bucket stepper (got ${restBtn && restBtn.textContent})`);
+  const chips = [...document.querySelectorAll("#overlays .overlay button")].filter((b) => b.textContent.startsWith("⏱"));
+  ok(chips.some((b) => b.textContent === "⏱ 3:42"), "complementary Deadlift keeps its per-exercise 3:42 rest (override beats role)");
+  ok(chips.some((b) => b.textContent === "⏱ 1:30"), "accessories fall to the accessory bucket");
+  document.querySelector("#overlays .overlay .overlay-head button").click(); await tick(); // close without banking
+  await db.Sessions.del(sid);
+  s.rest.mainCompoundSeconds = stockMain;
+  await db.Settings.save(s);
+}
+
 // ---- render every tab without throwing ----
 for (const [name, view] of [["home", home], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
   try { await view.render(host()); ok(host().childElementCount > 0, `${name} rendered`); }

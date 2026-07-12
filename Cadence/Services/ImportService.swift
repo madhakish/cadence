@@ -86,7 +86,8 @@ enum ImportService {
         var unitDisplay: String?; var proteinTargetGrams: Double?; var accessoryRestSeconds: Int?
         var mainCompoundRestSeconds: Int?; var olympicRestSeconds: Int?; var mainUpperRestSeconds: Int?; var secondaryRestSeconds: Int?
         var rest: RestDTO?
-        var autoStartRest: Bool?; var haptics: Bool?; var seededAt: Date?; var theme: String?
+        var autoStartRest: Bool?; var haptics: Bool?; var restSeedStampsCleared: Bool?
+        var seededAt: Date?; var theme: String?
     }
 
     @discardableResult
@@ -328,6 +329,11 @@ enum ImportService {
         if let v = st.rest?.accessorySeconds { settings.accessoryRestSeconds = v }
         if let v = st.autoStartRest { settings.autoStartRest = v }
         if let v = st.haptics { settings.haptics = v }
+        // A pre-migration backup (no flag) restores old-stamped exercises, so
+        // the next syncLibrary must re-run the retired-rest-stamp clear over
+        // them; a post-migration backup carries true and skips it. (Mirrors
+        // web importBundle, where the restored settings replace the row.)
+        settings.restSeedStampsCleared = st.restSeedStampsCleared ?? false
         // Only accept a known theme; an unknown value would round-trip as
         // garbage on the next export (the UI would silently show Carbon anyway).
         if let v = st.theme, ThemeName(rawValue: v) != nil { settings.themeNameRaw = v }

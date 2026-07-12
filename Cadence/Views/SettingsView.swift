@@ -48,23 +48,31 @@ struct SettingsView: View {
                         }
                     }
 
+                    // The smart defaults an exercise falls to when it has no
+                    // rest of its own, listed in the order they're checked:
+                    // today's program role first, then movement type
+                    // (RestDefaults in CadenceCore). Mirrors web settings.
                     Section {
-                        Stepper("Main compound (squat / deadlift): \(mmss(settings.mainCompoundRestSeconds))",
-                                value: bindable.mainCompoundRestSeconds, in: 0...600, step: 15)
-                        Stepper("Olympic (clean / snatch / push press): \(mmss(settings.olympicRestSeconds))",
-                                value: bindable.olympicRestSeconds, in: 0...600, step: 15)
-                        Stepper("Main upper: \(mmss(settings.mainUpperRestSeconds))",
-                                value: bindable.mainUpperRestSeconds, in: 0...600, step: 15)
-                        Stepper("Secondary (complementary): \(mmss(settings.secondaryRestSeconds))",
+                        Stepper("Complementary lifts: \(mmss(settings.secondaryRestSeconds))",
                                 value: bindable.secondaryRestSeconds, in: 0...600, step: 15)
-                        Stepper("Accessory: \(mmss(settings.accessoryRestSeconds))",
+                        Stepper("Accessories: \(mmss(settings.accessoryRestSeconds))",
                                 value: bindable.accessoryRestSeconds, in: 0...600, step: 15)
+                    } header: {
+                        Text("Rest timer — in a program day, by role")
+                    }
+                    Section {
+                        Stepper("Squat & deadlift mains: \(mmss(settings.mainCompoundRestSeconds))",
+                                value: bindable.mainCompoundRestSeconds, in: 0...600, step: 15)
+                        Stepper("Olympic lifts: \(mmss(settings.olympicRestSeconds))",
+                                value: bindable.olympicRestSeconds, in: 0...600, step: 15)
+                        Stepper("Other main lifts (presses…): \(mmss(settings.mainUpperRestSeconds))",
+                                value: bindable.mainUpperRestSeconds, in: 0...600, step: 15)
                         Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
                         Toggle("Haptics", isOn: bindable.haptics)
                     } header: {
-                        Text("Rest timer")
+                        Text("Rest timer — everything else, by movement")
                     } footer: {
-                        Text("Each bucket is adjustable up or down. Complementary/secondary lifts rest less than a top main. A per-exercise rest set in the logger or library overrides the default for any movement. Auto-start off = tap Rest yourself.")
+                        Text("These are the fallback timers. An exercise with a rest of its own (set in the logger or the library) always uses that instead. 0:00 = no timer. Auto-start off = tap Rest yourself.")
                     }
 
                     Section("Protein") {

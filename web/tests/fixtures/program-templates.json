@@ -12,7 +12,7 @@
         "type": "bodyweight",
         "group": "hinge",
         "isUnilateral": false,
-        "rest": 90
+        "rest": 0
       },
       {
         "name": "Hanging Knee Raise",
@@ -20,7 +20,7 @@
         "type": "bodyweight",
         "group": "core",
         "isUnilateral": false,
-        "rest": 90
+        "rest": 0
       }
     ],
     "days": [
@@ -203,7 +203,7 @@
         "type": "bodyweight",
         "group": "hinge",
         "isUnilateral": false,
-        "rest": 90
+        "rest": 0
       },
       {
         "name": "Hanging Knee Raise",
@@ -211,7 +211,7 @@
         "type": "bodyweight",
         "group": "core",
         "isUnilateral": false,
-        "rest": 90
+        "rest": 0
       }
     ],
     "days": [

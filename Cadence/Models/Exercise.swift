@@ -35,6 +35,8 @@ final class Exercise {
     var categoryRaw: String
     var typeRaw: String
     var isUnilateral: Bool
+    /// Explicit per-exercise rest. 0 = none set — the timer falls to the
+    /// configurable rest buckets (`RestDefaults.seconds`); > 0 wins everywhere.
     var defaultRestSeconds: Int
     var notes: String
     /// Shelved = in the library but not programmed (e.g. barbell bench, left shoulder).
@@ -54,7 +56,7 @@ final class Exercise {
         type: ExerciseType,
         movementGroup: String = "",
         isUnilateral: Bool = false,
-        defaultRestSeconds: Int = 90,
+        defaultRestSeconds: Int = 0,
         notes: String = "",
         isShelved: Bool = false,
         shelvedNote: String = "",

@@ -128,13 +128,14 @@ export async function openSession(id) {
   const defaultBar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const barFor = (se) => barByEx[se.exerciseName] || defaultBar;
 
-  // The five configurable rest buckets (migrating the old single accessory
-  // field). Merged over defaults so a partial `rest` object never yields NaN.
-  const restCfg = { ...C.REST_DEFAULTS, accessorySeconds: settings.accessoryRestSeconds ?? C.REST_DEFAULTS.accessorySeconds, ...(settings.rest || {}) };
-  // Smart per-exercise rest by role → category → movement + per-exercise override.
+  // The five configurable rest buckets — Settings.get() normalizes the shape,
+  // so `settings.rest` is always complete here.
+  const restCfg = settings.rest;
+  // Smart rest via the shared precedence: per-exercise rest → program role →
+  // movementGroup bucket. No exercise record → accessory bucket.
   function restFor(ex, role = null) {
-    if (!ex) return 90;
-    return C.restDefaultSeconds(ex.category, ex.name, role, restCfg, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : 0);
+    if (!ex) return restCfg.accessorySeconds;
+    return C.restDefaultSeconds(ex.category, ex.movementGroup, role, restCfg, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : 0);
   }
 
   const sessionStart = Date.now();            // session stopwatch origin (ephemeral)
@@ -240,7 +241,7 @@ export async function openSession(id) {
         // EFFECTIVE rest — so 0 is only offered where clearing lands on 0
         // (conditioning, whose smart default IS none); elsewhere stepping to 0
         // would snap the display up to the movement default.
-        const floor = C.restDefaultSeconds(ex.category, ex.name, se.programRole, restCfg, 0) === 0 ? 0 : 15;
+        const floor = C.restDefaultSeconds(ex.category, ex.movementGroup, se.programRole, restCfg, 0) === 0 ? 0 : 15;
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
           ui.stepper(restFor(ex, se.programRole), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
         c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used." }));

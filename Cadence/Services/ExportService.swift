@@ -135,6 +135,9 @@ enum ExportService {
         let rest: ExportRest?
         let autoStartRest: Bool
         let haptics: Bool
+        /// Rides in the bundle so restoring a post-migration backup doesn't
+        /// re-run the retired-rest-stamp clear; absent in old backups → re-run.
+        let restSeedStampsCleared: Bool?
         let seededAt: Date?
         let theme: String?
     }
@@ -421,7 +424,8 @@ enum ExportService {
                                                 secondarySeconds: s.secondaryRestSeconds,
                                                 accessorySeconds: s.accessoryRestSeconds),
                                autoStartRest: s.autoStartRest,
-                               haptics: s.haptics, seededAt: s.seededAt, theme: s.themeNameRaw)
+                               haptics: s.haptics, restSeedStampsCleared: s.restSeedStampsCleared,
+                               seededAt: s.seededAt, theme: s.themeNameRaw)
             }
         )
     }

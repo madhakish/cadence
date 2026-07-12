@@ -198,7 +198,9 @@ struct ProgressionChartsView: View {
     @Query(filter: #Predicate<Exercise> { $0.categoryRaw == "Main" }, sort: \Exercise.name)
     private var mainLifts: [Exercise]
 
-    @State private var selectedLift = "Deadlift"
+    // Defaults to the first main lift in the library on appear — no
+    // hardcoded exercise name (the library is user data).
+    @State private var selectedLift = ""
     @State private var metric: Metric = .topSet
     @State private var splitByRotation = false
 
@@ -245,6 +247,7 @@ struct ProgressionChartsView: View {
             Picker("Lift", selection: $selectedLift) {
                 ForEach(mainLifts) { Text($0.name).tag($0.name) }
             }
+            .onAppear { if selectedLift.isEmpty { selectedLift = mainLifts.first?.name ?? "" } }
             Picker("Metric", selection: $metric) {
                 ForEach(Metric.allCases, id: \.self) { Text($0.rawValue) }
             }

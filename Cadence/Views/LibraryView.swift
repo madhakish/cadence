@@ -149,8 +149,12 @@ struct ExerciseDetailView: View {
                     ForEach(ExerciseType.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 Toggle("Unilateral (log per side)", isOn: $exercise.isUnilateral)
+                // 0 = no rest of its own → the timer falls to the configurable
+                // rest buckets in Settings; any value set here wins everywhere.
                 Stepper(
-                    "Rest: \(exercise.defaultRestSeconds / 60):\(String(format: "%02d", exercise.defaultRestSeconds % 60))",
+                    exercise.defaultRestSeconds == 0
+                        ? "Rest: default (Settings)"
+                        : "Rest: \(exercise.defaultRestSeconds / 60):\(String(format: "%02d", exercise.defaultRestSeconds % 60))",
                     value: $exercise.defaultRestSeconds, in: 0...600, step: 15
                 )
             }

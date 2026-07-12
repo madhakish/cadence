@@ -32,6 +32,8 @@ section that matches what you're trying to do.
   grading, increments, stalls, deloads
 - [Swap rules](reference/swap-rules.md) — which exercises can substitute
   for which, and what each swap scope does
+- [Rest timers](reference/rest-timers.md) — how the rest countdown is
+  chosen: per-exercise rest, program role, movement type
 - [Program templates](reference/templates.md) — exactly what each
   pre-programmed style contains
 
