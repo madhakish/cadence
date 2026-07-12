@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
-import { Settings, Gyms, Tracks, Exercises, Programs, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded } from "../db.js";
+import { Settings, Gyms, Tracks, Exercises, Programs, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate } from "../templates.js";
 import { muscleProfile, muscleBlurb, figureSVG } from "../anatomy.js";
 import { Sessions } from "../db.js";
@@ -446,7 +446,9 @@ function exerciseDetail(e) {
           ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(e.isUnilateral, async (v) => { e.isUnilateral = v; await Exercises.save(e); })),
           // 0 = no rest of its own → the timer falls to the configurable rest
           // buckets in Settings; any value set here wins everywhere.
-          ui.h("div", { class: "row" }, ui.h("span", { text: "Rest" }), ui.stepper(e.defaultRestSeconds, { min: 0, max: 600, step: 15, format: (v) => (v === 0 ? "Default" : ui.mmss(v)), onChange: async (v) => { e.defaultRestSeconds = v; await Exercises.save(e); } }))));
+          // `|| 0`: a raw-imported record can lack the field — an undefined
+          // seed would render NaN:NaN and persist NaN on the first tap.
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Rest" }), ui.stepper(e.defaultRestSeconds || 0, { min: 0, max: 600, step: 15, format: (v) => (v === 0 ? "Default" : ui.mmss(v)), onChange: async (v) => { e.defaultRestSeconds = v; await Exercises.save(e); } }))));
         const siteSel = ui.h("select", {}, ui.h("option", { value: "", text: "None", selected: !e.watchSite }), ...BODY_SITES.map((s) => ui.h("option", { value: s, text: s, selected: s === e.watchSite })));
         siteSel.addEventListener("change", async () => { e.watchSite = siteSel.value || null; await Exercises.save(e); });
         body.append(ui.field("Watch site", siteSel));
@@ -474,7 +476,10 @@ function importData() {
     const f = file.files[0]; if (!f) return;
     const r = new FileReader();
     r.onload = async () => {
-      try { await importBundle(JSON.parse(r.result)); ui.toast("Imported."); ui.nav.refresh(); }
+      // syncLibrary right after the restore: a pre-migration backup re-arms
+      // the retired-rest-stamp clear, which otherwise wouldn't run until the
+      // next full page load — leaving the rest steppers dead in the meantime.
+      try { await importBundle(JSON.parse(r.result)); await syncLibrary(); ui.toast("Imported."); ui.nav.refresh(); }
       catch { ui.toast("Couldn't read that file."); }
     };
     r.readAsText(f);

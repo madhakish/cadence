@@ -140,7 +140,11 @@ export async function openSession(id) {
 
   const sessionStart = Date.now();            // session stopwatch origin (ephemeral)
   let currentSE = null;                       // the exercise you're actively working
-  const currentExercise = () => exMap.get(((currentSE || session.exercises[0]) || {}).exerciseName);
+  // Exercise AND role must come from the same session entry — pairing
+  // exercises[0] with currentSE's (null) role resolved the first lift's rest
+  // without its program role (mirrors native currentOrFirst).
+  const currentEntry = () => currentSE || session.exercises[0] || null;
+  const currentExercise = () => exMap.get((currentEntry() || {}).exerciseName);
 
   const rest = makeRestTimer(() => paintBar(), () => onRestDone());
   let restLabel = "";
@@ -162,7 +166,7 @@ export async function openSession(id) {
     } else {
       barEls.restTime.style.display = "none";
       barEls.restBtn.style.display = "";
-      barEls.restBtn.textContent = `Rest ${ui.mmss(restFor(currentExercise(), currentSE?.programRole))}`;
+      barEls.restBtn.textContent = `Rest ${ui.mmss(restFor(currentExercise(), currentEntry()?.programRole))}`;
       barEls.subBtn.style.display = "none";
       barEls.addBtn.style.display = "none";
       barEls.skipBtn.style.display = "none";
@@ -173,7 +177,7 @@ export async function openSession(id) {
   function buildBottomBar() {
     const clock = ui.h("span", { class: "clock mono" });
     const restTime = ui.h("span", { class: "rest-time mono", style: { display: "none" } });
-    const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex, currentSE?.programRole), ex ? ex.name : ""); } });
+    const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex, currentEntry()?.programRole), ex ? ex.name : ""); } });
     const subBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "−1:00", onClick: () => { rest.add(-60); paintBar(); } });
     const addBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "+1:00", onClick: () => { rest.add(60); paintBar(); } });
     const skipBtn = ui.h("button", { class: "btn sm ghost", style: { display: "none" }, text: "Skip", onClick: () => { rest.stop(); paintBar(); } });

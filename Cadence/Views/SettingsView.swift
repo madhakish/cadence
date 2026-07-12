@@ -246,6 +246,11 @@ struct SettingsView: View {
             do {
                 let data = try Data(contentsOf: url)
                 let s = try ImportService.load(data, into: context)
+                // syncLibrary right after the restore: a pre-migration backup
+                // re-arms the retired-rest-stamp clear, which otherwise
+                // wouldn't run until the next app launch — leaving the rest
+                // steppers dead in the meantime.
+                Seeder.syncLibrary(context: context)
                 return "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
             } catch {
                 return error.localizedDescription

@@ -201,7 +201,10 @@ enum ImportService {
             type: ExerciseType(rawValue: d.type ?? "") ?? .barbell,
             movementGroup: d.movementGroup ?? "",
             isUnilateral: d.isUnilateral ?? false,
-            defaultRestSeconds: d.defaultRestSeconds ?? 90,
+            // 0 = bucket-driven; a missing key must NOT mint a per-exercise
+            // override (90 was the retired blanket stamp — web imports the
+            // same record raw, so anything else diverges the platforms).
+            defaultRestSeconds: d.defaultRestSeconds ?? 0,
             notes: d.notes ?? "",
             isShelved: d.isShelved ?? false,
             shelvedNote: d.shelvedNote ?? "",
