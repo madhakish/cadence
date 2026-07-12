@@ -10,15 +10,27 @@ enum ProgramSession {
 
     static func make(program: Program, day: ProgramDay, context: ModelContext) -> WorkoutSession {
         // Resume, don't duplicate (mirrors web createSessionFromProgramDay):
-        // while a session for this program is open, Start returns it instead of
-        // minting a second copy that would later try to advance the same
-        // schedule position again (issue 17). The name is hoisted into a local
-        // because a Predicate can't reference a captured object's property.
+        // an open session for THIS day at the current position, whose content
+        // still matches the plan, is resumed instead of duplicated (issue 17).
+        // But a name-only match resurrected STALE snapshots — after editing a
+        // day, Start kept returning the pre-edit session (old complementary
+        // lift). canResumeSession requires the tag AND the exercise list to
+        // match the current plan, so an edited/moved day builds fresh.
+        // (Predicate can't read a captured property, so filter in Swift.)
         let programName = program.name
         let openDescriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { !$0.isCompleted && $0.programName == programName }
         )
-        if let existing = (try? context.fetch(openDescriptor))?.first { return existing }
+        let dayNames = day.orderedLifts.map(\.exerciseName) + day.orderedAccessories.map(\.exerciseName)
+        if let existing = (try? context.fetch(openDescriptor))?.first(where: { s in
+            ProgramProgression.canResumeSession(
+                tagCycle: s.programCycleNumber ?? program.cycleNumber,
+                tagWeek: s.programWeek ?? program.currentWeek,
+                tagDayIndex: s.programDayIndex ?? -1,
+                cycleNumber: program.cycleNumber, currentWeek: program.currentWeek, dayIndex: day.order,
+                sessionExerciseNames: s.orderedExercises.compactMap { $0.exercise?.name },
+                dayExerciseNames: dayNames)
+        }) { return existing }
 
         let defaultGym = (try? context.fetch(FetchDescriptor<Gym>()))?.first(where: { $0.isDefault })
         let session = WorkoutSession(gymName: defaultGym?.name)

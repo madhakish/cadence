@@ -154,6 +154,7 @@ export async function openSession(id) {
       barEls.restTime.textContent = ui.mmss(rest.remaining);
       barEls.restTime.style.display = "";
       barEls.restBtn.style.display = "none";
+      barEls.subBtn.style.display = "";
       barEls.addBtn.style.display = "";
       barEls.skipBtn.style.display = "";
       barEls.prog.style.width = `${Math.min(100, rest.progress * 100)}%`;
@@ -161,6 +162,7 @@ export async function openSession(id) {
       barEls.restTime.style.display = "none";
       barEls.restBtn.style.display = "";
       barEls.restBtn.textContent = `Rest ${ui.mmss(restFor(currentExercise(), currentSE?.programRole))}`;
+      barEls.subBtn.style.display = "none";
       barEls.addBtn.style.display = "none";
       barEls.skipBtn.style.display = "none";
       barEls.prog.style.width = "0%";
@@ -171,12 +173,13 @@ export async function openSession(id) {
     const clock = ui.h("span", { class: "clock mono" });
     const restTime = ui.h("span", { class: "rest-time mono", style: { display: "none" } });
     const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex, currentSE?.programRole), ex ? ex.name : ""); } });
+    const subBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "−1:00", onClick: () => { rest.add(-60); paintBar(); } });
     const addBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "+1:00", onClick: () => { rest.add(60); paintBar(); } });
     const skipBtn = ui.h("button", { class: "btn sm ghost", style: { display: "none" }, text: "Skip", onClick: () => { rest.stop(); paintBar(); } });
     const prog = ui.h("i");
-    barEls = { clock, restTime, restBtn, addBtn, skipBtn, prog };
+    barEls = { clock, restTime, restBtn, subBtn, addBtn, skipBtn, prog };
     return ui.h("div", { id: "session-bar" },
-      ui.h("div", { class: "session-bar-row" }, clock, ui.h("div", { class: "btn-row", style: { alignItems: "center" } }, restTime, restBtn, addBtn, skipBtn)),
+      ui.h("div", { class: "session-bar-row" }, clock, ui.h("div", { class: "btn-row", style: { alignItems: "center" } }, restTime, restBtn, subBtn, addBtn, skipBtn)),
       ui.h("div", { class: "progress" }, prog));
   }
 
@@ -216,7 +219,13 @@ export async function openSession(id) {
     card.append(ui.h("div", { class: "btn-row", style: { marginTop: "10px" } },
       ui.h("button", { class: "btn sm", text: "+ Set", onClick: () => { currentSE = se; addSet(se); save(); renderBody(body); } }),
       ui.h("button", { class: "btn sm ghost", text: "Rest", onClick: () => { currentSE = se; armRest(restFor(ex, se.programRole), se.exerciseName); } }),
-      ui.h("button", { class: "btn sm ghost warn", text: "↓ Dropping load", onClick: () => dropLoad(se, body) })));
+      ui.h("button", { class: "btn sm ghost warn", text: "↓ Dropping load", onClick: () => dropLoad(se, body) }),
+      // Remove the exercise from THIS session (program slot untouched).
+      ui.h("button", { class: "btn sm ghost danger", text: "✕ Remove", onClick: () => {
+        session.exercises = session.exercises.filter((x) => x !== se);
+        if (currentSE === se) currentSE = null;
+        save(); renderBody(body);
+      } })));
 
     if (ex && ex.watchSite) card.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: `Watch: ${ex.watchSite.toLowerCase()} — ${watchNote(ex.watchSite)}` }));
     return card;
@@ -597,11 +606,17 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb) {
 }
 
 export async function createSessionFromProgramDay(program, day) {
-  // Resume, don't duplicate: while a session for this program is open, Start
-  // returns it instead of minting a second copy that would later try to
-  // advance the same schedule position again (issue 17).
-  const openForProgram = (await Sessions.all()).find((s) => !s.isCompleted && s.programTag && s.programTag.programId === program.id);
-  if (openForProgram) return openForProgram.id;
+  // Resume, don't duplicate — but only a session for THIS day at the current
+  // position whose content still matches the plan (issue 17). A name/program-
+  // only match resurrected stale snapshots after a day was edited; canResume
+  // requires the tag AND exercise list to match, else build fresh.
+  const sortedLifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
+  const dayNames = [...sortedLifts.map((l) => l.exerciseName), ...(day.accessories || []).map((a) => a.exerciseName)];
+  const openForDay = (await Sessions.all()).find((s) => !s.isCompleted && s.programTag && s.programTag.programId === program.id
+    && C.canResumeSession(s.programTag.cycleNumber, s.programTag.week, s.programTag.dayIndex,
+      program.cycleNumber, program.currentWeek, day.order,
+      (s.exercises || []).map((e) => e.exerciseName), dayNames));
+  if (openForDay) return openForDay.id;
   const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
   const gym = await Gyms.default();
   const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);

@@ -471,6 +471,17 @@ export function sessionTagCurrent(tagCycle, tagWeek, tagDayIndex, cycleNumber, c
   return tagCycle === cycleNumber && tagWeek === currentWeek && tagDayIndex === nextDayIndex;
 }
 
+// Whether an OPEN session may be resumed when the user (re)starts a program
+// day, rather than building fresh: same cycle/week/day tag AND its exercises
+// still match that day's current plan (same names, same order). Either
+// mismatch = stale snapshot (program edited or position moved) → build fresh,
+// never resurface old content. Mirrors CadenceCore canResumeSession.
+export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, currentWeek, dayIndex, sessionExerciseNames, dayExerciseNames) {
+  return tagCycle === cycleNumber && tagWeek === currentWeek && tagDayIndex === dayIndex
+    && sessionExerciseNames.length === dayExerciseNames.length
+    && sessionExerciseNames.every((n, i) => n === dayExerciseNames[i]);
+}
+
 // ---- Swap rules (issue 20) ----------------------------------------------
 // Mirrors CadenceCore's SwapRules. Exercise types that can't carry a weight
 // prescription — a loaded slot must never be offered an unloadable substitute

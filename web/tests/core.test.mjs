@@ -333,6 +333,27 @@ eq(C.sessionTagCurrent(1, 1, 3, 2, 1, 3), false, "stale cycle → not current");
 eq(C.sessionTagCurrent(2, 1, 3, 2, 2, 3), false, "stale week → not current");
 eq(C.sessionTagCurrent(2, 1, 3, 2, 1, 0), false, "stale day → not current");
 
+// canResumeSession: resume only same-position + same-content open sessions
+{
+  const names = ["Overhead Press", "Incline DB Press", "Dips"];
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, names, names), true, "same position + content → resume");
+  // The reported bug: same day/position, but the day was edited so the open
+  // session still lists the old complementary lift → must NOT resume.
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Overhead Press", "Chest-supported Row", "Dips"], names), false, "edited content → build fresh");
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Overhead Press", "Dips"], names), false, "removed exercise → build fresh");
+  eq(C.canResumeSession(2, 1, 2, 2, 1, 3, names, names), false, "different day → build fresh");
+  eq(C.canResumeSession(1, 1, 3, 2, 1, 3, names, names), false, "stale cycle → build fresh");
+  eq(C.canResumeSession(2, 2, 3, 2, 1, 3, names, names), false, "stale week → build fresh");
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Incline DB Press", "Overhead Press", "Dips"], names), false, "reordered → build fresh");
+}
+
+// RestClock.add shrinks as well as extends, flooring at 0 (subtract control)
+{
+  const s = C.restClockStart(120, 1000);
+  eq(C.restClockRemaining(C.restClockAdd(s, -60), 1000), 60, "−60 shrinks the rest");
+  eq(C.restClockRemaining(C.restClockAdd(s, -300), 1000), 0, "over-subtract floors at 0");
+}
+
 // issue 18 repro: 3×3 prescribed at 175 (e1RM 300) but performed at 100 must
 // not grade success, reset the stall, or raise the base weight.
 const belowPlanPerf = { ...cleanPerf, anyBelowPlanLoad: true, topSetWeightLb: 100 };

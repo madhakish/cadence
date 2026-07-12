@@ -73,6 +73,25 @@ final class ProgramProgressionTests: XCTestCase {
                        "stale day → not current")
     }
 
+    func testCanResumeSession() {
+        let names = ["Overhead Press", "Incline DB Press", "Dips"]
+        func resume(_ tagDay: Int, _ day: Int, _ session: [String], _ dayNames: [String],
+                    cycle: Int = 2, week: Int = 1, tagCycle: Int = 2, tagWeek: Int = 1) -> Bool {
+            P.canResumeSession(tagCycle: tagCycle, tagWeek: tagWeek, tagDayIndex: tagDay,
+                               cycleNumber: cycle, currentWeek: week, dayIndex: day,
+                               sessionExerciseNames: session, dayExerciseNames: dayNames)
+        }
+        XCTAssertTrue(resume(3, 3, names, names), "same position + content → resume")
+        // The reported bug: same day/position, day edited, open session still
+        // lists the old complementary lift → must NOT resume.
+        XCTAssertFalse(resume(3, 3, ["Overhead Press", "Chest-supported Row", "Dips"], names), "edited content → build fresh")
+        XCTAssertFalse(resume(3, 3, ["Overhead Press", "Dips"], names), "removed exercise → build fresh")
+        XCTAssertFalse(resume(2, 3, names, names), "different day → build fresh")
+        XCTAssertFalse(resume(3, 3, names, names, tagCycle: 1), "stale cycle → build fresh")
+        XCTAssertFalse(resume(3, 3, names, names, tagWeek: 2), "stale week → build fresh")
+        XCTAssertFalse(resume(3, 3, ["Incline DB Press", "Overhead Press", "Dips"], names), "reordered → build fresh")
+    }
+
     func testBelowPlanWorkFailsCycle() {
         // Issue 18 repro: 3×3 prescribed at 175 (e1RM 300) but performed at 100
         // must not grade success, reset the stall, or raise the base weight.

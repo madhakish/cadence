@@ -170,7 +170,8 @@ struct ActiveSessionView: View {
                 allExercises: allExercises,
                 lastTime: recallLine(for: entry, in: recall),
                 onDropLoad: { autoregEntry = entry },
-                onWork: { currentEntry = $0 }
+                onWork: { currentEntry = $0 },
+                onRemove: { removeExercise(entry) }
             )
         }
     }
@@ -178,6 +179,15 @@ struct ActiveSessionView: View {
     private func recallLine(for entry: SessionExercise, in recall: [String: String]) -> String? {
         guard let name = entry.exercise?.name else { return nil }
         return recall[name]
+    }
+
+    /// Drop an exercise from this session (session-only — the program slot is
+    /// untouched, like a swap). If it was the actively-worked lift, clear that
+    /// so the bottom bar falls back to the first remaining exercise.
+    private func removeExercise(_ entry: SessionExercise) {
+        if currentEntry?.persistentModelID == entry.persistentModelID { currentEntry = nil }
+        context.delete(entry)
+        try? context.save()
     }
 
     private func pushActivityContext() {
@@ -278,6 +288,9 @@ private struct ExerciseSection: View {
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
     let onWork: (SessionExercise) -> Void
+    /// Remove this exercise from the session (session-only, like a swap — the
+    /// program slot is untouched and just isn't performed today).
+    let onRemove: () -> Void
 
     /// How long a swap outlives this session (issue 20). Session-only is the
     /// default: the program slot is untouched and simply isn't performed today
@@ -479,19 +492,28 @@ private struct ExerciseSection: View {
                     Text(Copy.shelved).foregroundStyle(Theme.hardStop)
                 }
                 Spacer()
-                if !alternatives.isEmpty {
-                    Menu {
-                        ForEach(alternatives) { alt in
-                            Button(alt.name) {
-                                if entry.programRole != nil { pendingSwap = alt }
-                                else { swap(to: alt, scope: .session) }
+                Menu {
+                    if !alternatives.isEmpty {
+                        Menu {
+                            ForEach(alternatives) { alt in
+                                Button(alt.name) {
+                                    if entry.programRole != nil { pendingSwap = alt }
+                                    else { swap(to: alt, scope: .session) }
+                                }
                             }
-                        }
-                    } label: {
-                        Label("Swap", systemImage: "arrow.left.arrow.right")
-                            .labelStyle(.iconOnly)
-                            .foregroundStyle(Theme.accent)
+                        } label: { Label("Swap exercise", systemImage: "arrow.left.arrow.right") }
                     }
+                    Button(role: .destructive, action: onRemove) {
+                        Label("Remove from session", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(Theme.accent)
+                }
+                .accessibilityLabel("Exercise options")
+                if !alternatives.isEmpty {
+                    // Retain the confirmation dialog anchor for scoped swaps.
+                    Color.clear.frame(width: 0, height: 0)
                     .confirmationDialog(
                         "Swap to \(pendingSwap?.name ?? "")?",
                         isPresented: Binding(get: { pendingSwap != nil },
@@ -848,8 +870,12 @@ private struct SessionBottomBar: View {
                     } label: { Image(systemName: restTimer.isPaused ? "play.fill" : "pause.fill") }
                         .buttonStyle(.bordered)
                         .accessibilityLabel(restTimer.isPaused ? "Resume rest" : "Pause rest")
+                    Button("−1:00") { restTimer.add(seconds: -60) }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Subtract one minute")
                     Button("+1:00") { restTimer.add(seconds: 60) }
                         .buttonStyle(.bordered)
+                        .accessibilityLabel("Add one minute")
                     Button {
                         restTimer.stop()
                     } label: { Image(systemName: "xmark") }

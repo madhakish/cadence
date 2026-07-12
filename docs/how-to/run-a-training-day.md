@@ -37,8 +37,18 @@ lifts appear under "Next up" with their own suggestions.
   silently editing the weight, so the reason is recorded. (Either way,
   working below prescription can't grade as a clean success.)
 - **Add a set** freely — extra back-off volume beyond the prescription
-  never hurts your grade.
-- **Wrong exercise available?** [Swap it](swap-an-exercise.md).
+  never hurts your grade. **Subtract** as well as add rest time with the
+  −1:00 / +1:00 controls while a rest runs.
+- **Wrong exercise available?** [Swap it](swap-an-exercise.md), or
+  **remove it** from the session entirely via the exercise's ⋯ menu
+  (iOS) / Remove button (web) — the program slot is untouched, the lift
+  just isn't performed today.
+
+Editing your program takes effect the next time you **Start** that day:
+Start always reflects the current plan, so a lift you swapped in the
+program editor shows up immediately (a session you already had open from
+before the edit stays as it was — resume it from the Today card only if
+you want the old snapshot).
 
 ## Bank it
 

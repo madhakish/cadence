@@ -179,6 +179,24 @@ public enum ProgramProgression {
         tagCycle == cycleNumber && tagWeek == currentWeek && tagDayIndex == nextDayIndex
     }
 
+    /// Whether an OPEN session may be resumed when the user (re)starts a
+    /// program day, rather than building a fresh one. It must be tagged for
+    /// the SAME cycle/week/day AND its exercises must still match that day's
+    /// current plan (same names, same order). Either mismatch means the open
+    /// snapshot is stale — the program was edited (a lift swapped/added/
+    /// removed) or the position moved — so a fresh session must be built,
+    /// never the old content resurfaced. (Bug: after editing Upper B, "Start"
+    /// kept showing the pre-edit complementary lift because the name-only
+    /// resume guard returned the stale session.)
+    public static func canResumeSession(
+        tagCycle: Int, tagWeek: Int, tagDayIndex: Int,
+        cycleNumber: Int, currentWeek: Int, dayIndex: Int,
+        sessionExerciseNames: [String], dayExerciseNames: [String]
+    ) -> Bool {
+        tagCycle == cycleNumber && tagWeek == currentWeek && tagDayIndex == dayIndex
+            && sessionExerciseNames == dayExerciseNames
+    }
+
     /// Increment = fraction of base × headroom-to-ceiling, floored at plate
     /// granularity, 0 at/over the focus-dependent training-max ceiling.
     public static func taperedIncrement(

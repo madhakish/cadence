@@ -314,6 +314,40 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(staleNotes.length === 1, "a program note explains the skipped advancement");
 }
 
+// ---- editing a day rebuilds Start instead of resurfacing the stale session ----
+{
+  let prog = await db.Programs.active();
+  const day = prog.days.find((d) => d.order === prog.nextDayIndex);
+  const comp = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1))[1];
+  const originalComp = comp.exerciseName;
+
+  // Start it once (open session snapshots the current plan), then re-Start —
+  // same day, unchanged → resumes the same session id.
+  const id1 = await session.createSessionFromProgramDay(prog, day);
+  const id2 = await session.createSessionFromProgramDay(await db.Programs.active(), day);
+  ok(id1 === id2, "re-starting an unedited day resumes the open session");
+  const built1 = await db.Sessions.get(id1);
+  ok(built1.exercises.some((e) => e.exerciseName === originalComp), "open session has the original complementary");
+
+  // Now edit the day's complementary lift and Start again → must build FRESH
+  // with the new exercise, not return the stale snapshot.
+  prog = await db.Programs.active();
+  const liveDay = prog.days.find((d) => d.order === day.order);
+  const liveComp = [...liveDay.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1))[1];
+  liveComp.exerciseName = "Face Pulls"; // a seeded exercise not previously on this day
+  await db.Programs.save(prog);
+
+  const id3 = await session.createSessionFromProgramDay(await db.Programs.active(), liveDay);
+  ok(id3 !== id1, "editing the day builds a fresh session, not the stale one");
+  const built3 = await db.Sessions.get(id3);
+  ok(built3.exercises.some((e) => e.exerciseName === "Face Pulls"), "fresh session has the edited exercise");
+  ok(!built3.exercises.some((e) => e.exerciseName === originalComp), "stale exercise is gone from the fresh session");
+  // And the fresh session now re-resumes (content matches the edited plan).
+  const id4 = await session.createSessionFromProgramDay(await db.Programs.active(), liveDay);
+  ok(id4 === id3, "the fresh session re-resumes on the next Start");
+  await db.Sessions.del(id1); await db.Sessions.del(id3);
+}
+
 // ---- program templates: every style instantiates and banks cleanly ----
 {
   const { PROGRAM_TEMPLATES, createProgramFromTemplate } = await import("../js/templates.js");
