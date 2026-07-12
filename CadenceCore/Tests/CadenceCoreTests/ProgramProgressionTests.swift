@@ -61,6 +61,18 @@ final class ProgramProgressionTests: XCTestCase {
                        "no prescription → nothing to compare")
     }
 
+    func testSessionTagCurrent() {
+        // A session may advance the program only from its live position (issue 17).
+        XCTAssertTrue(P.sessionTagCurrent(tagCycle: 2, tagWeek: 1, tagDayIndex: 3, cycleNumber: 2, currentWeek: 1, nextDayIndex: 3),
+                      "tag at the live position → current")
+        XCTAssertFalse(P.sessionTagCurrent(tagCycle: 1, tagWeek: 1, tagDayIndex: 3, cycleNumber: 2, currentWeek: 1, nextDayIndex: 3),
+                       "stale cycle → not current")
+        XCTAssertFalse(P.sessionTagCurrent(tagCycle: 2, tagWeek: 1, tagDayIndex: 3, cycleNumber: 2, currentWeek: 2, nextDayIndex: 3),
+                       "stale week → not current")
+        XCTAssertFalse(P.sessionTagCurrent(tagCycle: 2, tagWeek: 1, tagDayIndex: 3, cycleNumber: 2, currentWeek: 1, nextDayIndex: 0),
+                       "stale day → not current")
+    }
+
     func testBelowPlanWorkFailsCycle() {
         // Issue 18 repro: 3×3 prescribed at 175 (e1RM 300) but performed at 100
         // must not grade success, reset the stall, or raise the base weight.

@@ -143,6 +143,22 @@ enum SessionCompletion {
         guard let day = program.days.first(where: { $0.order == dayIndex }) else { return }
         let week = session.programWeek ?? program.currentWeek
 
+        // Duplicate/stale guard (mirrors web advanceProgram): the tag captured
+        // at creation must still match the program's live position, or this
+        // bank must not move the schedule again. Untagged legacy fields fall
+        // back to the current value (they can't disagree).
+        let tagCycle = session.programCycleNumber ?? program.cycleNumber
+        guard ProgramProgression.sessionTagCurrent(
+            tagCycle: tagCycle, tagWeek: week, tagDayIndex: dayIndex,
+            cycleNumber: program.cycleNumber, currentWeek: program.currentWeek,
+            nextDayIndex: program.nextDayIndex
+        ) else {
+            let label = "\(program.name): banked a session from cycle \(tagCycle) week \(week) day \(dayIndex + 1), but the program has moved on — kept as history, schedule not advanced twice."
+            context.insert(Milestone(date: session.date, exerciseName: nil, kind: .programNote, label: label))
+            events.append(PREvent(kind: .programNote, exercise: program.name, label: label))
+            return
+        }
+
         // Accessories: double progression, every bank.
         for acc in day.accessories {
             if let entry = session.exercises.first(where: { $0.programRole == "accessory" && $0.exercise?.name == acc.exerciseName }) {

@@ -503,6 +503,22 @@ async function advanceProgram(session, milestones) {
   const day = program.days.find((d) => d.order === tag.dayIndex);
   if (!day) return null;
   const note = (label, name) => milestones.push({ kind: "programNote", exercise: name, label, _persist: { exerciseName: name, label } });
+  // Program notes become milestones so the explanation shows in History; the
+  // caller persists them with the rest of the completion transaction.
+  const flushNotes = () => {
+    const noteRecords = [];
+    for (const m of milestones) {
+      if (m.kind === "programNote" && m._persist) { noteRecords.push({ date: iso(new Date(session.date)), exerciseName: m._persist.exerciseName, kind: "programNote", label: m._persist.label }); delete m._persist; }
+    }
+    return noteRecords;
+  };
+
+  // Duplicate/stale guard: the tag captured at creation must still match the
+  // program's live position, or this bank must not move the schedule again.
+  if (!C.sessionTagCurrent(tag.cycleNumber, tag.week, tag.dayIndex, program.cycleNumber, program.currentWeek, program.nextDayIndex)) {
+    note(`${program.name}: banked a session from cycle ${tag.cycleNumber} week ${tag.week} day ${tag.dayIndex + 1}, but the program has moved on — kept as history, schedule not advanced twice.`, null);
+    return { program: null, noteRecords: flushNotes() };
+  }
 
   // Accessories: double progression, evaluated every bank.
   for (const acc of day.accessories || []) {
@@ -547,13 +563,7 @@ async function advanceProgram(session, milestones) {
       program.currentWeek = 1;
     }
   }
-  // Program notes become milestones so the explanation shows in History; the
-  // caller persists them with the rest of the completion transaction.
-  const noteRecords = [];
-  for (const m of milestones) {
-    if (m.kind === "programNote" && m._persist) { noteRecords.push({ date: iso(new Date(session.date)), exerciseName: m._persist.exerciseName, kind: "programNote", label: m._persist.label }); delete m._persist; }
-  }
-  return { program, noteRecords };
+  return { program, noteRecords: flushNotes() };
 }
 
 // ---- Build a session from a program day ----
@@ -566,6 +576,11 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb) {
 }
 
 export async function createSessionFromProgramDay(program, day) {
+  // Resume, don't duplicate: while a session for this program is open, Start
+  // returns it instead of minting a second copy that would later try to
+  // advance the same schedule position again (issue 17).
+  const openForProgram = (await Sessions.all()).find((s) => !s.isCompleted && s.programTag && s.programTag.programId === program.id);
+  if (openForProgram) return openForProgram.id;
   const exMap = new Map((await Exercises.all()).map((e) => [e.name, e]));
   const gym = await Gyms.default();
   const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);

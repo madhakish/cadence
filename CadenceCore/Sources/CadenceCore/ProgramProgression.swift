@@ -167,6 +167,18 @@ public enum ProgramProgression {
         return atPlan < prescribedSets
     }
 
+    /// A banked session may only advance the program if its tag (captured at
+    /// creation) still matches the program's live position — otherwise it's a
+    /// duplicate or stale session and must be kept as history without moving
+    /// the schedule a second time (issue 17: banking two copies of a week's
+    /// final day skipped a whole week).
+    public static func sessionTagCurrent(
+        tagCycle: Int, tagWeek: Int, tagDayIndex: Int,
+        cycleNumber: Int, currentWeek: Int, nextDayIndex: Int
+    ) -> Bool {
+        tagCycle == cycleNumber && tagWeek == currentWeek && tagDayIndex == nextDayIndex
+    }
+
     /// Increment = fraction of base × headroom-to-ceiling, floored at plate
     /// granularity, 0 at/over the focus-dependent training-max ceiling.
     public static func taperedIncrement(

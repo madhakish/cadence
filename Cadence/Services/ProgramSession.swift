@@ -9,6 +9,17 @@ import CadenceCore
 enum ProgramSession {
 
     static func make(program: Program, day: ProgramDay, context: ModelContext) -> WorkoutSession {
+        // Resume, don't duplicate (mirrors web createSessionFromProgramDay):
+        // while a session for this program is open, Start returns it instead of
+        // minting a second copy that would later try to advance the same
+        // schedule position again (issue 17). The name is hoisted into a local
+        // because a Predicate can't reference a captured object's property.
+        let programName = program.name
+        let openDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { !$0.isCompleted && $0.programName == programName }
+        )
+        if let existing = (try? context.fetch(openDescriptor))?.first { return existing }
+
         let defaultGym = (try? context.fetch(FetchDescriptor<Gym>()))?.first(where: { $0.isDefault })
         let session = WorkoutSession(gymName: defaultGym?.name)
         let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb

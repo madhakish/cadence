@@ -462,6 +462,15 @@ export function belowPlanWork(weightsLb, plannedLb, prescribedSets, roundingLb =
   return atPlan < prescribedSets;
 }
 
+// A banked session may only advance the program if its tag (captured at
+// creation) still matches the program's live position — otherwise it's a
+// duplicate or stale session and must be kept as history without moving the
+// schedule a second time (issue 17: banking two copies of a week's final day
+// skipped a whole week).
+export function sessionTagCurrent(tagCycle, tagWeek, tagDayIndex, cycleNumber, currentWeek, nextDayIndex) {
+  return tagCycle === cycleNumber && tagWeek === currentWeek && tagDayIndex === nextDayIndex;
+}
+
 // Increment = fraction of base × headroom-to-ceiling, floored at plate granularity,
 // 0 at/over the focus-dependent training-max ceiling.
 export function taperedIncrement(baseWeightLb, estimatedMaxLb, focus, roundingLb = DEFAULT_ROUNDING_LB) {
