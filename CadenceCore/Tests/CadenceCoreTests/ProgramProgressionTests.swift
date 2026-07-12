@@ -47,6 +47,20 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertFalse(P.belowPlanLoad(actualLb: 100, plannedLb: 0, roundingLb: 5), "zero plan → nothing to compare")
     }
 
+    func testBelowPlanWorkCountsPrescribedSets() {
+        // The prescription is met by prescribedSets at-plan sets; extras are bonus.
+        XCTAssertFalse(P.belowPlanWork(weightsLb: [175, 175, 175], plannedLb: 175, prescribedSets: 3, roundingLb: 5),
+                       "all prescribed sets at plan → met")
+        XCTAssertFalse(P.belowPlanWork(weightsLb: [175, 175, 175, 155], plannedLb: 175, prescribedSets: 3, roundingLb: 5),
+                       "lighter back-off after the planned work is bonus volume")
+        XCTAssertTrue(P.belowPlanWork(weightsLb: [100, 100, 100], plannedLb: 175, prescribedSets: 3, roundingLb: 5),
+                      "whole lift performed light → below plan")
+        XCTAssertTrue(P.belowPlanWork(weightsLb: [175, 175, 155], plannedLb: 175, prescribedSets: 3, roundingLb: 5),
+                      "one prescribed set cut down → below plan")
+        XCTAssertFalse(P.belowPlanWork(weightsLb: [100, 100, 100], plannedLb: nil, prescribedSets: 3, roundingLb: 5),
+                       "no prescription → nothing to compare")
+    }
+
     func testBelowPlanWorkFailsCycle() {
         // Issue 18 repro: 3×3 prescribed at 175 (e1RM 300) but performed at 100
         // must not grade success, reset the stall, or raise the base weight.

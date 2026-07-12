@@ -262,6 +262,13 @@ eq(C.belowPlanLoad(170, 175, 5), true, "a full plate step down is a drop");
 eq(C.belowPlanLoad(100, null, 5), false, "no prescription → nothing to compare");
 eq(C.belowPlanLoad(100, 0, 5), false, "zero plan → nothing to compare");
 
+// belowPlanWork: the prescription is met by prescribedSets at-plan sets; extras are bonus
+eq(C.belowPlanWork([175, 175, 175], 175, 3, 5), false, "all prescribed sets at plan → met");
+eq(C.belowPlanWork([175, 175, 175, 155], 175, 3, 5), false, "lighter back-off after the planned work is bonus volume");
+eq(C.belowPlanWork([100, 100, 100], 175, 3, 5), true, "whole lift performed light → below plan");
+eq(C.belowPlanWork([175, 175, 155], 175, 3, 5), true, "one prescribed set cut down → below plan");
+eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → nothing to compare");
+
 // issue 18 repro: 3×3 prescribed at 175 (e1RM 300) but performed at 100 must
 // not grade success, reset the stall, or raise the base weight.
 const belowPlanPerf = { ...cleanPerf, anyBelowPlanLoad: true, topSetWeightLb: 100 };

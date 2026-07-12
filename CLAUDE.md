@@ -74,7 +74,9 @@ Four jobs on push to `main` (the first three also on PRs):
    (including `web-tests` — a tag is never cut while the JS mirror fails):
    semantic-release tags the next version, creates the GitHub Release, and
    attaches the version-stamped installer files from the same run's artifact.
-   These four job names are also the checks to require in any `main` ruleset.
+   A `main` ruleset should require the three PR-run checks (`core-tests`,
+   `web-tests`, `app-build`) — NOT `release`/`testflight`, which only run on
+   `main` pushes and would make PRs unmergeable if required.
 
 The `.ipa` is unsigned (no signing certs in CI) — it must be re-signed to
 sideload (AltStore/Sideloadly).

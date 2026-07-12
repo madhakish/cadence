@@ -152,6 +152,21 @@ public enum ProgramProgression {
         return actualLb < planned - roundingLb / 2
     }
 
+    /// Aggregate for a whole lift: the prescription is met when at least
+    /// `prescribedSets` working sets are at the planned load. Extra sets beyond
+    /// the prescription are bonus volume — a lighter back-off set after
+    /// completing the planned work must not fail the cycle. Fewer at-plan sets
+    /// than prescribed (whole lift performed light, or one prescribed set cut
+    /// down) is below plan.
+    public static func belowPlanWork(
+        weightsLb: [Double], plannedLb: Double?, prescribedSets: Int,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> Bool {
+        guard let planned = plannedLb, planned > 0 else { return false }
+        let atPlan = weightsLb.filter { !belowPlanLoad(actualLb: $0, plannedLb: planned, roundingLb: roundingLb) }.count
+        return atPlan < prescribedSets
+    }
+
     /// Increment = fraction of base × headroom-to-ceiling, floored at plate
     /// granularity, 0 at/over the focus-dependent training-max ceiling.
     public static func taperedIncrement(

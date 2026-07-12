@@ -116,9 +116,10 @@ enum SessionCompletion {
             completedSets: w.filter { $0.reps >= presReps }.count,
             anyStoppedEarly: w.contains { $0.flags.contains(.stoppedEarly) },
             anyDroppedLoad: w.contains { $0.autoregReason != nil },
-            anyBelowPlanLoad: w.contains {
-                ProgramProgression.belowPlanLoad(actualLb: $0.weightLb, plannedLb: entry.plannedWeightLb, roundingLb: roundingLb)
-            },
+            anyBelowPlanLoad: ProgramProgression.belowPlanWork(
+                weightsLb: w.map(\.weightLb), plannedLb: entry.plannedWeightLb,
+                prescribedSets: entry.plannedSets ?? w.count, roundingLb: roundingLb
+            ),
             grindyOrWobbleSets: w.filter { $0.flags.contains(.grindy) || $0.flags.contains(.wobble) }.count,
             topSetWeightLb: top?.weightLb ?? 0,
             topSetReps: top?.reps ?? 0

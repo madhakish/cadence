@@ -251,8 +251,21 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   const graded = prog.days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
   ok(graded.pending && graded.pending.grade === "fail", "below-plan peak graded fail, not success");
 
-  // Bank the rest of the wave cleanly; rollover applies the stashed fail.
-  for (let i = 0; i < 7; i++) {
+  // Day 1 of the same peak week: planned work done at plan, PLUS an extra
+  // lighter back-off set — bonus volume must not fail the cycle.
+  const day1 = prog.days.find((d) => d.order === prog.nextDayIndex);
+  const sess1 = await db.Sessions.get(await session.createSessionFromProgramDay(prog, day1));
+  const main1 = sess1.exercises.find((e) => e.programRole === "main");
+  const working1 = main1.sets.filter((s) => !s.isWarmup);
+  main1.sets.push({ ...working1[working1.length - 1], order: main1.sets.length, weightLb: working1[0].weightLb - 20 });
+  await session.completeSession(sess1);
+  prog = await db.Programs.active();
+  const graded1 = prog.days.find((d) => d.order === day1.order).lifts.find((l) => l.role === "main");
+  ok(graded1.pending && graded1.pending.grade === "success", "at-plan peak with a lighter back-off set still grades clean");
+
+  // Bank the rest of the wave cleanly (2 more peak days + the 4 deload days);
+  // rollover applies the stashed grades.
+  for (let i = 0; i < 6; i++) {
     const p = await db.Programs.active();
     const day = p.days.find((d) => d.order === p.nextDayIndex);
     const s = await db.Sessions.get(await session.createSessionFromProgramDay(p, day));

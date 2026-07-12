@@ -451,6 +451,17 @@ export function belowPlanLoad(actualLb, plannedLb, roundingLb = DEFAULT_ROUNDING
   return actualLb < plannedLb - roundingLb / 2;
 }
 
+// Aggregate for a whole lift: the prescription is met when at least
+// prescribedSets working sets are at the planned load. Extra sets beyond the
+// prescription are bonus volume — a lighter back-off set after completing the
+// planned work must not fail the cycle. Fewer at-plan sets than prescribed
+// (whole lift performed light, or one prescribed set cut down) is below plan.
+export function belowPlanWork(weightsLb, plannedLb, prescribedSets, roundingLb = DEFAULT_ROUNDING_LB) {
+  if (plannedLb == null || plannedLb <= 0) return false;
+  const atPlan = weightsLb.filter((w) => !belowPlanLoad(w, plannedLb, roundingLb)).length;
+  return atPlan < prescribedSets;
+}
+
 // Increment = fraction of base × headroom-to-ceiling, floored at plate granularity,
 // 0 at/over the focus-dependent training-max ceiling.
 export function taperedIncrement(baseWeightLb, estimatedMaxLb, focus, roundingLb = DEFAULT_ROUNDING_LB) {

@@ -479,7 +479,7 @@ function cyclePerf(se, roundingLb) {
     completedSets: w.filter((s) => s.reps >= presReps).length,
     anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
     anyDroppedLoad: w.some((s) => !!s.autoregReason),
-    anyBelowPlanLoad: w.some((s) => C.belowPlanLoad(s.weightLb, se.plannedWeightLb, roundingLb)),
+    anyBelowPlanLoad: C.belowPlanWork(w.map((s) => s.weightLb), se.plannedWeightLb, se.plannedSets ?? w.length, roundingLb),
     grindyOrWobbleSets: w.filter((s) => (s.flags || []).some((f) => f === "grindy" || f === "wobble")).length,
     topSetWeightLb: top ? top.weightLb : 0, topSetReps: top ? top.reps : 0,
   };
