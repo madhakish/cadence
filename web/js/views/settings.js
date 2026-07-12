@@ -259,7 +259,7 @@ function programEditor(p) {
           list.append(ui.h("div", { class: "row" },
             ui.h("div", { class: "lead", style: { cursor: "pointer", flex: "1" }, onClick: () => programDayEditor(p, day) },
               ui.h("span", { class: "title", text: day.name }),
-              ui.h("span", { class: "sub", text: day.lifts.map((l) => l.exerciseName).join(" + ") || "empty" })),
+              ui.h("span", { class: "sub", text: [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1)).map((l) => l.exerciseName).join(" + ") || "empty" })),
             ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { removeDay(p, day); await Programs.save(p); draw(); } })));
         }
         body.append(list);

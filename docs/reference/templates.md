@@ -13,12 +13,16 @@ shown as sets × rep-range (+load step where loaded).
 
 4 days · focus **strength** · rounding 5 lb
 
+The upper days alternate the two presses — A has the overhead emphasis,
+B the incline — and each day's accessories support that day's press.
+Every day carries core work.
+
 | Day | Main | Complementary | Accessories |
 |---|---|---|---|
-| Upper A | Overhead Press (65 / e1RM 95) | Incline DB Press (50/80) | Chin-ups 3×5–10 · Single-arm DB Row 3×8–12 @40 (+5) |
+| Upper A | Overhead Press (65 / e1RM 95) | Incline DB Press (50/80) | DB Overhead Triceps Extension 3×8–12 @20 (+5) · Y-T-W Raises 3×10–15 @10 · GHD Sit-up 3×8–15 |
 | Lower A | Back Squat (135/205) | Romanian Deadlift (95/165) | Walking Lunges 3×10–20 · Hanging Knee Raise 3×8–15 |
-| Upper B | Push Press (75/115) | Incline DB Press (50/80) | Push-ups 3×10–25 · Single-arm DB Row 3×8–12 @40 (+5) |
-| Lower B | Deadlift (155/245) | Front Squat (95/155) | Back Extension 3×10–15 · Hanging Knee Raise 3×8–15 |
+| Upper B | Incline DB Press (50/80) | Overhead Press (65/95) | Dips 3×5–12 · Band Pull-aparts 3×15–25 · Hanging Knee Raise 3×8–15 |
+| Lower B | Deadlift (155/245) | Front Squat (95/155) | Back Extension 3×10–15 · GHD Sit-up 3×8–15 |
 
 ## Olympic Weightlifting
 

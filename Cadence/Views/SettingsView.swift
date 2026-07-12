@@ -421,7 +421,10 @@ struct ProgramEditorView: View {
                     } label: {
                         VStack(alignment: .leading) {
                             Text(day.name)
-                            Text(day.lifts.map(\.exerciseName).joined(separator: " + "))
+                            // orderedLifts, not lifts: the SwiftData to-many
+                            // array is unordered, so the raw list can show the
+                            // complementary lift before the main.
+                            Text(day.orderedLifts.map(\.exerciseName).joined(separator: " + "))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
