@@ -269,6 +269,39 @@ eq(C.belowPlanWork([100, 100, 100], 175, 3, 5), true, "whole lift performed ligh
 eq(C.belowPlanWork([175, 175, 155], 175, 3, 5), true, "one prescribed set cut down → below plan");
 eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → nothing to compare");
 
+// completionCommit: save-or-rollback boundary for banking (issue 19) —
+// mirrors CompletionPersistenceTests.swift (same cases, same expectations)
+{
+  let saves = 0, rollbacks = 0, sideEffects = 0;
+  C.completionCommit(() => { saves += 1; }, () => { rollbacks += 1; });
+  eq(saves, 1, "committed once");
+  eq(rollbacks, 0, "no rollback on success");
+
+  let threw = null;
+  try {
+    C.completionCommit(() => { throw new Error("store down"); }, () => { rollbacks += 1; });
+    sideEffects += 1; // everything after commit — the web analog of HealthKit/notifications
+  } catch (e) { threw = e; }
+  ok(threw && /store down/.test(threw.message), "the underlying failure propagates to the caller");
+  eq(rollbacks, 1, "a failed save rolls back exactly once");
+  eq(sideEffects, 0, "side effects after commit never run on failure");
+
+  // Retryable: after a rolled-back failure, the same commit succeeds cleanly.
+  let healthy = false;
+  const attempt = () => C.completionCommit(() => { if (!healthy) throw new Error("store down"); }, () => { rollbacks += 1; });
+  try { attempt(); } catch { /* expected */ }
+  healthy = true;
+  attempt();
+  eq(rollbacks, 2, "only the failed attempts rolled back");
+
+  // A rollback that itself throws must not mask the save failure.
+  let masked = null;
+  try {
+    C.completionCommit(() => { throw new Error("store down"); }, () => { throw new Error("rollback exploded"); });
+  } catch (e) { masked = e; }
+  ok(masked && /store down/.test(masked.message), "the save failure propagates even when rollback throws");
+}
+
 // sessionTagCurrent: a session may advance the program only from its live position (issue 17)
 eq(C.sessionTagCurrent(2, 1, 3, 2, 1, 3), true, "tag at the live position → current");
 eq(C.sessionTagCurrent(1, 1, 3, 2, 1, 3), false, "stale cycle → not current");

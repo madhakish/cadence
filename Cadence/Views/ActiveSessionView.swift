@@ -24,6 +24,8 @@ struct ActiveSessionView: View {
     @State private var summary: SessionSummary?
     @State private var currentEntry: SessionExercise?   // the exercise you're actively working
     @State private var banking = false                  // double-tap on Bank it would run completion twice
+    @State private var showBankError = false            // failed save: everything rolled back, Bank stays retryable
+    @State private var bankErrorMessage = ""
 
     private var currentOrFirst: SessionExercise? { currentEntry ?? session.orderedExercises.first }
     private var gym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
@@ -55,9 +57,17 @@ struct ActiveSessionView: View {
                 Button {
                     guard !banking else { return }
                     banking = true
-                    summary = SessionCompletion.finish(session, context: context, startedAt: sessionStart)
-                    restTimer.stop()   // the workout is over; don't fire "Rest over" for a banked session
-                    workoutClock.end() // stop the stopwatch + end the Live Activity
+                    do {
+                        summary = try SessionCompletion.finish(session, context: context, startedAt: sessionStart)
+                        restTimer.stop()   // the workout is over; don't fire "Rest over" for a banked session
+                        workoutClock.end() // stop the stopwatch + end the Live Activity
+                    } catch {
+                        // Rolled back — the session is still open and untouched,
+                        // so surface the failure and let Bank be tapped again.
+                        banking = false
+                        bankErrorMessage = error.localizedDescription
+                        showBankError = true
+                    }
                 } label: {
                     Text(Copy.sessionDone)
                         .font(.headline)
@@ -90,6 +100,11 @@ struct ActiveSessionView: View {
         .onChange(of: currentRestSeconds) { pushActivityContext() }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Couldn't bank the session", isPresented: $showBankError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(bankErrorMessage)
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Later") { dismiss() }

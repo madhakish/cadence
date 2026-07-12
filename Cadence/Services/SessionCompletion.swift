@@ -17,20 +17,47 @@ struct SessionSummary {
 
 enum SessionCompletion {
 
+    /// The save failed and everything staged was rolled back — the session is
+    /// still open and Bank can simply be tapped again.
+    struct SaveFailure: LocalizedError {
+        let underlying: Error
+        var errorDescription: String? {
+            "Nothing was banked — the save failed, so the session is still open. Try again. (\(underlying.localizedDescription))"
+        }
+    }
+
     /// Close out a session: detect PRs against all prior completed sessions,
     /// persist milestones, advance any matching lift tracks, mirror the
     /// workout to HealthKit (when enabled and finished live), and arm the
     /// next-morning knee check-in if the session included running.
+    ///
+    /// Atomic (mirrors the web's single IndexedDB completion transaction): all
+    /// mutations are staged, then committed in one save. A failed save rolls
+    /// everything back — session flag, milestones, tracks, program — throws
+    /// SaveFailure, and runs NO side effects, so a retry can't duplicate
+    /// milestones, progression, HealthKit workouts, or notifications.
     ///
     /// `startedAt` is the logger's ephemeral session-clock origin (view-open
     /// time). The Health workout is written only when that origin falls on the
     /// session's own day — a session resumed and banked days later is a
     /// backfill, and a made-up duration is worse than no sample.
     @discardableResult
-    static func finish(_ session: WorkoutSession, context: ModelContext, startedAt: Date? = nil) -> SessionSummary {
+    static func finish(_ session: WorkoutSession, context: ModelContext, startedAt: Date? = nil) throws -> SessionSummary {
         // Idempotence backstop (mirrors web completeSession): finishing twice
         // would duplicate milestones and double-advance tracks/programs.
         guard !session.isCompleted else { return SessionSummary(lines: [], milestones: []) }
+
+        // Checkpoint the logged sets BEFORE staging anything: a rollback on a
+        // failed commit then discards only the completion mutations, never the
+        // user's logged work. If even the checkpoint can't save, the store is
+        // already failing — bail out now, with nothing staged and nothing to
+        // roll back, so the guarantee holds unconditionally.
+        do {
+            try context.save()
+        } catch {
+            throw SaveFailure(underlying: error)
+        }
+
         session.isCompleted = true
 
         var lines: [SessionSummary.LiftLine] = []
@@ -75,6 +102,18 @@ enum SessionCompletion {
             advanceProgram(session, context: context, events: &allEvents)
         }
 
+        // Commit the staged batch through the core boundary: save, or roll
+        // everything back to the checkpoint and rethrow. Side effects run
+        // strictly AFTER this line — a failed save must leave no trace.
+        do {
+            try CompletionPersistence.commit(
+                save: { try context.save() },
+                rollback: { context.rollback() }
+            )
+        } catch {
+            throw SaveFailure(underlying: error)
+        }
+
         if session.includesRunning {
             NotificationService.scheduleKneeCheckIn(afterSessionOn: session.date)
         }
@@ -89,13 +128,6 @@ enum SessionCompletion {
             Task { await HealthKitService.shared.saveStrengthWorkout(start: start, end: end) }
         }
 
-        do {
-            try context.save()
-        } catch {
-            // Keep the session retryable: with the flag left set, a retry
-            // would no-op through the idempotence guard without persisting.
-            session.isCompleted = false
-        }
         return SessionSummary(lines: lines, milestones: allEvents)
     }
 
