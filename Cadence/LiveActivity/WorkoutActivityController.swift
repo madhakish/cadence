@@ -127,6 +127,15 @@ enum WorkoutActivityController {
         await endAllActivities()
     }
 
+    /// Push the workout clock's origin/pause state (pause, resume, reset).
+    static func updateStopwatch(origin: Date, pausedAt: Date?) async {
+        guard let a = current else { return }
+        var s = a.content.state
+        s.stopwatchStart = origin
+        s.stopwatchPausedAt = pausedAt
+        await a.update(content(for: s))
+    }
+
     // MARK: - Background authority (Lock Screen / Action Button / Control Center intents)
 
     static func pauseRest() async {
@@ -149,6 +158,21 @@ enum WorkoutActivityController {
         await applyRest(nil, exerciseName: a.content.state.currentLift)
     }
 
+    /// Pause the workout clock from the Lock Screen / Dynamic Island.
+    static func pauseWorkout() async {
+        guard let a = current, a.content.state.stopwatchPausedAt == nil else { return }
+        let origin = a.content.state.stopwatchStart ?? a.attributes.startDate
+        await updateStopwatch(origin: origin, pausedAt: Date())
+    }
+
+    /// Resume it: the origin shifts forward by the paused span, so elapsed
+    /// picks up exactly where it froze.
+    static func resumeWorkout() async {
+        guard let a = current, let paused = a.content.state.stopwatchPausedAt else { return }
+        let origin = a.content.state.stopwatchStart ?? a.attributes.startDate
+        await updateStopwatch(origin: origin.addingTimeInterval(Date().timeIntervalSince(paused)), pausedAt: nil)
+    }
+
     /// One-button rest control (Action Button / Control Center): a live rest →
     /// skip it; a workout with no rest → arm the current lift's default; no
     /// workout at all → arm a standalone 3:00. Returns the spoken/shown result.
@@ -166,25 +190,44 @@ enum WorkoutActivityController {
     }
 
     // MARK: - Fire-and-forget wrappers (for the synchronous main-actor callers)
+    //
+    // SERIALIZED: each wrapper chains onto the previous one instead of
+    // spawning a free Task. Unordered tasks were the "timer won't stop" bug —
+    // tap ✕ (applyRest(nil)) while an earlier update was still in flight and
+    // the stale update could land second, resurrecting the rest face on the
+    // Lock Screen while the app believed the timer was stopped.
+
+    private static var chain: Task<Void, Never> = Task {}
+
+    private static func enqueue(_ op: @escaping @Sendable () async -> Void) {
+        chain = Task { [previous = chain] in
+            await previous.value
+            await op()
+        }
+    }
 
     static func beginSessionDetached(startDate: Date, currentLift: String, defaultRestSeconds: Int) {
-        Task { await beginSession(startDate: startDate, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
+        enqueue { await beginSession(startDate: startDate, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
     }
 
     static func updateContextDetached(currentLift: String, defaultRestSeconds: Int) {
-        Task { await updateContext(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
+        enqueue { await updateContext(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
     }
 
     static func startRestDetached(_ rest: RestClock.State, exerciseName: String) {
-        Task { await startRest(rest, exerciseName: exerciseName) }
+        enqueue { await startRest(rest, exerciseName: exerciseName) }
     }
 
     static func applyRestDetached(_ rest: RestClock.State?, exerciseName: String) {
-        Task { await applyRest(rest, exerciseName: exerciseName) }
+        enqueue { await applyRest(rest, exerciseName: exerciseName) }
+    }
+
+    static func updateStopwatchDetached(origin: Date, pausedAt: Date?) {
+        enqueue { await updateStopwatch(origin: origin, pausedAt: pausedAt) }
     }
 
     static func endSessionDetached() {
-        Task { await endSession() }
+        enqueue { await endSession() }
     }
 
     // MARK: - Internals

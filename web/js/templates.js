@@ -24,20 +24,21 @@ export const PROGRAM_TEMPLATES = [
     tagline: "4 days · barbell strength · A/B split over a 4-week wave",
     focus: "strength", roundingLb: 5,
     exercises: [
-      ex("Chin-ups", "Accessory", "bodyweight", "pull", { defaultRestSeconds: 120 }),
       ex("Back Extension", "Accessory", "bodyweight", "hinge"),
       ex("Hanging Knee Raise", "Accessory", "bodyweight", "core"),
-      ex("Push-ups", "Accessory", "bodyweight", "press"),
     ],
+    // The upper days alternate the two presses (A: overhead emphasis, B:
+    // incline emphasis); each day's accessories support THAT press, and every
+    // day carries core work.
     days: [
       { name: "Upper A", lifts: [lift("Overhead Press", "main", 65, 95), lift("Incline DB Press", "complementary", 50, 80)],
-        accessories: [acc("Chin-ups", 3, 5, 10), acc("Single-arm DB Row", 3, 8, 12, 40, 5)] },
+        accessories: [acc("DB Overhead Triceps Extension", 3, 8, 12, 20, 5), acc("Y-T-W Raises", 3, 10, 15, 10), acc("GHD Sit-up", 3, 8, 15)] },
       { name: "Lower A", lifts: [lift("Back Squat", "main", 135, 205), lift("Romanian Deadlift", "complementary", 95, 165)],
         accessories: [acc("Walking Lunges", 3, 10, 20), acc("Hanging Knee Raise", 3, 8, 15)] },
-      { name: "Upper B", lifts: [lift("Push Press", "main", 75, 115), lift("Incline DB Press", "complementary", 50, 80)],
-        accessories: [acc("Push-ups", 3, 10, 25), acc("Single-arm DB Row", 3, 8, 12, 40, 5)] },
+      { name: "Upper B", lifts: [lift("Incline DB Press", "main", 50, 80), lift("Overhead Press", "complementary", 65, 95)],
+        accessories: [acc("Dips", 3, 5, 12), acc("Band Pull-aparts", 3, 15, 25), acc("Hanging Knee Raise", 3, 8, 15)] },
       { name: "Lower B", lifts: [lift("Deadlift", "main", 155, 245), lift("Front Squat", "complementary", 95, 155)],
-        accessories: [acc("Back Extension", 3, 10, 15), acc("Hanging Knee Raise", 3, 8, 15)] },
+        accessories: [acc("Back Extension", 3, 10, 15), acc("GHD Sit-up", 3, 8, 15)] },
     ],
   },
   {

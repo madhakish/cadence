@@ -352,6 +352,33 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(JSON.stringify(squatAfter) === JSON.stringify(squatBefore), "existing exercises never overwritten by templates");
 }
 
+// ---- anatomy: muscle-map parity, coverage, and figure rendering ----
+{
+  const A = await import("../js/anatomy.js");
+  const { normalizedAnatomy } = await import("./anatomy-fixture.mjs");
+  const { readFile } = await import("node:fs/promises");
+  const fx = JSON.parse(await readFile(new URL("./fixtures/anatomy.json", import.meta.url), "utf8"));
+  ok(JSON.stringify(await normalizedAnatomy(), null, 2) === JSON.stringify(fx, null, 2),
+    "anatomy matches the shared parity fixture (regenerate via web/tools/generate-anatomy-fixture.mjs)");
+
+  const regionIds = new Set(A.ANATOMY_REGIONS.map((r) => r.id));
+  ok([...regionIds].every((id) => A.MUSCLE_NAMES[id]), "every region has a display name");
+  for (const [n, p] of Object.entries(A.MUSCLE_MAP)) {
+    ok([...p.primary, ...p.secondary].every((id) => regionIds.has(id)) && p.primary.length > 0,
+      `${n}: valid muscle profile`);
+  }
+  for (const e of await db.Exercises.all()) {
+    ok(!!A.muscleProfile(e.name, e.movementGroup), `${e.name} resolves a muscle profile (by name or group)`);
+  }
+  ok(A.muscleBlurb(A.muscleProfile("Overhead Press", "press")) === "Primary: Shoulders, Triceps · Supporting: Traps, Abs",
+    "blurb reads as expected");
+
+  const svg = A.figureSVG(A.muscleProfile("Overhead Press", "press"));
+  ok(svg.querySelectorAll("polygon").length > 30, "figure renders silhouette + regions for both views");
+  ok(svg.querySelectorAll('polygon[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
+  ok(svg.querySelectorAll('polygon[fill="#3a7bd5"]').length >= 1, "supporting muscles highlighted blue");
+}
+
 // ---- program: a cycle-scoped swap reverts at rollover (issue 20) ----
 // The swap gesture is native-only; the reverting state can arrive on web via
 // backup, so the rollover must honor it here identically.

@@ -1,12 +1,16 @@
 # Run a training day
 
-## Start (or resume)
+## Preview, then start (or resume)
 
 The **Today** screen shows the active program's next day with every
-prescription pre-filled. Tap **Start**. If a session for the program is
-already open, Start **resumes it** — you can't accidentally create a
-duplicate, and a duplicate smuggled in some other way banks as history
-without advancing the program twice.
+prescription pre-filled. **Tap the day's name to preview the whole
+workout** — every lift with its full prescription and bar loadout, every
+accessory — without starting anything; the pinned **Start** button up
+top is what commits. Tap **Start** (on the card or the preview) to
+begin. If a session for the program is already open, Start **resumes
+it** — you can't accidentally create a duplicate, and a duplicate
+smuggled in some other way banks as history without advancing the
+program twice.
 
 Off-program work: **Blank session** logs anything; standalone tracked
 lifts appear under "Next up" with their own suggestions.
@@ -20,6 +24,12 @@ lifts appear under "Next up" with their own suggestions.
   accessories; per-exercise overrides win). On iOS the Live Activity
   puts the countdown on the Lock Screen/Dynamic Island, and the Action
   Button or Control Center can start/skip rest.
+- **Workout clock controls** (iOS): the stopwatch menu in the session's
+  toolbar pauses, resumes, or resets the elapsed clock, and **End
+  workout** stops the clock and Live Activity outright without banking
+  (the session stays open to resume later). The same pause/resume/end
+  controls appear on the Live Activity's workout face, so an abandoned
+  session's stopwatch can always be stopped from the Lock Screen.
 - **Flag honest quality.** Mark sets *grindy* or *wobble* when they were
   — the program grades on it. Flag *stopped early* if you cut a set.
   These aren't judgments; they're the data autoregulation runs on.

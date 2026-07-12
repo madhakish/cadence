@@ -7,14 +7,6 @@
     "roundingLb": 5,
     "exercises": [
       {
-        "name": "Chin-ups",
-        "category": "Accessory",
-        "type": "bodyweight",
-        "group": "pull",
-        "isUnilateral": false,
-        "rest": 120
-      },
-      {
         "name": "Back Extension",
         "category": "Accessory",
         "type": "bodyweight",
@@ -27,14 +19,6 @@
         "category": "Accessory",
         "type": "bodyweight",
         "group": "core",
-        "isUnilateral": false,
-        "rest": 90
-      },
-      {
-        "name": "Push-ups",
-        "category": "Accessory",
-        "type": "bodyweight",
-        "group": "press",
         "isUnilateral": false,
         "rest": 90
       }
@@ -58,20 +42,28 @@
         ],
         "accessories": [
           {
-            "exercise": "Chin-ups",
-            "sets": 3,
-            "minReps": 5,
-            "maxReps": 10,
-            "weightLb": 0,
-            "incrementLb": 0
-          },
-          {
-            "exercise": "Single-arm DB Row",
+            "exercise": "DB Overhead Triceps Extension",
             "sets": 3,
             "minReps": 8,
             "maxReps": 12,
-            "weightLb": 40,
+            "weightLb": 20,
             "incrementLb": 5
+          },
+          {
+            "exercise": "Y-T-W Raises",
+            "sets": 3,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 10,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "GHD Sit-up",
+            "sets": 3,
+            "minReps": 8,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
           }
         ]
       },
@@ -114,34 +106,42 @@
         "name": "Upper B",
         "lifts": [
           {
-            "exercise": "Push Press",
-            "role": "main",
-            "baseWeightLb": 75,
-            "estimatedMaxLb": 115
-          },
-          {
             "exercise": "Incline DB Press",
-            "role": "complementary",
+            "role": "main",
             "baseWeightLb": 50,
             "estimatedMaxLb": 80
+          },
+          {
+            "exercise": "Overhead Press",
+            "role": "complementary",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 95
           }
         ],
         "accessories": [
           {
-            "exercise": "Push-ups",
+            "exercise": "Dips",
             "sets": 3,
-            "minReps": 10,
+            "minReps": 5,
+            "maxReps": 12,
+            "weightLb": 0,
+            "incrementLb": 0
+          },
+          {
+            "exercise": "Band Pull-aparts",
+            "sets": 3,
+            "minReps": 15,
             "maxReps": 25,
             "weightLb": 0,
             "incrementLb": 0
           },
           {
-            "exercise": "Single-arm DB Row",
+            "exercise": "Hanging Knee Raise",
             "sets": 3,
             "minReps": 8,
-            "maxReps": 12,
-            "weightLb": 40,
-            "incrementLb": 5
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0
           }
         ]
       },
@@ -171,7 +171,7 @@
             "incrementLb": 0
           },
           {
-            "exercise": "Hanging Knee Raise",
+            "exercise": "GHD Sit-up",
             "sets": 3,
             "minReps": 8,
             "maxReps": 15,
