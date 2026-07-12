@@ -257,33 +257,85 @@ private struct ExerciseSection: View {
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
     let onWork: (SessionExercise) -> Void
 
-    /// Same-movement-pattern lifts you can swap in (all presses, squat/hinge
-    /// variants, the oly lifts). Empty group ⇒ no swaps offered.
+    /// How long a swap outlives this session (issue 20). Session-only is the
+    /// default: the program slot is untouched and simply isn't performed today
+    /// (on a peak day the existing skipped-peak rule applies — the honest
+    /// grade for substituted work). Cycle renames the slot and reverts it at
+    /// the next rollover; program renames it for good.
+    enum SwapScope { case session, cycle, program }
+
+    /// Same-movement-pattern lifts you can swap in, constrained to the same
+    /// programming tier and loadability, excluding shelved (SwapRules in
+    /// CadenceCore — no more Walking Lunges → Back Squat or DB Press → Dips).
     private var alternatives: [Exercise] {
-        guard let g = entry.exercise?.movementGroup, !g.isEmpty else { return [] }
-        return allExercises.filter { $0.movementGroup == g && $0.name != entry.exercise?.name }
+        guard let cur = entry.exercise else { return [] }
+        return allExercises.filter {
+            SwapRules.compatible(
+                currentName: cur.name, currentCategory: cur.categoryRaw,
+                currentType: cur.typeRaw, currentGroup: cur.movementGroup,
+                candidateName: $0.name, candidateCategory: $0.categoryRaw,
+                candidateType: $0.typeRaw, candidateGroup: $0.movementGroup,
+                candidateShelved: $0.isShelved
+            )
+        }
     }
 
-    private func swap(to newExercise: Exercise) {
+    private func swap(to newExercise: Exercise, scope: SwapScope) {
         let oldName = entry.exercise?.name
-        // If this section fills a program slot, repoint the slot at the lift
-        // you're actually doing. Completion matches program lifts/accessories
-        // by name+role, so without this the swapped lift wouldn't be graded and
-        // the original would be treated as a missed peak (false stall/deload) at
-        // rollover. The slot keeps its progression state as the starting load.
-        if let role = entry.programRole, let name = entry.session?.programName,
+        let oldType = entry.exercise?.typeRaw
+        // Session scope leaves the program slot alone. Cycle/program scope
+        // repoint the slot at the lift you're actually doing (completion
+        // matches program lifts/accessories by name+role); the slot keeps its
+        // progression state as the starting load — candidates train the same
+        // pattern at the same tier, so base/e1RM remain the best prior.
+        if scope != .session,
+           let role = entry.programRole, let name = entry.session?.programName,
            let program = fetchProgram(named: name),
            let day = program.days.first(where: { $0.order == (entry.session?.programDayIndex ?? 0) }) {
             if role == "accessory" {
-                day.accessories.first { $0.exerciseName == oldName }?.exerciseName = newExercise.name
-            } else {
-                day.lifts.first { $0.exerciseName == oldName && $0.roleRaw == role }?.exerciseName = newExercise.name
+                if let acc = day.accessories.first(where: { $0.exerciseName == oldName }) {
+                    // Cycle: remember the original once (re-swapping mid-cycle
+                    // keeps the FIRST original). Program: any pending revert dies.
+                    if scope == .cycle { acc.revertToExerciseName = acc.revertToExerciseName ?? oldName }
+                    else { acc.revertToExerciseName = nil }
+                    acc.exerciseName = newExercise.name
+                }
+            } else if let lift = day.lifts.first(where: { $0.exerciseName == oldName && $0.roleRaw == role }) {
+                if scope == .cycle { lift.revertToExerciseName = lift.revertToExerciseName ?? oldName }
+                else { lift.revertToExerciseName = nil }
+                lift.exerciseName = newExercise.name
             }
         }
         entry.exercise = newExercise
         entry.sets.forEach { $0.isPerSide = newExercise.isUnilateral }
+        reconcileWarmups(oldType: oldType, newExercise: newExercise)
         try? context.save()
         onWork(entry)
+    }
+
+    /// Equipment-changing swaps invalidate the warmup ramp: a non-barbell
+    /// substitute drops the barbell ramp; a barbell substitute for a lift that
+    /// had none gains one. Working sets are never touched — the prescription
+    /// stands and any logged work is the user's record.
+    private func reconcileWarmups(oldType: String?, newExercise: Exercise) {
+        guard oldType != newExercise.typeRaw else { return }
+        let warmups = entry.sets.filter(\.isWarmup)
+        if newExercise.typeRaw != ExerciseType.barbell.rawValue {
+            for set in warmups { context.delete(set) }
+            entry.sets.removeAll(where: \.isWarmup)
+        } else if warmups.isEmpty {
+            let workingLb = entry.plannedWeightLb
+                ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb ?? 45
+            let ramp = WarmupRamp.ramp(workingLb: workingLb, barLb: effectiveBar.lb,
+                                       roundingLb: ProgramEngine.defaultRoundingLb)
+            for set in entry.sets { set.order += ramp.count }
+            for (i, wu) in ramp.enumerated() {
+                let set = SetEntry(order: i, weightLb: wu.weightLb, reps: wu.reps, isWarmup: true, isPerSide: false)
+                set.sessionExercise = entry
+                context.insert(set)
+                entry.sets.append(set)
+            }
+        }
     }
 
     private func fetchProgram(named name: String) -> Program? {
@@ -297,6 +349,11 @@ private struct ExerciseSection: View {
     /// default, a value-identical Bar — pins it for this screen's lifetime.
     @State private var pickedBar: Bar?
     private var effectiveBar: Bar { pickedBar ?? gym?.defaultBar ?? .bar45lb }
+
+    /// A picked swap for a program slot, awaiting its scope (issue 20).
+    /// Standalone entries skip the dialog — with no slot, session-only is the
+    /// only meaning a swap can have.
+    @State private var pendingSwap: Exercise?
 
     private var restSeconds: Int { smartRestSeconds(for: entry.exercise, role: entry.programRole, settings: settings) }
     private var restBinding: Binding<Int> {
@@ -397,12 +454,29 @@ private struct ExerciseSection: View {
                 if !alternatives.isEmpty {
                     Menu {
                         ForEach(alternatives) { alt in
-                            Button(alt.name) { swap(to: alt) }
+                            Button(alt.name) {
+                                if entry.programRole != nil { pendingSwap = alt }
+                                else { swap(to: alt, scope: .session) }
+                            }
                         }
                     } label: {
                         Label("Swap", systemImage: "arrow.left.arrow.right")
                             .labelStyle(.iconOnly)
                             .foregroundStyle(Theme.accent)
+                    }
+                    .confirmationDialog(
+                        "Swap to \(pendingSwap?.name ?? "")?",
+                        isPresented: Binding(get: { pendingSwap != nil },
+                                             set: { if !$0 { pendingSwap = nil } }),
+                        titleVisibility: .visible,
+                        presenting: pendingSwap
+                    ) { alt in
+                        Button("Just this session") { swap(to: alt, scope: .session) }
+                        Button("For the rest of this cycle") { swap(to: alt, scope: .cycle) }
+                        Button("For the whole program") { swap(to: alt, scope: .program) }
+                        Button("Cancel", role: .cancel) {}
+                    } message: { _ in
+                        Text("Just this session leaves the program unchanged. Cycle swaps revert at the next rollover; program swaps rename the slot for good.")
                     }
                 }
             }

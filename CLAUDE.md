@@ -153,6 +153,14 @@ progression systems: standalone `LiftTrack`s (independent per-lift cycles, the
     reset); bodyweight (`incrementLb <= 0`) → keep adding reps (maxReps advisory).
   - Training focus (strength/hypertrophy/maintain) sets the ceiling + increment;
     maintain never increments. Don't add nondeterminism to these functions.
+- **Swaps**: session-only by default — the program slot is untouched and simply
+  isn't performed that day (a swapped-out peak grades as skipped). Explicit
+  escalation: cycle scope (slot renamed, original kept in `revertToExerciseName`,
+  restored at rollover with a programNote) or program scope (renamed for good;
+  progression state stays with the slot either way). Candidates must share
+  movementGroup, category, and loadability, and never be shelved
+  (`SwapRules` in CadenceCore ≡ `swapCompatible` in core.js). The swap gesture
+  is native-only; the web app honors revert state arriving via backup.
 - **Generation + rollover**: `ProgramSession.make` / web `createSessionFromProgramDay`
   build a tagged session (program/cycle/week/day + per-exercise role). Completion
   (`SessionCompletion.swift` / web `completeSession`) grades each lift at the

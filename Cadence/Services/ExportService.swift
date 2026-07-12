@@ -189,6 +189,7 @@ enum ExportService {
         let stallCount: Int
         let lastIncrementLb: Double
         let pending: ExportPendingResult?
+        let revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
 
     struct ExportProgramAccessory: Codable {
@@ -200,6 +201,7 @@ enum ExportService {
         let weightLb: Double
         let incrementLb: Double
         let stallCount: Int
+        let revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
 
     struct ExportProgramDay: Codable {
@@ -374,12 +376,14 @@ enum ExportService {
                                             ),
                                             note: l.pendingNote
                                         )
-                                    }
+                                    },
+                                    revertToExerciseName: l.revertToExerciseName
                                 )
                             },
                             accessories: d.accessories.map { a in
                                 ExportProgramAccessory(exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
-                                                       currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount)
+                                                       currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount,
+                                                       revertToExerciseName: a.revertToExerciseName)
                             }
                         )
                     }

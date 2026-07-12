@@ -85,6 +85,9 @@ final class ProgramLift {
     var pendingStallCount: Int?
     var pendingLastIncrementLb: Double?
     var pendingNote: String?
+    /// Cycle-scoped swap (issue 20): the slot's original exercise, restored
+    /// at the next cycle rollover. nil = no revert pending.
+    var revertToExerciseName: String?
     var day: ProgramDay?
 
     init(exerciseName: String, role: LiftRole, baseWeightLb: Double, estimatedMaxLb: Double,
@@ -126,6 +129,9 @@ final class ProgramAccessory {
     var weightLb: Double
     var incrementLb: Double
     var stallCount: Int
+    /// Cycle-scoped swap (issue 20): the slot's original exercise, restored
+    /// at the next cycle rollover. nil = no revert pending.
+    var revertToExerciseName: String?
     var day: ProgramDay?
 
     init(exerciseName: String, sets: Int, minReps: Int, maxReps: Int,

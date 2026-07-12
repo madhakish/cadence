@@ -557,6 +557,22 @@ async function advanceProgram(session, milestones) {
               note(`${lift.exerciseName}: skipped peak — deloaded ${C.trim(old)}→${C.trim(lift.baseWeightLb)} lb.`, lift.exerciseName);
             }
           }
+          // A cycle-scoped swap ends with the cycle (mirrors native; the swap
+          // gesture is native-only, but this state can arrive via backup).
+          if (lift.revertToExerciseName) {
+            const original = lift.revertToExerciseName;
+            note(`${original}: cycle swap over — slot reverts from ${lift.exerciseName} for the new cycle.`, original);
+            lift.exerciseName = original;
+            delete lift.revertToExerciseName;
+          }
+        }
+        for (const acc of d.accessories || []) {
+          if (acc.revertToExerciseName) {
+            const original = acc.revertToExerciseName;
+            note(`${original}: cycle swap over — slot reverts from ${acc.exerciseName} for the new cycle.`, original);
+            acc.exerciseName = original;
+            delete acc.revertToExerciseName;
+          }
         }
       }
       program.cycleNumber += 1;

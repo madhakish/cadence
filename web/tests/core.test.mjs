@@ -269,6 +269,31 @@ eq(C.belowPlanWork([100, 100, 100], 175, 3, 5), true, "whole lift performed ligh
 eq(C.belowPlanWork([175, 175, 155], 175, 3, 5), true, "one prescribed set cut down → below plan");
 eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → nothing to compare");
 
+// swapCompatible: swap-candidate filtering (issue 20) — mirrors SwapRulesTests.swift
+{
+  const backSquat = { name: "Back Squat", category: "Main", type: "barbell", movementGroup: "squat" };
+  const frontSquat = { name: "Front Squat", category: "Main", type: "barbell", movementGroup: "squat" };
+  const walkingLunges = { name: "Walking Lunges", category: "Accessory", type: "bodyweight", movementGroup: "squat" };
+  const dbPress = { name: "Incline DB Press", category: "Main", type: "dumbbell", movementGroup: "press" };
+  const machinePress = { name: "Machine Press", category: "Main", type: "machine", movementGroup: "press" };
+  const bwPress = { name: "Pike Push-up", category: "Main", type: "bodyweight", movementGroup: "press" };
+  const benchShelved = { name: "Barbell Bench", category: "Main", type: "barbell", movementGroup: "press", isShelved: true };
+  const dips = { name: "Dips", category: "Accessory", type: "bodyweight", movementGroup: "press" };
+  const chinups = { name: "Chin-ups", category: "Accessory", type: "bodyweight", movementGroup: "pull" };
+  const pullups = { name: "Pull-ups", category: "Accessory", type: "bodyweight", movementGroup: "pull" };
+
+  eq(C.swapCompatible(backSquat, frontSquat), true, "same tier/pattern/loadability → offered");
+  eq(C.swapCompatible(chinups, pullups), true, "bodyweight→bodyweight is fine");
+  eq(C.swapCompatible(walkingLunges, backSquat), false, "accessory can't jump to a main competition lift");
+  eq(C.swapCompatible(dbPress, dips), false, "loaded press can't swap to an unloadable accessory");
+  eq(C.swapCompatible(dbPress, bwPress), false, "loadability mismatch alone filters (same tier/group)");
+  eq(C.swapCompatible(dbPress, machinePress), true, "equipment change within loadable types is fine");
+  eq(C.swapCompatible(dbPress, benchShelved), false, "shelved is never offered");
+  eq(C.swapCompatible(backSquat, dbPress), false, "different movement pattern");
+  eq(C.swapCompatible(backSquat, backSquat), false, "never itself");
+  eq(C.swapCompatible({ ...backSquat, movementGroup: "" }, frontSquat), false, "ungrouped lift offers no swaps");
+}
+
 // completionCommit: save-or-rollback boundary for banking (issue 19) —
 // mirrors CompletionPersistenceTests.swift (same cases, same expectations)
 {

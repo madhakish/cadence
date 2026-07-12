@@ -471,6 +471,26 @@ export function sessionTagCurrent(tagCycle, tagWeek, tagDayIndex, cycleNumber, c
   return tagCycle === cycleNumber && tagWeek === currentWeek && tagDayIndex === nextDayIndex;
 }
 
+// ---- Swap rules (issue 20) ----------------------------------------------
+// Mirrors CadenceCore's SwapRules. Exercise types that can't carry a weight
+// prescription — a loaded slot must never be offered an unloadable substitute
+// (Incline DB Press → Dips) or vice versa.
+export const UNLOADABLE_TYPES = new Set(["bodyweight", "timed", "conditioning"]);
+
+// A candidate is offered only when it trains the same movement pattern
+// (non-empty matching group), sits in the same programming tier
+// (Main/Accessory/Conditioning), matches the current lift's loadability,
+// isn't the same exercise, and isn't shelved. `current`/`candidate` are
+// exercise records: { name, category, type, movementGroup, isShelved }.
+export function swapCompatible(current, candidate) {
+  return !!current.movementGroup
+    && candidate.movementGroup === current.movementGroup
+    && candidate.name !== current.name
+    && !candidate.isShelved
+    && candidate.category === current.category
+    && UNLOADABLE_TYPES.has(candidate.type) === UNLOADABLE_TYPES.has(current.type);
+}
+
 // The transactional boundary for banking a session (issue 19), mirroring
 // CadenceCore's CompletionPersistence.commit: save the staged completion batch
 // or roll it back and rethrow, so side effects only ever run after a durable

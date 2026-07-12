@@ -314,6 +314,43 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(staleNotes.length === 1, "a program note explains the skipped advancement");
 }
 
+// ---- program: a cycle-scoped swap reverts at rollover (issue 20) ----
+// The swap gesture is native-only; the reverting state can arrive on web via
+// backup, so the rollover must honor it here identically.
+{
+  let prog = await db.Programs.active();
+  const lift = prog.days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
+  const originalLift = lift.exerciseName;
+  lift.revertToExerciseName = originalLift;
+  lift.exerciseName = "Safety Bar Squat (swap)";
+  const accDay = prog.days.find((d) => (d.accessories || []).length);
+  const originalAcc = accDay ? accDay.accessories[0].exerciseName : null;
+  if (accDay) {
+    accDay.accessories[0].revertToExerciseName = originalAcc;
+    accDay.accessories[0].exerciseName = "Ring Rows (swap)";
+  }
+  await db.Programs.save(prog);
+
+  const startCycle = prog.cycleNumber;
+  for (let i = 0; i < 16 && (await db.Programs.active()).cycleNumber === startCycle; i++) {
+    const p = await db.Programs.active();
+    const day = p.days.find((d) => d.order === p.nextDayIndex);
+    await session.completeSession(await db.Sessions.get(await session.createSessionFromProgramDay(p, day)));
+  }
+  prog = await db.Programs.active();
+  ok(prog.cycleNumber === startCycle + 1, "wave rolled over with a swap pending revert");
+  const liftAfter = prog.days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
+  ok(liftAfter.exerciseName === originalLift, "cycle-swapped lift reverted at rollover");
+  ok(liftAfter.revertToExerciseName == null, "lift revert marker cleared");
+  if (accDay) {
+    const accAfter = prog.days.find((d) => d.order === accDay.order).accessories[0];
+    ok(accAfter.exerciseName === originalAcc, "cycle-swapped accessory reverted at rollover");
+    ok(accAfter.revertToExerciseName == null, "accessory revert marker cleared");
+  }
+  const revertNotes = (await db.Milestones.all()).filter((m) => m.kind === "programNote" && /cycle swap over/.test(m.label));
+  ok(revertNotes.length >= (accDay ? 2 : 1), "revert notes written at rollover");
+}
+
 // ---- structural editing: add a day with a lift + accessory, generate, then remove ----
 {
   let prog = await db.Programs.active();
