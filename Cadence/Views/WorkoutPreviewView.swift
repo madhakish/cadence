@@ -1,0 +1,111 @@
+import SwiftUI
+import SwiftData
+import CadenceCore
+
+/// Read-only preview of a program day from the Today card: every lift with
+/// its full prescription and every accessory, WITHOUT creating a session —
+/// the prominent Start button up top is what commits. Mirrors the same
+/// preview math as the Today card (ProgramEngine.plan + neat snapping), so
+/// the preview and the started session never disagree.
+struct WorkoutPreviewView: View {
+    let program: Program
+    let day: ProgramDay
+    let onStart: () -> Void
+
+    @Query private var exercises: [Exercise]
+    @Query private var gyms: [Gym]
+
+    private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
+    private var phase: CyclePhase { CyclePhase(rawValue: program.currentWeek) ?? .volume }
+
+    private func plan(for lift: ProgramLift) -> SessionPlan {
+        let raw = ProgramEngine.plan(
+            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb,
+                            nextPhase: phase, incrementLb: 0),
+            roundingLb: program.roundingLb)
+        let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
+        let isBarbell = exercises.first { $0.name == lift.exerciseName }?.type == .barbell
+        let weightLb = ProgramSession.neatWeight(raw.weightLb, isBarbell: isBarbell,
+                                                 isMain: lift.role.rawValue == "main",
+                                                 barLb: barLb, stepLb: program.roundingLb)
+        return SessionPlan(weightLb: weightLb, sets: raw.sets, reps: raw.reps,
+                           phase: raw.phase, cycleNumber: raw.cycleNumber)
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 8) {
+                    WaveGlyph(week: program.currentWeek)
+                    Text("\(program.name) · Cycle \(program.cycleNumber) · \(phase.name)")
+                        .font(.caption.bold())
+                        .foregroundStyle(Theme.accent)
+                    Spacer()
+                }
+            }
+
+            Section("Lifts") {
+                ForEach(day.orderedLifts) { lift in
+                    let p = plan(for: lift)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline) {
+                            NavigationLink {
+                                ExerciseDetailByNameView(name: lift.exerciseName)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(lift.exerciseName).font(.subheadline.bold())
+                                    Text(lift.role.rawValue).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("\(Weight.trim(p.weightLb)) lb").font(.body.bold().monospacedDigit())
+                                Text("\(p.sets)×\(p.reps)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            }
+                        }
+                        if exercises.first(where: { $0.name == lift.exerciseName })?.type == .barbell, p.weightLb > 0 {
+                            BarbellView(weightLb: p.weightLb, unit: .lb,
+                                        bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
+                        }
+                    }
+                }
+            }
+
+            if !day.accessories.isEmpty {
+                Section("Accessories") {
+                    ForEach(day.accessories) { acc in
+                        HStack {
+                            NavigationLink {
+                                ExerciseDetailByNameView(name: acc.exerciseName)
+                            } label: {
+                                Text(acc.exerciseName).font(.subheadline)
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                            Text(acc.weightLb > 0
+                                 ? "\(acc.sets)×\(acc.currentReps) @ \(Weight.trim(acc.weightLb)) lb"
+                                 : "\(acc.sets)×\(acc.currentReps)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(day.name)
+        .navigationBarTitleDisplayMode(.inline)
+        // Start lives up top, pinned — browsing the workout never scrolls it away.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Button(action: onStart) {
+                Label("Start \(day.name)", systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(.bar)
+        }
+    }
+}

@@ -20,6 +20,13 @@ struct WorkoutActivityAttributes: ActivityAttributes {
         var defaultRestSeconds: Int
         /// The running rest, if any. `nil` → elapsed face.
         var rest: RestClock.State?
+        /// Stopwatch origin override: resume/reset shift the clock's start,
+        /// but `attributes.startDate` is immutable — so the live origin rides
+        /// in state. nil → `attributes.startDate` (activity as born).
+        var stopwatchStart: Date? = nil
+        /// Set while the workout clock is paused; the widget freezes the
+        /// elapsed face at (pausedAt − origin).
+        var stopwatchPausedAt: Date? = nil
     }
 
     /// Session stopwatch origin. Fixed for the activity's life.

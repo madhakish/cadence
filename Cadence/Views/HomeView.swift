@@ -19,6 +19,7 @@ struct HomeView: View {
 
     @State private var activeSession: WorkoutSession?
     @State private var showGymCard = false
+    @State private var previewDay: ProgramDay?
 
     private var settings: AppSettings? { settingsList.first }
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
@@ -79,14 +80,24 @@ struct HomeView: View {
 
                 if let program = activeProgram, let day = nextDay(program) {
                     Section("\(program.name) · Cycle \(program.cycleNumber)") {
-                        HStack(spacing: 8) {
-                            Text(day.name).font(.headline)
-                            Spacer()
-                            WaveGlyph(week: program.currentWeek)
-                            Text((CyclePhase(rawValue: program.currentWeek) ?? .volume).name)
-                                .font(.caption.bold())
-                                .foregroundStyle(Theme.accent)
+                        // Tapping the day opens the full preview — browse the
+                        // whole workout without starting it.
+                        Button {
+                            previewDay = day
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(day.name).font(.headline)
+                                Spacer()
+                                WaveGlyph(week: program.currentWeek)
+                                Text((CyclePhase(rawValue: program.currentWeek) ?? .volume).name)
+                                    .font(.caption.bold())
+                                    .foregroundStyle(Theme.accent)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
+                        .buttonStyle(.plain)
                         ForEach(day.orderedLifts) { lift in
                             let plan = programPlan(program, lift)
                             VStack(alignment: .leading, spacing: 4) {
@@ -193,6 +204,16 @@ struct HomeView: View {
             .fullScreenCover(item: $activeSession) { session in
                 NavigationStack {
                     ActiveSessionView(session: session)
+                }
+            }
+            .sheet(item: $previewDay) { day in
+                NavigationStack {
+                    if let program = activeProgram {
+                        WorkoutPreviewView(program: program, day: day) {
+                            previewDay = nil
+                            startProgramDay(program, day)
+                        }
+                    }
                 }
             }
             .sheet(isPresented: $showGymCard) {

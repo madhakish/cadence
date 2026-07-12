@@ -81,6 +81,7 @@ struct ActiveSessionView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SessionBottomBar(
                 sessionStart: sessionStart,
+                pausedAt: workoutClock.pausedAt,
                 restLabel: currentOrFirst?.exercise?.name ?? "",
                 restSeconds: currentRestSeconds
             )
@@ -108,6 +109,27 @@ struct ActiveSessionView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Later") { dismiss() }
+            }
+            // Workout clock controls: pause/resume/reset the stopwatch, or end
+            // the workout outright (Live Activity + timers) without banking —
+            // previously the only way to stop the clock was Bank it.
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    if workoutClock.isPaused {
+                        Button { workoutClock.resume() } label: { Label("Resume clock", systemImage: "play") }
+                    } else {
+                        Button { workoutClock.pause() } label: { Label("Pause clock", systemImage: "pause") }
+                    }
+                    Button { workoutClock.reset() } label: { Label("Reset clock", systemImage: "arrow.counterclockwise") }
+                    Divider()
+                    Button(role: .destructive) {
+                        restTimer.stop()
+                        workoutClock.end()
+                    } label: { Label("End workout", systemImage: "stop.circle") }
+                } label: {
+                    Image(systemName: workoutClock.isPaused ? "pause.circle" : "stopwatch")
+                }
+                .accessibilityLabel("Workout clock controls")
             }
         }
         .sheet(isPresented: $showExercisePicker) {
@@ -780,6 +802,7 @@ private struct SetDetailSheet: View {
 private struct SessionBottomBar: View {
     @Environment(RestTimer.self) private var restTimer
     let sessionStart: Date
+    let pausedAt: Date?
     let restLabel: String
     let restSeconds: Int
 
@@ -796,7 +819,8 @@ private struct SessionBottomBar: View {
                 // Session stopwatch — always visible, with an icon so it reads
                 // as a running clock.
                 TimelineView(.periodic(from: sessionStart, by: 1)) { timeline in
-                    Label(elapsedLabel(at: timeline.date), systemImage: "stopwatch")
+                    Label(elapsedLabel(at: pausedAt ?? timeline.date),
+                          systemImage: pausedAt == nil ? "stopwatch" : "pause.fill")
                         .font(.callout.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }

@@ -40,11 +40,13 @@ export async function render(host) {
     const phase = C.PHASES[program.currentWeek] || C.PHASES[1];
     root.append(ui.h("div", { class: "section-title", text: `${program.name} · Cycle ${program.cycleNumber}` }));
     const card = ui.h("div", { class: "card" },
-      ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
+      ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px", cursor: "pointer" },
+        onClick: () => workoutPreview(program, day, { exMap, gym, barLb }) },
         ui.h("span", { class: "title", text: day.name }),
         ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
           ui.wave(program.currentWeek),
-          ui.h("span", { class: "sub accent", text: phase.name }))));
+          ui.h("span", { class: "sub accent", text: phase.name }),
+          ui.h("span", { class: "chev" }))));
     const lifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
     for (const l of lifts) {
       const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
@@ -70,6 +72,7 @@ export async function render(host) {
   }
 
   // Next up — standalone tracked lifts not owned by the program
+  // (workoutPreview is defined below the view builder)
   const orphanTracks = tracks.filter((t) => !ownedNames.has(t.exerciseName));
   root.append(ui.h("div", { class: "section-title", text: program ? "Other tracked lifts" : "Next up" }));
   const list = ui.h("div", { class: "card list" });
@@ -129,6 +132,57 @@ function showGymTag(gym) {
         c.append(ui.h("div", { class: "muted", style: { textAlign: "center", fontSize: "12px", marginTop: "4px" }, text: "Turn screen brightness up to scan." }));
       } else {
         c.append(ui.empty("🎫", "No tag stored. Add a barcode photo in Settings → Gyms."));
+      }
+    },
+  });
+}
+
+// Full read-only preview of a program day — browse the whole workout without
+// creating a session; the Start button up top is what commits. Same preview
+// math as the Today card, so preview and started session never disagree.
+// (iOS mirror: WorkoutPreviewView.)
+function workoutPreview(program, day, { exMap, gym, barLb }) {
+  ui.pushScreen({
+    title: day.name,
+    build: (body) => {
+      const phase = C.PHASES[program.currentWeek] || C.PHASES[1];
+      body.append(ui.h("button", { class: "btn primary wide", text: `▶︎ Start ${day.name}`, onClick: async () => {
+        openSession(await createSessionFromProgramDay(program, day));
+      } }));
+      body.append(ui.h("div", { class: "sub", style: { margin: "6px 4px" },
+        text: `${program.name} · Cycle ${program.cycleNumber} · ${phase.name}` }));
+
+      body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
+      const liftCard = ui.h("div", { class: "card" });
+      const lifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
+      if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No wave lifts this day." }));
+      for (const l of lifts) {
+        const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
+        const ex = exMap.get(l.exerciseName);
+        plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb);
+        liftCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
+          ui.h("div", { class: "lead" },
+            ui.h("span", { class: "title", text: l.exerciseName }),
+            ui.h("span", { class: "sub", text: l.role })),
+          ui.h("div", { style: { textAlign: "right" } },
+            ui.h("div", { class: "wt-big mono", text: `${C.trim(plan.weightLb)} lb` }),
+            ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
+        if (ex && ex.type === "barbell" && plan.weightLb > 0) {
+          liftCard.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
+            barbellSVG(plan.weightLb, "lb", gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb, gym).svg));
+        }
+      }
+      body.append(liftCard);
+
+      if (day.accessories.length) {
+        body.append(ui.h("div", { class: "section-title", text: "Accessories" }));
+        const accCard = ui.h("div", { class: "card" });
+        for (const a of day.accessories) {
+          accCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
+            ui.h("span", { class: "title", text: a.exerciseName }),
+            ui.h("span", { class: "sub mono", text: a.weightLb > 0 ? `${a.sets}×${a.currentReps} @ ${C.trim(a.weightLb)} lb` : `${a.sets}×${a.currentReps}` })));
+        }
+        body.append(accCard);
       }
     },
   });

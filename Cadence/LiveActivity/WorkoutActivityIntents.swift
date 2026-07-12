@@ -38,6 +38,30 @@ struct EndRestIntent: LiveActivityIntent {
     }
 }
 
+struct PauseWorkoutIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Pause workout clock"
+    func perform() async throws -> some IntentResult {
+        await WorkoutActivityController.pauseWorkout()
+        return .result()
+    }
+}
+
+struct ResumeWorkoutIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Resume workout clock"
+    func perform() async throws -> some IntentResult {
+        await WorkoutActivityController.resumeWorkout()
+        return .result()
+    }
+}
+
+struct EndWorkoutIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "End workout"
+    func perform() async throws -> some IntentResult {
+        await WorkoutActivityController.endSession()
+        return .result()
+    }
+}
+
 /// The one-button rest control, wired to the Action Button (via App
 /// Shortcuts) and the iOS 18 Control Center control: resting → skip;
 /// working → arm the current lift's default rest; no workout → arm a

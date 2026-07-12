@@ -43,7 +43,7 @@ struct WorkoutActivityWidget: Widget {
                         restTimerText(rest, font: .title3.monospacedDigit().bold())
                             .foregroundStyle(restAccent)
                     } else {
-                        elapsedText(context.attributes.startDate, font: .title3.monospacedDigit().bold())
+                        elapsedText(context, font: .title3.monospacedDigit().bold())
                             .foregroundStyle(.primary)
                     }
                 }
@@ -56,14 +56,15 @@ struct WorkoutActivityWidget: Widget {
                     if let rest = context.state.rest {
                         restControls(rest)
                     } else {
-                        startRestButton(context.state)
+                        workoutControls(context.state)
                     }
                 }
             } compactLeading: {
                 if let rest = context.state.rest {
                     Image(systemName: rest.paused ? "pause.fill" : "timer").foregroundStyle(restAccent)
                 } else {
-                    Image(systemName: "stopwatch").foregroundStyle(.secondary)
+                    Image(systemName: context.state.stopwatchPausedAt == nil ? "stopwatch" : "pause.fill")
+                        .foregroundStyle(.secondary)
                 }
             } compactTrailing: {
                 if let rest = context.state.rest {
@@ -71,7 +72,7 @@ struct WorkoutActivityWidget: Widget {
                         .foregroundStyle(restAccent)
                         .frame(minWidth: 44)
                 } else {
-                    elapsedText(context.attributes.startDate, font: .caption.monospacedDigit().bold())
+                    elapsedText(context, font: .caption.monospacedDigit().bold())
                         .foregroundStyle(.secondary)
                         .frame(minWidth: 44)
                 }
@@ -106,28 +107,34 @@ private struct WorkoutLockScreenView: View {
                     Label("Workout", systemImage: "stopwatch")
                         .font(.subheadline.bold())
                     Spacer()
-                    elapsedText(context.attributes.startDate, font: .title.monospacedDigit().bold())
+                    elapsedText(context, font: .title.monospacedDigit().bold())
                 }
-                HStack {
-                    if !context.state.currentLift.isEmpty {
-                        Text(context.state.currentLift).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer()
-                    startRestButton(context.state)
+                if !context.state.currentLift.isEmpty {
+                    Text(context.state.currentLift).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
+                workoutControls(context.state)
             }
         }
         .padding()
     }
 }
 
-/// The session stopwatch, counting up from the workout's start.
+/// The session stopwatch, counting up from the workout's (possibly shifted)
+/// origin — frozen at the pause point while the clock is paused.
 @ViewBuilder
-private func elapsedText(_ startDate: Date, font: Font) -> some View {
-    Text(startDate, style: .timer)
-        .font(font)
-        .monospacedDigit()
-        .multilineTextAlignment(.trailing)
+private func elapsedText(_ context: ActivityViewContext<WorkoutActivityAttributes>, font: Font) -> some View {
+    let origin = context.state.stopwatchStart ?? context.attributes.startDate
+    if let paused = context.state.stopwatchPausedAt {
+        Text(mmssStatic(paused.timeIntervalSince(origin)))
+            .font(font)
+            .monospacedDigit()
+            .multilineTextAlignment(.trailing)
+    } else {
+        Text(origin, style: .timer)
+            .font(font)
+            .monospacedDigit()
+            .multilineTextAlignment(.trailing)
+    }
 }
 
 /// The Pause/Resume · +0:30 · End button row, shared by the Lock Screen and the
@@ -149,7 +156,28 @@ private func restControls(_ rest: RestClock.State) -> some View {
     .tint(restAccent)
 }
 
-/// The elapsed face's one action: arm the current lift's default rest.
+/// The elapsed face's controls: arm a rest, pause/resume the clock, and —
+/// the control that was missing — END the workout, so an abandoned session's
+/// stopwatch can always be stopped from the Lock Screen.
+@ViewBuilder
+private func workoutControls(_ state: WorkoutActivityAttributes.ContentState) -> some View {
+    HStack(spacing: 10) {
+        startRestButton(state)
+        if state.stopwatchPausedAt != nil {
+            Button(intent: ResumeWorkoutIntent()) { Label("Resume", systemImage: "play.fill") }
+                .tint(.secondary)
+        } else {
+            Button(intent: PauseWorkoutIntent()) { Label("Pause", systemImage: "pause.fill") }
+                .tint(.secondary)
+        }
+        Button(intent: EndWorkoutIntent()) { Label("End", systemImage: "xmark") }
+            .tint(.secondary)
+    }
+    .font(.caption.bold())
+    .buttonStyle(.bordered)
+}
+
+/// Arm the current lift's default rest.
 @ViewBuilder
 private func startRestButton(_ state: WorkoutActivityAttributes.ContentState) -> some View {
     Button(intent: ToggleRestIntent()) {
