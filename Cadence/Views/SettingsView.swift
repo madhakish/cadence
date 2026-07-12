@@ -475,8 +475,11 @@ struct ProgramDayEditorView: View {
                 TextField("Name", text: $day.name)
             }
             Section("Lifts") {
+                // Every row carries an explicit Remove button (mirroring the web
+                // editor): the segmented Role picker spans the row and eats the
+                // horizontal pan, so swipe-to-delete alone is undiscoverable here.
                 ForEach(day.orderedLifts) { lift in
-                    ProgramLiftRow(lift: lift, step: step)
+                    ProgramLiftRow(lift: lift, step: step) { context.delete(lift) }
                 }
                 .onDelete { offsets in
                     let ordered = day.orderedLifts
@@ -486,7 +489,7 @@ struct ProgramDayEditorView: View {
             }
             Section("Accessories") {
                 ForEach(day.accessories) { accessory in
-                    ProgramAccessoryRow(accessory: accessory)
+                    ProgramAccessoryRow(accessory: accessory) { context.delete(accessory) }
                 }
                 .onDelete { offsets in
                     for i in offsets { context.delete(day.accessories[i]) }
@@ -495,6 +498,7 @@ struct ProgramDayEditorView: View {
             }
         }
         .navigationTitle(day.name)
+        .toolbar { EditButton() }
         .sheet(item: $picking) { target in
             ExercisePickerSheetView { name in
                 switch target {
@@ -518,10 +522,19 @@ struct ProgramDayEditorView: View {
 private struct ProgramLiftRow: View {
     @Bindable var lift: ProgramLift
     let step: Double
+    let onRemove: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(lift.exerciseName).font(.headline)
+            HStack {
+                Text(lift.exerciseName).font(.headline)
+                Spacer()
+                Button(role: .destructive, action: onRemove) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless) // scoped to the icon, not the whole row
+                .accessibilityLabel("Remove \(lift.exerciseName)")
+            }
             Picker("Role", selection: Binding(get: { lift.role }, set: { lift.role = $0 })) {
                 Text("Main").tag(LiftRole.main)
                 Text("Complementary").tag(LiftRole.complementary)
@@ -535,10 +548,19 @@ private struct ProgramLiftRow: View {
 
 private struct ProgramAccessoryRow: View {
     @Bindable var accessory: ProgramAccessory
+    let onRemove: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(accessory.exerciseName).font(.headline)
+            HStack {
+                Text(accessory.exerciseName).font(.headline)
+                Spacer()
+                Button(role: .destructive, action: onRemove) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless) // scoped to the icon, not the whole row
+                .accessibilityLabel("Remove \(accessory.exerciseName)")
+            }
             Stepper("Weight: \(Weight.trim(accessory.weightLb)) lb", value: $accessory.weightLb, in: 0...500, step: 2.5)
             Stepper("Sets: \(accessory.sets)", value: $accessory.sets, in: 1...8)
             Stepper("Min reps: \(accessory.minReps)", value: $accessory.minReps, in: 1...20)
