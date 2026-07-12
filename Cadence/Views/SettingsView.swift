@@ -133,10 +133,28 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    Button {
-                        let program = Program(name: "Program \(programs.count + 1)", isActive: programs.isEmpty)
-                        context.insert(program)
-                        try? context.save()
+                    // Start from a style (ProgramTemplateData in CadenceCore,
+                    // fixture-locked to the web copy) or from scratch. First
+                    // program = active; names kept unique (Program.name is a
+                    // unique attribute — a collision would upsert, not add).
+                    Menu {
+                        ForEach(ProgramTemplateData.all) { template in
+                            Button {
+                                ProgramTemplates.instantiate(template, context: context)
+                                try? context.save()
+                            } label: {
+                                Text(template.name)
+                                Text(template.tagline)
+                            }
+                        }
+                        Button {
+                            let name = ProgramTemplates.uniqueProgramName("Program \(programs.count + 1)", existing: programs.map(\.name))
+                            let program = Program(name: name, isActive: programs.isEmpty)
+                            context.insert(program)
+                            try? context.save()
+                        } label: {
+                            Text("Blank program")
+                        }
                     } label: {
                         Label("Add program", systemImage: "plus")
                     }

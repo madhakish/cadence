@@ -54,12 +54,14 @@ enum ImportService {
     private struct LiftDTO: Decodable {
         var exerciseName: String?; var role: String?; var baseWeightLb: Double?; var estimatedMaxLb: Double?
         var stallCount: Int?; var lastIncrementLb: Double?; var pending: PendingDTO?
+        var revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
     private struct PendingDTO: Decodable { var state: PendingState?; var note: String? }
     private struct PendingState: Decodable { var baseWeightLb: Double?; var estimatedMaxLb: Double?; var stallCount: Int?; var lastIncrementLb: Double? }
     private struct AccessoryDTO: Decodable {
         var exerciseName: String?; var sets: Int?; var minReps: Int?; var maxReps: Int?
         var currentReps: Int?; var weightLb: Double?; var incrementLb: Double?; var stallCount: Int?
+        var revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
     private struct Track: Decodable {
         var exerciseName: String?; var mode: String?; var cycleNumber: Int?; var baseWeightLb: Double?
@@ -254,6 +256,7 @@ enum ImportService {
                     lift.pendingLastIncrementLb = st.lastIncrementLb
                     lift.pendingNote = l.pending?.note
                 }
+                lift.revertToExerciseName = l.revertToExerciseName
                 lift.day = day
                 day.lifts.append(lift)
             }
@@ -261,6 +264,7 @@ enum ImportService {
                 let acc = ProgramAccessory(exerciseName: a.exerciseName ?? "", sets: a.sets ?? 3, minReps: a.minReps ?? 8,
                                            maxReps: a.maxReps ?? 12, currentReps: a.currentReps ?? 8, weightLb: a.weightLb ?? 0,
                                            incrementLb: a.incrementLb ?? 0, stallCount: a.stallCount ?? 0)
+                acc.revertToExerciseName = a.revertToExerciseName
                 acc.day = day
                 day.accessories.append(acc)
             }

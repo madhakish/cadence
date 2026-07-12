@@ -314,6 +314,87 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(staleNotes.length === 1, "a program note explains the skipped advancement");
 }
 
+// ---- program templates: every style instantiates and banks cleanly ----
+{
+  const { PROGRAM_TEMPLATES, createProgramFromTemplate } = await import("../js/templates.js");
+  ok(PROGRAM_TEMPLATES.length >= 3, "styles on offer: strength, oly, metcon");
+
+  // Cross-language parity anchor: the JS templates must equal the shared
+  // fixture byte-for-byte; ProgramTemplateDataTests holds Swift to the same
+  // fixture, so either mirror drifting fails its own CI job.
+  const { normalizedTemplates } = await import("./template-fixture.mjs");
+  const fixture = JSON.parse(await (await import("node:fs/promises")).readFile(new URL("./fixtures/program-templates.json", import.meta.url), "utf8"));
+  ok(JSON.stringify(await normalizedTemplates(), null, 2) === JSON.stringify(fixture, null, 2),
+    "templates match the shared parity fixture (regenerate via web/tools/generate-template-fixture.mjs)");
+  const squatBefore = await db.Exercises.byName("Back Squat"); // seeded — must never be overwritten
+  for (const t of PROGRAM_TEMPLATES) {
+    const id = await createProgramFromTemplate(t);
+    const prog = await db.Programs.get(id);
+    ok(prog && prog.days.length === t.days.length && prog.focus === t.focus, `${t.id}: program created with all days`);
+    ok(!prog.isActive, `${t.id}: not activated over the existing program`);
+    for (const e of t.exercises) ok(!!(await db.Exercises.byName(e.name)), `${t.id}: library has ${e.name}`);
+    // A session from day 0 builds and banks without touching other programs.
+    const sess = await db.Sessions.get(await session.createSessionFromProgramDay(prog, prog.days[0]));
+    const roles = new Set(sess.exercises.map((x) => x.programRole));
+    ok(t.days[0].lifts.length === 0 ? roles.has("accessory") : roles.has("main"), `${t.id}: day 0 session has its work`);
+    await session.completeSession(sess);
+    ok((await db.Programs.get(id)).nextDayIndex === 1, `${t.id}: banking advances the template program`);
+    await db.Programs.del(id); // leave the world as we found it for later blocks
+  }
+  // Repeated instantiation mints a distinct name (the native mirror's
+  // Program.name is unique — a fixed name would upsert there).
+  const dupA = await createProgramFromTemplate(PROGRAM_TEMPLATES[0]);
+  const dupB = await createProgramFromTemplate(PROGRAM_TEMPLATES[0]);
+  const nameA = (await db.Programs.get(dupA)).name, nameB = (await db.Programs.get(dupB)).name;
+  ok(nameA !== nameB && nameB.startsWith(nameA), `re-adding a style gets a distinct name (${nameB})`);
+  await db.Programs.del(dupA); await db.Programs.del(dupB);
+  const squatAfter = await db.Exercises.byName("Back Squat");
+  ok(JSON.stringify(squatAfter) === JSON.stringify(squatBefore), "existing exercises never overwritten by templates");
+}
+
+// ---- program: a cycle-scoped swap reverts at rollover (issue 20) ----
+// The swap gesture is native-only; the reverting state can arrive on web via
+// backup, so the rollover must honor it here identically.
+{
+  let prog = await db.Programs.active();
+  const lift = prog.days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
+  const originalLift = lift.exerciseName;
+  lift.revertToExerciseName = originalLift;
+  lift.exerciseName = "Safety Bar Squat (swap)";
+  const accDay = prog.days.find((d) => (d.accessories || []).length);
+  const originalAcc = accDay ? accDay.accessories[0].exerciseName : null;
+  if (accDay) {
+    accDay.accessories[0].revertToExerciseName = originalAcc;
+    accDay.accessories[0].exerciseName = "Ring Rows (swap)";
+  }
+  await db.Programs.save(prog);
+
+  // The marker must survive a web export taken mid-cycle — dropping it would
+  // turn the temporary swap into a permanent rename on restore.
+  const exported = await db.exportBundle();
+  const exLift = exported.programs.find((p) => p.id === prog.id).days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
+  ok(exLift.revertToExerciseName === originalLift, "cycle-swap marker survives web export");
+
+  const startCycle = prog.cycleNumber;
+  for (let i = 0; i < 16 && (await db.Programs.active()).cycleNumber === startCycle; i++) {
+    const p = await db.Programs.active();
+    const day = p.days.find((d) => d.order === p.nextDayIndex);
+    await session.completeSession(await db.Sessions.get(await session.createSessionFromProgramDay(p, day)));
+  }
+  prog = await db.Programs.active();
+  ok(prog.cycleNumber === startCycle + 1, "wave rolled over with a swap pending revert");
+  const liftAfter = prog.days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
+  ok(liftAfter.exerciseName === originalLift, "cycle-swapped lift reverted at rollover");
+  ok(liftAfter.revertToExerciseName == null, "lift revert marker cleared");
+  if (accDay) {
+    const accAfter = prog.days.find((d) => d.order === accDay.order).accessories[0];
+    ok(accAfter.exerciseName === originalAcc, "cycle-swapped accessory reverted at rollover");
+    ok(accAfter.revertToExerciseName == null, "accessory revert marker cleared");
+  }
+  const revertNotes = (await db.Milestones.all()).filter((m) => m.kind === "programNote" && /cycle swap over/.test(m.label));
+  ok(revertNotes.length >= (accDay ? 2 : 1), "revert notes written at rollover");
+}
+
 // ---- structural editing: add a day with a lift + accessory, generate, then remove ----
 {
   let prog = await db.Programs.active();

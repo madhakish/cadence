@@ -252,6 +252,23 @@ enum SessionCompletion {
                         events.append(PREvent(kind: .programNote, exercise: lift.exerciseName, label: label))
                     }
                 }
+                // A cycle-scoped swap ends with the cycle (mirrors web).
+                if let original = lift.revertToExerciseName {
+                    let label = "\(original): cycle swap over — slot reverts from \(lift.exerciseName) for the new cycle."
+                    lift.exerciseName = original
+                    lift.revertToExerciseName = nil
+                    context.insert(Milestone(date: session.date, exerciseName: original, kind: .programNote, label: label))
+                    events.append(PREvent(kind: .programNote, exercise: original, label: label))
+                }
+            }
+            for acc in d.accessories {
+                if let original = acc.revertToExerciseName {
+                    let label = "\(original): cycle swap over — slot reverts from \(acc.exerciseName) for the new cycle."
+                    acc.exerciseName = original
+                    acc.revertToExerciseName = nil
+                    context.insert(Milestone(date: session.date, exerciseName: original, kind: .programNote, label: label))
+                    events.append(PREvent(kind: .programNote, exercise: original, label: label))
+                }
             }
         }
         program.cycleNumber += 1

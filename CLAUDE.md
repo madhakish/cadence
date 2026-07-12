@@ -21,6 +21,8 @@ suite). That parity is non-negotiable — it's why the two apps can't drift.
 | `Cadence/` | Native app target: SwiftUI views, SwiftData `@Model` classes, services, seed data |
 | `web/` | Web PWA: `js/core.js` (mirror of CadenceCore), `js/db.js` (IndexedDB), views, service worker. No build step |
 | `web/tests/` | `core.test.mjs` (parity checks vs XCTest) + `smoke.test.mjs` (jsdom + fake-indexeddb) + `fixtures/synthetic-backup.json` (broad-coverage dataset; regenerate with `web/tools/generate-synthetic-backup.mjs`, restores into BOTH apps) |
+| `docs/` | User documentation, Diátaxis-structured (tutorials/how-to/reference/explanation); `docs/README.md` is the index. Update alongside behavior changes |
+| `web/js/templates.js` ≡ `CadenceCore/…/ProgramTemplateData.swift` | Program style templates (data) behind the "+ Add program" picker. Parity ENFORCED: both suites assert against `web/tests/fixtures/program-templates.json` (regenerate via `web/tools/generate-template-fixture.mjs`). App-side instantiation: `Cadence/Seed/ProgramTemplates.swift`. Template exercises must use canonical seeded names — a variant spelling forks the library |
 | `fastlane/`, `docs/TESTFLIGHT.md` | Mac-free TestFlight pipeline (dormant until configured) |
 | `.github/workflows/ci.yml`, `pages.yml` | CI + release pipeline; web tests + Pages deploy |
 | `.releaserc.json` | semantic-release config |
@@ -153,6 +155,14 @@ progression systems: standalone `LiftTrack`s (independent per-lift cycles, the
     reset); bodyweight (`incrementLb <= 0`) → keep adding reps (maxReps advisory).
   - Training focus (strength/hypertrophy/maintain) sets the ceiling + increment;
     maintain never increments. Don't add nondeterminism to these functions.
+- **Swaps**: session-only by default — the program slot is untouched and simply
+  isn't performed that day (a swapped-out peak grades as skipped). Explicit
+  escalation: cycle scope (slot renamed, original kept in `revertToExerciseName`,
+  restored at rollover with a programNote) or program scope (renamed for good;
+  progression state stays with the slot either way). Candidates must share
+  movementGroup, category, and loadability, and never be shelved
+  (`SwapRules` in CadenceCore ≡ `swapCompatible` in core.js). The swap gesture
+  is native-only; the web app honors revert state arriving via backup.
 - **Generation + rollover**: `ProgramSession.make` / web `createSessionFromProgramDay`
   build a tagged session (program/cycle/week/day + per-exercise role). Completion
   (`SessionCompletion.swift` / web `completeSession`) grades each lift at the
@@ -176,7 +186,9 @@ The app holds an opinion about training; these constraints keep it coherent.
 - **The program is the prior.** A known plan collapses "which of 470 exercises"
   into "which of today's five." Lean on it.
 - **n=1.** Built for one user, ~30 movements, one gym. Refuse speculative
-  generality; generalize later from a working app + real data.
+  generality; generalize later from a working app + real data. (The program
+  style templates are the one sanctioned exception, added by owner decision —
+  data-only, fixture-locked, and editable into anything after creation.)
 - **Logic in CadenceCore, pure + tested + mirrored to JS.** Platform I/O
   (HealthKit, IndexedDB/SwiftData, sensors) stays at the edges so the reasoning
   is deterministic and unit-testable.

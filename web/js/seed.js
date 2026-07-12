@@ -5,7 +5,9 @@ import * as C from "./core.js";
 
 const D = (y, m, d, h = 17) => new Date(y, m - 1, d, h).toISOString();
 
-const ex = (name, category, type, group, o = {}) => ({
+// Exported: templates.js builds its (non-seeded) exercise records with this
+// same helper so the two can't drift shape; it overrides createdAt at save.
+export const ex = (name, category, type, group, o = {}) => ({
   name, category, type, movementGroup: group,
   isUnilateral: !!o.isUnilateral,
   defaultRestSeconds: o.defaultRestSeconds ?? 90,
@@ -13,7 +15,7 @@ const ex = (name, category, type, group, o = {}) => ({
   isShelved: !!o.isShelved,
   shelvedNote: o.shelvedNote || "",
   watchSite: o.watchSite || null,
-  createdAt: D(2026, 1, 1),
+  createdAt: o.createdAt || D(2026, 1, 1),
 });
 
 // movementGroup lets any lift be swapped for a similar one in the logger
