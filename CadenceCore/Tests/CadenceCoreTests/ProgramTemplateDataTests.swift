@@ -11,9 +11,10 @@ final class ProgramTemplateDataTests: XCTestCase {
     private func fixtureURL() -> URL {
         // …/CadenceCore/Tests/CadenceCoreTests/ThisFile.swift → repo root
         URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // CadenceCoreTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // CadenceCore
+            .deletingLastPathComponent()   // → CadenceCoreTests/
+            .deletingLastPathComponent()   // → Tests/
+            .deletingLastPathComponent()   // → CadenceCore/
+            .deletingLastPathComponent()   // → repo root
             .appendingPathComponent("web/tests/fixtures/program-templates.json")
     }
 
