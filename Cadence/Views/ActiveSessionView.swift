@@ -246,12 +246,13 @@ struct ActiveSessionView: View {
     }
 }
 
-/// Smart per-exercise rest by category/movement (shared CadenceCore logic);
-/// accessories fall back to the accessory setting, then 90s.
+/// Smart per-exercise rest via the shared CadenceCore precedence (per-exercise
+/// rest → program role → movementGroup bucket); no exercise → accessory bucket.
 private func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: AppSettings?) -> Int {
-    guard let ex = exercise else { return 90 }
-    return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name, role: role,
-                                config: settings?.restConfig ?? .standard,
+    let config = settings?.restConfig ?? .standard
+    guard let ex = exercise else { return config.accessorySeconds }
+    return RestDefaults.seconds(category: ex.categoryRaw, movementGroup: ex.movementGroup, role: role,
+                                config: config,
                                 exerciseDefaultRest: ex.defaultRestSeconds)
 }
 
@@ -405,7 +406,7 @@ private struct ExerciseSection: View {
     // the effective rest (mirrors web editRest's floor).
     private var restFloor: Int {
         guard let ex = entry.exercise else { return 15 }
-        return RestDefaults.seconds(category: ex.categoryRaw, name: ex.name, role: entry.programRole,
+        return RestDefaults.seconds(category: ex.categoryRaw, movementGroup: ex.movementGroup, role: entry.programRole,
                                     config: settings?.restConfig ?? .standard) == 0 ? 0 : 15
     }
 
@@ -479,6 +480,17 @@ private struct ExerciseSection: View {
 
             Stepper("Rest between sets: \(mmss(restSeconds))", value: restBinding, in: restFloor...600, step: 15)
                 .font(.caption)
+            // The stepper shows the EFFECTIVE rest, so its floor can't offer
+            // 0 ("Default") without the display snapping to the bucket value —
+            // clearing an override back to bucket-driven is an explicit action
+            // instead, offered only while an override exists.
+            if (entry.exercise?.defaultRestSeconds ?? 0) > 0 {
+                Button("Reset rest to default") {
+                    entry.exercise?.defaultRestSeconds = 0
+                    try? context.save()
+                }
+                .font(.caption)
+            }
         } header: {
             HStack {
                 Text(entry.exercise?.name ?? "Exercise")

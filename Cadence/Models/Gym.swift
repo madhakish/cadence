@@ -66,6 +66,11 @@ final class AppSettings {
     // already been resting. Mirrors web defaultSettings (db.js).
     var autoStartRest: Bool = false
     var haptics: Bool = true
+    /// One-shot migration marker: old seeds stamped every exercise with a
+    /// defaultRestSeconds, which (as the per-exercise override) froze the whole
+    /// library out of the rest buckets. `Seeder.syncLibrary` clears values that
+    /// still equal those retired stamps exactly once, then sets this.
+    var restSeedStampsCleared: Bool = false
     var healthKitEnabled: Bool
     var seededAt: Date?
     /// Selected theme, raw value of `ThemeName` (mirrors web `settings.theme`).
@@ -82,6 +87,10 @@ final class AppSettings {
         self.secondaryRestSeconds = 180
         self.autoStartRest = false
         self.haptics = true
+        // Fresh installs seed a stamp-free library — nothing to migrate. The
+        // property's stored default stays false so PRE-EXISTING stores (which
+        // carry the old stamps) run the one-shot clear in syncLibrary.
+        self.restSeedStampsCleared = true
         self.healthKitEnabled = false
         self.seededAt = nil
         self.themeNameRaw = "carbon"

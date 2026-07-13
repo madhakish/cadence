@@ -70,13 +70,16 @@ export const localDayKey = (d) => {
 export const isToday = (d) => localDayKey(d) === localDayKey(new Date());
 
 // ---- Settings ----
+// get/save both run normalizeSettings, so every consumer sees a COMPLETE
+// nested `rest` object (no view-side re-merging) and the legacy flat
+// accessoryRestSeconds mirror stays in sync for old exports.
 export const Settings = {
   async get() {
     let s = await get("settings", "app");
     if (!s) { s = { id: "app", ...defaultSettings() }; await put("settings", s); }
-    return s;
+    return normalizeSettings(s);
   },
-  save: (s) => put("settings", { ...s, id: "app" }),
+  save: (s) => put("settings", { ...normalizeSettings(s), id: "app" }),
 };
 function defaultSettings() {
   return {
@@ -88,6 +91,10 @@ function defaultSettings() {
     rest: { mainCompoundSeconds: 300, olympicSeconds: 240, mainUpperSeconds: 180, secondarySeconds: 180, accessorySeconds: 90 },
     autoStartRest: false, // manual start by default — auto lies if you rested first
     haptics: true,
+    // Fresh installs seed a stamp-free library — nothing to migrate (see
+    // RETIRED_REST_STAMPS). Absent on pre-bucket stores, so they get the
+    // one-shot clear in syncLibrary.
+    restSeedStampsCleared: true,
     seededAt: null,
   };
 }
@@ -153,9 +160,6 @@ export function topSet(sessionExercise) {
 export function workingVolume(sessionExercise) {
   return sessionExercise.sets.filter((s) => !s.isWarmup).reduce((sum, s) => sum + s.weightLb * s.reps, 0);
 }
-export const sessionIncludesRunning = (session) =>
-  session.exercises.some((e) => (e.exerciseName || "").toLowerCase().includes("run"));
-
 // ---- Seeding ----
 export async function ensureSeeded() {
   const s = await Settings.get();
@@ -171,6 +175,23 @@ export async function ensureSeeded() {
   await Settings.save(s);
 }
 
+// name → the defaultRestSeconds the pre-bucket seeds stamped on every record
+// (values that merely duplicated the rest buckets and are now 0 in seed.js).
+// Deliberate deviations (180/120/60 accessories) are NOT here — they stay
+// per-exercise. Mirror of Seeder.retiredRestStamps.
+const RETIRED_REST_STAMPS = {
+  Deadlift: 300, "Back Squat": 300, "Front Squat": 300, "Overhead Squat": 300,
+  "Barbell Bench": 300, "Overhead Press": 300, "Push Press": 300, "Push Jerk": 300,
+  "Split Jerk": 300, "Incline DB Press": 300, "Flat DB Press": 300,
+  "Seated Upright DB Press": 300, "Overhead DB Press": 300,
+  Snatch: 240, "Clean & Jerk": 240, Clean: 240, "Power Clean": 240, "Power Snatch": 240,
+  "Turkish Get-up": 90, "Single-arm DB Row": 90, "Lat Pulldown": 90, "Chest-supported Row": 90,
+  "Ring Row": 90, "Face Pulls": 90, "DB Curls": 90, "DB Overhead Triceps Extension": 90,
+  "Walking Lunges": 90, "GHD Sit-up": 90, "KB Swing": 90, "KB Clean": 90, Dips: 90,
+  // Template-declared exercises that carried the old blanket 90 default.
+  "Back Extension": 90, "Hanging Knee Raise": 90,
+};
+
 // Idempotent library top-up, run every launch: adds any SEED exercises an
 // already-seeded install is missing (new movements ship over time) and
 // backfills movementGroup on older records — WITHOUT clobbering user edits to
@@ -181,6 +202,20 @@ export async function syncLibrary() {
     const cur = have.get(seed.name);
     if (!cur) { await put("exercises", seed); continue; }
     if (!cur.movementGroup && seed.movementGroup) { cur.movementGroup = seed.movementGroup; await put("exercises", cur); }
+  }
+  // One-shot repair: old seeds stamped EVERY exercise with a rest, and the
+  // per-exercise value wins over the buckets — so the rest settings (and the
+  // complementary/accessory role timers) never applied to any seeded movement.
+  // Clear values that still exactly equal the retired stamps; a value the user
+  // changed no longer matches and is left alone.
+  const settings = await Settings.get();
+  if (!settings.restSeedStampsCleared) {
+    for (const [name, stamp] of Object.entries(RETIRED_REST_STAMPS)) {
+      const cur = have.get(name);
+      if (cur && cur.defaultRestSeconds === stamp) { cur.defaultRestSeconds = 0; await put("exercises", cur); }
+    }
+    settings.restSeedStampsCleared = true;
+    await Settings.save(settings);
   }
 }
 
@@ -323,7 +358,25 @@ export async function importBundle(bundle) {
     barcodeImage: isInlineImage(g.barcodeImage) ? g.barcodeImage : null,
   })));
   if (bundle.exercises) writes.set("exercises", bundle.exercises);
-  if (bundle.settings) writes.set("settings", [{ ...normalizeSettings(bundle.settings), id: "app" }]);
+  // restSeedStampsCleared describes the EXERCISE LIBRARY's migration state, so
+  // it follows the bundle only when the library itself was restored from it:
+  // a settings-only restore keeps the store's current marker (else the next
+  // syncLibrary would re-clear over an untouched library — and could eat a
+  // user-set rest that happens to equal a retired stamp), and a library
+  // restored with no settings riding along is of unknown vintage, so the
+  // marker resets and the next launch re-checks the stamps.
+  if (bundle.settings) {
+    const s = { ...normalizeSettings(bundle.settings), id: "app" };
+    if (!bundle.exercises) {
+      const cur = await get("settings", "app");
+      if (cur && cur.restSeedStampsCleared !== undefined) s.restSeedStampsCleared = cur.restSeedStampsCleared;
+      else delete s.restSeedStampsCleared;
+    }
+    writes.set("settings", [s]);
+  } else if (bundle.exercises) {
+    const cur = await get("settings", "app");
+    if (cur) writes.set("settings", [{ ...cur, restSeedStampsCleared: false }]);
+  }
 
   const stores = [...writes.keys()];
   if (!stores.length) throw new Error("Not a Cadence backup");

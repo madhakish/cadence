@@ -128,6 +128,15 @@ Existing entries — don't reintroduce these patterns:
   `web/js/core.js`. Quick rest control (start/skip) is `ToggleRestIntent` —
   exposed via App Shortcuts (Action Button, Siri) and an iOS 18 Control
   Center control. Deliberate: no volume/mute-button hijacking.
+- **Rest resolution** (`RestDefaults` in CadenceCore ≡ `restDefaultSeconds` in
+  core.js, lockstep-tested): per-exercise rest (`defaultRestSeconds > 0`, the
+  deliberate exception) → conditioning 0 → program role (complementary/accessory
+  buckets) → movementGroup bucket (Main squat/hinge → mainCompound, Main
+  olympic → olympic, other Main → mainUpper, else accessory). NEVER key on
+  exercise names. Seeds set `defaultRestSeconds` only for deliberate deviations
+  (0 = bucket-driven); the retired blanket stamps are cleared one-shot by
+  `syncLibrary` on both platforms (`retiredRestStamps` ≡ `RETIRED_REST_STAMPS`,
+  gated by `restSeedStampsCleared` in settings).
 
 ## Workout Program (adaptive progression)
 

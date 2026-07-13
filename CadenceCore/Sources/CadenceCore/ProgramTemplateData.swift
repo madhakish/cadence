@@ -20,9 +20,11 @@ public enum ProgramTemplateData {
         public let type: String       // barbell | dumbbell | kettlebell | bodyweight | …
         public let group: String      // movement group (swap pool)
         public let isUnilateral: Bool
+        /// Explicit per-exercise rest; 0 = none — the timer falls to the
+        /// configurable rest buckets (mirrors seed `ex()`).
         public let rest: Int
         init(_ name: String, _ category: String, _ type: String, _ group: String,
-             isUnilateral: Bool = false, rest: Int = 90) {
+             isUnilateral: Bool = false, rest: Int = 0) {
             self.name = name; self.category = category; self.type = type
             self.group = group; self.isUnilateral = isUnilateral; self.rest = rest
         }

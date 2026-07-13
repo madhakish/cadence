@@ -7,10 +7,13 @@ const D = (y, m, d, h = 17) => new Date(y, m - 1, d, h).toISOString();
 
 // Exported: templates.js builds its (non-seeded) exercise records with this
 // same helper so the two can't drift shape; it overrides createdAt at save.
+// defaultRestSeconds 0 = no per-exercise rest — the timer falls to the
+// configurable rest buckets (core restDefaultSeconds); > 0 wins everywhere,
+// so seeds set it ONLY where a movement deliberately deviates from its bucket.
 export const ex = (name, category, type, group, o = {}) => ({
   name, category, type, movementGroup: group,
   isUnilateral: !!o.isUnilateral,
-  defaultRestSeconds: o.defaultRestSeconds ?? 90,
+  defaultRestSeconds: o.defaultRestSeconds ?? 0,
   notes: o.notes || "",
   isShelved: !!o.isShelved,
   shelvedNote: o.shelvedNote || "",
@@ -23,27 +26,27 @@ export const ex = (name, category, type, group, o = {}) => ({
 // hinge, press, olympic, pull, shoulder, arms, core, conditioning.
 const exercises = [
   // --- Main barbell + press ---
-  ex("Deadlift", "Main", "barbell", "hinge", { defaultRestSeconds: 300 }),
-  ex("Back Squat", "Main", "barbell", "squat", { defaultRestSeconds: 300, watchSite: "Left hip" }),
-  ex("Front Squat", "Main", "barbell", "squat", { defaultRestSeconds: 300, watchSite: "Left hip" }),
-  ex("Overhead Squat", "Main", "barbell", "squat", { defaultRestSeconds: 300, watchSite: "Left shoulder" }),
-  ex("Barbell Bench", "Main", "barbell", "press", { defaultRestSeconds: 300, isShelved: true,
+  ex("Deadlift", "Main", "barbell", "hinge"),
+  ex("Back Squat", "Main", "barbell", "squat", { watchSite: "Left hip" }),
+  ex("Front Squat", "Main", "barbell", "squat", { watchSite: "Left hip" }),
+  ex("Overhead Squat", "Main", "barbell", "squat", { watchSite: "Left shoulder" }),
+  ex("Barbell Bench", "Main", "barbell", "press", { isShelved: true,
     shelvedNote: "Shelved — left shoulder. Re-entry test: symmetric DB pressing, no 'not there' feeling.",
     watchSite: "Left shoulder" }),
-  ex("Overhead Press", "Main", "barbell", "press", { defaultRestSeconds: 300, watchSite: "Left shoulder", notes: "Strict barbell press" }),
-  ex("Push Press", "Main", "barbell", "press", { defaultRestSeconds: 300, watchSite: "Left shoulder" }),
-  ex("Push Jerk", "Main", "barbell", "press", { defaultRestSeconds: 300, watchSite: "Left shoulder" }),
-  ex("Split Jerk", "Main", "barbell", "press", { defaultRestSeconds: 300, watchSite: "Left shoulder" }),
-  ex("Incline DB Press", "Main", "dumbbell", "press", { defaultRestSeconds: 300, watchSite: "Left shoulder" }),
-  ex("Flat DB Press", "Main", "dumbbell", "press", { defaultRestSeconds: 300, watchSite: "Left shoulder" }),
-  ex("Seated Upright DB Press", "Main", "dumbbell", "press", { defaultRestSeconds: 300, watchSite: "Left shoulder" }),
-  ex("Overhead DB Press", "Main", "dumbbell", "press", { defaultRestSeconds: 300, watchSite: "Left shoulder" }),
+  ex("Overhead Press", "Main", "barbell", "press", { watchSite: "Left shoulder", notes: "Strict barbell press" }),
+  ex("Push Press", "Main", "barbell", "press", { watchSite: "Left shoulder" }),
+  ex("Push Jerk", "Main", "barbell", "press", { watchSite: "Left shoulder" }),
+  ex("Split Jerk", "Main", "barbell", "press", { watchSite: "Left shoulder" }),
+  ex("Incline DB Press", "Main", "dumbbell", "press", { watchSite: "Left shoulder" }),
+  ex("Flat DB Press", "Main", "dumbbell", "press", { watchSite: "Left shoulder" }),
+  ex("Seated Upright DB Press", "Main", "dumbbell", "press", { watchSite: "Left shoulder" }),
+  ex("Overhead DB Press", "Main", "dumbbell", "press", { watchSite: "Left shoulder" }),
   // --- Olympic lifts + supporting pulls ---
-  ex("Snatch", "Main", "barbell", "olympic", { defaultRestSeconds: 240, watchSite: "Left shoulder" }),
-  ex("Clean & Jerk", "Main", "barbell", "olympic", { defaultRestSeconds: 240, watchSite: "Left shoulder" }),
-  ex("Clean", "Main", "barbell", "olympic", { defaultRestSeconds: 240 }),
-  ex("Power Clean", "Main", "barbell", "olympic", { defaultRestSeconds: 240 }),
-  ex("Power Snatch", "Main", "barbell", "olympic", { defaultRestSeconds: 240, watchSite: "Left shoulder" }),
+  ex("Snatch", "Main", "barbell", "olympic", { watchSite: "Left shoulder" }),
+  ex("Clean & Jerk", "Main", "barbell", "olympic", { watchSite: "Left shoulder" }),
+  ex("Clean", "Main", "barbell", "olympic"),
+  ex("Power Clean", "Main", "barbell", "olympic"),
+  ex("Power Snatch", "Main", "barbell", "olympic", { watchSite: "Left shoulder" }),
   ex("Hang Power Clean", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180 }),
   ex("Hang Power Snatch", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180, watchSite: "Left shoulder" }),
   ex("Clean Pull", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180 }),
@@ -72,10 +75,10 @@ const exercises = [
   ex("KB Clean", "Accessory", "kettlebell", "olympic", { isUnilateral: true }),
   ex("Dips", "Accessory", "bodyweight", "press", { watchSite: "Left shoulder" }),
   // --- Conditioning ---
-  ex("Walk", "Conditioning", "conditioning", "conditioning", { defaultRestSeconds: 0, notes: "Distance / time / incline" }),
-  ex("Run-Walk Intervals", "Conditioning", "conditioning", "conditioning", { defaultRestSeconds: 0, notes: "Jog min / walk min × rounds", watchSite: "Right knee" }),
-  ex("Bike", "Conditioning", "conditioning", "conditioning", { defaultRestSeconds: 0 }),
-  ex("Ruck", "Conditioning", "conditioning", "conditioning", { defaultRestSeconds: 0 }),
+  ex("Walk", "Conditioning", "conditioning", "conditioning", { notes: "Distance / time / incline" }),
+  ex("Run-Walk Intervals", "Conditioning", "conditioning", "conditioning", { notes: "Jog min / walk min × rounds", watchSite: "Right knee" }),
+  ex("Bike", "Conditioning", "conditioning", "conditioning"),
+  ex("Ruck", "Conditioning", "conditioning", "conditioning"),
 ];
 
 const gyms = [{

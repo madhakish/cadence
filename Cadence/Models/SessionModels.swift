@@ -42,13 +42,12 @@ final class WorkoutSession {
         exercises.sorted { $0.order < $1.order }
     }
 
-    /// True if this session contains running-type conditioning (drives the
-    /// next-morning right-knee check-in).
+    /// True if this session contains a movement watched at the right knee
+    /// (running-type conditioning) — drives the next-morning knee check-in.
+    /// Keyed on the exercise's watch-site data (editable in the library),
+    /// not on name matching.
     var includesRunning: Bool {
-        exercises.contains {
-            let name = $0.exercise?.name.lowercased() ?? ""
-            return name.contains("run")
-        }
+        exercises.contains { $0.exercise?.watchSite == .rightKnee }
     }
 }
 

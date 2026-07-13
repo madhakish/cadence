@@ -86,7 +86,8 @@ enum ImportService {
         var unitDisplay: String?; var proteinTargetGrams: Double?; var accessoryRestSeconds: Int?
         var mainCompoundRestSeconds: Int?; var olympicRestSeconds: Int?; var mainUpperRestSeconds: Int?; var secondaryRestSeconds: Int?
         var rest: RestDTO?
-        var autoStartRest: Bool?; var haptics: Bool?; var seededAt: Date?; var theme: String?
+        var autoStartRest: Bool?; var haptics: Bool?; var restSeedStampsCleared: Bool?
+        var seededAt: Date?; var theme: String?
     }
 
     @discardableResult
@@ -171,7 +172,15 @@ enum ImportService {
                 try context.delete(model: WorkoutSession.self)
                 for s in sessions { context.insert(makeSession(s, exByName: exByName)) }
             }
-            if let st = bundle.settings { applySettings(st, in: context) }
+            if let st = bundle.settings {
+                applySettings(st, restoredExercises: bundle.exercises != nil, in: context)
+            } else if bundle.exercises != nil,
+                      let s = (try? context.fetch(FetchDescriptor<AppSettings>()))?.first {
+                // A library restored with no settings riding along is of
+                // unknown vintage — re-arm the retired-rest-stamp check so the
+                // next launch's syncLibrary re-inspects the restored records.
+                s.restSeedStampsCleared = false
+            }
 
             try context.save()
         } catch {
@@ -192,7 +201,10 @@ enum ImportService {
             type: ExerciseType(rawValue: d.type ?? "") ?? .barbell,
             movementGroup: d.movementGroup ?? "",
             isUnilateral: d.isUnilateral ?? false,
-            defaultRestSeconds: d.defaultRestSeconds ?? 90,
+            // 0 = bucket-driven; a missing key must NOT mint a per-exercise
+            // override (90 was the retired blanket stamp — web imports the
+            // same record raw, so anything else diverges the platforms).
+            defaultRestSeconds: d.defaultRestSeconds ?? 0,
             notes: d.notes ?? "",
             isShelved: d.isShelved ?? false,
             shelvedNote: d.shelvedNote ?? "",
@@ -307,7 +319,7 @@ enum ImportService {
         return session
     }
 
-    private static func applySettings(_ st: SettingsDTO, in context: ModelContext) {
+    private static func applySettings(_ st: SettingsDTO, restoredExercises: Bool, in context: ModelContext) {
         let settings = ((try? context.fetch(FetchDescriptor<AppSettings>()))?.first) ?? {
             let s = AppSettings(); context.insert(s); return s
         }()
@@ -328,6 +340,14 @@ enum ImportService {
         if let v = st.rest?.accessorySeconds { settings.accessoryRestSeconds = v }
         if let v = st.autoStartRest { settings.autoStartRest = v }
         if let v = st.haptics { settings.haptics = v }
+        // restSeedStampsCleared describes the EXERCISE LIBRARY's migration
+        // state, so it follows the bundle only when the library itself was
+        // restored from it: a pre-migration backup (no flag) restores
+        // old-stamped exercises and the next syncLibrary must re-clear them,
+        // while a settings-only restore keeps the current marker — resetting
+        // it over an untouched library could eat a user-set rest that happens
+        // to equal a retired stamp (Codex). Mirrors web importBundle.
+        if restoredExercises { settings.restSeedStampsCleared = st.restSeedStampsCleared ?? false }
         // Only accept a known theme; an unknown value would round-trip as
         // garbage on the next export (the UI would silently show Carbon anyway).
         if let v = st.theme, ThemeName(rawValue: v) != nil { settings.themeNameRaw = v }

@@ -128,18 +128,23 @@ export async function openSession(id) {
   const defaultBar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const barFor = (se) => barByEx[se.exerciseName] || defaultBar;
 
-  // The five configurable rest buckets (migrating the old single accessory
-  // field). Merged over defaults so a partial `rest` object never yields NaN.
-  const restCfg = { ...C.REST_DEFAULTS, accessorySeconds: settings.accessoryRestSeconds ?? C.REST_DEFAULTS.accessorySeconds, ...(settings.rest || {}) };
-  // Smart per-exercise rest by role → category → movement + per-exercise override.
+  // The five configurable rest buckets — Settings.get() normalizes the shape,
+  // so `settings.rest` is always complete here.
+  const restCfg = settings.rest;
+  // Smart rest via the shared precedence: per-exercise rest → program role →
+  // movementGroup bucket. No exercise record → accessory bucket.
   function restFor(ex, role = null) {
-    if (!ex) return 90;
-    return C.restDefaultSeconds(ex.category, ex.name, role, restCfg, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : 0);
+    if (!ex) return restCfg.accessorySeconds;
+    return C.restDefaultSeconds(ex.category, ex.movementGroup, role, restCfg, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : 0);
   }
 
   const sessionStart = Date.now();            // session stopwatch origin (ephemeral)
   let currentSE = null;                       // the exercise you're actively working
-  const currentExercise = () => exMap.get(((currentSE || session.exercises[0]) || {}).exerciseName);
+  // Exercise AND role must come from the same session entry — pairing
+  // exercises[0] with currentSE's (null) role resolved the first lift's rest
+  // without its program role (mirrors native currentOrFirst).
+  const currentEntry = () => currentSE || session.exercises[0] || null;
+  const currentExercise = () => exMap.get((currentEntry() || {}).exerciseName);
 
   const rest = makeRestTimer(() => paintBar(), () => onRestDone());
   let restLabel = "";
@@ -161,7 +166,7 @@ export async function openSession(id) {
     } else {
       barEls.restTime.style.display = "none";
       barEls.restBtn.style.display = "";
-      barEls.restBtn.textContent = `Rest ${ui.mmss(restFor(currentExercise(), currentSE?.programRole))}`;
+      barEls.restBtn.textContent = `Rest ${ui.mmss(restFor(currentExercise(), currentEntry()?.programRole))}`;
       barEls.subBtn.style.display = "none";
       barEls.addBtn.style.display = "none";
       barEls.skipBtn.style.display = "none";
@@ -172,7 +177,7 @@ export async function openSession(id) {
   function buildBottomBar() {
     const clock = ui.h("span", { class: "clock mono" });
     const restTime = ui.h("span", { class: "rest-time mono", style: { display: "none" } });
-    const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex, currentSE?.programRole), ex ? ex.name : ""); } });
+    const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex, currentEntry()?.programRole), ex ? ex.name : ""); } });
     const subBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "−1:00", onClick: () => { rest.add(-60); paintBar(); } });
     const addBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "+1:00", onClick: () => { rest.add(60); paintBar(); } });
     const skipBtn = ui.h("button", { class: "btn sm ghost", style: { display: "none" }, text: "Skip", onClick: () => { rest.stop(); paintBar(); } });
@@ -236,14 +241,23 @@ export async function openSession(id) {
     ui.sheet({
       title: `Rest — ${ex.name}`,
       build: (c) => {
-        // Floor: writing 0 clears the override, and this stepper shows the
-        // EFFECTIVE rest — so 0 is only offered where clearing lands on 0
-        // (conditioning, whose smart default IS none); elsewhere stepping to 0
-        // would snap the display up to the movement default.
-        const floor = C.restDefaultSeconds(ex.category, ex.name, se.programRole, restCfg, 0) === 0 ? 0 : 15;
-        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
-          ui.stepper(restFor(ex, se.programRole), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); } })));
-        c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used." }));
+        const render = () => {
+          ui.clear(c);
+          // Floor: the stepper shows the EFFECTIVE rest, so it can't offer 0
+          // ("Default") without the display snapping to the bucket value —
+          // except where the bucket itself is 0 (conditioning). Clearing an
+          // override back to bucket-driven is the explicit Reset below.
+          const floor = C.restDefaultSeconds(ex.category, ex.movementGroup, se.programRole, restCfg, 0) === 0 ? 0 : 15;
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
+            ui.stepper(restFor(ex, se.programRole), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); render(); } })));
+          if (ex.defaultRestSeconds > 0) {
+            c.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Reset to default", onClick: async () => {
+              ex.defaultRestSeconds = 0; await Exercises.save(ex); renderBody(body); render();
+            } }));
+          }
+          c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used. Default = the rest buckets in Settings." }));
+        };
+        render();
       },
     });
   }
