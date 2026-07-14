@@ -60,11 +60,12 @@ export async function render(host) {
         ui.h("div", { style: { textAlign: "right" } },
           ui.h("div", { class: "wt-big mono", text: `${C.trim(plan.weightLb)} lb` }),
           ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
-      // The bar you'll load / the pair you'll grab — mains only, keeps the card calm.
-      if (l.role === "main" && ex && ex.type === "barbell" && plan.weightLb > 0) {
+      // The bar you'll load / the pair you'll grab — every wave lift, matching
+      // the preview (a complementary barbell lift is loaded just the same).
+      if (ex && ex.type === "barbell" && plan.weightLb > 0) {
         card.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
           barbellSVG(plan.weightLb, "lb", gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb, gym).svg));
-      } else if (l.role === "main" && ex && ex.type === "dumbbell" && plan.weightLb > 0) {
+      } else if (ex && ex.type === "dumbbell" && plan.weightLb > 0) {
         card.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
           dumbbellSVG(plan.weightLb, "lb"), ui.h("span", { class: "sub", text: "lb" })));
       }
