@@ -579,6 +579,11 @@ private struct SetRow: View {
 
     @State private var showDetail = false
 
+    /// Steady-state cardio (Walk/Bike/Ruck…) logs distance/time/incline, not
+    /// weight×reps. Keyed on the exercise TYPE — rep-based conditioning like
+    /// burpees (category Conditioning, type bodyweight) keeps the lifting row.
+    private var isCardio: Bool { exercise?.type == .conditioning }
+
     var body: some View {
         HStack(spacing: 12) {
             if isCurrent {
@@ -587,18 +592,29 @@ private struct SetRow: View {
                     .frame(width: 3, height: 34)
                     .accessibilityLabel("Current set")
             }
-            // Weight, shown in the unit it was entered in.
             Button {
                 showDetail = true
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(weightLabel)
+                    // Cardio: the shared CadenceCore label ("1.5 mi · 22:30 ·
+                    // 4 mph · 12%"); lifts: weight in its entered unit.
+                    Text(isCardio
+                         ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
+                                                 durationSeconds: set.durationSeconds,
+                                                 inclinePercent: set.inclinePercent)
+                         : weightLabel)
                         .font(.title3.bold().monospacedDigit())
                         .foregroundStyle(set.isWarmup ? .secondary : .primary)
                     HStack(spacing: 6) {
-                        Text("× \(set.reps)\(set.isPerSide ? "/side" : "")")
-                            .font(.callout.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                        if !isCardio {
+                            Text("× \(set.reps)\(set.isPerSide ? "/side" : "")")
+                                .font(.callout.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("tap to log distance · time · incline")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                         if set.isWarmup {
                             Text("warmup").font(.caption2).foregroundStyle(.secondary)
                         }
@@ -617,14 +633,20 @@ private struct SetRow: View {
 
             Spacer()
 
-            // Quality flags: one thumb-tap each.
-            ForEach([SetFlag.clean, .grindy, .wobble], id: \.self) { flag in
+            // Quality flags: one thumb-tap each. Cardio gets only ✓ (done) —
+            // grindy/wobble grade barbell quality, not a walk.
+            ForEach(isCardio ? [SetFlag.clean] : [SetFlag.clean, .grindy, .wobble], id: \.self) { flag in
                 FlagToggle(set: set, flag: flag, onLogged: onLogged)
             }
         }
         .sheet(isPresented: $showDetail) {
-            SetDetailSheet(set: set, exercise: exercise, gym: gym, bar: bar, targetLb: targetLb)
-                .presentationDetents([.large])
+            if isCardio {
+                CardioSetSheet(set: set)
+                    .presentationDetents([.medium, .large])
+            } else {
+                SetDetailSheet(set: set, exercise: exercise, gym: gym, bar: bar, targetLb: targetLb)
+                    .presentationDetents([.large])
+            }
         }
     }
 
@@ -634,6 +656,69 @@ private struct SetRow: View {
         case .lb: return "\(Weight.trim(set.weightLb)) lb"
         case .kg: return "\(Weight.trim(Weight.kg(fromLb: set.weightLb))) kg"
         }
+    }
+}
+
+// MARK: - Cardio set detail (distance / time / incline)
+
+/// Conditioning-type work logs distance, time, and incline; speed falls out.
+/// Small deliberate steps (0.25 mi, 1 min, 0.5%) — content hoisted into plain
+/// rows to stay inside the type-checker's budget (see CompileRegressionTests).
+private struct CardioSetSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var set: SetEntry
+
+    private var miles: Double { set.distanceMiles ?? 0 }
+    private var secs: Int { set.durationSeconds ?? 0 }
+    private var incline: Double { set.inclinePercent ?? 0 }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper("Distance: \(miles > 0 ? "\(Weight.trim(miles, decimals: 2)) mi" : "—")",
+                            value: Binding(get: { miles }, set: { set.distanceMiles = $0 > 0 ? $0 : nil }),
+                            in: 0...100, step: 0.25)
+                    distanceTypeRow
+                    Stepper("Time: \(secs > 0 ? CardioFormat.durationLabel(seconds: secs) : "—")",
+                            value: Binding(get: { secs }, set: { set.durationSeconds = $0 > 0 ? $0 : nil }),
+                            in: 0...36000, step: 60)
+                    Stepper("Incline: \(incline > 0 ? "\(Weight.trim(incline))%" : "—")",
+                            value: Binding(get: { incline }, set: { set.inclinePercent = $0 > 0 ? $0 : nil }),
+                            in: 0...30, step: 0.5)
+                } header: {
+                    Text("Distance · time · incline")
+                } footer: {
+                    if let mph = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds) {
+                        Text("Speed: \(Weight.trim(mph)) mph")
+                    }
+                }
+            }
+            .navigationTitle("Log conditioning")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+    }
+
+    /// Exact distance entry for values the 0.25 steps don't land.
+    private var distanceTypeRow: some View {
+        HStack {
+            Text("Type distance").foregroundStyle(.secondary)
+            Spacer()
+            TextField("miles", text: Binding(
+                get: { miles == 0 ? "" : Weight.trim(miles, decimals: 2) },
+                set: {
+                    if let v = Double($0.replacingOccurrences(of: ",", with: ".")), v > 0 { set.distanceMiles = v }
+                    else if $0.isEmpty { set.distanceMiles = nil }
+                }
+            ))
+            .keyboardType(.decimalPad)
+            .multilineTextAlignment(.trailing)
+            .frame(width: 90)
+        }
+        .font(.callout)
     }
 }
 
@@ -855,7 +940,11 @@ private struct SessionBottomBar: View {
                 .scaleEffect(x: 1, y: restTimer.isRunning ? 2 : 1, anchor: .top)
                 .animation(.default, value: restTimer.isRunning)
 
-            HStack(spacing: 12) {
+            // While resting the bar carries the countdown + FOUR controls —
+            // text everywhere here must be single-line (scaling down before
+            // truncating) or narrow phones wrap the digits mid-string
+            // ("0:2/0", "−1:0/0" — see the Jul 15 screenshot).
+            HStack(spacing: 10) {
                 // Session stopwatch — always visible, with an icon so it reads
                 // as a running clock.
                 TimelineView(.periodic(from: sessionStart, by: 1)) { timeline in
@@ -863,36 +952,42 @@ private struct SessionBottomBar: View {
                           systemImage: pausedAt == nil ? "stopwatch" : "pause.fill")
                         .font(.callout.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
 
                 if restTimer.isRunning {
                     VStack(alignment: .trailing, spacing: 0) {
                         if !restTimer.exerciseName.isEmpty {
                             Text("resting · \(restTimer.exerciseName)")
-                                .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                .font(.caption2).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.middle)
                         }
                         Text(restTimer.display)
-                            .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
+                            .font(.system(size: 28, weight: .heavy, design: .rounded).monospacedDigit())
                             .foregroundStyle(Theme.accent)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .layoutPriority(1) // the countdown is the point — buttons shrink first
                     }
-                    Button {
-                        restTimer.isPaused ? restTimer.resume() : restTimer.pause()
-                    } label: { Image(systemName: restTimer.isPaused ? "play.fill" : "pause.fill") }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel(restTimer.isPaused ? "Resume rest" : "Pause rest")
-                    Button("−1:00") { restTimer.add(seconds: -60) }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel("Subtract one minute")
-                    Button("+1:00") { restTimer.add(seconds: 60) }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel("Add one minute")
-                    Button {
-                        restTimer.stop()
-                    } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel("Skip rest")
+                    Group {
+                        Button {
+                            restTimer.isPaused ? restTimer.resume() : restTimer.pause()
+                        } label: { Image(systemName: restTimer.isPaused ? "play.fill" : "pause.fill") }
+                            .accessibilityLabel(restTimer.isPaused ? "Resume rest" : "Pause rest")
+                        Button { restTimer.add(seconds: -60) } label: { Image(systemName: "gobackward.60") }
+                            .accessibilityLabel("Subtract one minute")
+                        Button { restTimer.add(seconds: 60) } label: { Image(systemName: "goforward.60") }
+                            .accessibilityLabel("Add one minute")
+                        Button {
+                            restTimer.stop()
+                        } label: { Image(systemName: "xmark") }
+                            .accessibilityLabel("Skip rest")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 } else {
                     Button {
                         restTimer.start(seconds: restSeconds, exerciseName: restLabel)

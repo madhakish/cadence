@@ -105,10 +105,12 @@ final class SetEntry {
     var flagsRaw: [String]
     var bodyFlagSiteRaw: String?
     var bodyFlagNote: String?
-    /// Timed work (planks) in seconds.
+    /// Timed work (planks) and conditioning duration, seconds.
     var durationSeconds: Int?
     /// Conditioning distance, miles.
     var distanceMiles: Double?
+    /// Conditioning treadmill/road grade, percent.
+    var inclinePercent: Double?
     /// Set when this set's load came from a mid-session "dropping load" tap.
     var autoregReasonRaw: String?
     var sessionExercise: SessionExercise?
@@ -125,6 +127,7 @@ final class SetEntry {
         bodyFlagNote: String? = nil,
         durationSeconds: Int? = nil,
         distanceMiles: Double? = nil,
+        inclinePercent: Double? = nil,
         autoregReason: AutoregReason? = nil
     ) {
         self.order = order
@@ -138,6 +141,7 @@ final class SetEntry {
         self.bodyFlagNote = bodyFlagNote
         self.durationSeconds = durationSeconds
         self.distanceMiles = distanceMiles
+        self.inclinePercent = inclinePercent
         self.autoregReasonRaw = autoregReason?.rawValue
     }
 

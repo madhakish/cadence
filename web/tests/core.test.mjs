@@ -462,6 +462,23 @@ eq(C.restDefaultSeconds("Main", "press", "main", rc), 150, "configurable main up
 eq(C.restDefaultSeconds("Main", "hinge", "complementary", rc), 120, "configurable secondary");
 eq(C.restDefaultSeconds("Accessory", "arms", null, rc), 60, "configurable accessory");
 
+// ---- cardio set formatting (CardioFormatTests.swift) ----
+eq(C.cardioSpeedMph(1.5, 1350), 4.0, "speed from distance + time");
+eq(C.cardioSpeedMph(5, 5400), 3.3, "rounded to one decimal");
+eq(C.cardioSpeedMph(null, 1800), null, "no distance → no speed");
+eq(C.cardioSpeedMph(2, null), null, "no time → no speed");
+eq(C.cardioSpeedMph(0, 0), null, "zeros → no speed");
+eq(C.cardioDurationLabel(1350), "22:30", "m:ss");
+eq(C.cardioDurationLabel(65), "1:05", "single-digit minutes");
+eq(C.cardioDurationLabel(5400), "1:30:00", "hour-plus gets h:mm:ss");
+eq(C.cardioDurationLabel(0), "0:00", "zero");
+eq(C.cardioSetLabel(1.5, 1350, null), "1.5 mi · 22:30 · 4 mph", "full label");
+eq(C.cardioSetLabel(3, 2700, 12), "3 mi · 45:00 · 4 mph · 12%", "the 12-3-30 special");
+eq(C.cardioSetLabel(null, 1800, null), "30:00", "time only");
+eq(C.cardioSetLabel(2, null, null), "2 mi", "distance only");
+eq(C.cardioSetLabel(0.25, null, null), "0.25 mi", "quarter-mile keeps two decimals");
+eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
+
 // ---- RestClock parity (RestClockTests.swift) ----
 {
   // start counts down from total

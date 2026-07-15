@@ -246,6 +246,10 @@ export async function exportBundle() {
           enteredUnit: x.enteredUnit || "lb",
           flags: x.flags || [], bodyFlagSite: x.bodyFlagSite || null, bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
+          // Key emitted only when set (like revertToExerciseName): stamping
+          // null onto every record would break byte-stable re-export of
+          // pre-incline backups.
+          ...(x.inclinePercent != null ? { inclinePercent: x.inclinePercent } : {}),
           autoregReason: x.autoregReason || null,
         })),
       })),
@@ -336,7 +340,9 @@ export async function importBundle(bundle) {
         sets: (e.sets || []).map((x, si) => ({
           order: si, weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
           enteredUnit: x.enteredUnit || "lb", flags: x.flags || [], bodyFlagSite: x.bodyFlagSite || null, bodyFlagNote: x.bodyFlagNote || null,
-          durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null, autoregReason: x.autoregReason || null,
+          durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
+          ...(x.inclinePercent != null ? { inclinePercent: x.inclinePercent } : {}),
+          autoregReason: x.autoregReason || null,
         })),
       })),
     })));

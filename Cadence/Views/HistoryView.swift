@@ -156,11 +156,17 @@ struct SessionDetailView: View {
                 Section {
                     ForEach(entry.orderedSets) { set in
                         HStack {
-                            Text(set.weightLb == 0 ? "BW" : Weight.both(lb: set.weightLb))
+                            // Cardio sets carry distance/time/incline, not
+                            // weight×reps — same shared label as the logger.
+                            // Lookup via plain helper funcs, not inline lets
+                            // (type-checker budget — see CompileRegressionTests).
+                            Text(Self.setLine(set, cardio: entry.exercise?.type == .conditioning))
                                 .font(.callout.monospacedDigit())
                                 .foregroundStyle(set.isWarmup ? .secondary : .primary)
-                            Text("× \(set.reps)\(set.isPerSide ? "/side" : "")")
-                                .foregroundStyle(.secondary)
+                            if entry.exercise?.type != .conditioning {
+                                Text("× \(set.reps)\(set.isPerSide ? "/side" : "")")
+                                    .foregroundStyle(.secondary)
+                            }
                             Spacer()
                             if !set.flags.isEmpty {
                                 Text(set.flags.map(\.rawValue).joined(separator: ", "))
@@ -188,6 +194,17 @@ struct SessionDetailView: View {
             }
         }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
+    }
+
+    /// Lead label for a set line: cardio → the shared distance/time/incline
+    /// label; lifts → weight (both units) or BW.
+    private static func setLine(_ set: SetEntry, cardio: Bool) -> String {
+        if cardio {
+            return CardioFormat.setLabel(distanceMiles: set.distanceMiles,
+                                         durationSeconds: set.durationSeconds,
+                                         inclinePercent: set.inclinePercent)
+        }
+        return set.weightLb == 0 ? "BW" : Weight.both(lb: set.weightLb)
     }
 }
 

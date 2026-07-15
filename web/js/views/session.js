@@ -9,7 +9,8 @@ import { barbellSVG, dumbbellSVG } from "../barbell.js";
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
   order, weightLb: w, reps: r, isWarmup: !!o.warm, isPerSide: !!o.perSide, enteredUnit: "lb",
-  flags: [], bodyFlagSite: null, bodyFlagNote: null, durationSeconds: null, distanceMiles: null, autoregReason: null,
+  flags: [], bodyFlagSite: null, bodyFlagNote: null, durationSeconds: null, distanceMiles: null,
+  inclinePercent: null, autoregReason: null,
 });
 
 async function defaultGymName() { const g = await Gyms.default(); return g ? g.name : null; }
@@ -272,10 +273,17 @@ export async function openSession(id) {
   function setRow(se, s, body) {
     const ex = exMap.get(se.exerciseName);
     const u = exUnit(se);
-    const wlabel = s.weightLb === 0 ? "BW" : `${C.trim(u === "kg" ? C.kgFromLb(s.weightLb) : s.weightLb)} ${u}`;
-    const wt = ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editSet(se, s, body) },
-      ui.h("span", { class: "wt mono" + (s.isWarmup ? " muted" : ""), text: wlabel }),
-      ui.h("span", { class: "sub mono", text: ` × ${s.reps}${s.isPerSide ? "/side" : ""}` }));
+    // Steady-state cardio (type conditioning: Walk/Bike/Ruck…) logs
+    // distance/time/incline, not weight×reps — keyed on the exercise TYPE so
+    // rep-based conditioning (burpees, type bodyweight) keeps the lifting row.
+    const isCardio = ex && ex.type === "conditioning";
+    const wt = isCardio
+      ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editCardioSet(se, s, body) },
+          ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent) }),
+          ui.h("span", { class: "sub", text: " distance · time · incline" }))
+      : ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editSet(se, s, body) },
+          ui.h("span", { class: "wt mono" + (s.isWarmup ? " muted" : ""), text: s.weightLb === 0 ? "BW" : `${C.trim(u === "kg" ? C.kgFromLb(s.weightLb) : s.weightLb)} ${u}` }),
+          ui.h("span", { class: "sub mono", text: ` × ${s.reps}${s.isPerSide ? "/side" : ""}` }));
     const tags = ui.h("span", { class: "sub" });
     if (s.isWarmup) tags.append(ui.h("span", { class: "pill", text: "warmup" }));
     if (s.autoregReason) tags.append(ui.h("span", { class: "pill warn", text: `↓ ${s.autoregReason}` }));
@@ -290,8 +298,11 @@ export async function openSession(id) {
     // the accent rail; warmups sit quiet (and often go unflagged, so they
     // must not hold the rail hostage).
     const isCurrent = se.sets.find((x) => !x.isWarmup && !(x.flags || []).length) === s;
+    // Cardio gets only ✓ (done) — grindy/wobble grade barbell quality, not a walk.
     const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "") + (isCurrent ? " current" : "") }, wt, tags,
-      ui.h("div", { class: "flagbtns" }, flag("clean", "clean"), flag("grindy", "grindy"), flag("wobble", "wobble")));
+      isCardio
+        ? ui.h("div", { class: "flagbtns" }, flag("clean", "clean"))
+        : ui.h("div", { class: "flagbtns" }, flag("clean", "clean"), flag("grindy", "grindy"), flag("wobble", "wobble")));
 
     // Loadout visualization — plates for barbell lifts, the rack number for
     // dumbbell lifts. Mirrors native.
@@ -327,6 +338,12 @@ export async function openSession(id) {
     const r = last ? last.reps : (se.plannedReps ?? 5);
     const set = mkSet(se.sets.length, w, r, { perSide: ex && ex.isUnilateral });
     set.enteredUnit = exUnit(se);
+    if (ex && ex.type === "conditioning" && last) {
+      // Repeat intervals: carry the last round's cardio prescription forward.
+      set.distanceMiles = last.distanceMiles ?? null;
+      set.durationSeconds = last.durationSeconds ?? null;
+      set.inclinePercent = last.inclinePercent ?? null;
+    }
     se.sets.push(set);
   }
 
@@ -371,6 +388,49 @@ export async function openSession(id) {
             s.enteredUnit = unit; s.reps = reps; s.isWarmup = warm; s.isPerSide = per;
             s.bodyFlagSite = site; s.bodyFlagNote = site ? (noteInput.value || null) : null;
             unitByEx[se.exerciseName] = unit; // keep the row display in the unit you just used
+            api.close(); save(); renderBody(body);
+          },
+        }));
+        c.append(ui.h("button", { class: "btn wide danger", style: { marginTop: "8px" }, text: "Delete set",
+          onClick: () => { se.sets = se.sets.filter((x) => x !== s); se.sets.forEach((x, i) => { x.order = i; }); api.close(); save(); renderBody(body); } }));
+      },
+    });
+  }
+
+  // Cardio (type conditioning) sets: distance / time / incline, speed derived.
+  // Mirrors the native CardioSetSheet.
+  function editCardioSet(se, s, body) {
+    ui.sheet({
+      title: `Log conditioning — ${se.exerciseName}`,
+      build: (c, api) => {
+        const distInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "0.05", min: "0", placeholder: "0", value: s.distanceMiles > 0 ? C.trim(s.distanceMiles, 2) : "" });
+        const minInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", placeholder: "0", value: s.durationSeconds > 0 ? String(Math.floor(s.durationSeconds / 60)) : "" });
+        const secInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", max: "59", placeholder: "0", value: s.durationSeconds > 0 ? String(s.durationSeconds % 60) : "" });
+        let incline = s.inclinePercent > 0 ? s.inclinePercent : 0;
+        const speedLine = ui.h("div", { class: "sub", style: { margin: "6px 4px" } });
+        const readSecs = () => (parseInt(minInput.value, 10) || 0) * 60 + (parseInt(secInput.value, 10) || 0);
+        const paintSpeed = () => {
+          const mph = C.cardioSpeedMph(parseFloat(distInput.value) || 0, readSecs());
+          speedLine.textContent = mph !== null ? `Speed: ${C.trim(mph)} mph` : "";
+        };
+        [distInput, minInput, secInput].forEach((el) => el.addEventListener("input", paintSpeed));
+        c.append(ui.field("Distance (mi)", distInput));
+        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Time" }),
+          ui.h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } },
+            minInput, ui.h("span", { class: "sub", text: "min" }), secInput, ui.h("span", { class: "sub", text: "sec" }))));
+        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Incline" }),
+          ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
+        c.append(speedLine);
+        paintSpeed();
+        c.append(ui.h("button", {
+          class: "btn primary wide", style: { marginTop: "10px" }, text: "Done",
+          onClick: () => {
+            const miles = parseFloat(distInput.value) || 0;
+            const secs = readSecs();
+            s.distanceMiles = miles > 0 ? miles : null;
+            s.durationSeconds = secs > 0 ? secs : null;
+            s.inclinePercent = incline > 0 ? incline : null;
+            s.weightLb = 0; s.reps = Math.max(1, s.reps || 1); // cardio carries no load
             api.close(); save(); renderBody(body);
           },
         }));

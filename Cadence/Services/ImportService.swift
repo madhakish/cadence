@@ -40,7 +40,7 @@ enum ImportService {
     private struct SetDTO: Decodable {
         var weightLb: Double?; var reps: Int?; var isWarmup: Bool?; var isPerSide: Bool?
         var enteredUnit: String?; var flags: [String]?; var bodyFlagSite: String?; var bodyFlagNote: String?
-        var durationSeconds: Int?; var distanceMiles: Double?; var autoregReason: String?
+        var durationSeconds: Int?; var distanceMiles: Double?; var inclinePercent: Double?; var autoregReason: String?
     }
     private struct Bodyweight: Decodable { var date: Date?; var weightLb: Double?; var bodyFatPercent: Double?; var milestoneLabel: String? }
     private struct Protein: Decodable { var date: Date?; var grams: Double?; var label: String? }
@@ -310,6 +310,7 @@ enum ImportService {
                                    bodyFlagSite: BodySite(rawValue: x.bodyFlagSite ?? ""),
                                    bodyFlagNote: x.bodyFlagNote,
                                    durationSeconds: x.durationSeconds, distanceMiles: x.distanceMiles,
+                                   inclinePercent: x.inclinePercent,
                                    autoregReason: AutoregReason(rawValue: x.autoregReason ?? ""))
                 set.sessionExercise = entry
                 entry.sets.append(set)
