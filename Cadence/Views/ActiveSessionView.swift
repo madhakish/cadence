@@ -668,9 +668,11 @@ private struct CardioSetSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
 
-    private var miles: Double { set.distanceMiles ?? 0 }
-    private var secs: Int { set.durationSeconds ?? 0 }
-    private var incline: Double { set.inclinePercent ?? 0 }
+    // `self.` keeps the parser from reading `set` as a setter declaration
+    // (the type has a property named `set` — see CompileRegressionTests).
+    private var miles: Double { self.set.distanceMiles ?? 0 }
+    private var secs: Int { self.set.durationSeconds ?? 0 }
+    private var incline: Double { self.set.inclinePercent ?? 0 }
 
     var body: some View {
         NavigationStack {
