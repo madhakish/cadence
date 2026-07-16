@@ -189,6 +189,8 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 /* sticky session bar (clock + rest) at the bottom of the logger overlay */
 #session-bar { border-top: 1px solid var(--line); background: var(--card); padding: 10px 16px calc(10px + var(--safe-bottom)); }
 #session-bar .session-bar-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* the countdown and ±1:00 buttons must never wrap mid-digit on narrow screens */
+#session-bar .session-bar-row button, #session-bar .clock, #session-bar .rest-time { white-space: nowrap; }
 #session-bar .clock { font-size: 15px; font-weight: 700; color: var(--muted); }
 #session-bar .rest-time { font-size: 22px; font-weight: 800; color: var(--accent); margin-right: 4px; }
 #session-bar .progress { margin-top: 8px; }

@@ -38,6 +38,11 @@ lifts appear under "Next up" with their own suggestions.
 - **Dropping load mid-session?** Use the drop-load control rather than
   silently editing the weight, so the reason is recorded. (Either way,
   working below prescription can't grade as a clean success.)
+- **Conditioning work** (walks, bike, ruck — anything of the conditioning
+  type) logs **distance, time, and incline** instead of weight×reps: tap
+  the set to enter them; speed falls out of distance ÷ time. Rep-based
+  conditioning like burpees keeps normal sets×reps, and cardio sets carry
+  a single ✓ done flag (no grindy/wobble).
 - **Add a set** freely — extra back-off volume beyond the prescription
   never hurts your grade. **Subtract** as well as add rest time with the
   −1:00 / +1:00 controls while a rest runs.

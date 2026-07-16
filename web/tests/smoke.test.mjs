@@ -226,6 +226,39 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok((await db.Gyms.all()).length === gymsBefore.length, "poisoned import did not clear gyms");
 }
 
+// ---- cardio sets: distance/time/incline, not weight×reps ----
+{
+  // A Walk (type conditioning) logs the 12-3-30: 3 mi, 45 min, 12% incline.
+  const sid = await session.createBlankSession();
+  const s = await db.Sessions.get(sid);
+  s.exercises.push({ order: 0, exerciseName: "Walk", notes: "", phase: null,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null,
+    sets: [{ order: 0, weightLb: 0, reps: 1, isWarmup: false, isPerSide: false, enteredUnit: "lb",
+      flags: [], bodyFlagSite: null, bodyFlagNote: null,
+      durationSeconds: 2700, distanceMiles: 3, inclinePercent: 12, autoregReason: null }] });
+  await db.Sessions.save(s);
+  await session.openSession(sid); await tick();
+  // Overlays from earlier blocks can still be mounted — anchor on the row.
+  const walkRow = [...document.querySelectorAll("#overlays .overlay .setrow")]
+    .find((r) => r.textContent.includes("45:00"));
+  ok(walkRow && walkRow.textContent.includes("3 mi · 45:00 · 4 mph · 12%"), "cardio set row renders the shared conditioning label");
+  ok(walkRow && walkRow.querySelectorAll(".flagbtn").length === 1, "cardio gets only the ✓ flag (no grindy/wobble)");
+  const overlays = document.querySelectorAll("#overlays .overlay");
+  overlays[overlays.length - 1].querySelector(".overlay-head button").click(); await tick();
+
+  // The incline key rides exports only when set — pre-incline records stay
+  // byte-identical (the conditional-spread convention).
+  s.isCompleted = true;
+  await db.Sessions.save(s);
+  const bundle = JSON.parse(await db.exportJSON());
+  const exported = bundle.sessions.flatMap((x) => x.exercises).find((e) => e.name === "Walk");
+  ok(exported && exported.sets[0].inclinePercent === 12 && exported.sets[0].distanceMiles === 3
+    && exported.sets[0].durationSeconds === 2700, "export carries distance/time/incline");
+  const liftSet = bundle.sessions.flatMap((x) => x.exercises).find((e) => e.name === "Deadlift").sets[0];
+  ok(!("inclinePercent" in liftSet), "sets without incline don't grow the key (byte-stable exports)");
+  await db.Sessions.del(sid); // leave the completed count as later blocks expect
+}
+
 // ---- completion is idempotent (double-tap backstop) ----
 {
   const msBefore = (await db.Milestones.all()).length;

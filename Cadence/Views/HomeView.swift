@@ -115,8 +115,10 @@ struct HomeView: View {
                                     }
                                 }
                                 // The bar you'll load / the pair you'll grab —
-                                // mains only, keeps the card calm.
-                                if lift.role.rawValue == "main", plan.weightLb > 0 {
+                                // every wave lift, matching the preview screen
+                                // (a complementary barbell lift is loaded just
+                                // the same as the main).
+                                if plan.weightLb > 0 {
                                     let type = exercises.first(where: { $0.name == lift.exerciseName })?.type
                                     if type == .barbell {
                                         BarbellView(weightLb: plan.weightLb, unit: .lb,

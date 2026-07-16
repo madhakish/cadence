@@ -658,3 +658,35 @@ export function restClockRemaining(s, now) {
 export function restClockFractionRemaining(s, now) {
   return s.total > 0 ? Math.min(1, Math.max(0, restClockRemaining(s, now) / s.total)) : 0;
 }
+
+// ---- Cardio set formatting -------------------------------------------------
+// Conditioning sets log distance/time/incline, not weight×reps. These build
+// the shared label the logger and history rows render. Pure; mirrored 1:1 in
+// CadenceCore/CardioFormat.swift.
+
+// Miles per hour from distance + duration, rounded to one decimal; null when
+// either half is missing/zero (no speed without both).
+export function cardioSpeedMph(distanceMiles, durationSeconds) {
+  if (!(distanceMiles > 0) || !(durationSeconds > 0)) return null;
+  return Math.round((distanceMiles / (durationSeconds / 3600)) * 10) / 10;
+}
+
+// "22:30", or "1:30:00" at an hour and beyond.
+export function cardioDurationLabel(seconds) {
+  const s = Math.max(0, seconds);
+  const two = (n) => String(n).padStart(2, "0");
+  if (s >= 3600) return `${Math.floor(s / 3600)}:${two(Math.floor((s % 3600) / 60))}:${two(s % 60)}`;
+  return `${Math.floor(s / 60)}:${two(s % 60)}`;
+}
+
+// One line from whatever was logged: "1.5 mi · 22:30 · 4 mph · 12%".
+// Missing halves simply drop out; nothing logged → "—".
+export function cardioSetLabel(distanceMiles, durationSeconds, inclinePercent) {
+  const parts = [];
+  if (distanceMiles > 0) parts.push(`${trim(distanceMiles, 2)} mi`);
+  if (durationSeconds > 0) parts.push(cardioDurationLabel(durationSeconds));
+  const mph = cardioSpeedMph(distanceMiles, durationSeconds);
+  if (mph !== null) parts.push(`${trim(mph)} mph`);
+  if (inclinePercent > 0) parts.push(`${trim(inclinePercent)}%`);
+  return parts.length ? parts.join(" · ") : "—";
+}

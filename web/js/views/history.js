@@ -23,6 +23,10 @@ export async function render(host) {
 }
 
 function setLabel(s) { return s.weightLb === 0 ? "BW" : ui.fmtWeight(s.weightLb); }
+// A set that logged distance/time is cardio — render the shared conditioning
+// label and skip ×reps (keyed on the DATA so restored history renders right
+// even if the library entry is gone).
+const isCardioSet = (s) => s.distanceMiles > 0 || s.durationSeconds > 0;
 
 function renderLog(panel, sessions) {
   if (!sessions.length) { panel.append(ui.empty("📋", COPY.emptyHistory)); return; }
@@ -66,8 +70,9 @@ function openDetail(s) {
             e.phase ? ui.h("span", { class: "pill accent", text: C.phaseLabel(e.phase) }) : null));
         for (const x of e.sets || []) {
           card.append(ui.h("div", { class: "setrow" },
-            ui.h("span", { class: "wt mono" + (x.isWarmup ? " muted" : ""), text: setLabel(x) }),
-            ui.h("span", { class: "sub mono", text: `× ${x.reps}${x.isPerSide ? "/side" : ""}` }),
+            ui.h("span", { class: "wt mono" + (x.isWarmup ? " muted" : ""),
+              text: isCardioSet(x) ? C.cardioSetLabel(x.distanceMiles, x.durationSeconds, x.inclinePercent) : setLabel(x) }),
+            isCardioSet(x) ? null : ui.h("span", { class: "sub mono", text: `× ${x.reps}${x.isPerSide ? "/side" : ""}` }),
             x.isWarmup ? ui.h("span", { class: "pill", text: "warmup" }) : null,
             (x.flags || []).length ? ui.h("span", { class: "pill warn", text: x.flags.join(", ") }) : null,
             x.bodyFlagSite ? ui.h("span", { class: "pill hard", text: x.bodyFlagSite + (x.bodyFlagNote ? ` — ${x.bodyFlagNote}` : "") }) : null));
