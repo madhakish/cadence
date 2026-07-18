@@ -274,7 +274,7 @@ struct HomeView: View {
         session.exercises.append(entry)
 
         // Pre-fill warmup ramp + working sets. All editable.
-        if exercise?.type == .barbell {
+        if exercise.type == .barbell {
             for warmup in WarmupRamp.ramp(workingLb: plan.weightLb) {
                 let set = SetEntry(order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps, isWarmup: true)
                 set.sessionExercise = entry
