@@ -36,7 +36,10 @@ final class AppBootstrap: ObservableObject {
         errorMessage = nil
         isTemporary = false
         do {
-            let loaded = try ModelContainer(for: CadenceSchemaV1.self, migrationPlan: CadenceMigrationPlan.self)
+            let schema = Schema(versionedSchema: CadenceSchemaV1.self)
+            let config = ModelConfiguration(schema: schema)
+            let loaded = try ModelContainer(for: schema, migrationPlan: CadenceMigrationPlan.self,
+                                            configurations: config)
             try prepare(loaded)
             container = loaded
         } catch {
@@ -46,8 +49,9 @@ final class AppBootstrap: ObservableObject {
 
     func openTemporaryStore() {
         do {
-            let config = ModelConfiguration(isStoredInMemoryOnly: true)
-            let loaded = try ModelContainer(for: CadenceSchemaV1.self, migrationPlan: CadenceMigrationPlan.self,
+            let schema = Schema(versionedSchema: CadenceSchemaV1.self)
+            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            let loaded = try ModelContainer(for: schema, migrationPlan: CadenceMigrationPlan.self,
                                             configurations: config)
             try prepare(loaded)
             isTemporary = true
