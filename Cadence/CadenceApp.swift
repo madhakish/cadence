@@ -52,6 +52,7 @@ struct CadenceApp: App {
 struct ThemedRoot: View {
     @Query private var settings: [AppSettings]
     @State private var tab = 0
+    @StateObject private var persistenceErrors = PersistenceErrorCenter.shared
 
     private var theme: ThemeName {
         ThemeName(rawValue: settings.first?.themeNameRaw ?? "carbon") ?? .carbon
@@ -63,5 +64,13 @@ struct ThemedRoot: View {
             .tint(Theme.accent)
             .preferredColorScheme(theme.colorScheme)
             .id(theme)
+            .alert("Couldn't save", isPresented: Binding(
+                get: { persistenceErrors.message != nil },
+                set: { if !$0 { persistenceErrors.message = nil } }
+            )) {
+                Button("OK") { persistenceErrors.message = nil }
+            } message: {
+                Text(persistenceErrors.message ?? "")
+            }
     }
 }

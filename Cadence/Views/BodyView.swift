@@ -113,7 +113,7 @@ struct BodyView: View {
                         }
                         .onDelete { offsets in
                             for index in offsets { context.delete(todayProtein[index]) }
-                            try? context.save()
+                            PersistenceErrorCenter.shared.save(context, operation: "Deleting the protein entry")
                         }
                     }
                 }
@@ -128,7 +128,7 @@ struct BodyView: View {
 
     private func logProtein(_ grams: Double, _ label: String) {
         context.insert(ProteinEntry(grams: grams, label: label))
-        try? context.save()
+        PersistenceErrorCenter.shared.save(context, operation: "Logging protein")
         if settings?.healthKitEnabled == true { /* protein not mirrored; weights only */ }
     }
 }
@@ -174,7 +174,7 @@ private struct BodyweightEntrySheet: View {
             milestoneLabel: milestoneLabel.isEmpty ? nil : milestoneLabel
         )
         context.insert(entry)
-        try? context.save()
+        guard PersistenceErrorCenter.shared.save(context, operation: "Logging bodyweight") else { return }
         if settingsList.first?.healthKitEnabled == true {
             Task { await HealthKitService.shared.saveBodyweight(lb: weight, date: entry.date) }
         }

@@ -462,8 +462,12 @@ export function validateBackup(bundle) {
     if (value == null && !required) return;
     if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) invalid(path, "expected an ISO-8601 date");
   };
-  const enumValue = (value, allowed, path) => {
-    if (value != null && !allowed.includes(value)) invalid(path, `unknown value ${JSON.stringify(value)}`);
+  const enumValue = (value, allowed, path, required = false) => {
+    if (value == null) {
+      if (required) invalid(path, "expected a known value");
+      return;
+    }
+    if (!allowed.includes(value)) invalid(path, `unknown value ${JSON.stringify(value)}`);
   };
   const unique = (records, value, path) => {
     const seen = new Set();
@@ -497,7 +501,7 @@ export function validateBackup(bundle) {
       each(array(exercise, "sets", `${exercisePath}.sets`), `${exercisePath}.sets`, (set, setPath) => {
         numberValue(set.weightLb, `${setPath}.weightLb`, { required: true, min: 0 });
         numberValue(set.reps, `${setPath}.reps`, { required: true, integer: true, min: 0 });
-        enumValue(set.enteredUnit, BACKUP_ENUMS.units, `${setPath}.enteredUnit`);
+        enumValue(set.enteredUnit, BACKUP_ENUMS.units, `${setPath}.enteredUnit`, schemaVersion >= 1);
         const flags = array(set, "flags", `${setPath}.flags`);
         flags?.forEach((flag, i) => enumValue(flag, BACKUP_ENUMS.flags, `${setPath}.flags[${i}]`));
         enumValue(set.bodyFlagSite, BACKUP_ENUMS.sites, `${setPath}.bodyFlagSite`);
@@ -520,18 +524,18 @@ export function validateBackup(bundle) {
   });
   const checkIns = array(bundle, "checkIns");
   each(checkIns, "checkIns", (entry, path) => {
-    dateValue(entry.date, `${path}.date`, true); enumValue(entry.site, BACKUP_ENUMS.sites, `${path}.site`);
+    dateValue(entry.date, `${path}.date`, true); enumValue(entry.site, BACKUP_ENUMS.sites, `${path}.site`, true);
     textValue(entry.response, `${path}.response`, true);
   });
   const milestones = array(bundle, "milestones");
   each(milestones, "milestones", (entry, path) => {
-    dateValue(entry.date, `${path}.date`, true); enumValue(entry.kind, BACKUP_ENUMS.milestoneKinds, `${path}.kind`);
+    dateValue(entry.date, `${path}.date`, true); enumValue(entry.kind, BACKUP_ENUMS.milestoneKinds, `${path}.kind`, true);
     textValue(entry.label, `${path}.label`, true);
   });
 
   const programs = array(bundle, "programs");
   each(programs, "programs", (program, path) => {
-    textValue(program.name, `${path}.name`, true); enumValue(program.focus, BACKUP_ENUMS.focuses, `${path}.focus`);
+    textValue(program.name, `${path}.name`, true); enumValue(program.focus, BACKUP_ENUMS.focuses, `${path}.focus`, schemaVersion >= 1);
     numberValue(program.cycleNumber, `${path}.cycleNumber`, { integer: true, min: 1 });
     numberValue(program.currentWeek, `${path}.currentWeek`, { integer: true, min: 1 });
     numberValue(program.nextDayIndex, `${path}.nextDayIndex`, { integer: true, min: 0 });
@@ -540,7 +544,7 @@ export function validateBackup(bundle) {
     each(days, `${path}.days`, (day, dayPath) => {
       textValue(day.name, `${dayPath}.name`, true); numberValue(day.order, `${dayPath}.order`, { required: true, integer: true, min: 0 });
       each(array(day, "lifts", `${dayPath}.lifts`), `${dayPath}.lifts`, (lift, liftPath) => {
-        textValue(lift.exerciseName, `${liftPath}.exerciseName`, true); enumValue(lift.role, BACKUP_ENUMS.liftRoles, `${liftPath}.role`);
+        textValue(lift.exerciseName, `${liftPath}.exerciseName`, true); enumValue(lift.role, BACKUP_ENUMS.liftRoles, `${liftPath}.role`, schemaVersion >= 1);
         for (const key of ["baseWeightLb", "estimatedMaxLb", "lastIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
         numberValue(lift.stallCount, `${liftPath}.stallCount`, { integer: true, min: 0 });
         if (lift.pending != null) object(lift.pending, `${liftPath}.pending`);
@@ -558,7 +562,7 @@ export function validateBackup(bundle) {
 
   const tracks = array(bundle, "tracks");
   each(tracks, "tracks", (track, path) => {
-    textValue(track.exerciseName, `${path}.exerciseName`, true); enumValue(track.mode, BACKUP_ENUMS.modes, `${path}.mode`);
+    textValue(track.exerciseName, `${path}.exerciseName`, true); enumValue(track.mode, BACKUP_ENUMS.modes, `${path}.mode`, schemaVersion >= 1);
     numberValue(track.cycleNumber, `${path}.cycleNumber`, { integer: true, min: 1 });
     numberValue(track.nextPhase, `${path}.nextPhase`, { integer: true, min: 1, max: 4 });
     numberValue(track.baseWeightLb, `${path}.baseWeightLb`, { min: 0 });
@@ -573,15 +577,15 @@ export function validateBackup(bundle) {
     textValue(gym.name, `${path}.name`, true);
     each(array(gym, "plateToggles", `${path}.plateToggles`), `${path}.plateToggles`, (plate, platePath) => {
       numberValue(plate.value, `${platePath}.value`, { required: true, min: Number.MIN_VALUE });
-      enumValue(plate.unit, BACKUP_ENUMS.units, `${platePath}.unit`);
+      enumValue(plate.unit, BACKUP_ENUMS.units, `${platePath}.unit`, schemaVersion >= 1);
     });
   });
   if (gyms) unique(gyms, (gym) => gym.name.trim(), "gyms");
 
   const exercises = array(bundle, "exercises");
   each(exercises, "exercises", (exercise, path) => {
-    textValue(exercise.name, `${path}.name`, true); enumValue(exercise.category, BACKUP_ENUMS.categories, `${path}.category`);
-    enumValue(exercise.type, BACKUP_ENUMS.exerciseTypes, `${path}.type`); enumValue(exercise.watchSite, BACKUP_ENUMS.sites, `${path}.watchSite`);
+    textValue(exercise.name, `${path}.name`, true); enumValue(exercise.category, BACKUP_ENUMS.categories, `${path}.category`, schemaVersion >= 1);
+    enumValue(exercise.type, BACKUP_ENUMS.exerciseTypes, `${path}.type`, schemaVersion >= 1); enumValue(exercise.watchSite, BACKUP_ENUMS.sites, `${path}.watchSite`);
     numberValue(exercise.defaultRestSeconds, `${path}.defaultRestSeconds`, { integer: true, min: 0, max: 3600 });
     dateValue(exercise.createdAt, `${path}.createdAt`);
   });
@@ -589,8 +593,8 @@ export function validateBackup(bundle) {
 
   if ("settings" in bundle) {
     const settings = object(bundle.settings, "settings");
-    enumValue(settings.unitDisplay, BACKUP_ENUMS.unitDisplay, "settings.unitDisplay");
-    enumValue(settings.theme, BACKUP_ENUMS.themes, "settings.theme");
+    enumValue(settings.unitDisplay, BACKUP_ENUMS.unitDisplay, "settings.unitDisplay", schemaVersion >= 1);
+    enumValue(settings.theme, BACKUP_ENUMS.themes, "settings.theme", schemaVersion >= 1);
     numberValue(settings.proteinTargetGrams, "settings.proteinTargetGrams", { min: 0 });
     dateValue(settings.seededAt, "settings.seededAt");
     for (const key of ["accessoryRestSeconds", "mainCompoundRestSeconds", "olympicRestSeconds", "mainUpperRestSeconds", "secondaryRestSeconds"]) {

@@ -167,7 +167,6 @@ struct CheckInSheet: View {
 
     private func save(response: String) {
         context.insert(CheckIn(site: site, response: response, note: note))
-        try? context.save()
-        dismiss()
+        if PersistenceErrorCenter.shared.save(context, operation: "Saving the check-in") { dismiss() }
     }
 }

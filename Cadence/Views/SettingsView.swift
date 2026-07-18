@@ -121,7 +121,7 @@ struct SettingsView: View {
                     Button {
                         let gym = Gym(name: "Gym \(gyms.count + 1)")
                         context.insert(gym)
-                        try? context.save()
+                        PersistenceErrorCenter.shared.save(context, operation: "Adding the gym")
                     } label: {
                         Label("Add gym", systemImage: "plus")
                     }
@@ -150,8 +150,12 @@ struct SettingsView: View {
                     Menu {
                         ForEach(ProgramTemplateData.all) { template in
                             Button {
-                                ProgramTemplates.instantiate(template, context: context)
-                                try? context.save()
+                                do {
+                                    try ProgramTemplates.instantiate(template, context: context)
+                                    PersistenceErrorCenter.shared.save(context, operation: "Adding the program")
+                                } catch {
+                                    PersistenceErrorCenter.shared.report(error, operation: "Adding the program", context: context)
+                                }
                             } label: {
                                 Text(template.name)
                                 Text(template.tagline)
@@ -161,7 +165,7 @@ struct SettingsView: View {
                             let name = ProgramTemplates.uniqueProgramName("Program \(programs.count + 1)", existing: programs.map(\.name))
                             let program = Program(name: name, isActive: programs.isEmpty)
                             context.insert(program)
-                            try? context.save()
+                            PersistenceErrorCenter.shared.save(context, operation: "Adding the program")
                         } label: {
                             Text("Blank program")
                         }
@@ -256,8 +260,9 @@ struct SettingsView: View {
                 } footer: {
                     Text("Restores a backup, replacing the data it contains and leaving anything it doesn't alone. Export first if you're unsure.")
                 }
-            }
-            .navigationTitle("Settings")
+        }
+        .saveChangesOnDisappear(context, operation: "Saving settings")
+        .navigationTitle("Settings")
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 importAlert = restore(from: result)
             }
@@ -366,7 +371,7 @@ struct GymEditorView: View {
                     Button("Show tag") { showCard = true }
                     Button("Remove photo", role: .destructive) {
                         gym.barcodeImageData = nil
-                        try? context.save()
+                        PersistenceErrorCenter.shared.save(context, operation: "Removing the membership photo")
                     }
                 }
             } header: {
@@ -376,12 +381,18 @@ struct GymEditorView: View {
             }
         }
         .navigationTitle(gym.name)
+        .saveChangesOnDisappear(context, operation: "Saving the gym")
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self) {
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        throw CocoaError(.fileReadCorruptFile)
+                    }
                     gym.barcodeImageData = data
-                    try? context.save()
+                    PersistenceErrorCenter.shared.save(context, operation: "Saving the membership photo")
+                } catch {
+                    PersistenceErrorCenter.shared.report(error, operation: "Loading the membership photo", context: context)
                 }
             }
         }
@@ -394,6 +405,7 @@ struct GymEditorView: View {
 // MARK: - Track editor
 
 struct TrackEditorView: View {
+    @Environment(\.modelContext) private var context
     @Bindable var track: LiftTrack
 
     var body: some View {
@@ -432,6 +444,7 @@ struct TrackEditorView: View {
             }
         }
         .navigationTitle(track.exerciseName)
+        .saveChangesOnDisappear(context, operation: "Saving lift progression")
     }
 }
 
@@ -497,7 +510,7 @@ struct ProgramEditorView: View {
                     day.program = program
                     program.days.append(day)
                     context.insert(day)
-                    try? context.save()
+                    PersistenceErrorCenter.shared.save(context, operation: "Adding the program day")
                 } label: {
                     Label("Add day", systemImage: "plus")
                 }
@@ -505,14 +518,14 @@ struct ProgramEditorView: View {
             Section {
                 Button(role: .destructive) {
                     context.delete(program)
-                    try? context.save()
-                    dismiss()
+                    if PersistenceErrorCenter.shared.save(context, operation: "Deleting the program") { dismiss() }
                 } label: {
                     Text("Delete program")
                 }
             }
         }
         .navigationTitle(program.name)
+        .saveChangesOnDisappear(context, operation: "Saving the program")
     }
 
     /// Move the program to a rotation. Placing at/after Peak (rotation 3) with no
@@ -522,17 +535,18 @@ struct ProgramEditorView: View {
     /// A real Peak session logged in rotation 3 overwrites this hold with its grade.
     private func positionAtRotation(_ newValue: Int) {
         program.currentWeek = newValue
-        guard newValue >= 3 else { return }
-        for day in program.days {
-            for lift in day.lifts where lift.pendingBaseWeightLb == nil {
-                lift.pendingBaseWeightLb = lift.baseWeightLb
-                lift.pendingEstimatedMaxLb = lift.estimatedMaxLb
-                lift.pendingStallCount = lift.stallCount
-                lift.pendingLastIncrementLb = lift.lastIncrementLb
-                lift.pendingNote = nil
+        if newValue >= 3 {
+            for day in program.days {
+                for lift in day.lifts where lift.pendingBaseWeightLb == nil {
+                    lift.pendingBaseWeightLb = lift.baseWeightLb
+                    lift.pendingEstimatedMaxLb = lift.estimatedMaxLb
+                    lift.pendingStallCount = lift.stallCount
+                    lift.pendingLastIncrementLb = lift.lastIncrementLb
+                    lift.pendingNote = nil
+                }
             }
         }
-        try? context.save()
+        PersistenceErrorCenter.shared.save(context, operation: "Changing the program rotation")
     }
 
     private func deleteDays(at offsets: IndexSet) {
@@ -540,7 +554,7 @@ struct ProgramEditorView: View {
         for i in offsets { context.delete(ordered[i]) }
         for (i, day) in program.orderedDays.enumerated() { day.order = i }
         if program.nextDayIndex >= program.days.count { program.nextDayIndex = 0 }
-        try? context.save()
+        PersistenceErrorCenter.shared.save(context, operation: "Deleting the program day")
     }
 }
 
@@ -562,25 +576,34 @@ struct ProgramDayEditorView: View {
                 // editor): the segmented Role picker spans the row and eats the
                 // horizontal pan, so swipe-to-delete alone is undiscoverable here.
                 ForEach(day.orderedLifts) { lift in
-                    ProgramLiftRow(lift: lift, step: step) { context.delete(lift) }
+                    ProgramLiftRow(lift: lift, step: step) {
+                        context.delete(lift)
+                        PersistenceErrorCenter.shared.save(context, operation: "Removing the program lift")
+                    }
                 }
                 .onDelete { offsets in
                     let ordered = day.orderedLifts
                     for i in offsets { context.delete(ordered[i]) }
+                    PersistenceErrorCenter.shared.save(context, operation: "Removing the program lift")
                 }
                 Button { picking = .lift } label: { Label("Add lift", systemImage: "plus") }
             }
             Section("Accessories") {
                 ForEach(day.accessories) { accessory in
-                    ProgramAccessoryRow(accessory: accessory) { context.delete(accessory) }
+                    ProgramAccessoryRow(accessory: accessory) {
+                        context.delete(accessory)
+                        PersistenceErrorCenter.shared.save(context, operation: "Removing the program accessory")
+                    }
                 }
                 .onDelete { offsets in
                     for i in offsets { context.delete(day.accessories[i]) }
+                    PersistenceErrorCenter.shared.save(context, operation: "Removing the program accessory")
                 }
                 Button { picking = .accessory } label: { Label("Add accessory", systemImage: "plus") }
             }
         }
         .navigationTitle(day.name)
+        .saveChangesOnDisappear(context, operation: "Saving the program day")
         .toolbar { EditButton() }
         .sheet(item: $picking) { target in
             ExercisePickerSheetView { name in
@@ -596,6 +619,7 @@ struct ProgramDayEditorView: View {
                     day.accessories.append(acc)
                     context.insert(acc)
                 }
+                PersistenceErrorCenter.shared.save(context, operation: "Adding the program exercise")
                 picking = nil
             }
         }

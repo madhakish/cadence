@@ -108,7 +108,9 @@ struct ActiveSessionView: View {
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Later") { dismiss() }
+                Button("Later") {
+                    if PersistenceErrorCenter.shared.save(context, operation: "Saving the open session") { dismiss() }
+                }
             }
             // Workout clock controls: pause/resume/reset the stopwatch, or end
             // the workout outright (Live Activity + timers) without banking —
@@ -187,7 +189,7 @@ struct ActiveSessionView: View {
     private func removeExercise(_ entry: SessionExercise) {
         if currentEntry?.persistentModelID == entry.persistentModelID { currentEntry = nil }
         context.delete(entry)
-        try? context.save()
+        PersistenceErrorCenter.shared.save(context, operation: "Removing the exercise")
     }
 
     private func pushActivityContext() {
@@ -225,7 +227,7 @@ struct ActiveSessionView: View {
         entry.session = session
         context.insert(entry)
         session.exercises.append(entry)
-        try? context.save()
+        PersistenceErrorCenter.shared.save(context, operation: "Adding the exercise")
     }
 
     /// One tap mid-session: apply the shared drop plan (core parity) — only
@@ -242,7 +244,7 @@ struct ActiveSessionView: View {
         }
         let top = plan.map(\.weightLb).max() ?? 0
         entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \(Weight.trim(top)) — \(reason.rawValue)."
-        try? context.save()
+        PersistenceErrorCenter.shared.save(context, operation: "Dropping the load")
     }
 }
 
@@ -324,10 +326,35 @@ private struct ExerciseSection: View {
         // matches program lifts/accessories by name+role); the slot keeps its
         // progression state as the starting load — candidates train the same
         // pattern at the same tier, so base/e1RM remain the best prior.
-        if scope != .session,
-           let role = entry.programRole, let name = entry.session?.programName,
-           let program = fetchProgram(named: name),
-           let day = program.days.first(where: { $0.order == (entry.session?.programDayIndex ?? 0) }) {
+        if scope != .session {
+            guard let role = entry.programRole, let name = entry.session?.programName,
+                  let dayIndex = entry.session?.programDayIndex else {
+                PersistenceErrorCenter.shared.report(
+                    NSError(domain: "Cadence", code: 1,
+                            userInfo: [NSLocalizedDescriptionKey: "This session has no durable program linkage."]),
+                    operation: "Changing the program exercise", context: context
+                )
+                return
+            }
+            let program: Program
+            do {
+                guard let found = try fetchProgram(named: name) else {
+                    throw NSError(domain: "Cadence", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "The program \(name) no longer exists."])
+                }
+                program = found
+            } catch {
+                PersistenceErrorCenter.shared.report(error, operation: "Loading the program for the swap", context: context)
+                return
+            }
+            guard let day = program.days.first(where: { $0.order == dayIndex }) else {
+                PersistenceErrorCenter.shared.report(
+                    NSError(domain: "Cadence", code: 2,
+                            userInfo: [NSLocalizedDescriptionKey: "The program day for this session no longer exists."]),
+                    operation: "Loading the program for the swap", context: context
+                )
+                return
+            }
             if role == "accessory" {
                 if let acc = day.accessories.first(where: { $0.exerciseName == oldName }) {
                     // Cycle: remember the original once (re-swapping mid-cycle
@@ -345,8 +372,7 @@ private struct ExerciseSection: View {
         entry.exercise = newExercise
         entry.sets.forEach { $0.isPerSide = newExercise.isUnilateral }
         reconcileWarmups(oldType: oldType, newExercise: newExercise)
-        try? context.save()
-        onWork(entry)
+        if PersistenceErrorCenter.shared.save(context, operation: "Swapping the exercise") { onWork(entry) }
     }
 
     /// Equipment-changing swaps invalidate the warmup ramp: a non-barbell
@@ -377,9 +403,9 @@ private struct ExerciseSection: View {
         }
     }
 
-    private func fetchProgram(named name: String) -> Program? {
+    private func fetchProgram(named name: String) throws -> Program? {
         let n = name // hoist: #Predicate can't read a captured property
-        return (try? context.fetch(FetchDescriptor<Program>(predicate: #Predicate { $0.name == n })))?.first
+        return try context.fetch(FetchDescriptor<Program>(predicate: #Predicate { $0.name == n })).first
     }
 
     /// Ephemeral bar choice for this exercise (mirrors the web logger's
@@ -397,7 +423,10 @@ private struct ExerciseSection: View {
     private var restSeconds: Int { smartRestSeconds(for: entry.exercise, role: entry.programRole, settings: settings) }
     private var restBinding: Binding<Int> {
         Binding(get: { restSeconds },
-                set: { entry.exercise?.defaultRestSeconds = $0; try? context.save() })
+                set: {
+                    entry.exercise?.defaultRestSeconds = $0
+                    PersistenceErrorCenter.shared.save(context, operation: "Changing the rest timer")
+                })
     }
     // Stepper floor: writing 0 clears the override, and the stepper displays
     // the EFFECTIVE rest — so 0 is only offered where clearing lands on 0
@@ -440,7 +469,7 @@ private struct ExerciseSection: View {
             .onDelete { offsets in
                 let ordered = entry.orderedSets
                 for index in offsets { context.delete(ordered[index]) }
-                try? context.save()
+                PersistenceErrorCenter.shared.save(context, operation: "Deleting the set")
             }
 
             HStack {
@@ -487,7 +516,7 @@ private struct ExerciseSection: View {
             if (entry.exercise?.defaultRestSeconds ?? 0) > 0 {
                 Button("Reset rest to default") {
                     entry.exercise?.defaultRestSeconds = 0
-                    try? context.save()
+                    PersistenceErrorCenter.shared.save(context, operation: "Resetting the rest timer")
                 }
                 .font(.caption)
             }
@@ -560,7 +589,7 @@ private struct ExerciseSection: View {
         set.sessionExercise = entry
         context.insert(set)
         entry.sets.append(set)
-        try? context.save()
+        PersistenceErrorCenter.shared.save(context, operation: "Adding the set")
     }
 }
 
@@ -665,6 +694,7 @@ private struct SetRow: View {
 /// Small deliberate steps (0.25 mi, 1 min, 0.5%) — content hoisted into plain
 /// rows to stay inside the type-checker's budget (see CompileRegressionTests).
 private struct CardioSetSheet: View {
+    @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
 
@@ -699,7 +729,11 @@ private struct CardioSetSheet: View {
             .navigationTitle("Log conditioning")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        if PersistenceErrorCenter.shared.save(context, operation: "Saving the conditioning set") { dismiss() }
+                    }
+                }
             }
         }
     }
@@ -725,6 +759,7 @@ private struct CardioSetSheet: View {
 }
 
 private struct FlagToggle: View {
+    @Environment(\.modelContext) private var context
     @Bindable var set: SetEntry
     let flag: SetFlag
     var onLogged: () -> Void
@@ -742,6 +777,7 @@ private struct FlagToggle: View {
                 onLogged() // first flag = set done → arm rest timer
             }
             set.flags = flags
+            PersistenceErrorCenter.shared.save(context, operation: "Logging the set")
         } label: {
             Text(symbol)
                 .font(.headline)
@@ -774,6 +810,7 @@ private struct FlagToggle: View {
 // MARK: - Set detail (weight/reps/unit/body flag)
 
 private struct SetDetailSheet: View {
+    @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
     let exercise: Exercise?
@@ -901,7 +938,7 @@ private struct SetDetailSheet: View {
                     Button("Done") {
                         set.weightLb = lb       // stored canonically in lb
                         set.enteredUnit = unit
-                        dismiss()
+                        if PersistenceErrorCenter.shared.save(context, operation: "Saving the set") { dismiss() }
                     }
                 }
             }
