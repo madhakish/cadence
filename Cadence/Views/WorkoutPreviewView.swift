@@ -26,7 +26,11 @@ struct WorkoutPreviewView: View {
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb,
                             nextPhase: phase, incrementLb: 0),
             programRoundingLb: program.roundingLb,
-            exerciseType: exercise?.typeRaw)
+            exerciseType: exercise?.typeRaw,
+            movementGroup: exercise?.movementGroup,
+            role: lift.role,
+            focus: program.focus,
+            prescriptionStyle: lift.prescription)
         let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
         let isBarbell = exercise?.type == .barbell
         let weightLb = ProgramSession.neatWeight(raw.weightLb, isBarbell: isBarbell,
@@ -83,7 +87,8 @@ struct WorkoutPreviewView: View {
 
             if !day.accessories.isEmpty {
                 Section("Accessories") {
-                    ForEach(day.accessories) { acc in
+                    ForEach(day.orderedAccessories) { acc in
+                        let isTimed = exercises.first(where: { $0.name == acc.exerciseName })?.type == .timed
                         HStack {
                             NavigationLink {
                                 ExerciseDetailByNameView(name: acc.exerciseName)
@@ -92,9 +97,11 @@ struct WorkoutPreviewView: View {
                             }
                             .buttonStyle(.plain)
                             Spacer()
-                            Text(acc.weightLb > 0
-                                 ? "\(acc.sets)×\(acc.currentReps) @ \(unitDisplay.format(lb: acc.weightLb))"
-                                 : "\(acc.sets)×\(acc.currentReps)")
+                            Text(isTimed
+                                 ? "\(acc.sets) × \(CardioFormat.durationLabel(seconds: acc.targetSeconds))"
+                                 : (acc.weightLb > 0
+                                    ? "\(acc.sets)×\(acc.currentReps) @ \(unitDisplay.format(lb: acc.weightLb))"
+                                    : "\(acc.sets)×\(acc.currentReps)"))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }

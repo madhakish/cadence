@@ -85,6 +85,15 @@ struct SettingsView: View {
                     }
 
                     Section {
+                        Toggle("Show gym tag on first launch of the day",
+                               isOn: bindable.gymTagFirstLaunchOfDay)
+                    } header: {
+                        Text("Arrival")
+                    } footer: {
+                        Text("Shows the default membership tag once per day, then returns to Today for training.")
+                    }
+
+                    Section {
                         Toggle("Write workouts & bodyweight to Health", isOn: Binding(
                             get: { settings.healthKitEnabled },
                             set: { on in
@@ -457,10 +466,69 @@ struct ProgramEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var allPrograms: [Program]
     @Query private var settingsList: [AppSettings]
+    @Query private var exercises: [Exercise]
     @Bindable var program: Program
+
+    private var validationMessages: [String] {
+        var messages: [String] = []
+        let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
+        var weeklySets: [String: Int] = [:]
+        for day in program.orderedDays {
+            if !day.lifts.contains(where: { $0.role == .main }) {
+                messages.append("\(day.name) has no main lift.")
+            }
+            for lift in day.orderedLifts {
+                if lift.baseWeightLb <= 0 { messages.append("\(lift.exerciseName) needs a rotation-1 base weight.") }
+                if lift.estimatedMaxLb > 0, lift.baseWeightLb > lift.estimatedMaxLb {
+                    messages.append("\(lift.exerciseName)'s base is above its estimated 1RM.")
+                } else if lift.estimatedMaxLb > 0, program.focus.tmFraction > 0,
+                          lift.baseWeightLb > lift.estimatedMaxLb * program.focus.tmFraction {
+                    messages.append("\(lift.exerciseName)'s base is above the \(Int(program.focus.tmFraction * 100))% training-max ceiling; verify its estimated 1RM or lower the base.")
+                }
+                if let exercise = exerciseByName[lift.exerciseName] {
+                    let plan = ProgramEngine.programPlan(
+                        for: CycleState(baseWeightLb: lift.baseWeightLb, nextPhase: .volume),
+                        programRoundingLb: program.roundingLb, exerciseType: exercise.typeRaw,
+                        movementGroup: exercise.movementGroup, role: lift.role, focus: program.focus,
+                        prescriptionStyle: lift.prescription)
+                    weeklySets[exercise.movementGroup, default: 0] += plan.sets
+                }
+            }
+            for accessory in day.orderedAccessories {
+                let isTimed = exerciseByName[accessory.exerciseName]?.type == .timed
+                if !isTimed, accessory.minReps > accessory.maxReps {
+                    messages.append("\(accessory.exerciseName)'s minimum reps exceed its maximum.")
+                } else if !isTimed, !(accessory.minReps...accessory.maxReps).contains(accessory.currentReps) {
+                    messages.append("\(accessory.exerciseName)'s current reps are outside its rep range.")
+                }
+                if let group = exerciseByName[accessory.exerciseName]?.movementGroup {
+                    weeklySets[group, default: 0] += accessory.sets
+                }
+            }
+        }
+        let pressing = weeklySets["press", default: 0]
+        let pulling = weeklySets["pull", default: 0]
+        if pressing >= 8, pulling * 5 < pressing * 4 {
+            messages.append("Weekly pulling volume (\(pulling) sets) trails pressing (\(pressing)); consider more rows or pull-ups.")
+        }
+        let squat = weeklySets["squat", default: 0]
+        let hinge = weeklySets["hinge", default: 0]
+        if max(squat, hinge) >= 8, min(squat, hinge) * 2 < max(squat, hinge) {
+            messages.append("Weekly squat/hinge volume is uneven (\(squat)/\(hinge) sets).")
+        }
+        return messages
+    }
 
     var body: some View {
         Form {
+            if !validationMessages.isEmpty {
+                Section("Coach check") {
+                    ForEach(validationMessages, id: \.self) { message in
+                        Label(message, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
             Section("Name") {
                 TextField("Program name", text: $program.name)
             }
@@ -507,6 +575,7 @@ struct ProgramEditorView: View {
                         }
                     }
                 }
+                .onMove(perform: moveDays)
                 .onDelete(perform: deleteDays)
                 Button {
                     let day = ProgramDay(name: "Day \(program.days.count + 1)", order: program.days.count)
@@ -519,6 +588,11 @@ struct ProgramEditorView: View {
                 }
             }
             Section {
+                Button {
+                    cloneProgram()
+                } label: {
+                    Label("Duplicate program", systemImage: "square.on.square")
+                }
                 Button(role: .destructive) {
                     context.delete(program)
                     if PersistenceErrorCenter.shared.save(context, operation: "Deleting the program") { dismiss() }
@@ -559,6 +633,48 @@ struct ProgramEditorView: View {
         if program.nextDayIndex >= program.days.count { program.nextDayIndex = 0 }
         PersistenceErrorCenter.shared.save(context, operation: "Deleting the program day")
     }
+
+    private func moveDays(from offsets: IndexSet, to destination: Int) {
+        var ordered = program.orderedDays
+        ordered.move(fromOffsets: offsets, toOffset: destination)
+        for (index, day) in ordered.enumerated() { day.order = index }
+        program.nextDayIndex = min(program.nextDayIndex, max(ordered.count - 1, 0))
+        PersistenceErrorCenter.shared.save(context, operation: "Reordering program days")
+    }
+
+    private func cloneProgram() {
+        let copy = Program(
+            name: ProgramTemplates.uniqueProgramName("\(program.name) Copy", existing: allPrograms.map(\.name)),
+            focus: program.focus, cycleNumber: program.cycleNumber, currentWeek: program.currentWeek,
+            nextDayIndex: program.nextDayIndex, roundingLb: program.roundingLb, isActive: false)
+        context.insert(copy)
+        for sourceDay in program.orderedDays {
+            let dayCopy = ProgramDay(name: sourceDay.name, order: sourceDay.order)
+            dayCopy.program = copy
+            context.insert(dayCopy)
+            for source in sourceDay.orderedLifts {
+                let lift = ProgramLift(exerciseName: source.exerciseName, role: source.role, order: source.order,
+                                       prescription: source.prescription, warmupPolicy: source.warmupPolicy,
+                                       baseWeightLb: source.baseWeightLb, estimatedMaxLb: source.estimatedMaxLb,
+                                       stallCount: source.stallCount, lastIncrementLb: source.lastIncrementLb)
+                lift.day = dayCopy
+                context.insert(lift)
+                dayCopy.lifts.append(lift)
+            }
+            for source in sourceDay.orderedAccessories {
+                let accessory = ProgramAccessory(exerciseName: source.exerciseName, order: source.order,
+                                                 sets: source.sets, minReps: source.minReps, maxReps: source.maxReps,
+                                                 currentReps: source.currentReps, targetSeconds: source.targetSeconds,
+                                                 durationStepSeconds: source.durationStepSeconds, weightLb: source.weightLb,
+                                                 incrementLb: source.incrementLb, stallCount: source.stallCount)
+                accessory.day = dayCopy
+                context.insert(accessory)
+                dayCopy.accessories.append(accessory)
+            }
+            copy.days.append(dayCopy)
+        }
+        PersistenceErrorCenter.shared.save(context, operation: "Duplicating the program")
+    }
 }
 
 struct ProgramDayEditorView: View {
@@ -589,19 +705,22 @@ struct ProgramDayEditorView: View {
                     for i in offsets { context.delete(ordered[i]) }
                     PersistenceErrorCenter.shared.save(context, operation: "Removing the program lift")
                 }
+                .onMove(perform: moveLifts)
                 Button { picking = .lift } label: { Label("Add lift", systemImage: "plus") }
             }
             Section("Accessories") {
-                ForEach(day.accessories) { accessory in
+                ForEach(day.orderedAccessories) { accessory in
                     ProgramAccessoryRow(accessory: accessory) {
                         context.delete(accessory)
                         PersistenceErrorCenter.shared.save(context, operation: "Removing the program accessory")
                     }
                 }
                 .onDelete { offsets in
-                    for i in offsets { context.delete(day.accessories[i]) }
+                    let ordered = day.orderedAccessories
+                    for i in offsets { context.delete(ordered[i]) }
                     PersistenceErrorCenter.shared.save(context, operation: "Removing the program accessory")
                 }
+                .onMove(perform: moveAccessories)
                 Button { picking = .accessory } label: { Label("Add accessory", systemImage: "plus") }
             }
         }
@@ -612,12 +731,14 @@ struct ProgramDayEditorView: View {
             ExercisePickerSheetView { name in
                 switch target {
                 case .lift:
-                    let lift = ProgramLift(exerciseName: name, role: .complementary, baseWeightLb: 45, estimatedMaxLb: 52)
+                    let lift = ProgramLift(exerciseName: name, role: .complementary,
+                                           order: day.lifts.count, baseWeightLb: 45, estimatedMaxLb: 52)
                     lift.day = day
                     day.lifts.append(lift)
                     context.insert(lift)
                 case .accessory:
-                    let acc = ProgramAccessory(exerciseName: name, sets: 3, minReps: 8, maxReps: 12, currentReps: 8, weightLb: 0, incrementLb: 0)
+                    let acc = ProgramAccessory(exerciseName: name, order: day.accessories.count,
+                                               sets: 3, minReps: 8, maxReps: 12, currentReps: 8, weightLb: 0, incrementLb: 0)
                     acc.day = day
                     day.accessories.append(acc)
                     context.insert(acc)
@@ -626,6 +747,20 @@ struct ProgramDayEditorView: View {
                 picking = nil
             }
         }
+    }
+
+    private func moveLifts(from offsets: IndexSet, to destination: Int) {
+        var ordered = day.orderedLifts
+        ordered.move(fromOffsets: offsets, toOffset: destination)
+        for (index, lift) in ordered.enumerated() { lift.order = index }
+        PersistenceErrorCenter.shared.save(context, operation: "Reordering program lifts")
+    }
+
+    private func moveAccessories(from offsets: IndexSet, to destination: Int) {
+        var ordered = day.orderedAccessories
+        ordered.move(fromOffsets: offsets, toOffset: destination)
+        for (index, accessory) in ordered.enumerated() { accessory.order = index }
+        PersistenceErrorCenter.shared.save(context, operation: "Reordering program accessories")
     }
 }
 
@@ -664,6 +799,16 @@ private struct ProgramLiftRow: View {
                 Text("Complementary").tag(LiftRole.complementary)
             }
             .pickerStyle(.segmented)
+            Picker("Prescription", selection: Binding(get: { lift.prescription }, set: { lift.prescription = $0 })) {
+                ForEach(PrescriptionStyle.allCases, id: \.self) { style in
+                    Text(style.name).tag(style)
+                }
+            }
+            Picker("Warm-up", selection: Binding(get: { lift.warmupPolicy }, set: { lift.warmupPolicy = $0 })) {
+                ForEach(WarmupPolicy.allCases, id: \.self) { policy in
+                    Text(policy.name).tag(policy)
+                }
+            }
             Stepper("Rotation-1 base: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))", value: $lift.baseWeightLb, in: 0...1000, step: loadStep)
             Stepper("Est. 1RM: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.estimatedMaxLb))", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
         }
@@ -672,8 +817,13 @@ private struct ProgramLiftRow: View {
 
 private struct ProgramAccessoryRow: View {
     @Query private var settingsList: [AppSettings]
+    @Query private var exercises: [Exercise]
     @Bindable var accessory: ProgramAccessory
     let onRemove: () -> Void
+
+    private var isTimed: Bool {
+        exercises.first { $0.name == accessory.exerciseName }?.type == .timed
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -691,11 +841,18 @@ private struct ProgramAccessoryRow: View {
                 .buttonStyle(.borderless) // scoped to the icon, not the whole row
                 .accessibilityLabel("Remove \(accessory.exerciseName)")
             }
-            Stepper("Weight: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: accessory.weightLb))", value: $accessory.weightLb, in: 0...500, step: 2.5)
             Stepper("Sets: \(accessory.sets)", value: $accessory.sets, in: 1...8)
-            Stepper("Min reps: \(accessory.minReps)", value: $accessory.minReps, in: 1...20)
-            Stepper("Max reps: \(accessory.maxReps)", value: $accessory.maxReps, in: 1...30)
-            Stepper("Load step: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
+            if isTimed {
+                Stepper("Hold: \(CardioFormat.durationLabel(seconds: accessory.targetSeconds))",
+                        value: $accessory.targetSeconds, in: 5...1800, step: 5)
+                Stepper("Progress by: +\(accessory.durationStepSeconds) sec",
+                        value: $accessory.durationStepSeconds, in: 0...60, step: 5)
+            } else {
+                Stepper("Weight: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: accessory.weightLb))", value: $accessory.weightLb, in: 0...500, step: 2.5)
+                Stepper("Min reps: \(accessory.minReps)", value: $accessory.minReps, in: 1...20)
+                Stepper("Max reps: \(accessory.maxReps)", value: $accessory.maxReps, in: 1...30)
+                Stepper("Load step: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
+            }
         }
     }
 }

@@ -258,8 +258,17 @@ struct ActiveSessionView: View {
         guard !wanted.isEmpty else { return lines }
         for past in completedSessions where past.persistentModelID != session.persistentModelID {
             for entry in past.exercises {
-                guard let name = entry.exercise?.name, wanted.contains(name),
+                guard let exercise = entry.exercise, wanted.contains(exercise.name),
                       let top = entry.topSet else { continue }
+                let name = exercise.name
+                if exercise.type == .timed {
+                    let longest = past.exercises.filter { $0.exercise?.name == name }
+                        .flatMap(\.workingSets).compactMap(\.durationSeconds).max() ?? 0
+                    let when = past.date.formatted(date: .abbreviated, time: .omitted)
+                    lines[name] = "Last: \(CardioFormat.durationLabel(seconds: longest)) · \(when) (\(agoLabel(past.date)))"
+                    wanted.remove(name)
+                    continue
+                }
                 let better = past.exercises.filter { $0.exercise?.name == name }.compactMap(\.topSet)
                     .max { $0.weightLb < $1.weightLb } ?? top
                 let weight = better.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: better.weightLb)
@@ -645,12 +654,14 @@ private struct ExerciseSection: View {
 
     private func addSet() {
         let last = entry.orderedSets.last
+        let isTimed = entry.exercise?.type == .timed
         let set = SetEntry(
             order: entry.sets.count,
-            weightLb: last?.weightLb ?? entry.plannedWeightLb ?? 45,
-            reps: last?.reps ?? entry.plannedReps ?? 5,
+            weightLb: isTimed ? 0 : (last?.weightLb ?? entry.plannedWeightLb ?? 45),
+            reps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             isPerSide: entry.exercise?.isUnilateral ?? false,
-            enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb
+            enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
+            durationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil
         )
         set.sessionExercise = entry
         context.insert(set)
@@ -733,6 +744,7 @@ private struct SetRow: View {
     /// weight×reps. Keyed on the exercise TYPE — rep-based conditioning like
     /// burpees (category Conditioning, type bodyweight) keeps the lifting row.
     private var isCardio: Bool { exercise?.type == .conditioning }
+    private var isTimed: Bool { exercise?.type == .timed }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -752,16 +764,20 @@ private struct SetRow: View {
                          ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                                  durationSeconds: set.durationSeconds,
                                                  inclinePercent: set.inclinePercent)
-                         : weightLabel)
+                         : (isTimed ? CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) : weightLabel))
                         .font(.title3.bold().monospacedDigit())
                         .foregroundStyle(set.isWarmup ? .secondary : .primary)
                     HStack(spacing: 6) {
-                        if !isCardio {
+                        if !isCardio && !isTimed {
                             Text("× \(set.reps)\(set.isPerSide ? "/side" : "")")
                                 .font(.callout.monospacedDigit())
                                 .foregroundStyle(.secondary)
-                        } else {
+                        } else if isCardio {
                             Text("tap to log distance · time · incline")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            Text("tap to adjust hold time")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -783,13 +799,15 @@ private struct SetRow: View {
 
             Spacer()
 
-            SetStatusMenu(set: set, onCompleted: onLogged)
-            if !isCardio { QualityMenu(set: set) }
+            SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onCompleted: onLogged)
         }
         .sheet(isPresented: $showDetail) {
             if isCardio {
-                CardioSetSheet(set: set)
+                CardioSetSheet(set: set, onDelete: onRemove)
                     .presentationDetents([.medium, .large])
+            } else if isTimed {
+                TimedSetSheet(set: set, onDelete: onRemove)
+                    .presentationDetents([.medium])
             } else {
                 SetDetailSheet(set: set, entry: entry, exercise: exercise, gym: gym, bar: bar,
                                targetLb: targetLb, onDelete: onRemove)
@@ -816,6 +834,7 @@ private struct CardioSetSheet: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
+    let onDelete: () -> Void
 
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
@@ -842,6 +861,12 @@ private struct CardioSetSheet: View {
                 } footer: {
                     if let mph = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds) {
                         Text("Speed: \(Weight.trim(mph)) mph")
+                    }
+                }
+                Section {
+                    Button("Delete set", role: .destructive) {
+                        onDelete()
+                        dismiss()
                     }
                 }
             }
@@ -877,33 +902,108 @@ private struct CardioSetSheet: View {
     }
 }
 
-private struct SetStatusMenu: View {
+/// Timed holds (planks, hollow holds) have a first-class duration instead of
+/// masquerading as one repetition. The program pre-fills the target, so the
+/// normal path remains a single completion tap.
+private struct TimedSetSheet: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var set: SetEntry
+    let onDelete: () -> Void
+
+    private var seconds: Int { set.durationSeconds ?? 0 }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Hold time") {
+                    Stepper(
+                        CardioFormat.durationLabel(seconds: seconds),
+                        value: Binding(get: { seconds }, set: { set.durationSeconds = max($0, 5) }),
+                        in: 5...1800,
+                        step: 5
+                    )
+                }
+                Section {
+                    Button("Delete set", role: .destructive) {
+                        onDelete()
+                        dismiss()
+                    }
+                }
+            }
+            .navigationTitle("Log timed set")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        if PersistenceErrorCenter.shared.save(context, operation: "Saving the timed set") { dismiss() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Normal logging is one tap: planned → completed (and a second tap undoes).
+/// Long-press exposes the exceptional states and quality flags, keeping the
+/// powerful record model without making every ordinary set an interrogation.
+private struct SetVerdictControl: View {
     @Environment(\.modelContext) private var context
     @Bindable var set: SetEntry
+    let allowsQuality: Bool
     var onCompleted: () -> Void
 
     var body: some View {
         Menu {
+            Section("Status") {
             ForEach(SetStatus.allCases, id: \.self) { status in
                 Button {
-                    let wasCompleted = set.status == .completed
-                    set.status = status
-                    if status == .completed && !wasCompleted { onCompleted() }
-                    PersistenceErrorCenter.shared.save(context, operation: "Changing the set status")
+                    apply(status)
                 } label: {
                     Label(statusLabel(status), systemImage: statusIcon(status))
                 }
             }
+            }
+            if allowsQuality {
+                Section("Quality — only when notable") {
+                    Button("Not graded") { set.quality = nil; save() }
+                    Button("Clean") { set.quality = .clean; save() }
+                    Button("Grindy") { set.quality = .grindy; save() }
+                    Button("Wobble") { set.quality = .wobble; save() }
+                }
+            }
         } label: {
-            Image(systemName: statusIcon(set.status))
-                .font(.title3)
-                .frame(width: 40, height: 40)
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: statusIcon(set.status))
+                    .font(.title3)
+                if let quality = set.quality, quality != .clean {
+                    Text(quality == .grindy ? "G" : "W")
+                        .font(.caption2.bold())
+                        .padding(2)
+                        .background(Theme.warn, in: Circle())
+                        .foregroundStyle(.black)
+                        .offset(x: 6, y: -6)
+                }
+            }
+                .frame(width: 48, height: 48)
                 .background(statusColor(set.status).opacity(set.status == .planned ? 0.12 : 0.30),
                             in: RoundedRectangle(cornerRadius: 8))
+        } primaryAction: {
+            apply(set.status == .completed ? .planned : .completed)
         }
         .accessibilityLabel("Set status")
         .accessibilityValue(statusLabel(set.status))
+        .accessibilityHint("Tap to complete or undo. Touch and hold for skipped and quality options.")
     }
+
+    private func apply(_ status: SetStatus) {
+        let wasCompleted = set.status == .completed
+        set.status = status
+        if status == .completed && !wasCompleted { onCompleted() }
+        save()
+    }
+
+    private func save() { PersistenceErrorCenter.shared.save(context, operation: "Changing the set verdict") }
 
     private func statusLabel(_ status: SetStatus) -> String {
         switch status { case .planned: return "Planned"; case .completed: return "Completed"; case .skipped: return "Skipped" }
@@ -913,35 +1013,6 @@ private struct SetStatusMenu: View {
     }
     private func statusColor(_ status: SetStatus) -> Color {
         switch status { case .planned: return .secondary; case .completed: return Theme.good; case .skipped: return .secondary }
-    }
-}
-
-private struct QualityMenu: View {
-    @Environment(\.modelContext) private var context
-    @Bindable var set: SetEntry
-
-    var body: some View {
-        Menu {
-            Button("No quality") { set.quality = nil; save() }
-            Button("Clean") { set.quality = .clean; save() }
-            Button("Grindy") { set.quality = .grindy; save() }
-            Button("Wobble") { set.quality = .wobble; save() }
-        } label: {
-            Text(symbol)
-                .font(.headline)
-                .frame(width: 40, height: 40)
-                .background(color.opacity(set.quality == nil ? 0.12 : 0.30), in: RoundedRectangle(cornerRadius: 8))
-        }
-        .accessibilityLabel("Set quality")
-        .accessibilityValue(set.quality?.rawValue ?? "Not graded")
-    }
-
-    private func save() { PersistenceErrorCenter.shared.save(context, operation: "Grading the set") }
-    private var symbol: String {
-        switch set.quality { case .clean: return "✓"; case .grindy: return "G"; case .wobble: return "W"; default: return "Q" }
-    }
-    private var color: Color {
-        switch set.quality { case .clean: return Theme.good; case .grindy, .wobble: return Theme.warn; default: return .secondary }
     }
 }
 
@@ -1299,9 +1370,18 @@ private struct SessionSummarySheet: View {
                     ForEach(summary.lines) { line in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(line.exerciseName).font(.headline)
-                            Text("Top: \(line.topSetLabel) · Volume: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: line.volumeLb))")
+                            Text(line.volumeLb > 0
+                                 ? "Top: \(line.topSetLabel) · Volume: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: line.volumeLb))"
+                                 : line.topSetLabel)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if !summary.coachingNotes.isEmpty {
+                    Section("Coach") {
+                        ForEach(summary.coachingNotes, id: \.self) { note in
+                            Text(note)
                         }
                     }
                 }

@@ -77,12 +77,12 @@ export function pushScreen({ title, build, actions = [] }) {
 }
 
 // ---- bottom sheets ----
-export function sheet({ title, build }) {
+export function sheet({ title, build, onClose }) {
   const content = h("div", { class: "sheet" }, h("div", { class: "grip" }), title ? h("h2", { text: title }) : null);
   const scrim = h("div", { class: "scrim", onClick: (e) => { if (e.target === scrim) close(); } }, content);
   overlays().append(scrim);
   const api = { el: content, close };
-  function close() { scrim.remove(); }
+  function close() { scrim.remove(); onClose?.(); }
   if (build) build(content, api);
   return api;
 }

@@ -8,6 +8,7 @@ struct LibraryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var search = ""
+    @State private var showNewExercise = false
 
     private var visibleExercises: [Exercise] {
         guard !search.isEmpty else { return exercises }
@@ -53,6 +54,12 @@ struct LibraryView: View {
         }
         .navigationTitle("Library")
         .searchable(text: $search, prompt: "Exercise, movement, or equipment")
+        .toolbar {
+            Button { showNewExercise = true } label: {
+                Label("New exercise", systemImage: "plus")
+            }
+        }
+        .sheet(isPresented: $showNewExercise) { NewExerciseView() }
     }
 }
 
@@ -105,8 +112,13 @@ struct ExerciseDetailView: View {
     /// containing this exercise.
     private var lastDoneLabel: String {
         for s in completed {
-            guard let entry = s.exercises.first(where: { $0.exercise?.name == exercise.name }),
-                  let top = entry.workingSets.max(by: { $0.weightLb < $1.weightLb }) else { continue }
+            let matching = s.exercises.filter { $0.exercise?.name == exercise.name }
+            if exercise.type == .timed,
+               let longest = matching.flatMap(\.workingSets).compactMap(\.durationSeconds).max() {
+                let program = s.programName.map { " · \($0)" } ?? ""
+                return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \(CardioFormat.durationLabel(seconds: longest))\(program)"
+            }
+            guard let top = matching.flatMap(\.workingSets).max(by: { $0.weightLb < $1.weightLb }) else { continue }
             let program = s.programName.map { " · \($0)" } ?? ""
             return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb)) × \(top.reps)\(program)"
         }
@@ -117,8 +129,8 @@ struct ExerciseDetailView: View {
     private var topSetSeries: [Double] {
         var recent: [Double] = []
         for s in completed {
-            guard let entry = s.exercises.first(where: { $0.exercise?.name == exercise.name }),
-                  let top = entry.workingSets.max(by: { $0.weightLb < $1.weightLb }) else { continue }
+            let matching = s.exercises.filter { $0.exercise?.name == exercise.name }
+            guard let top = matching.flatMap(\.workingSets).max(by: { $0.weightLb < $1.weightLb }) else { continue }
             recent.append(top.weightLb)
             if recent.count == 24 { break }
         }
@@ -143,7 +155,7 @@ struct ExerciseDetailView: View {
                 LabeledContent("Last done") {
                     Text(lastDoneLabel).multilineTextAlignment(.trailing)
                 }
-                if topSetSeries.count >= 2 {
+                if exercise.type != .timed && topSetSeries.count >= 2 {
                     LabeledContent("Top set, last \(topSetSeries.count)") {
                         SparklineView(values: topSetSeries)
                             .frame(width: 132, height: 30)
@@ -160,12 +172,20 @@ struct ExerciseDetailView: View {
             }
 
             Section {
+                Picker("Category", selection: Binding(
+                    get: { exercise.category },
+                    set: { exercise.category = $0 }
+                )) {
+                    ForEach(ExerciseCategory.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
                 Picker("Type", selection: Binding(
                     get: { exercise.type },
                     set: { exercise.type = $0 }
                 )) {
                     ForEach(ExerciseType.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
+                TextField("Movement group", text: $exercise.movementGroup)
+                    .textInputAutocapitalization(.never)
                 Toggle("Unilateral (log per side)", isOn: $exercise.isUnilateral)
                 // 0 = no rest of its own → the timer falls to the configurable
                 // rest buckets in Settings; any value set here wins everywhere.
@@ -210,5 +230,61 @@ struct ExerciseDetailView: View {
         }
         .navigationTitle(exercise.name)
         .saveChangesOnDisappear(context, operation: "Saving the exercise")
+    }
+}
+
+private struct NewExerciseView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Query private var exercises: [Exercise]
+
+    @State private var name = ""
+    @State private var category: ExerciseCategory = .accessory
+    @State private var type: ExerciseType = .dumbbell
+    @State private var movementGroup = ""
+    @State private var isUnilateral = false
+    @State private var notes = ""
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canSave: Bool {
+        !trimmedName.isEmpty && !exercises.contains { $0.name.caseInsensitiveCompare(trimmedName) == .orderedSame }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Exercise") {
+                    TextField("Name", text: $name)
+                    Picker("Category", selection: $category) {
+                        ForEach(ExerciseCategory.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    Picker("Type", selection: $type) {
+                        ForEach(ExerciseType.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    TextField("Movement group (press, pull, squat…)", text: $movementGroup)
+                        .textInputAutocapitalization(.never)
+                    Toggle("Unilateral (log per side)", isOn: $isUnilateral)
+                    TextField("Notes", text: $notes, axis: .vertical)
+                }
+                if !trimmedName.isEmpty && !canSave {
+                    Section { Text("An exercise with this name already exists.").foregroundStyle(.orange) }
+                }
+            }
+            .navigationTitle("New exercise")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        let exercise = Exercise(name: trimmedName, category: category, type: type,
+                                                movementGroup: movementGroup.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                                                isUnilateral: isUnilateral, notes: notes)
+                        context.insert(exercise)
+                        if PersistenceErrorCenter.shared.save(context, operation: "Adding the exercise") { dismiss() }
+                    }
+                    .disabled(!canSave)
+                }
+            }
+        }
     }
 }

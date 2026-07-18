@@ -88,15 +88,17 @@ enum ImportService {
     }
     private struct DayDTO: Decodable { var name: String?; var order: Int?; var lifts: [LiftDTO]?; var accessories: [AccessoryDTO]? }
     private struct LiftDTO: Decodable {
-        var id: String?; var exerciseName: String?; var role: String?; var baseWeightLb: Double?; var estimatedMaxLb: Double?
+        var id: String?; var exerciseName: String?; var role: String?; var order: Int?
+        var prescription: String?; var warmupPolicy: String?; var baseWeightLb: Double?; var estimatedMaxLb: Double?
         var stallCount: Int?; var lastIncrementLb: Double?; var pending: PendingDTO?
         var revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
     private struct PendingDTO: Decodable { var state: PendingState?; var note: String? }
     private struct PendingState: Decodable { var baseWeightLb: Double?; var estimatedMaxLb: Double?; var stallCount: Int?; var lastIncrementLb: Double? }
     private struct AccessoryDTO: Decodable {
-        var id: String?; var exerciseName: String?; var sets: Int?; var minReps: Int?; var maxReps: Int?
-        var currentReps: Int?; var weightLb: Double?; var incrementLb: Double?; var stallCount: Int?
+        var id: String?; var exerciseName: String?; var order: Int?; var sets: Int?; var minReps: Int?; var maxReps: Int?
+        var currentReps: Int?; var targetSeconds: Int?; var durationStepSeconds: Int?
+        var weightLb: Double?; var incrementLb: Double?; var stallCount: Int?
         var revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
     private struct Track: Decodable {
@@ -122,7 +124,7 @@ enum ImportService {
         var unitDisplay: String?; var proteinTargetGrams: Double?; var accessoryRestSeconds: Int?
         var mainCompoundRestSeconds: Int?; var olympicRestSeconds: Int?; var mainUpperRestSeconds: Int?; var secondaryRestSeconds: Int?
         var rest: RestDTO?
-        var autoStartRest: Bool?; var haptics: Bool?; var restSeedStampsCleared: Bool?
+        var autoStartRest: Bool?; var haptics: Bool?; var gymTagFirstLaunchOfDay: Bool?; var restSeedStampsCleared: Bool?
         var seededAt: Date?; var theme: String?
     }
 
@@ -287,6 +289,9 @@ enum ImportService {
                     if lift.id != nil { _ = try portableID(lift.id, "\(liftPath).id") }
                     _ = try requiredText(lift.exerciseName, "\(liftPath).exerciseName")
                     try known(lift.role, liftRoles, "\(liftPath).role", required: schemaVersion >= 1)
+                    try integer(lift.order, "\(liftPath).order", min: 0)
+                    try known(lift.prescription, Set(PrescriptionStyle.allCases.map(\.rawValue)), "\(liftPath).prescription")
+                    try known(lift.warmupPolicy, Set(WarmupPolicy.allCases.map(\.rawValue)), "\(liftPath).warmupPolicy")
                     try finite(lift.baseWeightLb, "\(liftPath).baseWeightLb", min: 0)
                     try finite(lift.estimatedMaxLb, "\(liftPath).estimatedMaxLb", min: 0)
                     try integer(lift.stallCount, "\(liftPath).stallCount", min: 0)
@@ -302,10 +307,13 @@ enum ImportService {
                     let accessoryPath = "\(dayPath).accessories[\(ai)]"
                     if accessory.id != nil { _ = try portableID(accessory.id, "\(accessoryPath).id") }
                     _ = try requiredText(accessory.exerciseName, "\(accessoryPath).exerciseName")
+                    try integer(accessory.order, "\(accessoryPath).order", min: 0)
                     try integer(accessory.sets, "\(accessoryPath).sets", min: 0)
                     try integer(accessory.minReps, "\(accessoryPath).minReps", min: 0)
                     try integer(accessory.maxReps, "\(accessoryPath).maxReps", min: 0)
                     try integer(accessory.currentReps, "\(accessoryPath).currentReps", min: 0)
+                    try integer(accessory.targetSeconds, "\(accessoryPath).targetSeconds", min: 0)
+                    try integer(accessory.durationStepSeconds, "\(accessoryPath).durationStepSeconds", min: 0)
                     try finite(accessory.weightLb, "\(accessoryPath).weightLb", min: 0)
                     try finite(accessory.incrementLb, "\(accessoryPath).incrementLb", min: 0)
                     try integer(accessory.stallCount, "\(accessoryPath).stallCount", min: 0)
@@ -567,9 +575,12 @@ enum ImportService {
         for d in (p.days ?? []) {
             let day = ProgramDay(name: d.name ?? "Day", order: d.order ?? 0)
             day.program = prog
-            for l in (d.lifts ?? []) {
+            for (slotOrder, l) in (d.lifts ?? []).enumerated() {
                 let lift = ProgramLift(id: l.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? UUID().uuidString,
                                        exerciseName: l.exerciseName ?? "", role: LiftRole(rawValue: l.role ?? "main") ?? .main,
+                                       order: l.order ?? slotOrder,
+                                       prescription: PrescriptionStyle(rawValue: l.prescription ?? "automatic") ?? .automatic,
+                                       warmupPolicy: WarmupPolicy(rawValue: l.warmupPolicy ?? "automatic") ?? .automatic,
                                        baseWeightLb: l.baseWeightLb ?? 45, estimatedMaxLb: l.estimatedMaxLb ?? 0,
                                        stallCount: l.stallCount ?? 0, lastIncrementLb: l.lastIncrementLb ?? 0)
                 if let st = l.pending?.state {
@@ -583,10 +594,13 @@ enum ImportService {
                 lift.day = day
                 day.lifts.append(lift)
             }
-            for a in (d.accessories ?? []) {
+            for (slotOrder, a) in (d.accessories ?? []).enumerated() {
                 let acc = ProgramAccessory(id: a.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? UUID().uuidString,
-                                           exerciseName: a.exerciseName ?? "", sets: a.sets ?? 3, minReps: a.minReps ?? 8,
-                                           maxReps: a.maxReps ?? 12, currentReps: a.currentReps ?? 8, weightLb: a.weightLb ?? 0,
+                                           exerciseName: a.exerciseName ?? "", order: a.order ?? slotOrder,
+                                           sets: a.sets ?? 3, minReps: a.minReps ?? 8,
+                                           maxReps: a.maxReps ?? 12, currentReps: a.currentReps ?? 8,
+                                           targetSeconds: a.targetSeconds ?? 30,
+                                           durationStepSeconds: a.durationStepSeconds ?? 5, weightLb: a.weightLb ?? 0,
                                            incrementLb: a.incrementLb ?? 0, stallCount: a.stallCount ?? 0)
                 acc.revertToExerciseName = a.revertToExerciseName
                 acc.day = day
@@ -665,6 +679,7 @@ enum ImportService {
         if let v = st.rest?.accessorySeconds { settings.accessoryRestSeconds = v }
         if let v = st.autoStartRest { settings.autoStartRest = v }
         if let v = st.haptics { settings.haptics = v }
+        if let v = st.gymTagFirstLaunchOfDay { settings.gymTagFirstLaunchOfDay = v }
         // restSeedStampsCleared describes the EXERCISE LIBRARY's migration
         // state, so it follows the bundle only when the library itself was
         // restored from it: a pre-migration backup (no flag) restores

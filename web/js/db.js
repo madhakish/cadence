@@ -126,10 +126,16 @@ const normalizeProgram = (p) => {
       lifts: (day.lifts || []).map((lift, slotIndex) => ({
         ...lift,
         id: isPortableUUID(lift.id) ? lift.id : stableID(`slot:${uuid}:day:${day.order ?? dayIndex}:lift:${slotIndex}`),
+        order: Number.isInteger(lift.order) ? lift.order : slotIndex,
+        prescription: lift.prescription || "automatic",
+        warmupPolicy: lift.warmupPolicy || "automatic",
       })),
       accessories: (day.accessories || []).map((accessory, slotIndex) => ({
         ...accessory,
         id: isPortableUUID(accessory.id) ? accessory.id : stableID(`slot:${uuid}:day:${day.order ?? dayIndex}:accessory:${slotIndex}`),
+        order: Number.isInteger(accessory.order) ? accessory.order : slotIndex,
+        targetSeconds: Number.isInteger(accessory.targetSeconds) ? accessory.targetSeconds : 30,
+        durationStepSeconds: Number.isInteger(accessory.durationStepSeconds) ? accessory.durationStepSeconds : 5,
       })),
     })),
   };
@@ -182,6 +188,7 @@ function defaultSettings() {
     rest: { mainCompoundSeconds: 300, olympicSeconds: 240, mainUpperSeconds: 180, secondarySeconds: 180, accessorySeconds: 90 },
     autoStartRest: false, // manual start by default — auto lies if you rested first
     haptics: true,
+    gymTagFirstLaunchOfDay: false,
     // Fresh installs seed a stamp-free library — nothing to migrate (see
     // RETIRED_REST_STAMPS). Absent on pre-bucket stores, so they get the
     // one-shot clear in syncLibrary.
@@ -408,7 +415,9 @@ export async function exportBundle() {
       days: (p.days || []).map((d) => ({
         name: d.name, order: d.order,
         lifts: (d.lifts || []).map((l) => ({
-          id: l.id, exerciseName: l.exerciseName, role: l.role, baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb,
+          id: l.id, exerciseName: l.exerciseName, role: l.role, order: l.order ?? 0,
+          prescription: l.prescription || "automatic", warmupPolicy: l.warmupPolicy || "automatic",
+          baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb,
           stallCount: l.stallCount || 0, lastIncrementLb: l.lastIncrementLb || 0,
           // Mid-cycle backup: the week-3 Peak stashes a pending result that is
           // applied at rollover — losing it turns the next rollover into a stall.
@@ -418,7 +427,7 @@ export async function exportBundle() {
           // marker-free exports (and the synthetic fixture) stay byte-stable.
           ...(l.revertToExerciseName ? { revertToExerciseName: l.revertToExerciseName } : {}),
         })),
-        accessories: (d.accessories || []).map((a) => ({ id: a.id, exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
+        accessories: (d.accessories || []).map((a) => ({ id: a.id, exerciseName: a.exerciseName, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
       })),
     })),
     tracks, gyms,
@@ -494,7 +503,8 @@ function normalizeSettings(s) {
   };
   Object.keys(flat).forEach((k) => flat[k] === undefined && delete flat[k]);
   const rest = { ...C.REST_DEFAULTS, ...flat, ...(s.rest || {}) };
-  return { ...s, rest, accessoryRestSeconds: rest.accessorySeconds };
+  return { ...s, rest, accessoryRestSeconds: rest.accessorySeconds,
+    gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay === true };
 }
 
 const BACKUP_ENUMS = {
@@ -508,6 +518,8 @@ const BACKUP_ENUMS = {
   categories: ["Main", "Accessory", "Conditioning"],
   exerciseTypes: ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"],
   focuses: ["strength", "hypertrophy", "maintain"], modes: ["cycle", "linear"],
+  prescriptions: ["automatic", "wave", "secondary", "hypertrophy", "technique"],
+  warmupPolicies: ["automatic", "full", "short", "none"],
   milestoneKinds: ["heaviestSet", "volumePR", "firstScheme", "programNote"],
 };
 
@@ -645,6 +657,9 @@ export function validateBackup(bundle) {
       each(array(day, "lifts", `${dayPath}.lifts`), `${dayPath}.lifts`, (lift, liftPath) => {
         if (lift.id != null) portableID(lift.id, `${liftPath}.id`);
         textValue(lift.exerciseName, `${liftPath}.exerciseName`, true); enumValue(lift.role, BACKUP_ENUMS.liftRoles, `${liftPath}.role`, schemaVersion >= 1);
+        numberValue(lift.order, `${liftPath}.order`, { integer: true, min: 0 });
+        enumValue(lift.prescription, BACKUP_ENUMS.prescriptions, `${liftPath}.prescription`);
+        enumValue(lift.warmupPolicy, BACKUP_ENUMS.warmupPolicies, `${liftPath}.warmupPolicy`);
         for (const key of ["baseWeightLb", "estimatedMaxLb", "lastIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
         numberValue(lift.stallCount, `${liftPath}.stallCount`, { integer: true, min: 0 });
         if (lift.pending != null) object(lift.pending, `${liftPath}.pending`);
@@ -653,6 +668,7 @@ export function validateBackup(bundle) {
         if (accessory.id != null) portableID(accessory.id, `${accessoryPath}.id`);
         textValue(accessory.exerciseName, `${accessoryPath}.exerciseName`, true);
         for (const key of ["sets", "minReps", "maxReps", "currentReps", "stallCount"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { integer: true, min: 0 });
+        for (const key of ["order", "targetSeconds", "durationStepSeconds"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { integer: true, min: 0 });
         for (const key of ["weightLb", "incrementLb"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { min: 0 });
       });
     });

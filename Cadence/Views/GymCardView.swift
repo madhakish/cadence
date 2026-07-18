@@ -11,6 +11,7 @@ struct GymCardView: View {
     let gym: Gym?
     @State private var selectedGymName: String?
     @State private var previousBrightness: CGFloat = UIScreen.main.brightness
+    @State private var previousIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
 
     private var current: Gym? {
         if let selectedGymName {
@@ -65,10 +66,13 @@ struct GymCardView: View {
         }
         .onAppear {
             previousBrightness = UIScreen.main.brightness
+            previousIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
             UIScreen.main.brightness = 1.0
+            UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear {
             UIScreen.main.brightness = previousBrightness
+            UIApplication.shared.isIdleTimerDisabled = previousIdleTimerDisabled
         }
     }
 }

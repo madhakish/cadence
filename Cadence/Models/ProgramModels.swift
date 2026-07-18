@@ -2,6 +2,22 @@ import Foundation
 import SwiftData
 import CadenceCore
 
+enum WarmupPolicy: String, Codable, CaseIterable {
+    case automatic
+    case full
+    case short
+    case none
+
+    var name: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .full: return "Full ramp"
+        case .short: return "Short ramp"
+        case .none: return "No warm-up"
+        }
+    }
+}
+
 /// A structured training plan: ordered days, each pairing a main + complementary
 /// cycle-lift with accessories. The program OWNS the progression state for its
 /// lifts and drives one unified 4-week wave (`currentWeek`). Adaptive
@@ -64,11 +80,20 @@ final class ProgramDay {
         self.accessories = []
     }
 
-    /// Main first, then complementary.
+    /// The coach's explicit order. Legacy stores whose slots predate the field
+    /// retain the old main-first behavior until the day is reordered once.
     var orderedLifts: [ProgramLift] {
-        lifts.sorted { (a, b) in (a.role == .main ? 0 : 1) < (b.role == .main ? 0 : 1) }
+        if Set(lifts.map(\.order)).count <= 1 {
+            return lifts.sorted {
+                ($0.role == .main ? 0 : 1, $0.exerciseName)
+                    < ($1.role == .main ? 0 : 1, $1.exerciseName)
+            }
+        }
+        return lifts.sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
     }
-    var orderedAccessories: [ProgramAccessory] { accessories }
+    var orderedAccessories: [ProgramAccessory] {
+        accessories.sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
+    }
 }
 
 /// A cycle-driven main/complementary lift. Wraps `ProgramLiftState`.
@@ -79,6 +104,9 @@ final class ProgramLift {
     var id: String = UUID().uuidString
     var exerciseName: String
     var roleRaw: String
+    var order: Int = 0
+    var prescriptionRaw: String = "automatic"
+    var warmupPolicyRaw: String = "automatic"
     var baseWeightLb: Double
     var estimatedMaxLb: Double
     var stallCount: Int
@@ -94,11 +122,15 @@ final class ProgramLift {
     var revertToExerciseName: String?
     var day: ProgramDay?
 
-    init(id: String = UUID().uuidString, exerciseName: String, role: LiftRole, baseWeightLb: Double, estimatedMaxLb: Double,
-         stallCount: Int = 0, lastIncrementLb: Double = 0) {
+    init(id: String = UUID().uuidString, exerciseName: String, role: LiftRole, order: Int = 0,
+         prescription: PrescriptionStyle = .automatic, warmupPolicy: WarmupPolicy = .automatic,
+         baseWeightLb: Double, estimatedMaxLb: Double, stallCount: Int = 0, lastIncrementLb: Double = 0) {
         self.id = id
         self.exerciseName = exerciseName
         self.roleRaw = role.rawValue
+        self.order = order
+        self.prescriptionRaw = prescription.rawValue
+        self.warmupPolicyRaw = warmupPolicy.rawValue
         self.baseWeightLb = baseWeightLb
         self.estimatedMaxLb = estimatedMaxLb
         self.stallCount = stallCount
@@ -108,6 +140,16 @@ final class ProgramLift {
     var role: LiftRole {
         get { LiftRole(rawValue: roleRaw) ?? .main }
         set { roleRaw = newValue.rawValue }
+    }
+
+    var prescription: PrescriptionStyle {
+        get { PrescriptionStyle(rawValue: prescriptionRaw) ?? .automatic }
+        set { prescriptionRaw = newValue.rawValue }
+    }
+
+    var warmupPolicy: WarmupPolicy {
+        get { WarmupPolicy(rawValue: warmupPolicyRaw) ?? .automatic }
+        set { warmupPolicyRaw = newValue.rawValue }
     }
 
     var coreState: ProgramLiftState {
@@ -129,10 +171,15 @@ final class ProgramAccessory {
     /// Stable slot identity; see ProgramLift.id.
     var id: String = UUID().uuidString
     var exerciseName: String
+    var order: Int = 0
     var sets: Int
     var minReps: Int
     var maxReps: Int
     var currentReps: Int
+    /// Timed accessories use seconds instead of reps. Kept alongside the rep
+    /// fields so changing an exercise between typed and rep-based is lossless.
+    var targetSeconds: Int = 30
+    var durationStepSeconds: Int = 5
     var weightLb: Double
     var incrementLb: Double
     var stallCount: Int
@@ -141,14 +188,18 @@ final class ProgramAccessory {
     var revertToExerciseName: String?
     var day: ProgramDay?
 
-    init(id: String = UUID().uuidString, exerciseName: String, sets: Int, minReps: Int, maxReps: Int,
-         currentReps: Int, weightLb: Double, incrementLb: Double, stallCount: Int = 0) {
+    init(id: String = UUID().uuidString, exerciseName: String, order: Int = 0, sets: Int, minReps: Int, maxReps: Int,
+         currentReps: Int, targetSeconds: Int = 30, durationStepSeconds: Int = 5,
+         weightLb: Double, incrementLb: Double, stallCount: Int = 0) {
         self.id = id
         self.exerciseName = exerciseName
+        self.order = order
         self.sets = sets
         self.minReps = minReps
         self.maxReps = maxReps
         self.currentReps = currentReps
+        self.targetSeconds = targetSeconds
+        self.durationStepSeconds = durationStepSeconds
         self.weightLb = weightLb
         self.incrementLb = incrementLb
         self.stallCount = stallCount

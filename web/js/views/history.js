@@ -91,7 +91,7 @@ function renderCharts(panel, sessions, exercises) {
   if (!chartEx || !mains.includes(chartEx)) chartEx = mains[0];
 
   panel.append(ui.field("Exercise", (() => { const sel = ui.h("select", {}, ...mains.map((n) => ui.h("option", { value: n, text: n, selected: n === chartEx }))); sel.addEventListener("change", () => { chartEx = sel.value; renderInner(); }); return sel; })()));
-  panel.append(ui.seg([{ value: "weight", label: "Working weight" }, { value: "volume", label: "Volume" }], chartMetric, (m) => { chartMetric = m; renderInner(); }));
+  panel.append(ui.seg([{ value: "weight", label: "Working weight" }, { value: "e1rm", label: "Est. 1RM" }, { value: "volume", label: "Volume" }], chartMetric, (m) => { chartMetric = m; renderInner(); }));
   // One line per rotation: compare this cycle's R1 against last cycle's R1
   // instead of reading a sawtooth.
   panel.append(ui.h("div", { class: "row", style: { padding: "8px 4px" } },
@@ -105,13 +105,25 @@ function renderCharts(panel, sessions, exercises) {
     const series = [];
     const displayValue = (lb) => C.primaryUnit(ui.prefs.unitDisplay) === "kg" ? C.kgFromLb(lb) : lb;
     for (const s of [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date))) {
-      const e = (s.exercises || []).find((x) => x.exerciseName === chartEx);
-      if (!e) continue;
+      const entries = (s.exercises || []).filter((x) => x.exerciseName === chartEx);
+      if (!entries.length) continue;
       // The session point's rotation (R1–R4), for the split view. Sessions
       // logged outside a cycle bucket as "Untracked".
-      const rot = e.phase ? `R${e.phase} ${(C.PHASES[e.phase] || {}).name || ""}`.trim() : "Untracked";
-      if (chartMetric === "weight") { const t = topSet(e); if (t) series.push({ t: new Date(s.date).getTime(), y: displayValue(t.weightLb), rot }); }
-      else { const v = workingVolume(e); if (v > 0) series.push({ t: new Date(s.date).getTime(), y: displayValue(v), rot }); }
+      const phase = entries.find((entry) => entry.phase)?.phase;
+      const rot = phase ? `R${phase} ${(C.PHASES[phase] || {}).name || ""}`.trim() : "Untracked";
+      if (chartMetric === "weight") {
+        const tops = entries.map(topSet).filter(Boolean);
+        const t = tops.sort((a, b) => b.weightLb - a.weightLb)[0];
+        if (t) series.push({ t: new Date(s.date).getTime(), y: displayValue(t.weightLb), rot });
+      } else if (chartMetric === "e1rm") {
+        const estimates = entries.flatMap((entry) => (entry.sets || [])
+          .filter((set) => !set.isWarmup && set.status === "completed")
+          .map((set) => C.epleyE1RM(set.weightLb, set.reps)));
+        if (estimates.length) series.push({ t: new Date(s.date).getTime(), y: displayValue(Math.max(...estimates)), rot });
+      } else {
+        const v = entries.reduce((sum, entry) => sum + workingVolume(entry), 0);
+        if (v > 0) series.push({ t: new Date(s.date).getTime(), y: displayValue(v), rot });
+      }
     }
     ui.clear(slot);
     if (!series.length) { slot.append(ui.empty("📈", COPY.emptyHistory)); return; }
@@ -122,7 +134,9 @@ function renderCharts(panel, sessions, exercises) {
     } else {
       slot.append(lineChart(series, { fmtY: (v) => C.trim(v) }));
     }
-    slot.append(ui.h("div", { class: "muted", style: { textAlign: "center", fontSize: "12px" }, text: chartMetric === "weight" ? `Top working weight per session (${C.primaryUnit(ui.prefs.unitDisplay)})` : `Working volume per session (${C.primaryUnit(ui.prefs.unitDisplay)})` }));
+    const metricLabel = chartMetric === "weight" ? "Top working weight"
+      : chartMetric === "e1rm" ? "Estimated 1RM" : "Working volume";
+    slot.append(ui.h("div", { class: "muted", style: { textAlign: "center", fontSize: "12px" }, text: `${metricLabel} per session (${C.primaryUnit(ui.prefs.unitDisplay)})` }));
   }
 }
 

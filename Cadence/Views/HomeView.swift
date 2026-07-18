@@ -49,7 +49,11 @@ struct HomeView: View {
         let plan = ProgramEngine.programPlan(
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
             programRoundingLb: program.roundingLb,
-            exerciseType: exercise?.typeRaw)
+            exerciseType: exercise?.typeRaw,
+            movementGroup: exercise?.movementGroup,
+            role: lift.role,
+            focus: program.focus,
+            prescriptionStyle: lift.prescription)
         // Preview the same snapped weight the session will store (secondary barbell lifts).
         let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
         let isBarbell = exercise?.type == .barbell
@@ -78,6 +82,32 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
+                // Arrival is a real workflow: the membership tag replaces a
+                // physical keychain and must be available before the workout.
+                Section {
+                    Button {
+                        showGymCard = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "barcode.viewfinder")
+                                .font(.title2.bold())
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Gym Tag").font(.headline)
+                                Text(defaultGym?.barcodeImageData == nil
+                                     ? "Add your membership barcode"
+                                     : "Ready to scan · full brightness")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.bold()).foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityHint("Shows the default membership barcode at full brightness")
+                }
+
                 if let open = openSessions.first {
                     Section {
                         Button {
@@ -187,19 +217,6 @@ struct HomeView: View {
                     } label: {
                         Label("Blank session", systemImage: "plus")
                     }
-                }
-
-                Section {
-                    Button {
-                        showGymCard = true
-                    } label: {
-                        Label("Gym tag", systemImage: "barcode.viewfinder")
-                            .font(.headline)
-                    }
-                } footer: {
-                    Text(defaultGym?.barcodeImageData == nil
-                         ? "Add a photo of your membership barcode in Settings → Gyms."
-                         : "Full brightness, ready to scan.")
                 }
 
                 Section("Protein") {

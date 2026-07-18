@@ -30,10 +30,21 @@ export function programLoadStep(programRoundingLb, exerciseType = null) {
 // Program wave plan with a per-hand DB ceiling: a 55 lb volume base must not
 // jump to 65 lb at Peak. Above-base DB rotations stay within one 5 lb rack
 // jump; barbell/machine waves retain the normal percentages.
-export function programPlanFor(state, programRoundingLb, exerciseType = null) {
-  const plan = planFor(state, programLoadStep(programRoundingLb, exerciseType));
+export function programPlanFor(state, programRoundingLb, exerciseType = null, movementGroup = null,
+  role = "main", focus = "strength", prescriptionStyle = "automatic") {
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  const plan = planForStyle(state, programLoadStep(programRoundingLb, exerciseType), style);
   if (exerciseType !== "dumbbell" || plan.weightLb <= state.baseWeightLb) return plan;
   return { ...plan, weightLb: Math.min(plan.weightLb, state.baseWeightLb + 5) };
+}
+
+export function resolvedPrescriptionStyle(requested = "automatic", movementGroup = null,
+  role = "main", focus = "strength") {
+  if (requested !== "automatic") return requested;
+  if (movementGroup === "olympic") return "technique";
+  if (focus === "hypertrophy") return "hypertrophy";
+  if (role === "complementary" || focus === "maintain") return "secondary";
+  return "wave";
 }
 
 // Round a target TOTAL to the nearest weight cleanly loadable on `barLb`: the
@@ -359,6 +370,29 @@ export function planFor(state, roundingLb = DEFAULT_ROUNDING_LB) {
     reps: ph.reps,
     phase: p,
     cycleNumber: state.cycleNumber,
+  };
+}
+
+export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave") {
+  const p = state.nextPhase;
+  const byStyle = {
+    wave: {
+      1: [5, 5, 1.0], 2: [5, 3, 1.10], 3: [3, 3, 1.175], 4: [3, 5, 0.775],
+    },
+    secondary: {
+      1: [3, 5, 1.0], 2: [3, 4, 1.05], 3: [3, 3, 1.10], 4: [2, 5, 0.80],
+    },
+    hypertrophy: {
+      1: [4, 10, 1.0], 2: [4, 8, 1.025], 3: [3, 8, 1.05], 4: [2, 10, 0.85],
+    },
+    technique: {
+      1: [5, 3, 1.0], 2: [6, 2, 1.05], 3: [6, 1, 1.10], 4: [3, 2, 0.80],
+    },
+  };
+  const [sets, reps, multiplier] = (byStyle[style] || byStyle.wave)[p];
+  return {
+    weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
+    sets, reps, phase: p, cycleNumber: state.cycleNumber,
   };
 }
 

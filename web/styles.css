@@ -69,7 +69,7 @@ body {
 .tab {
   background: none; border: 0; color: var(--muted);
   display: flex; flex-direction: column; align-items: center; gap: 3px;
-  font-size: 10px; font-weight: 600; padding: 4px 0; cursor: pointer;
+  font-size: 10px; font-weight: 600; padding: 4px 0; min-height: 44px; cursor: pointer;
 }
 .tab svg { width: 24px; height: 24px; fill: currentColor; }
 .tab.active { color: var(--accent); }
@@ -114,7 +114,7 @@ button.btn:active, a.btn:active { filter: brightness(1.2); }
 .btn.ghost { background: transparent; border: 1px solid var(--line); }
 .btn.danger { color: var(--hard); }
 .btn.wide { width: 100%; }
-.btn.sm { min-height: 36px; font-size: 14px; padding: 0 12px; }
+.btn.sm { min-height: 44px; min-width: 44px; font-size: 14px; padding: 0 12px; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--card2); color: var(--muted); }
 .pill.warn { background: rgba(255,204,0,0.16); color: var(--warn); }
@@ -130,10 +130,10 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .seg { display: flex; background: var(--card2); border-radius: 11px; padding: 3px; gap: 3px; }
-.seg button { flex: 1; border: 0; background: none; color: var(--muted); padding: 8px 6px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }
+.seg button { flex: 1; min-height: 44px; border: 0; background: none; color: var(--muted); padding: 8px 6px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }
 .seg button.on { background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--accent); }
 .stepper { display: flex; align-items: center; gap: 12px; }
-.stepper button { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--card2); color: var(--text); font-size: 22px; cursor: pointer; }
+.stepper button { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--card2); color: var(--text); font-size: 22px; cursor: pointer; }
 .toggle { position: relative; width: 50px; height: 30px; border-radius: 999px; background: var(--card2); border: 0; cursor: pointer; flex: none; }
 .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; }
 .toggle.on { background: var(--good); } .toggle.on::after { transform: translateX(20px); }
@@ -180,7 +180,8 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .setrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .setrow .wt { font-size: 18px; font-weight: 700; min-width: 96px; }
 .flagbtns { display: flex; gap: 6px; margin-left: auto; }
-.flagbtn { width: 38px; height: 38px; border-radius: 9px; border: 0; background: var(--card2); color: var(--muted); font-weight: 700; cursor: pointer; }
+.flagbtn { width: 44px; height: 44px; border-radius: 9px; border: 0; background: var(--card2); color: var(--muted); font-weight: 700; cursor: pointer; }
+.gym-tag-hero { margin-top: 2px; }
 .flagbtn.on-clean { background: var(--good); color: #022; }
 .flagbtn.on-grindy, .flagbtn.on-wobble { background: var(--warn); color: #221c00; }
 .gym-img { width: 100%; background: #fff; border-radius: 12px; padding: 12px; }

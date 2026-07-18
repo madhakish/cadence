@@ -473,7 +473,8 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
       lifts: [
         { exerciseName: "Incline DB Press", role: "main", baseWeightLb: 55, estimatedMaxLb: 80, stallCount: 0, lastIncrementLb: 0 },
         { exerciseName: "Incline DB Press", role: "main", baseWeightLb: 55, estimatedMaxLb: 80, stallCount: 0, lastIncrementLb: 0 },
-      ], accessories: [] }],
+      ], accessories: [{ exerciseName: "Plank", order: 0, sets: 3, minReps: 1, maxReps: 1,
+        currentReps: 1, targetSeconds: 45, durationStepSeconds: 5, weightLb: 0, incrementLb: 0, stallCount: 0 }] }],
   });
   let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   ok(program.days[0].lifts.every((lift) => lift.id) && new Set(program.days[0].lifts.map((lift) => lift.id)).size === 2,
@@ -484,6 +485,9 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   const volumeMain = volume.exercises[0];
   ok(volumeMain.plannedWeightLb === 55, "10 lb program rounding is capped to a 5 lb per-hand DB step");
   ok(volumeMain.sets.some((set) => set.isWarmup), "main dumbbell press receives warmup sets");
+  const timedAccessory = volume.exercises.find((entry) => entry.exerciseName === "Plank");
+  ok(timedAccessory.sets.every((set) => set.durationSeconds === 45 && set.reps === 1 && set.weightLb === 0),
+    "timed program accessories carry seconds instead of fake repetition work");
   ok(volumeMain.programSlotId === program.days[0].lifts[0].id, "session entry retains its exact program goal slot");
   await db.Sessions.del(volumeId);
 
@@ -939,6 +943,20 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])]))
     : Array.isArray(v) ? v.map(stable) : v;
   const canon = (bundle) => {
+    bundle = structuredClone(bundle);
+    if (bundle.settings) bundle.settings.gymTagFirstLaunchOfDay ??= false;
+    for (const program of bundle.programs || []) for (const day of program.days || []) {
+      (day.lifts || []).forEach((lift, index) => {
+        lift.order ??= index;
+        lift.prescription ??= "automatic";
+        lift.warmupPolicy ??= "automatic";
+      });
+      (day.accessories || []).forEach((accessory, index) => {
+        accessory.order ??= index;
+        accessory.targetSeconds ??= 30;
+        accessory.durationStepSeconds ??= 5;
+      });
+    }
     const b = stable(bundle);
     delete b.exportedAt; delete b.appVersion;
     if (b.settings) delete b.settings.seededAt;

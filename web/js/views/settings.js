@@ -73,6 +73,14 @@ export async function render(host) {
   root.append(restCard);
   root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "These are the fallback timers. An exercise with a rest of its own (set with ⏱ in the logger, or in the library) always uses that instead. 0:00 = no timer. Auto-start off = tap Rest yourself." }));
 
+  root.append(ui.h("div", { class: "section-title", text: "Arrival" }));
+  root.append(ui.h("div", { class: "card" },
+    ui.h("div", { class: "row", style: { borderBottom: "0" } },
+      ui.h("div", { class: "lead" },
+        ui.h("span", { text: "Show gym tag on first launch of the day" }),
+        ui.h("span", { class: "sub", text: "Presents the default membership tag once, then leaves Today ready for training." })),
+      ui.toggle(settings.gymTagFirstLaunchOfDay === true, async (v) => { settings.gymTagFirstLaunchOfDay = v; await saveS(); }))));
+
   // Protein
   root.append(ui.h("div", { class: "section-title", text: "Protein" }));
   root.append(ui.h("div", { class: "card" }, ui.h("div", { class: "row" }, ui.h("span", { text: "Daily target" }),
@@ -264,18 +272,69 @@ function removeDay(p, day) {
   if (p.nextDayIndex >= p.days.length) p.nextDayIndex = 0;
 }
 
+function orderedSlots(slots = []) {
+  return [...slots].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+    || String(a.exerciseName || a.name || "").localeCompare(String(b.exerciseName || b.name || "")));
+}
+
+function moveSlot(slots, slot, delta) {
+  const ordered = orderedSlots(slots);
+  const from = ordered.indexOf(slot);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= ordered.length) return false;
+  [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
+  ordered.forEach((item, index) => { item.order = index; });
+  return true;
+}
+
 async function activateProgram(p) {
   const all = await Programs.all();
   for (const x of all) { const want = x.id === p.id; if (x.isActive !== want) { x.isActive = want; await Programs.save(x); } }
   p.isActive = true;
 }
 
-function programEditor(p) {
+async function programEditor(p) {
+  const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
+  const warningsFor = () => {
+    const warnings = [];
+    const weekly = new Map();
+    const addSets = (group, sets) => { if (group) weekly.set(group, (weekly.get(group) || 0) + sets); };
+    for (const day of p.days || []) {
+      if (!(day.lifts || []).some((lift) => lift.role === "main")) warnings.push(`${day.name} has no main lift.`);
+      for (const lift of day.lifts || []) {
+        if (!(lift.baseWeightLb > 0)) warnings.push(`${lift.exerciseName} needs a rotation-1 base weight.`);
+        if (lift.estimatedMaxLb > 0 && lift.baseWeightLb > lift.estimatedMaxLb) warnings.push(`${lift.exerciseName}'s base is above its estimated 1RM.`);
+        else {
+          const ceiling = C.focusParams(p.focus).tm;
+          if (lift.estimatedMaxLb > 0 && ceiling > 0 && lift.baseWeightLb > lift.estimatedMaxLb * ceiling) warnings.push(`${lift.exerciseName}'s base is above the ${Math.round(ceiling * 100)}% training-max ceiling; verify its estimated 1RM or lower the base.`);
+        }
+        const exercise = exerciseByName.get(lift.exerciseName);
+        if (exercise) addSets(exercise.movementGroup, C.programPlanFor(
+          { cycleNumber: 1, baseWeightLb: lift.baseWeightLb, nextPhase: 1, incrementLb: 0 },
+          p.roundingLb, exercise.type, exercise.movementGroup, lift.role, p.focus, lift.prescription || "automatic").sets);
+      }
+      for (const accessory of day.accessories || []) {
+        const exercise = exerciseByName.get(accessory.exerciseName);
+        if (exercise?.type !== "timed" && accessory.minReps > accessory.maxReps) warnings.push(`${accessory.exerciseName}'s minimum reps exceed its maximum.`);
+        else if (exercise?.type !== "timed" && (accessory.currentReps < accessory.minReps || accessory.currentReps > accessory.maxReps)) warnings.push(`${accessory.exerciseName}'s current reps are outside its rep range.`);
+        addSets(exercise?.movementGroup, accessory.sets);
+      }
+    }
+    const press = weekly.get("press") || 0, pull = weekly.get("pull") || 0;
+    if (press >= 8 && pull * 5 < press * 4) warnings.push(`Weekly pulling volume (${pull} sets) trails pressing (${press}); consider more rows or pull-ups.`);
+    const squat = weekly.get("squat") || 0, hinge = weekly.get("hinge") || 0;
+    if (Math.max(squat, hinge) >= 8 && Math.min(squat, hinge) * 2 < Math.max(squat, hinge)) warnings.push(`Weekly squat/hinge volume is uneven (${squat}/${hinge} sets).`);
+    return warnings;
+  };
   ui.pushScreen({
     title: p.name,
     build: (body, api) => {
       const draw = () => {
         ui.clear(body);
+        const warnings = warningsFor();
+        if (warnings.length) body.append(ui.h("div", { class: "card" },
+          ui.h("div", { class: "title warn", text: "Coach check" }),
+          ...warnings.map((warning) => ui.h("div", { class: "sub warn", style: { marginTop: "6px" }, text: `⚠ ${warning}` }))));
         const nameInput = ui.h("input", { type: "text", value: p.name });
         nameInput.addEventListener("change", async () => { p.name = nameInput.value || p.name; api.setTitle(p.name); await Programs.save(p); });
         body.append(ui.field("Program name", nameInput));
@@ -310,13 +369,26 @@ function programEditor(p) {
           list.append(ui.h("div", { class: "row" },
             ui.h("div", { class: "lead", style: { cursor: "pointer", flex: "1" }, onClick: () => programDayEditor(p, day) },
               ui.h("span", { class: "title", text: day.name }),
-              ui.h("span", { class: "sub", text: [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1)).map((l) => l.exerciseName).join(" + ") || "empty" })),
+              ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
+            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { if (moveSlot(p.days, day, -1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
+            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { if (moveSlot(p.days, day, 1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
             ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { removeDay(p, day); await Programs.save(p); draw(); } })));
         }
         body.append(list);
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add day", onClick: async () => {
           p.days.push({ name: `Day ${p.days.length + 1}`, order: p.days.length, lifts: [], accessories: [] });
           await Programs.save(p); draw();
+        } }));
+        body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Duplicate program", onClick: async () => {
+          const all = await Programs.all();
+          const base = `${p.name} Copy`;
+          let name = base, suffix = 2;
+          while (all.some((program) => program.name === name)) name = `${base} ${suffix++}`;
+          const copy = structuredClone(p);
+          delete copy.id; delete copy.uuid;
+          copy.name = name; copy.isActive = false;
+          for (const day of copy.days || []) for (const slot of [...(day.lifts || []), ...(day.accessories || [])]) delete slot.id;
+          await Programs.save(copy); ui.toast(`Created ${name}.`); ui.nav.refresh();
         } }));
         body.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "12px" }, text: "Delete program", onClick: () => {
           ui.actionSheet("Delete this program?", [{ label: "Delete", role: "danger", onClick: async () => { await Programs.del(p.id); api.close(); ui.nav.refresh(); } }]);
@@ -340,42 +412,64 @@ async function programDayEditor(p, day) {
 
         body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
         const openDetail = async (name) => { const ex = await Exercises.byName(name); if (ex) exerciseDetail(ex); };
-        for (const l of [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1))) {
+        for (const l of orderedSlots(day.lifts)) {
           body.append(ui.h("div", { class: "card" },
             ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
               ui.h("span", { class: "title", text: l.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(l.exerciseName) }),
+              ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${l.exerciseName} earlier`, onClick: async () => { if (moveSlot(day.lifts, l, -1)) { await Programs.save(p); draw(); } } }),
+              ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${l.exerciseName} later`, onClick: async () => { if (moveSlot(day.lifts, l, 1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.lifts = day.lifts.filter((x) => x !== l); await Programs.save(p); draw(); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
               ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); })),
+            ui.h("div", { class: "row" }, ui.h("span", { text: "Prescription" }), (() => {
+              const select = ui.h("select", {}, ...[
+                ["automatic", "Automatic"], ["wave", "Strength wave"], ["secondary", "Secondary strength"],
+                ["hypertrophy", "Hypertrophy"], ["technique", "Technique"],
+              ].map(([value, label]) => ui.h("option", { value, text: label, selected: (l.prescription || "automatic") === value })));
+              select.addEventListener("change", async () => { l.prescription = select.value; await Programs.save(p); });
+              return select;
+            })()),
+            ui.h("div", { class: "row" }, ui.h("span", { text: "Warm-up" }), (() => {
+              const select = ui.h("select", {}, ...[
+                ["automatic", "Automatic"], ["full", "Full ramp"], ["short", "Short ramp"], ["none", "No warm-up"],
+              ].map(([value, label]) => ui.h("option", { value, text: label, selected: (l.warmupPolicy || "automatic") === value })));
+              select.addEventListener("change", async () => { l.warmupPolicy = select.value; await Programs.save(p); });
+              return select;
+            })()),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Rotation-1 base" }),
               ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
               ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } }))));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add lift", onClick: () => pickExerciseSheet(async (e) => {
-          day.lifts.push({ exerciseName: e.name, role: "complementary", baseWeightLb: 45, estimatedMaxLb: 52, stallCount: 0, lastIncrementLb: 0 });
+          day.lifts.push({ exerciseName: e.name, role: "complementary", order: day.lifts.length, prescription: "automatic", warmupPolicy: "automatic", baseWeightLb: 45, estimatedMaxLb: 52, stallCount: 0, lastIncrementLb: 0 });
           await Programs.save(p); draw();
         }) }));
 
         body.append(ui.h("div", { class: "section-title", text: "Accessories" }));
-        for (const a of day.accessories) {
+        for (const a of orderedSlots(day.accessories)) {
+          const isTimed = exerciseByName.get(a.exerciseName)?.type === "timed";
           body.append(ui.h("div", { class: "card" },
             ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
               ui.h("span", { class: "title", text: a.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(a.exerciseName) }),
+              ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${a.exerciseName} earlier`, onClick: async () => { if (moveSlot(day.accessories, a, -1)) { await Programs.save(p); draw(); } } }),
+              ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${a.exerciseName} later`, onClick: async () => { if (moveSlot(day.accessories, a, 1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.accessories = day.accessories.filter((x) => x !== a); await Programs.save(p); draw(); } })),
-            ui.h("div", { class: "row" }, ui.h("span", { text: "Weight" }),
+            isTimed ? null : ui.h("div", { class: "row" }, ui.h("span", { text: "Weight" }),
               ui.stepper(a.weightLb, { min: 0, max: 500, step: 2.5, format: ui.fmtWeight, onChange: async (v) => { a.weightLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Sets" }),
               ui.stepper(a.sets, { min: 1, max: 8, format: (v) => `${v}`, onChange: async (v) => { a.sets = v; await Programs.save(p); } })),
-            ui.h("div", { class: "row" }, ui.h("span", { text: "Rep range" }),
+            isTimed ? ui.h("div", { class: "row" }, ui.h("span", { text: "Hold time" }),
+              ui.stepper(a.targetSeconds || 30, { min: 5, max: 1800, step: 5, format: C.cardioDurationLabel, onChange: async (v) => { a.targetSeconds = v; await Programs.save(p); } })) : ui.h("div", { class: "row" }, ui.h("span", { text: "Rep range" }),
               ui.h("div", { class: "btn-row" },
                 ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => { a.minReps = v; if (a.currentReps < v) a.currentReps = v; await Programs.save(p); } }),
                 ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => { a.maxReps = v; await Programs.save(p); } }))),
-            ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Load step (0 = bodyweight)" }),
+            isTimed ? ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Progress by" }),
+              ui.stepper(a.durationStepSeconds ?? 5, { min: 0, max: 60, step: 5, format: (v) => `+${v} sec`, onChange: async (v) => { a.durationStepSeconds = v; await Programs.save(p); } })) : ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Load step (0 = bodyweight)" }),
               ui.stepper(a.incrementLb, { min: 0, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { a.incrementLb = v; await Programs.save(p); } }))));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add accessory", onClick: () => pickExerciseSheet(async (e) => {
-          day.accessories.push({ exerciseName: e.name, sets: 3, minReps: 8, maxReps: 12, currentReps: 8, weightLb: 0, incrementLb: 0, stallCount: 0 });
+          day.accessories.push({ exerciseName: e.name, order: day.accessories.length, sets: 3, minReps: 8, maxReps: 12, currentReps: 8, targetSeconds: 30, durationStepSeconds: 5, weightLb: 0, incrementLb: 0, stallCount: 0 });
           await Programs.save(p); draw();
         }) }));
       };
@@ -417,6 +511,7 @@ function exerciseLibrary(exercises) {
     build: (body) => {
       const search = ui.h("input", { type: "search", placeholder: "Exercise, movement, or equipment" });
       const results = ui.h("div");
+      body.append(ui.h("button", { class: "btn primary wide", text: "+ New exercise", onClick: () => newExerciseSheet(exercises, () => paint()) }));
       const paint = () => {
         ui.clear(results);
         const term = search.value.trim().toLowerCase();
@@ -443,6 +538,37 @@ function exerciseLibrary(exercises) {
   });
 }
 
+function newExerciseSheet(exercises, onSaved) {
+  ui.sheet({
+    title: "New exercise",
+    build: (c, api) => {
+      const name = ui.h("input", { type: "text", placeholder: "Exercise name" });
+      const category = ui.h("select", {}, ...CATEGORIES.map((value) => ui.h("option", { value, text: value, selected: value === "Accessory" })));
+      const type = ui.h("select", {}, ...EX_TYPES.map((value) => ui.h("option", { value, text: value, selected: value === "dumbbell" })));
+      const movementGroup = ui.h("input", { type: "text", placeholder: "press, pull, squat, hinge…" });
+      const notes = ui.h("textarea", { rows: 2, placeholder: "Notes" });
+      let unilateral = false;
+      c.append(ui.field("Name", name), ui.field("Category", category), ui.field("Type", type),
+        ui.field("Movement group", movementGroup),
+        ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(false, (value) => { unilateral = value; })),
+        ui.field("Notes", notes));
+      c.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "10px" }, text: "Add", onClick: async () => {
+        const trimmed = name.value.trim();
+        if (!trimmed) { ui.toast("Enter an exercise name."); return; }
+        if (exercises.some((exercise) => exercise.name.toLowerCase() === trimmed.toLowerCase())) { ui.toast("That exercise already exists."); return; }
+        const exercise = {
+          name: trimmed, category: category.value, type: type.value,
+          movementGroup: movementGroup.value.trim().toLowerCase(), isUnilateral: unilateral,
+          defaultRestSeconds: 0, notes: notes.value, isShelved: false, shelvedNote: "", watchSite: null,
+          createdAt: new Date().toISOString(),
+        };
+        await Exercises.save(exercise); exercises.push(exercise); exercises.sort((a, b) => a.name.localeCompare(b.name));
+        api.close(); onSaved();
+      } }));
+    },
+  });
+}
+
 // Program membership, last-performed, and progress for one exercise —
 // assembled async and filled into `wrap` so the screen renders instantly.
 async function exerciseInsight(wrap, e) {
@@ -456,25 +582,25 @@ async function exerciseInsight(wrap, e) {
   }
   const hist = []; // newest first (Sessions.completed sorts desc)
   for (const s of completed) {
-    const se = s.exercises.find((x) => x.exerciseName === e.name);
-    if (!se) continue;
-    const w = se.sets.filter((x) => !x.isWarmup && x.status === "completed");
+    const matching = s.exercises.filter((x) => x.exerciseName === e.name);
+    const w = matching.flatMap((se) => se.sets.filter((x) => !x.isWarmup && x.status === "completed"));
     if (!w.length) continue;
     const top = w.reduce((b, x) => (!b || x.weightLb > b.weightLb ? x : b), null);
+    const longestSeconds = e.type === "timed" ? Math.max(...w.map((set) => set.durationSeconds || 0)) : null;
     const prog = s.programTag
       ? (s.programTag.programName || programs.find((p) => p.id === s.programTag.programId)?.name || "a program")
       : null;
-    hist.push({ date: s.date, top, prog });
+    hist.push({ date: s.date, top, longestSeconds, prog });
   }
   const card = ui.h("div", { class: "card" });
   const last = hist[0];
   card.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Last done" }),
     ui.h("span", { class: "sub", text: last
-      ? `${ui.fmtDate(last.date)} — ${ui.fmtWeight(last.top.weightLb)} × ${last.top.reps}${last.prog ? ` · ${last.prog}` : ""}`
+      ? `${ui.fmtDate(last.date)} — ${e.type === "timed" ? C.cardioDurationLabel(last.longestSeconds) : `${ui.fmtWeight(last.top.weightLb)} × ${last.top.reps}`}${last.prog ? ` · ${last.prog}` : ""}`
       : "not yet" })));
   card.append(ui.h("div", { class: "row" }, ui.h("span", { text: "In programs" }),
     ui.h("span", { class: "sub", style: { textAlign: "right", whiteSpace: "pre-line" }, text: memberships.join("\n") || "none" })));
-  if (hist.length >= 2) {
+  if (e.type !== "timed" && hist.length >= 2) {
     const series = [...hist].reverse().slice(-24).map((h) => h.top.weightLb);
     card.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
       ui.h("span", { text: `Top set, last ${series.length}` }), ui.spark(series)));
@@ -499,9 +625,15 @@ function exerciseDetail(e) {
         const insightWrap = ui.h("div", {});
         body.append(insightWrap);
         exerciseInsight(insightWrap, e);
+        const categorySel = ui.h("select", {}, ...CATEGORIES.map((value) => ui.h("option", { value, text: value, selected: value === e.category })));
+        categorySel.addEventListener("change", async () => { e.category = categorySel.value; await Exercises.save(e); });
+        body.append(ui.field("Category", categorySel));
         const typeSel = ui.h("select", {}, ...EX_TYPES.map((t) => ui.h("option", { value: t, text: t, selected: t === e.type })));
         typeSel.addEventListener("change", async () => { e.type = typeSel.value; await Exercises.save(e); });
         body.append(ui.field("Type", typeSel));
+        const groupInput = ui.h("input", { type: "text", value: e.movementGroup || "", placeholder: "press, pull, squat, hinge…" });
+        groupInput.addEventListener("change", async () => { e.movementGroup = groupInput.value.trim().toLowerCase(); await Exercises.save(e); });
+        body.append(ui.field("Movement group", groupInput));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(e.isUnilateral, async (v) => { e.isUnilateral = v; await Exercises.save(e); })),
           // 0 = no rest of its own → the timer falls to the configurable rest

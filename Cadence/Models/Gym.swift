@@ -67,6 +67,10 @@ final class AppSettings {
     // already been resting. Mirrors web defaultSettings (db.js).
     var autoStartRest: Bool = false
     var haptics: Bool = true
+    /// Present the default membership tag automatically on the first app
+    /// foreground of a local calendar day. The tag is an arrival tool — this
+    /// option keeps it instant without hijacking every mid-workout reopen.
+    var gymTagFirstLaunchOfDay: Bool = false
     /// One-shot migration marker: old seeds stamped every exercise with a
     /// defaultRestSeconds, which (as the per-exercise override) froze the whole
     /// library out of the rest buckets. `Seeder.syncLibrary` clears values that
@@ -88,6 +92,7 @@ final class AppSettings {
         self.secondaryRestSeconds = 180
         self.autoStartRest = false
         self.haptics = true
+        self.gymTagFirstLaunchOfDay = false
         // Fresh installs seed a stamp-free library — nothing to migrate. The
         // property's stored default stays false so PRE-EXISTING stores (which
         // carry the old stamps) run the one-shot clear in syncLibrary.

@@ -4,44 +4,84 @@ import SwiftData
 @main
 struct CadenceApp: App {
     @Environment(\.scenePhase) private var scenePhase
-    let container: ModelContainer
-
-    init() {
-        do {
-            container = try ModelContainer(for:
-                Exercise.self,
-                WorkoutSession.self,
-                SessionExercise.self,
-                SetEntry.self,
-                LiftTrack.self,
-                BodyweightEntry.self,
-                ProteinEntry.self,
-                CheckIn.self,
-                Milestone.self,
-                Gym.self,
-                AppSettings.self,
-                Program.self,
-                ProgramDay.self,
-                ProgramLift.self,
-                ProgramAccessory.self
-            )
-            try Seeder.seedIfNeeded(context: container.mainContext)
-            try Seeder.syncLibrary(context: container.mainContext) // top up the library on already-seeded installs
-        } catch {
-            fatalError("Failed to create model container: \(error)")
-        }
-    }
+    @StateObject private var bootstrap = AppBootstrap()
 
     var body: some Scene {
         WindowGroup {
-            ThemedRoot()
-                .onChange(of: scenePhase) { _, phase in
-                    guard phase == .background else { return }
-                    do { try BackupCheckpointService.create(context: container.mainContext, reason: "background") }
-                    catch { BackupCheckpointService.recordFailure(error) }
-                }
+            if let container = bootstrap.container {
+                ThemedRoot()
+                    .modelContainer(container)
+                    .onChange(of: scenePhase) { _, phase in
+                        guard phase == .background, !bootstrap.isTemporary else { return }
+                        do { try BackupCheckpointService.create(context: container.mainContext, reason: "background") }
+                        catch { BackupCheckpointService.recordFailure(error) }
+                    }
+            } else {
+                StartupRecoveryView(bootstrap: bootstrap)
+            }
         }
-        .modelContainer(container)
+    }
+}
+
+@MainActor
+final class AppBootstrap: ObservableObject {
+    @Published private(set) var container: ModelContainer?
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var isTemporary = false
+
+    init() { loadPersistentStore() }
+
+    func loadPersistentStore() {
+        container = nil
+        errorMessage = nil
+        isTemporary = false
+        do {
+            let loaded = try ModelContainer(for: CadenceSchemaV1.self, migrationPlan: CadenceMigrationPlan.self)
+            try prepare(loaded)
+            container = loaded
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func openTemporaryStore() {
+        do {
+            let config = ModelConfiguration(isStoredInMemoryOnly: true)
+            let loaded = try ModelContainer(for: CadenceSchemaV1.self, migrationPlan: CadenceMigrationPlan.self,
+                                            configurations: config)
+            try prepare(loaded)
+            isTemporary = true
+            container = loaded
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func prepare(_ container: ModelContainer) throws {
+        try Seeder.seedIfNeeded(context: container.mainContext)
+        try Seeder.syncLibrary(context: container.mainContext)
+    }
+}
+
+private struct StartupRecoveryView: View {
+    @ObservedObject var bootstrap: AppBootstrap
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Cadence couldn't open your training data", systemImage: "externaldrive.badge.exclamationmark")
+        } description: {
+            Text("Your store was not deleted. Retry first; a temporary session is available if you need the app at the gym, but it will not persist.")
+        } actions: {
+            Button("Retry", action: bootstrap.loadPersistentStore)
+                .buttonStyle(.borderedProminent)
+            Button("Open temporary session", action: bootstrap.openTemporaryStore)
+                .buttonStyle(.bordered)
+            if let message = bootstrap.errorMessage {
+                Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+        }
+        .padding()
     }
 }
 

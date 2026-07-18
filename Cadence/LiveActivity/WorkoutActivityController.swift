@@ -268,14 +268,26 @@ enum WorkoutActivityController {
         // UNTimeIntervalNotificationTrigger requires an interval >= 1s or it
         // throws; under a second the rest is effectively over — skip it.
         guard seconds >= 1 else { return }
-        let content = UNMutableNotificationContent()
-        content.title = "Rest over."
-        content.body = exerciseName.isEmpty ? "Next set." : "\(exerciseName) — next set."
-        content.sound = .default
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: notificationID, content: content, trigger: trigger)
-        )
+        let center = UNUserNotificationCenter.current()
+        let add = {
+            let content = UNMutableNotificationContent()
+            content.title = "Rest over."
+            content.body = exerciseName.isEmpty ? "Next set." : "\(exerciseName) — next set."
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+            center.add(UNNotificationRequest(identifier: notificationID, content: content, trigger: trigger))
+        }
+        // Ask only when the athlete starts a feature that needs alerts; first
+        // launch no longer interrupts the arrival/tag workflow.
+        center.getNotificationSettings { settings in
+            if settings.authorizationStatus == .notDetermined {
+                center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                    if granted { add() }
+                }
+            } else if settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional {
+                add()
+            }
+        }
     }
 
     private static func cancelNotification() {

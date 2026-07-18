@@ -55,6 +55,28 @@ public enum TrackMode: String, Codable, Sendable {
     case linear
 }
 
+/// Set/rep strategy for a program slot. `automatic` keeps setup simple while
+/// still respecting the program focus, lift role, and Olympic lift technique
+/// needs. Coaches can override an individual slot when the default is not the
+/// right training stimulus.
+public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
+    case automatic
+    case wave
+    case secondary
+    case hypertrophy
+    case technique
+
+    public var name: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .wave: return "Strength wave"
+        case .secondary: return "Secondary strength"
+        case .hypertrophy: return "Hypertrophy"
+        case .technique: return "Technique"
+        }
+    }
+}
+
 /// Per-lift progression state. Serializable; the app wraps this in SwiftData.
 public struct CycleState: Codable, Hashable, Sendable {
     public var cycleNumber: Int
@@ -116,10 +138,15 @@ public enum ProgramEngine {
     public static func programPlan(
         for state: CycleState,
         programRoundingLb: Double,
-        exerciseType: String?
+        exerciseType: String?,
+        movementGroup: String? = nil,
+        role: LiftRole = .main,
+        focus: TrainingFocus = .strength,
+        prescriptionStyle: PrescriptionStyle = .automatic
     ) -> SessionPlan {
         let step = loadStep(programRoundingLb: programRoundingLb, exerciseType: exerciseType)
-        let raw = plan(for: state, roundingLb: step)
+        let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
+        let raw = plan(for: state, roundingLb: step, style: style)
         guard exerciseType == "dumbbell", raw.weightLb > state.baseWeightLb else { return raw }
         return SessionPlan(
             weightLb: Swift.min(raw.weightLb, state.baseWeightLb + 5),
@@ -127,6 +154,66 @@ public enum ProgramEngine {
             reps: raw.reps,
             phase: raw.phase,
             cycleNumber: raw.cycleNumber
+        )
+    }
+
+    /// Resolves the low-friction automatic choice. Olympic lifts prioritize
+    /// crisp practice; hypertrophy programs use a rep-range wave; secondary
+    /// lifts carry less fatigue than main lifts.
+    public static func resolvedStyle(
+        _ requested: PrescriptionStyle,
+        movementGroup: String?,
+        role: LiftRole,
+        focus: TrainingFocus
+    ) -> PrescriptionStyle {
+        guard requested == .automatic else { return requested }
+        if movementGroup == "olympic" { return .technique }
+        if focus == .hypertrophy { return .hypertrophy }
+        if role == .complementary || focus == .maintain { return .secondary }
+        return .wave
+    }
+
+    /// Phase-shaped plan for a specific training stimulus. The phase still
+    /// advances with the unified four-rotation program, but every slot no
+    /// longer has to inherit the main-lift 5×5 → 5×3 prescription.
+    public static func plan(
+        for state: CycleState,
+        roundingLb: Double = defaultRoundingLb,
+        style: PrescriptionStyle
+    ) -> SessionPlan {
+        let phase = state.nextPhase
+        let prescription: (sets: Int, reps: Int, multiplier: Double)
+        switch style {
+        case .automatic, .wave:
+            prescription = (phase.sets, phase.reps, phase.multiplier)
+        case .secondary:
+            switch phase {
+            case .volume: prescription = (3, 5, 1.0)
+            case .load: prescription = (3, 4, 1.05)
+            case .peak: prescription = (3, 3, 1.10)
+            case .deload: prescription = (2, 5, 0.80)
+            }
+        case .hypertrophy:
+            switch phase {
+            case .volume: prescription = (4, 10, 1.0)
+            case .load: prescription = (4, 8, 1.025)
+            case .peak: prescription = (3, 8, 1.05)
+            case .deload: prescription = (2, 10, 0.85)
+            }
+        case .technique:
+            switch phase {
+            case .volume: prescription = (5, 3, 1.0)
+            case .load: prescription = (6, 2, 1.05)
+            case .peak: prescription = (6, 1, 1.10)
+            case .deload: prescription = (3, 2, 0.80)
+            }
+        }
+        return SessionPlan(
+            weightLb: Weight.round(state.baseWeightLb * prescription.multiplier, to: roundingLb),
+            sets: prescription.sets,
+            reps: prescription.reps,
+            phase: phase,
+            cycleNumber: state.cycleNumber
         )
     }
 
