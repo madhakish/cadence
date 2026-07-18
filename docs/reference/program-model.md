@@ -14,7 +14,7 @@ the standalone "Next up" tracks.
 | `cycleNumber` | Which 4-week cycle you're on (increments at rollover) |
 | `currentWeek` | 1 volume · 2 load · 3 peak · 4 rest (deload) |
 | `nextDayIndex` | The day the Today screen offers next |
-| `roundingLb` | Plate granularity; all prescriptions snap to it |
+| `roundingLb` | Default load granularity. Dumbbells use at most 5 lb per-hand steps, and above-base wave rotations stay within one 5 lb rack jump |
 | `isActive` | Drives the Today screen |
 
 ### Focus
@@ -28,6 +28,7 @@ hypertrophy to 78% with 1.5%, maintain never increments.
 
 | Field | Meaning |
 |---|---|
+| `id` | Stable slot identity; completion uses this rather than exercise name/order |
 | `role` | `main` (one per day, anchors it, rests longest) or `complementary` |
 | `baseWeightLb` | Rotation-1 (volume week) working weight; the wave derives the other weeks |
 | `estimatedMaxLb` | Smoothed Epley e1RM; seeds the ceiling, re-estimated from every banked peak |
@@ -40,6 +41,7 @@ hypertrophy to 78% with 1.5%, maintain never increments.
 
 | Field | Meaning |
 |---|---|
+| `id` | Stable slot identity; completion uses this rather than exercise name/order |
 | `sets` | Working sets |
 | `minReps` / `maxReps` | The rep range to earn |
 | `currentReps` | Today's target reps |
@@ -50,8 +52,15 @@ hypertrophy to 78% with 1.5%, maintain never increments.
 ## Sessions generated from a day
 
 Starting a program day pre-fills one session exercise per lift and
-accessory, tagged with the program, cycle, week, day, and role. Barbell
-lifts get a warmup ramp; complementary/accessory barbell work snaps to a
-neat bar-loadable weight. The tag is what completion validates before
-advancing anything — see
+accessory, tagged with the program, cycle, week, day, role, and exact slot ID.
+Barbell lifts get a warmup ramp; main dumbbell lifts get a short per-hand
+40/60/80% ramp. Complementary/accessory barbell work snaps to a neat
+bar-loadable weight. The program tag validates the schedule position and the
+slot ID selects the progression record to advance — see
 [Progression rules](progression-rules.md#stale-sessions).
+
+Edits made in the logger belong to that session. Applying a weight/reps change
+to the remaining planned sets also updates the session prescription, while
+completed and skipped rows remain untouched. Completion therefore compares
+performed work with the accepted, adjusted target rather than the originally
+generated number.

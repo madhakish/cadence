@@ -39,4 +39,20 @@ final class ProgramTemplateDataTests: XCTestCase {
             }
         }
     }
+
+    func testUpperLowerSplitKeepsTheReviewedFourDayRotation() throws {
+        let template = try XCTUnwrap(ProgramTemplateData.all.first { $0.id == "strength-upper-lower" })
+        XCTAssertEqual(template.days.map(\.name), ["Upper A", "Lower A", "Upper B", "Lower B"])
+        XCTAssertEqual(template.roundingLb, 5, "upper-body and per-hand dumbbell work must allow 5 lb steps")
+        XCTAssertEqual(template.days[0].lifts.first?.exercise, "Overhead Press")
+        XCTAssertEqual(template.days[2].lifts.first?.exercise, "Incline DB Press")
+        XCTAssertEqual(template.days[1].lifts.first?.exercise, "Back Squat")
+        XCTAssertEqual(template.days[3].lifts.first?.exercise, "Deadlift")
+        XCTAssertTrue(template.days.allSatisfy { day in
+            day.lifts.first?.role == "main" && day.lifts.dropFirst().allSatisfy { $0.role == "complementary" }
+        }, "role order is deterministic so goal slots cannot cross-align")
+        XCTAssertTrue(template.days.allSatisfy { day in
+            day.accessories.contains { ["core", "GHD Sit-up", "Hanging Knee Raise"].contains($0.exercise) }
+        }, "each day retains trunk work")
+    }
 }

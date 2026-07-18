@@ -18,9 +18,10 @@ lifts appear under "Next up" with their own suggestions.
 ## During the session
 
 - **Confirm sets as you do them.** Everything predictable is pre-filled
-  — weight, sets, reps, and a warmup ramp for barbell lifts — but remains
-  *planned* until you mark it completed. Mark intentionally omitted work as
-  *skipped*. Only completed work counts in history and progression.
+  — weight, sets, reps, and a warmup ramp for barbell lifts and main dumbbell
+  lifts — but remains *planned* until you mark it completed. Mark intentionally
+  omitted work as *skipped*. Only completed work counts in history and
+  progression.
 - **Check the equipment context.** “Training at” follows the gym captured by
   the session. Changing it updates default bars and warmups; a bar selected on
   one exercise is saved with that session and survives reopening it.
@@ -48,9 +49,15 @@ lifts appear under "Next up" with their own suggestions.
   the set to enter them; speed falls out of distance ÷ time. Rep-based
   conditioning like burpees keeps normal sets×reps, and cardio sets carry
   a completion status without a lifting-quality grade.
-- **Add a set** freely — extra back-off volume beyond the prescription
-  never hurts your grade. **Subtract** as well as add rest time with the
-  −1:00 / +1:00 controls while a rest runs.
+- **Add or remove individual sets** with the + Set / − Set controls, row swipe
+  (iOS), or Delete set action. Extra back-off volume beyond the prescription
+  never hurts your grade.
+- **Adjust a work set without retyping the others.** Weight and reps are edited
+  as one draft, and “Apply weight and reps to remaining planned sets” is on by
+  default. That accepted adjustment becomes the session target used for
+  progression; completed or skipped sets are never rewritten.
+- **Subtract** as well as add rest time with the −1:00 / +1:00 controls while a
+  rest runs.
 - **Wrong exercise available?** [Swap it](swap-an-exercise.md), or
   **remove it** from the session entirely via the exercise's ⋯ menu
   (iOS) / Remove button (web) — the program slot is untouched, the lift

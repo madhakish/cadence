@@ -7,17 +7,32 @@ import CadenceCore
 struct LibraryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
+    @State private var search = ""
+
+    private var visibleExercises: [Exercise] {
+        guard !search.isEmpty else { return exercises }
+        return exercises.filter {
+            $0.name.localizedCaseInsensitiveContains(search)
+                || $0.movementGroup.localizedCaseInsensitiveContains(search)
+                || $0.typeRaw.localizedCaseInsensitiveContains(search)
+        }
+    }
 
     var body: some View {
         List {
             ForEach(ExerciseCategory.allCases, id: \.self) { category in
                 Section(category.rawValue) {
-                    ForEach(exercises.filter { $0.category == category }) { exercise in
+                    ForEach(visibleExercises.filter { $0.category == category }) { exercise in
                         NavigationLink {
                             ExerciseDetailView(exercise: exercise)
                         } label: {
                             HStack {
-                                Text(exercise.name)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(exercise.name)
+                                    Text("\(exercise.movementGroup.capitalized) · \(exercise.typeRaw)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                                 Spacer()
                                 if exercise.isShelved {
                                     Text(Copy.shelved)
@@ -37,6 +52,7 @@ struct LibraryView: View {
             }
         }
         .navigationTitle("Library")
+        .searchable(text: $search, prompt: "Exercise, movement, or equipment")
     }
 }
 

@@ -21,12 +21,14 @@ struct WorkoutPreviewView: View {
     private var phase: CyclePhase { CyclePhase(rawValue: program.currentWeek) ?? .volume }
 
     private func plan(for lift: ProgramLift) -> SessionPlan {
-        let raw = ProgramEngine.plan(
+        let exercise = exercises.first { $0.name == lift.exerciseName }
+        let raw = ProgramEngine.programPlan(
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb,
                             nextPhase: phase, incrementLb: 0),
-            roundingLb: program.roundingLb)
+            programRoundingLb: program.roundingLb,
+            exerciseType: exercise?.typeRaw)
         let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
-        let isBarbell = exercises.first { $0.name == lift.exerciseName }?.type == .barbell
+        let isBarbell = exercise?.type == .barbell
         let weightLb = ProgramSession.neatWeight(raw.weightLb, isBarbell: isBarbell,
                                                  isMain: lift.role.rawValue == "main",
                                                  barLb: barLb, stepLb: program.roundingLb)

@@ -133,8 +133,11 @@ export async function openSession(id) {
     const ex = exMap.get(se.exerciseName);
     const working = (se.sets || []).filter((set) => !set.isWarmup).sort((a, b) => a.order - b.order);
     const workingLb = se.plannedWeightLb ?? working[0]?.weightLb;
-    if (!ex || ex.type !== "barbell" || !(workingLb > 0)) return;
-    const desired = C.warmupRamp(workingLb, C.barLb(bar), 5);
+    if (!ex || !(workingLb > 0)) return;
+    const desired = ex.type === "barbell"
+      ? C.warmupRamp(workingLb, C.barLb(bar), 5)
+      : (ex.type === "dumbbell" && se.programRole === "main" ? C.dumbbellWarmupRamp(workingLb, 5) : null);
+    if (!desired) return;
     const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
     const warmups = desired.map((target, index) => {
       const set = existing[index] || mkSet(index, target.weightLb, target.reps, { warm: true, unit: exUnit(se) });
@@ -250,6 +253,13 @@ export async function openSession(id) {
 
     card.append(ui.h("div", { class: "btn-row", style: { marginTop: "10px" } },
       ui.h("button", { class: "btn sm", text: "+ Set", onClick: () => { currentSE = se; addSet(se); save(); renderBody(body); } }),
+      ui.h("button", { class: "btn sm", text: "− Set", disabled: !(se.sets || []).length, onClick: () => {
+        currentSE = se;
+        const ordered = [...(se.sets || [])].sort((a, b) => a.order - b.order);
+        const target = [...ordered].reverse().find((set) => !set.isWarmup) || ordered.at(-1);
+        if (target) removeSet(se, target);
+        save(); renderBody(body);
+      } }),
       ui.h("button", { class: "btn sm ghost", text: "Rest", onClick: () => { currentSE = se; armRest(restFor(ex, se.programRole), se.exerciseName); } }),
       ui.h("button", { class: "btn sm ghost warn", text: "↓ Dropping load", onClick: () => dropLoad(se, body) }),
       // Remove the exercise from THIS session (program slot untouched).
@@ -394,6 +404,17 @@ export async function openSession(id) {
       set.inclinePercent = last.inclinePercent ?? null;
     }
     se.sets.push(set);
+    syncSetPlan(se);
+  }
+
+  function syncSetPlan(se) {
+    se.sets.forEach((set, index) => { set.order = index; });
+    se.plannedSets = se.sets.filter((set) => !set.isWarmup).length;
+  }
+
+  function removeSet(se, set) {
+    se.sets = se.sets.filter((candidate) => candidate !== set);
+    syncSetPlan(se);
   }
 
   function dropLoad(se, body) {
@@ -424,9 +445,14 @@ export async function openSession(id) {
         c.append(ui.field("Reps", ui.stepper(reps, { min: 0, max: 100, onChange: (v) => { reps = v; } })));
         let warm = s.isWarmup, per = s.isPerSide, site = s.bodyFlagSite;
         let stopped = (s.flags || []).includes("stopped early");
+        let applyToRemaining = !s.isWarmup && s.status === "planned";
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Warmup" }), ui.toggle(warm, (v) => { warm = v; })));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Per side" }), ui.toggle(per, (v) => { per = v; })));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Stopped early" }), ui.toggle(stopped, (v) => { stopped = v; })));
+        if (!s.isWarmup && se.sets.some((candidate) => candidate !== s && !candidate.isWarmup && candidate.status === "planned")) {
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Apply weight and reps to remaining planned sets" }),
+            ui.toggle(applyToRemaining, (v) => { applyToRemaining = v; })));
+        }
         const noteInput = ui.h("input", { type: "text", placeholder: "What did it feel like?", value: s.bodyFlagNote || "" });
         const siteSel = ui.h("select", {}, ui.h("option", { value: "", text: "None" }), ...BODY_SITES.map((b) => ui.h("option", { value: b, text: b, selected: b === site })));
         siteSel.addEventListener("change", () => { site = siteSel.value || null; });
@@ -435,16 +461,26 @@ export async function openSession(id) {
           class: "btn primary wide", style: { marginTop: "10px" }, text: "Done",
           onClick: () => {
             const val = parseFloat(wInput.value) || 0;
-            s.weightLb = val === 0 ? 0 : C.toLb(val, unit);
-            s.enteredUnit = unit; s.reps = reps; s.isWarmup = warm; s.isPerSide = per;
+            const weightLb = val === 0 ? 0 : C.toLb(val, unit);
+            const targets = applyToRemaining && !warm
+              ? se.sets.filter((set) => !set.isWarmup && (set === s || set.status === "planned"))
+              : [s];
+            for (const target of targets) { target.weightLb = weightLb; target.enteredUnit = unit; target.reps = reps; }
+            s.isWarmup = warm; s.isPerSide = per;
             s.flags = C.normalizedSetFlags(C.setQuality(s.flags), stopped);
             s.bodyFlagSite = site; s.bodyFlagNote = site ? (noteInput.value || null) : null;
+            syncSetPlan(se);
+            if (applyToRemaining && !warm) {
+              se.plannedWeightLb = weightLb;
+              se.plannedReps = reps;
+              synchronizeWarmups(se, barFor(se));
+            }
             unitByEx[se.exerciseName] = unit; // keep the row display in the unit you just used
             api.close(); save(); renderBody(body);
           },
         }));
         c.append(ui.h("button", { class: "btn wide danger", style: { marginTop: "8px" }, text: "Delete set",
-          onClick: () => { se.sets = se.sets.filter((x) => x !== s); se.sets.forEach((x, i) => { x.order = i; }); api.close(); save(); renderBody(body); } }));
+          onClick: () => { removeSet(se, s); api.close(); save(); renderBody(body); } }));
       },
     });
   }
@@ -487,7 +523,7 @@ export async function openSession(id) {
           },
         }));
         c.append(ui.h("button", { class: "btn wide danger", style: { marginTop: "8px" }, text: "Delete set",
-          onClick: () => { se.sets = se.sets.filter((x) => x !== s); se.sets.forEach((x, i) => { x.order = i; }); api.close(); save(); renderBody(body); } }));
+          onClick: () => { removeSet(se, s); api.close(); save(); renderBody(body); } }));
       },
     });
   }
@@ -497,19 +533,29 @@ export async function openSession(id) {
     ui.sheet({
       title: "Add exercise",
       build: (c, api) => {
-        for (const cat of CATEGORIES) {
-          const inCat = all.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-          if (!inCat.length) continue;
-          c.append(ui.h("div", { class: "section-title", text: cat }));
-          for (const e of inCat) {
-            c.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px", justifyContent: "space-between" },
-              onClick: () => {
-                session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null, plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
-                api.close(); save(); renderBody(body);
-              } },
-              ui.h("span", { text: e.name }), e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : ui.h("span")));
+        const search = ui.h("input", { type: "search", placeholder: "Exercise or movement" });
+        const results = ui.h("div");
+        const paint = () => {
+          ui.clear(results);
+          const term = search.value.trim().toLowerCase();
+          const visible = term ? all.filter((exercise) => [exercise.name, exercise.movementGroup].some((value) => String(value || "").toLowerCase().includes(term))) : all;
+          for (const cat of CATEGORIES) {
+            const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
+            if (!inCat.length) continue;
+            results.append(ui.h("div", { class: "section-title", text: cat }));
+            for (const e of inCat) {
+              results.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px", justifyContent: "space-between" },
+                onClick: () => {
+                  session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null, plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+                  api.close(); save(); renderBody(body);
+                } },
+                ui.h("span", { text: e.name }), e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : ui.h("span")));
+            }
           }
-        }
+        };
+        search.addEventListener("input", paint);
+        c.append(search, results);
+        paint();
       },
     });
   }
@@ -656,6 +702,7 @@ async function advanceProgram(session, milestones) {
   const program = await Programs.byStableId(tag.programId)
     || (await Programs.all()).find((candidate) => candidate.name === tag.programName);
   if (!program) return null;
+  const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const day = program.days.find((d) => d.order === tag.dayIndex);
   if (!day) return null;
   const note = (label, name) => milestones.push({ kind: "programNote", exercise: name, label, _persist: { exerciseName: name, label } });
@@ -678,15 +725,18 @@ async function advanceProgram(session, milestones) {
 
   // Accessories: double progression, evaluated every bank.
   for (const acc of day.accessories || []) {
-    const se = session.exercises.find((e) => e.programRole === "accessory" && e.exerciseName === acc.exerciseName);
+    const se = session.exercises.find((e) => e.programSlotId === acc.id
+      || (!e.programSlotId && e.programRole === "accessory" && e.exerciseName === acc.exerciseName));
     if (se && se.sets.some((set) => !set.isWarmup && set.status === "completed")) Object.assign(acc, C.advanceAccessory(acc, accPerf(se)));
   }
   // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
   if (tag.week === 3) {
     for (const lift of day.lifts || []) {
-      const se = session.exercises.find((e) => e.exerciseName === lift.exerciseName && e.programRole === lift.role);
+      const se = session.exercises.find((e) => e.programSlotId === lift.id
+        || (!e.programSlotId && e.exerciseName === lift.exerciseName && e.programRole === lift.role));
       if (se && se.sets.some((set) => !set.isWarmup && set.status === "completed")) {
-        lift.pending = C.advanceCycleLift(lift, cyclePerf(se, program.roundingLb), program.focus, program.roundingLb);
+        const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(se.exerciseName)?.type);
+        lift.pending = C.advanceCycleLift(lift, cyclePerf(se, loadStep), program.focus, loadStep);
       }
     }
   }
@@ -716,7 +766,8 @@ async function advanceProgram(session, milestones) {
             lift.stallCount = (lift.stallCount || 0) + 1; lift.lastIncrementLb = 0;
             if (lift.stallCount >= C.STALL_LIMIT) {
               const old = lift.baseWeightLb;
-              lift.baseWeightLb = C.roundTo(old * C.DELOAD_REBUILD_FRACTION, program.roundingLb);
+              const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
+              lift.baseWeightLb = C.roundTo(old * C.DELOAD_REBUILD_FRACTION, loadStep);
               lift.stallCount = 0;
               note(`${lift.exerciseName}: skipped peak — deloaded ${ui.fmtWeight(old)}→${ui.fmtWeight(lift.baseWeightLb)}.`, lift.exerciseName);
             }
@@ -779,21 +830,23 @@ export async function createSessionFromProgramDay(program, day) {
   let order = 0;
   const lifts = [...(day.lifts || [])].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
   for (const lift of lifts) {
-    const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
     const ex = exMap.get(lift.exerciseName);
+    const loadStep = C.programLoadStep(program.roundingLb, ex?.type);
+    const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb, ex?.type);
     const weightLb = neat(plan.weightLb, ex, lift.role === "main");
     const sets = [];
     let so = 0;
     if (ex && ex.type === "barbell") for (const wu of C.warmupRamp(weightLb, barLb, program.roundingLb)) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit }));
+    if (ex && ex.type === "dumbbell" && lift.role === "main") for (const wu of C.dumbbellWarmupRamp(weightLb, loadStep)) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, perSide: ex.isUnilateral }));
     for (let i = 0; i < plan.sets; i += 1) sets.push(mkSet(so++, weightLb, plan.reps, { perSide: ex && ex.isUnilateral, unit }));
-    exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps, programRole: lift.role, sets });
+    exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps, programRole: lift.role, programSlotId: lift.id, sets });
   }
   for (const acc of day.accessories || []) {
     const ex = exMap.get(acc.exerciseName);
     const weightLb = neat(acc.weightLb, ex, false);
     const sets = [];
     for (let i = 0; i < acc.sets; i += 1) sets.push(mkSet(i, weightLb, acc.currentReps, { perSide: ex && ex.isUnilateral, unit }));
-    exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null, plannedWeightLb: weightLb, plannedSets: acc.sets, plannedReps: acc.currentReps, programRole: "accessory", sets });
+    exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null, plannedWeightLb: weightLb, plannedSets: acc.sets, plannedReps: acc.currentReps, programRole: "accessory", programSlotId: acc.id, sets });
   }
   const id = await Sessions.save({
     date: iso(new Date()), notes: "", isCompleted: false, ...await defaultGymTag(),

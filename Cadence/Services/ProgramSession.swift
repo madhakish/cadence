@@ -66,14 +66,18 @@ enum ProgramSession {
         var order = 0
 
         for lift in day.orderedLifts {
-            let plan = ProgramEngine.plan(
-                for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
-                roundingLb: program.roundingLb
-            )
             let exercise = try findExercise(named: lift.exerciseName, context: context)
+            let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
+                                                  exerciseType: exercise.typeRaw)
+            let plan = ProgramEngine.programPlan(
+                for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
+                programRoundingLb: program.roundingLb,
+                exerciseType: exercise.typeRaw
+            )
             let weightLb = neat(plan.weightLb, exercise, isMain: lift.role.rawValue == "main")
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = lift.role.rawValue
+            entry.programSlotID = lift.id
             entry.plannedWeightLb = weightLb
             entry.plannedSets = plan.sets
             entry.plannedReps = plan.reps
@@ -86,6 +90,12 @@ enum ProgramSession {
             if exercise.type == .barbell {
                 for wu in WarmupRamp.ramp(workingLb: weightLb, barLb: barLb, roundingLb: program.roundingLb) {
                     insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true, perSide: false, enteredUnit: entryUnit, context: context)
+                    so += 1
+                }
+            } else if exercise.type == .dumbbell && lift.role == .main {
+                for wu in WarmupRamp.dumbbellRamp(workingLb: weightLb, roundingLb: loadStep) {
+                    insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true,
+                              perSide: exercise.isUnilateral, enteredUnit: entryUnit, context: context)
                     so += 1
                 }
             }
@@ -101,6 +111,7 @@ enum ProgramSession {
             let weightLb = neat(acc.weightLb, exercise, isMain: false)
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = "accessory"
+            entry.programSlotID = acc.id
             entry.plannedWeightLb = weightLb
             entry.plannedSets = acc.sets
             entry.plannedReps = acc.currentReps

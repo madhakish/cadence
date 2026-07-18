@@ -54,7 +54,7 @@ enum ImportService {
     }
     private struct ExerciseEntry: Decodable {
         var name: String?; var notes: String?; var phase: String?; var role: String?
-        var barId: String?
+        var programSlotId: String?; var barId: String?
         var plannedWeightLb: Double?; var plannedSets: Int?; var plannedReps: Int?; var sets: [SetDTO]?
     }
     private struct SetDTO: Decodable {
@@ -88,14 +88,14 @@ enum ImportService {
     }
     private struct DayDTO: Decodable { var name: String?; var order: Int?; var lifts: [LiftDTO]?; var accessories: [AccessoryDTO]? }
     private struct LiftDTO: Decodable {
-        var exerciseName: String?; var role: String?; var baseWeightLb: Double?; var estimatedMaxLb: Double?
+        var id: String?; var exerciseName: String?; var role: String?; var baseWeightLb: Double?; var estimatedMaxLb: Double?
         var stallCount: Int?; var lastIncrementLb: Double?; var pending: PendingDTO?
         var revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
     private struct PendingDTO: Decodable { var state: PendingState?; var note: String? }
     private struct PendingState: Decodable { var baseWeightLb: Double?; var estimatedMaxLb: Double?; var stallCount: Int?; var lastIncrementLb: Double? }
     private struct AccessoryDTO: Decodable {
-        var exerciseName: String?; var sets: Int?; var minReps: Int?; var maxReps: Int?
+        var id: String?; var exerciseName: String?; var sets: Int?; var minReps: Int?; var maxReps: Int?
         var currentReps: Int?; var weightLb: Double?; var incrementLb: Double?; var stallCount: Int?
         var revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
@@ -222,6 +222,7 @@ enum ImportService {
                 let exercisePath = "\(path).exercises[\(ei)]"
                 _ = try requiredText(exercise.name, "\(exercisePath).name")
                 try known(exercise.role, roles, "\(exercisePath).role")
+                if exercise.programSlotId != nil { _ = try portableID(exercise.programSlotId, "\(exercisePath).programSlotId") }
                 try finite(exercise.plannedWeightLb, "\(exercisePath).plannedWeightLb", min: 0)
                 try integer(exercise.plannedSets, "\(exercisePath).plannedSets", min: 0)
                 try integer(exercise.plannedReps, "\(exercisePath).plannedReps", min: 0)
@@ -283,6 +284,7 @@ enum ImportService {
                 try integer(day.order, "\(dayPath).order", required: true, min: 0)
                 for (li, lift) in (day.lifts ?? []).enumerated() {
                     let liftPath = "\(dayPath).lifts[\(li)]"
+                    if lift.id != nil { _ = try portableID(lift.id, "\(liftPath).id") }
                     _ = try requiredText(lift.exerciseName, "\(liftPath).exerciseName")
                     try known(lift.role, liftRoles, "\(liftPath).role", required: schemaVersion >= 1)
                     try finite(lift.baseWeightLb, "\(liftPath).baseWeightLb", min: 0)
@@ -298,6 +300,7 @@ enum ImportService {
                 }
                 for (ai, accessory) in (day.accessories ?? []).enumerated() {
                     let accessoryPath = "\(dayPath).accessories[\(ai)]"
+                    if accessory.id != nil { _ = try portableID(accessory.id, "\(accessoryPath).id") }
                     _ = try requiredText(accessory.exerciseName, "\(accessoryPath).exerciseName")
                     try integer(accessory.sets, "\(accessoryPath).sets", min: 0)
                     try integer(accessory.minReps, "\(accessoryPath).minReps", min: 0)
@@ -309,6 +312,10 @@ enum ImportService {
                 }
             }
             try unique((program.days ?? []).compactMap(\.order).map { String($0) }, "\(path).days")
+            let slotIDs = (program.days ?? []).flatMap { day in
+                (day.lifts ?? []).compactMap(\.id) + (day.accessories ?? []).compactMap(\.id)
+            }
+            try unique(slotIDs, "\(path).slotIds")
             if let next = program.nextDayIndex, let count = program.days?.count, count > 0, next >= count {
                 throw ImportError.invalidData("\(path).nextDayIndex: outside the program's day list")
             }
@@ -561,7 +568,8 @@ enum ImportService {
             let day = ProgramDay(name: d.name ?? "Day", order: d.order ?? 0)
             day.program = prog
             for l in (d.lifts ?? []) {
-                let lift = ProgramLift(exerciseName: l.exerciseName ?? "", role: LiftRole(rawValue: l.role ?? "main") ?? .main,
+                let lift = ProgramLift(id: l.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? UUID().uuidString,
+                                       exerciseName: l.exerciseName ?? "", role: LiftRole(rawValue: l.role ?? "main") ?? .main,
                                        baseWeightLb: l.baseWeightLb ?? 45, estimatedMaxLb: l.estimatedMaxLb ?? 0,
                                        stallCount: l.stallCount ?? 0, lastIncrementLb: l.lastIncrementLb ?? 0)
                 if let st = l.pending?.state {
@@ -576,7 +584,8 @@ enum ImportService {
                 day.lifts.append(lift)
             }
             for a in (d.accessories ?? []) {
-                let acc = ProgramAccessory(exerciseName: a.exerciseName ?? "", sets: a.sets ?? 3, minReps: a.minReps ?? 8,
+                let acc = ProgramAccessory(id: a.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? UUID().uuidString,
+                                           exerciseName: a.exerciseName ?? "", sets: a.sets ?? 3, minReps: a.minReps ?? 8,
                                            maxReps: a.maxReps ?? 12, currentReps: a.currentReps ?? 8, weightLb: a.weightLb ?? 0,
                                            incrementLb: a.incrementLb ?? 0, stallCount: a.stallCount ?? 0)
                 acc.revertToExerciseName = a.revertToExerciseName
@@ -607,6 +616,7 @@ enum ImportService {
         for (oi, e) in (s.exercises ?? []).enumerated() {
             let entry = SessionExercise(order: oi, exercise: e.name.flatMap { exByName[$0] }, notes: e.notes ?? "")
             entry.programRole = e.role
+            entry.programSlotID = e.programSlotId
             entry.barID = e.barId
             entry.plannedWeightLb = e.plannedWeightLb
             entry.plannedSets = e.plannedSets

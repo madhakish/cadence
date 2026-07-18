@@ -29,6 +29,7 @@ enum ExportService {
         let notes: String
         let phase: String?
         let role: String?
+        let programSlotId: String?
         let barId: String?
         let plannedWeightLb: Double?
         let plannedSets: Int?
@@ -194,6 +195,7 @@ enum ExportService {
     }
 
     struct ExportProgramLift: Codable {
+        let id: String
         let exerciseName: String
         let role: String
         let baseWeightLb: Double
@@ -205,6 +207,7 @@ enum ExportService {
     }
 
     struct ExportProgramAccessory: Codable {
+        let id: String
         let exerciseName: String
         let sets: Int
         let minReps: Int
@@ -350,6 +353,7 @@ enum ExportService {
                             notes: entry.notes,
                             phase: entry.phase?.label,
                             role: entry.programRole,
+                            programSlotId: entry.programSlotID,
                             barId: entry.barID,
                             plannedWeightLb: entry.plannedWeightLb,
                             plannedSets: entry.plannedSets,
@@ -396,7 +400,7 @@ enum ExportService {
                             name: d.name, order: d.order,
                             lifts: d.orderedLifts.map { l in
                                 ExportProgramLift(
-                                    exerciseName: l.exerciseName, role: l.roleRaw, baseWeightLb: l.baseWeightLb,
+                                    id: l.id, exerciseName: l.exerciseName, role: l.roleRaw, baseWeightLb: l.baseWeightLb,
                                     estimatedMaxLb: l.estimatedMaxLb, stallCount: l.stallCount, lastIncrementLb: l.lastIncrementLb,
                                     pending: l.pendingBaseWeightLb.map { pendingBase in
                                         ExportPendingResult(
@@ -413,7 +417,7 @@ enum ExportService {
                                 )
                             },
                             accessories: d.accessories.map { a in
-                                ExportProgramAccessory(exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
+                                ExportProgramAccessory(id: a.id, exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
                                                        currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount,
                                                        revertToExerciseName: a.revertToExerciseName)
                             }

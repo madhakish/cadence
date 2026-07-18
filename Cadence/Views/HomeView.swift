@@ -45,12 +45,14 @@ struct HomeView: View {
 
     private func programPlan(_ program: Program, _ lift: ProgramLift) -> SessionPlan {
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
-        let plan = ProgramEngine.plan(
+        let exercise = exercises.first { $0.name == lift.exerciseName }
+        let plan = ProgramEngine.programPlan(
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
-            roundingLb: program.roundingLb)
+            programRoundingLb: program.roundingLb,
+            exerciseType: exercise?.typeRaw)
         // Preview the same snapped weight the session will store (secondary barbell lifts).
         let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
-        let isBarbell = exercises.first { $0.name == lift.exerciseName }?.type == .barbell
+        let isBarbell = exercise?.type == .barbell
         let weightLb = ProgramSession.neatWeight(plan.weightLb, isBarbell: isBarbell,
                                                  isMain: lift.role.rawValue == "main", barLb: barLb, stepLb: program.roundingLb)
         return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps, phase: plan.phase, cycleNumber: plan.cycleNumber)

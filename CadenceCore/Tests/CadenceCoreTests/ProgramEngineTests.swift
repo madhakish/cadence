@@ -127,4 +127,24 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(Weight.round(246.75, to: 5), 245)
         XCTAssertEqual(Weight.round(162.75, to: 5), 165)
     }
+
+    func testDumbbellProgramStepIsCappedPerHand() {
+        XCTAssertEqual(ProgramEngine.loadStep(programRoundingLb: 10, exerciseType: "dumbbell"), 5)
+        XCTAssertEqual(ProgramEngine.loadStep(programRoundingLb: 2.5, exerciseType: "dumbbell"), 2.5)
+        XCTAssertEqual(ProgramEngine.loadStep(programRoundingLb: 10, exerciseType: "barbell"), 10)
+    }
+
+    func testDumbbellProgramPeakStaysWithinOneRackJumpOfBase() {
+        let state = CycleState(cycleNumber: 2, baseWeightLb: 55, nextPhase: .peak, incrementLb: 0)
+        XCTAssertEqual(ProgramEngine.programPlan(for: state, programRoundingLb: 5,
+                                                 exerciseType: "dumbbell").weightLb, 60)
+        XCTAssertEqual(ProgramEngine.programPlan(for: state, programRoundingLb: 5,
+                                                 exerciseType: "barbell").weightLb, 65)
+    }
+
+    func testMainDumbbellWarmupRamp() {
+        XCTAssertEqual(WarmupRamp.dumbbellRamp(workingLb: 60).map(\.weightLb), [25, 35, 50])
+        XCTAssertEqual(WarmupRamp.dumbbellRamp(workingLb: 60).map(\.reps), [10, 5, 2])
+        XCTAssertTrue(WarmupRamp.dumbbellRamp(workingLb: 5).isEmpty)
+    }
 }

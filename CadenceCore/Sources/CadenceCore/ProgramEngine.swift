@@ -100,6 +100,36 @@ public enum ProgramEngine {
     /// Default rounding for barbell suggestions.
     public static let defaultRoundingLb = 5.0
 
+    /// Dumbbells are recorded per hand. A program-level 10 lb rounding step
+    /// would therefore turn into a 20 lb total jump, which is too coarse for
+    /// upper-body work. Keep per-hand prescriptions and adaptive progression
+    /// to at most 5 lb while leaving the program's chosen granularity intact
+    /// for barbells and machines.
+    public static func loadStep(programRoundingLb: Double, exerciseType: String?) -> Double {
+        exerciseType == "dumbbell" ? Swift.min(programRoundingLb, 5) : programRoundingLb
+    }
+
+    /// Program-specific wave plan. Dumbbells are logged per hand, so the
+    /// standard Peak multiplier can otherwise turn a 55 lb volume base into a
+    /// 65 lb prescription. Keep every above-base DB rotation within one 5 lb
+    /// rack jump; barbell/machine waves retain their normal percentages.
+    public static func programPlan(
+        for state: CycleState,
+        programRoundingLb: Double,
+        exerciseType: String?
+    ) -> SessionPlan {
+        let step = loadStep(programRoundingLb: programRoundingLb, exerciseType: exerciseType)
+        let raw = plan(for: state, roundingLb: step)
+        guard exerciseType == "dumbbell", raw.weightLb > state.baseWeightLb else { return raw }
+        return SessionPlan(
+            weightLb: Swift.min(raw.weightLb, state.baseWeightLb + 5),
+            sets: raw.sets,
+            reps: raw.reps,
+            phase: raw.phase,
+            cycleNumber: raw.cycleNumber
+        )
+    }
+
     /// Next suggested session for a cycle-tracked lift.
     public static func plan(for state: CycleState, roundingLb: Double = defaultRoundingLb) -> SessionPlan {
         let phase = state.nextPhase

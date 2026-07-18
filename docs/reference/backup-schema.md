@@ -26,7 +26,8 @@ Every session carries:
 - `date`, `notes`, optional historical `gym`, and optional stable `gymId`
 - `isCompleted`, preserving both open and banked sessions
 - optional `programTag`
-- ordered `exercises`, each with its planned prescription, optional session-local `barId`, and logged sets
+- ordered `exercises`, each with its planned prescription, optional stable
+  `programSlotId`, optional session-local `barId`, and logged sets
 
 A program tag carries a stable portable `programId` plus the historical
 `programName` label. It also carries cycle, week, day index, and `planNames`,
@@ -38,8 +39,12 @@ completed sets contribute to volume, PRs, charts, HealthKit metadata, or
 progression. Quality remains optional and mutually exclusive (`clean`,
 `grindy`, or `wobble`); `stopped early` is an independent observation.
 
-Programs and gyms each export their stable ID. The web keeps its IndexedDB
-primary key private and resolves the portable ID after import.
+Programs, program lift/accessory slots, and gyms each export their stable ID.
+The session exercise's `programSlotId` points at the exact lift or accessory
+slot it came from, so duplicate names or reordered exercises cannot advance the
+wrong goal. Older version-2 backups may omit these optional slot IDs and fall
+back to name-and-role matching. The web keeps its IndexedDB primary key private
+and resolves the portable program ID after import.
 
 ## Compatibility rules
 

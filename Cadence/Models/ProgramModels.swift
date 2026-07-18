@@ -74,6 +74,9 @@ final class ProgramDay {
 /// A cycle-driven main/complementary lift. Wraps `ProgramLiftState`.
 @Model
 final class ProgramLift {
+    /// Stable slot identity. Exercise names and roles are editable presentation;
+    /// completion must advance the slot that created the session entry.
+    var id: String = UUID().uuidString
     var exerciseName: String
     var roleRaw: String
     var baseWeightLb: Double
@@ -91,8 +94,9 @@ final class ProgramLift {
     var revertToExerciseName: String?
     var day: ProgramDay?
 
-    init(exerciseName: String, role: LiftRole, baseWeightLb: Double, estimatedMaxLb: Double,
+    init(id: String = UUID().uuidString, exerciseName: String, role: LiftRole, baseWeightLb: Double, estimatedMaxLb: Double,
          stallCount: Int = 0, lastIncrementLb: Double = 0) {
+        self.id = id
         self.exerciseName = exerciseName
         self.roleRaw = role.rawValue
         self.baseWeightLb = baseWeightLb
@@ -122,6 +126,8 @@ final class ProgramLift {
 /// An accessory tracked with double progression. Wraps `AccessoryState`.
 @Model
 final class ProgramAccessory {
+    /// Stable slot identity; see ProgramLift.id.
+    var id: String = UUID().uuidString
     var exerciseName: String
     var sets: Int
     var minReps: Int
@@ -135,8 +141,9 @@ final class ProgramAccessory {
     var revertToExerciseName: String?
     var day: ProgramDay?
 
-    init(exerciseName: String, sets: Int, minReps: Int, maxReps: Int,
+    init(id: String = UUID().uuidString, exerciseName: String, sets: Int, minReps: Int, maxReps: Int,
          currentReps: Int, weightLb: Double, incrementLb: Double, stallCount: Int = 0) {
+        self.id = id
         self.exerciseName = exerciseName
         self.sets = sets
         self.minReps = minReps

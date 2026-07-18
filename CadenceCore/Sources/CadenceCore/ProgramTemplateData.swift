@@ -8,10 +8,9 @@ import Foundation
 /// matches it, so either side drifting fails CI. Regenerate the fixture with
 /// web/tools/generate-template-fixture.mjs when templates change.
 ///
-/// Only exercises the seed does NOT provide are declared; seeded names
-/// (Back Squat, Clean & Jerk, KB Swing, Ring Row…) are guaranteed by the
-/// first-launch seed on both platforms and must be referenced by their
-/// canonical seeded names — a variant spelling would fork the library.
+/// Templates may retain compatibility definitions for exercises that are now
+/// part of the expanded seed. Instantiation never overwrites an existing
+/// library record, and canonical names must stay aligned across both clients.
 public enum ProgramTemplateData {
 
     public struct TemplateExercise: Codable, Equatable {

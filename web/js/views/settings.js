@@ -238,12 +238,22 @@ function gymEditor(g) {
 function pickExerciseSheet(onPick) {
   Exercises.all().then((all) => {
     ui.sheet({ title: "Pick exercise", build: (c, api) => {
-      for (const cat of CATEGORIES) {
-        const inCat = all.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-        if (!inCat.length) continue;
-        c.append(ui.h("div", { class: "section-title", text: cat }));
-        for (const e of inCat) c.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px" }, text: e.name, onClick: () => { api.close(); onPick(e); } }));
-      }
+      const search = ui.h("input", { type: "search", placeholder: "Exercise, movement, or equipment" });
+      const results = ui.h("div");
+      const paint = () => {
+        ui.clear(results);
+        const term = search.value.trim().toLowerCase();
+        const visible = term ? all.filter((exercise) => [exercise.name, exercise.movementGroup, exercise.type].some((value) => String(value || "").toLowerCase().includes(term))) : all;
+        for (const cat of CATEGORIES) {
+          const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
+          if (!inCat.length) continue;
+          results.append(ui.h("div", { class: "section-title", text: cat }));
+          for (const e of inCat) results.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px" }, text: e.name, onClick: () => { api.close(); onPick(e); } }));
+        }
+      };
+      search.addEventListener("input", paint);
+      c.append(search, results);
+      paint();
     } });
   });
 }
@@ -317,7 +327,8 @@ function programEditor(p) {
   });
 }
 
-function programDayEditor(p, day) {
+async function programDayEditor(p, day) {
+  const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   ui.pushScreen({
     title: day.name,
     build: (body, api) => {
@@ -337,7 +348,7 @@ function programDayEditor(p, day) {
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
               ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Rotation-1 base" }),
-              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: p.roundingLb, format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
+              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
               ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } }))));
         }
@@ -404,19 +415,30 @@ function exerciseLibrary(exercises) {
   ui.pushScreen({
     title: "Exercise library",
     build: (body) => {
-      for (const cat of CATEGORIES) {
-        const inCat = exercises.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-        if (!inCat.length) continue;
-        body.append(ui.h("div", { class: "section-title", text: cat }));
-        const card = ui.h("div", { class: "card list" });
-        for (const e of inCat) {
-          card.append(ui.h("div", { class: "row", onClick: () => exerciseDetail(e) },
-            ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: e.name }),
-              ui.h("span", { class: "sub", text: [e.isShelved ? "shelved" : null, e.isUnilateral ? "per side" : null].filter(Boolean).join(" · ") || e.type })),
-            ui.h("span", { class: "chev" })));
+      const search = ui.h("input", { type: "search", placeholder: "Exercise, movement, or equipment" });
+      const results = ui.h("div");
+      const paint = () => {
+        ui.clear(results);
+        const term = search.value.trim().toLowerCase();
+        const visible = term ? exercises.filter((e) => [e.name, e.movementGroup, e.type].some((value) => String(value || "").toLowerCase().includes(term))) : exercises;
+        for (const cat of CATEGORIES) {
+          const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
+          if (!inCat.length) continue;
+          results.append(ui.h("div", { class: "section-title", text: cat }));
+          const card = ui.h("div", { class: "card list" });
+          for (const e of inCat) {
+            const meta = [e.movementGroup, e.type, e.isUnilateral ? "per side" : null, e.isShelved ? "shelved" : null].filter(Boolean).join(" · ");
+            card.append(ui.h("div", { class: "row", onClick: () => exerciseDetail(e) },
+              ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: e.name }),
+                ui.h("span", { class: "sub", text: meta })),
+              ui.h("span", { class: "chev" })));
+          }
+          results.append(card);
         }
-        body.append(card);
-      }
+      };
+      search.addEventListener("input", paint);
+      body.append(search, results);
+      paint();
     },
   });
 }

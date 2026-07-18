@@ -190,6 +190,9 @@ enum SessionCompletion {
         let dayIndex = session.programDayIndex ?? 0
         guard let day = program.days.first(where: { $0.order == dayIndex }) else { return }
         let week = session.programWeek ?? program.currentWeek
+        let exerciseTypeByName = Dictionary(
+            uniqueKeysWithValues: try context.fetch(FetchDescriptor<Exercise>()).map { ($0.name, $0.typeRaw) }
+        )
 
         // Duplicate/stale guard (mirrors web advanceProgram): the tag captured
         // at creation must still match the program's live position, or this
@@ -210,7 +213,8 @@ enum SessionCompletion {
         // Accessories: double progression, every bank.
         for acc in day.accessories {
             if let entry = session.exercises.first(where: {
-                $0.programRole == "accessory" && $0.exercise?.name == acc.exerciseName && !$0.workingSets.isEmpty
+                ($0.programSlotID == acc.id || ($0.programSlotID == nil && $0.programRole == "accessory" && $0.exercise?.name == acc.exerciseName))
+                    && !$0.workingSets.isEmpty
             }) {
                 acc.apply(ProgramProgression.advanceAccessory(acc.coreState, perf: accPerf(entry)))
             }
@@ -220,9 +224,17 @@ enum SessionCompletion {
         if week == 3 {
             for lift in day.lifts {
                 if let entry = session.exercises.first(where: {
-                    $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue && !$0.workingSets.isEmpty
+                    ($0.programSlotID == lift.id || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue))
+                        && !$0.workingSets.isEmpty
                 }) {
-                    let result = ProgramProgression.advanceCycleLift(lift.coreState, perf: cyclePerf(entry, roundingLb: program.roundingLb), focus: program.focus, roundingLb: program.roundingLb)
+                    let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
+                                                          exerciseType: entry.exercise?.typeRaw)
+                    let result = ProgramProgression.advanceCycleLift(
+                        lift.coreState,
+                        perf: cyclePerf(entry, roundingLb: loadStep),
+                        focus: program.focus,
+                        roundingLb: loadStep
+                    )
                     lift.pendingBaseWeightLb = result.state.baseWeightLb
                     lift.pendingEstimatedMaxLb = result.state.estimatedMaxLb
                     lift.pendingStallCount = result.state.stallCount
@@ -269,7 +281,9 @@ enum SessionCompletion {
                     lift.lastIncrementLb = 0
                     if lift.stallCount >= ProgramProgression.stallLimit {
                         let old = lift.baseWeightLb
-                        lift.baseWeightLb = Weight.round(old * ProgramProgression.deloadRebuildFraction, to: program.roundingLb)
+                        let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
+                                                              exerciseType: exerciseTypeByName[lift.exerciseName])
+                        lift.baseWeightLb = Weight.round(old * ProgramProgression.deloadRebuildFraction, to: loadStep)
                         lift.stallCount = 0
                         let label = "\(lift.exerciseName): skipped peak — deloaded \(unitDisplay.format(lb: old))→\(unitDisplay.format(lb: lift.baseWeightLb))."
                         context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))

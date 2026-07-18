@@ -631,9 +631,15 @@ struct ProgramDayEditorView: View {
 
 private struct ProgramLiftRow: View {
     @Query private var settingsList: [AppSettings]
+    @Query private var exercises: [Exercise]
     @Bindable var lift: ProgramLift
     let step: Double
     let onRemove: () -> Void
+
+    private var loadStep: Double {
+        ProgramEngine.loadStep(programRoundingLb: step,
+                               exerciseType: exercises.first { $0.name == lift.exerciseName }?.typeRaw)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -658,7 +664,7 @@ private struct ProgramLiftRow: View {
                 Text("Complementary").tag(LiftRole.complementary)
             }
             .pickerStyle(.segmented)
-            Stepper("Rotation-1 base: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))", value: $lift.baseWeightLb, in: 0...1000, step: step)
+            Stepper("Rotation-1 base: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))", value: $lift.baseWeightLb, in: 0...1000, step: loadStep)
             Stepper("Est. 1RM: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.estimatedMaxLb))", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
         }
     }
@@ -698,13 +704,22 @@ private struct ProgramAccessoryRow: View {
 private struct ExercisePickerSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
+    @State private var search = ""
     let onPick: (String) -> Void
+
+    private var visible: [Exercise] {
+        search.isEmpty ? exercises : exercises.filter {
+            $0.name.localizedCaseInsensitiveContains(search)
+                || $0.movementGroup.localizedCaseInsensitiveContains(search)
+                || $0.typeRaw.localizedCaseInsensitiveContains(search)
+        }
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 ForEach(ExerciseCategory.allCases, id: \.self) { category in
-                    let inCategory = exercises.filter { $0.category == category }
+                    let inCategory = visible.filter { $0.category == category }
                     if !inCategory.isEmpty {
                         Section(category.rawValue) {
                             ForEach(inCategory) { exercise in
@@ -715,6 +730,7 @@ private struct ExercisePickerSheetView: View {
                 }
             }
             .navigationTitle("Pick exercise")
+            .searchable(text: $search, prompt: "Exercise, movement, or equipment")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
     }

@@ -135,6 +135,8 @@ export const MUSCLE_GROUP_DEFAULTS = {
   shoulder: { primary: ["delts"], secondary: ["traps"] },
   arms: { primary: ["biceps", "triceps"], secondary: ["forearms"] },
   core: { primary: ["abs"], secondary: ["obliques"] },
+  calves: { primary: ["calves"], secondary: ["hamstrings"] },
+  carry: { primary: ["forearms", "traps"], secondary: ["abs", "obliques"] },
   conditioning: { primary: ["quads", "calves"], secondary: ["abs"] },
 };
 

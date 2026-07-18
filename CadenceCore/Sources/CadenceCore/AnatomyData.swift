@@ -143,6 +143,8 @@ public enum AnatomyData {
         "shoulder": Profile(primary: ["delts"], secondary: ["traps"]),
         "arms": Profile(primary: ["biceps", "triceps"], secondary: ["forearms"]),
         "core": Profile(primary: ["abs"], secondary: ["obliques"]),
+        "calves": Profile(primary: ["calves"], secondary: ["hamstrings"]),
+        "carry": Profile(primary: ["forearms", "traps"], secondary: ["abs", "obliques"]),
         "conditioning": Profile(primary: ["quads", "calves"], secondary: ["abs"]),
     ]
 
