@@ -15,6 +15,8 @@ struct SettingsView: View {
     @State private var exportCSV: Data?
     @State private var showImporter = false
     @State private var importAlert: String?
+    @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
+    @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
 
     var body: some View {
         NavigationStack {
@@ -119,7 +121,7 @@ struct SettingsView: View {
                     Button {
                         let gym = Gym(name: "Gym \(gyms.count + 1)")
                         context.insert(gym)
-                        try? context.save()
+                        PersistenceErrorCenter.shared.save(context, operation: "Adding the gym")
                     } label: {
                         Label("Add gym", systemImage: "plus")
                     }
@@ -148,8 +150,12 @@ struct SettingsView: View {
                     Menu {
                         ForEach(ProgramTemplateData.all) { template in
                             Button {
-                                ProgramTemplates.instantiate(template, context: context)
-                                try? context.save()
+                                do {
+                                    try ProgramTemplates.instantiate(template, context: context)
+                                    PersistenceErrorCenter.shared.save(context, operation: "Adding the program")
+                                } catch {
+                                    PersistenceErrorCenter.shared.report(error, operation: "Adding the program", context: context)
+                                }
                             } label: {
                                 Text(template.name)
                                 Text(template.tagline)
@@ -159,7 +165,7 @@ struct SettingsView: View {
                             let name = ProgramTemplates.uniqueProgramName("Program \(programs.count + 1)", existing: programs.map(\.name))
                             let program = Program(name: name, isActive: programs.isEmpty)
                             context.insert(program)
-                            try? context.save()
+                            PersistenceErrorCenter.shared.save(context, operation: "Adding the program")
                         } label: {
                             Text("Blank program")
                         }
@@ -189,7 +195,11 @@ struct SettingsView: View {
 
                 Section("Export") {
                     Button("Prepare JSON export") {
-                        exportJSON = try? ExportService.jsonData(context: context)
+                        do { exportJSON = try ExportService.jsonData(context: context) }
+                        catch {
+                            exportJSON = nil
+                            importAlert = "Couldn't prepare the JSON export: \(error.localizedDescription)"
+                        }
                     }
                     if let exportJSON {
                         ShareLink(
@@ -200,7 +210,11 @@ struct SettingsView: View {
                         }
                     }
                     Button("Prepare CSV export") {
-                        exportCSV = try? ExportService.csvData(context: context)
+                        do { exportCSV = try ExportService.csvData(context: context) }
+                        catch {
+                            exportCSV = nil
+                            importAlert = "Couldn't prepare the CSV export: \(error.localizedDescription)"
+                        }
                     }
                     if let exportCSV {
                         ShareLink(
@@ -210,6 +224,29 @@ struct SettingsView: View {
                             Label("Share CSV", systemImage: "square.and.arrow.up")
                         }
                     }
+                }
+
+                Section {
+                    Button("Checkpoint now") {
+                        do {
+                            try BackupCheckpointService.create(context: context, reason: "manual")
+                            importAlert = "Local recovery checkpoint created."
+                        } catch {
+                            BackupCheckpointService.recordFailure(error)
+                            importAlert = "Couldn't create a recovery checkpoint: \(error.localizedDescription)"
+                        }
+                    }
+                    if !checkpointLastSuccess.isEmpty {
+                        Button("Restore latest checkpoint") { importAlert = restoreLatestCheckpoint() }
+                        Text("Latest: \(checkpointLastSuccess)").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if !checkpointLastFailure.isEmpty {
+                        Text("Last checkpoint failed: \(checkpointLastFailure)").font(.caption).foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("Local recovery")
+                } footer: {
+                    Text("Cadence keeps the last three checkpoints when it backgrounds and before imports. They can undo a bad import, but deleting the app removes them; exported JSON is the durable backup.")
                 }
 
                 Section {
@@ -223,12 +260,13 @@ struct SettingsView: View {
                 } footer: {
                     Text("Restores a backup, replacing the data it contains and leaving anything it doesn't alone. Export first if you're unsure.")
                 }
-            }
-            .navigationTitle("Settings")
+        }
+        .saveChangesOnDisappear(context, operation: "Saving settings")
+        .navigationTitle("Settings")
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 importAlert = restore(from: result)
             }
-            .alert("Import", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } })) {
+            .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } })) {
                 Button("OK") { importAlert = nil }
             } message: {
                 Text(importAlert ?? "")
@@ -245,16 +283,32 @@ struct SettingsView: View {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
                 let data = try Data(contentsOf: url)
+                // A valid but unwanted restore is still destructive. Keep the
+                // current state locally before replacing any sections.
+                try BackupCheckpointService.create(context: context, reason: "before-import")
                 let s = try ImportService.load(data, into: context)
                 // syncLibrary right after the restore: a pre-migration backup
                 // re-arms the retired-rest-stamp clear, which otherwise
                 // wouldn't run until the next app launch — leaving the rest
                 // steppers dead in the meantime.
-                Seeder.syncLibrary(context: context)
+                try Seeder.syncLibrary(context: context)
                 return "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
             } catch {
                 return error.localizedDescription
             }
+        }
+    }
+
+    private func restoreLatestCheckpoint() -> String {
+        do {
+            guard let data = try BackupCheckpointService.latestData() else { return "No local recovery checkpoint exists." }
+            // Capture the current state too, so this recovery can itself be undone.
+            try BackupCheckpointService.create(context: context, reason: "before-checkpoint-restore")
+            let s = try ImportService.load(data, into: context)
+            try Seeder.syncLibrary(context: context)
+            return "Restored local checkpoint: \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+        } catch {
+            return error.localizedDescription
         }
     }
 }
@@ -317,7 +371,7 @@ struct GymEditorView: View {
                     Button("Show tag") { showCard = true }
                     Button("Remove photo", role: .destructive) {
                         gym.barcodeImageData = nil
-                        try? context.save()
+                        PersistenceErrorCenter.shared.save(context, operation: "Removing the membership photo")
                     }
                 }
             } header: {
@@ -327,12 +381,18 @@ struct GymEditorView: View {
             }
         }
         .navigationTitle(gym.name)
+        .saveChangesOnDisappear(context, operation: "Saving the gym")
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self) {
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        throw CocoaError(.fileReadCorruptFile)
+                    }
                     gym.barcodeImageData = data
-                    try? context.save()
+                    PersistenceErrorCenter.shared.save(context, operation: "Saving the membership photo")
+                } catch {
+                    PersistenceErrorCenter.shared.report(error, operation: "Loading the membership photo", context: context)
                 }
             }
         }
@@ -345,6 +405,7 @@ struct GymEditorView: View {
 // MARK: - Track editor
 
 struct TrackEditorView: View {
+    @Environment(\.modelContext) private var context
     @Bindable var track: LiftTrack
 
     var body: some View {
@@ -383,6 +444,7 @@ struct TrackEditorView: View {
             }
         }
         .navigationTitle(track.exerciseName)
+        .saveChangesOnDisappear(context, operation: "Saving lift progression")
     }
 }
 
@@ -448,7 +510,7 @@ struct ProgramEditorView: View {
                     day.program = program
                     program.days.append(day)
                     context.insert(day)
-                    try? context.save()
+                    PersistenceErrorCenter.shared.save(context, operation: "Adding the program day")
                 } label: {
                     Label("Add day", systemImage: "plus")
                 }
@@ -456,14 +518,14 @@ struct ProgramEditorView: View {
             Section {
                 Button(role: .destructive) {
                     context.delete(program)
-                    try? context.save()
-                    dismiss()
+                    if PersistenceErrorCenter.shared.save(context, operation: "Deleting the program") { dismiss() }
                 } label: {
                     Text("Delete program")
                 }
             }
         }
         .navigationTitle(program.name)
+        .saveChangesOnDisappear(context, operation: "Saving the program")
     }
 
     /// Move the program to a rotation. Placing at/after Peak (rotation 3) with no
@@ -473,17 +535,18 @@ struct ProgramEditorView: View {
     /// A real Peak session logged in rotation 3 overwrites this hold with its grade.
     private func positionAtRotation(_ newValue: Int) {
         program.currentWeek = newValue
-        guard newValue >= 3 else { return }
-        for day in program.days {
-            for lift in day.lifts where lift.pendingBaseWeightLb == nil {
-                lift.pendingBaseWeightLb = lift.baseWeightLb
-                lift.pendingEstimatedMaxLb = lift.estimatedMaxLb
-                lift.pendingStallCount = lift.stallCount
-                lift.pendingLastIncrementLb = lift.lastIncrementLb
-                lift.pendingNote = nil
+        if newValue >= 3 {
+            for day in program.days {
+                for lift in day.lifts where lift.pendingBaseWeightLb == nil {
+                    lift.pendingBaseWeightLb = lift.baseWeightLb
+                    lift.pendingEstimatedMaxLb = lift.estimatedMaxLb
+                    lift.pendingStallCount = lift.stallCount
+                    lift.pendingLastIncrementLb = lift.lastIncrementLb
+                    lift.pendingNote = nil
+                }
             }
         }
-        try? context.save()
+        PersistenceErrorCenter.shared.save(context, operation: "Changing the program rotation")
     }
 
     private func deleteDays(at offsets: IndexSet) {
@@ -491,7 +554,7 @@ struct ProgramEditorView: View {
         for i in offsets { context.delete(ordered[i]) }
         for (i, day) in program.orderedDays.enumerated() { day.order = i }
         if program.nextDayIndex >= program.days.count { program.nextDayIndex = 0 }
-        try? context.save()
+        PersistenceErrorCenter.shared.save(context, operation: "Deleting the program day")
     }
 }
 
@@ -513,25 +576,34 @@ struct ProgramDayEditorView: View {
                 // editor): the segmented Role picker spans the row and eats the
                 // horizontal pan, so swipe-to-delete alone is undiscoverable here.
                 ForEach(day.orderedLifts) { lift in
-                    ProgramLiftRow(lift: lift, step: step) { context.delete(lift) }
+                    ProgramLiftRow(lift: lift, step: step) {
+                        context.delete(lift)
+                        PersistenceErrorCenter.shared.save(context, operation: "Removing the program lift")
+                    }
                 }
                 .onDelete { offsets in
                     let ordered = day.orderedLifts
                     for i in offsets { context.delete(ordered[i]) }
+                    PersistenceErrorCenter.shared.save(context, operation: "Removing the program lift")
                 }
                 Button { picking = .lift } label: { Label("Add lift", systemImage: "plus") }
             }
             Section("Accessories") {
                 ForEach(day.accessories) { accessory in
-                    ProgramAccessoryRow(accessory: accessory) { context.delete(accessory) }
+                    ProgramAccessoryRow(accessory: accessory) {
+                        context.delete(accessory)
+                        PersistenceErrorCenter.shared.save(context, operation: "Removing the program accessory")
+                    }
                 }
                 .onDelete { offsets in
                     for i in offsets { context.delete(day.accessories[i]) }
+                    PersistenceErrorCenter.shared.save(context, operation: "Removing the program accessory")
                 }
                 Button { picking = .accessory } label: { Label("Add accessory", systemImage: "plus") }
             }
         }
         .navigationTitle(day.name)
+        .saveChangesOnDisappear(context, operation: "Saving the program day")
         .toolbar { EditButton() }
         .sheet(item: $picking) { target in
             ExercisePickerSheetView { name in
@@ -547,6 +619,7 @@ struct ProgramDayEditorView: View {
                     day.accessories.append(acc)
                     context.insert(acc)
                 }
+                PersistenceErrorCenter.shared.save(context, operation: "Adding the program exercise")
                 picking = nil
             }
         }

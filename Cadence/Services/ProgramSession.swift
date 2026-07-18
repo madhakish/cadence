@@ -8,7 +8,16 @@ import CadenceCore
 /// Mirrors web `createSessionFromProgramDay`.
 enum ProgramSession {
 
-    static func make(program: Program, day: ProgramDay, context: ModelContext) -> WorkoutSession {
+    enum BuildError: LocalizedError {
+        case missingExercise(String)
+        var errorDescription: String? {
+            switch self {
+            case .missingExercise(let name): return "The exercise library is missing \(name). Sync or restore the library, then try again."
+            }
+        }
+    }
+
+    static func make(program: Program, day: ProgramDay, context: ModelContext) throws -> WorkoutSession {
         // Resume, don't duplicate (mirrors web createSessionFromProgramDay):
         // an open session for THIS day at the current position, whose content
         // still matches the plan, is resumed instead of duplicated (issue 17).
@@ -22,7 +31,7 @@ enum ProgramSession {
             predicate: #Predicate { !$0.isCompleted && $0.programName == programName }
         )
         let dayNames = day.orderedLifts.map(\.exerciseName) + day.orderedAccessories.map(\.exerciseName)
-        if let existing = (try? context.fetch(openDescriptor))?.first(where: { s in
+        if let existing = try context.fetch(openDescriptor).first(where: { s in
             ProgramProgression.canResumeSession(
                 // Missing tag fields → -1 sentinel (never equals a real
                 // 1-based cycle/week/day), so ambiguously-tagged legacy
@@ -35,7 +44,7 @@ enum ProgramSession {
                 dayPlanNames: dayNames)
         }) { return existing }
 
-        let defaultGym = (try? context.fetch(FetchDescriptor<Gym>()))?.first(where: { $0.isDefault })
+        let defaultGym = try context.fetch(FetchDescriptor<Gym>()).first(where: { $0.isDefault })
         let session = WorkoutSession(gymName: defaultGym?.name)
         let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
         func neat(_ weightLb: Double, _ exercise: Exercise?, isMain: Bool) -> Double {
@@ -56,7 +65,7 @@ enum ProgramSession {
                 for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
                 roundingLb: program.roundingLb
             )
-            let exercise = findExercise(named: lift.exerciseName, context: context)
+            let exercise = try findExercise(named: lift.exerciseName, context: context)
             let weightLb = neat(plan.weightLb, exercise, isMain: lift.role.rawValue == "main")
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = lift.role.rawValue
@@ -69,21 +78,21 @@ enum ProgramSession {
             session.exercises.append(entry)
 
             var so = 0
-            if exercise?.type == .barbell {
+            if exercise.type == .barbell {
                 for wu in WarmupRamp.ramp(workingLb: weightLb, barLb: barLb, roundingLb: program.roundingLb) {
                     insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true, perSide: false, context: context)
                     so += 1
                 }
             }
             for _ in 0..<plan.sets {
-                insertSet(entry, order: so, weight: weightLb, reps: plan.reps, warmup: false, perSide: exercise?.isUnilateral ?? false, context: context)
+                insertSet(entry, order: so, weight: weightLb, reps: plan.reps, warmup: false, perSide: exercise.isUnilateral, context: context)
                 so += 1
             }
             order += 1
         }
 
         for acc in day.orderedAccessories {
-            let exercise = findExercise(named: acc.exerciseName, context: context)
+            let exercise = try findExercise(named: acc.exerciseName, context: context)
             let weightLb = neat(acc.weightLb, exercise, isMain: false)
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = "accessory"
@@ -94,7 +103,7 @@ enum ProgramSession {
             context.insert(entry)
             session.exercises.append(entry)
             for i in 0..<acc.sets {
-                insertSet(entry, order: i, weight: weightLb, reps: acc.currentReps, warmup: false, perSide: exercise?.isUnilateral ?? false, context: context)
+                insertSet(entry, order: i, weight: weightLb, reps: acc.currentReps, warmup: false, perSide: exercise.isUnilateral, context: context)
             }
             order += 1
         }
@@ -116,8 +125,9 @@ enum ProgramSession {
         entry.sets.append(set)
     }
 
-    private static func findExercise(named name: String, context: ModelContext) -> Exercise? {
+    private static func findExercise(named name: String, context: ModelContext) throws -> Exercise {
         let descriptor = FetchDescriptor<Exercise>(predicate: #Predicate { $0.name == name })
-        return try? context.fetch(descriptor).first
+        guard let exercise = try context.fetch(descriptor).first else { throw BuildError.missingExercise(name) }
+        return exercise
     }
 }

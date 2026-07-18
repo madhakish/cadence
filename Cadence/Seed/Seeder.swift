@@ -6,8 +6,8 @@ import CadenceCore
 /// training history so charts, PRs, and suggestions work on day one.
 enum Seeder {
 
-    static func seedIfNeeded(context: ModelContext) {
-        let existing = (try? context.fetch(FetchDescriptor<AppSettings>())) ?? []
+    static func seedIfNeeded(context: ModelContext) throws {
+        let existing = try context.fetch(FetchDescriptor<AppSettings>())
         if let settings = existing.first, settings.seededAt != nil { return }
 
         let settings = existing.first ?? {
@@ -24,7 +24,8 @@ enum Seeder {
         seedProgram(context: context)
 
         settings.seededAt = .now
-        try? context.save()
+        do { try context.save() }
+        catch { context.rollback(); throw error }
     }
 
     // MARK: - Exercise library (exact seed list; movementGroup enables swap)
@@ -116,8 +117,8 @@ enum Seeder {
     /// insert movements an older install is missing and backfill `movementGroup`
     /// on existing records — never clobbering user edits to exercises that
     /// already exist (rest, shelved, watch site, etc.).
-    static func syncLibrary(context: ModelContext) {
-        let existing = (try? context.fetch(FetchDescriptor<Exercise>())) ?? []
+    static func syncLibrary(context: ModelContext) throws {
+        let existing = try context.fetch(FetchDescriptor<Exercise>())
         var byName: [String: Exercise] = [:]
         for ex in existing { byName[ex.name] = ex }
         for def in libraryDefinitions() {
@@ -128,8 +129,9 @@ enum Seeder {
                 byName[def.name] = def
             }
         }
-        clearRetiredRestStamps(byName: byName, context: context)
-        try? context.save()
+        try clearRetiredRestStamps(byName: byName, context: context)
+        do { try context.save() }
+        catch { context.rollback(); throw error }
     }
 
     /// Old seeds stamped EVERY exercise with a defaultRestSeconds, and the
@@ -139,8 +141,8 @@ enum Seeder {
     /// clear values that still exactly equal the retired stamps, so those
     /// movements fall to the configurable buckets. A value the user changed no
     /// longer matches its stamp and is left alone.
-    private static func clearRetiredRestStamps(byName: [String: Exercise], context: ModelContext) {
-        guard let settings = (try? context.fetch(FetchDescriptor<AppSettings>()))?.first,
+    private static func clearRetiredRestStamps(byName: [String: Exercise], context: ModelContext) throws {
+        guard let settings = try context.fetch(FetchDescriptor<AppSettings>()).first,
               !settings.restSeedStampsCleared else { return }
         for (name, stamp) in retiredRestStamps {
             if let cur = byName[name], cur.defaultRestSeconds == stamp { cur.defaultRestSeconds = 0 }

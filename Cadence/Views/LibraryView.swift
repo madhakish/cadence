@@ -57,6 +57,7 @@ struct ExerciseDetailByNameView: View {
 }
 
 struct ExerciseDetailView: View {
+    @Environment(\.modelContext) private var context
     @Bindable var exercise: Exercise
     @Query private var programs: [Program]
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted },
@@ -191,5 +192,6 @@ struct ExerciseDetailView: View {
             }
         }
         .navigationTitle(exercise.name)
+        .saveChangesOnDisappear(context, operation: "Saving the exercise")
     }
 }

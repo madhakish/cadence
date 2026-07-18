@@ -36,6 +36,21 @@ ok((await db.Tracks.all()).length === 3, "seeded 3 tracks");
 await db.ensureSeeded(); // idempotent
 ok((await db.Sessions.completed()).length === 10, "re-seed is a no-op");
 
+// Recover an install killed by the old store-at-a-time seeder: seed-owned
+// stores are rebuilt once, while user-only stores survive.
+{
+  const extra = structuredClone((await db.Sessions.completed())[0]);
+  delete extra.id;
+  await db.Sessions.save(extra);
+  const proteinId = await db.Protein.add({ date: new Date().toISOString(), grams: 17, label: "keep through seed repair" });
+  const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
+  await db.ensureSeeded();
+  ok((await db.Sessions.completed()).length === 10, "partial old seed is rebuilt without duplicate sessions");
+  ok((await db.Exercises.all()).length === 47, "partial old seed is rebuilt without duplicate exercises");
+  ok((await db.Protein.all()).some((p) => p.id === proteinId), "seed recovery preserves user-only stores");
+  await db.Protein.del(proteinId);
+}
+
 // ---- library sync tops up an already-seeded (older) install ----
 {
   // Simulate an old install: blank a movement group and edit an exercise's
@@ -143,6 +158,7 @@ ok(ms.some((m) => m.exerciseName === "Deadlift" && m.kind === "heaviestSet" && m
 // ---- export / import round trip ----
 const json = await db.exportJSON();
 const parsed = JSON.parse(json);
+ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the current backup schema");
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
@@ -165,6 +181,13 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(restored.nextPhase === 4 && restored.baseWeightLb !== 100, "import restores live track progression");
   const sets = (await db.Sessions.completed())[0].exercises[0].sets;
   ok(sets.every((s) => s.enteredUnit === "lb" || s.enteredUnit === "kg"), "sets keep their entered unit through the round trip");
+
+  const legacy = JSON.parse(JSON.stringify(parsed));
+  delete legacy.schemaVersion;
+  for (const s of legacy.sessions) delete s.isCompleted;
+  await db.importBundle(legacy);
+  ok((await db.Sessions.all()).every((s) => s.isCompleted), "legacy version-0 sessions still restore as completed");
+  await db.importBundle(parsed);
 }
 
 // Cross-platform settings: a native backup carries the rest buckets FLAT
@@ -224,6 +247,45 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(threwMid, "poisoned record rejects the import");
   ok((await db.Sessions.completed()).length === 11, "poisoned import did not clear sessions");
   ok((await db.Gyms.all()).length === gymsBefore.length, "poisoned import did not clear gyms");
+
+  const sessionsBeforeFuture = (await db.Sessions.all()).length;
+  let threwFuture = false;
+  try { await db.importBundle({ ...parsed, schemaVersion: db.BACKUP_SCHEMA_VERSION + 1 }); } catch { threwFuture = true; }
+  ok(threwFuture, "a future backup schema is rejected before mutation");
+  ok((await db.Sessions.all()).length === sessionsBeforeFuture, "future-schema rejection leaves sessions intact");
+
+  const rejectBeforeMutation = async (mutate, label) => {
+    const poisoned = structuredClone(parsed);
+    mutate(poisoned);
+    const before = (await db.Sessions.all()).length;
+    let message = "";
+    try { await db.importBundle(poisoned); } catch (error) { message = error.message; }
+    ok(message.includes("Backup validation failed"), `${label} is rejected by preflight validation`);
+    ok((await db.Sessions.all()).length === before, `${label} rejection leaves sessions intact`);
+  };
+  await rejectBeforeMutation((b) => { b.sessions[0].date = "yesterday-ish"; }, "invalid date");
+  await rejectBeforeMutation((b) => { b.sessions[0].exercises[0].sets[0].enteredUnit = "stone"; }, "unknown set unit");
+  await rejectBeforeMutation((b) => { delete b.sessions[0].exercises[0].sets[0].enteredUnit; }, "missing v1 set unit");
+  await rejectBeforeMutation((b) => { b.exercises[0].name = "   "; }, "blank exercise identifier");
+  await rejectBeforeMutation((b) => { b.gyms.push(structuredClone(b.gyms[0])); }, "duplicate gym identifier");
+  await rejectBeforeMutation((b) => { b.programs[0].nextDayIndex = b.programs[0].days.length; }, "out-of-range program day");
+  await rejectBeforeMutation((b) => { b.sessions = { absolutely: "not an array" }; }, "wrong section shape");
+}
+
+// ---- rotating local recovery checkpoints ----
+{
+  const before = await db.Tracks.byName("Deadlift");
+  await db.Checkpoints.create("smoke-restore");
+  before.baseWeightLb = 77; await db.Tracks.save(before);
+  await db.Checkpoints.restoreLatest();
+  ok((await db.Tracks.byName("Deadlift")).baseWeightLb !== 77, "latest local checkpoint restores the prior state");
+  await db.Checkpoints.create("rotation-1");
+  await db.Checkpoints.create("rotation-2");
+  await db.Checkpoints.create("rotation-3");
+  await db.Checkpoints.create("rotation-4");
+  const checkpoints = await db.Checkpoints.all();
+  ok(checkpoints.length === 3, "local checkpoint rotation keeps exactly three snapshots");
+  ok(checkpoints.every((checkpoint) => checkpoint.bundle.schemaVersion === db.BACKUP_SCHEMA_VERSION), "local checkpoints use the portable backup contract");
 }
 
 // ---- cardio sets: distance/time/incline, not weight×reps ----
@@ -594,6 +656,32 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok((await db.Programs.all()).filter((p) => p.isActive).length === 1, "exactly one program active");
   await db.Programs.del(second.id);
   ok((await db.Programs.all()).length === 1, "program deleted");
+}
+
+
+// ---- backup v1: open program sessions and canonical tags survive restore ----
+{
+  const prog = await db.Programs.active();
+  const day = prog.days.find((d) => d.order === prog.nextDayIndex);
+  const id = await session.createSessionFromProgramDay(prog, day);
+  const open = await db.Sessions.get(id);
+  open.notes = "backup-v1-open-session";
+  await db.Sessions.save(open);
+
+  const bundle = await db.exportBundle();
+  const exported = bundle.sessions.find((s) => s.notes === "backup-v1-open-session");
+  ok(exported && exported.isCompleted === false, "export preserves an open session");
+  ok(exported.programTag?.programName === prog.name && exported.programTag.programId === undefined,
+    "export uses the canonical cross-platform program-name tag");
+  ok((exported.programTag?.planNames || []).length > 0, "export preserves the built-from plan snapshot");
+
+  await db.importBundle(bundle);
+  const restored = (await db.Sessions.all()).find((s) => s.notes === "backup-v1-open-session");
+  ok(restored && restored.isCompleted === false, "restore keeps the session open");
+  ok(restored.programTag?.programId === prog.id && restored.programTag?.programName === prog.name,
+    "restore resolves the canonical tag back to the local program id");
+  ok((restored.programTag?.planNames || []).length === exported.programTag.planNames.length,
+    "restore keeps resume-vs-rebuild plan context");
 }
 
 

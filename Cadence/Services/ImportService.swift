@@ -10,10 +10,13 @@ import CadenceCore
 enum ImportService {
 
     enum ImportError: LocalizedError {
-        case notABackup, writeFailed
+        case notABackup, unsupportedSchemaVersion(Int), invalidData(String), writeFailed
         var errorDescription: String? {
             switch self {
             case .notABackup: return "That file isn't a Cadence backup."
+            case .unsupportedSchemaVersion(let version):
+                return "This backup uses schema version \(version), which this version of Cadence can't restore. Update Cadence and try again."
+            case .invalidData(let reason): return "Backup validation failed at \(reason). Nothing was changed."
             case .writeFailed: return "Couldn't restore the backup — nothing was changed."
             }
         }
@@ -24,15 +27,19 @@ enum ImportService {
     // Lenient decode DTOs — optional everywhere so a partial or web-origin
     // backup never throws on a missing key.
     private struct Bundle: Decodable {
+        var schemaVersion: Int?
         var sessions: [Session]?; var bodyweight: [Bodyweight]?; var protein: [Protein]?
         var checkIns: [CheckInDTO]?; var milestones: [MilestoneDTO]?; var programs: [ProgramDTO]?
         var tracks: [Track]?; var gyms: [GymDTO]?; var exercises: [ExerciseDef]?; var settings: SettingsDTO?
     }
     private struct Session: Decodable {
-        var date: Date?; var notes: String?; var gym: String?
+        var date: Date?; var notes: String?; var gym: String?; var isCompleted: Bool?
         var programTag: ProgramTag?; var exercises: [ExerciseEntry]?
     }
-    private struct ProgramTag: Decodable { var programName: String?; var cycleNumber: Int?; var week: Int?; var dayIndex: Int? }
+    private struct ProgramTag: Decodable {
+        var programName: String?; var cycleNumber: Int?; var week: Int?; var dayIndex: Int?
+        var planNames: [String]?
+    }
     private struct ExerciseEntry: Decodable {
         var name: String?; var notes: String?; var phase: String?; var role: String?
         var plannedWeightLb: Double?; var plannedSets: Int?; var plannedReps: Int?; var sets: [SetDTO]?
@@ -90,6 +97,223 @@ enum ImportService {
         var seededAt: Date?; var theme: String?
     }
 
+    // MARK: - Preflight validation
+
+    private static func requiredText(_ value: String?, _ path: String) throws -> String {
+        let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw ImportError.invalidData("\(path): expected non-empty text") }
+        return trimmed
+    }
+
+    private static func finite(_ value: Double?, _ path: String, required: Bool = false,
+                               min: Double = -Double.greatestFiniteMagnitude,
+                               max: Double = .greatestFiniteMagnitude) throws {
+        guard let value else {
+            if required { throw ImportError.invalidData("\(path): expected a number") }
+            return
+        }
+        guard value.isFinite, value >= min, value <= max else {
+            throw ImportError.invalidData("\(path): expected a finite number from \(min) to \(max)")
+        }
+    }
+
+    private static func integer(_ value: Int?, _ path: String, required: Bool = false,
+                                min: Int = .min, max: Int = .max) throws {
+        guard let value else {
+            if required { throw ImportError.invalidData("\(path): expected an integer") }
+            return
+        }
+        guard value >= min, value <= max else {
+            throw ImportError.invalidData("\(path): expected an integer from \(min) to \(max)")
+        }
+    }
+
+    private static func known(_ value: String?, _ allowed: Set<String>, _ path: String, required: Bool = false) throws {
+        guard let value else {
+            if required { throw ImportError.invalidData("\(path): expected a known value") }
+            return
+        }
+        guard allowed.contains(value) else { throw ImportError.invalidData("\(path): unknown value \(value)") }
+    }
+
+    private static func requireDate(_ value: Date?, _ path: String) throws {
+        guard value != nil else { throw ImportError.invalidData("\(path): expected an ISO-8601 date") }
+    }
+
+    private static func unique(_ values: [String], _ path: String) throws {
+        var seen = Set<String>()
+        for (index, value) in values.enumerated() where !seen.insert(value).inserted {
+            throw ImportError.invalidData("\(path)[\(index)]: duplicate identifier \(value)")
+        }
+    }
+
+    /// Mirrors web `validateBackup`: reject data that either platform would
+    /// silently coerce to a default. This runs before the first fetch/delete,
+    /// so a bad file cannot partially restore or mutate the context.
+    private static func validate(_ bundle: Bundle, schemaVersion: Int) throws {
+        let units: Set<String> = ["lb", "kg"]
+        let roles: Set<String> = ["main", "complementary", "accessory"]
+        let liftRoles: Set<String> = ["main", "complementary"]
+        let flags: Set<String> = ["clean", "grindy", "wobble", "stopped early"]
+        let reasons: Set<String> = ["bar speed", "wobble", "joint signal", "heat", "fatigue"]
+        let sites: Set<String> = ["Left shoulder", "Left hip", "Right knee"]
+
+        for (si, session) in (bundle.sessions ?? []).enumerated() {
+            let path = "sessions[\(si)]"
+            try requireDate(session.date, "\(path).date")
+            if let tag = session.programTag {
+                if schemaVersion >= 1 { _ = try requiredText(tag.programName, "\(path).programTag.programName") }
+                try integer(tag.cycleNumber, "\(path).programTag.cycleNumber", min: 1)
+                try integer(tag.week, "\(path).programTag.week", min: 1)
+                try integer(tag.dayIndex, "\(path).programTag.dayIndex", min: 0)
+                for (i, name) in (tag.planNames ?? []).enumerated() {
+                    _ = try requiredText(name, "\(path).programTag.planNames[\(i)]")
+                }
+            }
+            for (ei, exercise) in (session.exercises ?? []).enumerated() {
+                let exercisePath = "\(path).exercises[\(ei)]"
+                _ = try requiredText(exercise.name, "\(exercisePath).name")
+                try known(exercise.role, roles, "\(exercisePath).role")
+                try finite(exercise.plannedWeightLb, "\(exercisePath).plannedWeightLb", min: 0)
+                try integer(exercise.plannedSets, "\(exercisePath).plannedSets", min: 0)
+                try integer(exercise.plannedReps, "\(exercisePath).plannedReps", min: 0)
+                for (xi, set) in (exercise.sets ?? []).enumerated() {
+                    let setPath = "\(exercisePath).sets[\(xi)]"
+                    try finite(set.weightLb, "\(setPath).weightLb", required: true, min: 0)
+                    try integer(set.reps, "\(setPath).reps", required: true, min: 0)
+                    try known(set.enteredUnit, units, "\(setPath).enteredUnit", required: schemaVersion >= 1)
+                    for (fi, flag) in (set.flags ?? []).enumerated() { try known(flag, flags, "\(setPath).flags[\(fi)]") }
+                    try known(set.bodyFlagSite, sites, "\(setPath).bodyFlagSite")
+                    try known(set.autoregReason, reasons, "\(setPath).autoregReason")
+                    try integer(set.durationSeconds, "\(setPath).durationSeconds", min: 0)
+                    try finite(set.distanceMiles, "\(setPath).distanceMiles", min: 0)
+                    try finite(set.inclinePercent, "\(setPath).inclinePercent", min: -100, max: 100)
+                }
+            }
+        }
+
+        for (i, entry) in (bundle.bodyweight ?? []).enumerated() {
+            try requireDate(entry.date, "bodyweight[\(i)].date")
+            try finite(entry.weightLb, "bodyweight[\(i)].weightLb", required: true, min: 0)
+            try finite(entry.bodyFatPercent, "bodyweight[\(i)].bodyFatPercent", min: 0, max: 100)
+        }
+        for (i, entry) in (bundle.protein ?? []).enumerated() {
+            try requireDate(entry.date, "protein[\(i)].date")
+            try finite(entry.grams, "protein[\(i)].grams", required: true, min: 0)
+        }
+        for (i, entry) in (bundle.checkIns ?? []).enumerated() {
+            try requireDate(entry.date, "checkIns[\(i)].date")
+            _ = try requiredText(entry.site, "checkIns[\(i)].site")
+            try known(entry.site, sites, "checkIns[\(i)].site")
+            _ = try requiredText(entry.response, "checkIns[\(i)].response")
+        }
+        let milestoneKinds: Set<String> = ["heaviestSet", "volumePR", "firstScheme", "programNote"]
+        for (i, entry) in (bundle.milestones ?? []).enumerated() {
+            try requireDate(entry.date, "milestones[\(i)].date")
+            _ = try requiredText(entry.kind, "milestones[\(i)].kind")
+            try known(entry.kind, milestoneKinds, "milestones[\(i)].kind")
+            _ = try requiredText(entry.label, "milestones[\(i)].label")
+        }
+
+        for (pi, program) in (bundle.programs ?? []).enumerated() {
+            let path = "programs[\(pi)]"
+            _ = try requiredText(program.name, "\(path).name")
+            try known(program.focus, ["strength", "hypertrophy", "maintain"], "\(path).focus", required: schemaVersion >= 1)
+            try integer(program.cycleNumber, "\(path).cycleNumber", min: 1)
+            try integer(program.currentWeek, "\(path).currentWeek", min: 1, max: 4)
+            try integer(program.nextDayIndex, "\(path).nextDayIndex", min: 0)
+            try finite(program.roundingLb, "\(path).roundingLb", min: Double.leastNonzeroMagnitude)
+            for (di, day) in (program.days ?? []).enumerated() {
+                let dayPath = "\(path).days[\(di)]"
+                _ = try requiredText(day.name, "\(dayPath).name")
+                try integer(day.order, "\(dayPath).order", required: true, min: 0)
+                for (li, lift) in (day.lifts ?? []).enumerated() {
+                    let liftPath = "\(dayPath).lifts[\(li)]"
+                    _ = try requiredText(lift.exerciseName, "\(liftPath).exerciseName")
+                    try known(lift.role, liftRoles, "\(liftPath).role", required: schemaVersion >= 1)
+                    try finite(lift.baseWeightLb, "\(liftPath).baseWeightLb", min: 0)
+                    try finite(lift.estimatedMaxLb, "\(liftPath).estimatedMaxLb", min: 0)
+                    try integer(lift.stallCount, "\(liftPath).stallCount", min: 0)
+                    try finite(lift.lastIncrementLb, "\(liftPath).lastIncrementLb", min: 0)
+                    if let state = lift.pending?.state {
+                        try finite(state.baseWeightLb, "\(liftPath).pending.state.baseWeightLb", min: 0)
+                        try finite(state.estimatedMaxLb, "\(liftPath).pending.state.estimatedMaxLb", min: 0)
+                        try integer(state.stallCount, "\(liftPath).pending.state.stallCount", min: 0)
+                        try finite(state.lastIncrementLb, "\(liftPath).pending.state.lastIncrementLb", min: 0)
+                    }
+                }
+                for (ai, accessory) in (day.accessories ?? []).enumerated() {
+                    let accessoryPath = "\(dayPath).accessories[\(ai)]"
+                    _ = try requiredText(accessory.exerciseName, "\(accessoryPath).exerciseName")
+                    try integer(accessory.sets, "\(accessoryPath).sets", min: 0)
+                    try integer(accessory.minReps, "\(accessoryPath).minReps", min: 0)
+                    try integer(accessory.maxReps, "\(accessoryPath).maxReps", min: 0)
+                    try integer(accessory.currentReps, "\(accessoryPath).currentReps", min: 0)
+                    try finite(accessory.weightLb, "\(accessoryPath).weightLb", min: 0)
+                    try finite(accessory.incrementLb, "\(accessoryPath).incrementLb", min: 0)
+                    try integer(accessory.stallCount, "\(accessoryPath).stallCount", min: 0)
+                }
+            }
+            try unique((program.days ?? []).compactMap(\.order).map { String($0) }, "\(path).days")
+            if let next = program.nextDayIndex, let count = program.days?.count, count > 0, next >= count {
+                throw ImportError.invalidData("\(path).nextDayIndex: outside the program's day list")
+            }
+        }
+        try unique((bundle.programs ?? []).map { try requiredText($0.name, "programs.name") }, "programs")
+
+        for (i, track) in (bundle.tracks ?? []).enumerated() {
+            let path = "tracks[\(i)]"
+            _ = try requiredText(track.exerciseName, "\(path).exerciseName")
+            try known(track.mode, ["cycle", "linear"], "\(path).mode", required: schemaVersion >= 1)
+            try integer(track.cycleNumber, "\(path).cycleNumber", min: 1)
+            try integer(track.nextPhase, "\(path).nextPhase", min: 1, max: 4)
+            try finite(track.baseWeightLb, "\(path).baseWeightLb", min: 0)
+            try finite(track.incrementLb, "\(path).incrementLb", min: Double.leastNonzeroMagnitude)
+            try finite(track.roundingLb, "\(path).roundingLb", min: Double.leastNonzeroMagnitude)
+        }
+        try unique((bundle.tracks ?? []).map { try requiredText($0.exerciseName, "tracks.exerciseName") }, "tracks")
+
+        for (i, gym) in (bundle.gyms ?? []).enumerated() {
+            _ = try requiredText(gym.name, "gyms[\(i)].name")
+            for (pi, plate) in (gym.plateToggles ?? []).enumerated() {
+                try finite(plate.value, "gyms[\(i)].plateToggles[\(pi)].value", required: true, min: Double.leastNonzeroMagnitude)
+                _ = try requiredText(plate.unit, "gyms[\(i)].plateToggles[\(pi)].unit")
+                try known(plate.unit, units, "gyms[\(i)].plateToggles[\(pi)].unit", required: schemaVersion >= 1)
+            }
+        }
+        try unique((bundle.gyms ?? []).map { try requiredText($0.name, "gyms.name") }, "gyms")
+
+        let categories: Set<String> = ["Main", "Accessory", "Conditioning"]
+        let types: Set<String> = ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"]
+        for (i, exercise) in (bundle.exercises ?? []).enumerated() {
+            let path = "exercises[\(i)]"
+            _ = try requiredText(exercise.name, "\(path).name")
+            try known(exercise.category, categories, "\(path).category", required: schemaVersion >= 1)
+            try known(exercise.type, types, "\(path).type", required: schemaVersion >= 1)
+            try known(exercise.watchSite, sites, "\(path).watchSite")
+            try integer(exercise.defaultRestSeconds, "\(path).defaultRestSeconds", min: 0, max: 3600)
+        }
+        try unique((bundle.exercises ?? []).map { try requiredText($0.name, "exercises.name") }, "exercises")
+
+        if let settings = bundle.settings {
+            try known(settings.unitDisplay, ["lbPrimary", "kgPrimary", "both"], "settings.unitDisplay", required: schemaVersion >= 1)
+            try known(settings.theme, ["memento", "carbon", "slate", "system"], "settings.theme", required: schemaVersion >= 1)
+            try finite(settings.proteinTargetGrams, "settings.proteinTargetGrams", min: 0)
+            for (path, value) in [
+                ("settings.accessoryRestSeconds", settings.accessoryRestSeconds),
+                ("settings.mainCompoundRestSeconds", settings.mainCompoundRestSeconds),
+                ("settings.olympicRestSeconds", settings.olympicRestSeconds),
+                ("settings.mainUpperRestSeconds", settings.mainUpperRestSeconds),
+                ("settings.secondaryRestSeconds", settings.secondaryRestSeconds),
+                ("settings.rest.mainCompoundSeconds", settings.rest?.mainCompoundSeconds),
+                ("settings.rest.olympicSeconds", settings.rest?.olympicSeconds),
+                ("settings.rest.mainUpperSeconds", settings.rest?.mainUpperSeconds),
+                ("settings.rest.secondarySeconds", settings.rest?.secondarySeconds),
+                ("settings.rest.accessorySeconds", settings.rest?.accessorySeconds),
+            ] { try integer(value, path, min: 0, max: 3600) }
+        }
+    }
+
     @discardableResult
     static func load(_ data: Data, into context: ModelContext) throws -> Summary {
         let decoder = JSONDecoder()
@@ -104,12 +328,17 @@ enum ImportService {
             throw DecodingError.dataCorrupted(.init(codingPath: d.codingPath, debugDescription: "Unrecognised date: \(s)"))
         }
         guard let bundle = try? decoder.decode(Bundle.self, from: data) else { throw ImportError.notABackup }
+        let schemaVersion = bundle.schemaVersion ?? 0
+        guard BackupContract.supports(schemaVersion: schemaVersion) else {
+            throw ImportError.unsupportedSchemaVersion(schemaVersion)
+        }
 
         let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
                            bundle.gyms != nil, bundle.exercises != nil, bundle.bodyweight != nil,
                            bundle.protein != nil, bundle.checkIns != nil, bundle.milestones != nil,
                            bundle.settings != nil].contains(true)
         guard hasAnything else { throw ImportError.notABackup }
+        try validate(bundle, schemaVersion: schemaVersion)
 
         do {
             // Exercises: UPSERT by name (never delete — SessionExercise links to
@@ -126,11 +355,8 @@ enum ImportService {
                     else { let e = makeExercise(d); context.insert(e); byName[name] = e }
                 }
             }
-            let exByName: [String: Exercise] = {
-                var m: [String: Exercise] = [:]
-                for e in ((try? context.fetch(FetchDescriptor<Exercise>())) ?? []) { m[e.name] = e }
-                return m
-            }()
+            var exByName: [String: Exercise] = [:]
+            for e in try context.fetch(FetchDescriptor<Exercise>()) { exByName[e.name] = e }
 
             if let gyms = bundle.gyms {
                 try context.delete(model: Gym.self)
@@ -173,9 +399,9 @@ enum ImportService {
                 for s in sessions { context.insert(makeSession(s, exByName: exByName)) }
             }
             if let st = bundle.settings {
-                applySettings(st, restoredExercises: bundle.exercises != nil, in: context)
+                try applySettings(st, restoredExercises: bundle.exercises != nil, in: context)
             } else if bundle.exercises != nil,
-                      let s = (try? context.fetch(FetchDescriptor<AppSettings>()))?.first {
+                      let s = try context.fetch(FetchDescriptor<AppSettings>()).first {
                 // A library restored with no settings riding along is of
                 // unknown vintage — re-arm the retired-rest-stamp check so the
                 // next launch's syncLibrary re-inspects the restored records.
@@ -287,12 +513,15 @@ enum ImportService {
 
     private static func makeSession(_ s: Session, exByName: [String: Exercise]) -> WorkoutSession {
         let session = WorkoutSession(date: s.date ?? .now, notes: s.notes ?? "", gymName: s.gym)
-        session.isCompleted = true
+        // Legacy, unversioned backups only contained completed sessions, so a
+        // missing flag means completed. Version 1 carries the actual state.
+        session.isCompleted = s.isCompleted ?? true
         if let tag = s.programTag {
             session.programName = tag.programName
             session.programCycleNumber = tag.cycleNumber
             session.programWeek = tag.week
             session.programDayIndex = tag.dayIndex
+            session.programPlanNames = tag.planNames
         }
         for (oi, e) in (s.exercises ?? []).enumerated() {
             let entry = SessionExercise(order: oi, exercise: e.name.flatMap { exByName[$0] }, notes: e.notes ?? "")
@@ -320,8 +549,8 @@ enum ImportService {
         return session
     }
 
-    private static func applySettings(_ st: SettingsDTO, restoredExercises: Bool, in context: ModelContext) {
-        let settings = ((try? context.fetch(FetchDescriptor<AppSettings>()))?.first) ?? {
+    private static func applySettings(_ st: SettingsDTO, restoredExercises: Bool, in context: ModelContext) throws {
+        let settings = (try context.fetch(FetchDescriptor<AppSettings>()).first) ?? {
             let s = AppSettings(); context.insert(s); return s
         }()
         if let v = st.unitDisplay { settings.unitDisplayRaw = v }

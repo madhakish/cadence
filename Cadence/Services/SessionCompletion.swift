@@ -76,7 +76,9 @@ enum SessionCompletion {
                 ))
             }
 
-            let history = priorHistory(for: exercise.name, before: session.date, context: context)
+            let history: (sets: [SetSample], volumes: [Double], schemes: Set<String>)
+            do { history = try priorHistory(for: exercise.name, before: session.date, context: context) }
+            catch { context.rollback(); throw SaveFailure(underlying: error) }
             let events = PRDetection.evaluate(
                 exercise: exercise.name,
                 sessionSets: working,
@@ -94,12 +96,14 @@ enum SessionCompletion {
 
             // Program-owned exercises advance via the program, never the standalone track.
             if entry.programRole == nil {
-                advanceTrackIfNeeded(for: exercise.name, context: context)
+                do { try advanceTrackIfNeeded(for: exercise.name, context: context) }
+                catch { context.rollback(); throw SaveFailure(underlying: error) }
             }
         }
 
         if session.programName != nil {
-            advanceProgram(session, context: context, events: &allEvents)
+            do { try advanceProgram(session, context: context, events: &allEvents) }
+            catch { context.rollback(); throw SaveFailure(underlying: error) }
         }
 
         // Commit the staged batch through the core boundary: save, or roll
@@ -167,10 +171,10 @@ enum SessionCompletion {
         )
     }
 
-    private static func advanceProgram(_ session: WorkoutSession, context: ModelContext, events: inout [PREvent]) {
+    private static func advanceProgram(_ session: WorkoutSession, context: ModelContext, events: inout [PREvent]) throws {
         guard let name = session.programName else { return }
         let descriptor = FetchDescriptor<Program>(predicate: #Predicate { $0.name == name })
-        guard let program = try? context.fetch(descriptor).first else { return }
+        guard let program = try context.fetch(descriptor).first else { return }
         let dayIndex = session.programDayIndex ?? 0
         guard let day = program.days.first(where: { $0.order == dayIndex }) else { return }
         let week = session.programWeek ?? program.currentWeek
@@ -281,11 +285,11 @@ enum SessionCompletion {
         for exerciseName: String,
         before date: Date,
         context: ModelContext
-    ) -> (sets: [SetSample], volumes: [Double], schemes: Set<String>) {
+    ) throws -> (sets: [SetSample], volumes: [Double], schemes: Set<String>) {
         let descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { $0.isCompleted && $0.date < date }
         )
-        let sessions = (try? context.fetch(descriptor)) ?? []
+        let sessions = try context.fetch(descriptor)
 
         var sets: [SetSample] = []
         var volumes: [Double] = []
@@ -305,11 +309,11 @@ enum SessionCompletion {
         return (sets, volumes, schemes)
     }
 
-    private static func advanceTrackIfNeeded(for exerciseName: String, context: ModelContext) {
+    private static func advanceTrackIfNeeded(for exerciseName: String, context: ModelContext) throws {
         let descriptor = FetchDescriptor<LiftTrack>(
             predicate: #Predicate { $0.exerciseName == exerciseName }
         )
-        guard let track = try? context.fetch(descriptor).first else { return }
+        guard let track = try context.fetch(descriptor).first else { return }
         track.completeSession()
     }
 }

@@ -5,6 +5,14 @@ import CadenceCore
 /// Today: suggested next session per lift, one-tap session start,
 /// gym tag, protein running total. Nothing motivational.
 struct HomeView: View {
+    private enum StartError: LocalizedError {
+        case missingExercise(String)
+        var errorDescription: String? {
+            switch self {
+            case .missingExercise(let name): return "The exercise library is missing \(name). Sync or restore the library, then try again."
+            }
+        }
+    }
     @Environment(\.modelContext) private var context
     @Query private var tracks: [LiftTrack]
     @Query private var programs: [Program]
@@ -231,22 +239,29 @@ struct HomeView: View {
     private func proteinButton(_ label: String, grams: Double) -> some View {
         Button(label) {
             context.insert(ProteinEntry(grams: grams, label: label))
-            try? context.save()
+            PersistenceErrorCenter.shared.save(context, operation: "Logging protein")
         }
         .buttonStyle(.bordered)
         .font(.callout)
     }
 
     private func startSession(with track: LiftTrack) {
-        let session = WorkoutSession(gymName: defaultGym?.name)
-        context.insert(session)
-
         // #Predicate can't reference properties of captured objects; capture the value
         let exerciseName = track.exerciseName
         let descriptor = FetchDescriptor<Exercise>(
             predicate: #Predicate { $0.name == exerciseName }
         )
-        let exercise = try? context.fetch(descriptor).first
+        let exercise: Exercise
+        do {
+            guard let found = try context.fetch(descriptor).first else { throw StartError.missingExercise(exerciseName) }
+            exercise = found
+        } catch {
+            PersistenceErrorCenter.shared.report(error, operation: "Starting the session", context: context)
+            return
+        }
+
+        let session = WorkoutSession(gymName: defaultGym?.name)
+        context.insert(session)
 
         let entry = SessionExercise(order: 0, exercise: exercise)
         entry.session = session
@@ -259,7 +274,7 @@ struct HomeView: View {
         session.exercises.append(entry)
 
         // Pre-fill warmup ramp + working sets. All editable.
-        if exercise?.type == .barbell {
+        if exercise.type == .barbell {
             for warmup in WarmupRamp.ramp(workingLb: plan.weightLb) {
                 let set = SetEntry(order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps, isWarmup: true)
                 set.sessionExercise = entry
@@ -274,20 +289,21 @@ struct HomeView: View {
             entry.sets.append(set)
         }
 
-        try? context.save()
-        activeSession = session
+        if PersistenceErrorCenter.shared.save(context, operation: "Starting the session") { activeSession = session }
     }
 
     private func startBlankSession() {
         let session = WorkoutSession(gymName: defaultGym?.name)
         context.insert(session)
-        try? context.save()
-        activeSession = session
+        if PersistenceErrorCenter.shared.save(context, operation: "Starting the session") { activeSession = session }
     }
 
     private func startProgramDay(_ program: Program, _ day: ProgramDay) {
-        let session = ProgramSession.make(program: program, day: day, context: context)
-        try? context.save()
-        activeSession = session
+        do {
+            let session = try ProgramSession.make(program: program, day: day, context: context)
+            if PersistenceErrorCenter.shared.save(context, operation: "Starting the program session") { activeSession = session }
+        } catch {
+            PersistenceErrorCenter.shared.report(error, operation: "Starting the program session", context: context)
+        }
     }
 }
