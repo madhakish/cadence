@@ -10,10 +10,12 @@ import CadenceCore
 enum ImportService {
 
     enum ImportError: LocalizedError {
-        case notABackup, writeFailed
+        case notABackup, unsupportedSchemaVersion(Int), writeFailed
         var errorDescription: String? {
             switch self {
             case .notABackup: return "That file isn't a Cadence backup."
+            case .unsupportedSchemaVersion(let version):
+                return "This backup uses schema version \(version), which this version of Cadence can't restore. Update Cadence and try again."
             case .writeFailed: return "Couldn't restore the backup — nothing was changed."
             }
         }
@@ -24,15 +26,19 @@ enum ImportService {
     // Lenient decode DTOs — optional everywhere so a partial or web-origin
     // backup never throws on a missing key.
     private struct Bundle: Decodable {
+        var schemaVersion: Int?
         var sessions: [Session]?; var bodyweight: [Bodyweight]?; var protein: [Protein]?
         var checkIns: [CheckInDTO]?; var milestones: [MilestoneDTO]?; var programs: [ProgramDTO]?
         var tracks: [Track]?; var gyms: [GymDTO]?; var exercises: [ExerciseDef]?; var settings: SettingsDTO?
     }
     private struct Session: Decodable {
-        var date: Date?; var notes: String?; var gym: String?
+        var date: Date?; var notes: String?; var gym: String?; var isCompleted: Bool?
         var programTag: ProgramTag?; var exercises: [ExerciseEntry]?
     }
-    private struct ProgramTag: Decodable { var programName: String?; var cycleNumber: Int?; var week: Int?; var dayIndex: Int? }
+    private struct ProgramTag: Decodable {
+        var programName: String?; var cycleNumber: Int?; var week: Int?; var dayIndex: Int?
+        var planNames: [String]?
+    }
     private struct ExerciseEntry: Decodable {
         var name: String?; var notes: String?; var phase: String?; var role: String?
         var plannedWeightLb: Double?; var plannedSets: Int?; var plannedReps: Int?; var sets: [SetDTO]?
@@ -104,6 +110,10 @@ enum ImportService {
             throw DecodingError.dataCorrupted(.init(codingPath: d.codingPath, debugDescription: "Unrecognised date: \(s)"))
         }
         guard let bundle = try? decoder.decode(Bundle.self, from: data) else { throw ImportError.notABackup }
+        let schemaVersion = bundle.schemaVersion ?? 0
+        guard BackupContract.supports(schemaVersion: schemaVersion) else {
+            throw ImportError.unsupportedSchemaVersion(schemaVersion)
+        }
 
         let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
                            bundle.gyms != nil, bundle.exercises != nil, bundle.bodyweight != nil,
@@ -287,12 +297,15 @@ enum ImportService {
 
     private static func makeSession(_ s: Session, exByName: [String: Exercise]) -> WorkoutSession {
         let session = WorkoutSession(date: s.date ?? .now, notes: s.notes ?? "", gymName: s.gym)
-        session.isCompleted = true
+        // Legacy, unversioned backups only contained completed sessions, so a
+        // missing flag means completed. Version 1 carries the actual state.
+        session.isCompleted = s.isCompleted ?? true
         if let tag = s.programTag {
             session.programName = tag.programName
             session.programCycleNumber = tag.cycleNumber
             session.programWeek = tag.week
             session.programDayIndex = tag.dayIndex
+            session.programPlanNames = tag.planNames
         }
         for (oi, e) in (s.exercises ?? []).enumerated() {
             let entry = SessionExercise(order: oi, exercise: e.name.flatMap { exByName[$0] }, notes: e.notes ?? "")

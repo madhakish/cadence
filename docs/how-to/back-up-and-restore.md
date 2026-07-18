@@ -13,7 +13,8 @@ visited in a while.
 - **Export JSON** — the full backup bundle: sessions, body log, protein,
   check-ins, milestones, programs (including mid-cycle state: pending
   peak grades and cycle-swap markers), tracked lifts, gyms, exercise
-  library, settings.
+  library, settings. Open workouts are included and remain open after a
+  restore.
 - **Export CSV** — sessions flattened for spreadsheets. Not a backup;
   it can't be re-imported.
 
@@ -27,6 +28,9 @@ text; keep it wherever you keep files you care about.
 - The bundle is the same format on both platforms: an iOS export
   restores into the web app and vice versa. This is also the way to
   move between devices.
+- Current exports declare a schema version. Cadence still accepts legacy
+  unversioned backups, but refuses a newer schema it doesn't understand
+  before changing local data. Update the app, then retry the restore.
 - Restore is transactional and per-section: only the sections present in
   the bundle are replaced (an old backup without `programs` leaves your
   programs alone), and a malformed file aborts without changing

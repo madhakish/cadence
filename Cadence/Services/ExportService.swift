@@ -40,12 +40,14 @@ enum ExportService {
         let cycleNumber: Int?
         let week: Int?
         let dayIndex: Int?
+        let planNames: [String]?
     }
 
     struct ExportSession: Codable {
         let date: Date
         let notes: String
         let gym: String?
+        let isCompleted: Bool
         let programTag: ExportProgramTag?
         let exercises: [ExportExercise]
     }
@@ -55,6 +57,7 @@ enum ExportService {
     // so a restore — the web importBundle is the only restore path — recovers
     // everything, not just history.
     struct ExportBundle: Codable {
+        let schemaVersion: Int
         let exportedAt: Date
         let appVersion: String
         let sessions: [ExportSession]
@@ -307,6 +310,7 @@ enum ExportService {
         let settings = try context.fetch(FetchDescriptor<AppSettings>()).first
 
         return ExportBundle(
+            schemaVersion: BackupContract.currentSchemaVersion,
             exportedAt: .now,
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev",
             sessions: sessions.map { session in
@@ -314,11 +318,13 @@ enum ExportService {
                     date: session.date,
                     notes: session.notes,
                     gym: session.gymName,
+                    isCompleted: session.isCompleted,
                     programTag: session.programName.map { name in
                         ExportProgramTag(programName: name,
                                          cycleNumber: session.programCycleNumber,
                                          week: session.programWeek,
-                                         dayIndex: session.programDayIndex)
+                                         dayIndex: session.programDayIndex,
+                                         planNames: session.programPlanNames)
                     },
                     exercises: session.orderedExercises.map { entry in
                         ExportExercise(

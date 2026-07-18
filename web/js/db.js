@@ -6,6 +6,7 @@ import { SEED } from "./seed.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 2;
+export const BACKUP_SCHEMA_VERSION = 1;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -226,16 +227,30 @@ export async function syncLibrary() {
 // shelved, watch sites), and settings ride along with sessions.
 export async function exportBundle() {
   const [sessions, bodyweight, protein, checkins, milestones, programs, tracks, gyms, exercises, settings] = await Promise.all([
-    Sessions.completed(), Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
+    Sessions.all().then((all) => all.sort((a, b) => new Date(b.date) - new Date(a.date))),
+    Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
     Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(),
   ]);
+  const programsById = new Map(programs.map((p) => [p.id, p]));
+  const exportProgramTag = (tag) => {
+    if (!tag) return null;
+    const programName = tag.programName || programsById.get(tag.programId)?.name || null;
+    return {
+      programName,
+      cycleNumber: tag.cycleNumber ?? null,
+      week: tag.week ?? null,
+      dayIndex: tag.dayIndex ?? null,
+      planNames: tag.planNames || null,
+    };
+  };
   const { id: _settingsRowId, ...settingsOut } = settings; // strip the fixed row key
   return {
+    schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: iso(new Date()),
     appVersion: "web",
     sessions: sessions.map((s) => ({
-      date: iso(s.date), notes: s.notes || "", gym: s.gymName || null,
-      programTag: s.programTag || null,
+      date: iso(s.date), notes: s.notes || "", gym: s.gymName || null, isCompleted: !!s.isCompleted,
+      programTag: exportProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e) => ({
         name: e.exerciseName, notes: e.notes || "",
         phase: e.phase ? C.phaseLabel(e.phase) : null,
@@ -327,12 +342,35 @@ function normalizeSettings(s) {
 // touched (an old backup without e.g. `gyms` leaves current gyms alone), and a
 // malformed bundle aborts wholesale instead of leaving stores cleared.
 export async function importBundle(bundle) {
+  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) throw new Error("Not a Cadence backup");
+  const schemaVersion = bundle.schemaVersion ?? 0;
+  if (!Number.isInteger(schemaVersion) || schemaVersion < 0 || schemaVersion > BACKUP_SCHEMA_VERSION) {
+    throw new Error(`Unsupported Cadence backup schema version: ${schemaVersion}`);
+  }
+
   const writes = new Map(); // store name -> records to clear+put
+  const knownPrograms = bundle.programs || await Programs.all();
+  const programsById = new Map(knownPrograms.map((p) => [p.id, p]));
+  const programsByName = new Map(knownPrograms.map((p) => [p.name, p]));
+  const importProgramTag = (tag) => {
+    if (!tag) return null;
+    const program = programsById.get(tag.programId) || programsByName.get(tag.programName);
+    return {
+      programId: program?.id ?? tag.programId ?? null,
+      programName: tag.programName || program?.name || null,
+      cycleNumber: tag.cycleNumber ?? null,
+      week: tag.week ?? null,
+      dayIndex: tag.dayIndex ?? null,
+      planNames: tag.planNames || [],
+    };
+  };
 
   if (bundle.sessions) {
     writes.set("sessions", bundle.sessions.map((s) => ({
-      date: s.date, notes: s.notes || "", isCompleted: true, gymName: s.gym || null,
-      programTag: s.programTag || null,
+      // Version-0 bundles only exported completed sessions, so absence means
+      // completed. Version 1 preserves open sessions explicitly.
+      date: s.date, notes: s.notes || "", isCompleted: s.isCompleted !== false, gymName: s.gym || null,
+      programTag: importProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, notes: e.notes || "", phase: recoverPhase(e.phase),
         programRole: e.role || null,

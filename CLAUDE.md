@@ -24,6 +24,7 @@ suite). That parity is non-negotiable — it's why the two apps can't drift.
 | `docs/` | User documentation, Diátaxis-structured (tutorials/how-to/reference/explanation); `docs/README.md` is the index. Update alongside behavior changes |
 | `web/js/templates.js` ≡ `CadenceCore/…/ProgramTemplateData.swift` | Program style templates (data) behind the "+ Add program" picker. Parity ENFORCED: both suites assert against `web/tests/fixtures/program-templates.json` (regenerate via `web/tools/generate-template-fixture.mjs`). App-side instantiation: `Cadence/Seed/ProgramTemplates.swift`. Template exercises must use canonical seeded names — a variant spelling forks the library |
 | `web/js/anatomy.js` ≡ `CadenceCore/…/AnatomyData.swift` | Muscle map + figure geometry for the exercise detail view. Parity ENFORCED against `web/tests/fixtures/anatomy.json` (regenerate via `web/tools/generate-anatomy-fixture.mjs`) |
+| `BackupContract.currentSchemaVersion` ≡ `web/js/db.js` `BACKUP_SCHEMA_VERSION` | Cross-platform JSON backup schema. Missing means legacy v0; current exporters emit v1. Never bump one side alone |
 | `fastlane/`, `docs/TESTFLIGHT.md` | Mac-free TestFlight pipeline (dormant until configured) |
 | `.github/workflows/ci.yml`, `pages.yml` | CI + release pipeline; web tests + Pages deploy |
 | `.releaserc.json` | semantic-release config |

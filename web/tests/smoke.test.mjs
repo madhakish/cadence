@@ -143,6 +143,7 @@ ok(ms.some((m) => m.exerciseName === "Deadlift" && m.kind === "heaviestSet" && m
 // ---- export / import round trip ----
 const json = await db.exportJSON();
 const parsed = JSON.parse(json);
+ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the current backup schema");
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
@@ -165,6 +166,13 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(restored.nextPhase === 4 && restored.baseWeightLb !== 100, "import restores live track progression");
   const sets = (await db.Sessions.completed())[0].exercises[0].sets;
   ok(sets.every((s) => s.enteredUnit === "lb" || s.enteredUnit === "kg"), "sets keep their entered unit through the round trip");
+
+  const legacy = JSON.parse(JSON.stringify(parsed));
+  delete legacy.schemaVersion;
+  for (const s of legacy.sessions) delete s.isCompleted;
+  await db.importBundle(legacy);
+  ok((await db.Sessions.all()).every((s) => s.isCompleted), "legacy version-0 sessions still restore as completed");
+  await db.importBundle(parsed);
 }
 
 // Cross-platform settings: a native backup carries the rest buckets FLAT
@@ -224,6 +232,12 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(threwMid, "poisoned record rejects the import");
   ok((await db.Sessions.completed()).length === 11, "poisoned import did not clear sessions");
   ok((await db.Gyms.all()).length === gymsBefore.length, "poisoned import did not clear gyms");
+
+  const sessionsBeforeFuture = (await db.Sessions.all()).length;
+  let threwFuture = false;
+  try { await db.importBundle({ ...parsed, schemaVersion: db.BACKUP_SCHEMA_VERSION + 1 }); } catch { threwFuture = true; }
+  ok(threwFuture, "a future backup schema is rejected before mutation");
+  ok((await db.Sessions.all()).length === sessionsBeforeFuture, "future-schema rejection leaves sessions intact");
 }
 
 // ---- cardio sets: distance/time/incline, not weight×reps ----
@@ -594,6 +608,32 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok((await db.Programs.all()).filter((p) => p.isActive).length === 1, "exactly one program active");
   await db.Programs.del(second.id);
   ok((await db.Programs.all()).length === 1, "program deleted");
+}
+
+
+// ---- backup v1: open program sessions and canonical tags survive restore ----
+{
+  const prog = await db.Programs.active();
+  const day = prog.days.find((d) => d.order === prog.nextDayIndex);
+  const id = await session.createSessionFromProgramDay(prog, day);
+  const open = await db.Sessions.get(id);
+  open.notes = "backup-v1-open-session";
+  await db.Sessions.save(open);
+
+  const bundle = await db.exportBundle();
+  const exported = bundle.sessions.find((s) => s.notes === "backup-v1-open-session");
+  ok(exported && exported.isCompleted === false, "export preserves an open session");
+  ok(exported.programTag?.programName === prog.name && exported.programTag.programId === undefined,
+    "export uses the canonical cross-platform program-name tag");
+  ok((exported.programTag?.planNames || []).length > 0, "export preserves the built-from plan snapshot");
+
+  await db.importBundle(bundle);
+  const restored = (await db.Sessions.all()).find((s) => s.notes === "backup-v1-open-session");
+  ok(restored && restored.isCompleted === false, "restore keeps the session open");
+  ok(restored.programTag?.programId === prog.id && restored.programTag?.programName === prog.name,
+    "restore resolves the canonical tag back to the local program id");
+  ok((restored.programTag?.planNames || []).length === exported.programTag.planNames.length,
+    "restore keeps resume-vs-rebuild plan context");
 }
 
 

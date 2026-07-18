@@ -36,6 +36,8 @@ section that matches what you're trying to do.
   chosen: per-exercise rest, program role, movement type
 - [Program templates](reference/templates.md) — exactly what each
   pre-programmed style contains
+- [Backup schema](reference/backup-schema.md) — versioning, session state,
+  cross-platform program linkage, and compatibility rules
 
 ## Explanation — why it works this way
 

@@ -718,7 +718,7 @@ export async function createSessionFromProgramDay(program, day) {
   }
   const id = await Sessions.save({
     date: iso(new Date()), notes: "", isCompleted: false, gymName: await defaultGymName(),
-    programTag: { programId: program.id, cycleNumber: program.cycleNumber, week: program.currentWeek, dayIndex: day.order, planNames: dayNames },
+    programTag: { programId: program.id, programName: program.name, cycleNumber: program.cycleNumber, week: program.currentWeek, dayIndex: day.order, planNames: dayNames },
     exercises,
   });
   return id;

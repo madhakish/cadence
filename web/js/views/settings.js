@@ -403,7 +403,9 @@ async function exerciseInsight(wrap, e) {
     const w = se.sets.filter((x) => !x.isWarmup);
     if (!w.length) continue;
     const top = w.reduce((b, x) => (!b || x.weightLb > b.weightLb ? x : b), null);
-    const prog = s.programTag ? (programs.find((p) => p.id === s.programTag.programId)?.name ?? "a program") : null;
+    const prog = s.programTag
+      ? (s.programTag.programName || programs.find((p) => p.id === s.programTag.programId)?.name || "a program")
+      : null;
     hist.push({ date: s.date, top, prog });
   }
   const card = ui.h("div", { class: "card" });
