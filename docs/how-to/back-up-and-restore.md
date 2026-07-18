@@ -51,6 +51,7 @@ the app phone home.
 
 ## Reset
 
-**Settings → Reset all data** wipes the device's copy (the seed data
-returns on next launch). The web app creates and preserves a local recovery
-checkpoint first, but export JSON before resetting if the data matters.
+**Settings → Reset all data** wipes the device's copy. The generic exercise
+library and default gym return on next launch, but workout history, programs,
+body metrics, and signals do not. The web app creates and preserves a local
+recovery checkpoint first, but export JSON before resetting if the data matters.

@@ -58,16 +58,16 @@ export async function render(host) {
           ui.h("span", { class: "title", text: l.exerciseName }),
           ui.h("span", { class: "sub", text: l.role })),
         ui.h("div", { style: { textAlign: "right" } },
-          ui.h("div", { class: "wt-big mono", text: `${C.trim(plan.weightLb)} lb` }),
+          ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) }),
           ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
       // The bar you'll load / the pair you'll grab — every wave lift, matching
       // the preview (a complementary barbell lift is loaded just the same).
       if (ex && ex.type === "barbell" && plan.weightLb > 0) {
         card.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
-          barbellSVG(plan.weightLb, "lb", gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb, gym).svg));
+          barbellSVG(plan.weightLb, C.primaryUnit(settings.unitDisplay), gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb, gym).svg));
       } else if (ex && ex.type === "dumbbell" && plan.weightLb > 0) {
         card.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
-          dumbbellSVG(plan.weightLb, "lb"), ui.h("span", { class: "sub", text: "lb" })));
+          dumbbellSVG(plan.weightLb, C.primaryUnit(settings.unitDisplay)), ui.h("span", { class: "sub", text: C.primaryUnit(settings.unitDisplay) })));
       }
     }
     if (day.accessories.length) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: `+ ${day.accessories.map((a) => a.exerciseName).join(", ")}` }));
@@ -169,14 +169,14 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
             ui.h("span", { class: "title", text: l.exerciseName }),
             ui.h("span", { class: "sub", text: l.role })),
           ui.h("div", { style: { textAlign: "right" } },
-            ui.h("div", { class: "wt-big mono", text: `${C.trim(plan.weightLb)} lb` }),
+            ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) }),
             ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
         if (ex && ex.type === "barbell" && plan.weightLb > 0) {
           liftCard.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
-            barbellSVG(plan.weightLb, "lb", gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb, gym).svg));
+            barbellSVG(plan.weightLb, C.primaryUnit(ui.prefs.unitDisplay), gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb, gym).svg));
         } else if (ex && ex.type === "dumbbell" && plan.weightLb > 0) {
           liftCard.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
-            dumbbellSVG(plan.weightLb, "lb"), ui.h("span", { class: "sub", text: "lb" })));
+            dumbbellSVG(plan.weightLb, C.primaryUnit(ui.prefs.unitDisplay)), ui.h("span", { class: "sub", text: C.primaryUnit(ui.prefs.unitDisplay) })));
         }
       }
       body.append(liftCard);
@@ -187,7 +187,7 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
         for (const a of day.accessories) {
           accCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
             ui.h("span", { class: "title", text: a.exerciseName }),
-            ui.h("span", { class: "sub mono", text: a.weightLb > 0 ? `${a.sets}×${a.currentReps} @ ${C.trim(a.weightLb)} lb` : `${a.sets}×${a.currentReps}` })));
+            ui.h("span", { class: "sub mono", text: a.weightLb > 0 ? `${a.sets}×${a.currentReps} @ ${ui.fmtWeight(a.weightLb)}` : `${a.sets}×${a.currentReps}` })));
         }
         body.append(accCard);
       }

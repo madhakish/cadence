@@ -2,6 +2,11 @@ import XCTest
 @testable import CadenceCore
 
 final class UnitsTests: XCTestCase {
+    func testPrimaryUnitFollowsDisplayPreference() {
+        XCTAssertEqual(UnitDisplay.lbPrimary.primaryUnit, .lb)
+        XCTAssertEqual(UnitDisplay.kgPrimary.primaryUnit, .kg)
+        XCTAssertEqual(UnitDisplay.both.primaryUnit, .lb)
+    }
 
     func testConversionRoundTrip() {
         XCTAssertEqual(Weight.kg(fromLb: Weight.lb(fromKg: 42.5)), 42.5, accuracy: 1e-9)

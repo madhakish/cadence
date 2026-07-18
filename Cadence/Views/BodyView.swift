@@ -14,6 +14,10 @@ struct BodyView: View {
     @State private var customProteinText = ""
 
     private var settings: AppSettings? { settingsList.first }
+    private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
+    private func displayWeight(_ lb: Double) -> Double {
+        unitDisplay.primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb
+    }
 
     private var todayProtein: [ProteinEntry] {
         protein.filter { Calendar.current.isDateInToday($0.date) }
@@ -32,17 +36,17 @@ struct BodyView: View {
                             ForEach(bodyweight) { entry in
                                 LineMark(
                                     x: .value("Date", entry.date),
-                                    y: .value("lb", entry.weightLb)
+                                    y: .value(unitDisplay.primaryUnit.rawValue, displayWeight(entry.weightLb))
                                 )
                                 .foregroundStyle(Theme.accent)
                                 PointMark(
                                     x: .value("Date", entry.date),
-                                    y: .value("lb", entry.weightLb)
+                                    y: .value(unitDisplay.primaryUnit.rawValue, displayWeight(entry.weightLb))
                                 )
                                 .foregroundStyle(Theme.accent)
                                 .annotation(position: .top) {
                                     if let label = entry.milestoneLabel {
-                                        Text("\(label) \(Weight.trim(entry.weightLb))")
+                                        Text("\(label) \(unitDisplay.format(lb: entry.weightLb))")
                                             .font(.caption2.bold())
                                             .foregroundStyle(.secondary)
                                     }
@@ -54,7 +58,7 @@ struct BodyView: View {
                     }
                     if let latest = bodyweight.last {
                         HStack {
-                            Text("\(Weight.trim(latest.weightLb)) lb")
+                            Text(unitDisplay.format(lb: latest.weightLb))
                                 .font(.title2.bold())
                             if let bf = latest.bodyFatPercent {
                                 Text("\(Weight.trim(bf))% bf").foregroundStyle(.secondary)
@@ -75,11 +79,11 @@ struct BodyView: View {
                     HStack {
                         Text("\(Int(todayProteinTotal)) g")
                             .font(.title.bold().monospacedDigit())
-                        Text("/ \(Int(settings?.proteinTargetGrams ?? 175)) g today")
+                        Text("/ \(Int(settings?.proteinTargetGrams ?? 100)) g today")
                             .foregroundStyle(.secondary)
                     }
-                    ProgressView(value: min(1, todayProteinTotal / (settings?.proteinTargetGrams ?? 175)))
-                        .tint(todayProteinTotal >= (settings?.proteinTargetGrams ?? 175) ? Theme.good : Theme.accent)
+                    ProgressView(value: min(1, todayProteinTotal / (settings?.proteinTargetGrams ?? 100)))
+                        .tint(todayProteinTotal >= (settings?.proteinTargetGrams ?? 100) ? Theme.good : Theme.accent)
 
                     HStack(spacing: 10) {
                         Button("Shake ~45g") { logProtein(45, "Shake ~45g") }
@@ -141,11 +145,12 @@ private struct BodyweightEntrySheet: View {
     @State private var weightText = ""
     @State private var bodyFatText = ""
     @State private var milestoneLabel = ""
+    private var entryUnit: WeightUnit { settingsList.first?.unitDisplay.primaryUnit ?? .lb }
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Weight (lb)", text: $weightText)
+                TextField("Weight (\(entryUnit.rawValue))", text: $weightText)
                     .keyboardType(.decimalPad)
                     .font(.title2.bold())
                 TextField("Body fat % (optional)", text: $bodyFatText)
@@ -167,7 +172,8 @@ private struct BodyweightEntrySheet: View {
     }
 
     private func save() {
-        guard let weight = Double(weightText) else { return }
+        guard let enteredWeight = Double(weightText) else { return }
+        let weight = Weight.toLb(enteredWeight, from: entryUnit)
         let entry = BodyweightEntry(
             weightLb: weight,
             bodyFatPercent: Double(bodyFatText),

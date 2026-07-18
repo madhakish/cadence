@@ -3,10 +3,11 @@
 // screen is one unit of work), which keeps reads/writes join-free.
 import * as C from "./core.js";
 import { SEED } from "./seed.js";
+import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 3;
-export const BACKUP_SCHEMA_VERSION = 1;
+export const BACKUP_SCHEMA_VERSION = 2;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -104,6 +105,37 @@ const put = (store, value) => run(store, "readwrite", (os) => reqP(os.put(value)
 const del = (store, key) => run(store, "readwrite", (os) => reqP(os.delete(key)));
 const clear = (store) => run(store, "readwrite", (os) => reqP(os.clear()));
 
+// Deterministic UUID-shaped migration IDs keep fixture exports reproducible.
+// Once written they never follow a later rename. Imported v2 IDs win.
+const stableID = (seed) => {
+  let state = 0x811c9dc5;
+  for (const ch of seed) { state ^= ch.charCodeAt(0); state = Math.imul(state, 0x01000193); }
+  let hex = "";
+  for (let i = 0; i < 32; i += 1) { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; hex += ((state >>> 0) & 15).toString(16); }
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
+};
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isPortableUUID = (value) => typeof value === "string" && UUID_RE.test(value);
+const normalizeProgram = (p) => ({
+  ...p,
+  uuid: isPortableUUID(p.uuid) ? p.uuid : (isPortableUUID(p.id) ? p.id : stableID(`program:${p.name}`)),
+});
+const normalizeGym = (g) => ({ ...g, id: isPortableUUID(g.id) ? g.id : stableID(`gym:${g.name}`) });
+const normalizeSession = (session) => ({
+  ...session,
+  exercises: (session.exercises || []).map((exercise) => ({
+    ...exercise,
+    sets: (exercise.sets || []).map((set) => ({
+      ...set,
+      // Pre-v2 completed history is known performed work. An open record is
+      // ambiguous, so it migrates conservatively as planned.
+      status: C.resolveSetStatus(set.status, !!session.isCompleted),
+      flags: C.normalizedSetFlags(C.setQuality(set.flags), (set.flags || []).includes("stopped early")),
+      bodyFlagSite: normalizeBodySite(set.bodyFlagSite),
+    })),
+  })),
+});
+
 // ---- Date helpers ----
 export const iso = (d) => (d instanceof Date ? d : new Date(d)).toISOString();
 export const localDayKey = (d) => {
@@ -128,7 +160,7 @@ function defaultSettings() {
   return {
     unitDisplay: "lbPrimary",
     theme: "carbon",
-    proteinTargetGrams: 175,
+    proteinTargetGrams: 100,
     accessoryRestSeconds: 90, // legacy — superseded by rest.accessorySeconds, kept for old exports
     // Five configurable rest buckets (seconds); secondary rests less than a top main.
     rest: { mainCompoundSeconds: 300, olympicSeconds: 240, mainUpperSeconds: 180, secondarySeconds: 180, accessorySeconds: 90 },
@@ -144,15 +176,28 @@ function defaultSettings() {
 
 // ---- Repositories ----
 export const Exercises = {
-  all: () => getAll("exercises"),
-  byName: (name) => get("exercises", name),
-  save: (e) => put("exercises", e),
+  async all() {
+    return (await getAll("exercises")).map((exercise) => ({
+      ...exercise, watchSite: normalizeBodySite(exercise.watchSite),
+    }));
+  },
+  async byName(name) {
+    const exercise = await get("exercises", name);
+    return exercise ? { ...exercise, watchSite: normalizeBodySite(exercise.watchSite) } : null;
+  },
+  save: (exercise) => put("exercises", { ...exercise, watchSite: normalizeBodySite(exercise.watchSite) }),
 };
 export const Gyms = {
-  all: () => getAll("gyms"),
-  save: (g) => put("gyms", g),
+  async all() {
+    const all = await getAll("gyms");
+    const normalized = all.map(normalizeGym);
+    await Promise.all(normalized.filter((g, i) => g.id !== all[i].id).map((g) => put("gyms", g)));
+    return normalized;
+  },
+  save: (g) => put("gyms", normalizeGym(g)),
   del: (name) => del("gyms", name),
-  async default() { const all = await getAll("gyms"); return all.find((g) => g.isDefault) || all[0] || null; },
+  async default() { const all = await Gyms.all(); return all.find((g) => g.isDefault) || all[0] || null; },
+  async resolve(id, name) { const all = await Gyms.all(); return all.find((g) => g.id === id) || all.find((g) => g.name === name) || all.find((g) => g.isDefault) || all[0] || null; },
 };
 export const Tracks = {
   all: () => getAll("tracks"),
@@ -160,12 +205,12 @@ export const Tracks = {
   save: (t) => put("tracks", t),
 };
 export const Sessions = {
-  all: () => getAll("sessions"),
-  get: (id) => get("sessions", id),
-  save: (s) => put("sessions", s),
+  async all() { return (await getAll("sessions")).map(normalizeSession); },
+  async get(id) { const session = await get("sessions", id); return session ? normalizeSession(session) : null; },
+  save: (s) => put("sessions", normalizeSession(s)),
   del: (id) => del("sessions", id),
-  async open() { const all = await getAll("sessions"); return all.filter((s) => !s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null; },
-  async completed() { const all = await getAll("sessions"); return all.filter((s) => s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date)); },
+  async open() { const all = await Sessions.all(); return all.filter((s) => !s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null; },
+  async completed() { const all = await Sessions.all(); return all.filter((s) => s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date)); },
 };
 export const Bodyweight = {
   all: () => getAll("bodyweight"),
@@ -180,48 +225,52 @@ export const Protein = {
   async todayTotal() { return (await Protein.today()).reduce((s, p) => s + p.grams, 0); },
 };
 export const Checkins = {
-  all: () => getAll("checkins"),
-  add: (c) => put("checkins", c),
+  async all() {
+    return (await getAll("checkins")).map((entry) => ({
+      ...entry, site: normalizeBodySite(entry.site),
+    }));
+  },
+  add: (c) => put("checkins", { ...c, site: normalizeBodySite(c.site) }),
 };
 export const Milestones = {
   all: () => getAll("milestones"),
   add: (m) => put("milestones", m),
 };
 export const Programs = {
-  all: () => getAll("programs"),
+  async all() {
+    const all = await getAll("programs");
+    const normalized = all.map(normalizeProgram);
+    await Promise.all(normalized.filter((p, i) => p.uuid !== all[i].uuid).map((p) => put("programs", p)));
+    return normalized;
+  },
   get: (id) => get("programs", id),
-  save: (p) => put("programs", p),
+  save: (p) => put("programs", normalizeProgram(p)),
   del: (id) => del("programs", id),
-  async active() { const all = await getAll("programs"); return all.find((p) => p.isActive) || all[0] || null; },
+  async active() { const all = await Programs.all(); return all.find((p) => p.isActive) || all[0] || null; },
+  async byStableId(id) { const all = await Programs.all(); return all.find((p) => p.uuid === id || p.id === id) || null; },
 };
 
 // ---- Session helpers (working with embedded docs) ----
 export function topSet(sessionExercise) {
-  const working = sessionExercise.sets.filter((s) => !s.isWarmup);
+  const working = sessionExercise.sets.filter((s) => !s.isWarmup && s.status === "completed");
   return working.reduce((best, s) => (!best || s.weightLb > best.weightLb ? s : best), null);
 }
 export function workingVolume(sessionExercise) {
-  return sessionExercise.sets.filter((s) => !s.isWarmup).reduce((sum, s) => sum + s.weightLb * s.reps, 0);
+  return sessionExercise.sets.filter((s) => !s.isWarmup && s.status === "completed").reduce((sum, s) => sum + s.weightLb * s.reps, 0);
 }
 // ---- Seeding ----
 export async function ensureSeeded() {
   const s = await Settings.get();
   if (s.seededAt) return;
-  const records = {
-    exercises: SEED.exercises, gyms: SEED.gyms, tracks: SEED.tracks,
-    bodyweight: SEED.bodyweight, milestones: SEED.milestones,
-    programs: SEED.programs || [], sessions: SEED.sessions,
-  };
-  const stores = [...Object.keys(records), "settings"];
-  await runAll(stores, "readwrite", (os) => {
-    // Older builds could die between the per-store writes and leave seededAt
-    // unset. Clearing only seed-owned stores makes that state recoverable
-    // without touching user-only protein/check-in records.
-    for (const [name, values] of Object.entries(records)) {
-      const store = os(name);
-      store.clear();
-      for (const value of values) store.put(value);
+  const [existingExercises, existingGyms] = await Promise.all([getAll("exercises"), getAll("gyms")]);
+  const exerciseNames = new Set(existingExercises.map((exercise) => exercise.name));
+  await runAll(["exercises", "gyms", "settings"], "readwrite", (os) => {
+    // A missing seed stamp must never be an excuse to erase user-owned data.
+    // Add only absent reference records and leave every mutable store intact.
+    for (const exercise of SEED.exercises) {
+      if (!exerciseNames.has(exercise.name)) os("exercises").put(exercise);
     }
+    if (!existingGyms.length) for (const gym of SEED.gyms) os("gyms").put(gym);
     os("settings").put({ ...normalizeSettings(s), seededAt: iso(new Date()), id: "app" });
   });
 }
@@ -281,12 +330,21 @@ export async function exportBundle() {
     Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
     Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(),
   ]);
-  const programsById = new Map(programs.map((p) => [p.id, p]));
+  const programsById = new Map(programs.flatMap((p) => [[p.id, p], [p.uuid, p]]));
+  const programsByName = new Map(programs.map((p) => [p.name, p]));
+  const gymsByName = new Map(gyms.map((g) => [g.name, g]));
   const exportProgramTag = (tag) => {
     if (!tag) return null;
-    const programName = tag.programName || programsById.get(tag.programId)?.name || null;
-    if (!programName) return null; // orphaned local IDs are not portable linkage
+    const linked = programsById.get(tag.programId) || programsByName.get(tag.programName);
+    const programName = tag.programName || linked?.name || null;
+    const portableTagID = isPortableUUID(tag.programId) || String(tag.programId || "").startsWith("legacy:")
+      ? tag.programId
+      : linked?.uuid;
+    const programId = portableTagID
+      || (programName ? `legacy:${programName}` : null);
+    if (!programName || !programId) return null; // orphaned local IDs are not portable linkage
     return {
+      programId,
       programName,
       cycleNumber: tag.cycleNumber ?? null,
       week: tag.week ?? null,
@@ -300,17 +358,20 @@ export async function exportBundle() {
     exportedAt: iso(new Date()),
     appVersion: "web",
     sessions: sessions.map((s) => ({
-      date: iso(s.date), notes: s.notes || "", gym: s.gymName || null, isCompleted: !!s.isCompleted,
+      date: iso(s.date), notes: s.notes || "", gym: s.gymName || null,
+      gymId: s.gymId || gymsByName.get(s.gymName)?.id || null, isCompleted: !!s.isCompleted,
       programTag: exportProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e) => ({
         name: e.exerciseName, notes: e.notes || "",
         phase: e.phase ? C.phaseLabel(e.phase) : null,
         role: e.programRole || null,
+        barId: e.barId || null,
         plannedWeightLb: e.plannedWeightLb ?? null, plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
         sets: (e.sets || []).map((x) => ({
           weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
+          status: x.status || (s.isCompleted ? "completed" : "planned"),
           enteredUnit: x.enteredUnit || "lb",
-          flags: x.flags || [], bodyFlagSite: x.bodyFlagSite || null, bodyFlagNote: x.bodyFlagNote || null,
+          flags: x.flags || [], bodyFlagSite: normalizeBodySite(x.bodyFlagSite), bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
           // Key emitted only when set (like revertToExerciseName): stamping
           // null onto every record would break byte-stable re-export of
@@ -322,10 +383,10 @@ export async function exportBundle() {
     })),
     bodyweight: bodyweight.map((b) => ({ date: iso(b.date), weightLb: b.weightLb, bodyFatPercent: b.bodyFatPercent ?? null, milestoneLabel: b.milestoneLabel || null })),
     protein: protein.map((p) => ({ date: iso(p.date), grams: p.grams, label: p.label })),
-    checkIns: checkins.map((c) => ({ date: iso(c.date), site: c.site, response: c.response, note: c.note || "" })),
+    checkIns: checkins.map((c) => ({ date: iso(c.date), site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })),
     milestones: milestones.map((m) => ({ date: iso(m.date), exercise: m.exerciseName || null, kind: m.kind, label: m.label })),
     programs: programs.map((p) => ({
-      id: p.id, name: p.name, focus: p.focus, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
+      id: p.uuid, name: p.name, focus: p.focus, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
       nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: !!p.isActive,
       days: (p.days || []).map((d) => ({
         name: d.name, order: d.order,
@@ -343,7 +404,8 @@ export async function exportBundle() {
         accessories: (d.accessories || []).map((a) => ({ exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
       })),
     })),
-    tracks, gyms, exercises,
+    tracks, gyms,
+    exercises: exercises.map((exercise) => ({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) })),
     settings: settingsOut,
   };
 }
@@ -351,7 +413,7 @@ export const exportJSON = async () => JSON.stringify(await exportBundle(), null,
 
 export async function exportCSV() {
   const sessions = await Sessions.completed();
-  const head = ["date", "exercise", "set_index", "weight_lb", "weight_kg", "reps", "is_warmup", "per_side", "flags", "body_flag_site", "body_flag_note", "autoreg_reason", "session_notes"];
+  const head = ["date", "exercise", "set_index", "weight_lb", "weight_kg", "reps", "is_warmup", "status", "per_side", "flags", "body_flag_site", "body_flag_note", "autoreg_reason", "session_notes"];
   const esc = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const rows = [head.join(",")];
   for (const s of sessions) {
@@ -359,7 +421,7 @@ export async function exportCSV() {
       (e.sets || []).forEach((x, i) => {
         rows.push([
           iso(s.date), e.exerciseName, i, C.trim(x.weightLb), C.trim(C.kgFromLb(x.weightLb)), x.reps,
-          x.isWarmup, x.isPerSide, (x.flags || []).join(";"), x.bodyFlagSite || "", x.bodyFlagNote || "",
+          x.isWarmup, x.status || "completed", x.isPerSide, (x.flags || []).join(";"), normalizeBodySite(x.bodyFlagSite) || "", x.bodyFlagNote || "",
           x.autoregReason || "", s.notes || "",
         ].map(esc).join(","));
       });
@@ -422,9 +484,10 @@ const BACKUP_ENUMS = {
   units: ["lb", "kg"], unitDisplay: ["lbPrimary", "kgPrimary", "both"],
   themes: ["memento", "carbon", "slate", "system"],
   roles: ["main", "complementary", "accessory"], liftRoles: ["main", "complementary"],
-  flags: ["clean", "grindy", "wobble", "stopped early"],
+  statuses: C.SET_STATUSES,
+  flags: [...C.SET_QUALITIES, "stopped early"],
   reasons: ["bar speed", "wobble", "joint signal", "heat", "fatigue"],
-  sites: ["Left shoulder", "Left hip", "Right knee"],
+  sites: BODY_SITES,
   categories: ["Main", "Accessory", "Conditioning"],
   exerciseTypes: ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"],
   focuses: ["strength", "hypertrophy", "maintain"], modes: ["cycle", "linear"],
@@ -451,6 +514,10 @@ export function validateBackup(bundle) {
     if (value == null && !required) return;
     if (typeof value !== "string" || (required && !value.trim())) invalid(path, "expected non-empty text");
   };
+  const portableID = (value, path, allowLegacy = false) => {
+    textValue(value, path, true);
+    if (!UUID_RE.test(value) && !(allowLegacy && value.startsWith("legacy:"))) invalid(path, "expected a UUID");
+  };
   const numberValue = (value, path, { required = false, integer = false, min = -Infinity, max = Infinity } = {}) => {
     if (value == null && !required) return;
     if (!Number.isFinite(value) || (integer && !Number.isInteger(value)) || value < min || value > max) {
@@ -469,6 +536,13 @@ export function validateBackup(bundle) {
     }
     if (!allowed.includes(value)) invalid(path, `unknown value ${JSON.stringify(value)}`);
   };
+  const bodySiteValue = (value, path, required = false) => {
+    if (value == null) {
+      if (required) invalid(path, "expected a known body site");
+      return;
+    }
+    if (!normalizeBodySite(value)) invalid(path, `unknown body site ${JSON.stringify(value)}`);
+  };
   const unique = (records, value, path) => {
     const seen = new Set();
     records.forEach((record, index) => {
@@ -486,6 +560,7 @@ export function validateBackup(bundle) {
     if (tag != null) {
       object(tag, `${path}.programTag`);
       textValue(tag.programName, `${path}.programTag.programName`, schemaVersion >= 1);
+      if (schemaVersion >= 2) portableID(tag.programId, `${path}.programTag.programId`, true);
       numberValue(tag.cycleNumber, `${path}.programTag.cycleNumber`, { integer: true, min: 1 });
       numberValue(tag.week, `${path}.programTag.week`, { integer: true, min: 1 });
       numberValue(tag.dayIndex, `${path}.programTag.dayIndex`, { integer: true, min: 0 });
@@ -495,16 +570,21 @@ export function validateBackup(bundle) {
     each(array(session, "exercises", `${path}.exercises`), `${path}.exercises`, (exercise, exercisePath) => {
       textValue(exercise.name, `${exercisePath}.name`, true);
       enumValue(exercise.role, BACKUP_ENUMS.roles, `${exercisePath}.role`);
+      textValue(exercise.barId, `${exercisePath}.barId`);
       numberValue(exercise.plannedWeightLb, `${exercisePath}.plannedWeightLb`, { min: 0 });
       numberValue(exercise.plannedSets, `${exercisePath}.plannedSets`, { integer: true, min: 0 });
       numberValue(exercise.plannedReps, `${exercisePath}.plannedReps`, { integer: true, min: 0 });
       each(array(exercise, "sets", `${exercisePath}.sets`), `${exercisePath}.sets`, (set, setPath) => {
         numberValue(set.weightLb, `${setPath}.weightLb`, { required: true, min: 0 });
         numberValue(set.reps, `${setPath}.reps`, { required: true, integer: true, min: 0 });
+        enumValue(set.status, BACKUP_ENUMS.statuses, `${setPath}.status`, schemaVersion >= 2);
         enumValue(set.enteredUnit, BACKUP_ENUMS.units, `${setPath}.enteredUnit`, schemaVersion >= 1);
         const flags = array(set, "flags", `${setPath}.flags`);
         flags?.forEach((flag, i) => enumValue(flag, BACKUP_ENUMS.flags, `${setPath}.flags[${i}]`));
-        enumValue(set.bodyFlagSite, BACKUP_ENUMS.sites, `${setPath}.bodyFlagSite`);
+        if (schemaVersion >= 2 && (flags || []).filter((flag) => C.SET_QUALITIES.includes(flag)).length > 1) {
+          invalid(`${setPath}.flags`, "quality must be mutually exclusive");
+        }
+        bodySiteValue(set.bodyFlagSite, `${setPath}.bodyFlagSite`);
         enumValue(set.autoregReason, BACKUP_ENUMS.reasons, `${setPath}.autoregReason`);
         numberValue(set.durationSeconds, `${setPath}.durationSeconds`, { integer: true, min: 0 });
         numberValue(set.distanceMiles, `${setPath}.distanceMiles`, { min: 0 });
@@ -524,7 +604,7 @@ export function validateBackup(bundle) {
   });
   const checkIns = array(bundle, "checkIns");
   each(checkIns, "checkIns", (entry, path) => {
-    dateValue(entry.date, `${path}.date`, true); enumValue(entry.site, BACKUP_ENUMS.sites, `${path}.site`, true);
+    dateValue(entry.date, `${path}.date`, true); bodySiteValue(entry.site, `${path}.site`, true);
     textValue(entry.response, `${path}.response`, true);
   });
   const milestones = array(bundle, "milestones");
@@ -535,6 +615,7 @@ export function validateBackup(bundle) {
 
   const programs = array(bundle, "programs");
   each(programs, "programs", (program, path) => {
+    if (schemaVersion >= 2) portableID(program.id, `${path}.id`);
     textValue(program.name, `${path}.name`, true); enumValue(program.focus, BACKUP_ENUMS.focuses, `${path}.focus`, schemaVersion >= 1);
     numberValue(program.cycleNumber, `${path}.cycleNumber`, { integer: true, min: 1 });
     numberValue(program.currentWeek, `${path}.currentWeek`, { integer: true, min: 1 });
@@ -559,6 +640,7 @@ export function validateBackup(bundle) {
     if (days) unique(days, (day) => day.order, `${path}.days`);
   });
   if (programs) unique(programs, (program) => program.name.trim(), "programs");
+  if (schemaVersion >= 2 && programs) unique(programs, (program) => program.id, "programs.id");
 
   const tracks = array(bundle, "tracks");
   each(tracks, "tracks", (track, path) => {
@@ -574,6 +656,7 @@ export function validateBackup(bundle) {
 
   const gyms = array(bundle, "gyms");
   each(gyms, "gyms", (gym, path) => {
+    if (schemaVersion >= 2) portableID(gym.id, `${path}.id`);
     textValue(gym.name, `${path}.name`, true);
     each(array(gym, "plateToggles", `${path}.plateToggles`), `${path}.plateToggles`, (plate, platePath) => {
       numberValue(plate.value, `${platePath}.value`, { required: true, min: Number.MIN_VALUE });
@@ -581,11 +664,12 @@ export function validateBackup(bundle) {
     });
   });
   if (gyms) unique(gyms, (gym) => gym.name.trim(), "gyms");
+  if (schemaVersion >= 2 && gyms) unique(gyms, (gym) => gym.id, "gyms.id");
 
   const exercises = array(bundle, "exercises");
   each(exercises, "exercises", (exercise, path) => {
     textValue(exercise.name, `${path}.name`, true); enumValue(exercise.category, BACKUP_ENUMS.categories, `${path}.category`, schemaVersion >= 1);
-    enumValue(exercise.type, BACKUP_ENUMS.exerciseTypes, `${path}.type`, schemaVersion >= 1); enumValue(exercise.watchSite, BACKUP_ENUMS.sites, `${path}.watchSite`);
+    enumValue(exercise.type, BACKUP_ENUMS.exerciseTypes, `${path}.type`, schemaVersion >= 1); bodySiteValue(exercise.watchSite, `${path}.watchSite`);
     numberValue(exercise.defaultRestSeconds, `${path}.defaultRestSeconds`, { integer: true, min: 0, max: 3600 });
     dateValue(exercise.createdAt, `${path}.createdAt`);
   });
@@ -626,14 +710,18 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   if (createCheckpoint) await Checkpoints.create("before-import");
 
   const writes = new Map(); // store name -> records to clear+put
-  const knownPrograms = bundle.programs || await Programs.all();
-  const programsById = new Map(knownPrograms.map((p) => [p.id, p]));
+  const importedPrograms = bundle.programs?.map(({ id, ...program }) => ({
+    ...program,
+    uuid: typeof id === "string" ? id : stableID(`program:${program.name}`),
+  }));
+  const knownPrograms = importedPrograms || await Programs.all();
+  const programsById = new Map(knownPrograms.flatMap((p) => [[p.id, p], [p.uuid, p]]));
   const programsByName = new Map(knownPrograms.map((p) => [p.name, p]));
   const importProgramTag = (tag) => {
     if (!tag) return null;
     const program = programsById.get(tag.programId) || programsByName.get(tag.programName);
     return {
-      programId: program?.id ?? tag.programId ?? null,
+      programId: program?.uuid ?? tag.programId ?? null,
       programName: tag.programName || program?.name || null,
       cycleNumber: tag.cycleNumber ?? null,
       week: tag.week ?? null,
@@ -646,15 +734,17 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
     writes.set("sessions", bundle.sessions.map((s) => ({
       // Version-0 bundles only exported completed sessions, so absence means
       // completed. Version 1 preserves open sessions explicitly.
-      date: s.date, notes: s.notes || "", isCompleted: s.isCompleted !== false, gymName: s.gym || null,
+      date: s.date, notes: s.notes || "", isCompleted: s.isCompleted !== false,
+      gymId: s.gymId || null, gymName: s.gym || null,
       programTag: importProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, notes: e.notes || "", phase: recoverPhase(e.phase),
-        programRole: e.role || null,
+        programRole: e.role || null, barId: e.barId || null,
         plannedWeightLb: e.plannedWeightLb ?? null, plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
         sets: (e.sets || []).map((x, si) => ({
           order: si, weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
-          enteredUnit: x.enteredUnit || "lb", flags: x.flags || [], bodyFlagSite: x.bodyFlagSite || null, bodyFlagNote: x.bodyFlagNote || null,
+          status: x.status || (s.isCompleted !== false ? "completed" : "planned"),
+          enteredUnit: x.enteredUnit || "lb", flags: x.flags || [], bodyFlagSite: normalizeBodySite(x.bodyFlagSite), bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
           ...(x.inclinePercent != null ? { inclinePercent: x.inclinePercent } : {}),
           autoregReason: x.autoregReason || null,
@@ -664,9 +754,9 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   }
   if (bundle.bodyweight) writes.set("bodyweight", bundle.bodyweight.map((b) => ({ date: b.date, weightLb: b.weightLb, bodyFatPercent: b.bodyFatPercent ?? null, milestoneLabel: b.milestoneLabel || null })));
   if (bundle.protein) writes.set("protein", bundle.protein.map((p) => ({ date: p.date, grams: p.grams, label: p.label })));
-  if (bundle.checkIns) writes.set("checkins", bundle.checkIns.map((c) => ({ date: c.date, site: c.site, response: c.response, note: c.note || "" })));
+  if (bundle.checkIns) writes.set("checkins", bundle.checkIns.map((c) => ({ date: c.date, site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })));
   if (bundle.milestones) writes.set("milestones", bundle.milestones.map((m) => ({ date: m.date, exerciseName: m.exercise || null, kind: m.kind, label: m.label })));
-  if (bundle.programs) writes.set("programs", bundle.programs);
+  if (importedPrograms) writes.set("programs", importedPrograms);
   if (bundle.tracks) writes.set("tracks", bundle.tracks);
   // Gyms are kept as-is except barcodeImage, which must be an inline base64
   // data:image/* URL — exactly what the gym editor's FileReader produces. A
@@ -678,7 +768,9 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
     ...g,
     barcodeImage: isInlineImage(g.barcodeImage) ? g.barcodeImage : null,
   })));
-  if (bundle.exercises) writes.set("exercises", bundle.exercises);
+  if (bundle.exercises) writes.set("exercises", bundle.exercises.map((exercise) => ({
+    ...exercise, watchSite: normalizeBodySite(exercise.watchSite),
+  })));
   // restSeedStampsCleared describes the EXERCISE LIBRARY's migration state, so
   // it follows the bundle only when the library itself was restored from it:
   // a settings-only restore keeps the store's current marker (else the next

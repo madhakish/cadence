@@ -23,6 +23,14 @@ eq(C.both(232), "232 lb / 105.2 kg", "both format");
 eq(C.unitFormat("lbPrimary", 232), "232 lb", "lbPrimary");
 eq(C.unitFormat("kgPrimary", 232), "105.2 kg", "kgPrimary");
 eq(C.unitFormat("both", 232), "232 lb / 105.2 kg", "both mode");
+eq(C.primaryUnit("kgPrimary"), "kg", "kg primary input unit");
+eq(C.primaryUnit("both"), "lb", "both mode keeps lb input primary");
+
+eq(C.resolveSetStatus(null, false), "planned", "legacy open set stays planned");
+eq(C.resolveSetStatus(null, true), "completed", "legacy banked set is completed");
+eq(C.resolveSetStatus("skipped", true), "skipped", "explicit skipped status wins");
+eq(C.normalizedSetFlags("grindy", true).join(","), "grindy,stopped early", "quality and stopped-early normalize independently");
+eq(C.setQuality(["wobble", "stopped early"]), "wobble", "quality resolves from observations");
 
 // ---- Rounding ----
 eq(C.roundTo(192.5, 5), 195, "round 192.5");
@@ -204,7 +212,7 @@ let ev = C.prEvaluate({
 });
 let heaviest = ev.find((e) => e.kind === "heaviestSet");
 ok(heaviest, "Jun7 heaviest exists");
-eq(heaviest?.label, "232×5×3 — heaviest deadlift of the comeback", "Jun7 heaviest label");
+eq(heaviest?.label, "232×5×3 — heaviest deadlift logged", "heaviest label");
 ok(ev.some((e) => e.kind === "firstScheme"), "Jun7 first scheme");
 ok(!ev.some((e) => e.kind === "volumePR"), "Jun7 not volume PR");
 
@@ -231,6 +239,13 @@ ev = C.prEvaluate({
 ok(ev.some((e) => e.kind === "heaviestSet"), "first session heaviest");
 ok(ev.some((e) => e.kind === "firstScheme"), "first session scheme");
 ok(!ev.some((e) => e.kind === "volumePR"), "first session not volume PR");
+
+ev = C.prEvaluate({
+  exercise: "Deadlift", sessionSets: [{ weightLb: 220.462, reps: 1 }],
+  historySets: [], historyVolumes: [], historySchemes: [],
+  formatWeight: (lb) => `${C.trim(C.kgFromLb(lb))} kg`,
+});
+ok(ev.every((e) => e.label.includes("100 kg")), "PR labels honor the presentation-unit formatter");
 
 let top = C.prTopScheme([...Array(5).fill({ weightLb: 175, reps: 5 }), { weightLb: 155, reps: 8 }]);
 eq(top.weightLb, 175, "top weight group"); eq(top.sets, 5, "top sets"); eq(top.reps, 5, "top reps");
@@ -473,7 +488,7 @@ eq(C.cardioDurationLabel(65), "1:05", "single-digit minutes");
 eq(C.cardioDurationLabel(5400), "1:30:00", "hour-plus gets h:mm:ss");
 eq(C.cardioDurationLabel(0), "0:00", "zero");
 eq(C.cardioSetLabel(1.5, 1350, null), "1.5 mi · 22:30 · 4 mph", "full label");
-eq(C.cardioSetLabel(3, 2700, 12), "3 mi · 45:00 · 4 mph · 12%", "the 12-3-30 special");
+eq(C.cardioSetLabel(3, 2700, 12), "3 mi · 45:00 · 4 mph · 12%", "fictional full-field fixture");
 eq(C.cardioSetLabel(null, 1800, null), "30:00", "time only");
 eq(C.cardioSetLabel(2, null, null), "2 mi", "distance only");
 eq(C.cardioSetLabel(0.25, null, null), "0.25 mi", "quarter-mile keeps two decimals");

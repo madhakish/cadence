@@ -129,7 +129,7 @@ export async function render(host) {
     const sug = t.mode === "cycle" ? C.planFor(t) : C.linearPlan(t.baseWeightLb);
     trackList.append(ui.h("div", { class: "row", onClick: () => trackEditor(t) },
       ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: t.exerciseName }),
-        ui.h("span", { class: "sub", text: `+${C.trim(t.incrementLb)} lb per ${t.mode === "cycle" ? "cycle" : "session"} · next: ${C.sessionPlanLabel(sug)}` })),
+        ui.h("span", { class: "sub", text: `+${ui.fmtWeight(t.incrementLb)} per ${t.mode === "cycle" ? "cycle" : "session"} · next: ${ui.fmtWeight(sug.weightLb)} · ${sug.sets}×${sug.reps}` })),
       ui.h("span", { class: "chev" })));
   }
   root.append(trackList);
@@ -274,7 +274,7 @@ function programEditor(p) {
           p.focus, async (v) => { p.focus = v; await Programs.save(p); })));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Rounding" }),
-            ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
+            ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: ui.fmtWeight, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
           ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Active (drives Today)" }),
             ui.toggle(p.isActive, async (v) => { if (v) await activateProgram(p); else p.isActive = false; await Programs.save(p); }))));
         body.append(ui.h("div", { class: "section-title", text: "Where you are" }));
@@ -337,9 +337,9 @@ function programDayEditor(p, day) {
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
               ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Rotation-1 base" }),
-              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: p.roundingLb, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
+              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: p.roundingLb, format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
-              ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } }))));
+              ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } }))));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add lift", onClick: () => pickExerciseSheet(async (e) => {
           day.lifts.push({ exerciseName: e.name, role: "complementary", baseWeightLb: 45, estimatedMaxLb: 52, stallCount: 0, lastIncrementLb: 0 });
@@ -353,7 +353,7 @@ function programDayEditor(p, day) {
               ui.h("span", { class: "title", text: a.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(a.exerciseName) }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.accessories = day.accessories.filter((x) => x !== a); await Programs.save(p); draw(); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Weight" }),
-              ui.stepper(a.weightLb, { min: 0, max: 500, step: 2.5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { a.weightLb = v; await Programs.save(p); } })),
+              ui.stepper(a.weightLb, { min: 0, max: 500, step: 2.5, format: ui.fmtWeight, onChange: async (v) => { a.weightLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Sets" }),
               ui.stepper(a.sets, { min: 1, max: 8, format: (v) => `${v}`, onChange: async (v) => { a.sets = v; await Programs.save(p); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Rep range" }),
@@ -361,7 +361,7 @@ function programDayEditor(p, day) {
                 ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => { a.minReps = v; if (a.currentReps < v) a.currentReps = v; await Programs.save(p); } }),
                 ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => { a.maxReps = v; await Programs.save(p); } }))),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Load step (0 = bodyweight)" }),
-              ui.stepper(a.incrementLb, { min: 0, max: 25, step: 2.5, format: (v) => `+${C.trim(v)} lb`, onChange: async (v) => { a.incrementLb = v; await Programs.save(p); } }))));
+              ui.stepper(a.incrementLb, { min: 0, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { a.incrementLb = v; await Programs.save(p); } }))));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add accessory", onClick: () => pickExerciseSheet(async (e) => {
           day.accessories.push({ exerciseName: e.name, sets: 3, minReps: 8, maxReps: 12, currentReps: 8, weightLb: 0, incrementLb: 0, stallCount: 0 });
@@ -381,8 +381,8 @@ function trackEditor(t) {
         ui.clear(body);
         body.append(ui.field("Mode", ui.seg([{ value: "cycle", label: "4-rotation cycle" }, { value: "linear", label: "Linear" }], t.mode, async (m) => { t.mode = m; await Tracks.save(t); draw(); })));
         body.append(ui.h("div", { class: "card" },
-          ui.h("div", { class: "row" }, ui.h("span", { text: "Increment" }), ui.stepper(t.incrementLb, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${C.trim(v)} lb`, onChange: async (v) => { t.incrementLb = v; await Tracks.save(t); refreshSug(); } })),
-          ui.h("div", { class: "row" }, ui.h("span", { text: t.mode === "cycle" ? "Rotation-1 weight" : "Current weight" }), ui.stepper(t.baseWeightLb, { min: 0, max: 1000, step: 5, format: (v) => `${C.trim(v)} lb`, onChange: async (v) => { t.baseWeightLb = v; await Tracks.save(t); refreshSug(); } }))));
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Increment" }), ui.stepper(t.incrementLb, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { t.incrementLb = v; await Tracks.save(t); refreshSug(); } })),
+          ui.h("div", { class: "row" }, ui.h("span", { text: t.mode === "cycle" ? "Rotation-1 weight" : "Current weight" }), ui.stepper(t.baseWeightLb, { min: 0, max: 1000, step: 5, format: ui.fmtWeight, onChange: async (v) => { t.baseWeightLb = v; await Tracks.save(t); refreshSug(); } }))));
         if (t.mode === "cycle") {
           const sel = ui.h("select", {}, ...[1, 2, 3, 4].map((p) => ui.h("option", { value: p, text: C.PHASES[p].name, selected: p === t.nextPhase })));
           sel.addEventListener("change", async () => { t.nextPhase = Number(sel.value); await Tracks.save(t); refreshSug(); });
@@ -392,7 +392,7 @@ function trackEditor(t) {
         body.append(ui.h("div", { class: "section-title", text: "Next suggestion" }));
         const sug = ui.h("div", { class: "big accent" });
         body.append(sug);
-        function refreshSug() { sug.textContent = C.sessionPlanLabel(t.mode === "cycle" ? C.planFor(t) : C.linearPlan(t.baseWeightLb)); }
+        function refreshSug() { const p = t.mode === "cycle" ? C.planFor(t) : C.linearPlan(t.baseWeightLb); sug.textContent = `${ui.fmtWeight(p.weightLb)} · ${p.sets}×${p.reps}`; }
         refreshSug();
       };
       draw();
@@ -436,7 +436,7 @@ async function exerciseInsight(wrap, e) {
   for (const s of completed) {
     const se = s.exercises.find((x) => x.exerciseName === e.name);
     if (!se) continue;
-    const w = se.sets.filter((x) => !x.isWarmup);
+    const w = se.sets.filter((x) => !x.isWarmup && x.status === "completed");
     if (!w.length) continue;
     const top = w.reduce((b, x) => (!b || x.weightLb > b.weightLb ? x : b), null);
     const prog = s.programTag
@@ -448,7 +448,7 @@ async function exerciseInsight(wrap, e) {
   const last = hist[0];
   card.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Last done" }),
     ui.h("span", { class: "sub", text: last
-      ? `${ui.fmtDate(last.date)} — ${C.trim(last.top.weightLb)} lb × ${last.top.reps}${last.prog ? ` · ${last.prog}` : ""}`
+      ? `${ui.fmtDate(last.date)} — ${ui.fmtWeight(last.top.weightLb)} × ${last.top.reps}${last.prog ? ` · ${last.prog}` : ""}`
       : "not yet" })));
   card.append(ui.h("div", { class: "row" }, ui.h("span", { text: "In programs" }),
     ui.h("span", { class: "sub", style: { textAlign: "right", whiteSpace: "pre-line" }, text: memberships.join("\n") || "none" })));

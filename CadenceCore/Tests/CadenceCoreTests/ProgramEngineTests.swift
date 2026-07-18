@@ -3,10 +3,10 @@ import XCTest
 
 final class ProgramEngineTests: XCTestCase {
 
-    // Seeded state, mirroring first launch: deadlift base 210, squat base 175.
+    // Fictional state-machine examples; fresh installs carry no progression.
 
     func testDeadliftPeakSuggestion() {
-        // Deadlift completed Wk2 Load → next is Wk3 Peak 3×3 around 245-250.
+        // A lift completed Load → next is Peak 3×3 around 245-250.
         let state = CycleState(cycleNumber: 1, baseWeightLb: 210, nextPhase: .peak, incrementLb: 10)
         let plan = ProgramEngine.plan(for: state)
         XCTAssertEqual(plan.weightLb, 245)
@@ -16,7 +16,7 @@ final class ProgramEngineTests: XCTestCase {
     }
 
     func testSquatLoadSuggestion() {
-        // Squat completed Wk1 Volume at 175 → next Wk2 Load 5×3 around 190-195.
+        // A lift completed Volume at 175 → next is Load 5×3 around 190-195.
         let state = CycleState(cycleNumber: 1, baseWeightLb: 175, nextPhase: .load, incrementLb: 10)
         let plan = ProgramEngine.plan(for: state)
         XCTAssertEqual(plan.weightLb, 195)

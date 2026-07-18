@@ -18,8 +18,12 @@ lifts appear under "Next up" with their own suggestions.
 ## During the session
 
 - **Confirm sets as you do them.** Everything predictable is pre-filled
-  — weight, sets, reps, and a warmup ramp for barbell lifts. Adjust only
-  when reality differed.
+  — weight, sets, reps, and a warmup ramp for barbell lifts — but remains
+  *planned* until you mark it completed. Mark intentionally omitted work as
+  *skipped*. Only completed work counts in history and progression.
+- **Check the equipment context.** “Training at” follows the gym captured by
+  the session. Changing it updates default bars and warmups; a bar selected on
+  one exercise is saved with that session and survives reopening it.
 - **Rest timer** starts per your settings: an exercise's own rest (⏱)
   wins, then its role today (complementary lifts and accessories rest
   less than a top main), then its movement type — see
@@ -32,9 +36,10 @@ lifts appear under "Next up" with their own suggestions.
   (the session stays open to resume later). The same pause/resume/end
   controls appear on the Live Activity's workout face, so an abandoned
   session's stopwatch can always be stopped from the Lock Screen.
-- **Flag honest quality.** Mark sets *grindy* or *wobble* when they were
-  — the program grades on it. Flag *stopped early* if you cut a set.
-  These aren't judgments; they're the data autoregulation runs on.
+- **Grade honest quality.** Clean, grindy, and wobble are one optional,
+  mutually exclusive assessment. *Stopped early* is independent and can
+  accompany the appropriate completed or skipped status. These aren't
+  judgments; they're the data autoregulation runs on.
 - **Dropping load mid-session?** Use the drop-load control rather than
   silently editing the weight, so the reason is recorded. (Either way,
   working below prescription can't grade as a clean success.)
@@ -42,7 +47,7 @@ lifts appear under "Next up" with their own suggestions.
   type) logs **distance, time, and incline** instead of weight×reps: tap
   the set to enter them; speed falls out of distance ÷ time. Rep-based
   conditioning like burpees keeps normal sets×reps, and cardio sets carry
-  a single ✓ done flag (no grindy/wobble).
+  a completion status without a lifting-quality grade.
 - **Add a set** freely — extra back-off volume beyond the prescription
   never hurts your grade. **Subtract** as well as add rest time with the
   −1:00 / +1:00 controls while a rest runs.
@@ -63,6 +68,8 @@ Tap **Bank it.** when you're done. Banking is atomic: your history, PR
 milestones, accessory progression, and program state all commit together
 — or, if saving fails, nothing does and you can simply tap Bank again.
 The summary shows top sets, volume, and any PRs or program notes.
+If planned sets remain, Cadence confirms the incomplete bank and explains that
+only completed work will count.
 
 What banking advances:
 

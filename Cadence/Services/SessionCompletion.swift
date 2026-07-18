@@ -58,7 +58,16 @@ enum SessionCompletion {
             throw SaveFailure(underlying: error)
         }
 
+        // Freeze the legacy fallback while the session is still open. Without
+        // this, flipping isCompleted first would make every status-less set in
+        // a pre-v2 open session appear performed.
+        for entry in session.exercises {
+            for set in entry.sets where SetStatus(rawValue: set.statusRaw) == nil {
+                set.status = .planned
+            }
+        }
         session.isCompleted = true
+        let unitDisplay = (try? context.fetch(FetchDescriptor<AppSettings>()).first?.unitDisplay) ?? .lbPrimary
 
         var lines: [SessionSummary.LiftLine] = []
         var allEvents: [PREvent] = []
@@ -71,7 +80,7 @@ enum SessionCompletion {
             if let top = entry.topSet {
                 lines.append(SessionSummary.LiftLine(
                     exerciseName: exercise.name,
-                    topSetLabel: "\(Weight.trim(top.weightLb))×\(top.reps)",
+                    topSetLabel: "\(unitDisplay.format(lb: top.weightLb)) × \(top.reps)",
                     volumeLb: entry.workingVolumeLb
                 ))
             }
@@ -84,7 +93,8 @@ enum SessionCompletion {
                 sessionSets: working,
                 historySets: history.sets,
                 historyVolumes: history.volumes,
-                historySchemes: history.schemes
+                historySchemes: history.schemes,
+                formatWeight: { unitDisplay.format(lb: $0) }
             )
             for event in events {
                 context.insert(Milestone(
@@ -101,8 +111,8 @@ enum SessionCompletion {
             }
         }
 
-        if session.programName != nil {
-            do { try advanceProgram(session, context: context, events: &allEvents) }
+        if (session.programID != nil || session.programName != nil) && session.hasCompletedWork {
+            do { try advanceProgram(session, context: context, unitDisplay: unitDisplay, events: &allEvents) }
             catch { context.rollback(); throw SaveFailure(underlying: error) }
         }
 
@@ -127,6 +137,7 @@ enum SessionCompletion {
         // seconds-long workout dated today (sessionStart is view-open time).
         if let start = startedAt,
            Calendar.current.isDate(start, inSameDayAs: session.date),
+           session.hasCompletedWork,
            healthKitEnabled(context) {
             let end = Date()
             Task { await HealthKitService.shared.saveStrengthWorkout(start: start, end: end) }
@@ -171,10 +182,11 @@ enum SessionCompletion {
         )
     }
 
-    private static func advanceProgram(_ session: WorkoutSession, context: ModelContext, events: inout [PREvent]) throws {
-        guard let name = session.programName else { return }
-        let descriptor = FetchDescriptor<Program>(predicate: #Predicate { $0.name == name })
-        guard let program = try context.fetch(descriptor).first else { return }
+    private static func advanceProgram(_ session: WorkoutSession, context: ModelContext,
+                                       unitDisplay: UnitDisplay, events: inout [PREvent]) throws {
+        let programs = try context.fetch(FetchDescriptor<Program>())
+        guard let program = session.programID.flatMap({ id in programs.first { $0.id == id } })
+                ?? programs.first(where: { $0.name == session.programName }) else { return }
         let dayIndex = session.programDayIndex ?? 0
         guard let day = program.days.first(where: { $0.order == dayIndex }) else { return }
         let week = session.programWeek ?? program.currentWeek
@@ -197,7 +209,9 @@ enum SessionCompletion {
 
         // Accessories: double progression, every bank.
         for acc in day.accessories {
-            if let entry = session.exercises.first(where: { $0.programRole == "accessory" && $0.exercise?.name == acc.exerciseName }) {
+            if let entry = session.exercises.first(where: {
+                $0.programRole == "accessory" && $0.exercise?.name == acc.exerciseName && !$0.workingSets.isEmpty
+            }) {
                 acc.apply(ProgramProgression.advanceAccessory(acc.coreState, perf: accPerf(entry)))
             }
         }
@@ -205,7 +219,9 @@ enum SessionCompletion {
         // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
         if week == 3 {
             for lift in day.lifts {
-                if let entry = session.exercises.first(where: { $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue }) {
+                if let entry = session.exercises.first(where: {
+                    $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue && !$0.workingSets.isEmpty
+                }) {
                     let result = ProgramProgression.advanceCycleLift(lift.coreState, perf: cyclePerf(entry, roundingLb: program.roundingLb), focus: program.focus, roundingLb: program.roundingLb)
                     lift.pendingBaseWeightLb = result.state.baseWeightLb
                     lift.pendingEstimatedMaxLb = result.state.estimatedMaxLb
@@ -229,12 +245,16 @@ enum SessionCompletion {
         for d in program.days {
             for lift in d.lifts {
                 if let pendingBase = lift.pendingBaseWeightLb {
+                    let oldBase = lift.baseWeightLb
                     lift.baseWeightLb = pendingBase
                     lift.estimatedMaxLb = lift.pendingEstimatedMaxLb ?? lift.estimatedMaxLb
                     lift.stallCount = lift.pendingStallCount ?? lift.stallCount
                     lift.lastIncrementLb = lift.pendingLastIncrementLb ?? 0
                     if let note = lift.pendingNote {
-                        let label = "\(lift.exerciseName): \(note)"
+                        let presented = note.hasPrefix("Two cycles without a clean peak")
+                            ? "Two cycles without a clean peak — deloaded \(unitDisplay.format(lb: oldBase))→\(unitDisplay.format(lb: pendingBase)) to rebuild."
+                            : note
+                        let label = "\(lift.exerciseName): \(presented)"
                         context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
                         events.append(PREvent(kind: .programNote, exercise: lift.exerciseName, label: label))
                     }
@@ -251,7 +271,7 @@ enum SessionCompletion {
                         let old = lift.baseWeightLb
                         lift.baseWeightLb = Weight.round(old * ProgramProgression.deloadRebuildFraction, to: program.roundingLb)
                         lift.stallCount = 0
-                        let label = "\(lift.exerciseName): skipped peak — deloaded \(Weight.trim(old))→\(Weight.trim(lift.baseWeightLb)) lb."
+                        let label = "\(lift.exerciseName): skipped peak — deloaded \(unitDisplay.format(lb: old))→\(unitDisplay.format(lb: lift.baseWeightLb))."
                         context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
                         events.append(PREvent(kind: .programNote, exercise: lift.exerciseName, label: label))
                     }

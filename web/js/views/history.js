@@ -42,7 +42,7 @@ function renderLog(panel, sessions) {
     const tops = (s.exercises || []).map((e) => ({ e, t: topSet(e) })).filter((x) => x.t);
     const lead = [...tops].sort((a, b) => b.t.weightLb - a.t.weightLb)[0];
     const rest = tops.filter((x) => x !== lead)
-      .map((x) => `${x.e.exerciseName} ${C.trim(x.t.weightLb)}×${x.t.reps}`).join(" · ");
+      .map((x) => `${x.e.exerciseName} ${ui.fmtWeight(x.t.weightLb)}×${x.t.reps}`).join(" · ");
     const vol = volumeOf(s);
     const bar = ui.h("div", { class: "volbar" }, ui.h("i", { style: { width: `${Math.max(2, (vol / maxVolume) * 100)}%` } }));
     panel.append(ui.h("div", { class: "card list", style: { margin: "6px 0" } },
@@ -51,7 +51,7 @@ function renderLog(panel, sessions) {
           ui.h("span", { class: "sub", text: ui.fmtDate(s.date) }),
           lead ? ui.h("span", {},
             ui.h("span", { class: "title", text: `${lead.e.exerciseName} ` }),
-            ui.h("span", { class: "wt-big mono accent", text: lead.t.weightLb > 0 ? `${C.trim(lead.t.weightLb)}×${lead.t.reps}` : `BW×${lead.t.reps}` })) : ui.h("span", { class: "title", text: "—" }),
+            ui.h("span", { class: "wt-big mono accent", text: lead.t.weightLb > 0 ? `${ui.fmtWeight(lead.t.weightLb)}×${lead.t.reps}` : `BW×${lead.t.reps}` })) : ui.h("span", { class: "title", text: "—" }),
           rest ? ui.h("span", { class: "sub", text: rest }) : null),
         ui.h("span", { class: "chev" })),
       vol > 0 ? bar : null));
@@ -103,14 +103,15 @@ function renderCharts(panel, sessions, exercises) {
 
   function renderInner() {
     const series = [];
+    const displayValue = (lb) => C.primaryUnit(ui.prefs.unitDisplay) === "kg" ? C.kgFromLb(lb) : lb;
     for (const s of [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date))) {
       const e = (s.exercises || []).find((x) => x.exerciseName === chartEx);
       if (!e) continue;
       // The session point's rotation (R1–R4), for the split view. Sessions
       // logged outside a cycle bucket as "Untracked".
       const rot = e.phase ? `R${e.phase} ${(C.PHASES[e.phase] || {}).name || ""}`.trim() : "Untracked";
-      if (chartMetric === "weight") { const t = topSet(e); if (t) series.push({ t: new Date(s.date).getTime(), y: t.weightLb, rot }); }
-      else { const v = workingVolume(e); if (v > 0) series.push({ t: new Date(s.date).getTime(), y: v, rot }); }
+      if (chartMetric === "weight") { const t = topSet(e); if (t) series.push({ t: new Date(s.date).getTime(), y: displayValue(t.weightLb), rot }); }
+      else { const v = workingVolume(e); if (v > 0) series.push({ t: new Date(s.date).getTime(), y: displayValue(v), rot }); }
     }
     ui.clear(slot);
     if (!series.length) { slot.append(ui.empty("📈", COPY.emptyHistory)); return; }
@@ -121,7 +122,7 @@ function renderCharts(panel, sessions, exercises) {
     } else {
       slot.append(lineChart(series, { fmtY: (v) => C.trim(v) }));
     }
-    slot.append(ui.h("div", { class: "muted", style: { textAlign: "center", fontSize: "12px" }, text: chartMetric === "weight" ? "Top working weight per session (lb)" : "Working volume per session (lb)" }));
+    slot.append(ui.h("div", { class: "muted", style: { textAlign: "center", fontSize: "12px" }, text: chartMetric === "weight" ? `Top working weight per session (${C.primaryUnit(ui.prefs.unitDisplay)})` : `Working volume per session (${C.primaryUnit(ui.prefs.unitDisplay)})` }));
   }
 }
 

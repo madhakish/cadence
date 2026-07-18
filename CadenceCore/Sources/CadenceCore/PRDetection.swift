@@ -58,20 +58,22 @@ public enum PRDetection {
         sessionSets: [SetSample],
         historySets: [SetSample],
         historyVolumes: [Double],
-        historySchemes: Set<String>
+        historySchemes: Set<String>,
+        formatWeight: ((Double) -> String)? = nil
     ) -> [PREvent] {
         guard !sessionSets.isEmpty else { return [] }
         var events: [PREvent] = []
+        let weightLabel = formatWeight ?? { Weight.trim($0) }
 
         let priorMax = historySets.map(\.weightLb).max() ?? 0
 
         if let top = topScheme(sessionSets) {
             if top.weightLb > priorMax + 1e-9 {
-                let scheme = top.sets > 1 ? "\(Weight.trim(top.weightLb))×\(top.sets)×\(top.reps)" : "\(Weight.trim(top.weightLb))×\(top.reps)"
+                let scheme = top.sets > 1 ? "\(weightLabel(top.weightLb))×\(top.sets)×\(top.reps)" : "\(weightLabel(top.weightLb))×\(top.reps)"
                 events.append(PREvent(
                     kind: .heaviestSet,
                     exercise: exercise,
-                    label: "\(scheme) — heaviest \(exercise.lowercased()) of the comeback"
+                    label: "\(scheme) — heaviest \(exercise.lowercased()) logged"
                 ))
             }
 
@@ -80,7 +82,7 @@ public enum PRDetection {
                 events.append(PREvent(
                     kind: .firstScheme,
                     exercise: exercise,
-                    label: "First \(schemeKey) — \(Weight.trim(top.weightLb)) \(exercise.lowercased())"
+                    label: "First \(schemeKey) — \(weightLabel(top.weightLb)) \(exercise.lowercased())"
                 ))
             }
         }
@@ -88,10 +90,11 @@ public enum PRDetection {
         let vol = volume(sessionSets)
         let priorVolMax = historyVolumes.max() ?? 0
         if vol > priorVolMax + 1e-9, !historyVolumes.isEmpty {
+            let volumeLabel = formatWeight?(vol) ?? "\(Weight.trim(vol)) lb"
             events.append(PREvent(
                 kind: .volumePR,
                 exercise: exercise,
-                label: "Volume PR — \(Weight.trim(vol)) lb total \(exercise.lowercased())"
+                label: "Volume PR — \(volumeLabel) total \(exercise.lowercased())"
             ))
         }
 

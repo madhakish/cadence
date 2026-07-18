@@ -8,8 +8,9 @@ struct InjuryTimelineView: View {
     @Environment(\.modelContext) private var context
     @Query private var allSets: [SetEntry]
     @Query(sort: \CheckIn.date, order: .reverse) private var checkIns: [CheckIn]
+    @Query private var settingsList: [AppSettings]
 
-    @State private var site: BodySite = .leftShoulder
+    @State private var site: BodySite = .shoulder
     @State private var showCheckIn = false
 
     private struct TimelineItem: Identifiable {
@@ -28,7 +29,7 @@ struct InjuryTimelineView: View {
                 let exercise = set.sessionExercise?.exercise?.name ?? "Set"
                 return TimelineItem(
                     date: session?.date ?? .distantPast,
-                    title: "\(exercise) — \(Weight.trim(set.weightLb))×\(set.reps)",
+                    title: "\(exercise) — \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: set.weightLb))×\(set.reps)",
                     detail: set.bodyFlagNote ?? "",
                     isHardStop: false
                 )
@@ -47,8 +48,8 @@ struct InjuryTimelineView: View {
     }
 
     private var latestKneeHardStop: Bool {
-        guard site == .rightKnee else { return false }
-        return checkIns.first { $0.site == .rightKnee }?.isHardStop ?? false
+        guard site == .knee else { return false }
+        return checkIns.first { $0.site == .knee }?.isHardStop ?? false
     }
 
     var body: some View {
@@ -118,14 +119,14 @@ struct InjuryTimelineView: View {
 
     private func shortName(_ site: BodySite) -> String {
         switch site {
-        case .leftShoulder: return "L shoulder"
-        case .leftHip: return "L hip"
-        case .rightKnee: return "R knee"
+        case .shoulder: return "Shoulder"
+        case .hip: return "Hip"
+        case .knee: return "Knee"
         }
     }
 }
 
-/// Morning check-in entry ("Right knee — any swelling?").
+/// Morning check-in entry for a selected generic body site.
 struct CheckInSheet: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -136,17 +137,17 @@ struct CheckInSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(site == .rightKnee ? "Any swelling?" : "How is it?") {
+                Section("How is it?") {
                     Button {
-                        save(response: site == .rightKnee ? "No swelling" : "Fine")
+                        save(response: "Fine")
                     } label: {
                         Label(Copy.noSwelling, systemImage: "checkmark")
                             .foregroundStyle(Theme.good)
                     }
                     Button {
-                        save(response: site == .rightKnee ? "Swelling" : "Flagged")
+                        save(response: "Flagged")
                     } label: {
-                        Label(site == .rightKnee ? Copy.swelling : "Something's off",
+                        Label("Something's off",
                               systemImage: "hand.raised.fill")
                             .foregroundStyle(Theme.hardStop)
                     }

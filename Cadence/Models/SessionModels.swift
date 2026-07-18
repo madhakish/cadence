@@ -15,9 +15,13 @@ final class WorkoutSession {
     var date: Date
     var notes: String
     var isCompleted: Bool
+    /// Stable equipment linkage. `gymName` remains the historical display
+    /// label and the fallback for records created before schema v2.
+    var gymID: String?
     var gymName: String?
     // Set when this session was generated from a program day, so completion
     // advances PROGRAM state (not standalone tracks).
+    var programID: String?
     var programName: String?
     var programCycleNumber: Int?
     var programWeek: Int?
@@ -30,10 +34,11 @@ final class WorkoutSession {
     @Relationship(deleteRule: .cascade, inverse: \SessionExercise.session)
     var exercises: [SessionExercise]
 
-    init(date: Date = .now, notes: String = "", gymName: String? = nil) {
+    init(date: Date = .now, notes: String = "", gymID: String? = nil, gymName: String? = nil) {
         self.date = date
         self.notes = notes
         self.isCompleted = false
+        self.gymID = gymID
         self.gymName = gymName
         self.exercises = []
     }
@@ -42,19 +47,23 @@ final class WorkoutSession {
         exercises.sorted { $0.order < $1.order }
     }
 
-    /// True if this session contains a movement watched at the right knee
+    /// True if this session contains a movement watched at the knee
     /// (running-type conditioning) — drives the next-morning knee check-in.
     /// Keyed on the exercise's watch-site data (editable in the library),
     /// not on name matching.
     var includesRunning: Bool {
-        exercises.contains { $0.exercise?.watchSite == .rightKnee }
+        exercises.contains { $0.exercise?.watchSite == .knee && !$0.workingSets.isEmpty }
     }
+
+    var hasCompletedWork: Bool { exercises.contains { !$0.workingSets.isEmpty } }
 }
 
 @Model
 final class SessionExercise {
     var order: Int
     var notes: String
+    /// Optional per-exercise override. Nil follows the session gym's default.
+    var barID: String?
     var exercise: Exercise?
     var session: WorkoutSession?
     @Relationship(deleteRule: .cascade, inverse: \SetEntry.sessionExercise)
@@ -80,7 +89,9 @@ final class SessionExercise {
     }
 
     var orderedSets: [SetEntry] { sets.sorted { $0.order < $1.order } }
-    var workingSets: [SetEntry] { orderedSets.filter { !$0.isWarmup } }
+    var plannedWorkingSets: [SetEntry] { orderedSets.filter { !$0.isWarmup } }
+    /// Only performed work belongs in history, PRs, volume, or progression.
+    var workingSets: [SetEntry] { plannedWorkingSets.filter { $0.status == .completed } }
 
     var workingVolumeLb: Double {
         workingSets.reduce(0) { $0 + $1.weightLb * Double($1.reps) }
@@ -98,6 +109,9 @@ final class SetEntry {
     var weightLb: Double
     var reps: Int
     var isWarmup: Bool
+    /// Empty marks a pre-v2 record. Completed historical sessions migrate as
+    /// performed; ambiguous open-session sets migrate as planned.
+    var statusRaw: String = ""
     /// Unilateral movements: reps are per side.
     var isPerSide: Bool
     /// What the user actually typed (lb/kg) so the field re-displays in kind.
@@ -120,6 +134,7 @@ final class SetEntry {
         weightLb: Double,
         reps: Int,
         isWarmup: Bool = false,
+        status: SetStatus = .planned,
         isPerSide: Bool = false,
         enteredUnit: WeightUnit = .lb,
         flags: [SetFlag] = [],
@@ -134,6 +149,7 @@ final class SetEntry {
         self.weightLb = weightLb
         self.reps = reps
         self.isWarmup = isWarmup
+        self.statusRaw = status.rawValue
         self.isPerSide = isPerSide
         self.enteredUnitRaw = enteredUnit.rawValue
         self.flagsRaw = flags.map(\.rawValue)
@@ -146,12 +162,35 @@ final class SetEntry {
     }
 
     var flags: [SetFlag] {
-        get { flagsRaw.compactMap(SetFlag.init(rawValue:)) }
+        get {
+            SetLifecycle.normalizedFlags(
+                quality: SetLifecycle.quality(in: flagsRaw),
+                stoppedEarly: flagsRaw.contains(SetFlag.stoppedEarly.rawValue)
+            ).compactMap(SetFlag.init(rawValue:))
+        }
         set { flagsRaw = newValue.map(\.rawValue) }
     }
 
+    var status: SetStatus {
+        get {
+            SetLifecycle.resolve(statusRaw.isEmpty ? nil : statusRaw,
+                                 sessionCompleted: sessionExercise?.session?.isCompleted == true)
+        }
+        set { statusRaw = newValue.rawValue }
+    }
+
+    var quality: SetFlag? {
+        get { flags.first { $0 == .clean || $0 == .grindy || $0 == .wobble } }
+        set {
+            flags = SetLifecycle.normalizedFlags(
+                quality: newValue == .stoppedEarly ? nil : newValue?.rawValue,
+                stoppedEarly: flags.contains(.stoppedEarly)
+            ).compactMap(SetFlag.init(rawValue:))
+        }
+    }
+
     var bodyFlagSite: BodySite? {
-        get { bodyFlagSiteRaw.flatMap(BodySite.init(rawValue:)) }
+        get { BodySite.fromStorage(bodyFlagSiteRaw) }
         set { bodyFlagSiteRaw = newValue?.rawValue }
     }
 

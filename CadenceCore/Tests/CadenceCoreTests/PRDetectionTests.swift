@@ -3,9 +3,9 @@ import XCTest
 
 final class PRDetectionTests: XCTestCase {
 
-    /// Deadlift history through Jun 4 (working sets only), per the seed log.
+    /// Fictional prior working sets for regression coverage.
     private var deadliftHistory: [SetSample] {
-        // May 9: 221×1×3; May 15: 221×1×3; May 22: 210×3×5 + 221×3×2; May 29: 210×5×5.
+        // Four fictional sessions with varied schemes and volume.
         [SetSample(weightLb: 221, reps: 3), SetSample(weightLb: 221, reps: 3)]
             + Array(repeating: SetSample(weightLb: 210, reps: 5), count: 3)
             + Array(repeating: SetSample(weightLb: 221, reps: 2), count: 3)
@@ -16,8 +16,8 @@ final class PRDetectionTests: XCTestCase {
         [221 * 3, 221 * 3, 210 * 3 * 5 + 221 * 3 * 2, 210 * 5 * 5]
     }
 
-    func testJun7DeadliftIsHeaviestOfComeback() {
-        // Jun 7: 232 × 5 sets × 3 reps. Prior max 221 → heaviest-set milestone.
+    func testNewTopLoadCreatesHeaviestSetEvent() {
+        // 232 × 5 sets × 3 reps. Prior max 221 → heaviest-set milestone.
         let session = Array(repeating: SetSample(weightLb: 232, reps: 3), count: 5)
         let events = PRDetection.evaluate(
             exercise: "Deadlift",
@@ -28,10 +28,10 @@ final class PRDetectionTests: XCTestCase {
         )
         let heaviest = events.first { $0.kind == .heaviestSet }
         XCTAssertNotNil(heaviest)
-        XCTAssertEqual(heaviest?.label, "232×5×3 — heaviest deadlift of the comeback")
+        XCTAssertEqual(heaviest?.label, "232×5×3 — heaviest deadlift logged")
         // First time running a 5×3 top scheme → also a milestone.
         XCTAssertTrue(events.contains { $0.kind == .firstScheme })
-        // 232×5×3 = 3480 lb < May 29's 5250 lb — NOT a volume PR. Don't inflate.
+        // 232×5×3 = 3480 lb < the prior 5250 lb — NOT a volume PR.
         XCTAssertFalse(events.contains { $0.kind == .volumePR })
     }
 
@@ -85,5 +85,15 @@ final class PRDetectionTests: XCTestCase {
         XCTAssertEqual(top?.weightLb, 175)
         XCTAssertEqual(top?.sets, 5)
         XCTAssertEqual(top?.reps, 5)
+    }
+
+    func testMilestoneLabelsAcceptThePresentationUnitFormatter() {
+        let events = PRDetection.evaluate(
+            exercise: "Deadlift",
+            sessionSets: [SetSample(weightLb: 220.462, reps: 1)],
+            historySets: [], historyVolumes: [], historySchemes: [],
+            formatWeight: { "\(Weight.trim(Weight.kg(fromLb: $0))) kg" }
+        )
+        XCTAssertTrue(events.allSatisfy { $0.label.contains("100 kg") })
     }
 }

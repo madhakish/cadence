@@ -24,7 +24,7 @@ suite). That parity is non-negotiable — it's why the two apps can't drift.
 | `docs/` | User documentation, Diátaxis-structured (tutorials/how-to/reference/explanation); `docs/README.md` is the index. Update alongside behavior changes |
 | `web/js/templates.js` ≡ `CadenceCore/…/ProgramTemplateData.swift` | Program style templates (data) behind the "+ Add program" picker. Parity ENFORCED: both suites assert against `web/tests/fixtures/program-templates.json` (regenerate via `web/tools/generate-template-fixture.mjs`). App-side instantiation: `Cadence/Seed/ProgramTemplates.swift`. Template exercises must use canonical seeded names — a variant spelling forks the library |
 | `web/js/anatomy.js` ≡ `CadenceCore/…/AnatomyData.swift` | Muscle map + figure geometry for the exercise detail view. Parity ENFORCED against `web/tests/fixtures/anatomy.json` (regenerate via `web/tools/generate-anatomy-fixture.mjs`) |
-| `BackupContract.currentSchemaVersion` ≡ `web/js/db.js` `BACKUP_SCHEMA_VERSION` | Cross-platform JSON backup schema. Missing means legacy v0; current exporters emit v1. Never bump one side alone |
+| `BackupContract.currentSchemaVersion` ≡ `web/js/db.js` `BACKUP_SCHEMA_VERSION` | Cross-platform JSON backup schema. Missing means legacy v0; current exporters emit v2. Never bump one side alone |
 | `fastlane/`, `docs/TESTFLIGHT.md` | Mac-free TestFlight pipeline (dormant until configured) |
 | `.github/workflows/ci.yml`, `pages.yml` | CI + release pipeline; web tests + Pages deploy |
 | `.releaserc.json` | semantic-release config |
@@ -117,8 +117,9 @@ Existing entries — don't reintroduce these patterns:
 - **All weights stored canonically in pounds (`Double`).** kg exists only at
   entry/display boundaries via `Weight`/`UnitDisplay` in CadenceCore.
 - New computational logic goes in CadenceCore with tests, not in views.
-- SwiftData models live in `Cadence/Models/`; seed data in `Seed/Seeder.swift`
-  encodes real training history — don't casually regenerate it.
+- SwiftData models live in `Cadence/Models/`; `Seed/Seeder.swift` may contain
+  generic reference data only. Never commit personal workouts, body metrics,
+  health signals, gym barcodes, or exported app backups.
 - HealthKit is optional and write-only by design; the app reads nothing.
 - **One workout Live Activity** (Lock Screen + Dynamic Island): a session
   stopwatch (elapsed + current lift) that swaps to the rest countdown +
@@ -240,7 +241,7 @@ thing before there's a working, distributed app.
   last session (unobservable from the wrist; not passive). Far off; watchOS.
 
 Open questions to resolve while building Phase 1: HRV/sleep/RHR/temp weighting +
-the user's personal baselines; deload trigger (scheduled vs readiness vs hybrid)
+per-user baselines; deload trigger (scheduled vs readiness vs hybrid)
 and its hysteresis; confirming watchOS high-rate capture needs an active
 `HKWorkoutSession`; the confidence threshold for silent-log vs ask.
 

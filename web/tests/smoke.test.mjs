@@ -26,29 +26,85 @@ const signals = await import("../js/views/signals.js");
 const settings = await import("../js/views/settings.js");
 const session = await import("../js/views/session.js");
 const plates = await import("../js/views/plates.js");
+const completeAll = async (workout) => {
+  for (const exercise of workout.exercises || []) for (const set of exercise.sets || []) if (!set.isWarmup) set.status = "completed";
+  return session.completeSession(workout);
+};
 
-// ---- seed ----
+// ---- privacy-safe first launch ----
 await db.ensureSeeded();
 ok((await db.Exercises.all()).length === 47, "seeded 47 exercises");
 ok((await db.Exercises.all()).every((e) => e.movementGroup), "every seeded exercise has a movement group");
-ok((await db.Sessions.completed()).length === 10, "seeded 10 sessions");
-ok((await db.Tracks.all()).length === 3, "seeded 3 tracks");
+ok((await db.Sessions.completed()).length === 0, "fresh install has no workout history");
+ok((await db.Tracks.all()).length === 0, "fresh install has no progression state");
+ok((await db.Programs.all()).length === 0, "fresh install has no personal program");
+ok((await db.Bodyweight.all()).length === 0 && (await db.Checkins.all()).length === 0,
+  "fresh install has no body metrics or health signals");
 await db.ensureSeeded(); // idempotent
-ok((await db.Sessions.completed()).length === 10, "re-seed is a no-op");
+ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
 
-// Recover an install killed by the old store-at-a-time seeder: seed-owned
-// stores are rebuilt once, while user-only stores survive.
+// Recover an install missing its seed stamp without touching user-owned data.
 {
-  const extra = structuredClone((await db.Sessions.completed())[0]);
-  delete extra.id;
-  await db.Sessions.save(extra);
-  const proteinId = await db.Protein.add({ date: new Date().toISOString(), grams: 17, label: "keep through seed repair" });
+  const sentinelId = await db.Sessions.save({
+    date: "2000-01-01T00:00:00.000Z", notes: "Fictional seed-repair sentinel",
+    isCompleted: true, gymName: "Main Gym", exercises: [],
+  });
+  const proteinId = await db.Protein.add({ date: "2000-01-01T00:00:00.000Z", grams: 10, label: "Fixture sentinel" });
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
-  ok((await db.Sessions.completed()).length === 10, "partial old seed is rebuilt without duplicate sessions");
-  ok((await db.Exercises.all()).length === 47, "partial old seed is rebuilt without duplicate exercises");
-  ok((await db.Protein.all()).some((p) => p.id === proteinId), "seed recovery preserves user-only stores");
+  ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
+  ok((await db.Exercises.all()).length === 47, "seed repair does not duplicate exercises");
+  ok((await db.Protein.all()).some((entry) => entry.id === proteinId), "seed repair preserves other user stores");
+  await db.Sessions.del(sentinelId);
   await db.Protein.del(proteinId);
+}
+
+// Explicit fictional state for the remainder of the regression suite. This is
+// test data, never a first-launch seed or exported user backup.
+const cyc = (exerciseName, role, baseWeightLb, estimatedMaxLb) =>
+  ({ exerciseName, role, baseWeightLb, estimatedMaxLb, stallCount: 0, lastIncrementLb: 0 });
+const acc = (exerciseName, weightLb, incrementLb = 5) =>
+  ({ exerciseName, sets: 3, minReps: 8, maxReps: 12, currentReps: 8, weightLb, incrementLb, stallCount: 0 });
+await db.Programs.save({
+  name: "Fixture Upper/Lower", focus: "strength", cycleNumber: 1, currentWeek: 1,
+  nextDayIndex: 0, roundingLb: 5, isActive: true,
+  days: [
+    { name: "Lower A", order: 0,
+      lifts: [cyc("Back Squat", "main", 175, 204), cyc("Deadlift", "complementary", 185, 255)],
+      accessories: [acc("Walking Lunges", 0, 0), acc("GHD Sit-up", 0, 0), acc("Plank", 0, 0)] },
+    { name: "Upper A", order: 1,
+      lifts: [cyc("Incline DB Press", "main", 45, 52), cyc("Single-arm DB Row", "complementary", 65, 80)],
+      accessories: [acc("Face Pulls", 40), acc("DB Curls", 35), acc("Band Pull-aparts", 0, 0)] },
+    { name: "Lower B", order: 2,
+      lifts: [cyc("Deadlift", "main", 210, 255), cyc("Back Squat", "complementary", 150, 204)],
+      accessories: [acc("KB Swing", 53), acc("Side Plank", 0, 0), acc("Walking Lunges", 0, 0)] },
+    { name: "Upper B", order: 3,
+      lifts: [cyc("Overhead DB Press", "main", 35, 42), cyc("Chest-supported Row", "complementary", 90, 110)],
+      accessories: [acc("Y-T-W Raises", 10), acc("DB Overhead Triceps Extension", 45), acc("Band External Rotation", 0, 0)] },
+  ],
+});
+for (const track of [
+  { exerciseName: "Deadlift", mode: "cycle", cycleNumber: 1, baseWeightLb: 210, nextPhase: 3, incrementLb: 10, roundingLb: 5, lastCompletedAt: null },
+  { exerciseName: "Back Squat", mode: "cycle", cycleNumber: 1, baseWeightLb: 175, nextPhase: 2, incrementLb: 10, roundingLb: 5, lastCompletedAt: null },
+  { exerciseName: "Incline DB Press", mode: "linear", cycleNumber: 1, baseWeightLb: 45, nextPhase: 1, incrementLb: 5, roundingLb: 5, lastCompletedAt: null },
+]) await db.Tracks.save(track);
+for (let i = 0; i < 10; i++) {
+  await db.Sessions.save({
+    date: new Date(Date.UTC(2000, 0, i + 1)).toISOString(), notes: "Fictional regression record",
+    isCompleted: true, gymName: "Main Gym", exercises: [{
+      order: 0, exerciseName: "Deadlift", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null,
+      sets: [{ order: 0, weightLb: 50 + i, reps: 5, isWarmup: false, isPerSide: false,
+        enteredUnit: "lb", status: "completed", flags: ["clean"], bodyFlagSite: null, bodyFlagNote: null }],
+    }],
+  });
+}
+
+// Stable IDs are added once and survive mutable display names.
+{
+  const p = await db.Programs.active(); const g = await db.Gyms.default();
+  ok(typeof p.uuid === "string" && p.uuid.length === 36, "program has a stable portable id");
+  ok(typeof g.id === "string" && g.id.length === 36, "gym has a stable portable id");
 }
 
 // ---- library sync tops up an already-seeded (older) install ----
@@ -128,6 +184,17 @@ document.querySelector("#overlays .overlay .overlay-head button").click(); // cl
 await tick();
 
 // ---- full session flow: start Deadlift (peak 245×3×3), complete, expect PR + advance ----
+// First prove untouched prescriptions are not performed work.
+{
+  const track = (await db.Tracks.all()).find((t) => t.exerciseName === "Incline DB Press");
+  const before = track.baseWeightLb;
+  const untouchedId = await session.createSessionFromTrack(track);
+  const summary = await session.completeSession(await db.Sessions.get(untouchedId));
+  ok(summary.lines.length === 0, "untouched planned sets produce no completion summary");
+  ok((await db.Tracks.byName(track.exerciseName)).baseWeightLb === before, "untouched planned sets do not advance progression");
+  await db.Sessions.del(untouchedId);
+}
+
 const dl = (await db.Tracks.all()).find((t) => t.exerciseName === "Deadlift");
 const id = await session.createSessionFromTrack(dl);
 const created = await db.Sessions.get(id);
@@ -135,6 +202,8 @@ const work = created.exercises[0].sets.filter((s) => !s.isWarmup);
 const warm = created.exercises[0].sets.filter((s) => s.isWarmup);
 ok(warm.length === 5 && warm[0].weightLb === 45, "deadlift got a warmup ramp");
 ok(work.length === 3 && work.every((s) => s.weightLb === 245 && s.reps === 3), "3 working sets at 245×3");
+work.forEach((set) => { set.status = "completed"; });
+await db.Sessions.save(created);
 
 await session.openSession(id); await tick();
 const overlayButtons = () => [...document.querySelectorAll("#overlays .overlay button")];
@@ -142,6 +211,13 @@ ok(overlayButtons().some((b) => b.textContent === "Rest"), "per-exercise Rest bu
 ok(overlayButtons().some((b) => b.textContent.startsWith("⏱")), "per-exercise rest chip shows duration");
 ok(document.querySelector("#overlays .overlay svg.barbell"), "barbell plate visualization renders for a barbell lift");
 ok([...document.querySelectorAll("#overlays .overlay select.bar-select option")].some((o) => o.textContent.includes("45 lb")), "bar selector offers 45 lb");
+const barSelect = document.querySelector("#overlays .overlay select.bar-select");
+barSelect.value = "35-lb";
+barSelect.dispatchEvent(new window.Event("change")); await tick();
+const withBarOverride = await db.Sessions.get(id);
+ok(withBarOverride.exercises[0].barId === "35-lb", "per-exercise bar override persists on the session");
+ok(withBarOverride.exercises[0].sets.filter((s) => s.isWarmup)[0].weightLb === 35,
+  "bar override keeps the warmup ramp in the same equipment context");
 ok(document.querySelector("#session-bar .clock").textContent.includes("session"), "session clock shows in the sticky bottom bar");
 ok([...document.querySelectorAll("#session-bar button")].some((b) => b.textContent.startsWith("Rest ")), "bottom-bar Rest button shows the current lift's rest");
 const bank = overlayButtons().find((b) => b.textContent === "Bank it.");
@@ -166,6 +242,7 @@ ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 47, "export ca
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
 ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
+ok(parsed.sessions.some((s) => s.exercises.some((e) => e.barId === "35-lb")), "export carries session-local bar overrides");
 const csv = await db.exportCSV();
 ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 
@@ -187,6 +264,29 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   for (const s of legacy.sessions) delete s.isCompleted;
   await db.importBundle(legacy);
   ok((await db.Sessions.all()).every((s) => s.isCompleted), "legacy version-0 sessions still restore as completed");
+  await db.importBundle(parsed);
+}
+
+// Version-1 web backups used numeric IndexedDB program IDs. They migrate to
+// portable UUIDs, and name-tagged sessions are rebound without retaining the
+// local integer as cross-platform linkage.
+{
+  const v1 = structuredClone(parsed);
+  v1.schemaVersion = 1;
+  v1.programs.forEach((program, index) => { program.id = index + 1; });
+  const first = v1.programs[0];
+  v1.sessions[0].programTag = {
+    programId: first.id, programName: first.name, cycleNumber: first.cycleNumber,
+    week: first.currentWeek, dayIndex: first.nextDayIndex, planNames: [],
+  };
+  for (const workout of v1.sessions) for (const exercise of workout.exercises) for (const set of exercise.sets) delete set.status;
+  await db.importBundle(v1);
+  const migratedPrograms = await db.Programs.all();
+  const migratedSession = (await db.Sessions.all()).find((workout) => workout.programTag);
+  ok(migratedPrograms.every((program) => typeof program.uuid === "string" && program.uuid.length === 36),
+    "v1 numeric program IDs migrate to portable UUIDs");
+  ok(migratedPrograms.some((program) => program.uuid === migratedSession.programTag.programId),
+    "v1 session tags rebind to the migrated program UUID");
   await db.importBundle(parsed);
 }
 
@@ -266,6 +366,10 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await rejectBeforeMutation((b) => { b.sessions[0].date = "yesterday-ish"; }, "invalid date");
   await rejectBeforeMutation((b) => { b.sessions[0].exercises[0].sets[0].enteredUnit = "stone"; }, "unknown set unit");
   await rejectBeforeMutation((b) => { delete b.sessions[0].exercises[0].sets[0].enteredUnit; }, "missing v1 set unit");
+  await rejectBeforeMutation((b) => { delete b.sessions[0].exercises[0].sets[0].status; }, "missing v2 set status");
+  await rejectBeforeMutation((b) => { b.programs[0].id = "1"; }, "non-portable program identifier");
+  await rejectBeforeMutation((b) => { b.sessions[0].exercises[0].sets[0].flags = ["clean", "grindy"]; }, "multiple quality grades");
+  await rejectBeforeMutation((b) => { delete b.programs[0].id; }, "missing stable program id");
   await rejectBeforeMutation((b) => { b.exercises[0].name = "   "; }, "blank exercise identifier");
   await rejectBeforeMutation((b) => { b.gyms.push(structuredClone(b.gyms[0])); }, "duplicate gym identifier");
   await rejectBeforeMutation((b) => { b.programs[0].nextDayIndex = b.programs[0].days.length; }, "out-of-range program day");
@@ -290,7 +394,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 
 // ---- cardio sets: distance/time/incline, not weight×reps ----
 {
-  // A Walk (type conditioning) logs the 12-3-30: 3 mi, 45 min, 12% incline.
+  // A fictional conditioning fixture exercises every cardio field.
   const sid = await session.createBlankSession();
   const s = await db.Sessions.get(sid);
   s.exercises.push({ order: 0, exerciseName: "Walk", notes: "", phase: null,
@@ -325,7 +429,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 {
   const msBefore = (await db.Milestones.all()).length;
   const done = (await db.Sessions.completed())[0];
-  const again = await session.completeSession(done);
+  const again = await completeAll(done);
   ok(again.lines.length === 0 && again.milestones.length === 0, "re-completing a banked session is a no-op");
   ok((await db.Milestones.all()).length === msBefore, "no duplicate milestones from re-completion");
 }
@@ -341,7 +445,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
              flags: ["clean"], bodyFlagSite: null, bodyFlagNote: null, durationSeconds: null, distanceMiles: null, autoregReason: null }],
   });
   const sid = await db.Sessions.save({ date: db.iso(new Date()), notes: "", isCompleted: false, gymName: null, exercises: [sec(0), sec(1)] });
-  await session.completeSession(await db.Sessions.get(sid));
+  await completeAll(await db.Sessions.get(sid));
   const after = (await db.Tracks.byName("Incline DB Press")).baseWeightLb;
   ok(after === before + 10, `duplicate sections advance the track twice (${before}→${after})`);
 }
@@ -349,6 +453,36 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 // ---- protein add reflects in today's total ----
 await db.Protein.add({ date: new Date().toISOString(), grams: 45, label: "Shake" });
 ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
+
+// ---- program lifecycle: untouched vs partial completion ----
+{
+  let prog = await db.Programs.active();
+  const day = prog.days.find((d) => d.order === prog.nextDayIndex);
+  const initialDay = prog.nextDayIndex;
+  const untouchedId = await session.createSessionFromProgramDay(prog, day);
+  const untouched = await db.Sessions.get(untouchedId);
+  const summary = await session.completeSession(untouched);
+  prog = await db.Programs.active();
+  ok(summary.lines.length === 0 && prog.nextDayIndex === initialDay,
+    "untouched planned program session does not advance the schedule");
+  await db.Sessions.del(untouchedId);
+
+  await db.importBundle(parsed);
+  prog = await db.Programs.active();
+  const partialDay = prog.days.find((d) => d.order === prog.nextDayIndex);
+  const untouchedAccessory = partialDay.accessories[0];
+  const accessoryReps = untouchedAccessory.currentReps;
+  const partialId = await session.createSessionFromProgramDay(prog, partialDay);
+  const partial = await db.Sessions.get(partialId);
+  partial.exercises[0].sets.filter((set) => !set.isWarmup).forEach((set) => { set.status = "completed"; });
+  await session.completeSession(partial);
+  prog = await db.Programs.active();
+  const reloadedDay = prog.days.find((d) => d.order === partialDay.order);
+  ok(prog.nextDayIndex !== initialDay, "partial program session advances after completed work");
+  ok(reloadedDay.accessories.find((a) => a.exerciseName === untouchedAccessory.exerciseName).currentReps === accessoryReps,
+    "planned-only accessory is not graded in a partial workout");
+  await db.importBundle(parsed);
+}
 
 // ---- program: bank a full 4-week cycle, assert adaptive progression ----
 {
@@ -364,14 +498,14 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(built.programTag && built.programTag.week === 1, "program session is tagged");
   const roles = built.exercises.map((e) => e.programRole);
   ok(roles.includes("main") && roles.includes("complementary") && roles.includes("accessory"), "day has main+complementary+accessories");
-  await session.completeSession(built); // i=0 banked (Lower A, week 1)
+  await completeAll(built); // i=0 banked (Lower A, week 1)
 
   for (let i = 1; i < 16; i++) {        // remaining of 4 weeks × 4 days
     prog = await db.Programs.active();
     const day = prog.days.find((d) => d.order === prog.nextDayIndex);
     const id = await session.createSessionFromProgramDay(prog, day);
     const sess = await db.Sessions.get(id);
-    await session.completeSession(sess); // pre-filled working sets at target = a clean cycle
+    await completeAll(sess); // pre-filled working sets at target = a clean cycle
   }
 
   prog = await db.Programs.active();
@@ -391,7 +525,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     const prog = await db.Programs.active();
     const day = prog.days.find((d) => d.order === prog.nextDayIndex);
     const sess = await db.Sessions.get(await session.createSessionFromProgramDay(prog, day));
-    await session.completeSession(sess);
+    await completeAll(sess);
   }
   let prog = await db.Programs.active();
   ok(prog.currentWeek === 3 && prog.nextDayIndex === 0, `at the peak week (wk=${prog.currentWeek} day=${prog.nextDayIndex})`);
@@ -404,7 +538,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   for (const e of sess.exercises) {
     if (e.programRole === "main") for (const s of e.sets) { if (!s.isWarmup) s.weightLb = 100; }
   }
-  await session.completeSession(sess);
+  await completeAll(sess);
   prog = await db.Programs.active();
   const graded = prog.days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
   ok(graded.pending && graded.pending.grade === "fail", "below-plan peak graded fail, not success");
@@ -416,7 +550,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   const main1 = sess1.exercises.find((e) => e.programRole === "main");
   const working1 = main1.sets.filter((s) => !s.isWarmup);
   main1.sets.push({ ...working1[working1.length - 1], order: main1.sets.length, weightLb: working1[0].weightLb - 20 });
-  await session.completeSession(sess1);
+  await completeAll(sess1);
   prog = await db.Programs.active();
   const graded1 = prog.days.find((d) => d.order === day1.order).lifts.find((l) => l.role === "main");
   ok(graded1.pending && graded1.pending.grade === "success", "at-plan peak with a lighter back-off set still grades clean");
@@ -427,7 +561,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     const p = await db.Programs.active();
     const day = p.days.find((d) => d.order === p.nextDayIndex);
     const s = await db.Sessions.get(await session.createSessionFromProgramDay(p, day));
-    await session.completeSession(s);
+    await completeAll(s);
   }
   prog = await db.Programs.active();
   ok(prog.currentWeek === 1, "wave rolled over after the below-plan cycle");
@@ -442,7 +576,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   for (let i = 0; i < 3; i++) {
     const p = await db.Programs.active();
     const day = p.days.find((d) => d.order === p.nextDayIndex);
-    await session.completeSession(await db.Sessions.get(await session.createSessionFromProgramDay(p, day)));
+    await completeAll(await db.Sessions.get(await session.createSessionFromProgramDay(p, day)));
   }
   let prog = await db.Programs.active();
   const week0 = prog.currentWeek;
@@ -458,11 +592,11 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   const dup = JSON.parse(JSON.stringify(await db.Sessions.get(idA)));
   delete dup.id;
   const idB = await db.Sessions.save(dup);
-  await session.completeSession(await db.Sessions.get(idA));
+  await completeAll(await db.Sessions.get(idA));
   prog = await db.Programs.active();
   ok(prog.currentWeek === week0 + 1 && prog.nextDayIndex === 0, "first bank advances exactly one week");
   const accReps = prog.days[3].accessories.length ? prog.days[3].accessories[0].currentReps : null;
-  await session.completeSession(await db.Sessions.get(idB));
+  await completeAll(await db.Sessions.get(idB));
   prog = await db.Programs.active();
   ok(prog.currentWeek === week0 + 1, `stale duplicate did not advance the week again (wk=${prog.currentWeek})`);
   ok(prog.nextDayIndex === 0, "stale duplicate did not move the day pointer");
@@ -538,7 +672,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     const sess = await db.Sessions.get(await session.createSessionFromProgramDay(prog, prog.days[0]));
     const roles = new Set(sess.exercises.map((x) => x.programRole));
     ok(t.days[0].lifts.length === 0 ? roles.has("accessory") : roles.has("main"), `${t.id}: day 0 session has its work`);
-    await session.completeSession(sess);
+    await completeAll(sess);
     ok((await db.Programs.get(id)).nextDayIndex === 1, `${t.id}: banking advances the template program`);
     await db.Programs.del(id); // leave the world as we found it for later blocks
   }
@@ -600,14 +734,14 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   // The marker must survive a web export taken mid-cycle — dropping it would
   // turn the temporary swap into a permanent rename on restore.
   const exported = await db.exportBundle();
-  const exLift = exported.programs.find((p) => p.id === prog.id).days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
+  const exLift = exported.programs.find((p) => p.id === prog.uuid).days.find((d) => d.order === 0).lifts.find((l) => l.role === "main");
   ok(exLift.revertToExerciseName === originalLift, "cycle-swap marker survives web export");
 
   const startCycle = prog.cycleNumber;
   for (let i = 0; i < 16 && (await db.Programs.active()).cycleNumber === startCycle; i++) {
     const p = await db.Programs.active();
     const day = p.days.find((d) => d.order === p.nextDayIndex);
-    await session.completeSession(await db.Sessions.get(await session.createSessionFromProgramDay(p, day)));
+    await completeAll(await db.Sessions.get(await session.createSessionFromProgramDay(p, day)));
   }
   prog = await db.Programs.active();
   ok(prog.cycleNumber === startCycle + 1, "wave rolled over with a swap pending revert");
@@ -659,35 +793,37 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 }
 
 
-// ---- backup v1: open program sessions and canonical tags survive restore ----
+// ---- backup v2: open sessions, lifecycle, and stable tags survive restore ----
 {
   const prog = await db.Programs.active();
   const day = prog.days.find((d) => d.order === prog.nextDayIndex);
   const id = await session.createSessionFromProgramDay(prog, day);
   const open = await db.Sessions.get(id);
-  open.notes = "backup-v1-open-session";
+  open.notes = "backup-v2-open-session";
   await db.Sessions.save(open);
 
   const bundle = await db.exportBundle();
-  const exported = bundle.sessions.find((s) => s.notes === "backup-v1-open-session");
+  const exported = bundle.sessions.find((s) => s.notes === "backup-v2-open-session");
   ok(exported && exported.isCompleted === false, "export preserves an open session");
-  ok(exported.programTag?.programName === prog.name && exported.programTag.programId === undefined,
-    "export uses the canonical cross-platform program-name tag");
+  ok(exported.programTag?.programName === prog.name && exported.programTag.programId === prog.uuid,
+    "export uses a stable cross-platform program id and historical label");
+  ok(exported.exercises.flatMap((e) => e.sets).every((set) => set.status === "planned"),
+    "prefilled open-session sets export as planned work");
   ok((exported.programTag?.planNames || []).length > 0, "export preserves the built-from plan snapshot");
 
   await db.importBundle(bundle);
-  const restored = (await db.Sessions.all()).find((s) => s.notes === "backup-v1-open-session");
+  const restored = (await db.Sessions.all()).find((s) => s.notes === "backup-v2-open-session");
   ok(restored && restored.isCompleted === false, "restore keeps the session open");
-  ok(restored.programTag?.programId === prog.id && restored.programTag?.programName === prog.name,
-    "restore resolves the canonical tag back to the local program id");
+  ok(restored.programTag?.programId === prog.uuid && restored.programTag?.programName === prog.name,
+    "restore retains the canonical stable program id");
   ok((restored.programTag?.planNames || []).length === exported.programTag.planNames.length,
     "restore keeps resume-vs-rebuild plan context");
 }
 
 
 // ---- synthetic fixture: the broad-coverage dataset must import cleanly ----
-// (Runs LAST — importing the fixture replaces the seeded stores. The fixture
-// is generated by tools/generate-synthetic-backup.mjs and doubles as the
+// (Runs LAST — importing the fixture replaces the explicit fictional stores.
+// The fixture is generated by tools/generate-synthetic-backup.mjs and doubles as the
 // cross-platform backup-schema regression lock: the same file restores into
 // the iOS app via ImportService.)
 {
@@ -695,7 +831,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   const fixture = JSON.parse(fs.readFileSync(new URL("./fixtures/synthetic-backup.json", import.meta.url), "utf8"));
   await db.importBundle(fixture);
   const sessions = await db.Sessions.completed();
-  ok(sessions.length >= 75, `fixture carries a deep log (${sessions.length} sessions)`);
+  ok(sessions.length >= 65, `fixture carries a deep fictional log (${sessions.length} sessions)`);
 
   const usedNames = new Set(); const flagKinds = new Set();
   let kgSets = 0, perSide = 0, timed = 0, bwSets = 0, drops = 0, signals = 0;
@@ -719,6 +855,11 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 
   const progs = await db.Programs.all();
   ok(progs.length >= 3 && new Set(progs.map((p) => p.focus)).size === 3, "programs cover all three training focuses");
+  ok(fixture.appVersion === "synthetic" && progs.every((program) => program.name.startsWith("Fixture ")),
+    "regression backup is explicitly fictional, never an app export");
+  ok((await db.Exercises.all()).every((exercise) => !exercise.isShelved && !exercise.shelvedNote && !exercise.watchSite),
+    "fixture exercise library contains no user health defaults");
+  ok((await db.Gyms.all()).every((gym) => !gym.barcodeImage), "fixture contains no membership barcode images");
   ok(progs.filter((p) => p.isActive).length === 1, "exactly one program active");
   ok(progs.some((p) => p.days.some((d) => (d.lifts || []).some((l) => l.pending))), "a mid-wave pending peak grade survives the round trip");
   ok(progs.some((p) => p.days.some((d) => (d.lifts || []).some((l) => (l.stallCount || 0) > 0))), "a stalled lift survives the round trip");

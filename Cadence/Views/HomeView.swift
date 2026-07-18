@@ -30,6 +30,8 @@ struct HomeView: View {
     @State private var previewDay: ProgramDay?
 
     private var settings: AppSettings? { settingsList.first }
+    private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
+    private var entryUnit: WeightUnit { unitDisplay.primaryUnit }
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
     private var activeProgram: Program? { programs.first { $0.isActive } ?? programs.first }
     private var ownedLiftNames: Set<String> {
@@ -116,7 +118,7 @@ struct HomeView: View {
                                     }
                                     Spacer()
                                     VStack(alignment: .trailing, spacing: 2) {
-                                        Text("\(Weight.trim(plan.weightLb)) lb")
+                                        Text(unitDisplay.format(lb: plan.weightLb))
                                             .font(.body.bold().monospacedDigit())
                                         Text("\(plan.sets)×\(plan.reps)")
                                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -129,10 +131,10 @@ struct HomeView: View {
                                 if plan.weightLb > 0 {
                                     let type = exercises.first(where: { $0.name == lift.exerciseName })?.type
                                     if type == .barbell {
-                                        BarbellView(weightLb: plan.weightLb, unit: .lb,
+                                        BarbellView(weightLb: plan.weightLb, unit: entryUnit,
                                                     bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
                                     } else if type == .dumbbell {
-                                        DumbbellView(weightLb: plan.weightLb, unit: .lb)
+                                        DumbbellView(weightLb: plan.weightLb, unit: entryUnit)
                                     }
                                 }
                             }
@@ -160,7 +162,7 @@ struct HomeView: View {
                                     Text(track.exerciseName)
                                         .font(.headline)
                                         .foregroundStyle(.primary)
-                                    Text(track.suggestion.label)
+                                    Text("\(unitDisplay.format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
                                         .font(.title3.bold())
                                         .foregroundStyle(Theme.accent)
                                     if track.mode == .cycle {
@@ -202,7 +204,7 @@ struct HomeView: View {
                     HStack {
                         Text("\(Int(todayProtein)) g")
                             .font(.title2.bold().monospacedDigit())
-                        Text("/ \(Int(settings?.proteinTargetGrams ?? 175)) g")
+                        Text("/ \(Int(settings?.proteinTargetGrams ?? 100)) g")
                             .foregroundStyle(.secondary)
                         Spacer()
                     }
@@ -260,7 +262,7 @@ struct HomeView: View {
             return
         }
 
-        let session = WorkoutSession(gymName: defaultGym?.name)
+        let session = WorkoutSession(gymID: defaultGym?.id, gymName: defaultGym?.name)
         context.insert(session)
 
         let entry = SessionExercise(order: 0, exercise: exercise)
@@ -275,15 +277,19 @@ struct HomeView: View {
 
         // Pre-fill warmup ramp + working sets. All editable.
         if exercise.type == .barbell {
-            for warmup in WarmupRamp.ramp(workingLb: plan.weightLb) {
-                let set = SetEntry(order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps, isWarmup: true)
+            for warmup in WarmupRamp.ramp(
+                workingLb: plan.weightLb,
+                barLb: (defaultGym?.defaultBar ?? .bar45lb).lb,
+                roundingLb: track.roundingLb
+            ) {
+                let set = SetEntry(order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps, isWarmup: true, enteredUnit: entryUnit)
                 set.sessionExercise = entry
                 context.insert(set)
                 entry.sets.append(set)
             }
         }
         for _ in 0..<plan.sets {
-            let set = SetEntry(order: entry.sets.count, weightLb: plan.weightLb, reps: plan.reps)
+            let set = SetEntry(order: entry.sets.count, weightLb: plan.weightLb, reps: plan.reps, enteredUnit: entryUnit)
             set.sessionExercise = entry
             context.insert(set)
             entry.sets.append(set)
@@ -293,7 +299,7 @@ struct HomeView: View {
     }
 
     private func startBlankSession() {
-        let session = WorkoutSession(gymName: defaultGym?.name)
+        let session = WorkoutSession(gymID: defaultGym?.id, gymName: defaultGym?.name)
         context.insert(session)
         if PersistenceErrorCenter.shared.save(context, operation: "Starting the session") { activeSession = session }
     }

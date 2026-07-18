@@ -14,8 +14,10 @@ struct WorkoutPreviewView: View {
 
     @Query private var exercises: [Exercise]
     @Query private var gyms: [Gym]
+    @Query private var settingsList: [AppSettings]
 
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
+    private var unitDisplay: UnitDisplay { settingsList.first?.unitDisplay ?? .lbPrimary }
     private var phase: CyclePhase { CyclePhase(rawValue: program.currentWeek) ?? .volume }
 
     private func plan(for lift: ProgramLift) -> SessionPlan {
@@ -60,17 +62,17 @@ struct WorkoutPreviewView: View {
                             .buttonStyle(.plain)
                             Spacer()
                             VStack(alignment: .trailing, spacing: 2) {
-                                Text("\(Weight.trim(p.weightLb)) lb").font(.body.bold().monospacedDigit())
+                                Text(unitDisplay.format(lb: p.weightLb)).font(.body.bold().monospacedDigit())
                                 Text("\(p.sets)×\(p.reps)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                             }
                         }
                         if p.weightLb > 0 {
                             let type = exercises.first(where: { $0.name == lift.exerciseName })?.type
                             if type == .barbell {
-                                BarbellView(weightLb: p.weightLb, unit: .lb,
+                                BarbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit,
                                             bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
                             } else if type == .dumbbell {
-                                DumbbellView(weightLb: p.weightLb, unit: .lb)
+                                DumbbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit)
                             }
                         }
                     }
@@ -89,7 +91,7 @@ struct WorkoutPreviewView: View {
                             .buttonStyle(.plain)
                             Spacer()
                             Text(acc.weightLb > 0
-                                 ? "\(acc.sets)×\(acc.currentReps) @ \(Weight.trim(acc.weightLb)) lb"
+                                 ? "\(acc.sets)×\(acc.currentReps) @ \(unitDisplay.format(lb: acc.weightLb))"
                                  : "\(acc.sets)×\(acc.currentReps)")
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)

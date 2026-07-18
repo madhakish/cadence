@@ -22,7 +22,7 @@ final class CardioFormatTests: XCTestCase {
         XCTAssertEqual(CardioFormat.setLabel(distanceMiles: 1.5, durationSeconds: 1350, inclinePercent: nil),
                        "1.5 mi · 22:30 · 4 mph")
         XCTAssertEqual(CardioFormat.setLabel(distanceMiles: 3, durationSeconds: 2700, inclinePercent: 12),
-                       "3 mi · 45:00 · 4 mph · 12%", "the 12-3-30 special")
+                       "3 mi · 45:00 · 4 mph · 12%", "fictional full-field fixture")
         XCTAssertEqual(CardioFormat.setLabel(distanceMiles: nil, durationSeconds: 1800, inclinePercent: nil), "30:00")
         XCTAssertEqual(CardioFormat.setLabel(distanceMiles: 2, durationSeconds: nil, inclinePercent: nil), "2 mi")
         XCTAssertEqual(CardioFormat.setLabel(distanceMiles: 0.25, durationSeconds: nil, inclinePercent: nil), "0.25 mi", "quarter-mile keeps two decimals")

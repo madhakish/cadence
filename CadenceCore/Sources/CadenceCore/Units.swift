@@ -61,6 +61,10 @@ public enum UnitDisplay: String, Codable, CaseIterable, Sendable {
     case kgPrimary
     case both
 
+    public var primaryUnit: WeightUnit {
+        switch self { case .kgPrimary: return .kg; case .lbPrimary, .both: return .lb }
+    }
+
     public func format(lb: Double) -> String {
         switch self {
         case .lbPrimary: return "\(Weight.trim(lb)) lb"

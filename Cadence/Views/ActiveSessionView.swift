@@ -26,9 +26,21 @@ struct ActiveSessionView: View {
     @State private var banking = false                  // double-tap on Bank it would run completion twice
     @State private var showBankError = false            // failed save: everything rolled back, Bank stays retryable
     @State private var bankErrorMessage = ""
+    @State private var showIncompleteBankConfirmation = false
 
     private var currentOrFirst: SessionExercise? { currentEntry ?? session.orderedExercises.first }
-    private var gym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
+    private var gym: Gym? {
+        gyms.first { $0.id == session.gymID }
+            ?? gyms.first { $0.name == session.gymName }
+            ?? gyms.first { $0.isDefault }
+            ?? gyms.first
+    }
+    private var unfinishedSetCount: Int {
+        session.orderedExercises.flatMap(\.plannedWorkingSets).filter { $0.status == .planned }.count
+    }
+    private var completedSetCount: Int {
+        session.orderedExercises.flatMap(\.plannedWorkingSets).filter { $0.status == .completed }.count
+    }
     /// The stopwatch origin lives in WorkoutClock (root-scoped), so it survives
     /// leaving this screen — and, via the Live Activity, app relaunch.
     private var sessionStart: Date { workoutClock.startDate ?? .now }
@@ -38,6 +50,7 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
+            trainingAtSection
             exerciseSections
 
             Section {
@@ -55,19 +68,8 @@ struct ActiveSessionView: View {
 
             Section {
                 Button {
-                    guard !banking else { return }
-                    banking = true
-                    do {
-                        summary = try SessionCompletion.finish(session, context: context, startedAt: sessionStart)
-                        restTimer.stop()   // the workout is over; don't fire "Rest over" for a banked session
-                        workoutClock.end() // stop the stopwatch + end the Live Activity
-                    } catch {
-                        // Rolled back — the session is still open and untouched,
-                        // so surface the failure and let Bank be tapped again.
-                        banking = false
-                        bankErrorMessage = error.localizedDescription
-                        showBankError = true
-                    }
+                    if unfinishedSetCount > 0 { showIncompleteBankConfirmation = true }
+                    else { bankSession() }
                 } label: {
                     Text(Copy.sessionDone)
                         .font(.headline)
@@ -105,6 +107,16 @@ struct ActiveSessionView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(bankErrorMessage)
+        }
+        .confirmationDialog(
+            "Bank an incomplete session?",
+            isPresented: $showIncompleteBankConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Bank completed work") { bankSession() }
+            Button("Keep logging", role: .cancel) {}
+        } message: {
+            Text("\(completedSetCount) completed; \(unfinishedSetCount) planned set\(unfinishedSetCount == 1 ? " is" : "s are") still unfinished. Only completed sets will count toward volume, PRs, and progression.")
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -160,6 +172,30 @@ struct ActiveSessionView: View {
         }
     }
 
+    @ViewBuilder
+    private var trainingAtSection: some View {
+        if !gyms.isEmpty {
+            Section("Training at") {
+                Picker("Gym", selection: Binding(
+                    get: { gym?.id ?? "" },
+                    set: { id in
+                        guard let selected = gyms.first(where: { $0.id == id }) else { return }
+                        session.gymID = selected.id
+                        session.gymName = selected.name
+                        for entry in session.exercises where entry.barID == nil {
+                            synchronizeWarmups(entry, bar: selected.defaultBar,
+                                               enteredUnit: settingsList.first?.unitDisplay.primaryUnit ?? .lb,
+                                               context: context)
+                        }
+                        PersistenceErrorCenter.shared.save(context, operation: "Changing the session gym")
+                    }
+                )) {
+                    ForEach(gyms) { option in Text(option.name).tag(option.id) }
+                }
+            }
+        }
+    }
+
     /// Extracted from `body` — the seven-argument section call plus the recall
     /// lookup pushed the List builder past the type-checker's budget.
     private var exerciseSections: some View {
@@ -197,8 +233,22 @@ struct ActiveSessionView: View {
                                    defaultRestSeconds: currentRestSeconds)
     }
 
-    /// "Last: 225×5 · Jun 12 (3w ago)" per lift in THIS session — when and how
-    /// heavy each was last time, searched across ALL history (not just this
+    private func bankSession() {
+        guard !banking else { return }
+        banking = true
+        do {
+            summary = try SessionCompletion.finish(session, context: context, startedAt: sessionStart)
+            restTimer.stop()
+            workoutClock.end()
+        } catch {
+            banking = false
+            bankErrorMessage = error.localizedDescription
+            showBankError = true
+        }
+    }
+
+    /// Compact previous-performance context per lift in THIS session, searched
+    /// across ALL history (not just this
     /// program), so a lift you swapped away from months ago still tells you
     /// where you left off. One newest-first pass over history, stopping as
     /// soon as every lift on today's card has an answer.
@@ -212,7 +262,7 @@ struct ActiveSessionView: View {
                       let top = entry.topSet else { continue }
                 let better = past.exercises.filter { $0.exercise?.name == name }.compactMap(\.topSet)
                     .max { $0.weightLb < $1.weightLb } ?? top
-                let weight = better.weightLb == 0 ? "BW" : Weight.trim(better.weightLb)
+                let weight = better.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: better.weightLb)
                 let when = past.date.formatted(date: .abbreviated, time: .omitted)
                 lines[name] = "Last: \(weight)×\(better.reps) · \(when) (\(agoLabel(past.date)))"
                 wanted.remove(name)
@@ -235,7 +285,7 @@ struct ActiveSessionView: View {
     private func dropLoad(_ entry: SessionExercise, reason: AutoregReason) {
         let ordered = entry.orderedSets
         let plan = ProgramEngine.dropLoadPlan(
-            sets: ordered.map { (weightLb: $0.weightLb, isWarmup: $0.isWarmup, isFlagged: !$0.flags.isEmpty) }
+            sets: ordered.map { (weightLb: $0.weightLb, isWarmup: $0.isWarmup, isFlagged: $0.status != .planned) }
         )
         guard !plan.isEmpty else { return }
         for (i, target) in plan.enumerated() {
@@ -243,7 +293,7 @@ struct ActiveSessionView: View {
             if i == 0 { ordered[target.index].autoregReason = reason }
         }
         let top = plan.map(\.weightLb).max() ?? 0
-        entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \(Weight.trim(top)) — \(reason.rawValue)."
+        entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top)) — \(reason.rawValue)."
         PersistenceErrorCenter.shared.save(context, operation: "Dropping the load")
     }
 }
@@ -286,7 +336,7 @@ private struct ExerciseSection: View {
     let settings: AppSettings?
     let gym: Gym?
     let allExercises: [Exercise]
-    /// "Last: 225×5 · Jun 12 (3w ago)", or nil for a first-ever lift.
+    /// Previous-performance context, or nil for a first-ever lift.
     let lastTime: String?
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
@@ -327,7 +377,7 @@ private struct ExerciseSection: View {
         // progression state as the starting load — candidates train the same
         // pattern at the same tier, so base/e1RM remain the best prior.
         if scope != .session {
-            guard let role = entry.programRole, let name = entry.session?.programName,
+            guard let role = entry.programRole, let session = entry.session,
                   let dayIndex = entry.session?.programDayIndex else {
                 PersistenceErrorCenter.shared.report(
                     NSError(domain: "Cadence", code: 1,
@@ -338,9 +388,9 @@ private struct ExerciseSection: View {
             }
             let program: Program
             do {
-                guard let found = try fetchProgram(named: name) else {
+                guard let found = try fetchProgram(id: session.programID, named: session.programName) else {
                     throw NSError(domain: "Cadence", code: 1,
-                                  userInfo: [NSLocalizedDescriptionKey: "The program \(name) no longer exists."])
+                                  userInfo: [NSLocalizedDescriptionKey: "The originating program no longer exists."])
                 }
                 program = found
             } catch {
@@ -395,7 +445,8 @@ private struct ExerciseSection: View {
                                        roundingLb: ProgramEngine.defaultRoundingLb)
             for set in entry.sets { set.order += ramp.count }
             for (i, wu) in ramp.enumerated() {
-                let set = SetEntry(order: i, weightLb: wu.weightLb, reps: wu.reps, isWarmup: true, isPerSide: false)
+                let set = SetEntry(order: i, weightLb: wu.weightLb, reps: wu.reps, isWarmup: true, isPerSide: false,
+                                   enteredUnit: settings?.unitDisplay.primaryUnit ?? .lb)
                 set.sessionExercise = entry
                 context.insert(set)
                 entry.sets.append(set)
@@ -403,17 +454,15 @@ private struct ExerciseSection: View {
         }
     }
 
-    private func fetchProgram(named name: String) throws -> Program? {
-        let n = name // hoist: #Predicate can't read a captured property
-        return try context.fetch(FetchDescriptor<Program>(predicate: #Predicate { $0.name == n })).first
+    private func fetchProgram(id: String?, named name: String?) throws -> Program? {
+        let programs = try context.fetch(FetchDescriptor<Program>())
+        return id.flatMap { stableID in programs.first { $0.id == stableID } }
+            ?? programs.first { $0.name == name }
     }
 
-    /// Ephemeral bar choice for this exercise (mirrors the web logger's
-    /// per-exercise bar select, which is equally sticky once touched). Starts
-    /// out tracking the gym's default bar; a pick — including re-picking the
-    /// default, a value-identical Bar — pins it for this screen's lifetime.
-    @State private var pickedBar: Bar?
-    private var effectiveBar: Bar { pickedBar ?? gym?.defaultBar ?? .bar45lb }
+    /// A nil override follows the selected gym's default. Explicit choices are
+    /// stored on the session exercise so they survive navigation and relaunch.
+    private var effectiveBar: Bar { entry.barID.map { Bar.by(id: $0) } ?? gym?.defaultBar ?? .bar45lb }
 
     /// A picked swap for a program slot, awaiting its scope (issue 20).
     /// Standalone entries skip the dialog — with no slot, session-only is the
@@ -445,7 +494,7 @@ private struct ExerciseSection: View {
                 // The set you're ON — the first WORKING set with no verdict
                 // yet. Warmups sit quiet (and often go unflagged, so they must
                 // not hold the rail hostage).
-                let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.flags.isEmpty }?.persistentModelID == set.persistentModelID
+                let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }?.persistentModelID == set.persistentModelID
                 VStack(alignment: .leading, spacing: 4) {
                     SetRow(set: set, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
                            targetLb: entry.plannedWeightLb, onLogged: {
@@ -501,7 +550,16 @@ private struct ExerciseSection: View {
             }
 
             if entry.exercise?.type == .barbell {
-                Picker("Bar", selection: Binding(get: { effectiveBar }, set: { pickedBar = $0 })) {
+                Picker("Bar", selection: Binding(
+                    get: { effectiveBar },
+                    set: {
+                        entry.barID = $0.id
+                        synchronizeWarmups(entry, bar: $0,
+                                           enteredUnit: settings?.unitDisplay.primaryUnit ?? .lb,
+                                           context: context)
+                        PersistenceErrorCenter.shared.save(context, operation: "Changing the exercise bar")
+                    }
+                )) {
                     ForEach(Bar.all) { Text($0.label).tag($0) }
                 }
                 .font(.caption)
@@ -584,13 +642,48 @@ private struct ExerciseSection: View {
             order: entry.sets.count,
             weightLb: last?.weightLb ?? entry.plannedWeightLb ?? 45,
             reps: last?.reps ?? entry.plannedReps ?? 5,
-            isPerSide: entry.exercise?.isUnilateral ?? false
+            isPerSide: entry.exercise?.isUnilateral ?? false,
+            enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb
         )
         set.sessionExercise = entry
         context.insert(set)
         entry.sets.append(set)
         PersistenceErrorCenter.shared.save(context, operation: "Adding the set")
     }
+}
+
+/// Keep the editable prescription and its equipment illustration on the same
+/// bar context without discarding status/quality already logged on matching
+/// warmup rows.
+private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar,
+                                enteredUnit: WeightUnit, context: ModelContext) {
+    guard entry.exercise?.type == .barbell,
+          let workingLb = entry.plannedWeightLb
+            ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb,
+          workingLb > 0 else { return }
+    let desired = WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
+                                  roundingLb: ProgramEngine.defaultRoundingLb)
+    let existing = entry.orderedSets.filter(\.isWarmup)
+    var rebuilt: [SetEntry] = []
+    for (index, target) in desired.enumerated() {
+        if index < existing.count {
+            existing[index].weightLb = target.weightLb
+            existing[index].reps = target.reps
+            rebuilt.append(existing[index])
+        } else {
+            let set = SetEntry(order: index, weightLb: target.weightLb, reps: target.reps,
+                               isWarmup: true, enteredUnit: enteredUnit)
+            set.sessionExercise = entry
+            context.insert(set)
+            rebuilt.append(set)
+        }
+    }
+    if existing.count > desired.count {
+        for set in existing.dropFirst(desired.count) { context.delete(set) }
+    }
+    let working = entry.orderedSets.filter { !$0.isWarmup }
+    entry.sets = rebuilt + working
+    for (index, set) in entry.sets.enumerated() { set.order = index }
 }
 
 // MARK: - Set row
@@ -625,8 +718,8 @@ private struct SetRow: View {
                 showDetail = true
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    // Cardio: the shared CadenceCore label ("1.5 mi · 22:30 ·
-                    // 4 mph · 12%"); lifts: weight in its entered unit.
+                    // Cardio uses the shared CadenceCore formatter; lifts show
+                    // weight in the unit used for entry.
                     Text(isCardio
                          ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                                  durationSeconds: set.durationSeconds,
@@ -662,11 +755,8 @@ private struct SetRow: View {
 
             Spacer()
 
-            // Quality flags: one thumb-tap each. Cardio gets only ✓ (done) —
-            // grindy/wobble grade barbell quality, not a walk.
-            ForEach(isCardio ? [SetFlag.clean] : [SetFlag.clean, .grindy, .wobble], id: \.self) { flag in
-                FlagToggle(set: set, flag: flag, onLogged: onLogged)
-            }
+            SetStatusMenu(set: set, onCompleted: onLogged)
+            if !isCardio { QualityMenu(set: set) }
         }
         .sheet(isPresented: $showDetail) {
             if isCardio {
@@ -691,7 +781,7 @@ private struct SetRow: View {
 // MARK: - Cardio set detail (distance / time / incline)
 
 /// Conditioning-type work logs distance, time, and incline; speed falls out.
-/// Small deliberate steps (0.25 mi, 1 min, 0.5%) — content hoisted into plain
+/// Small deliberate steps for each field — content hoisted into plain
 /// rows to stay inside the type-checker's budget (see CompileRegressionTests).
 private struct CardioSetSheet: View {
     @Environment(\.modelContext) private var context
@@ -758,52 +848,71 @@ private struct CardioSetSheet: View {
     }
 }
 
-private struct FlagToggle: View {
+private struct SetStatusMenu: View {
     @Environment(\.modelContext) private var context
     @Bindable var set: SetEntry
-    let flag: SetFlag
-    var onLogged: () -> Void
-
-    // `self.` keeps the parser from reading `set` as a setter declaration
-    private var isOn: Bool { self.set.flags.contains(flag) }
+    var onCompleted: () -> Void
 
     var body: some View {
-        Button {
-            var flags = set.flags
-            if isOn {
-                flags.removeAll { $0 == flag }
-            } else {
-                flags.append(flag)
-                onLogged() // first flag = set done → arm rest timer
+        Menu {
+            ForEach(SetStatus.allCases, id: \.self) { status in
+                Button {
+                    let wasCompleted = set.status == .completed
+                    set.status = status
+                    if status == .completed && !wasCompleted { onCompleted() }
+                    PersistenceErrorCenter.shared.save(context, operation: "Changing the set status")
+                } label: {
+                    Label(statusLabel(status), systemImage: statusIcon(status))
+                }
             }
-            set.flags = flags
-            PersistenceErrorCenter.shared.save(context, operation: "Logging the set")
+        } label: {
+            Image(systemName: statusIcon(set.status))
+                .font(.title3)
+                .frame(width: 40, height: 40)
+                .background(statusColor(set.status).opacity(set.status == .planned ? 0.12 : 0.30),
+                            in: RoundedRectangle(cornerRadius: 8))
+        }
+        .accessibilityLabel("Set status")
+        .accessibilityValue(statusLabel(set.status))
+    }
+
+    private func statusLabel(_ status: SetStatus) -> String {
+        switch status { case .planned: return "Planned"; case .completed: return "Completed"; case .skipped: return "Skipped" }
+    }
+    private func statusIcon(_ status: SetStatus) -> String {
+        switch status { case .planned: return "circle"; case .completed: return "checkmark.circle.fill"; case .skipped: return "minus.circle.fill" }
+    }
+    private func statusColor(_ status: SetStatus) -> Color {
+        switch status { case .planned: return .secondary; case .completed: return Theme.good; case .skipped: return .secondary }
+    }
+}
+
+private struct QualityMenu: View {
+    @Environment(\.modelContext) private var context
+    @Bindable var set: SetEntry
+
+    var body: some View {
+        Menu {
+            Button("No quality") { set.quality = nil; save() }
+            Button("Clean") { set.quality = .clean; save() }
+            Button("Grindy") { set.quality = .grindy; save() }
+            Button("Wobble") { set.quality = .wobble; save() }
         } label: {
             Text(symbol)
                 .font(.headline)
                 .frame(width: 40, height: 40)
-                .background(isOn ? color.opacity(0.35) : Color(.tertiarySystemFill),
-                            in: RoundedRectangle(cornerRadius: 8))
+                .background(color.opacity(set.quality == nil ? 0.12 : 0.30), in: RoundedRectangle(cornerRadius: 8))
         }
-        .buttonStyle(.plain)
+        .accessibilityLabel("Set quality")
+        .accessibilityValue(set.quality?.rawValue ?? "Not graded")
     }
 
+    private func save() { PersistenceErrorCenter.shared.save(context, operation: "Grading the set") }
     private var symbol: String {
-        switch flag {
-        case .clean: return "✓"
-        case .grindy: return "G"
-        case .wobble: return "W"
-        case .stoppedEarly: return "■"
-        }
+        switch set.quality { case .clean: return "✓"; case .grindy: return "G"; case .wobble: return "W"; default: return "Q" }
     }
-
     private var color: Color {
-        switch flag {
-        case .clean: return Theme.good
-        case .grindy: return Theme.warn
-        case .wobble: return Theme.warn
-        case .stoppedEarly: return Theme.hardStop
-        }
+        switch set.quality { case .clean: return Theme.good; case .grindy, .wobble: return Theme.warn; default: return .secondary }
     }
 }
 
@@ -981,8 +1090,7 @@ private struct SessionBottomBar: View {
 
             // While resting the bar carries the countdown + FOUR controls —
             // text everywhere here must be single-line (scaling down before
-            // truncating) or narrow phones wrap the digits mid-string
-            // ("0:2/0", "−1:0/0" — see the Jul 15 screenshot).
+            // truncating) or narrow phones wrap the digits mid-string.
             HStack(spacing: 10) {
                 // Session stopwatch — always visible, with an icon so it reads
                 // as a running clock.
@@ -1089,6 +1197,7 @@ private struct ExercisePickerSheet: View {
 // MARK: - Summary
 
 private struct SessionSummarySheet: View {
+    @Query private var settingsList: [AppSettings]
     let summary: SessionSummary
     let onDone: () -> Void
 
@@ -1099,7 +1208,7 @@ private struct SessionSummarySheet: View {
                     ForEach(summary.lines) { line in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(line.exerciseName).font(.headline)
-                            Text("Top: \(line.topSetLabel) · Volume: \(Weight.trim(line.volumeLb)) lb")
+                            Text("Top: \(line.topSetLabel) · Volume: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: line.volumeLb))")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }

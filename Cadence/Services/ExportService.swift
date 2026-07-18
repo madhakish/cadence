@@ -12,6 +12,7 @@ enum ExportService {
         let weightLb: Double
         let reps: Int
         let isWarmup: Bool
+        let status: String
         let isPerSide: Bool
         let enteredUnit: String
         let flags: [String]
@@ -28,6 +29,7 @@ enum ExportService {
         let notes: String
         let phase: String?
         let role: String?
+        let barId: String?
         let plannedWeightLb: Double?
         let plannedSets: Int?
         let plannedReps: Int?
@@ -36,6 +38,7 @@ enum ExportService {
 
     /// Program linkage on a session (web `programTag`; historical metadata).
     struct ExportProgramTag: Codable {
+        let programId: String
         let programName: String
         let cycleNumber: Int?
         let week: Int?
@@ -47,6 +50,7 @@ enum ExportService {
         let date: Date
         let notes: String
         let gym: String?
+        let gymId: String?
         let isCompleted: Bool
         let programTag: ExportProgramTag?
         let exercises: [ExportExercise]
@@ -92,6 +96,7 @@ enum ExportService {
 
     /// Web `gyms` store record shape; barcodeImage is a data URL.
     struct ExportGym: Codable {
+        let id: String
         let name: String
         let isDefault: Bool
         let defaultBarId: String
@@ -219,6 +224,7 @@ enum ExportService {
     }
 
     struct ExportProgram: Codable {
+        let id: String
         let name: String
         let focus: String
         let cycleNumber: Int
@@ -243,7 +249,7 @@ enum ExportService {
 
     static func csvData(context: ModelContext) throws -> Data {
         let bundle = try buildBundle(context: context)
-        var rows = ["date,exercise,set_index,weight_lb,weight_kg,reps,is_warmup,per_side,flags,body_flag_site,body_flag_note,autoreg_reason,session_notes"]
+        var rows = ["date,exercise,set_index,weight_lb,weight_kg,reps,is_warmup,status,per_side,flags,body_flag_site,body_flag_note,autoreg_reason,session_notes"]
         let formatter = ISO8601DateFormatter()
         for session in bundle.sessions {
             for exercise in session.exercises {
@@ -256,6 +262,7 @@ enum ExportService {
                         String(format: "%.2f", Weight.kg(fromLb: set.weightLb)),
                         "\(set.reps)",
                         "\(set.isWarmup)",
+                        set.status,
                         "\(set.isPerSide)",
                         set.flags.joined(separator: ";"),
                         set.bodyFlagSite ?? "",
@@ -314,24 +321,36 @@ enum ExportService {
             exportedAt: .now,
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev",
             sessions: sessions.map { session in
-                ExportSession(
+                let resolvedGymID = session.gymID ?? gyms.first(where: { $0.name == session.gymName })?.id
+                let resolvedProgramID = session.programID
+                    ?? programs.first(where: { $0.name == session.programName })?.id
+                    ?? session.programName.map { "legacy:\($0)" }
+                let programTag: ExportProgramTag?
+                if let id = resolvedProgramID, let name = session.programName {
+                    programTag = ExportProgramTag(
+                        programId: id, programName: name,
+                        cycleNumber: session.programCycleNumber,
+                        week: session.programWeek,
+                        dayIndex: session.programDayIndex,
+                        planNames: session.programPlanNames
+                    )
+                } else {
+                    programTag = nil
+                }
+                return ExportSession(
                     date: session.date,
                     notes: session.notes,
                     gym: session.gymName,
+                    gymId: resolvedGymID,
                     isCompleted: session.isCompleted,
-                    programTag: session.programName.map { name in
-                        ExportProgramTag(programName: name,
-                                         cycleNumber: session.programCycleNumber,
-                                         week: session.programWeek,
-                                         dayIndex: session.programDayIndex,
-                                         planNames: session.programPlanNames)
-                    },
+                    programTag: programTag,
                     exercises: session.orderedExercises.map { entry in
                         ExportExercise(
                             name: entry.exercise?.name ?? "Unknown",
                             notes: entry.notes,
                             phase: entry.phase?.label,
                             role: entry.programRole,
+                            barId: entry.barID,
                             plannedWeightLb: entry.plannedWeightLb,
                             plannedSets: entry.plannedSets,
                             plannedReps: entry.plannedReps,
@@ -340,10 +359,11 @@ enum ExportService {
                                     weightLb: set.weightLb,
                                     reps: set.reps,
                                     isWarmup: set.isWarmup,
+                                    status: set.status.rawValue,
                                     isPerSide: set.isPerSide,
                                     enteredUnit: set.enteredUnitRaw,
-                                    flags: set.flagsRaw,
-                                    bodyFlagSite: set.bodyFlagSiteRaw,
+                                    flags: set.flags.map(\.rawValue),
+                                    bodyFlagSite: set.bodyFlagSite?.rawValue,
                                     bodyFlagNote: set.bodyFlagNote,
                                     durationSeconds: set.durationSeconds,
                                     distanceMiles: set.distanceMiles,
@@ -361,14 +381,15 @@ enum ExportService {
             },
             protein: protein.map { ExportProtein(date: $0.date, grams: $0.grams, label: $0.label) },
             checkIns: checkIns.map {
-                ExportCheckIn(date: $0.date, site: $0.siteRaw, response: $0.response, note: $0.note)
+                ExportCheckIn(date: $0.date, site: $0.site?.rawValue ?? BodySite.knee.rawValue,
+                              response: $0.response, note: $0.note)
             },
             milestones: milestones.map {
                 ExportMilestone(date: $0.date, exercise: $0.exerciseName, kind: $0.kindRaw, label: $0.label)
             },
             programs: programs.map { p in
                 ExportProgram(
-                    name: p.name, focus: p.focusRaw, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
+                    id: p.id, name: p.name, focus: p.focusRaw, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
                     nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: p.isActive,
                     days: p.orderedDays.map { d in
                         ExportProgramDay(
@@ -407,7 +428,7 @@ enum ExportService {
             },
             gyms: gyms.map { g in
                 ExportGym(
-                    name: g.name, isDefault: g.isDefault,
+                    id: g.id, name: g.name, isDefault: g.isDefault,
                     // Normalize through Bar.by so legacy untrimmed ids export
                     // in the shared format the web can resolve.
                     defaultBarId: Bar.by(id: g.defaultBarID).id,
@@ -419,7 +440,8 @@ enum ExportService {
             exercises: exerciseDefs.map { e in
                 ExportExerciseDef(name: e.name, category: e.categoryRaw, type: e.typeRaw, movementGroup: e.movementGroup,
                                   isUnilateral: e.isUnilateral, defaultRestSeconds: e.defaultRestSeconds, notes: e.notes,
-                                  isShelved: e.isShelved, shelvedNote: e.shelvedNote, watchSite: e.watchSiteRaw, createdAt: e.createdAt)
+                                  isShelved: e.isShelved, shelvedNote: e.shelvedNote,
+                                  watchSite: e.watchSite?.rawValue, createdAt: e.createdAt)
             },
             settings: settings.map { s in
                 ExportSettings(unitDisplay: s.unitDisplayRaw, proteinTargetGrams: s.proteinTargetGrams,

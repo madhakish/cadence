@@ -52,6 +52,17 @@ export function unitFormat(mode, lb) {
     default: return `${trim(lb)} lb`;
   }
 }
+export const primaryUnit = (mode) => (mode === "kgPrimary" ? "kg" : "lb");
+
+// ---- Explicit set lifecycle -------------------------------------------------
+export const SET_STATUSES = ["planned", "completed", "skipped"];
+export const SET_QUALITIES = ["clean", "grindy", "wobble"];
+export const resolveSetStatus = (raw, sessionCompleted) => SET_STATUSES.includes(raw) ? raw : (sessionCompleted ? "completed" : "planned");
+export const setQuality = (flags = []) => flags.find((flag) => SET_QUALITIES.includes(flag)) || null;
+export const normalizedSetFlags = (quality, stoppedEarly = false) => [
+  ...(SET_QUALITIES.includes(quality) ? [quality] : []),
+  ...(stoppedEarly ? ["stopped early"] : []),
+];
 
 // ---- Plates & bars ---------------------------------------------------------
 
@@ -381,9 +392,10 @@ export function prTopScheme(sets) {
 }
 
 // Returns [{ kind, exercise, label }], kind ∈ heaviestSet|firstScheme|volumePR
-export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes, historySchemes }) {
+export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes, historySchemes, formatWeight = null }) {
   if (!sessionSets.length) return [];
   const events = [];
+  const weightLabel = formatWeight || trim;
   const priorMax = historySets.length ? Math.max(...historySets.map((s) => s.weightLb)) : 0;
   const top = prTopScheme(sessionSets);
   const schemes = historySchemes instanceof Set ? historySchemes : new Set(historySchemes);
@@ -391,20 +403,21 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
   if (top) {
     if (top.weightLb > priorMax + 1e-9) {
       const scheme = top.sets > 1
-        ? `${trim(top.weightLb)}×${top.sets}×${top.reps}`
-        : `${trim(top.weightLb)}×${top.reps}`;
-      events.push({ kind: "heaviestSet", exercise, label: `${scheme} — heaviest ${exercise.toLowerCase()} of the comeback` });
+        ? `${weightLabel(top.weightLb)}×${top.sets}×${top.reps}`
+        : `${weightLabel(top.weightLb)}×${top.reps}`;
+      events.push({ kind: "heaviestSet", exercise, label: `${scheme} — heaviest ${exercise.toLowerCase()} logged` });
     }
     const schemeKey = `${top.sets}×${top.reps}`;
     if (!schemes.has(schemeKey)) {
-      events.push({ kind: "firstScheme", exercise, label: `First ${schemeKey} — ${trim(top.weightLb)} ${exercise.toLowerCase()}` });
+      events.push({ kind: "firstScheme", exercise, label: `First ${schemeKey} — ${weightLabel(top.weightLb)} ${exercise.toLowerCase()}` });
     }
   }
 
   const vol = prVolume(sessionSets);
   const priorVolMax = historyVolumes.length ? Math.max(...historyVolumes) : 0;
   if (vol > priorVolMax + 1e-9 && historyVolumes.length) {
-    events.push({ kind: "volumePR", exercise, label: `Volume PR — ${trim(vol)} lb total ${exercise.toLowerCase()}` });
+    const volumeLabel = formatWeight ? formatWeight(vol) : `${trim(vol)} lb`;
+    events.push({ kind: "volumePR", exercise, label: `Volume PR — ${volumeLabel} total ${exercise.toLowerCase()}` });
   }
   return events;
 }
@@ -671,7 +684,7 @@ export function cardioSpeedMph(distanceMiles, durationSeconds) {
   return Math.round((distanceMiles / (durationSeconds / 3600)) * 10) / 10;
 }
 
-// "22:30", or "1:30:00" at an hour and beyond.
+// Format a duration as minutes and seconds, including hours when needed.
 export function cardioDurationLabel(seconds) {
   const s = Math.max(0, seconds);
   const two = (n) => String(n).padStart(2, "0");
@@ -679,7 +692,7 @@ export function cardioDurationLabel(seconds) {
   return `${Math.floor(s / 60)}:${two(s % 60)}`;
 }
 
-// One line from whatever was logged: "1.5 mi · 22:30 · 4 mph · 12%".
+// Build one compact line from whichever cardio fields were logged.
 // Missing halves simply drop out; nothing logged → "—".
 export function cardioSetLabel(distanceMiles, durationSeconds, inclinePercent) {
   const parts = [];

@@ -12,20 +12,33 @@ enum ExerciseType: String, Codable, CaseIterable {
     case barbell, dumbbell, kettlebell, bodyweight, band, machine, timed, conditioning
 }
 
-/// The three watch sites. Lightweight signal tracking, not medical.
+/// Generic watch sites. Lightweight signal tracking, not medical.
 enum BodySite: String, Codable, CaseIterable, Identifiable {
-    case leftShoulder = "Left shoulder"
-    case leftHip = "Left hip"
-    case rightKnee = "Right knee"
+    case shoulder = "Shoulder"
+    case hip = "Hip"
+    case knee = "Knee"
 
     var id: String { rawValue }
 
     var watchNote: String {
         switch self {
-        case .leftShoulder: return "Old trauma. Watch for 'not there' / weakness on pressing."
-        case .leftHip: return "Old dislocation. Watch during lunges and squats."
-        case .rightKnee: return "Meniscectomy. Swelling after running = hard stop."
+        case .shoulder: return "Track comfort and range of motion during upper-body work."
+        case .hip: return "Track comfort and range of motion during lower-body work."
+        case .knee: return "Track comfort during squatting, lunging, and running."
         }
+    }
+
+    /// Normalizes records from builds that stored a side-specific label.
+    /// Matching by anatomical suffix preserves local history without keeping
+    /// a user's old injury profile in source or exported data.
+    static func fromStorage(_ value: String?) -> BodySite? {
+        guard let value else { return nil }
+        if let current = BodySite(rawValue: value) { return current }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.hasSuffix("shoulder") { return .shoulder }
+        if normalized.hasSuffix("hip") { return .hip }
+        if normalized.hasSuffix("knee") { return .knee }
+        return nil
     }
 }
 
@@ -39,7 +52,7 @@ final class Exercise {
     /// configurable rest buckets (`RestDefaults.seconds`); > 0 wins everywhere.
     var defaultRestSeconds: Int
     var notes: String
-    /// Shelved = in the library but not programmed (e.g. barbell bench, left shoulder).
+    /// Shelved = in the library but not available for programming.
     var isShelved: Bool
     /// Re-entry test, in the coach's words.
     var shelvedNote: String
@@ -86,7 +99,7 @@ final class Exercise {
     }
 
     var watchSite: BodySite? {
-        get { watchSiteRaw.flatMap(BodySite.init(rawValue:)) }
+        get { BodySite.fromStorage(watchSiteRaw) }
         set { watchSiteRaw = newValue?.rawValue }
     }
 

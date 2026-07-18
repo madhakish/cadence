@@ -20,6 +20,7 @@ struct PlateToggle: Codable, Hashable, Identifiable {
 
 @Model
 final class Gym {
+    @Attribute(.unique) var id: String = UUID().uuidString
     @Attribute(.unique) var name: String
     var isDefault: Bool
     /// Bar id, e.g. "45-lb" — see `Bar.id`. Older builds wrote untrimmed ids
@@ -79,7 +80,7 @@ final class AppSettings {
 
     init() {
         self.unitDisplayRaw = UnitDisplay.lbPrimary.rawValue
-        self.proteinTargetGrams = 175
+        self.proteinTargetGrams = 100
         self.accessoryRestSeconds = 90
         self.mainCompoundRestSeconds = 300
         self.olympicRestSeconds = 240

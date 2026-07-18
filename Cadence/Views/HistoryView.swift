@@ -7,6 +7,7 @@ import CadenceCore
 struct HistoryView: View {
     @Query(sort: \WorkoutSession.date, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \Milestone.date, order: .reverse) private var milestones: [Milestone]
+    @Query private var settingsList: [AppSettings]
 
     @State private var view: ViewMode = .list
 
@@ -99,7 +100,7 @@ struct HistoryView: View {
             return (name, top)
         }
         guard let lead = tops.max(by: { $0.1.weightLb < $1.1.weightLb }) else { return nil }
-        let w = lead.1.weightLb == 0 ? "BW" : Weight.trim(lead.1.weightLb)
+        let w = lead.1.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lead.1.weightLb)
         return (lead.0, "\(w)×\(lead.1.reps)")
     }
 
@@ -110,7 +111,7 @@ struct HistoryView: View {
         }
         guard let leadName = tops.max(by: { $0.1.weightLb < $1.1.weightLb })?.0 else { return "" }
         return tops.filter { $0.0 != leadName }
-            .map { "\($0.0) \(Weight.trim($0.1.weightLb))×\($0.1.reps)" }
+            .map { "\($0.0) \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: $0.1.weightLb))×\($0.1.reps)" }
             .joined(separator: " · ")
     }
 
@@ -137,7 +138,7 @@ struct HistoryView: View {
     private func sessionLine(_ session: WorkoutSession) -> String {
         session.orderedExercises.compactMap { entry -> String? in
             guard let name = entry.exercise?.name, let top = entry.topSet else { return nil }
-            return "\(name) \(Weight.trim(top.weightLb))×\(top.reps)"
+            return "\(name) \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb))×\(top.reps)"
         }.joined(separator: " · ")
     }
 }
@@ -146,6 +147,7 @@ struct HistoryView: View {
 
 struct SessionDetailView: View {
     let session: WorkoutSession
+    @Query private var settingsList: [AppSettings]
 
     var body: some View {
         List {
@@ -160,7 +162,8 @@ struct SessionDetailView: View {
                             // weight×reps — same shared label as the logger.
                             // Lookup via plain helper funcs, not inline lets
                             // (type-checker budget — see CompileRegressionTests).
-                            Text(Self.setLine(set, cardio: entry.exercise?.type == .conditioning))
+                            Text(Self.setLine(set, cardio: entry.exercise?.type == .conditioning,
+                                              unitDisplay: settingsList.first?.unitDisplay ?? .lbPrimary))
                                 .font(.callout.monospacedDigit())
                                 .foregroundStyle(set.isWarmup ? .secondary : .primary)
                             if entry.exercise?.type != .conditioning {
@@ -168,6 +171,11 @@ struct SessionDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
+                            if !set.isWarmup && set.status != .completed {
+                                Text(set.status.rawValue)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                             if !set.flags.isEmpty {
                                 Text(set.flags.map(\.rawValue).joined(separator: ", "))
                                     .font(.caption)
@@ -198,13 +206,13 @@ struct SessionDetailView: View {
 
     /// Lead label for a set line: cardio → the shared distance/time/incline
     /// label; lifts → weight (both units) or BW.
-    private static func setLine(_ set: SetEntry, cardio: Bool) -> String {
+    private static func setLine(_ set: SetEntry, cardio: Bool, unitDisplay: UnitDisplay) -> String {
         if cardio {
             return CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                          durationSeconds: set.durationSeconds,
                                          inclinePercent: set.inclinePercent)
         }
-        return set.weightLb == 0 ? "BW" : Weight.both(lb: set.weightLb)
+        return set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)
     }
 }
 
@@ -214,6 +222,7 @@ struct ProgressionChartsView: View {
     @Query(sort: \WorkoutSession.date) private var sessions: [WorkoutSession]
     @Query(filter: #Predicate<Exercise> { $0.categoryRaw == "Main" }, sort: \Exercise.name)
     private var mainLifts: [Exercise]
+    @Query private var settingsList: [AppSettings]
 
     // Defaults to the first main lift in the library on appear — no
     // hardcoded exercise name (the library is user data).
@@ -236,7 +245,8 @@ struct ProgressionChartsView: View {
     }
 
     private var points: [Point] {
-        sessions.compactMap { session -> Point? in
+        let display = settingsList.first?.unitDisplay ?? .lbPrimary
+        return sessions.compactMap { session -> Point? in
             let entries = session.exercises.filter { $0.exercise?.name == selectedLift }
             guard !entries.isEmpty else { return nil }
             let phase = entries.compactMap(\.phase).first
@@ -244,13 +254,15 @@ struct ProgressionChartsView: View {
             switch metric {
             case .topSet:
                 guard let top = entries.compactMap(\.topSet?.weightLb).max() else { return nil }
-                return Point(date: session.date, value: top, rotation: rotation)
+                return Point(date: session.date, value: display.primaryUnit == .kg ? Weight.kg(fromLb: top) : top, rotation: rotation)
             case .volume:
                 let volume = entries.reduce(0) { $0 + $1.workingVolumeLb }
-                return volume > 0 ? Point(date: session.date, value: volume, rotation: rotation) : nil
+                let shown = display.primaryUnit == .kg ? Weight.kg(fromLb: volume) : volume
+                return volume > 0 ? Point(date: session.date, value: shown, rotation: rotation) : nil
             }
         }
     }
+    private var chartUnitLabel: String { (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue }
 
     /// Rotation → line colour: escalating heat to Peak, muted Deload.
     private static let rotationColors: KeyValuePairs<String, Color> = [
@@ -278,10 +290,10 @@ struct ProgressionChartsView: View {
                 ContentUnavailableView(Copy.emptyHistory, systemImage: "chart.xyaxis.line")
             } else if splitByRotation {
                 Chart(points) { point in
-                    LineMark(x: .value("Date", point.date), y: .value("lb", point.value),
+                    LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value),
                              series: .value("Rotation", point.rotation))
                         .foregroundStyle(by: .value("Rotation", point.rotation))
-                    PointMark(x: .value("Date", point.date), y: .value("lb", point.value))
+                    PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
                         .foregroundStyle(by: .value("Rotation", point.rotation))
                 }
                 .chartForegroundStyleScale(Self.rotationColors)
@@ -290,9 +302,9 @@ struct ProgressionChartsView: View {
                 .padding(.horizontal)
             } else {
                 Chart(points) { point in
-                    LineMark(x: .value("Date", point.date), y: .value("lb", point.value))
+                    LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
                         .foregroundStyle(Theme.accent)
-                    PointMark(x: .value("Date", point.date), y: .value("lb", point.value))
+                    PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
                         .foregroundStyle(Theme.accent)
                 }
                 .chartYScale(domain: .automatic(includesZero: false))
