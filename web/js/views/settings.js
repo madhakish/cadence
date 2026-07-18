@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
-import { Settings, Gyms, Tracks, Exercises, Programs, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
+import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate } from "../templates.js";
 import { muscleProfile, muscleBlurb, figureSVG } from "../anatomy.js";
 import { Sessions } from "../db.js";
@@ -35,7 +35,7 @@ function positionAtRotation(program, rotation) {
 }
 
 export async function render(host) {
-  const [settings, gyms, tracks, exercises, programs] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all(), Programs.all()]);
+  const [settings, gyms, tracks, exercises, programs, checkpoints] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all(), Programs.all(), Checkpoints.all()]);
   const root = ui.h("div");
   const saveS = async () => { await Settings.save(settings); ui.prefs.unitDisplay = settings.unitDisplay; };
 
@@ -141,13 +141,49 @@ export async function render(host) {
       ui.h("span", { class: "title", text: "Exercise library" }), ui.h("span", { class: "chev" }))));
 
   // Data
+  const downloadExport = async (kind) => {
+    try {
+      if (kind === "json") ui.download("cadence-export.json", await exportJSON());
+      else ui.download("cadence-sets.csv", await exportCSV(), "text/csv");
+    } catch (error) {
+      console.error("Cadence export failed", error);
+      ui.toast(`Export failed: ${error?.message || error}`);
+    }
+  };
   root.append(ui.h("div", { class: "section-title", text: "Data" }));
   root.append(ui.h("div", { class: "card" },
     ui.h("div", { class: "btn-row" },
-      ui.h("button", { class: "btn", text: "Export JSON", onClick: async () => ui.download("cadence-export.json", await exportJSON()) }),
-      ui.h("button", { class: "btn", text: "Export CSV", onClick: async () => ui.download("cadence-sets.csv", await exportCSV(), "text/csv") }),
+      ui.h("button", { class: "btn", text: "Export JSON", onClick: () => downloadExport("json") }),
+      ui.h("button", { class: "btn", text: "Export CSV", onClick: () => downloadExport("csv") }),
       ui.h("button", { class: "btn ghost", text: "Import JSON", onClick: () => importData() })),
     ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Export regularly — iOS Safari can clear local data. Import restores from a JSON backup." })));
+  const latestCheckpoint = checkpoints[0];
+  const checkpointAction = async (action) => {
+    try {
+      if (action === "create") {
+        await Checkpoints.create("manual");
+        ui.toast("Recovery checkpoint created.");
+      } else {
+        await Checkpoints.restoreLatest();
+        await syncLibrary();
+        ui.toast("Recovery checkpoint restored.");
+      }
+      ui.nav.refresh();
+    } catch (error) {
+      console.error("Cadence checkpoint operation failed", error);
+      ui.toast(`Recovery failed: ${error?.message || error}`);
+    }
+  };
+  root.append(ui.h("div", { class: "card", style: { marginTop: "10px" } },
+    ui.h("div", { class: "btn-row" },
+      ui.h("button", { class: "btn ghost", text: "Checkpoint now", onClick: () => checkpointAction("create") }),
+      latestCheckpoint ? ui.h("button", { class: "btn ghost", text: "Restore latest", onClick: () => ui.actionSheet("Restore local checkpoint?", [
+        { label: "Restore it", role: "danger", onClick: () => checkpointAction("restore") },
+      ]) }) : null),
+    ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: latestCheckpoint
+      ? `Keeping ${checkpoints.length} of 3 local recovery points. Latest: ${new Date(latestCheckpoint.createdAt).toLocaleString()}.`
+      : "Cadence keeps the last 3 local recovery points when the app backgrounds and before imports/resets." }),
+    ui.h("div", { class: "sub", style: { marginTop: "4px" }, text: "Local checkpoints can undo a bad import, but Safari eviction removes them too. Downloaded JSON is the real backup." })));
   root.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "10px" }, text: "Reset all data", onClick: () => resetData() }));
 
   host.replaceChildren(root);
@@ -482,8 +518,12 @@ function importData() {
       // the retired-rest-stamp clear, which otherwise wouldn't run until the
       // next full page load — leaving the rest steppers dead in the meantime.
       try { await importBundle(JSON.parse(r.result)); await syncLibrary(); ui.toast("Imported."); ui.nav.refresh(); }
-      catch { ui.toast("Couldn't read that file."); }
+      catch (error) {
+        console.error("Cadence import failed", error);
+        ui.toast(`Import failed: ${error?.message || error}`);
+      }
     };
+    r.onerror = () => ui.toast(`Import failed: ${r.error?.message || "couldn't read the file"}`);
     r.readAsText(f);
   });
   ui.sheet({ title: "Import JSON backup", build: (c, api) => {
@@ -495,6 +535,12 @@ function importData() {
 
 function resetData() {
   ui.actionSheet("Reset all data?", [
-    { label: "Erase and re-seed", role: "danger", onClick: async () => { await wipeAll(); const s = await Settings.get(); s.seededAt = null; await Settings.save(s); await ensureSeeded(); ui.toast("Reset."); ui.nav.refresh(); } },
+    { label: "Erase and re-seed", role: "danger", onClick: async () => {
+      await Checkpoints.create("before-reset");
+      await wipeAll({ preserveCheckpoints: true });
+      const s = await Settings.get(); s.seededAt = null; await Settings.save(s);
+      await ensureSeeded();
+      ui.toast("Reset. Recovery point kept."); ui.nav.refresh();
+    } },
   ]);
 }

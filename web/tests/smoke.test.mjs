@@ -36,6 +36,21 @@ ok((await db.Tracks.all()).length === 3, "seeded 3 tracks");
 await db.ensureSeeded(); // idempotent
 ok((await db.Sessions.completed()).length === 10, "re-seed is a no-op");
 
+// Recover an install killed by the old store-at-a-time seeder: seed-owned
+// stores are rebuilt once, while user-only stores survive.
+{
+  const extra = structuredClone((await db.Sessions.completed())[0]);
+  delete extra.id;
+  await db.Sessions.save(extra);
+  const proteinId = await db.Protein.add({ date: new Date().toISOString(), grams: 17, label: "keep through seed repair" });
+  const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
+  await db.ensureSeeded();
+  ok((await db.Sessions.completed()).length === 10, "partial old seed is rebuilt without duplicate sessions");
+  ok((await db.Exercises.all()).length === 47, "partial old seed is rebuilt without duplicate exercises");
+  ok((await db.Protein.all()).some((p) => p.id === proteinId), "seed recovery preserves user-only stores");
+  await db.Protein.del(proteinId);
+}
+
 // ---- library sync tops up an already-seeded (older) install ----
 {
   // Simulate an old install: blank a movement group and edit an exercise's
@@ -238,6 +253,38 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   try { await db.importBundle({ ...parsed, schemaVersion: db.BACKUP_SCHEMA_VERSION + 1 }); } catch { threwFuture = true; }
   ok(threwFuture, "a future backup schema is rejected before mutation");
   ok((await db.Sessions.all()).length === sessionsBeforeFuture, "future-schema rejection leaves sessions intact");
+
+  const rejectBeforeMutation = async (mutate, label) => {
+    const poisoned = structuredClone(parsed);
+    mutate(poisoned);
+    const before = (await db.Sessions.all()).length;
+    let message = "";
+    try { await db.importBundle(poisoned); } catch (error) { message = error.message; }
+    ok(message.includes("Backup validation failed"), `${label} is rejected by preflight validation`);
+    ok((await db.Sessions.all()).length === before, `${label} rejection leaves sessions intact`);
+  };
+  await rejectBeforeMutation((b) => { b.sessions[0].date = "yesterday-ish"; }, "invalid date");
+  await rejectBeforeMutation((b) => { b.sessions[0].exercises[0].sets[0].enteredUnit = "stone"; }, "unknown set unit");
+  await rejectBeforeMutation((b) => { b.exercises[0].name = "   "; }, "blank exercise identifier");
+  await rejectBeforeMutation((b) => { b.gyms.push(structuredClone(b.gyms[0])); }, "duplicate gym identifier");
+  await rejectBeforeMutation((b) => { b.programs[0].nextDayIndex = b.programs[0].days.length; }, "out-of-range program day");
+  await rejectBeforeMutation((b) => { b.sessions = { absolutely: "not an array" }; }, "wrong section shape");
+}
+
+// ---- rotating local recovery checkpoints ----
+{
+  const before = await db.Tracks.byName("Deadlift");
+  await db.Checkpoints.create("smoke-restore");
+  before.baseWeightLb = 77; await db.Tracks.save(before);
+  await db.Checkpoints.restoreLatest();
+  ok((await db.Tracks.byName("Deadlift")).baseWeightLb !== 77, "latest local checkpoint restores the prior state");
+  await db.Checkpoints.create("rotation-1");
+  await db.Checkpoints.create("rotation-2");
+  await db.Checkpoints.create("rotation-3");
+  await db.Checkpoints.create("rotation-4");
+  const checkpoints = await db.Checkpoints.all();
+  ok(checkpoints.length === 3, "local checkpoint rotation keeps exactly three snapshots");
+  ok(checkpoints.every((checkpoint) => checkpoint.bundle.schemaVersion === db.BACKUP_SCHEMA_VERSION), "local checkpoints use the portable backup contract");
 }
 
 // ---- cardio sets: distance/time/incline, not weight×reps ----

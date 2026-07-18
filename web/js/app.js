@@ -1,6 +1,6 @@
 // Bootstrap: service worker, seed, settings, tab bar, router, FAB.
 import * as ui from "./ui.js";
-import { Settings, ensureSeeded, syncLibrary } from "./db.js";
+import { Settings, Checkpoints, ensureSeeded, syncLibrary } from "./db.js";
 import * as home from "./views/home.js";
 import * as history from "./views/history.js";
 import * as body from "./views/body.js";
@@ -18,6 +18,9 @@ const TABS = [
 ];
 
 let current = "home";
+let storageReady = false;
+let checkpointing = false;
+let checkpointFailure = null;
 const viewEl = () => document.getElementById("view");
 
 async function navigate(id) {
@@ -57,6 +60,7 @@ async function boot() {
 
   await ensureSeeded();
   await syncLibrary(); // top up the exercise library on already-seeded installs
+  storageReady = true;
   const s = await Settings.get();
   ui.prefs.unitDisplay = s.unitDisplay;
   ui.applyTheme(s.theme);
@@ -106,4 +110,38 @@ function showUpdateBanner(reg) {
   document.body.append(banner);
 }
 
-boot();
+function readableError(error) {
+  return error instanceof Error ? error.message : String(error || "Unknown error");
+}
+
+// Event handlers throughout the PWA are async. A rejected save used to vanish
+// into the console while the optimistic control stayed changed. Keep the app
+// usable, but tell the user the last edit may not have reached IndexedDB.
+window.addEventListener("unhandledrejection", (event) => {
+  console.error("Unhandled Cadence operation", event.reason);
+  ui.toast(`Couldn't save: ${readableError(event.reason)}`);
+  event.preventDefault();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && checkpointFailure) {
+    ui.toast(`Recovery checkpoint failed: ${readableError(checkpointFailure)}`);
+    checkpointFailure = null;
+    return;
+  }
+  if (document.visibilityState !== "hidden" || !storageReady || checkpointing) return;
+  checkpointing = true;
+  Checkpoints.create("background")
+    .catch((error) => { console.error("Cadence checkpoint failed", error); checkpointFailure = error; })
+    .finally(() => { checkpointing = false; });
+});
+
+boot().catch((error) => {
+  console.error("Cadence failed to start", error);
+  const host = viewEl();
+  host?.replaceChildren(ui.h("div", { class: "empty" },
+    ui.h("span", { class: "glyph", text: "⚠️" }),
+    ui.h("strong", { text: "Cadence couldn't open its data." }),
+    ui.h("span", { class: "muted", text: readableError(error) }),
+    ui.h("button", { class: "btn primary", text: "Retry", onClick: () => location.reload() })));
+});

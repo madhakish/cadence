@@ -15,6 +15,8 @@ struct SettingsView: View {
     @State private var exportCSV: Data?
     @State private var showImporter = false
     @State private var importAlert: String?
+    @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
+    @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
 
     var body: some View {
         NavigationStack {
@@ -189,7 +191,11 @@ struct SettingsView: View {
 
                 Section("Export") {
                     Button("Prepare JSON export") {
-                        exportJSON = try? ExportService.jsonData(context: context)
+                        do { exportJSON = try ExportService.jsonData(context: context) }
+                        catch {
+                            exportJSON = nil
+                            importAlert = "Couldn't prepare the JSON export: \(error.localizedDescription)"
+                        }
                     }
                     if let exportJSON {
                         ShareLink(
@@ -200,7 +206,11 @@ struct SettingsView: View {
                         }
                     }
                     Button("Prepare CSV export") {
-                        exportCSV = try? ExportService.csvData(context: context)
+                        do { exportCSV = try ExportService.csvData(context: context) }
+                        catch {
+                            exportCSV = nil
+                            importAlert = "Couldn't prepare the CSV export: \(error.localizedDescription)"
+                        }
                     }
                     if let exportCSV {
                         ShareLink(
@@ -210,6 +220,29 @@ struct SettingsView: View {
                             Label("Share CSV", systemImage: "square.and.arrow.up")
                         }
                     }
+                }
+
+                Section {
+                    Button("Checkpoint now") {
+                        do {
+                            try BackupCheckpointService.create(context: context, reason: "manual")
+                            importAlert = "Local recovery checkpoint created."
+                        } catch {
+                            BackupCheckpointService.recordFailure(error)
+                            importAlert = "Couldn't create a recovery checkpoint: \(error.localizedDescription)"
+                        }
+                    }
+                    if !checkpointLastSuccess.isEmpty {
+                        Button("Restore latest checkpoint") { importAlert = restoreLatestCheckpoint() }
+                        Text("Latest: \(checkpointLastSuccess)").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if !checkpointLastFailure.isEmpty {
+                        Text("Last checkpoint failed: \(checkpointLastFailure)").font(.caption).foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("Local recovery")
+                } footer: {
+                    Text("Cadence keeps the last three checkpoints when it backgrounds and before imports. They can undo a bad import, but deleting the app removes them; exported JSON is the durable backup.")
                 }
 
                 Section {
@@ -228,7 +261,7 @@ struct SettingsView: View {
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 importAlert = restore(from: result)
             }
-            .alert("Import", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } })) {
+            .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } })) {
                 Button("OK") { importAlert = nil }
             } message: {
                 Text(importAlert ?? "")
@@ -245,16 +278,32 @@ struct SettingsView: View {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
                 let data = try Data(contentsOf: url)
+                // A valid but unwanted restore is still destructive. Keep the
+                // current state locally before replacing any sections.
+                try BackupCheckpointService.create(context: context, reason: "before-import")
                 let s = try ImportService.load(data, into: context)
                 // syncLibrary right after the restore: a pre-migration backup
                 // re-arms the retired-rest-stamp clear, which otherwise
                 // wouldn't run until the next app launch — leaving the rest
                 // steppers dead in the meantime.
-                Seeder.syncLibrary(context: context)
+                try Seeder.syncLibrary(context: context)
                 return "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
             } catch {
                 return error.localizedDescription
             }
+        }
+    }
+
+    private func restoreLatestCheckpoint() -> String {
+        do {
+            guard let data = try BackupCheckpointService.latestData() else { return "No local recovery checkpoint exists." }
+            // Capture the current state too, so this recovery can itself be undone.
+            try BackupCheckpointService.create(context: context, reason: "before-checkpoint-restore")
+            let s = try ImportService.load(data, into: context)
+            try Seeder.syncLibrary(context: context)
+            return "Restored local checkpoint: \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+        } catch {
+            return error.localizedDescription
         }
     }
 }

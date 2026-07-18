@@ -5,7 +5,7 @@ import * as C from "./core.js";
 import { SEED } from "./seed.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 export const BACKUP_SCHEMA_VERSION = 1;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
@@ -18,22 +18,46 @@ const STORES = {
   checkins: { keyPath: "id", autoIncrement: true },
   milestones: { keyPath: "id", autoIncrement: true },
   programs: { keyPath: "id", autoIncrement: true },
+  checkpoints: { keyPath: "id", autoIncrement: true },
 };
 
 let _db = null;
+let _opening = null;
 function open() {
   if (_db) return Promise.resolve(_db);
-  return new Promise((resolve, reject) => {
+  if (_opening) return _opening;
+  _opening = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      _opening = null;
+      reject(error);
+    };
     req.onupgradeneeded = () => {
       const db = req.result;
       for (const [name, opts] of Object.entries(STORES)) {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, opts);
       }
     };
-    req.onsuccess = () => { _db = req.result; resolve(_db); };
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      if (settled) { req.result.close(); return; }
+      settled = true;
+      const db = req.result;
+      db.onversionchange = () => {
+        db.close();
+        if (_db === db) _db = null;
+      };
+      db.onclose = () => { if (_db === db) _db = null; };
+      _db = db;
+      _opening = null;
+      resolve(db);
+    };
+    req.onblocked = () => fail(new Error("Cadence storage is open in another tab. Close it and retry."));
+    req.onerror = () => fail(req.error || new Error("Couldn't open Cadence storage."));
   });
+  return _opening;
 }
 
 // One transaction over one or more stores. fn receives a store getter and is
@@ -41,8 +65,26 @@ function open() {
 // rejection aborts the WHOLE transaction — queued writes must never
 // auto-commit around a failure.
 export function runAll(stores, mode, fn) {
-  return open().then((db) => new Promise((resolve, reject) => {
-    const tx = db.transaction(stores, mode);
+  return open().then((db) => {
+    let tx;
+    try {
+      tx = db.transaction(stores, mode);
+    } catch (error) {
+      // Safari can retain a cached connection after suspending the PWA. A
+      // failure to CREATE the transaction is safe to retry; a transaction
+      // that already started is never replayed.
+      if (error?.name === "InvalidStateError" && _db === db) {
+        db.close(); _db = null;
+        return open().then((fresh) => runTransaction(fresh, stores, mode, fn));
+      }
+      throw error;
+    }
+    return runTransaction(db, stores, mode, fn, tx);
+  });
+}
+function runTransaction(db, stores, mode, fn, existingTransaction = null) {
+  return new Promise((resolve, reject) => {
+    const tx = existingTransaction || db.transaction(stores, mode);
     let out;
     tx.oncomplete = () => resolve(out);
     tx.onerror = () => reject(tx.error);
@@ -51,7 +93,7 @@ export function runAll(stores, mode, fn) {
     try {
       Promise.resolve(fn((name) => tx.objectStore(name))).then((v) => { out = v; }, abort);
     } catch (e) { abort(e); }
-  }));
+  });
 }
 function run(store, mode, fn) { return runAll([store], mode, (os) => fn(os(store))); }
 const reqP = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
@@ -165,15 +207,23 @@ export function workingVolume(sessionExercise) {
 export async function ensureSeeded() {
   const s = await Settings.get();
   if (s.seededAt) return;
-  for (const e of SEED.exercises) await put("exercises", e);
-  for (const g of SEED.gyms) await put("gyms", g);
-  for (const t of SEED.tracks) await put("tracks", t);
-  for (const b of SEED.bodyweight) await put("bodyweight", b);
-  for (const m of SEED.milestones) await put("milestones", m);
-  for (const p of SEED.programs || []) await put("programs", p);
-  for (const sess of SEED.sessions) await put("sessions", sess);
-  s.seededAt = iso(new Date());
-  await Settings.save(s);
+  const records = {
+    exercises: SEED.exercises, gyms: SEED.gyms, tracks: SEED.tracks,
+    bodyweight: SEED.bodyweight, milestones: SEED.milestones,
+    programs: SEED.programs || [], sessions: SEED.sessions,
+  };
+  const stores = [...Object.keys(records), "settings"];
+  await runAll(stores, "readwrite", (os) => {
+    // Older builds could die between the per-store writes and leave seededAt
+    // unset. Clearing only seed-owned stores makes that state recoverable
+    // without touching user-only protein/check-in records.
+    for (const [name, values] of Object.entries(records)) {
+      const store = os(name);
+      store.clear();
+      for (const value of values) store.put(value);
+    }
+    os("settings").put({ ...normalizeSettings(s), seededAt: iso(new Date()), id: "app" });
+  });
 }
 
 // name → the defaultRestSeconds the pre-bucket seeds stamped on every record
@@ -235,6 +285,7 @@ export async function exportBundle() {
   const exportProgramTag = (tag) => {
     if (!tag) return null;
     const programName = tag.programName || programsById.get(tag.programId)?.name || null;
+    if (!programName) return null; // orphaned local IDs are not portable linkage
     return {
       programName,
       cycleNumber: tag.cycleNumber ?? null,
@@ -317,6 +368,35 @@ export async function exportCSV() {
   return rows.join("\n");
 }
 
+// Three local recovery points protect against an accidental valid import or
+// reset. They live beside the primary data, so they are NOT a substitute for a
+// downloaded JSON backup when Safari evicts the entire origin.
+const CHECKPOINT_LIMIT = 3;
+export const Checkpoints = {
+  async all() {
+    return (await getAll("checkpoints")).sort((a, b) => (new Date(b.createdAt) - new Date(a.createdAt)) || (b.id - a.id));
+  },
+  async latest() { return (await Checkpoints.all())[0] || null; },
+  async create(reason = "automatic") {
+    const record = { createdAt: iso(new Date()), reason, bundle: await exportBundle() };
+    await run("checkpoints", "readwrite", async (store) => {
+      const existing = await reqP(store.getAll());
+      const id = await reqP(store.add(record));
+      const all = [...existing, { ...record, id }].sort((a, b) => (new Date(b.createdAt) - new Date(a.createdAt)) || (b.id - a.id));
+      for (const old of all.slice(CHECKPOINT_LIMIT)) store.delete(old.id);
+    });
+    return record;
+  },
+  async restoreLatest() {
+    const latest = await Checkpoints.latest();
+    if (!latest) throw new Error("No local recovery checkpoint exists.");
+    // Preserve the current state too; undoing a recovery should be possible.
+    await Checkpoints.create("before-checkpoint-restore");
+    await importBundle(latest.bundle, { createCheckpoint: false });
+    return latest;
+  },
+};
+
 // Accepts both the current "R{n}" prefix and legacy "Wk{n}" from older backups.
 const recoverPhase = (label) => { const m = /(?:R|Wk)(\d)/.exec(label || ""); return m ? Number(m[1]) : null; };
 
@@ -338,15 +418,208 @@ function normalizeSettings(s) {
   return { ...s, rest, accessoryRestSeconds: rest.accessorySeconds };
 }
 
+const BACKUP_ENUMS = {
+  units: ["lb", "kg"], unitDisplay: ["lbPrimary", "kgPrimary", "both"],
+  themes: ["memento", "carbon", "slate", "system"],
+  roles: ["main", "complementary", "accessory"], liftRoles: ["main", "complementary"],
+  flags: ["clean", "grindy", "wobble", "stopped early"],
+  reasons: ["bar speed", "wobble", "joint signal", "heat", "fatigue"],
+  sites: ["Left shoulder", "Left hip", "Right knee"],
+  categories: ["Main", "Accessory", "Conditioning"],
+  exerciseTypes: ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"],
+  focuses: ["strength", "hypertrophy", "maintain"], modes: ["cycle", "linear"],
+  milestoneKinds: ["heaviestSet", "volumePR", "firstScheme", "programNote"],
+};
+
+// Validate the entire payload before the first read or write. IndexedDB will
+// reject missing key-paths, but that is too late: it does not catch corrupt
+// dates, unknown enum values, or plausible-looking records that would silently
+// default to something else on iOS.
+export function validateBackup(bundle) {
+  const schemaVersion = bundle.schemaVersion ?? 0;
+  const invalid = (path, message) => { throw new Error(`Backup validation failed at ${path}: ${message}. Nothing was changed.`); };
+  const array = (owner, key, path = key) => {
+    if (!(key in owner)) return null;
+    if (!Array.isArray(owner[key])) invalid(path, "expected a list");
+    return owner[key];
+  };
+  const object = (value, path) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) invalid(path, "expected an object");
+    return value;
+  };
+  const textValue = (value, path, required = false) => {
+    if (value == null && !required) return;
+    if (typeof value !== "string" || (required && !value.trim())) invalid(path, "expected non-empty text");
+  };
+  const numberValue = (value, path, { required = false, integer = false, min = -Infinity, max = Infinity } = {}) => {
+    if (value == null && !required) return;
+    if (!Number.isFinite(value) || (integer && !Number.isInteger(value)) || value < min || value > max) {
+      const kind = integer ? "integer" : "number";
+      invalid(path, `expected a finite ${kind} from ${min} to ${max}`);
+    }
+  };
+  const dateValue = (value, path, required = false) => {
+    if (value == null && !required) return;
+    if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) invalid(path, "expected an ISO-8601 date");
+  };
+  const enumValue = (value, allowed, path) => {
+    if (value != null && !allowed.includes(value)) invalid(path, `unknown value ${JSON.stringify(value)}`);
+  };
+  const unique = (records, value, path) => {
+    const seen = new Set();
+    records.forEach((record, index) => {
+      const key = value(record);
+      if (seen.has(key)) invalid(`${path}[${index}]`, `duplicate identifier ${JSON.stringify(key)}`);
+      seen.add(key);
+    });
+  };
+  const each = (records, path, fn) => records?.forEach((record, index) => fn(object(record, `${path}[${index}]`), `${path}[${index}]`));
+
+  const sessions = array(bundle, "sessions");
+  each(sessions, "sessions", (session, path) => {
+    dateValue(session.date, `${path}.date`, true);
+    const tag = session.programTag;
+    if (tag != null) {
+      object(tag, `${path}.programTag`);
+      textValue(tag.programName, `${path}.programTag.programName`, schemaVersion >= 1);
+      numberValue(tag.cycleNumber, `${path}.programTag.cycleNumber`, { integer: true, min: 1 });
+      numberValue(tag.week, `${path}.programTag.week`, { integer: true, min: 1 });
+      numberValue(tag.dayIndex, `${path}.programTag.dayIndex`, { integer: true, min: 0 });
+      const names = array(tag, "planNames", `${path}.programTag.planNames`);
+      names?.forEach((name, i) => textValue(name, `${path}.programTag.planNames[${i}]`, true));
+    }
+    each(array(session, "exercises", `${path}.exercises`), `${path}.exercises`, (exercise, exercisePath) => {
+      textValue(exercise.name, `${exercisePath}.name`, true);
+      enumValue(exercise.role, BACKUP_ENUMS.roles, `${exercisePath}.role`);
+      numberValue(exercise.plannedWeightLb, `${exercisePath}.plannedWeightLb`, { min: 0 });
+      numberValue(exercise.plannedSets, `${exercisePath}.plannedSets`, { integer: true, min: 0 });
+      numberValue(exercise.plannedReps, `${exercisePath}.plannedReps`, { integer: true, min: 0 });
+      each(array(exercise, "sets", `${exercisePath}.sets`), `${exercisePath}.sets`, (set, setPath) => {
+        numberValue(set.weightLb, `${setPath}.weightLb`, { required: true, min: 0 });
+        numberValue(set.reps, `${setPath}.reps`, { required: true, integer: true, min: 0 });
+        enumValue(set.enteredUnit, BACKUP_ENUMS.units, `${setPath}.enteredUnit`);
+        const flags = array(set, "flags", `${setPath}.flags`);
+        flags?.forEach((flag, i) => enumValue(flag, BACKUP_ENUMS.flags, `${setPath}.flags[${i}]`));
+        enumValue(set.bodyFlagSite, BACKUP_ENUMS.sites, `${setPath}.bodyFlagSite`);
+        enumValue(set.autoregReason, BACKUP_ENUMS.reasons, `${setPath}.autoregReason`);
+        numberValue(set.durationSeconds, `${setPath}.durationSeconds`, { integer: true, min: 0 });
+        numberValue(set.distanceMiles, `${setPath}.distanceMiles`, { min: 0 });
+        numberValue(set.inclinePercent, `${setPath}.inclinePercent`, { min: -100, max: 100 });
+      });
+    });
+  });
+
+  const bodyweight = array(bundle, "bodyweight");
+  each(bodyweight, "bodyweight", (entry, path) => {
+    dateValue(entry.date, `${path}.date`, true); numberValue(entry.weightLb, `${path}.weightLb`, { required: true, min: 0 });
+    numberValue(entry.bodyFatPercent, `${path}.bodyFatPercent`, { min: 0, max: 100 });
+  });
+  const protein = array(bundle, "protein");
+  each(protein, "protein", (entry, path) => {
+    dateValue(entry.date, `${path}.date`, true); numberValue(entry.grams, `${path}.grams`, { required: true, min: 0 });
+  });
+  const checkIns = array(bundle, "checkIns");
+  each(checkIns, "checkIns", (entry, path) => {
+    dateValue(entry.date, `${path}.date`, true); enumValue(entry.site, BACKUP_ENUMS.sites, `${path}.site`);
+    textValue(entry.response, `${path}.response`, true);
+  });
+  const milestones = array(bundle, "milestones");
+  each(milestones, "milestones", (entry, path) => {
+    dateValue(entry.date, `${path}.date`, true); enumValue(entry.kind, BACKUP_ENUMS.milestoneKinds, `${path}.kind`);
+    textValue(entry.label, `${path}.label`, true);
+  });
+
+  const programs = array(bundle, "programs");
+  each(programs, "programs", (program, path) => {
+    textValue(program.name, `${path}.name`, true); enumValue(program.focus, BACKUP_ENUMS.focuses, `${path}.focus`);
+    numberValue(program.cycleNumber, `${path}.cycleNumber`, { integer: true, min: 1 });
+    numberValue(program.currentWeek, `${path}.currentWeek`, { integer: true, min: 1 });
+    numberValue(program.nextDayIndex, `${path}.nextDayIndex`, { integer: true, min: 0 });
+    numberValue(program.roundingLb, `${path}.roundingLb`, { min: Number.MIN_VALUE });
+    const days = array(program, "days", `${path}.days`);
+    each(days, `${path}.days`, (day, dayPath) => {
+      textValue(day.name, `${dayPath}.name`, true); numberValue(day.order, `${dayPath}.order`, { required: true, integer: true, min: 0 });
+      each(array(day, "lifts", `${dayPath}.lifts`), `${dayPath}.lifts`, (lift, liftPath) => {
+        textValue(lift.exerciseName, `${liftPath}.exerciseName`, true); enumValue(lift.role, BACKUP_ENUMS.liftRoles, `${liftPath}.role`);
+        for (const key of ["baseWeightLb", "estimatedMaxLb", "lastIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
+        numberValue(lift.stallCount, `${liftPath}.stallCount`, { integer: true, min: 0 });
+        if (lift.pending != null) object(lift.pending, `${liftPath}.pending`);
+      });
+      each(array(day, "accessories", `${dayPath}.accessories`), `${dayPath}.accessories`, (accessory, accessoryPath) => {
+        textValue(accessory.exerciseName, `${accessoryPath}.exerciseName`, true);
+        for (const key of ["sets", "minReps", "maxReps", "currentReps", "stallCount"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { integer: true, min: 0 });
+        for (const key of ["weightLb", "incrementLb"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { min: 0 });
+      });
+    });
+    if (days?.length && program.nextDayIndex != null && program.nextDayIndex >= days.length) invalid(`${path}.nextDayIndex`, "outside the program's day list");
+    if (days) unique(days, (day) => day.order, `${path}.days`);
+  });
+  if (programs) unique(programs, (program) => program.name.trim(), "programs");
+
+  const tracks = array(bundle, "tracks");
+  each(tracks, "tracks", (track, path) => {
+    textValue(track.exerciseName, `${path}.exerciseName`, true); enumValue(track.mode, BACKUP_ENUMS.modes, `${path}.mode`);
+    numberValue(track.cycleNumber, `${path}.cycleNumber`, { integer: true, min: 1 });
+    numberValue(track.nextPhase, `${path}.nextPhase`, { integer: true, min: 1, max: 4 });
+    numberValue(track.baseWeightLb, `${path}.baseWeightLb`, { min: 0 });
+    numberValue(track.incrementLb, `${path}.incrementLb`, { min: Number.MIN_VALUE });
+    numberValue(track.roundingLb, `${path}.roundingLb`, { min: Number.MIN_VALUE });
+    dateValue(track.lastCompletedAt, `${path}.lastCompletedAt`);
+  });
+  if (tracks) unique(tracks, (track) => track.exerciseName.trim(), "tracks");
+
+  const gyms = array(bundle, "gyms");
+  each(gyms, "gyms", (gym, path) => {
+    textValue(gym.name, `${path}.name`, true);
+    each(array(gym, "plateToggles", `${path}.plateToggles`), `${path}.plateToggles`, (plate, platePath) => {
+      numberValue(plate.value, `${platePath}.value`, { required: true, min: Number.MIN_VALUE });
+      enumValue(plate.unit, BACKUP_ENUMS.units, `${platePath}.unit`);
+    });
+  });
+  if (gyms) unique(gyms, (gym) => gym.name.trim(), "gyms");
+
+  const exercises = array(bundle, "exercises");
+  each(exercises, "exercises", (exercise, path) => {
+    textValue(exercise.name, `${path}.name`, true); enumValue(exercise.category, BACKUP_ENUMS.categories, `${path}.category`);
+    enumValue(exercise.type, BACKUP_ENUMS.exerciseTypes, `${path}.type`); enumValue(exercise.watchSite, BACKUP_ENUMS.sites, `${path}.watchSite`);
+    numberValue(exercise.defaultRestSeconds, `${path}.defaultRestSeconds`, { integer: true, min: 0, max: 3600 });
+    dateValue(exercise.createdAt, `${path}.createdAt`);
+  });
+  if (exercises) unique(exercises, (exercise) => exercise.name.trim(), "exercises");
+
+  if ("settings" in bundle) {
+    const settings = object(bundle.settings, "settings");
+    enumValue(settings.unitDisplay, BACKUP_ENUMS.unitDisplay, "settings.unitDisplay");
+    enumValue(settings.theme, BACKUP_ENUMS.themes, "settings.theme");
+    numberValue(settings.proteinTargetGrams, "settings.proteinTargetGrams", { min: 0 });
+    dateValue(settings.seededAt, "settings.seededAt");
+    for (const key of ["accessoryRestSeconds", "mainCompoundRestSeconds", "olympicRestSeconds", "mainUpperRestSeconds", "secondaryRestSeconds"]) {
+      numberValue(settings[key], `settings.${key}`, { integer: true, min: 0, max: 3600 });
+    }
+    if (settings.rest != null) {
+      object(settings.rest, "settings.rest");
+      for (const key of ["mainCompoundSeconds", "olympicSeconds", "mainUpperSeconds", "secondarySeconds", "accessorySeconds"]) {
+        numberValue(settings.rest[key], `settings.rest.${key}`, { integer: true, min: 0, max: 3600 });
+      }
+    }
+  }
+
+  if (![sessions, bodyweight, protein, checkIns, milestones, programs, tracks, gyms, exercises].some((v) => v !== null) && !("settings" in bundle)) {
+    throw new Error("Not a Cadence backup");
+  }
+}
+
 // Restore a backup in ONE transaction: only stores present in the bundle are
 // touched (an old backup without e.g. `gyms` leaves current gyms alone), and a
 // malformed bundle aborts wholesale instead of leaving stores cleared.
-export async function importBundle(bundle) {
+export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) throw new Error("Not a Cadence backup");
   const schemaVersion = bundle.schemaVersion ?? 0;
   if (!Number.isInteger(schemaVersion) || schemaVersion < 0 || schemaVersion > BACKUP_SCHEMA_VERSION) {
     throw new Error(`Unsupported Cadence backup schema version: ${schemaVersion}`);
   }
+  validateBackup(bundle);
+  if (createCheckpoint) await Checkpoints.create("before-import");
 
   const writes = new Map(); // store name -> records to clear+put
   const knownPrograms = bundle.programs || await Programs.all();
@@ -435,4 +708,11 @@ export async function importBundle(bundle) {
   });
 }
 
-export async function wipeAll() { for (const st of Object.keys(STORES)) await clear(st); _db = null; }
+export async function wipeAll({ preserveCheckpoints = false } = {}) {
+  const stores = Object.keys(STORES).filter((name) => !preserveCheckpoints || name !== "checkpoints");
+  await runAll(stores, "readwrite", (os) => { for (const name of stores) os(name).clear(); });
+  const db = _db;
+  _db = null;
+  _opening = null;
+  db?.close();
+}
