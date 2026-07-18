@@ -29,6 +29,7 @@ enum ExportService {
         let notes: String
         let phase: String?
         let role: String?
+        let programSlotId: String?
         let barId: String?
         let plannedWeightLb: Double?
         let plannedSets: Int?
@@ -144,6 +145,7 @@ enum ExportService {
         let rest: ExportRest?
         let autoStartRest: Bool
         let haptics: Bool
+        let gymTagFirstLaunchOfDay: Bool?
         /// Rides in the bundle so restoring a post-migration backup doesn't
         /// re-run the retired-rest-stamp clear; absent in old backups → re-run.
         let restSeedStampsCleared: Bool?
@@ -194,8 +196,12 @@ enum ExportService {
     }
 
     struct ExportProgramLift: Codable {
+        let id: String
         let exerciseName: String
         let role: String
+        let order: Int
+        let prescription: String
+        let warmupPolicy: String
         let baseWeightLb: Double
         let estimatedMaxLb: Double
         let stallCount: Int
@@ -205,11 +211,15 @@ enum ExportService {
     }
 
     struct ExportProgramAccessory: Codable {
+        let id: String
         let exerciseName: String
+        let order: Int
         let sets: Int
         let minReps: Int
         let maxReps: Int
         let currentReps: Int
+        let targetSeconds: Int
+        let durationStepSeconds: Int
         let weightLb: Double
         let incrementLb: Double
         let stallCount: Int
@@ -350,6 +360,7 @@ enum ExportService {
                             notes: entry.notes,
                             phase: entry.phase?.label,
                             role: entry.programRole,
+                            programSlotId: entry.programSlotID,
                             barId: entry.barID,
                             plannedWeightLb: entry.plannedWeightLb,
                             plannedSets: entry.plannedSets,
@@ -396,7 +407,8 @@ enum ExportService {
                             name: d.name, order: d.order,
                             lifts: d.orderedLifts.map { l in
                                 ExportProgramLift(
-                                    exerciseName: l.exerciseName, role: l.roleRaw, baseWeightLb: l.baseWeightLb,
+                                    id: l.id, exerciseName: l.exerciseName, role: l.roleRaw, order: l.order,
+                                    prescription: l.prescriptionRaw, warmupPolicy: l.warmupPolicyRaw, baseWeightLb: l.baseWeightLb,
                                     estimatedMaxLb: l.estimatedMaxLb, stallCount: l.stallCount, lastIncrementLb: l.lastIncrementLb,
                                     pending: l.pendingBaseWeightLb.map { pendingBase in
                                         ExportPendingResult(
@@ -412,9 +424,11 @@ enum ExportService {
                                     revertToExerciseName: l.revertToExerciseName
                                 )
                             },
-                            accessories: d.accessories.map { a in
-                                ExportProgramAccessory(exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
-                                                       currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount,
+                            accessories: d.orderedAccessories.map { a in
+                                ExportProgramAccessory(id: a.id, exerciseName: a.exerciseName, order: a.order, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
+                                                       currentReps: a.currentReps, targetSeconds: a.targetSeconds,
+                                                       durationStepSeconds: a.durationStepSeconds, weightLb: a.weightLb,
+                                                       incrementLb: a.incrementLb, stallCount: a.stallCount,
                                                        revertToExerciseName: a.revertToExerciseName)
                             }
                         )
@@ -454,7 +468,8 @@ enum ExportService {
                                                 secondarySeconds: s.secondaryRestSeconds,
                                                 accessorySeconds: s.accessoryRestSeconds),
                                autoStartRest: s.autoStartRest,
-                               haptics: s.haptics, restSeedStampsCleared: s.restSeedStampsCleared,
+                               haptics: s.haptics, gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay,
+                               restSeedStampsCleared: s.restSeedStampsCleared,
                                seededAt: s.seededAt, theme: s.themeNameRaw)
             }
         )

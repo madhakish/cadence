@@ -20,6 +20,33 @@ export function roundTo(valueLb, increment) {
   return roundHalfAway(valueLb / increment) * increment;
 }
 
+// Dumbbells are stored per hand. Cap their prescription/progression step at
+// 5 lb so a program-wide 10 lb rounding choice cannot become a 20 lb total
+// upper-body jump. Mirrors ProgramEngine.loadStep.
+export function programLoadStep(programRoundingLb, exerciseType = null) {
+  return exerciseType === "dumbbell" ? Math.min(programRoundingLb, 5) : programRoundingLb;
+}
+
+// Program wave plan with a per-hand DB ceiling: a 55 lb volume base must not
+// jump to 65 lb at Peak. Above-base DB rotations stay within one 5 lb rack
+// jump; barbell/machine waves retain the normal percentages.
+export function programPlanFor(state, programRoundingLb, exerciseType = null, movementGroup = null,
+  role = "main", focus = "strength", prescriptionStyle = "automatic") {
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  const plan = planForStyle(state, programLoadStep(programRoundingLb, exerciseType), style);
+  if (exerciseType !== "dumbbell" || plan.weightLb <= state.baseWeightLb) return plan;
+  return { ...plan, weightLb: Math.min(plan.weightLb, state.baseWeightLb + 5) };
+}
+
+export function resolvedPrescriptionStyle(requested = "automatic", movementGroup = null,
+  role = "main", focus = "strength") {
+  if (requested !== "automatic") return requested;
+  if (movementGroup === "olympic") return "technique";
+  if (focus === "hypertrophy") return "hypertrophy";
+  if (role === "complementary" || focus === "maintain") return "secondary";
+  return "wave";
+}
+
 // Round a target TOTAL to the nearest weight cleanly loadable on `barLb`: the
 // per-side load snaps to `stepLb`, so no lonely 2.5 lb change plate (e.g. 150 on
 // a 45 bar → 155 = 45+10/side). Never below the bar. For secondary/accessory
@@ -302,6 +329,20 @@ export function warmupRamp(workingLb, barLb = 45, roundingLb = 5) {
   return sets.map((s) => ({ ...s, label: `${trim(s.weightLb)} × ${s.reps}` }));
 }
 
+
+// Short per-hand ramp for a main dumbbell lift: no empty-bar opener, no
+// duplicate rack weights, and never the working weight itself.
+export function dumbbellWarmupRamp(workingLb, roundingLb = 5) {
+  if (!(workingLb > 0)) return [];
+  const seen = new Set();
+  return [[0.40, 10], [0.60, 5], [0.80, 2]].flatMap(([percent, reps]) => {
+    const weightLb = Math.max(roundingLb, roundTo(workingLb * percent, roundingLb));
+    if (weightLb >= workingLb - 1e-9 || seen.has(weightLb)) return [];
+    seen.add(weightLb);
+    return [{ weightLb, reps }];
+  });
+}
+
 // ---- Program engine (4-week cycle) -----------------------------------------
 
 // phase: 1 volume, 2 load, 3 peak, 4 deload
@@ -329,6 +370,29 @@ export function planFor(state, roundingLb = DEFAULT_ROUNDING_LB) {
     reps: ph.reps,
     phase: p,
     cycleNumber: state.cycleNumber,
+  };
+}
+
+export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave") {
+  const p = state.nextPhase;
+  const byStyle = {
+    wave: {
+      1: [5, 5, 1.0], 2: [5, 3, 1.10], 3: [3, 3, 1.175], 4: [3, 5, 0.775],
+    },
+    secondary: {
+      1: [3, 5, 1.0], 2: [3, 4, 1.05], 3: [3, 3, 1.10], 4: [2, 5, 0.80],
+    },
+    hypertrophy: {
+      1: [4, 10, 1.0], 2: [4, 8, 1.025], 3: [3, 8, 1.05], 4: [2, 10, 0.85],
+    },
+    technique: {
+      1: [5, 3, 1.0], 2: [6, 2, 1.05], 3: [6, 1, 1.10], 4: [3, 2, 0.80],
+    },
+  };
+  const [sets, reps, multiplier] = (byStyle[style] || byStyle.wave)[p];
+  return {
+    weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
+    sets, reps, phase: p, cycleNumber: state.cycleNumber,
   };
 }
 

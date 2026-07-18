@@ -5,7 +5,8 @@ import CadenceCore
 
 /// Sessions, milestones, and per-lift progression charts.
 struct HistoryView: View {
-    @Query(sort: \WorkoutSession.date, order: .reverse) private var sessions: [WorkoutSession]
+    @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted },
+           sort: \WorkoutSession.date, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \Milestone.date, order: .reverse) private var milestones: [Milestone]
     @Query private var settingsList: [AppSettings]
 
@@ -162,11 +163,11 @@ struct SessionDetailView: View {
                             // weight×reps — same shared label as the logger.
                             // Lookup via plain helper funcs, not inline lets
                             // (type-checker budget — see CompileRegressionTests).
-                            Text(Self.setLine(set, cardio: entry.exercise?.type == .conditioning,
+                            Text(Self.setLine(set, type: entry.exercise?.type,
                                               unitDisplay: settingsList.first?.unitDisplay ?? .lbPrimary))
                                 .font(.callout.monospacedDigit())
                                 .foregroundStyle(set.isWarmup ? .secondary : .primary)
-                            if entry.exercise?.type != .conditioning {
+                            if entry.exercise?.type != .conditioning && entry.exercise?.type != .timed {
                                 Text("× \(set.reps)\(set.isPerSide ? "/side" : "")")
                                     .foregroundStyle(.secondary)
                             }
@@ -206,12 +207,13 @@ struct SessionDetailView: View {
 
     /// Lead label for a set line: cardio → the shared distance/time/incline
     /// label; lifts → weight (both units) or BW.
-    private static func setLine(_ set: SetEntry, cardio: Bool, unitDisplay: UnitDisplay) -> String {
-        if cardio {
+    private static func setLine(_ set: SetEntry, type: ExerciseType?, unitDisplay: UnitDisplay) -> String {
+        if type == .conditioning {
             return CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                          durationSeconds: set.durationSeconds,
                                          inclinePercent: set.inclinePercent)
         }
+        if type == .timed { return CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) }
         return set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)
     }
 }
@@ -219,7 +221,8 @@ struct SessionDetailView: View {
 // MARK: - Progression charts
 
 struct ProgressionChartsView: View {
-    @Query(sort: \WorkoutSession.date) private var sessions: [WorkoutSession]
+    @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date)
+    private var sessions: [WorkoutSession]
     @Query(filter: #Predicate<Exercise> { $0.categoryRaw == "Main" }, sort: \Exercise.name)
     private var mainLifts: [Exercise]
     @Query private var settingsList: [AppSettings]
@@ -232,6 +235,7 @@ struct ProgressionChartsView: View {
 
     enum Metric: String, CaseIterable {
         case topSet = "Working weight"
+        case estimatedMax = "Est. 1RM"
         case volume = "Volume"
     }
 
@@ -255,6 +259,14 @@ struct ProgressionChartsView: View {
             case .topSet:
                 guard let top = entries.compactMap(\.topSet?.weightLb).max() else { return nil }
                 return Point(date: session.date, value: display.primaryUnit == .kg ? Weight.kg(fromLb: top) : top, rotation: rotation)
+            case .estimatedMax:
+                let samples = entries.flatMap(\.workingSets).map {
+                    ProgramProgression.epleyE1RM(weightLb: $0.weightLb, reps: $0.reps)
+                }
+                guard let estimate = samples.max(), estimate > 0 else { return nil }
+                return Point(date: session.date,
+                             value: display.primaryUnit == .kg ? Weight.kg(fromLb: estimate) : estimate,
+                             rotation: rotation)
             case .volume:
                 let volume = entries.reduce(0) { $0 + $1.workingVolumeLb }
                 let shown = display.primaryUnit == .kg ? Weight.kg(fromLb: volume) : volume

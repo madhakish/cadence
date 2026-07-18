@@ -258,8 +258,17 @@ struct ActiveSessionView: View {
         guard !wanted.isEmpty else { return lines }
         for past in completedSessions where past.persistentModelID != session.persistentModelID {
             for entry in past.exercises {
-                guard let name = entry.exercise?.name, wanted.contains(name),
+                guard let exercise = entry.exercise, wanted.contains(exercise.name),
                       let top = entry.topSet else { continue }
+                let name = exercise.name
+                if exercise.type == .timed {
+                    let longest = past.exercises.filter { $0.exercise?.name == name }
+                        .flatMap(\.workingSets).compactMap(\.durationSeconds).max() ?? 0
+                    let when = past.date.formatted(date: .abbreviated, time: .omitted)
+                    lines[name] = "Last: \(CardioFormat.durationLabel(seconds: longest)) · \(when) (\(agoLabel(past.date)))"
+                    wanted.remove(name)
+                    continue
+                }
                 let better = past.exercises.filter { $0.exercise?.name == name }.compactMap(\.topSet)
                     .max { $0.weightLb < $1.weightLb } ?? top
                 let weight = better.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: better.weightLb)
@@ -373,7 +382,8 @@ private struct ExerciseSection: View {
         let oldType = entry.exercise?.typeRaw
         // Session scope leaves the program slot alone. Cycle/program scope
         // repoint the slot at the lift you're actually doing (completion
-        // matches program lifts/accessories by name+role); the slot keeps its
+        // matches the durable slot ID, with name+role only for legacy
+        // sessions); the slot keeps its
         // progression state as the starting load — candidates train the same
         // pattern at the same tier, so base/e1RM remain the best prior.
         if scope != .session {
@@ -406,14 +416,16 @@ private struct ExerciseSection: View {
                 return
             }
             if role == "accessory" {
-                if let acc = day.accessories.first(where: { $0.exerciseName == oldName }) {
+                if let acc = entry.programSlotID.flatMap({ id in day.accessories.first { $0.id == id } })
+                    ?? day.accessories.first(where: { $0.exerciseName == oldName }) {
                     // Cycle: remember the original once (re-swapping mid-cycle
                     // keeps the FIRST original). Program: any pending revert dies.
                     if scope == .cycle { acc.revertToExerciseName = acc.revertToExerciseName ?? oldName }
                     else { acc.revertToExerciseName = nil }
                     acc.exerciseName = newExercise.name
                 }
-            } else if let lift = day.lifts.first(where: { $0.exerciseName == oldName && $0.roleRaw == role }) {
+            } else if let lift = entry.programSlotID.flatMap({ id in day.lifts.first { $0.id == id } })
+                ?? day.lifts.first(where: { $0.exerciseName == oldName && $0.roleRaw == role }) {
                 if scope == .cycle { lift.revertToExerciseName = lift.revertToExerciseName ?? oldName }
                 else { lift.revertToExerciseName = nil }
                 lift.exerciseName = newExercise.name
@@ -432,25 +444,18 @@ private struct ExerciseSection: View {
     private func reconcileWarmups(oldType: String?, newExercise: Exercise) {
         guard oldType != newExercise.typeRaw else { return }
         let warmups = entry.sets.filter(\.isWarmup)
-        if newExercise.typeRaw != ExerciseType.barbell.rawValue {
+        let supportsRamp = newExercise.type == .barbell
+            || (newExercise.type == .dumbbell && entry.programRole == LiftRole.main.rawValue)
+        if !supportsRamp {
             for set in warmups { context.delete(set) }
             entry.sets.removeAll(where: \.isWarmup)
             // Renumber the survivors: addSet() assigns order = sets.count, so
             // leftover gaps (3,4,5) would collide with the next added set.
             for (i, set) in entry.orderedSets.enumerated() { set.order = i }
-        } else if warmups.isEmpty {
-            let workingLb = entry.plannedWeightLb
-                ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb ?? 45
-            let ramp = WarmupRamp.ramp(workingLb: workingLb, barLb: effectiveBar.lb,
-                                       roundingLb: ProgramEngine.defaultRoundingLb)
-            for set in entry.sets { set.order += ramp.count }
-            for (i, wu) in ramp.enumerated() {
-                let set = SetEntry(order: i, weightLb: wu.weightLb, reps: wu.reps, isWarmup: true, isPerSide: false,
-                                   enteredUnit: settings?.unitDisplay.primaryUnit ?? .lb)
-                set.sessionExercise = entry
-                context.insert(set)
-                entry.sets.append(set)
-            }
+        } else {
+            synchronizeWarmups(entry, bar: effectiveBar,
+                               enteredUnit: settings?.unitDisplay.primaryUnit ?? .lb,
+                               context: context)
         }
     }
 
@@ -496,7 +501,7 @@ private struct ExerciseSection: View {
                 // not hold the rail hostage).
                 let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }?.persistentModelID == set.persistentModelID
                 VStack(alignment: .leading, spacing: 4) {
-                    SetRow(set: set, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
+                    SetRow(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
                            targetLb: entry.plannedWeightLb, onLogged: {
                         onWork(entry)
                         // Auto-start only if the user opted in (manual is the
@@ -505,7 +510,7 @@ private struct ExerciseSection: View {
                             restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
                                             exerciseName: entry.exercise?.name ?? "")
                         }
-                    })
+                    }, onRemove: { removeSet(set) })
                     // Loadout visualization — plates for barbell lifts, the
                     // rack number for dumbbell lifts. Mirrors web.
                     if entry.exercise?.type == .barbell && set.weightLb > 0 {
@@ -517,7 +522,7 @@ private struct ExerciseSection: View {
             }
             .onDelete { offsets in
                 let ordered = entry.orderedSets
-                for index in offsets { context.delete(ordered[index]) }
+                for index in offsets.sorted(by: >) { removeSet(ordered[index], save: false) }
                 PersistenceErrorCenter.shared.save(context, operation: "Deleting the set")
             }
 
@@ -529,6 +534,17 @@ private struct ExerciseSection: View {
                     Label("Set", systemImage: "plus")
                 }
                 .buttonStyle(.bordered)
+
+                Button {
+                    onWork(entry)
+                    if let last = entry.orderedSets.last(where: { !$0.isWarmup }) ?? entry.orderedSets.last {
+                        removeSet(last)
+                    }
+                } label: {
+                    Label("Set", systemImage: "minus")
+                }
+                .buttonStyle(.bordered)
+                .disabled(entry.sets.isEmpty)
 
                 Button {
                     onWork(entry)
@@ -638,17 +654,28 @@ private struct ExerciseSection: View {
 
     private func addSet() {
         let last = entry.orderedSets.last
+        let isTimed = entry.exercise?.type == .timed
         let set = SetEntry(
             order: entry.sets.count,
-            weightLb: last?.weightLb ?? entry.plannedWeightLb ?? 45,
-            reps: last?.reps ?? entry.plannedReps ?? 5,
+            weightLb: isTimed ? 0 : (last?.weightLb ?? entry.plannedWeightLb ?? 45),
+            reps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             isPerSide: entry.exercise?.isUnilateral ?? false,
-            enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb
+            enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
+            durationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil
         )
         set.sessionExercise = entry
         context.insert(set)
         entry.sets.append(set)
+        entry.plannedSets = entry.plannedWorkingSets.count
         PersistenceErrorCenter.shared.save(context, operation: "Adding the set")
+    }
+
+    private func removeSet(_ set: SetEntry, save: Bool = true) {
+        entry.sets.removeAll { $0 === set }
+        context.delete(set)
+        for (index, remaining) in entry.orderedSets.enumerated() { remaining.order = index }
+        entry.plannedSets = entry.plannedWorkingSets.count
+        if save { PersistenceErrorCenter.shared.save(context, operation: "Deleting the set") }
     }
 }
 
@@ -657,12 +684,22 @@ private struct ExerciseSection: View {
 /// warmup rows.
 private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar,
                                 enteredUnit: WeightUnit, context: ModelContext) {
-    guard entry.exercise?.type == .barbell,
+    guard let exercise = entry.exercise,
           let workingLb = entry.plannedWeightLb
             ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb,
           workingLb > 0 else { return }
-    let desired = WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
+    let desired: [WarmupSet]
+    if exercise.type == .barbell {
+        desired = WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
                                   roundingLb: ProgramEngine.defaultRoundingLb)
+    } else if exercise.type == .dumbbell && entry.programRole == LiftRole.main.rawValue {
+        desired = WarmupRamp.dumbbellRamp(workingLb: workingLb,
+                                          roundingLb: ProgramEngine.loadStep(
+                                            programRoundingLb: ProgramEngine.defaultRoundingLb,
+                                            exerciseType: exercise.typeRaw))
+    } else {
+        return
+    }
     let existing = entry.orderedSets.filter(\.isWarmup)
     var rebuilt: [SetEntry] = []
     for (index, target) in desired.enumerated() {
@@ -690,6 +727,7 @@ private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar,
 
 private struct SetRow: View {
     @Bindable var set: SetEntry
+    let entry: SessionExercise
     let exercise: Exercise?
     let gym: Gym?
     let bar: Bar
@@ -698,6 +736,7 @@ private struct SetRow: View {
     /// The program/track weight this session recommends — the picker anchors here.
     let targetLb: Double?
     var onLogged: () -> Void
+    var onRemove: () -> Void
 
     @State private var showDetail = false
 
@@ -705,6 +744,7 @@ private struct SetRow: View {
     /// weight×reps. Keyed on the exercise TYPE — rep-based conditioning like
     /// burpees (category Conditioning, type bodyweight) keeps the lifting row.
     private var isCardio: Bool { exercise?.type == .conditioning }
+    private var isTimed: Bool { exercise?.type == .timed }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -724,16 +764,20 @@ private struct SetRow: View {
                          ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                                  durationSeconds: set.durationSeconds,
                                                  inclinePercent: set.inclinePercent)
-                         : weightLabel)
+                         : (isTimed ? CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) : weightLabel))
                         .font(.title3.bold().monospacedDigit())
                         .foregroundStyle(set.isWarmup ? .secondary : .primary)
                     HStack(spacing: 6) {
-                        if !isCardio {
+                        if !isCardio && !isTimed {
                             Text("× \(set.reps)\(set.isPerSide ? "/side" : "")")
                                 .font(.callout.monospacedDigit())
                                 .foregroundStyle(.secondary)
-                        } else {
+                        } else if isCardio {
                             Text("tap to log distance · time · incline")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            Text("tap to adjust hold time")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -755,15 +799,18 @@ private struct SetRow: View {
 
             Spacer()
 
-            SetStatusMenu(set: set, onCompleted: onLogged)
-            if !isCardio { QualityMenu(set: set) }
+            SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onCompleted: onLogged)
         }
         .sheet(isPresented: $showDetail) {
             if isCardio {
-                CardioSetSheet(set: set)
+                CardioSetSheet(set: set, onDelete: onRemove)
                     .presentationDetents([.medium, .large])
+            } else if isTimed {
+                TimedSetSheet(set: set, onDelete: onRemove)
+                    .presentationDetents([.medium])
             } else {
-                SetDetailSheet(set: set, exercise: exercise, gym: gym, bar: bar, targetLb: targetLb)
+                SetDetailSheet(set: set, entry: entry, exercise: exercise, gym: gym, bar: bar,
+                               targetLb: targetLb, onDelete: onRemove)
                     .presentationDetents([.large])
             }
         }
@@ -787,6 +834,7 @@ private struct CardioSetSheet: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
+    let onDelete: () -> Void
 
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
@@ -813,6 +861,12 @@ private struct CardioSetSheet: View {
                 } footer: {
                     if let mph = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds) {
                         Text("Speed: \(Weight.trim(mph)) mph")
+                    }
+                }
+                Section {
+                    Button("Delete set", role: .destructive) {
+                        onDelete()
+                        dismiss()
                     }
                 }
             }
@@ -848,33 +902,108 @@ private struct CardioSetSheet: View {
     }
 }
 
-private struct SetStatusMenu: View {
+/// Timed holds (planks, hollow holds) have a first-class duration instead of
+/// masquerading as one repetition. The program pre-fills the target, so the
+/// normal path remains a single completion tap.
+private struct TimedSetSheet: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var set: SetEntry
+    let onDelete: () -> Void
+
+    private var seconds: Int { self.set.durationSeconds ?? 0 }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Hold time") {
+                    Stepper(
+                        CardioFormat.durationLabel(seconds: seconds),
+                        value: Binding(get: { seconds }, set: { set.durationSeconds = max($0, 5) }),
+                        in: 5...1800,
+                        step: 5
+                    )
+                }
+                Section {
+                    Button("Delete set", role: .destructive) {
+                        onDelete()
+                        dismiss()
+                    }
+                }
+            }
+            .navigationTitle("Log timed set")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        if PersistenceErrorCenter.shared.save(context, operation: "Saving the timed set") { dismiss() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Normal logging is one tap: planned → completed (and a second tap undoes).
+/// Long-press exposes the exceptional states and quality flags, keeping the
+/// powerful record model without making every ordinary set an interrogation.
+private struct SetVerdictControl: View {
     @Environment(\.modelContext) private var context
     @Bindable var set: SetEntry
+    let allowsQuality: Bool
     var onCompleted: () -> Void
 
     var body: some View {
         Menu {
+            Section("Status") {
             ForEach(SetStatus.allCases, id: \.self) { status in
                 Button {
-                    let wasCompleted = set.status == .completed
-                    set.status = status
-                    if status == .completed && !wasCompleted { onCompleted() }
-                    PersistenceErrorCenter.shared.save(context, operation: "Changing the set status")
+                    apply(status)
                 } label: {
                     Label(statusLabel(status), systemImage: statusIcon(status))
                 }
             }
+            }
+            if allowsQuality {
+                Section("Quality — only when notable") {
+                    Button("Not graded") { set.quality = nil; save() }
+                    Button("Clean") { set.quality = .clean; save() }
+                    Button("Grindy") { set.quality = .grindy; save() }
+                    Button("Wobble") { set.quality = .wobble; save() }
+                }
+            }
         } label: {
-            Image(systemName: statusIcon(set.status))
-                .font(.title3)
-                .frame(width: 40, height: 40)
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: statusIcon(set.status))
+                    .font(.title3)
+                if let quality = set.quality, quality != .clean {
+                    Text(quality == .grindy ? "G" : "W")
+                        .font(.caption2.bold())
+                        .padding(2)
+                        .background(Theme.warn, in: Circle())
+                        .foregroundStyle(.black)
+                        .offset(x: 6, y: -6)
+                }
+            }
+                .frame(width: 48, height: 48)
                 .background(statusColor(set.status).opacity(set.status == .planned ? 0.12 : 0.30),
                             in: RoundedRectangle(cornerRadius: 8))
+        } primaryAction: {
+            apply(set.status == .completed ? .planned : .completed)
         }
         .accessibilityLabel("Set status")
         .accessibilityValue(statusLabel(set.status))
+        .accessibilityHint("Tap to complete or undo. Touch and hold for skipped and quality options.")
     }
+
+    private func apply(_ status: SetStatus) {
+        let wasCompleted = set.status == .completed
+        set.status = status
+        if status == .completed && !wasCompleted { onCompleted() }
+        save()
+    }
+
+    private func save() { PersistenceErrorCenter.shared.save(context, operation: "Changing the set verdict") }
 
     private func statusLabel(_ status: SetStatus) -> String {
         switch status { case .planned: return "Planned"; case .completed: return "Completed"; case .skipped: return "Skipped" }
@@ -887,51 +1016,31 @@ private struct SetStatusMenu: View {
     }
 }
 
-private struct QualityMenu: View {
-    @Environment(\.modelContext) private var context
-    @Bindable var set: SetEntry
-
-    var body: some View {
-        Menu {
-            Button("No quality") { set.quality = nil; save() }
-            Button("Clean") { set.quality = .clean; save() }
-            Button("Grindy") { set.quality = .grindy; save() }
-            Button("Wobble") { set.quality = .wobble; save() }
-        } label: {
-            Text(symbol)
-                .font(.headline)
-                .frame(width: 40, height: 40)
-                .background(color.opacity(set.quality == nil ? 0.12 : 0.30), in: RoundedRectangle(cornerRadius: 8))
-        }
-        .accessibilityLabel("Set quality")
-        .accessibilityValue(set.quality?.rawValue ?? "Not graded")
-    }
-
-    private func save() { PersistenceErrorCenter.shared.save(context, operation: "Grading the set") }
-    private var symbol: String {
-        switch set.quality { case .clean: return "✓"; case .grindy: return "G"; case .wobble: return "W"; default: return "Q" }
-    }
-    private var color: Color {
-        switch set.quality { case .clean: return Theme.good; case .grindy, .wobble: return Theme.warn; default: return .secondary }
-    }
-}
-
 // MARK: - Set detail (weight/reps/unit/body flag)
 
 private struct SetDetailSheet: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
+    let entry: SessionExercise
     let exercise: Exercise?
     let gym: Gym?
     let bar: Bar
     let targetLb: Double?
+    let onDelete: () -> Void
 
     // Edited live (canonical pounds) so the plate graphic tracks every tap;
     // committed on Done. Starts at the set's weight, which the program/track
     // pre-fills to this session's recommendation.
     @State private var lb: Double = 0
     @State private var unit: WeightUnit = .lb
+    @State private var reps: Int = 0
+    @State private var isWarmup = false
+    @State private var isPerSide = false
+    @State private var stoppedEarly = false
+    @State private var bodySite: BodySite?
+    @State private var bodyNote = ""
+    @State private var applyToRemaining = true
 
     private var isBarbell: Bool { exercise?.type == .barbell }
 
@@ -1011,32 +1120,31 @@ private struct SetDetailSheet: View {
                 }
 
                 Section {
-                    Stepper("Reps: \(set.reps)", value: Bindable(set).reps, in: 0...100)
-                    Toggle("Warmup", isOn: Bindable(set).isWarmup)
-                    Toggle("Per side", isOn: Bindable(set).isPerSide)
-                    Toggle("Stopped early", isOn: Binding(
-                        get: { set.flags.contains(.stoppedEarly) },
-                        set: { on in
-                            var flags = set.flags
-                            flags.removeAll { $0 == .stoppedEarly }
-                            if on { flags.append(.stoppedEarly) }
-                            set.flags = flags
-                        }
-                    ))
+                    Stepper("Reps: \(reps)", value: $reps, in: 0...100)
+                    Toggle("Warmup", isOn: $isWarmup)
+                    Toggle("Per side", isOn: $isPerSide)
+                    Toggle("Stopped early", isOn: $stoppedEarly)
+                    if canApplyToRemaining {
+                        Toggle("Apply weight and reps to remaining planned sets", isOn: $applyToRemaining)
+                    }
                 }
 
                 Section("Body flag") {
-                    Picker("Site", selection: Bindable(set).bodyFlagSite) {
+                    Picker("Site", selection: $bodySite) {
                         Text("None").tag(BodySite?.none)
                         ForEach(BodySite.allCases) { site in
                             Text(site.rawValue).tag(BodySite?.some(site))
                         }
                     }
-                    if set.bodyFlagSite != nil {
-                        TextField("What did it feel like?", text: Binding(
-                            get: { set.bodyFlagNote ?? "" },
-                            set: { set.bodyFlagNote = $0.isEmpty ? nil : $0 }
-                        ))
+                    if bodySite != nil {
+                        TextField("What did it feel like?", text: $bodyNote)
+                    }
+                }
+
+                Section {
+                    Button("Delete set", role: .destructive) {
+                        dismiss()
+                        onDelete()
                     }
                 }
             }
@@ -1045,8 +1153,7 @@ private struct SetDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        set.weightLb = lb       // stored canonically in lb
-                        set.enteredUnit = unit
+                        commitDraft()
                         if PersistenceErrorCenter.shared.save(context, operation: "Saving the set") { dismiss() }
                     }
                 }
@@ -1054,6 +1161,13 @@ private struct SetDetailSheet: View {
             .onAppear {
                 unit = set.enteredUnit
                 lb = set.weightLb
+                reps = set.reps
+                isWarmup = set.isWarmup
+                isPerSide = set.isPerSide
+                stoppedEarly = set.flags.contains(.stoppedEarly)
+                bodySite = set.bodyFlagSite
+                bodyNote = set.bodyFlagNote ?? ""
+                applyToRemaining = !set.isWarmup && set.status == .planned
             }
         }
     }
@@ -1064,6 +1178,44 @@ private struct SetDetailSheet: View {
 
     private func setUnit(_ newUnit: WeightUnit) {
         unit = newUnit // lb is canonical, so the readout just re-renders in the new unit
+    }
+
+    private var canApplyToRemaining: Bool {
+        !isWarmup && entry.plannedWorkingSets.contains {
+            $0 !== set && $0.status == .planned
+        }
+    }
+
+    /// Commit the sheet as one draft. Propagating an edit also redefines this
+    /// session's target; progression then grades the explicitly accepted
+    /// prescription and actual completed load, not the stale generated weight.
+    /// Completed/skipped rows are never rewritten.
+    private func commitDraft() {
+        let targets: [SetEntry]
+        if applyToRemaining && !isWarmup {
+            targets = entry.plannedWorkingSets.filter { $0 === set || $0.status == .planned }
+        } else {
+            targets = [set]
+        }
+        for target in targets {
+            target.weightLb = lb
+            target.enteredUnit = unit
+            target.reps = reps
+        }
+        set.isWarmup = isWarmup
+        set.isPerSide = isPerSide
+        var flags = set.flags.filter { $0 != .stoppedEarly }
+        if stoppedEarly { flags.append(.stoppedEarly) }
+        set.flags = flags
+        set.bodyFlagSite = bodySite
+        set.bodyFlagNote = bodySite == nil || bodyNote.isEmpty ? nil : bodyNote
+
+        entry.plannedSets = entry.plannedWorkingSets.count
+        if applyToRemaining && !isWarmup {
+            entry.plannedWeightLb = lb
+            entry.plannedReps = reps
+            synchronizeWarmups(entry, bar: bar, enteredUnit: unit, context: context)
+        }
     }
 }
 
@@ -1162,14 +1314,23 @@ private struct SessionBottomBar: View {
 private struct ExercisePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
+    @State private var search = ""
     let onPick: (Exercise) -> Void
+
+    private var visible: [Exercise] {
+        search.isEmpty ? exercises : exercises.filter {
+            $0.name.localizedCaseInsensitiveContains(search)
+                || $0.movementGroup.localizedCaseInsensitiveContains(search)
+                || $0.typeRaw.localizedCaseInsensitiveContains(search)
+        }
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 ForEach(ExerciseCategory.allCases, id: \.self) { category in
                     Section(category.rawValue) {
-                        ForEach(exercises.filter { $0.category == category }) { exercise in
+                        ForEach(visible.filter { $0.category == category }) { exercise in
                             Button {
                                 onPick(exercise)
                                 dismiss()
@@ -1190,6 +1351,7 @@ private struct ExercisePickerSheet: View {
             }
             .navigationTitle("Add exercise")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $search, prompt: "Exercise, movement, or equipment")
         }
     }
 }
@@ -1208,9 +1370,18 @@ private struct SessionSummarySheet: View {
                     ForEach(summary.lines) { line in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(line.exerciseName).font(.headline)
-                            Text("Top: \(line.topSetLabel) · Volume: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: line.volumeLb))")
+                            Text(line.volumeLb > 0
+                                 ? "Top: \(line.topSetLabel) · Volume: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: line.volumeLb))"
+                                 : line.topSetLabel)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if !summary.coachingNotes.isEmpty {
+                    Section("Coach") {
+                        ForEach(summary.coachingNotes, id: \.self) { note in
+                            Text(note)
                         }
                     }
                 }

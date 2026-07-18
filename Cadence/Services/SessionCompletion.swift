@@ -13,6 +13,7 @@ struct SessionSummary {
 
     let lines: [LiftLine]
     let milestones: [PREvent]
+    let coachingNotes: [String]
 }
 
 enum SessionCompletion {
@@ -45,7 +46,7 @@ enum SessionCompletion {
     static func finish(_ session: WorkoutSession, context: ModelContext, startedAt: Date? = nil) throws -> SessionSummary {
         // Idempotence backstop (mirrors web completeSession): finishing twice
         // would duplicate milestones and double-advance tracks/programs.
-        guard !session.isCompleted else { return SessionSummary(lines: [], milestones: []) }
+        guard !session.isCompleted else { return SessionSummary(lines: [], milestones: [], coachingNotes: []) }
 
         // Checkpoint the logged sets BEFORE staging anything: a rollback on a
         // failed commit then discards only the completion mutations, never the
@@ -76,6 +77,19 @@ enum SessionCompletion {
             guard let exercise = entry.exercise else { continue }
             let working = entry.workingSets.map { SetSample(weightLb: $0.weightLb, reps: $0.reps) }
             guard !working.isEmpty else { continue }
+
+            if exercise.type == .timed {
+                let durations = entry.workingSets.compactMap(\.durationSeconds)
+                if let longest = durations.max() {
+                    lines.append(SessionSummary.LiftLine(
+                        exerciseName: exercise.name,
+                        topSetLabel: "\(durations.count) × \(CardioFormat.durationLabel(seconds: longest))",
+                        volumeLb: 0
+                    ))
+                }
+                continue // duration work is not a weight/repetition PR or lift track
+            }
+            if exercise.type == .conditioning { continue }
 
             if let top = entry.topSet {
                 lines.append(SessionSummary.LiftLine(
@@ -111,7 +125,8 @@ enum SessionCompletion {
             }
         }
 
-        if (session.programID != nil || session.programName != nil) && session.hasCompletedWork {
+        let isProgramSession = session.programID != nil || session.programName != nil
+        if isProgramSession && session.hasCompletedWork {
             do { try advanceProgram(session, context: context, unitDisplay: unitDisplay, events: &allEvents) }
             catch { context.rollback(); throw SaveFailure(underlying: error) }
         }
@@ -143,7 +158,29 @@ enum SessionCompletion {
             Task { await HealthKitService.shared.saveStrengthWorkout(start: start, end: end) }
         }
 
-        return SessionSummary(lines: lines, milestones: allEvents)
+        let completedSets = session.exercises.flatMap(\.workingSets).filter { $0.status == .completed }
+        let skippedSets = session.exercises.flatMap(\.workingSets).filter { $0.status == .skipped }
+        let plannedSets = session.exercises.flatMap(\.workingSets).filter { $0.status == .planned }
+        let adjusted = completedSets.contains {
+            $0.autoregReason != nil || $0.flags.contains(.stoppedEarly) || $0.quality == .grindy || $0.quality == .wobble
+        }
+        var coachingNotes: [String] = []
+        if !plannedSets.isEmpty || !skippedSets.isEmpty {
+            coachingNotes.append("Modified session — \(completedSets.count) sets completed; unfinished or skipped sets were not credited as performed.")
+        } else if adjusted {
+            coachingNotes.append("Completed with adjustments — progression was graded from the work actually logged.")
+        } else if !completedSets.isEmpty {
+            coachingNotes.append("Completed as planned — progression advanced from the banked work.")
+        }
+        if isProgramSession,
+           let programs = try? context.fetch(FetchDescriptor<Program>()),
+           let program = session.programID.flatMap({ id in programs.first { $0.id == id } })
+                ?? programs.first(where: { $0.name == session.programName }),
+           let nextDay = program.orderedDays.first(where: { $0.order == program.nextDayIndex }) ?? program.orderedDays.first {
+            let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
+            coachingNotes.append("Next: \(nextDay.name) · R\(program.currentWeek) \(phase.name).")
+        }
+        return SessionSummary(lines: lines, milestones: allEvents, coachingNotes: coachingNotes)
     }
 
     private static func healthKitEnabled(_ context: ModelContext) -> Bool {
@@ -190,6 +227,9 @@ enum SessionCompletion {
         let dayIndex = session.programDayIndex ?? 0
         guard let day = program.days.first(where: { $0.order == dayIndex }) else { return }
         let week = session.programWeek ?? program.currentWeek
+        let exerciseTypeByName = Dictionary(
+            uniqueKeysWithValues: try context.fetch(FetchDescriptor<Exercise>()).map { ($0.name, $0.typeRaw) }
+        )
 
         // Duplicate/stale guard (mirrors web advanceProgram): the tag captured
         // at creation must still match the program's live position, or this
@@ -210,9 +250,19 @@ enum SessionCompletion {
         // Accessories: double progression, every bank.
         for acc in day.accessories {
             if let entry = session.exercises.first(where: {
-                $0.programRole == "accessory" && $0.exercise?.name == acc.exerciseName && !$0.workingSets.isEmpty
+                ($0.programSlotID == acc.id || ($0.programSlotID == nil && $0.programRole == "accessory" && $0.exercise?.name == acc.exerciseName))
+                    && !$0.workingSets.isEmpty
             }) {
-                acc.apply(ProgramProgression.advanceAccessory(acc.coreState, perf: accPerf(entry)))
+                if exerciseTypeByName[acc.exerciseName] == ExerciseType.timed.rawValue {
+                    let completed = entry.workingSets.filter { $0.status == .completed }
+                    if completed.count >= acc.sets,
+                       completed.allSatisfy({ ($0.durationSeconds ?? 0) >= acc.targetSeconds }),
+                       !completed.contains(where: { $0.flags.contains(.stoppedEarly) }) {
+                        acc.targetSeconds += acc.durationStepSeconds
+                    }
+                } else {
+                    acc.apply(ProgramProgression.advanceAccessory(acc.coreState, perf: accPerf(entry)))
+                }
             }
         }
 
@@ -220,9 +270,17 @@ enum SessionCompletion {
         if week == 3 {
             for lift in day.lifts {
                 if let entry = session.exercises.first(where: {
-                    $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue && !$0.workingSets.isEmpty
+                    ($0.programSlotID == lift.id || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue))
+                        && !$0.workingSets.isEmpty
                 }) {
-                    let result = ProgramProgression.advanceCycleLift(lift.coreState, perf: cyclePerf(entry, roundingLb: program.roundingLb), focus: program.focus, roundingLb: program.roundingLb)
+                    let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
+                                                          exerciseType: entry.exercise?.typeRaw)
+                    let result = ProgramProgression.advanceCycleLift(
+                        lift.coreState,
+                        perf: cyclePerf(entry, roundingLb: loadStep),
+                        focus: program.focus,
+                        roundingLb: loadStep
+                    )
                     lift.pendingBaseWeightLb = result.state.baseWeightLb
                     lift.pendingEstimatedMaxLb = result.state.estimatedMaxLb
                     lift.pendingStallCount = result.state.stallCount
@@ -269,7 +327,9 @@ enum SessionCompletion {
                     lift.lastIncrementLb = 0
                     if lift.stallCount >= ProgramProgression.stallLimit {
                         let old = lift.baseWeightLb
-                        lift.baseWeightLb = Weight.round(old * ProgramProgression.deloadRebuildFraction, to: program.roundingLb)
+                        let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
+                                                              exerciseType: exerciseTypeByName[lift.exerciseName])
+                        lift.baseWeightLb = Weight.round(old * ProgramProgression.deloadRebuildFraction, to: loadStep)
                         lift.stallCount = 0
                         let label = "\(lift.exerciseName): skipped peak — deloaded \(unitDisplay.format(lb: old))→\(unitDisplay.format(lb: lift.baseWeightLb))."
                         context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))

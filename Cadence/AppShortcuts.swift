@@ -7,6 +7,16 @@ import AppIntents
 struct CadenceShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
+            intent: OpenGymTagIntent(),
+            phrases: [
+                "Show my gym tag in \(.applicationName)",
+                "Open my gym tag in \(.applicationName)",
+                "\(.applicationName) gym tag"
+            ],
+            shortTitle: "Gym Tag",
+            systemImageName: "barcode.viewfinder"
+        )
+        AppShortcut(
             intent: ToggleRestIntent(),
             phrases: [
                 "Start rest in \(.applicationName)",

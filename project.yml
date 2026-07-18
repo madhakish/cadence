@@ -59,6 +59,10 @@ targets:
         # Enables the workout Live Activity (Lock Screen + Dynamic Island):
         # session stopwatch that swaps to the rest countdown while resting.
         NSSupportsLiveActivities: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.madhakish.Cadence
+            CFBundleURLSchemes:
+              - cadence
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.Cadence

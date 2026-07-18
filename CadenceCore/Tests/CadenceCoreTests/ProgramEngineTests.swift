@@ -127,4 +127,49 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(Weight.round(246.75, to: 5), 245)
         XCTAssertEqual(Weight.round(162.75, to: 5), 165)
     }
+
+    func testDumbbellProgramStepIsCappedPerHand() {
+        XCTAssertEqual(ProgramEngine.loadStep(programRoundingLb: 10, exerciseType: "dumbbell"), 5)
+        XCTAssertEqual(ProgramEngine.loadStep(programRoundingLb: 2.5, exerciseType: "dumbbell"), 2.5)
+        XCTAssertEqual(ProgramEngine.loadStep(programRoundingLb: 10, exerciseType: "barbell"), 10)
+    }
+
+    func testDumbbellProgramPeakStaysWithinOneRackJumpOfBase() {
+        let state = CycleState(cycleNumber: 2, baseWeightLb: 55, nextPhase: .peak, incrementLb: 0)
+        XCTAssertEqual(ProgramEngine.programPlan(for: state, programRoundingLb: 5,
+                                                 exerciseType: "dumbbell").weightLb, 60)
+        XCTAssertEqual(ProgramEngine.programPlan(for: state, programRoundingLb: 5,
+                                                 exerciseType: "barbell").weightLb, 65)
+    }
+
+    func testAutomaticPrescriptionRespectsRoleFocusAndMovement() {
+        XCTAssertEqual(ProgramEngine.resolvedStyle(.automatic, movementGroup: "press", role: .main, focus: .strength), .wave)
+        XCTAssertEqual(ProgramEngine.resolvedStyle(.automatic, movementGroup: "hinge", role: .complementary, focus: .strength), .secondary)
+        XCTAssertEqual(ProgramEngine.resolvedStyle(.automatic, movementGroup: "press", role: .main, focus: .hypertrophy), .hypertrophy)
+        XCTAssertEqual(ProgramEngine.resolvedStyle(.automatic, movementGroup: "olympic", role: .main, focus: .strength), .technique)
+    }
+
+    func testComplementaryVolumeDoesNotInheritMainFiveByFive() {
+        let state = CycleState(baseWeightLb: 200, nextPhase: .volume)
+        let plan = ProgramEngine.programPlan(for: state, programRoundingLb: 5, exerciseType: "barbell",
+                                             movementGroup: "hinge", role: .complementary)
+        XCTAssertEqual(plan.sets, 3)
+        XCTAssertEqual(plan.reps, 5)
+        XCTAssertEqual(plan.weightLb, 200)
+    }
+
+    func testTechniquePeakUsesCrispSingles() {
+        let state = CycleState(baseWeightLb: 100, nextPhase: .peak)
+        let plan = ProgramEngine.programPlan(for: state, programRoundingLb: 5, exerciseType: "barbell",
+                                             movementGroup: "olympic", role: .main)
+        XCTAssertEqual(plan.sets, 6)
+        XCTAssertEqual(plan.reps, 1)
+        XCTAssertEqual(plan.weightLb, 110)
+    }
+
+    func testMainDumbbellWarmupRamp() {
+        XCTAssertEqual(WarmupRamp.dumbbellRamp(workingLb: 60).map(\.weightLb), [25, 35, 50])
+        XCTAssertEqual(WarmupRamp.dumbbellRamp(workingLb: 60).map(\.reps), [10, 5, 2])
+        XCTAssertTrue(WarmupRamp.dumbbellRamp(workingLb: 5).isEmpty)
+    }
 }

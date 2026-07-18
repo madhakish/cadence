@@ -36,4 +36,21 @@ public enum WarmupRamp {
         }
         return sets
     }
+
+    /// A short per-hand dumbbell ramp for a main lift. Unlike a barbell ramp
+    /// there is no empty-bar opener; use three distinct, rack-friendly steps
+    /// and never duplicate or reach the working weight.
+    public static func dumbbellRamp(
+        workingLb: Double,
+        roundingLb: Double = 5
+    ) -> [WarmupSet] {
+        guard workingLb > 0 else { return [] }
+        let steps: [(percent: Double, reps: Int)] = [(0.40, 10), (0.60, 5), (0.80, 2)]
+        var seen = Set<Double>()
+        return steps.compactMap { step in
+            let weight = Swift.max(roundingLb, Weight.round(workingLb * step.percent, to: roundingLb))
+            guard weight < workingLb - 1e-9, seen.insert(weight).inserted else { return nil }
+            return WarmupSet(weightLb: weight, reps: step.reps)
+        }
+    }
 }

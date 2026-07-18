@@ -33,8 +33,17 @@ const completeAll = async (workout) => {
 
 // ---- privacy-safe first launch ----
 await db.ensureSeeded();
-ok((await db.Exercises.all()).length === 47, "seeded 47 exercises");
-ok((await db.Exercises.all()).every((e) => e.movementGroup), "every seeded exercise has a movement group");
+const seededExercises = await db.Exercises.all();
+ok(seededExercises.length === 138, "seeded 138 exercises");
+ok(["Push-ups", "Pull-ups", "Barbell Row", "Bulgarian Split Squat", "Ab Wheel Rollout", "Row Erg"]
+  .every((name) => seededExercises.some((exercise) => exercise.name === name)),
+  "comprehensive seed covers common push, pull, lower, core, and conditioning movements");
+ok(seededExercises.every((e) => e.movementGroup), "every seeded exercise has a movement group");
+const nativeSeedSource = await (await import("node:fs/promises")).readFile(
+  new URL("../../Cadence/Seed/Seeder.swift", import.meta.url), "utf8");
+const nativeSeedNames = [...nativeSeedSource.matchAll(/Exercise\(name: "([^"]+)"/g)].map((match) => match[1]).sort();
+ok(JSON.stringify(nativeSeedNames) === JSON.stringify(seededExercises.map((exercise) => exercise.name).sort()),
+  "native and web comprehensive exercise catalogs stay in parity");
 ok((await db.Sessions.completed()).length === 0, "fresh install has no workout history");
 ok((await db.Tracks.all()).length === 0, "fresh install has no progression state");
 ok((await db.Programs.all()).length === 0, "fresh install has no personal program");
@@ -53,7 +62,7 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
   ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
-  ok((await db.Exercises.all()).length === 47, "seed repair does not duplicate exercises");
+  ok((await db.Exercises.all()).length === 138, "seed repair does not duplicate exercises");
   ok((await db.Protein.all()).some((entry) => entry.id === proteinId), "seed repair preserves other user stores");
   await db.Sessions.del(sentinelId);
   await db.Protein.del(proteinId);
@@ -116,7 +125,7 @@ for (let i = 0; i < 10; i++) {
   await db.syncLibrary();
   ok((await db.Exercises.byName("Deadlift")).movementGroup === "hinge", "sync backfills a missing movement group");
   ok((await db.Exercises.byName("Deadlift")).defaultRestSeconds === 222, "sync does NOT clobber user edits");
-  ok((await db.Exercises.all()).length === 47, "sync leaves the count whole (no dupes)");
+  ok((await db.Exercises.all()).length === 138, "sync leaves the count whole (no dupes)");
 }
 
 // ---- retired rest stamps: one-shot clear un-freezes the rest buckets ----
@@ -238,7 +247,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
-ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 47, "export carries the exercise library");
+ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 138, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
 ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
@@ -453,6 +462,59 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 // ---- protein add reflects in today's total ----
 await db.Protein.add({ date: new Date().toISOString(), grams: 45, label: "Shake" });
 ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
+
+// ---- program prescription integrity: DB steps, warmups, adjusted targets, slot identity ----
+{
+  const name = "Fixture Slot Identity";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 10, isActive: false,
+    days: [{ name: "Upper", order: 0,
+      lifts: [
+        { exerciseName: "Incline DB Press", role: "main", baseWeightLb: 55, estimatedMaxLb: 80, stallCount: 0, lastIncrementLb: 0 },
+        { exerciseName: "Incline DB Press", role: "main", baseWeightLb: 55, estimatedMaxLb: 80, stallCount: 0, lastIncrementLb: 0 },
+      ], accessories: [{ exerciseName: "Plank", order: 0, sets: 3, minReps: 1, maxReps: 1,
+        currentReps: 1, targetSeconds: 45, durationStepSeconds: 5, weightLb: 0, incrementLb: 0, stallCount: 0 }] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.days[0].lifts.every((lift) => lift.id) && new Set(program.days[0].lifts.map((lift) => lift.id)).size === 2,
+    "duplicate exercise appearances receive distinct stable goal-slot IDs");
+
+  const volumeId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const volume = await db.Sessions.get(volumeId);
+  const volumeMain = volume.exercises[0];
+  ok(volumeMain.plannedWeightLb === 55, "10 lb program rounding is capped to a 5 lb per-hand DB step");
+  ok(volumeMain.sets.some((set) => set.isWarmup), "main dumbbell press receives warmup sets");
+  const timedAccessory = volume.exercises.find((entry) => entry.exerciseName === "Plank");
+  ok(timedAccessory.sets.every((set) => set.durationSeconds === 45 && set.reps === 1 && set.weightLb === 0),
+    "timed program accessories carry seconds instead of fake repetition work");
+  ok(volumeMain.programSlotId === program.days[0].lifts[0].id, "session entry retains its exact program goal slot");
+  await db.Sessions.del(volumeId);
+
+  program.currentWeek = 3;
+  await db.Programs.save(program);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const peakId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const peak = await db.Sessions.get(peakId);
+  const adjusted = peak.exercises[1];
+  ok(adjusted.plannedWeightLb === 60, "55 lb DB base generates a 60 lb Peak, not 65 lb per hand");
+  adjusted.plannedWeightLb = 55;
+  const adjustedWork = adjusted.sets.filter((set) => !set.isWarmup);
+  adjustedWork.forEach((set, index) => {
+    // Mirrors accepting 60 after an already-completed 65: the completed row
+    // stays historical while the remaining prescription changes to 60.
+    set.weightLb = index === 0 ? 60 : 55;
+    set.status = "completed";
+  });
+  await session.completeSession(peak);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(!program.days[0].lifts[0].pending, "unperformed duplicate slot is not graded by name collision");
+  ok(program.days[0].lifts[1].pending?.grade === "success"
+      && program.days[0].lifts[1].pending?.state.baseWeightLb === 60,
+    "adjusted target, unchanged completed row, and actual work drive the correct goal slot");
+
+  await db.importBundle(parsed);
+}
 
 // ---- program lifecycle: untouched vs partial completion ----
 {
@@ -881,6 +943,20 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])]))
     : Array.isArray(v) ? v.map(stable) : v;
   const canon = (bundle) => {
+    bundle = structuredClone(bundle);
+    if (bundle.settings) bundle.settings.gymTagFirstLaunchOfDay ??= false;
+    for (const program of bundle.programs || []) for (const day of program.days || []) {
+      (day.lifts || []).forEach((lift, index) => {
+        lift.order ??= index;
+        lift.prescription ??= "automatic";
+        lift.warmupPolicy ??= "automatic";
+      });
+      (day.accessories || []).forEach((accessory, index) => {
+        accessory.order ??= index;
+        accessory.targetSeconds ??= 30;
+        accessory.durationStepSeconds ??= 5;
+      });
+    }
     const b = stable(bundle);
     delete b.exportedAt; delete b.appVersion;
     if (b.settings) delete b.settings.seededAt;

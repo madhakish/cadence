@@ -75,6 +75,9 @@ final class SessionExercise {
     var phaseRaw: Int?
     /// "main" / "complementary" / "accessory" when part of a program day; nil otherwise.
     var programRole: String?
+    /// Stable ProgramLift/ProgramAccessory slot that produced this entry.
+    /// Names/roles remain only a fallback for sessions created before this key.
+    var programSlotID: String?
 
     init(order: Int, exercise: Exercise?, notes: String = "") {
         self.order = order

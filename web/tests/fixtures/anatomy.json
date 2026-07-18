@@ -1554,6 +1554,24 @@
         "obliques"
       ]
     },
+    "calves": {
+      "primary": [
+        "calves"
+      ],
+      "secondary": [
+        "hamstrings"
+      ]
+    },
+    "carry": {
+      "primary": [
+        "forearms",
+        "traps"
+      ],
+      "secondary": [
+        "abs",
+        "obliques"
+      ]
+    },
     "conditioning": {
       "primary": [
         "quads",

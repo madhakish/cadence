@@ -21,8 +21,9 @@ group → no figure, so give custom exercises a group in the library.
 - **Top set** sparkline — your heaviest working set per session across
   the last two dozen sessions, so a glance shows the trend.
 - **In programs** — every program slot the exercise currently fills
-  ("Upper/Lower 4-Day · Upper A (main)"), so you know what a library
+  ("Example Program · Day 1 (main)"), so you know what a library
   edit or a shelving decision would touch.
 
-The editable fields (type, rest, watch site, shelved, notes) live on the
+The editable fields (category, type, movement group, rest, watch site,
+shelved, notes) live on the
 same page, below the insight.

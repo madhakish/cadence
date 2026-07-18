@@ -23,7 +23,9 @@ no quotes.
   completed session, never the calendar. +10 lb/cycle lower, +5 upper.
   Suggestions are editable in two taps; mid-session "Dropping load" recalcs
   remaining sets and logs why (bar speed / wobble / joint / heat / fatigue).
-- **Session logging** — pre-filled warmup ramp (bar×10, ~40/55/70/85%),
+- **Session logging** — pre-filled warmup ramps (barbell bar×10 +
+  ~40/55/70/85%; main dumbbell ~40/60/80% per hand), add/remove individual
+  sets, propagate weight/reps edits across the remaining planned work,
   explicit planned/completed/skipped sets, optional exclusive quality
   (clean/grindy/wobble), independent stopped-early notes, kg or lb entry
   stored canonically in lb, rest timer (5:00 main / 1:30 accessory,
@@ -40,7 +42,10 @@ no quotes.
   inventories, per-lift increments, rest defaults, optional write-only
   HealthKit, full JSON + CSV export.
 
-Fresh installs contain only the generic exercise library and a default gym.
+Fresh installs contain a searchable, categorized library of 138 generic
+strength, accessory, bodyweight, Olympic, and conditioning exercises plus a
+default gym. Existing installs receive missing generic definitions without
+overwriting their edits.
 No workout history, body metrics, health signals, program state, or personal
 starting weights ship in the repository. Program-style templates are optional
 starting points and remain editable before the first session.

@@ -116,11 +116,33 @@ const stableID = (seed) => {
 };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isPortableUUID = (value) => typeof value === "string" && UUID_RE.test(value);
-const normalizeProgram = (p) => ({
-  ...p,
-  uuid: isPortableUUID(p.uuid) ? p.uuid : (isPortableUUID(p.id) ? p.id : stableID(`program:${p.name}`)),
-});
+const normalizeProgram = (p) => {
+  const uuid = isPortableUUID(p.uuid) ? p.uuid : (isPortableUUID(p.id) ? p.id : stableID(`program:${p.name}`));
+  return {
+    ...p,
+    uuid,
+    days: (p.days || []).map((day, dayIndex) => ({
+      ...day,
+      lifts: (day.lifts || []).map((lift, slotIndex) => ({
+        ...lift,
+        id: isPortableUUID(lift.id) ? lift.id : stableID(`slot:${uuid}:day:${day.order ?? dayIndex}:lift:${slotIndex}`),
+        order: Number.isInteger(lift.order) ? lift.order : slotIndex,
+        prescription: lift.prescription || "automatic",
+        warmupPolicy: lift.warmupPolicy || "automatic",
+      })),
+      accessories: (day.accessories || []).map((accessory, slotIndex) => ({
+        ...accessory,
+        id: isPortableUUID(accessory.id) ? accessory.id : stableID(`slot:${uuid}:day:${day.order ?? dayIndex}:accessory:${slotIndex}`),
+        order: Number.isInteger(accessory.order) ? accessory.order : slotIndex,
+        targetSeconds: Number.isInteger(accessory.targetSeconds) ? accessory.targetSeconds : 30,
+        durationStepSeconds: Number.isInteger(accessory.durationStepSeconds) ? accessory.durationStepSeconds : 5,
+      })),
+    })),
+  };
+};
 const normalizeGym = (g) => ({ ...g, id: isPortableUUID(g.id) ? g.id : stableID(`gym:${g.name}`) });
+const hasPortableProgramSlots = (program) => (program.days || []).every((day) =>
+  [...(day.lifts || []), ...(day.accessories || [])].every((slot) => isPortableUUID(slot.id)));
 const normalizeSession = (session) => ({
   ...session,
   exercises: (session.exercises || []).map((exercise) => ({
@@ -166,6 +188,7 @@ function defaultSettings() {
     rest: { mainCompoundSeconds: 300, olympicSeconds: 240, mainUpperSeconds: 180, secondarySeconds: 180, accessorySeconds: 90 },
     autoStartRest: false, // manual start by default — auto lies if you rested first
     haptics: true,
+    gymTagFirstLaunchOfDay: false,
     // Fresh installs seed a stamp-free library — nothing to migrate (see
     // RETIRED_REST_STAMPS). Absent on pre-bucket stores, so they get the
     // one-shot clear in syncLibrary.
@@ -240,7 +263,7 @@ export const Programs = {
   async all() {
     const all = await getAll("programs");
     const normalized = all.map(normalizeProgram);
-    await Promise.all(normalized.filter((p, i) => p.uuid !== all[i].uuid).map((p) => put("programs", p)));
+    await Promise.all(normalized.filter((p, i) => p.uuid !== all[i].uuid || !hasPortableProgramSlots(all[i])).map((p) => put("programs", p)));
     return normalized;
   },
   get: (id) => get("programs", id),
@@ -365,6 +388,7 @@ export async function exportBundle() {
         name: e.exerciseName, notes: e.notes || "",
         phase: e.phase ? C.phaseLabel(e.phase) : null,
         role: e.programRole || null,
+        programSlotId: e.programSlotId || null,
         barId: e.barId || null,
         plannedWeightLb: e.plannedWeightLb ?? null, plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
         sets: (e.sets || []).map((x) => ({
@@ -391,7 +415,9 @@ export async function exportBundle() {
       days: (p.days || []).map((d) => ({
         name: d.name, order: d.order,
         lifts: (d.lifts || []).map((l) => ({
-          exerciseName: l.exerciseName, role: l.role, baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb,
+          id: l.id, exerciseName: l.exerciseName, role: l.role, order: l.order ?? 0,
+          prescription: l.prescription || "automatic", warmupPolicy: l.warmupPolicy || "automatic",
+          baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb,
           stallCount: l.stallCount || 0, lastIncrementLb: l.lastIncrementLb || 0,
           // Mid-cycle backup: the week-3 Peak stashes a pending result that is
           // applied at rollover — losing it turns the next rollover into a stall.
@@ -401,7 +427,7 @@ export async function exportBundle() {
           // marker-free exports (and the synthetic fixture) stay byte-stable.
           ...(l.revertToExerciseName ? { revertToExerciseName: l.revertToExerciseName } : {}),
         })),
-        accessories: (d.accessories || []).map((a) => ({ exerciseName: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
+        accessories: (d.accessories || []).map((a) => ({ id: a.id, exerciseName: a.exerciseName, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
       })),
     })),
     tracks, gyms,
@@ -477,7 +503,8 @@ function normalizeSettings(s) {
   };
   Object.keys(flat).forEach((k) => flat[k] === undefined && delete flat[k]);
   const rest = { ...C.REST_DEFAULTS, ...flat, ...(s.rest || {}) };
-  return { ...s, rest, accessoryRestSeconds: rest.accessorySeconds };
+  return { ...s, rest, accessoryRestSeconds: rest.accessorySeconds,
+    gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay === true };
 }
 
 const BACKUP_ENUMS = {
@@ -491,6 +518,8 @@ const BACKUP_ENUMS = {
   categories: ["Main", "Accessory", "Conditioning"],
   exerciseTypes: ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"],
   focuses: ["strength", "hypertrophy", "maintain"], modes: ["cycle", "linear"],
+  prescriptions: ["automatic", "wave", "secondary", "hypertrophy", "technique"],
+  warmupPolicies: ["automatic", "full", "short", "none"],
   milestoneKinds: ["heaviestSet", "volumePR", "firstScheme", "programNote"],
 };
 
@@ -570,6 +599,7 @@ export function validateBackup(bundle) {
     each(array(session, "exercises", `${path}.exercises`), `${path}.exercises`, (exercise, exercisePath) => {
       textValue(exercise.name, `${exercisePath}.name`, true);
       enumValue(exercise.role, BACKUP_ENUMS.roles, `${exercisePath}.role`);
+      if (exercise.programSlotId != null) portableID(exercise.programSlotId, `${exercisePath}.programSlotId`);
       textValue(exercise.barId, `${exercisePath}.barId`);
       numberValue(exercise.plannedWeightLb, `${exercisePath}.plannedWeightLb`, { min: 0 });
       numberValue(exercise.plannedSets, `${exercisePath}.plannedSets`, { integer: true, min: 0 });
@@ -625,19 +655,27 @@ export function validateBackup(bundle) {
     each(days, `${path}.days`, (day, dayPath) => {
       textValue(day.name, `${dayPath}.name`, true); numberValue(day.order, `${dayPath}.order`, { required: true, integer: true, min: 0 });
       each(array(day, "lifts", `${dayPath}.lifts`), `${dayPath}.lifts`, (lift, liftPath) => {
+        if (lift.id != null) portableID(lift.id, `${liftPath}.id`);
         textValue(lift.exerciseName, `${liftPath}.exerciseName`, true); enumValue(lift.role, BACKUP_ENUMS.liftRoles, `${liftPath}.role`, schemaVersion >= 1);
+        numberValue(lift.order, `${liftPath}.order`, { integer: true, min: 0 });
+        enumValue(lift.prescription, BACKUP_ENUMS.prescriptions, `${liftPath}.prescription`);
+        enumValue(lift.warmupPolicy, BACKUP_ENUMS.warmupPolicies, `${liftPath}.warmupPolicy`);
         for (const key of ["baseWeightLb", "estimatedMaxLb", "lastIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
         numberValue(lift.stallCount, `${liftPath}.stallCount`, { integer: true, min: 0 });
         if (lift.pending != null) object(lift.pending, `${liftPath}.pending`);
       });
       each(array(day, "accessories", `${dayPath}.accessories`), `${dayPath}.accessories`, (accessory, accessoryPath) => {
+        if (accessory.id != null) portableID(accessory.id, `${accessoryPath}.id`);
         textValue(accessory.exerciseName, `${accessoryPath}.exerciseName`, true);
         for (const key of ["sets", "minReps", "maxReps", "currentReps", "stallCount"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { integer: true, min: 0 });
+        for (const key of ["order", "targetSeconds", "durationStepSeconds"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { integer: true, min: 0 });
         for (const key of ["weightLb", "incrementLb"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { min: 0 });
       });
     });
     if (days?.length && program.nextDayIndex != null && program.nextDayIndex >= days.length) invalid(`${path}.nextDayIndex`, "outside the program's day list");
     if (days) unique(days, (day) => day.order, `${path}.days`);
+    const slots = (days || []).flatMap((day) => [...(day.lifts || []), ...(day.accessories || [])]).filter((slot) => slot.id != null);
+    unique(slots, (slot) => slot.id, `${path}.slotIds`);
   });
   if (programs) unique(programs, (program) => program.name.trim(), "programs");
   if (schemaVersion >= 2 && programs) unique(programs, (program) => program.id, "programs.id");
@@ -710,7 +748,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   if (createCheckpoint) await Checkpoints.create("before-import");
 
   const writes = new Map(); // store name -> records to clear+put
-  const importedPrograms = bundle.programs?.map(({ id, ...program }) => ({
+  const importedPrograms = bundle.programs?.map(({ id, ...program }) => normalizeProgram({
     ...program,
     uuid: typeof id === "string" ? id : stableID(`program:${program.name}`),
   }));
@@ -739,7 +777,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       programTag: importProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, notes: e.notes || "", phase: recoverPhase(e.phase),
-        programRole: e.role || null, barId: e.barId || null,
+        programRole: e.role || null, programSlotId: e.programSlotId || null, barId: e.barId || null,
         plannedWeightLb: e.plannedWeightLb ?? null, plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
         sets: (e.sets || []).map((x, si) => ({
           order: si, weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,

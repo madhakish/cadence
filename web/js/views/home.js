@@ -6,6 +6,17 @@ import { barbellSVG, dumbbellSVG } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Protein, Programs, Exercises, iso, topSet } from "../db.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession } from "./session.js";
 
+const orderedSlots = (slots = [], roleAwareLegacy = false) => {
+  const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
+  return [...slots].sort((a, b) => {
+    if (allLegacy && roleAwareLegacy) {
+      const role = (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1);
+      if (role) return role;
+    }
+    return (a.order ?? 0) - (b.order ?? 0) || a.exerciseName.localeCompare(b.exerciseName);
+  });
+};
+
 export async function render(host) {
   const [open, tracks, gym, settings, proteinTotal, program, allExercises, completed] = await Promise.all([
     Sessions.open(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(), Programs.active(), Exercises.all(), Sessions.completed(),
@@ -27,6 +38,21 @@ export async function render(host) {
   const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
   const root = ui.h("div");
 
+  // Arrival is the first workflow, even though it lasts only seconds: this is
+  // the keychain replacement and must beat all training content to the screen.
+  root.append(ui.h("div", { class: "card gym-tag-hero" },
+    ui.h("button", { class: "btn primary wide", style: { minHeight: "58px", justifyContent: "space-between" },
+      onClick: () => showGymTag(gym) },
+      ui.h("span", { text: "▤  Gym Tag" }),
+      ui.h("span", { class: "sub", text: gym && gym.barcodeImage ? "Ready to scan ›" : "Add barcode ›" }))));
+
+  const todayKey = new Date().toLocaleDateString("en-CA");
+  if (settings.gymTagFirstLaunchOfDay && gym?.barcodeImage
+      && localStorage.getItem("cadenceGymTagAutoDay") !== todayKey) {
+    localStorage.setItem("cadenceGymTagAutoDay", todayKey);
+    queueMicrotask(() => showGymTag(gym));
+  }
+
   if (open) {
     root.append(ui.h("div", { class: "card" },
       ui.h("button", { class: "btn primary wide", text: `▶︎ Resume session — ${ui.fmtDate(open.date)}`, onClick: () => openSession(open.id) })));
@@ -47,10 +73,11 @@ export async function render(host) {
           ui.wave(program.currentWeek),
           ui.h("span", { class: "sub accent", text: phase.name }),
           ui.h("span", { class: "chev" }))));
-    const lifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
+    const lifts = orderedSlots(day.lifts, true);
     for (const l of lifts) {
-      const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
       const ex = exMap.get(l.exerciseName);
+      const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+        program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic");
       // Preview the same snapped weight the session will store (secondary barbell lifts).
       plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb);
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
@@ -96,12 +123,6 @@ export async function render(host) {
   root.append(list);
   root.append(ui.h("button", { class: "btn ghost wide", text: "Blank session", onClick: async () => openSession(await createBlankSession()) }));
 
-  // Gym tag
-  root.append(ui.h("div", { class: "section-title", text: "Gym" }));
-  root.append(ui.h("div", { class: "card" },
-    ui.h("button", { class: "btn wide", text: "🎫 Gym tag", onClick: () => showGymTag(gym) }),
-    ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: gym && gym.barcodeImage ? "Full brightness, ready to scan." : "Add a barcode photo in Settings → Gyms." })));
-
   // Protein
   root.append(ui.h("div", { class: "section-title", text: "Protein" }));
   const total = ui.h("span", { class: "big mono", text: `${Math.round(proteinTotal)} g` });
@@ -127,8 +148,11 @@ export async function render(host) {
 }
 
 function showGymTag(gym) {
+  let wakeLock = null;
+  navigator.wakeLock?.request("screen").then((lock) => { wakeLock = lock; }).catch(() => {});
   ui.sheet({
     title: gym ? gym.name : "Gym tag",
+    onClose: () => { wakeLock?.release().catch(() => {}); },
     build: (c) => {
       if (gym && gym.barcodeImage) {
         c.append(ui.h("img", { class: "gym-img", src: gym.barcodeImage, alt: "Membership barcode" }));
@@ -158,11 +182,12 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
 
       body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
       const liftCard = ui.h("div", { class: "card" });
-      const lifts = [...day.lifts].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
+      const lifts = orderedSlots(day.lifts, true);
       if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No wave lifts this day." }));
       for (const l of lifts) {
-        const plan = C.planFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 }, program.roundingLb);
         const ex = exMap.get(l.exerciseName);
+        const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+          program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic");
         plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb);
         liftCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
           ui.h("div", { class: "lead" },
@@ -184,10 +209,13 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
       if (day.accessories.length) {
         body.append(ui.h("div", { class: "section-title", text: "Accessories" }));
         const accCard = ui.h("div", { class: "card" });
-        for (const a of day.accessories) {
+        for (const a of orderedSlots(day.accessories)) {
+          const isTimed = exMap.get(a.exerciseName)?.type === "timed";
           accCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
             ui.h("span", { class: "title", text: a.exerciseName }),
-            ui.h("span", { class: "sub mono", text: a.weightLb > 0 ? `${a.sets}×${a.currentReps} @ ${ui.fmtWeight(a.weightLb)}` : `${a.sets}×${a.currentReps}` })));
+            ui.h("span", { class: "sub mono", text: isTimed
+              ? `${a.sets} × ${C.cardioDurationLabel(a.targetSeconds || 30)}`
+              : (a.weightLb > 0 ? `${a.sets}×${a.currentReps} @ ${ui.fmtWeight(a.weightLb)}` : `${a.sets}×${a.currentReps}`) })));
         }
         body.append(accCard);
       }

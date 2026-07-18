@@ -1,9 +1,8 @@
 // Pre-programmed starting points for "+ Add program" (the style picker).
-// Each template is DATA: a focus, days of lifts/accessories, and the handful
-// of library exercises it needs that the seed doesn't provide (seeded names —
-// Back Squat, Clean & Jerk, KB Swing… — are guaranteed by ensureSeeded and are
-// deliberately NOT redeclared here). Baselines start deliberately light: the
-// docs walk through setting rotation-1 bases before the first session.
+// Each template is DATA: a focus, days of lifts/accessories, and compatibility
+// definitions that may now also exist in the expanded seed. Instantiation
+// never overwrites an existing library record. Baselines start deliberately
+// light: the docs walk through setting rotation-1 bases before the first session.
 //
 // Ported 1:1 from CadenceCore/Sources/CadenceCore/ProgramTemplateData.swift;
 // parity is ENFORCED against the shared fixture

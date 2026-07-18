@@ -43,16 +43,17 @@ enum ProgramTemplates {
             let day = ProgramDay(name: d.name, order: i)
             day.program = program
             context.insert(day)   // insert before appending children (Seeder pattern)
-            for l in d.lifts {
+            for (slotOrder, l) in d.lifts.enumerated() {
                 let lift = ProgramLift(exerciseName: l.exercise,
                                        role: LiftRole(rawValue: l.role) ?? .main,
+                                       order: slotOrder,
                                        baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb)
                 lift.day = day
                 context.insert(lift)
                 day.lifts.append(lift)
             }
-            for a in d.accessories {
-                let acc = ProgramAccessory(exerciseName: a.exercise, sets: a.sets, minReps: a.minReps,
+            for (slotOrder, a) in d.accessories.enumerated() {
+                let acc = ProgramAccessory(exerciseName: a.exercise, order: slotOrder, sets: a.sets, minReps: a.minReps,
                                            maxReps: a.maxReps, currentReps: a.minReps,
                                            weightLb: a.weightLb, incrementLb: a.incrementLb)
                 acc.day = day

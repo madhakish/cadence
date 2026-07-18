@@ -2,9 +2,14 @@ import SwiftUI
 import SwiftData
 
 struct RootView: View {
+    private static let gymTagLastAutoDayKey = "gymTagLastAutoDay"
+
     @Binding var selection: Int
     @Environment(\.scenePhase) private var scenePhase
+    @Query private var settingsList: [AppSettings]
+    @Query private var gyms: [Gym]
     @State private var showPlateCalc = false
+    @State private var showGymTag = false
     @State private var restTimer = RestTimer()
     @State private var workoutClock = WorkoutClock()
 
@@ -45,16 +50,44 @@ struct RootView: View {
         .sheet(isPresented: $showPlateCalc) {
             NavigationStack { PlateCalculatorView() }
         }
+        .fullScreenCover(isPresented: $showGymTag) {
+            GymCardView(gym: gyms.first { $0.isDefault } ?? gyms.first)
+        }
         .environment(restTimer)
         .environment(workoutClock)
         .task {
-            _ = await NotificationService.requestAuthorization()
+            openPendingGymTagIfNeeded()
+            autoPresentGymTagIfNeeded()
+        }
+        .onOpenURL { url in
+            guard url.scheme == "cadence", url.host == "gym-tag" else { return }
+            showGymTag = true
         }
         .onChange(of: scenePhase) { _, phase in
             // The user may have paused/resumed/extended/skipped the rest from
             // the Lock Screen / Action Button while we were backgrounded —
             // adopt the activity's state.
-            if phase == .active { restTimer.reconcileFromActivity() }
+            if phase == .active {
+                restTimer.reconcileFromActivity()
+                openPendingGymTagIfNeeded()
+                autoPresentGymTagIfNeeded()
+            }
         }
+    }
+
+    private func openPendingGymTagIfNeeded() {
+        guard UserDefaults.standard.bool(forKey: OpenGymTagIntent.pendingKey) else { return }
+        UserDefaults.standard.set(false, forKey: OpenGymTagIntent.pendingKey)
+        showGymTag = true
+    }
+
+    private func autoPresentGymTagIfNeeded() {
+        guard settingsList.first?.gymTagFirstLaunchOfDay == true,
+              gyms.contains(where: { $0.barcodeImageData != nil }) else { return }
+        let day = Calendar.current.startOfDay(for: .now).timeIntervalSince1970
+        let defaults = UserDefaults.standard
+        guard defaults.double(forKey: Self.gymTagLastAutoDayKey) != day else { return }
+        defaults.set(day, forKey: Self.gymTagLastAutoDayKey)
+        showGymTag = true
     }
 }

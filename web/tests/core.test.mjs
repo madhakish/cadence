@@ -150,6 +150,26 @@ r = C.warmupRamp(65);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45, 55]), "ramp 65");
 r = C.warmupRamp(45);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45]) && r[0].reps === 10, "ramp 45 bar only");
+eq(C.programLoadStep(10, "dumbbell"), 5, "dumbbell program step capped per hand");
+eq(C.programLoadStep(2.5, "dumbbell"), 2.5, "fine dumbbell step preserved");
+eq(C.programLoadStep(10, "barbell"), 10, "barbell program step preserved");
+eq(C.programPlanFor({ cycleNumber: 2, baseWeightLb: 55, nextPhase: 3, incrementLb: 0 }, 5, "dumbbell").weightLb,
+  60, "DB Peak stays within one 5 lb rack jump of its volume base");
+eq(C.programPlanFor({ cycleNumber: 2, baseWeightLb: 55, nextPhase: 3, incrementLb: 0 }, 5, "barbell").weightLb,
+  65, "barbell Peak retains the normal wave percentage");
+eq(C.resolvedPrescriptionStyle("automatic", "press", "main", "strength"), "wave", "automatic main strength uses wave");
+eq(C.resolvedPrescriptionStyle("automatic", "hinge", "complementary", "strength"), "secondary", "automatic complementary uses lower-fatigue strategy");
+eq(C.resolvedPrescriptionStyle("automatic", "press", "main", "hypertrophy"), "hypertrophy", "focus drives hypertrophy prescription");
+eq(C.resolvedPrescriptionStyle("automatic", "olympic", "main", "strength"), "technique", "Olympic lift prioritizes technique");
+let rolePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 0 }, 5,
+  "barbell", "hinge", "complementary", "strength", "automatic");
+eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x5@200", "complementary volume avoids a second 5x5");
+let techniquePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 100, nextPhase: 3, incrementLb: 0 }, 5,
+  "barbell", "olympic", "main", "strength", "automatic");
+eq(`${techniquePlan.sets}x${techniquePlan.reps}@${techniquePlan.weightLb}`, "6x1@110", "Olympic peak is crisp singles");
+r = C.dumbbellWarmupRamp(60);
+ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([25, 35, 50]), "dumbbell ramp weights");
+ok(JSON.stringify(r.map((x) => x.reps)) === JSON.stringify([10, 5, 2]), "dumbbell ramp reps");
 for (let w = 50; w <= 500; w += 7.5) {
   for (const set of C.warmupRamp(w).slice(1)) ok(set.weightLb < w, `ramp ${w} below working`);
 }

@@ -9,6 +9,7 @@ struct CadenceWidgetsBundle: WidgetBundle {
         WorkoutActivityWidget()
         if #available(iOS 18.0, *) {
             RestControl()
+            GymTagControl()
         }
     }
 }
