@@ -911,7 +911,7 @@ private struct TimedSetSheet: View {
     @Bindable var set: SetEntry
     let onDelete: () -> Void
 
-    private var seconds: Int { set.durationSeconds ?? 0 }
+    private var seconds: Int { self.set.durationSeconds ?? 0 }
 
     var body: some View {
         NavigationStack {
