@@ -4,7 +4,7 @@ import * as C from "../core.js";
 import { Sessions, Checkins, iso } from "../db.js";
 import { BODY_SITES, watchNote, COPY } from "../constants.js";
 
-let site = "Right knee";
+let site = "Knee";
 
 export async function render(host) {
   const [sessions, checkins] = await Promise.all([Sessions.completed(), Checkins.all()]);
@@ -12,7 +12,7 @@ export async function render(host) {
   root.append(ui.seg(BODY_SITES, site, (s) => { site = s; render(host); }));
 
   const siteCheckins = checkins.filter((c) => c.site === site).sort((a, b) => new Date(b.date) - new Date(a.date));
-  if (site === "Right knee" && siteCheckins[0] && /swell/i.test(siteCheckins[0].response)) {
+  if (site === "Knee" && siteCheckins[0] && /flag|pain|swell|off/i.test(siteCheckins[0].response)) {
     root.append(ui.h("div", { class: "card", style: { background: "rgba(255,204,0,0.16)" } },
       ui.h("span", { class: "warn", text: `✋ ${COPY.swelling}` })));
   }
@@ -25,13 +25,13 @@ export async function render(host) {
     for (const e of s.exercises || []) {
       for (const x of e.sets || []) {
         if (x.bodyFlagSite === site) {
-          items.push({ date: s.date, title: e.exerciseName, detail: `${C.trim(x.weightLb)}×${x.reps}${x.bodyFlagNote ? ` — ${x.bodyFlagNote}` : ""}`, hard: false });
+          items.push({ date: s.date, title: e.exerciseName, detail: `${ui.fmtWeight(x.weightLb)}×${x.reps}${x.bodyFlagNote ? ` — ${x.bodyFlagNote}` : ""}`, hard: false });
         }
       }
     }
   }
   for (const c of siteCheckins) {
-    items.push({ date: c.date, title: `Check-in: ${c.response}`, detail: c.note || "", hard: /swell/i.test(c.response) });
+    items.push({ date: c.date, title: `Check-in: ${c.response}`, detail: c.note || "", hard: /flag|pain|swell|off/i.test(c.response) });
   }
   items.sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -60,7 +60,7 @@ export async function render(host) {
         const save = async (response) => { await Checkins.add({ date: iso(new Date()), site, response, note: note.value || "" }); api.close(); ui.nav.refresh(); };
         const note = ui.h("input", { type: "text", placeholder: "Note (optional)" });
         c.append(ui.h("button", { class: "btn wide", style: { marginTop: "6px", color: "var(--good)" }, text: `✓ ${COPY.noSwelling}`, onClick: () => save(COPY.noSwelling) }));
-        c.append(ui.h("button", { class: "btn wide", style: { marginTop: "8px", color: "var(--hard)" }, text: site === "Right knee" ? "✋ Swelling — hard stop" : "✋ Something's off", onClick: () => save(site === "Right knee" ? "Swelling" : "Off") }));
+        c.append(ui.h("button", { class: "btn wide", style: { marginTop: "8px", color: "var(--hard)" }, text: "✋ Something's off", onClick: () => save("Flagged") }));
         c.append(ui.field("Note", note));
       },
     });

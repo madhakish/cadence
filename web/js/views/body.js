@@ -15,7 +15,8 @@ export async function render(host) {
   root.append(ui.h("div", { class: "section-title", text: "Bodyweight" }));
   const bw = ui.h("div", { class: "card" });
   if (weights.length > 1) {
-    bw.append(lineChart(weights.map((w) => ({ t: new Date(w.date).getTime(), y: w.weightLb, ann: w.milestoneLabel || null })), { fmtY: (v) => String(Math.round(v)) }));
+    const display = (lb) => C.primaryUnit(settings.unitDisplay) === "kg" ? C.kgFromLb(lb) : lb;
+    bw.append(lineChart(weights.map((w) => ({ t: new Date(w.date).getTime(), y: display(w.weightLb), ann: w.milestoneLabel || null })), { fmtY: (v) => C.trim(v) }));
   }
   const latest = weights[weights.length - 1];
   if (latest) {
@@ -66,16 +67,17 @@ function logWeight() {
   ui.sheet({
     title: "Log weight",
     build: (c, api) => {
-      const w = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", placeholder: "lb" });
+      const unit = C.primaryUnit(ui.prefs.unitDisplay);
+      const w = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", placeholder: unit });
       const bf = ui.h("input", { type: "number", inputmode: "decimal", placeholder: "optional" });
-      const ms = ui.h("input", { type: "text", placeholder: "optional, e.g. Discharge" });
-      c.append(ui.field("Weight (lb)", w), ui.field("Body fat %", bf), ui.field("Milestone label", ms));
+      const ms = ui.h("input", { type: "text", placeholder: "optional annotation" });
+      c.append(ui.field(`Weight (${unit})`, w), ui.field("Body fat %", bf), ui.field("Milestone label", ms));
       c.append(ui.h("button", {
         class: "btn primary wide", style: { marginTop: "10px" }, text: "Save",
         onClick: async () => {
           const val = parseFloat(w.value);
           if (!(val > 0)) { ui.toast("Enter a weight."); return; }
-          await Bodyweight.add({ date: iso(new Date()), weightLb: val, bodyFatPercent: parseFloat(bf.value) || null, milestoneLabel: ms.value || null });
+          await Bodyweight.add({ date: iso(new Date()), weightLb: C.toLb(val, unit), bodyFatPercent: parseFloat(bf.value) || null, milestoneLabel: ms.value || null });
           api.close(); ui.nav.refresh();
         },
       }));

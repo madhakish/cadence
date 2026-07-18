@@ -25,7 +25,7 @@ enum NotificationService {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-timer"])
     }
 
-    /// Next morning at 08:00 after a running session: "Right knee — any swelling?"
+    /// Next morning at 08:00 after a running session: a generic knee check-in.
     static func scheduleKneeCheckIn(afterSessionOn sessionDate: Date) {
         let calendar = Calendar.current
         guard let nextDay = calendar.date(byAdding: .day, value: 1, to: sessionDate) else { return }
@@ -33,8 +33,8 @@ enum NotificationService {
         comps.hour = 8
 
         let content = UNMutableNotificationContent()
-        content.title = "Right knee — any swelling?"
-        content.body = "Swelling = hard stop on running. Log it either way."
+        content.title = "Knee check-in after running"
+        content.body = "How does it feel this morning? Log a quick signal either way."
         content.sound = .default
 
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)

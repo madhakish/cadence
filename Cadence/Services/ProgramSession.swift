@@ -27,11 +27,13 @@ enum ProgramSession {
         // match the current plan, so an edited/moved day builds fresh.
         // (Predicate can't read a captured property, so filter in Swift.)
         let programName = program.name
+        let programID = program.id
         let openDescriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { !$0.isCompleted && $0.programName == programName }
+            predicate: #Predicate { !$0.isCompleted }
         )
         let dayNames = day.orderedLifts.map(\.exerciseName) + day.orderedAccessories.map(\.exerciseName)
         if let existing = try context.fetch(openDescriptor).first(where: { s in
+            (s.programID == programID || (s.programID == nil && s.programName == programName)) &&
             ProgramProgression.canResumeSession(
                 // Missing tag fields → -1 sentinel (never equals a real
                 // 1-based cycle/week/day), so ambiguously-tagged legacy
@@ -44,12 +46,15 @@ enum ProgramSession {
                 dayPlanNames: dayNames)
         }) { return existing }
 
-        let defaultGym = try context.fetch(FetchDescriptor<Gym>()).first(where: { $0.isDefault })
-        let session = WorkoutSession(gymName: defaultGym?.name)
+        let gyms = try context.fetch(FetchDescriptor<Gym>())
+        let defaultGym = gyms.first(where: { $0.isDefault }) ?? gyms.first
+        let entryUnit = try context.fetch(FetchDescriptor<AppSettings>()).first?.unitDisplay.primaryUnit ?? .lb
+        let session = WorkoutSession(gymID: defaultGym?.id, gymName: defaultGym?.name)
         let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
         func neat(_ weightLb: Double, _ exercise: Exercise?, isMain: Bool) -> Double {
             neatWeight(weightLb, isBarbell: exercise?.type == .barbell, isMain: isMain, barLb: barLb, stepLb: program.roundingLb)
         }
+        session.programID = program.id
         session.programName = program.name
         session.programCycleNumber = program.cycleNumber
         session.programWeek = program.currentWeek
@@ -80,12 +85,12 @@ enum ProgramSession {
             var so = 0
             if exercise.type == .barbell {
                 for wu in WarmupRamp.ramp(workingLb: weightLb, barLb: barLb, roundingLb: program.roundingLb) {
-                    insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true, perSide: false, context: context)
+                    insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true, perSide: false, enteredUnit: entryUnit, context: context)
                     so += 1
                 }
             }
             for _ in 0..<plan.sets {
-                insertSet(entry, order: so, weight: weightLb, reps: plan.reps, warmup: false, perSide: exercise.isUnilateral, context: context)
+                insertSet(entry, order: so, weight: weightLb, reps: plan.reps, warmup: false, perSide: exercise.isUnilateral, enteredUnit: entryUnit, context: context)
                 so += 1
             }
             order += 1
@@ -103,7 +108,7 @@ enum ProgramSession {
             context.insert(entry)
             session.exercises.append(entry)
             for i in 0..<acc.sets {
-                insertSet(entry, order: i, weight: weightLb, reps: acc.currentReps, warmup: false, perSide: exercise.isUnilateral, context: context)
+                insertSet(entry, order: i, weight: weightLb, reps: acc.currentReps, warmup: false, perSide: exercise.isUnilateral, enteredUnit: entryUnit, context: context)
             }
             order += 1
         }
@@ -118,8 +123,8 @@ enum ProgramSession {
         (!isMain && isBarbell) ? Weight.barLoadable(weightLb, barLb: barLb, stepLb: stepLb) : weightLb
     }
 
-    private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool, perSide: Bool, context: ModelContext) {
-        let set = SetEntry(order: order, weightLb: weight, reps: reps, isWarmup: warmup, isPerSide: perSide)
+    private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool, perSide: Bool, enteredUnit: WeightUnit, context: ModelContext) {
+        let set = SetEntry(order: order, weightLb: weight, reps: reps, isWarmup: warmup, isPerSide: perSide, enteredUnit: enteredUnit)
         set.sessionExercise = entry
         context.insert(set)
         entry.sets.append(set)

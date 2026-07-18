@@ -94,8 +94,8 @@ extension Color {
 enum Copy {
     static let sessionDone = "Bank it."
     static let stoppedEarly = "Clean reps over rep count."
-    static let noSwelling = "Clear. Carry on."
-    static let swelling = "Hard stop on running. Let it settle."
+    static let noSwelling = "All clear."
+    static let swelling = "Pause and reassess before continuing."
     static let restOver = "Rest over."
     static let offTarget = "Closest load is off target."
     static let emptyHistory = "Nothing logged yet."

@@ -3,15 +3,15 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { barbellSVG } from "../barbell.js";
-import { Gyms } from "../db.js";
+import { Gyms, Settings } from "../db.js";
 
 export async function openPlateCalculator() {
-  const gyms = await Gyms.all();
+  const [gyms, settings] = await Promise.all([Gyms.all(), Settings.get()]);
   let gym = gyms.find((g) => g.isDefault) || gyms[0] || null;
   let mode = "target";
   let bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
-  let unit = "lb";
-  let targetVal = 135;
+  let unit = C.primaryUnit(settings.unitDisplay);
+  let targetVal = unit === "kg" ? C.kgFromLb(135) : 135;
   const counts = {}; // plateId -> count, for reverse mode
 
   const availablePlates = () => {
@@ -68,8 +68,9 @@ export async function openPlateCalculator() {
           out.append(ui.h("div", { class: "big mono", text: C.both(sol.totalLb) }));
           out.append(ui.h("div", { class: "sub", text: `on ${C.barLabel(bar)}` }));
           if (sol.isOffTarget) {
+            const deviation = unit === "kg" ? C.kgFromLb(Math.abs(sol.deviationLb)) : Math.abs(sol.deviationLb);
             out.append(ui.h("div", { class: "card", style: { background: "rgba(255,204,0,0.16)", marginTop: "10px" } },
-              ui.h("span", { class: "warn", text: `⚠︎ Closest load is off target by ${C.trim(Math.abs(sol.deviationLb))} lb.` })));
+              ui.h("span", { class: "warn", text: `⚠︎ Closest load is off target by ${C.trim(deviation)} ${unit}.` })));
           }
         }
       }

@@ -181,7 +181,7 @@ struct SettingsView: View {
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(track.exerciseName)
-                                Text("+\(Weight.trim(track.incrementLb)) lb per \(track.mode == .cycle ? "cycle" : "session") · next: \(track.suggestion.label)")
+                                Text("+\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: track.incrementLb)) per \(track.mode == .cycle ? "cycle" : "session") · next: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -407,6 +407,8 @@ struct GymEditorView: View {
 struct TrackEditorView: View {
     @Environment(\.modelContext) private var context
     @Bindable var track: LiftTrack
+    @Query private var settingsList: [AppSettings]
+    private var unitDisplay: UnitDisplay { settingsList.first?.unitDisplay ?? .lbPrimary }
 
     var body: some View {
         Form {
@@ -419,11 +421,11 @@ struct TrackEditorView: View {
                     Text("Linear").tag(TrackMode.linear)
                 }
                 Stepper(
-                    "Increment: +\(Weight.trim(track.incrementLb)) lb",
+                    "Increment: +\(unitDisplay.format(lb: track.incrementLb))",
                     value: $track.incrementLb, in: 2.5...25, step: 2.5
                 )
                 Stepper(
-                    "\(track.mode == .cycle ? "Rotation 1 weight" : "Current weight"): \(Weight.trim(track.baseWeightLb)) lb",
+                    "\(track.mode == .cycle ? "Rotation 1 weight" : "Current weight"): \(unitDisplay.format(lb: track.baseWeightLb))",
                     value: $track.baseWeightLb, in: 0...1000, step: 5
                 )
                 if track.mode == .cycle {
@@ -438,7 +440,7 @@ struct TrackEditorView: View {
                 }
             }
             Section("Next suggestion") {
-                Text(track.suggestion.label)
+                Text("\(unitDisplay.format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
                     .font(.headline)
                     .foregroundStyle(Theme.accent)
             }
@@ -454,6 +456,7 @@ struct ProgramEditorView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var allPrograms: [Program]
+    @Query private var settingsList: [AppSettings]
     @Bindable var program: Program
 
     var body: some View {
@@ -467,7 +470,7 @@ struct ProgramEditorView: View {
                     Text("Hypertrophy").tag(TrainingFocus.hypertrophy)
                     Text("Maintain").tag(TrainingFocus.maintain)
                 }
-                Stepper("Rounding: \(Weight.trim(program.roundingLb)) lb", value: $program.roundingLb, in: 2.5...10, step: 2.5)
+                Stepper("Rounding: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: program.roundingLb))", value: $program.roundingLb, in: 2.5...10, step: 2.5)
                 // Activation is exclusive — only one program drives Today.
                 Toggle("Active", isOn: Binding(get: { program.isActive }, set: { on in
                     if on { for p in allPrograms { p.isActive = (p === program) } } else { program.isActive = false }
@@ -627,6 +630,7 @@ struct ProgramDayEditorView: View {
 }
 
 private struct ProgramLiftRow: View {
+    @Query private var settingsList: [AppSettings]
     @Bindable var lift: ProgramLift
     let step: Double
     let onRemove: () -> Void
@@ -654,13 +658,14 @@ private struct ProgramLiftRow: View {
                 Text("Complementary").tag(LiftRole.complementary)
             }
             .pickerStyle(.segmented)
-            Stepper("Rotation-1 base: \(Weight.trim(lift.baseWeightLb)) lb", value: $lift.baseWeightLb, in: 0...1000, step: step)
-            Stepper("Est. 1RM: \(Weight.trim(lift.estimatedMaxLb)) lb", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
+            Stepper("Rotation-1 base: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))", value: $lift.baseWeightLb, in: 0...1000, step: step)
+            Stepper("Est. 1RM: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.estimatedMaxLb))", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
         }
     }
 }
 
 private struct ProgramAccessoryRow: View {
+    @Query private var settingsList: [AppSettings]
     @Bindable var accessory: ProgramAccessory
     let onRemove: () -> Void
 
@@ -680,11 +685,11 @@ private struct ProgramAccessoryRow: View {
                 .buttonStyle(.borderless) // scoped to the icon, not the whole row
                 .accessibilityLabel("Remove \(accessory.exerciseName)")
             }
-            Stepper("Weight: \(Weight.trim(accessory.weightLb)) lb", value: $accessory.weightLb, in: 0...500, step: 2.5)
+            Stepper("Weight: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: accessory.weightLb))", value: $accessory.weightLb, in: 0...500, step: 2.5)
             Stepper("Sets: \(accessory.sets)", value: $accessory.sets, in: 1...8)
             Stepper("Min reps: \(accessory.minReps)", value: $accessory.minReps, in: 1...20)
             Stepper("Max reps: \(accessory.maxReps)", value: $accessory.maxReps, in: 1...30)
-            Stepper("Load step: +\(Weight.trim(accessory.incrementLb)) lb (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
+            Stepper("Load step: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
         }
     }
 }

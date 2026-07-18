@@ -1,11 +1,12 @@
 // Generates web/tests/fixtures/synthetic-backup.json — a broad-coverage
-// synthetic dataset for exercising EVERY feature: three programs (one per
+// fictional dataset for exercising EVERY feature: three programs (one per
 // training focus) in different wave states including mid-peak pending grades,
 // stalls and an auto-deload, standalone tracks in both modes at every cycle
 // phase, ~100 completed sessions touching every library exercise, all set
 // flags, drop-loads, kg-entered sets, per-side work, conditioning
 // duration/distance, bodyweight sets, body signals, bodyweight/protein/
-// check-in logs, and a second (kg-plate) gym.
+// check-in logs, and a second (kg-plate) gym. None of the values originate
+// from a user's training, health history, or exported app data.
 //
 // The output is a normal Cadence backup bundle, so the SAME file restores
 // into the web app (Settings → Import) and the iOS app (ImportService) —
@@ -29,6 +30,10 @@ global.Node = dom.window.Node;
 const db = await import("../js/db.js");
 const C = await import("../js/core.js");
 const session = await import("../js/views/session.js");
+const completeAll = async (workout) => {
+  for (const exercise of workout.exercises || []) for (const set of exercise.sets || []) if (!set.isWarmup) set.status = "completed";
+  return session.completeSession(workout);
+};
 
 // ---- deterministic helpers ----
 function mulberry32(a) {
@@ -47,7 +52,7 @@ const day = (offset) => new Date(ANCHOR.getTime() + offset * 86400000);
 const workingSets = (s, name) =>
   (s.exercises.find((e) => e.exerciseName === name)?.sets ?? []).filter((x) => !x.isWarmup);
 const flagSets = (s, name, flag, n) =>
-  workingSets(s, name).slice(0, n).forEach((x) => { x.flags = [...(x.flags || []), flag]; });
+  workingSets(s, name).slice(0, n).forEach((x) => { x.flags = [flag, ...(x.flags || []).filter((f) => f === "stopped early")]; });
 
 // Bank one session of a program day (whatever day is next), backdated,
 // optionally mutated (flags/drops/signals) before completion so the adaptive
@@ -60,7 +65,7 @@ async function bankProgramDay(programId, date, mutate) {
   s.date = db.iso(date);
   if (mutate) mutate(s);
   await db.Sessions.save(s);
-  await session.completeSession(s);
+  await completeAll(s);
 }
 
 async function bankTrackSession(track, date) {
@@ -68,18 +73,18 @@ async function bankTrackSession(track, date) {
   const s = await db.Sessions.get(id);
   s.date = db.iso(date);
   await db.Sessions.save(s);
-  await session.completeSession(s);
+  await completeAll(s);
 }
 
 const mkSet = (order, w, r, o = {}) => ({
   order, weightLb: w, reps: r, isWarmup: !!o.warm, isPerSide: !!o.perSide,
-  enteredUnit: o.unit || "lb", flags: o.flags ? [...o.flags] : ["clean"],
+  enteredUnit: o.unit || "lb", status: "completed", flags: o.flags ? [...o.flags] : ["clean"],
   bodyFlagSite: o.site || null, bodyFlagNote: o.siteNote || null,
   durationSeconds: o.duration ?? null, distanceMiles: o.distance ?? null,
   autoregReason: o.drop || null,
 });
 
-// ---- 0. seed (library, Main Gym, 3 tracks, the strength program, real history) ----
+// ---- 0. seed the generic library and empty stores ----
 await db.ensureSeeded();
 const lib = await db.Exercises.all();
 
@@ -97,7 +102,25 @@ const acc = (exerciseName, weightLb, incrementLb = 5, sets = 3, minReps = 8, max
   ({ exerciseName, sets, minReps, maxReps, currentReps: minReps, weightLb, incrementLb, stallCount: 0 });
 
 await db.Programs.save({
-  name: "Push/Pull 3-Day", focus: "hypertrophy", cycleNumber: 1, currentWeek: 1,
+  name: "Fixture Strength 4-Day", focus: "strength", cycleNumber: 1, currentWeek: 1,
+  nextDayIndex: 0, roundingLb: 5, isActive: true,
+  days: [
+    { name: "Lower A", order: 0,
+      lifts: [cyc("Back Squat", "main", 100, 125), cyc("Deadlift", "complementary", 110, 140)],
+      accessories: [acc("Walking Lunges", 0, 0), acc("GHD Sit-up", 0, 0), acc("Plank", 0, 0)] },
+    { name: "Upper A", order: 1,
+      lifts: [cyc("Incline DB Press", "main", 30, 40), cyc("Single-arm DB Row", "complementary", 40, 55)],
+      accessories: [acc("Face Pulls", 25), acc("DB Curls", 20), acc("Band Pull-aparts", 0, 0)] },
+    { name: "Lower B", order: 2,
+      lifts: [cyc("Deadlift", "main", 120, 150), cyc("Back Squat", "complementary", 90, 125)],
+      accessories: [acc("KB Swing", 35), acc("Side Plank", 0, 0), acc("Walking Lunges", 0, 0)] },
+    { name: "Upper B", order: 3,
+      lifts: [cyc("Overhead DB Press", "main", 25, 35), cyc("Chest-supported Row", "complementary", 50, 65)],
+      accessories: [acc("Y-T-W Raises", 5), acc("DB Overhead Triceps Extension", 25), acc("Band External Rotation", 0, 0)] },
+  ],
+});
+await db.Programs.save({
+  name: "Fixture Push/Pull 3-Day", focus: "hypertrophy", cycleNumber: 1, currentWeek: 1,
   nextDayIndex: 0, roundingLb: 5, isActive: false,
   days: [
     { name: "Push", order: 0,
@@ -112,7 +135,7 @@ await db.Programs.save({
   ],
 });
 await db.Programs.save({
-  name: "Travel Maintain 2-Day", focus: "maintain", cycleNumber: 1, currentWeek: 1,
+  name: "Fixture Maintain 2-Day", focus: "maintain", cycleNumber: 1, currentWeek: 1,
   nextDayIndex: 0, roundingLb: 5, isActive: false,
   days: [
     { name: "Full A", order: 0,
@@ -128,6 +151,12 @@ const programs = await db.Programs.all();
 const strength = programs.find((p) => p.focus === "strength");
 const hyper = programs.find((p) => p.focus === "hypertrophy");
 const maintain = programs.find((p) => p.focus === "maintain");
+
+// Fictional standalone tracks provide state-machine coverage without shipping
+// a first-launch training prescription.
+await db.Tracks.save({ exerciseName: "Deadlift", mode: "cycle", cycleNumber: 1, baseWeightLb: 120, nextPhase: 3, incrementLb: 10, roundingLb: 5, lastCompletedAt: null });
+await db.Tracks.save({ exerciseName: "Back Squat", mode: "cycle", cycleNumber: 1, baseWeightLb: 100, nextPhase: 2, incrementLb: 10, roundingLb: 5, lastCompletedAt: null });
+await db.Tracks.save({ exerciseName: "Incline DB Press", mode: "linear", cycleNumber: 1, baseWeightLb: 30, nextPhase: 1, incrementLb: 5, roundingLb: 5, lastCompletedAt: null });
 // Guard: names above must exist in the library, or sessions would carry ghosts.
 {
   const names = new Set(lib.map((e) => e.name));
@@ -146,7 +175,7 @@ for (let i = 0; i < 14; i++) {
     if (i === 4) flagSets(s, "Flat DB Press", "grindy", 1); // within tolerance — still SUCCESS
     if (i % 5 === 2) {
       const w = workingSets(s, s.exercises[0].exerciseName);
-      if (w[0]) { w[0].bodyFlagSite = "Left shoulder"; w[0].bodyFlagNote = "Pinch on first rep, warmed out of it."; }
+      if (w[0]) { w[0].bodyFlagSite = "Shoulder"; w[0].bodyFlagNote = "Fictional fixture signal."; }
     }
   });
   cursor += i % 3 === 2 ? 3 : 2;
@@ -230,30 +259,32 @@ for (let i = 0; i < leftovers.length; i += 6) {
       for (let k = 0; k < 3; k++) sets.push(mkSet(k, C.toLb(kg, "kg"), 10, { unit: "kg", perSide: ex.isUnilateral }));
     } else {
       const w = ex.type === "barbell" ? 95 + 10 * Math.floor(rng() * 6) : 25 + 5 * Math.floor(rng() * 6);
-      for (let k = 0; k < 3; k++) sets.push(mkSet(k, w, 8, { perSide: ex.isUnilateral, flags: k === 2 && rng() < 0.3 ? ["clean", "grindy"] : ["clean"] }));
+      for (let k = 0; k < 3; k++) sets.push(mkSet(k, w, 8, { perSide: ex.isUnilateral, flags: k === 2 && rng() < 0.3 ? ["grindy"] : ["clean"] }));
     }
-    return { order, exerciseName: ex.name, notes: "", phase: null, plannedWeightLb: null, plannedSets: null, plannedReps: null, programRole: null, sets };
+    return { order, exerciseName: ex.name, notes: "", phase: null,
+      barId: ex.type === "barbell" && order === 0 ? "35-lb" : null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null, programRole: null, sets };
   });
   await db.Sessions.save(s);
-  await session.completeSession(s);
+  await completeAll(s);
   cursor += 3;
 }
 
-// ---- 8. body logs: weekly bodyweight, two weeks of protein, monthly check-ins ----
+// ---- 8. fictional body-log records for storage and chart coverage ----
 for (let w = 0; w < 26; w++) {
   const d = day(-175 + w * 7);
-  const weightLb = Math.round((168 + w * 1.05 + (rng() - 0.5) * 2) * 10) / 10;
-  await db.Bodyweight.add({ date: db.iso(d), weightLb, bodyFatPercent: w % 8 === 0 ? Math.round((22 - w * 0.15) * 10) / 10 : null, milestoneLabel: w === 7 ? "175 crossed" : w === 21 ? "190 — comeback weight" : null });
+  const weightLb = Math.round((150 + Math.sin(w / 3) * 2 + (rng() - 0.5)) * 10) / 10;
+  await db.Bodyweight.add({ date: db.iso(d), weightLb, bodyFatPercent: w % 8 === 0 ? 20 : null, milestoneLabel: w === 7 ? "Fixture checkpoint A" : w === 21 ? "Fixture checkpoint B" : null });
 }
 for (let d = -13; d <= 0; d++) {
-  await db.Protein.add({ date: day(d).toISOString(), grams: 45, label: "Shake" });
-  await db.Protein.add({ date: day(d).toISOString(), grams: 50, label: "Meat" });
-  if (rng() < 0.6) await db.Protein.add({ date: day(d).toISOString(), grams: 25 + Math.floor(rng() * 3) * 5, label: "Extra" });
+  await db.Protein.add({ date: day(d).toISOString(), grams: 40, label: "Fixture entry A" });
+  await db.Protein.add({ date: day(d).toISOString(), grams: 50, label: "Fixture entry B" });
+  if (rng() < 0.6) await db.Protein.add({ date: day(d).toISOString(), grams: 25 + Math.floor(rng() * 3) * 5, label: "Fixture entry C" });
 }
-const RESPONSES = ["No pain, full ROM", "Tight after volume day", "Mild swelling after running", "Felt strong"];
-for (const site of ["Left shoulder", "Left hip", "Right knee"]) {
+const RESPONSES = ["All clear", "Mild stiffness", "Flagged", "Comfortable"];
+for (const site of ["Shoulder", "Hip", "Knee"]) {
   for (let m = 0; m < 4; m++) {
-    await db.Checkins.add({ date: day(-140 + m * 40).toISOString(), site, response: RESPONSES[(m + site.length) % RESPONSES.length], note: m === 2 ? "After hill sprints." : "" });
+    await db.Checkins.add({ date: day(-140 + m * 40).toISOString(), site, response: RESPONSES[(m + site.length) % RESPONSES.length], note: m === 2 ? "Fictional fixture note." : "" });
   }
 }
 

@@ -14,7 +14,7 @@ public enum CardioFormat {
         return (miles / (Double(secs) / 3600) * 10).rounded() / 10
     }
 
-    /// "22:30", or "1:30:00" at an hour and beyond.
+    /// Formats a duration as minutes and seconds, including hours when needed.
     public static func durationLabel(seconds: Int) -> String {
         let s = max(0, seconds)
         if s >= 3600 {
@@ -23,7 +23,7 @@ public enum CardioFormat {
         return String(format: "%d:%02d", s / 60, s % 60)
     }
 
-    /// One line from whatever was logged: "1.5 mi · 22:30 · 4 mph · 12%".
+    /// Builds one compact line from whichever cardio fields were logged.
     /// Missing halves simply drop out; nothing logged → "—".
     public static func setLabel(distanceMiles: Double?, durationSeconds: Int?, inclinePercent: Double?) -> String {
         var parts: [String] = []

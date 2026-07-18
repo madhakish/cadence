@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **1**. A missing version means the legacy version-0 shape.
+version **2**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -19,34 +19,41 @@ The source-of-truth constants are:
 
 These values must change together.
 
-## Version 1 session contract
+## Version 2 session contract
 
 Every session carries:
 
-- `date`, `notes`, and optional `gym`
+- `date`, `notes`, optional historical `gym`, and optional stable `gymId`
 - `isCompleted`, preserving both open and banked sessions
 - optional `programTag`
-- ordered `exercises`, each with its planned prescription and logged sets
+- ordered `exercises`, each with its planned prescription, optional session-local `barId`, and logged sets
 
-A program tag uses the program's unique name across the backup boundary. Local
-SwiftData or IndexedDB identifiers are deliberately excluded. The tag also
-carries cycle, week, day index, and `planNames`, the immutable snapshot used to
-decide whether an open session may resume after a program edit.
+A program tag carries a stable portable `programId` plus the historical
+`programName` label. It also carries cycle, week, day index, and `planNames`,
+the immutable snapshot used to decide whether an open session may resume after
+a program edit. Renaming a program therefore cannot detach an open session.
 
-On web import, `programName` is resolved back to the destination database's
-local program ID. Legacy web tags containing `programId` remain accepted.
+Every set carries a `status` of `planned`, `completed`, or `skipped`. Only
+completed sets contribute to volume, PRs, charts, HealthKit metadata, or
+progression. Quality remains optional and mutually exclusive (`clean`,
+`grindy`, or `wobble`); `stopped early` is an independent observation.
+
+Programs and gyms each export their stable ID. The web keeps its IndexedDB
+primary key private and resolves the portable ID after import.
 
 ## Compatibility rules
 
 - Version-0 sessions have no `isCompleted`; they are treated as completed
   because the legacy web exporter excluded open sessions.
+- Pre-version-2 sets in completed sessions migrate as completed. Sets in open
+  sessions migrate conservatively as planned.
 - Missing top-level sections leave the corresponding local store untouched.
 - Import runs a full preflight before storage is touched. Missing identifiers,
   invalid dates or numbers, unknown enum values, duplicate keys, and impossible
   progression positions reject the complete bundle with a field path.
 - Import is transactional. A failed record aborts every mutation in the bundle.
-- Program names are unique and act as the cross-platform linkage key until a
-  future schema introduces stable portable IDs.
+- Program and gym names remain historical labels; stable IDs are the linkage
+  keys from version 2 onward.
 
 Both clients also keep three rotating local checkpoints when the app
 backgrounds and before a valid import. These are an undo buffer, not part of the

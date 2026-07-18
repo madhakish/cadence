@@ -8,6 +8,7 @@ import CadenceCore
 /// cross-cycle progression lives in CadenceCore (`ProgramProgression`).
 @Model
 final class Program {
+    @Attribute(.unique) var id: String = UUID().uuidString
     @Attribute(.unique) var name: String
     var focusRaw: String
     var cycleNumber: Int

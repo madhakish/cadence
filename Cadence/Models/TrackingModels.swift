@@ -83,7 +83,7 @@ final class BodyweightEntry {
     var date: Date
     var weightLb: Double
     var bodyFatPercent: Double?
-    /// e.g. "Discharge" — shows as a chart annotation.
+    /// Optional user-authored chart annotation.
     var milestoneLabel: String?
 
     init(date: Date = .now, weightLb: Double, bodyFatPercent: Double? = nil, milestoneLabel: String? = nil) {
@@ -107,7 +107,7 @@ final class ProteinEntry {
     }
 }
 
-/// Next-morning check-in after running ("Right knee — any swelling?").
+/// Optional body-signal check-in.
 @Model
 final class CheckIn {
     var date: Date
@@ -123,8 +123,11 @@ final class CheckIn {
         self.note = note
     }
 
-    var site: BodySite? { BodySite(rawValue: siteRaw) }
-    var isHardStop: Bool { response.lowercased().contains("swell") }
+    var site: BodySite? { BodySite.fromStorage(siteRaw) }
+    var isHardStop: Bool {
+        let value = response.lowercased()
+        return ["flag", "pain", "swell", "off"].contains { value.contains($0) }
+    }
 }
 
 /// Auto-detected milestone, persisted so the history reads like a logbook.

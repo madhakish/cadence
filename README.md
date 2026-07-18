@@ -1,6 +1,6 @@
 # Cadence
 
-A coach's logbook for a structured barbell comeback. Two apps sharing one
+A local-first logbook for structured strength training. Two apps sharing one
 brain: native iOS (SwiftUI + SwiftData, iOS 17+) and a web PWA
 ([madhakish.github.io/cadence](https://madhakish.github.io/cadence/)).
 Single user, local-first. No backend, no accounts, no streaks, no badges,
@@ -24,16 +24,15 @@ no quotes.
   Suggestions are editable in two taps; mid-session "Dropping load" recalcs
   remaining sets and logs why (bar speed / wobble / joint / heat / fatigue).
 - **Session logging** — pre-filled warmup ramp (bar×10, ~40/55/70/85%),
-  per-set quality flags (clean/grindy/wobble/stopped early), kg or lb entry
+  explicit planned/completed/skipped sets, optional exclusive quality
+  (clean/grindy/wobble), independent stopped-early notes, kg or lb entry
   stored canonically in lb, rest timer (5:00 main / 1:30 accessory,
   per-exercise override) with local notification, end-of-session summary
   with volume, top sets, and auto-detected PRs.
-- **Injury signals** — body flags on left shoulder / left hip / right knee
-  per set, per-site timeline, next-morning knee check-in notification after
-  running, swelling = hard-stop banner. Barbell bench ships shelved with its
-  re-entry test written down.
-- **Body** — bodyweight chart with milestone annotations (168 discharge →
-  194 current), protein quick-log vs 175 g target.
+- **Body signals** — optional shoulder / hip / knee flags per set, per-site
+  timeline, and an optional next-morning knee check-in after running.
+- **Body** — private on-device bodyweight chart with optional annotations and
+  protein quick-log against a configurable target.
 - **Gym tag** — store a photo of the membership keychain barcode per gym;
   shows full-screen at max brightness so the phone is the second tag the
   gym's software can't issue.
@@ -41,9 +40,10 @@ no quotes.
   inventories, per-lift increments, rest defaults, optional write-only
   HealthKit, full JSON + CSV export.
 
-Seeded with the real training history (May 9 – Jun 7, 2026) so charts, PRs,
-and next-session suggestions work on first launch: Deadlift → Wk3 Peak 3×3
-@ 245, Squat → Wk2 Load 5×3 @ 195, Incline DB linear at 45s.
+Fresh installs contain only the generic exercise library and a default gym.
+No workout history, body metrics, health signals, program state, or personal
+starting weights ship in the repository. Program-style templates are optional
+starting points and remain editable before the first session.
 
 ## Layout
 
@@ -62,7 +62,7 @@ and next-session suggestions work on first launch: Deadlift → Wk3 Peak 3×3
 ├── Cadence/                 # App target (SwiftUI + SwiftData)
 │   ├── CadenceApp.swift
 │   ├── Models/              # @Model classes (canonical lb everywhere)
-│   ├── Seed/                # training history seed + program style templates
+│   ├── Seed/                # generic exercise seed + program style templates
 │   ├── Services/            # notifications, rest timer, completion/PRs,
 │   │                        # export, optional HealthKit (write-only)
 │   └── Views/               # dark, big targets, terse copy

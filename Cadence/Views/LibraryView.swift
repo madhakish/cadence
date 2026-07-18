@@ -60,6 +60,7 @@ struct ExerciseDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var exercise: Exercise
     @Query private var programs: [Program]
+    @Query private var settingsList: [AppSettings]
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted },
            sort: \WorkoutSession.date, order: .reverse)
     private var completed: [WorkoutSession]
@@ -84,14 +85,14 @@ struct ExerciseDetailView: View {
         return out
     }
 
-    /// "Jun 7, 2026 — 245 lb × 3 · Upper/Lower 4-Day", from the newest
-    /// completed session containing this exercise.
+    /// Compact previous-performance context from the newest completed session
+    /// containing this exercise.
     private var lastDoneLabel: String {
         for s in completed {
             guard let entry = s.exercises.first(where: { $0.exercise?.name == exercise.name }),
                   let top = entry.workingSets.max(by: { $0.weightLb < $1.weightLb }) else { continue }
             let program = s.programName.map { " · \($0)" } ?? ""
-            return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \(Weight.trim(top.weightLb)) lb × \(top.reps)\(program)"
+            return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb)) × \(top.reps)\(program)"
         }
         return "Not yet"
     }

@@ -6,6 +6,7 @@ import CadenceCore
 /// reverse: what's on the bar → total. Big digits, zero ceremony.
 struct PlateCalculatorView: View {
     @Query private var gyms: [Gym]
+    @Query private var settingsList: [AppSettings]
 
     @State private var mode: Mode = .target
     @State private var targetText = ""
@@ -38,6 +39,10 @@ struct PlateCalculatorView: View {
         return PlateMath.solve(targetLb: targetLb, bar: bar, plates: availablePlates)
     }
 
+    private var preferredUnit: WeightUnit {
+        settingsList.first?.unitDisplay.primaryUnit ?? .lb
+    }
+
     var body: some View {
         Form {
             Picker("Mode", selection: $mode) {
@@ -53,7 +58,12 @@ struct PlateCalculatorView: View {
                 if gyms.count > 1 {
                     Picker("Gym", selection: Binding(
                         get: { gym?.name ?? "" },
-                        set: { selectedGymName = $0 }
+                        set: { name in
+                            selectedGymName = name
+                            if let selected = gyms.first(where: { $0.name == name }) {
+                                bar = selected.defaultBar
+                            }
+                        }
                     )) {
                         ForEach(gyms) { Text($0.name).tag($0.name) }
                     }
@@ -67,6 +77,10 @@ struct PlateCalculatorView: View {
         }
         .navigationTitle("Plates")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if targetText.isEmpty { targetUnit = preferredUnit }
+            if selectedGymName == nil { bar = gym?.defaultBar ?? .bar45lb }
+        }
     }
 
     // MARK: - Target mode
@@ -121,8 +135,11 @@ struct PlateCalculatorView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if solution.isOffTarget {
+                        let deviation = targetUnit == .kg
+                            ? Weight.kg(fromLb: solution.deviationLb)
+                            : solution.deviationLb
                         Label(
-                            "\(Copy.offTarget) \(solution.deviationLb > 0 ? "+" : "")\(Weight.trim(solution.deviationLb)) lb vs target.",
+                            "\(Copy.offTarget) \(deviation > 0 ? "+" : "")\(Weight.trim(deviation)) \(targetUnit.rawValue) vs target.",
                             systemImage: "exclamationmark.triangle.fill"
                         )
                         .font(.callout.bold())
