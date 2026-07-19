@@ -4,7 +4,7 @@
 /// completion state and canonical program tags. Version 2 adds stable program
 /// and gym identifiers plus explicit per-set lifecycle state.
 public enum BackupContract {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

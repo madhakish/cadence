@@ -74,6 +74,10 @@ enum Seeder {
             Exercise(name: "GHD Sit-up", category: .accessory, type: .bodyweight, movementGroup: "core"),
             Exercise(name: "Plank", category: .accessory, type: .timed, movementGroup: "core", defaultRestSeconds: 60),
             Exercise(name: "Side Plank", category: .accessory, type: .timed, movementGroup: "core", isUnilateral: true, defaultRestSeconds: 60),
+            Exercise(name: "Copenhagen Plank", category: .accessory, type: .timed, movementGroup: "core",
+                     movementPattern: .adductor, isUnilateral: true, defaultRestSeconds: 60),
+            Exercise(name: "Cable Hip Adduction", category: .accessory, type: .machine, movementGroup: "squat",
+                     movementPattern: .adductor, isUnilateral: true),
             Exercise(name: "KB Swing", category: .accessory, type: .kettlebell, movementGroup: "hinge"),
             Exercise(name: "KB Clean", category: .accessory, type: .kettlebell, movementGroup: "olympic", isUnilateral: true),
             Exercise(name: "Dips", category: .accessory, type: .bodyweight, movementGroup: "press"),
@@ -125,6 +129,8 @@ enum Seeder {
             Exercise(name: "Glute Bridge", category: .accessory, type: .bodyweight, movementGroup: "hinge"),
             Exercise(name: "Cable Pull-through", category: .accessory, type: .machine, movementGroup: "hinge"),
             Exercise(name: "Back Extension", category: .accessory, type: .bodyweight, movementGroup: "hinge"),
+            Exercise(name: "GHD Back Extension", category: .accessory, type: .bodyweight, movementGroup: "hinge",
+                     movementPattern: .hipExtension),
             Exercise(name: "Standing Calf Raise", category: .accessory, type: .machine, movementGroup: "calves"),
             Exercise(name: "Seated Calf Raise", category: .accessory, type: .machine, movementGroup: "calves"),
             Exercise(name: "Barbell Curl", category: .accessory, type: .barbell, movementGroup: "arms"),
@@ -186,6 +192,18 @@ enum Seeder {
             if let current = byName[definition.name] {
                 if current.movementGroup.isEmpty && !definition.movementGroup.isEmpty {
                     current.movementGroup = definition.movementGroup
+                }
+                if current.movementPatternRaw.isEmpty && !definition.movementPatternRaw.isEmpty {
+                    current.movementPatternRaw = definition.movementPatternRaw
+                }
+                if current.secondaryMovementPatternRaw.isEmpty && !definition.secondaryMovementPatternRaw.isEmpty {
+                    current.secondaryMovementPatternRaw = definition.secondaryMovementPatternRaw
+                }
+                if current.aliases.isEmpty && !definition.aliases.isEmpty {
+                    current.aliases = definition.aliases
+                }
+                if current.strategyTags.isEmpty && !definition.strategyTags.isEmpty {
+                    current.strategyTags = definition.strategyTags
                 }
                 if current.loadBasisRaw.isEmpty && !definition.loadBasisRaw.isEmpty {
                     current.loadBasisRaw = definition.loadBasisRaw

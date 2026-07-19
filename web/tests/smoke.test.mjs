@@ -27,15 +27,26 @@ const settings = await import("../js/views/settings.js");
 const session = await import("../js/views/session.js");
 const plates = await import("../js/views/plates.js");
 const C = await import("../js/core.js");
+const coach = await import("../js/coaching-adapter.js");
 const completeAll = async (workout) => {
   for (const exercise of workout.exercises || []) for (const set of exercise.sets || []) if (!set.isWarmup) set.status = "completed";
   return session.completeSession(workout);
 };
 
+{
+  const program = { id: "temporary-program", cycleNumber: 2, currentWeek: 3 };
+  const decision = { programId: program.id, action: "accepted", date: new Date().toISOString(),
+    afterValue: coach.temporaryAccessoryValue(75, 2, 3) };
+  ok(coach.effectiveAccessoryPercent(program, [decision]) === 75,
+    "accepted red-readiness cut applies only to its target rotation");
+  ok(coach.effectiveAccessoryPercent({ ...program, currentWeek: 4 }, [decision]) === 100,
+    "temporary accessory cut expires at the next rotation");
+}
+
 // ---- privacy-safe first launch ----
 await db.ensureSeeded();
 const seededExercises = await db.Exercises.all();
-ok(seededExercises.length === 138, "seeded 138 exercises");
+ok(seededExercises.length === 141, "seeded 141 exercises");
 ok(["Push-ups", "Pull-ups", "Barbell Row", "Bulgarian Split Squat", "Ab Wheel Rollout", "Row Erg"]
   .every((name) => seededExercises.some((exercise) => exercise.name === name)),
   "comprehensive seed covers common push, pull, lower, core, and conditioning movements");
@@ -63,7 +74,7 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
   ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
-  ok((await db.Exercises.all()).length === 138, "seed repair does not duplicate exercises");
+  ok((await db.Exercises.all()).length === 141, "seed repair does not duplicate exercises");
   ok((await db.Protein.all()).some((entry) => entry.id === proteinId), "seed repair preserves other user stores");
   await db.Sessions.del(sentinelId);
   await db.Protein.del(proteinId);
@@ -171,7 +182,7 @@ for (let i = 0; i < 10; i++) {
   await db.syncLibrary();
   ok((await db.Exercises.byName("Deadlift")).movementGroup === "hinge", "sync backfills a missing movement group");
   ok((await db.Exercises.byName("Deadlift")).defaultRestSeconds === 222, "sync does NOT clobber user edits");
-  ok((await db.Exercises.all()).length === 138, "sync leaves the count whole (no dupes)");
+  ok((await db.Exercises.all()).length === 141, "sync leaves the count whole (no dupes)");
 }
 
 // ---- retired rest stamps: one-shot clear un-freezes the rest buckets ----
@@ -295,7 +306,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
-ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 138, "export carries the exercise library");
+ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 141, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
 ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
@@ -491,9 +502,23 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok((await db.Milestones.all()).length === msBefore, "no duplicate milestones from re-completion");
 }
 
-// ---- the same tracked exercise in two sections advances the track twice ----
-// (native parity: SwiftData mutates one context-cached object per section)
+// ---- the same tracked exercise in two sections is one exposure ----
 {
+  const adjustedTrack = await db.Tracks.byName("Incline DB Press");
+  const heldBase = adjustedTrack.baseWeightLb;
+  const adjustedId = await session.createSessionFromTrack(adjustedTrack);
+  const adjustedSession = await db.Sessions.get(adjustedId);
+  adjustedSession.exercises[0].sets.filter((set) => !set.isWarmup).forEach((set) => {
+    set.weightLb -= 5;
+    set.status = "completed";
+  });
+  const heldSummary = await session.completeSession(adjustedSession);
+  const heldTrack = await db.Tracks.byName("Incline DB Press");
+  ok(heldTrack.baseWeightLb === heldBase && heldTrack.lastCompletedAt,
+    "performed weight below the immutable plan is saved but holds standalone progression");
+  ok(heldSummary.coachingNotes.some((note) => note.startsWith("Held progression")),
+    "completion explains why the adjusted standalone goal held");
+
   const before = (await db.Tracks.byName("Incline DB Press")).baseWeightLb; // linear, +5/session
   const sec = (order) => ({
     order, exerciseName: "Incline DB Press", notes: "", phase: null, programRole: null,
@@ -504,7 +529,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const sid = await db.Sessions.save({ date: db.iso(new Date()), notes: "", isCompleted: false, gymName: null, exercises: [sec(0), sec(1)] });
   await completeAll(await db.Sessions.get(sid));
   const after = (await db.Tracks.byName("Incline DB Press")).baseWeightLb;
-  ok(after === before + 10, `duplicate sections advance the track twice (${before}→${after})`);
+  ok(after === before + 5, `duplicate sections advance the track only once (${before}→${after})`);
 }
 
 // ---- protein add reflects in today's total ----
@@ -990,6 +1015,9 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   const stable = (v) => (v && typeof v === "object" && !Array.isArray(v))
     ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])]))
     : Array.isArray(v) ? v.map(stable) : v;
+  // The generated fixture is the current V3 portable contract. Importing and
+  // re-exporting it must preserve every field, including coaching decisions
+  // and immutable target/planned/performed snapshots.
   const canon = (bundle) => {
     bundle = structuredClone(bundle);
     if (bundle.settings) bundle.settings.gymTagFirstLaunchOfDay ??= false;

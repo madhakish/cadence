@@ -488,7 +488,9 @@ struct ProgramEditorView: View {
     private var validationMessages: [String] {
         var messages: [String] = []
         let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
-        var weeklySets: [String: Int] = [:]
+        var rotationSets: [String: Int] = [:]
+        var patternSets: [MovementPattern: Int] = [:]
+        var intervalSlots = 0
         for day in program.orderedDays {
             if !day.lifts.contains(where: { $0.role == .main }) {
                 messages.append("\(day.name) has no main lift.")
@@ -506,31 +508,70 @@ struct ProgramEditorView: View {
                         for: CycleState(baseWeightLb: lift.baseWeightLb, nextPhase: .volume),
                         programRoundingLb: program.roundingLb, exerciseType: exercise.typeRaw,
                         movementGroup: exercise.movementGroup, role: lift.role, focus: program.focus,
-                        prescriptionStyle: lift.prescription)
-                    weeklySets[exercise.movementGroup, default: 0] += plan.sets
+                        prescriptionStyle: lift.prescription,
+                        configuration: lift.prescriptionConfiguration(movementGroup: exercise.movementGroup))
+                    rotationSets[exercise.movementGroup, default: 0] += plan.sets
+                    patternSets[exercise.movementPattern, default: 0] += plan.sets
+                    if exercise.movementPattern == .olympicPower, plan.reps > 3 {
+                        messages.append("\(lift.exerciseName) is power work; keep programmed sets at 1–3 reps.")
+                    }
                 }
             }
             for accessory in day.orderedAccessories {
-                let isTimed = exerciseByName[accessory.exerciseName]?.type == .timed
+                let type = exerciseByName[accessory.exerciseName]?.type
+                let isTimed = type == .timed || type == .conditioning
                 if !isTimed, accessory.minReps > accessory.maxReps {
                     messages.append("\(accessory.exerciseName)'s minimum reps exceed its maximum.")
                 } else if !isTimed, !(accessory.minReps...accessory.maxReps).contains(accessory.currentReps) {
                     messages.append("\(accessory.exerciseName)'s current reps are outside its rep range.")
                 }
                 if let group = exerciseByName[accessory.exerciseName]?.movementGroup {
-                    weeklySets[group, default: 0] += accessory.sets
+                    rotationSets[group, default: 0] += accessory.sets
                 }
+                if let pattern = exerciseByName[accessory.exerciseName]?.movementPattern {
+                    patternSets[pattern, default: 0] += accessory.sets
+                    if pattern == .olympicPower, accessory.currentReps > 3 {
+                        messages.append("\(accessory.exerciseName) is power work; keep programmed sets at 1–3 reps.")
+                    }
+                }
+                if type == .conditioning, accessory.conditioningEffort == .interval { intervalSlots += 1 }
+            }
+            let hasPower = day.lifts.contains { exerciseByName[$0.exerciseName]?.movementPattern == .olympicPower }
+            let hasIntervals = day.accessories.contains {
+                exerciseByName[$0.exerciseName]?.type == .conditioning && $0.conditioningEffort == .interval
+            }
+            if hasPower, hasIntervals {
+                messages.append("Move intervals off \(day.name); power work and intervals should not share a session.")
             }
         }
-        let pressing = weeklySets["press", default: 0]
-        let pulling = weeklySets["pull", default: 0]
-        if pressing >= 8, pulling * 5 < pressing * 4 {
-            messages.append("Weekly pulling volume (\(pulling) sets) trails pressing (\(pressing)); consider more rows or pull-ups.")
+        if intervalSlots > 1 {
+            messages.append("The rotation has \(intervalSlots) interval blocks; keep one interval dose and make the rest easy conditioning.")
         }
-        let squat = weeklySets["squat", default: 0]
-        let hinge = weeklySets["hinge", default: 0]
+        let pressing = rotationSets["press", default: 0]
+        let pulling = rotationSets["pull", default: 0]
+        if pressing >= 8, pulling * 5 < pressing * 4 {
+            messages.append("Per-rotation pulling volume (\(pulling) sets) trails pressing (\(pressing)); consider more rows or pull-ups.")
+        }
+        if patternSets[.verticalPull, default: 0] < 3 {
+            messages.append("Vertical pulling is \(patternSets[.verticalPull, default: 0])/3 sets per rotation.")
+        }
+        let squat = rotationSets["squat", default: 0]
+        let hinge = rotationSets["hinge", default: 0]
         if max(squat, hinge) >= 8, min(squat, hinge) * 2 < max(squat, hinge) {
-            messages.append("Weekly squat/hinge volume is uneven (\(squat)/\(hinge) sets).")
+            messages.append("Per-rotation squat/hinge volume is uneven (\(squat)/\(hinge) sets).")
+        }
+        let days = program.orderedDays
+        for (index, day) in days.enumerated() where !days.isEmpty {
+            let next = days[(index + 1) % days.count]
+            let nextIsHingeLed = next.lifts.contains {
+                $0.role == .main && exerciseByName[$0.exerciseName]?.movementPattern == .hipHinge
+            }
+            if nextIsHingeLed, day.accessories.contains(where: {
+                guard let pattern = exerciseByName[$0.exerciseName]?.movementPattern else { return false }
+                return pattern == .kneeFlexion || pattern == .hipExtension
+            }) {
+                messages.append("Move hamstring isolation/back extensions off \(day.name); it immediately precedes hinge-led \(next.name).")
+            }
         }
         return messages
     }
@@ -559,6 +600,25 @@ struct ProgramEditorView: View {
                 Toggle("Active", isOn: Binding(get: { program.isActive }, set: { on in
                     if on { for p in allPrograms { p.isActive = (p === program) } } else { program.isActive = false }
                 }))
+            }
+            Section("Deterministic coach") {
+                Toggle("Enable coaching proposals", isOn: $program.coachEnabled)
+                Stepper("Preferred spacing: \(program.preferredSessionSpacingDays) days",
+                        value: $program.preferredSessionSpacingDays, in: 2...7)
+                Stepper("Maximum added work: \(program.maximumAddedSetsPerRotation) sets / rotation",
+                        value: $program.maximumAddedSetsPerRotation, in: 0...10)
+                Toggle("Ignore early incomplete logs", isOn: Binding(
+                    get: { program.reliableHistoryStart != nil },
+                    set: { program.reliableHistoryStart = $0 ? (program.reliableHistoryStart ?? .now) : nil }
+                ))
+                if program.reliableHistoryStart != nil {
+                    DatePicker("Reliable history starts", selection: Binding(
+                        get: { program.reliableHistoryStart ?? .now },
+                        set: { program.reliableHistoryStart = $0 }
+                    ), displayedComponents: .date)
+                }
+            } footer: {
+                Text("Proposals use completed output by full program rotation. They never change the program until you apply them.")
             }
             Section {
                 Stepper("Cycle: \(program.cycleNumber)", value: $program.cycleNumber, in: 1...99)
@@ -663,6 +723,10 @@ struct ProgramEditorView: View {
             name: ProgramTemplates.uniqueProgramName("\(program.name) Copy", existing: allPrograms.map(\.name)),
             focus: program.focus, cycleNumber: program.cycleNumber, currentWeek: program.currentWeek,
             nextDayIndex: program.nextDayIndex, roundingLb: program.roundingLb, isActive: false)
+        copy.coachEnabled = program.coachEnabled
+        copy.reliableHistoryStart = program.reliableHistoryStart
+        copy.preferredSessionSpacingDays = program.preferredSessionSpacingDays
+        copy.maximumAddedSetsPerRotation = program.maximumAddedSetsPerRotation
         context.insert(copy)
         for sourceDay in program.orderedDays {
             let dayCopy = ProgramDay(name: sourceDay.name, order: sourceDay.order)
@@ -673,6 +737,20 @@ struct ProgramEditorView: View {
                                        prescription: source.prescription, warmupPolicy: source.warmupPolicy,
                                        baseWeightLb: source.baseWeightLb, estimatedMaxLb: source.estimatedMaxLb,
                                        stallCount: source.stallCount, lastIncrementLb: source.lastIncrementLb)
+                lift.loadOffsetLb = source.loadOffsetLb
+                lift.peakOffsetLb = source.peakOffsetLb
+                lift.deloadMultiplier = source.deloadMultiplier
+                lift.doubleProgressionSets = source.doubleProgressionSets
+                lift.minimumReps = source.minimumReps
+                lift.maximumReps = source.maximumReps
+                lift.currentReps = source.currentReps
+                lift.peakSingleEnabled = source.peakSingleEnabled
+                lift.lastPeakSingleLb = source.lastPeakSingleLb
+                lift.peakSingleIncrementLb = source.peakSingleIncrementLb
+                lift.phasePrimerEnabled = source.phasePrimerEnabled
+                lift.dropIncrementLb = source.dropIncrementLb
+                lift.capacityManaged = source.capacityManaged
+                lift.maximumSets = source.maximumSets
                 lift.day = dayCopy
                 context.insert(lift)
                 dayCopy.lifts.append(lift)
@@ -683,6 +761,10 @@ struct ProgramEditorView: View {
                                                  currentReps: source.currentReps, targetSeconds: source.targetSeconds,
                                                  durationStepSeconds: source.durationStepSeconds, weightLb: source.weightLb,
                                                  incrementLb: source.incrementLb, stallCount: source.stallCount)
+                accessory.capacityManaged = source.capacityManaged
+                accessory.maximumSets = source.maximumSets
+                accessory.conditioningEffortRaw = source.conditioningEffortRaw
+                accessory.targetRPE = source.targetRPE
                 accessory.day = dayCopy
                 context.insert(accessory)
                 dayCopy.accessories.append(accessory)
@@ -695,6 +777,7 @@ struct ProgramEditorView: View {
 
 struct ProgramDayEditorView: View {
     @Environment(\.modelContext) private var context
+    @Query private var exercises: [Exercise]
     @Bindable var day: ProgramDay
     let step: Double
     @State private var picking: PickTarget?
@@ -753,8 +836,12 @@ struct ProgramDayEditorView: View {
                     day.lifts.append(lift)
                     context.insert(lift)
                 case .accessory:
+                    let type = exercises.first { $0.name == name }?.type
                     let acc = ProgramAccessory(exerciseName: name, order: day.accessories.count,
-                                               sets: 3, minReps: 8, maxReps: 12, currentReps: 8, weightLb: 0, incrementLb: 0)
+                                               sets: type == .conditioning ? 1 : 3,
+                                               minReps: 8, maxReps: 12, currentReps: 8,
+                                               targetSeconds: type == .conditioning ? 1_200 : 30,
+                                               weightLb: 0, incrementLb: 0)
                     acc.day = day
                     day.accessories.append(acc)
                     context.insert(acc)
@@ -827,6 +914,35 @@ private struct ProgramLiftRow: View {
             }
             Stepper("Rotation-1 base: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))", value: $lift.baseWeightLb, in: 0...1000, step: loadStep)
             Stepper("Est. 1RM: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.estimatedMaxLb))", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
+            if lift.prescription == .offsetWave {
+                Stepper("Load offset: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.loadOffsetLb))",
+                        value: $lift.loadOffsetLb, in: 0...100, step: loadStep)
+                Stepper("Peak offset: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.peakOffsetLb))",
+                        value: $lift.peakOffsetLb, in: 0...150, step: loadStep)
+                Stepper("Deload: \(Int(lift.deloadMultiplier * 100))%", value: $lift.deloadMultiplier,
+                        in: 0.5...0.9, step: 0.025)
+            }
+            if lift.prescription == .doubleProgression {
+                Stepper("Sets: \(lift.doubleProgressionSets)", value: $lift.doubleProgressionSets, in: 1...8)
+                Stepper("Minimum reps: \(lift.minimumReps)", value: $lift.minimumReps, in: 1...20)
+                Stepper("Maximum reps: \(lift.maximumReps)", value: $lift.maximumReps, in: lift.minimumReps...30)
+                Text("Current target: \(lift.currentReps) reps · add \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: loadStep)) only after every set reaches the top of the window.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Toggle("Peak top single", isOn: $lift.peakSingleEnabled)
+            if lift.peakSingleEnabled {
+                Stepper("Last clean single: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.lastPeakSingleLb))",
+                        value: $lift.lastPeakSingleLb, in: 0...1200, step: loadStep)
+                Stepper("Single step: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.peakSingleIncrementLb))",
+                        value: $lift.peakSingleIncrementLb, in: loadStep...25, step: loadStep)
+            }
+            Toggle("Phase primer single", isOn: $lift.phasePrimerEnabled)
+            Stepper("One-tap drop: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.dropIncrementLb)) (0 = automatic)",
+                    value: $lift.dropIncrementLb, in: 0...50, step: loadStep)
+            Toggle("Coach may add sets", isOn: $lift.capacityManaged)
+            if lift.capacityManaged {
+                Stepper("Maximum sets: \(lift.maximumSets)", value: $lift.maximumSets, in: 1...10)
+            }
         }
     }
 }
@@ -838,7 +954,12 @@ private struct ProgramAccessoryRow: View {
     let onRemove: () -> Void
 
     private var isTimed: Bool {
-        exercises.first { $0.name == accessory.exerciseName }?.type == .timed
+        let type = exercises.first { $0.name == accessory.exerciseName }?.type
+        return type == .timed || type == .conditioning
+    }
+
+    private var isConditioning: Bool {
+        exercises.first { $0.name == accessory.exerciseName }?.type == .conditioning
     }
 
     var body: some View {
@@ -858,11 +979,27 @@ private struct ProgramAccessoryRow: View {
                 .accessibilityLabel("Remove \(accessory.exerciseName)")
             }
             Stepper("Sets: \(accessory.sets)", value: $accessory.sets, in: 1...8)
+            Toggle("Coach may adjust sets", isOn: $accessory.capacityManaged)
+            if accessory.capacityManaged {
+                Stepper("Maximum sets: \(accessory.maximumSets)", value: $accessory.maximumSets, in: 1...10)
+            }
             if isTimed {
-                Stepper("Hold: \(CardioFormat.durationLabel(seconds: accessory.targetSeconds))",
+                Stepper(isConditioning
+                        ? "Duration: \(CardioFormat.durationLabel(seconds: accessory.targetSeconds))"
+                        : "Hold: \(CardioFormat.durationLabel(seconds: accessory.targetSeconds))",
                         value: $accessory.targetSeconds, in: 5...1800, step: 5)
-                Stepper("Progress by: +\(accessory.durationStepSeconds) sec",
-                        value: $accessory.durationStepSeconds, in: 0...60, step: 5)
+                if isConditioning {
+                    Picker("Effort", selection: Binding(get: { accessory.conditioningEffort }, set: { accessory.conditioningEffort = $0 })) {
+                        ForEach(ConditioningEffort.allCases, id: \.self) { effort in
+                            Text(effort.name).tag(effort)
+                        }
+                    }
+                    Stepper("Target RPE: \(accessory.targetRPE == 0 ? "none" : String(accessory.targetRPE))",
+                            value: $accessory.targetRPE, in: 0...10)
+                } else {
+                    Stepper("Progress by: +\(accessory.durationStepSeconds) sec",
+                            value: $accessory.durationStepSeconds, in: 0...60, step: 5)
+                }
             } else {
                 Stepper("Weight: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: accessory.weightLb))", value: $accessory.weightLb, in: 0...500, step: 2.5)
                 Stepper("Min reps: \(accessory.minReps)", value: $accessory.minReps, in: 1...20)
@@ -881,10 +1018,14 @@ private struct ExercisePickerSheetView: View {
     let onPick: (String) -> Void
 
     private var visible: [Exercise] {
-        search.isEmpty ? exercises : exercises.filter {
+        let available = exercises.filter { $0.gateStatus != .shelved }
+        return search.isEmpty ? available : available.filter {
             $0.name.localizedCaseInsensitiveContains(search)
                 || $0.movementGroup.localizedCaseInsensitiveContains(search)
+                || $0.movementPattern.name.localizedCaseInsensitiveContains(search)
                 || $0.typeRaw.localizedCaseInsensitiveContains(search)
+                || $0.aliases.contains(where: { $0.localizedCaseInsensitiveContains(search) })
+                || $0.strategyTags.contains(where: { $0.localizedCaseInsensitiveContains(search) })
         }
     }
 

@@ -41,6 +41,16 @@ public struct PlateSolution: Hashable, Codable, Sendable {
     }
 }
 
+/// The selected prescription plus the nearest achievable load on either side
+/// of the theoretical target. This keeps the engine's choice explainable in
+/// the session UI instead of silently replacing a programmed number.
+public struct PlatePrescriptionOptions: Hashable, Sendable {
+    public let targetLb: Double
+    public let selected: PlateSolution
+    public let below: PlateSolution?
+    public let above: PlateSolution?
+}
+
 public enum PlateMath {
     /// Warn when achieved differs from target by more than this. Also the
     /// "good enough" band: any load within this of the target is treated as
@@ -201,6 +211,55 @@ public enum PlateMath {
         }
         return PlateSolution(loadout: Loadout(bar: bar, perSide: perSide, collarLb: collarLb),
                              targetLb: targetLb, policy: policy, satisfiesPolicy: policyBest != nil)
+    }
+
+    /// Resolve a programmed target against the active rack. An explicit gym
+    /// policy wins. With the default closest policy, equal misses select the
+    /// heavier option on a volume exposure and the lighter option otherwise
+    /// (notably peak work), while returning both choices for display.
+    public static func prescriptionOptions(
+        targetLb: Double,
+        bar: Bar,
+        plates: [Plate],
+        collarLb: Double = 0,
+        policy: LoadingPolicy = .closest,
+        preferOverOnTie: Bool = false,
+        maxPerPlateSide: Int = 10
+    ) -> PlatePrescriptionOptions {
+        let underCandidate = solve(
+            targetLb: targetLb, bar: bar, plates: plates, collarLb: collarLb,
+            policy: .under, maxPerPlateSide: maxPerPlateSide
+        )
+        let overCandidate = solve(
+            targetLb: targetLb, bar: bar, plates: plates, collarLb: collarLb,
+            policy: .over, maxPerPlateSide: maxPerPlateSide
+        )
+        let below = underCandidate.satisfiesPolicy ? underCandidate : nil
+        let above = overCandidate.satisfiesPolicy ? overCandidate : nil
+
+        let selected: PlateSolution
+        if policy != .closest {
+            selected = solve(
+                targetLb: targetLb, bar: bar, plates: plates, collarLb: collarLb,
+                policy: policy, maxPerPlateSide: maxPerPlateSide
+            )
+        } else if let below, let above {
+            let underMiss = abs(below.deviationLb)
+            let overMiss = abs(above.deviationLb)
+            if abs(underMiss - overMiss) <= 1e-9 {
+                selected = preferOverOnTie ? above : below
+            } else {
+                selected = underMiss < overMiss ? below : above
+            }
+        } else {
+            selected = below ?? above ?? solve(
+                targetLb: targetLb, bar: bar, plates: plates, collarLb: collarLb,
+                policy: .closest, maxPerPlateSide: maxPerPlateSide
+            )
+        }
+        return PlatePrescriptionOptions(
+            targetLb: targetLb, selected: selected, below: below, above: above
+        )
     }
 
     private static func policyAllows(_ deviationLb: Double, policy: LoadingPolicy) -> Bool {

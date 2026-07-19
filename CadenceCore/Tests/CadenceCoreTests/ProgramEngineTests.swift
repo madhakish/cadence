@@ -167,6 +167,55 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(plan.weightLb, 110)
     }
 
+    func testOffsetWaveDerivesEveryPhaseFromTheVolumeBase() {
+        let config = LiftPrescriptionConfiguration(
+            loadOffsetLb: 25, peakOffsetLb: 33, deloadMultiplier: 0.80
+        )
+        let phases = CyclePhase.allCases.map { phase in
+            ProgramEngine.plan(
+                for: CycleState(cycleNumber: 2, baseWeightLb: 221, nextPhase: phase),
+                roundingLb: 5, style: .offsetWave, configuration: config
+            ).weightLb
+        }
+        XCTAssertEqual(phases, [220, 245, 255, 175])
+    }
+
+    func testPeakSingleAndPrimerAreSeparateFromMainWork() {
+        let config = LiftPrescriptionConfiguration(
+            loadOffsetLb: 25, peakOffsetLb: 33, deloadMultiplier: 0.80,
+            peakSingleEnabled: true, lastPeakSingleLb: 270,
+            peakSingleIncrementLb: 5, phasePrimerEnabled: true
+        )
+        let prescription = ProgramEngine.sessionPrescription(
+            for: CycleState(cycleNumber: 2, baseWeightLb: 221, nextPhase: .peak),
+            programRoundingLb: 5, exerciseType: "barbell", movementGroup: "hinge",
+            role: .main, prescriptionStyle: .offsetWave,
+            configuration: config, estimatedMaxLb: 300
+        )
+        XCTAssertEqual(prescription.mainWork.weightLb, 255)
+        XCTAssertEqual(prescription.blocks.map(\.kind), [.primer, .topSingle, .work])
+        XCTAssertEqual(prescription.blocks.map(\.weightLb), [245, 275, 255])
+    }
+
+    func testProgramLiftDoubleProgressionHoldsLoadAndUsesCurrentRepTarget() {
+        let config = LiftPrescriptionConfiguration(
+            workingSets: 5, minimumReps: 5, maximumReps: 8, currentReps: 5
+        )
+        let plan = ProgramEngine.programPlan(
+            for: CycleState(baseWeightLb: 55, nextPhase: .load),
+            programRoundingLb: 5, exerciseType: "dumbbell", movementGroup: "press",
+            role: .main, prescriptionStyle: .doubleProgression, configuration: config
+        )
+        XCTAssertEqual(plan.weightLb, 55)
+        XCTAssertEqual(plan.sets, 5)
+        XCTAssertEqual(plan.reps, 5)
+    }
+
+    func testConfiguredDropIncrementWinsOverPercentageFallback() {
+        XCTAssertEqual(ProgramEngine.droppedLoad(from: 205, roundingLb: 5, dropIncrementLb: 10), 195)
+        XCTAssertEqual(ProgramEngine.droppedLoad(from: 140, roundingLb: 5, dropIncrementLb: 5), 135)
+    }
+
     func testMainDumbbellWarmupRamp() {
         XCTAssertEqual(WarmupRamp.dumbbellRamp(workingLb: 60).map(\.weightLb), [25, 35, 50])
         XCTAssertEqual(WarmupRamp.dumbbellRamp(workingLb: 60).map(\.reps), [10, 5, 2])

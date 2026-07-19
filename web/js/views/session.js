@@ -3,12 +3,18 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
-import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, iso, runAll } from "../db.js";
-import { barbellSVG, dumbbellSVG } from "../barbell.js";
+import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, iso, runAll } from "../db.js";
+import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
+import { effectiveAccessoryPercent } from "../coaching-adapter.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
   order, weightLb: w, reps: r, isWarmup: !!o.warm, isPerSide: !!o.perSide, enteredUnit: o.unit || "lb",
+  targetWeightLb: o.targetWeightLb ?? w,
+  plannedWeightLb: o.plannedWeightLb ?? w,
+  plannedReps: o.plannedReps ?? r,
+  plannedDurationSeconds: o.plannedDurationSeconds ?? null,
+  prescriptionBlock: o.prescriptionBlock || (o.warm ? "warmup" : "work"),
   loadBasis: C.LOAD_BASES.includes(o.loadBasis) ? o.loadBasis : C.inferredLoadBasis(o.exerciseType),
   implementCount: Math.max(1, o.implementCount || C.inferredImplementCount(o.exerciseType)),
   status: "planned",
@@ -54,7 +60,7 @@ export async function createSessionFromTrack(track) {
   const barLb = C.barLb(bar);
   const sug = track.mode === "cycle" ? C.planFor(trackState(track)) : C.linearPlan(track.baseWeightLb);
   const workingLb = ex?.type === "barbell" && gym
-    ? neatProgramWeight(sug.weightLb, ex, true, barLb, track.roundingLb, gym)
+    ? neatProgramWeight(sug.weightLb, ex, true, barLb, track.roundingLb, gym, sug.phase)
     : sug.weightLb;
   const sets = [];
   let order = 0;
@@ -62,8 +68,17 @@ export async function createSessionFromTrack(track) {
     const ramp = achievableWarmups(C.warmupRamp(workingLb, barLb, track.roundingLb), workingLb, bar, gym);
     for (const w of ramp) sets.push(mkSet(order++, w.weightLb, w.reps, { warm: true, unit, ...loadOptions(ex) }));
   }
-  for (let i = 0; i < sug.sets; i += 1) sets.push(mkSet(order++, workingLb, sug.reps, { perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex) }));
-  const se = { order: 0, exerciseName: track.exerciseName, notes: "", phase: sug.phase || null, plannedWeightLb: workingLb, plannedSets: sug.sets, plannedReps: sug.reps, sets };
+  if (ex && ex.type === "dumbbell") {
+    for (const w of C.dumbbellWarmupRamp(workingLb, C.programLoadStep(track.roundingLb, ex.type))) {
+      sets.push(mkSet(order++, w.weightLb, w.reps, { warm: true, unit, perSide: !!ex.isUnilateral, ...loadOptions(ex) }));
+    }
+  }
+  for (let i = 0; i < sug.sets; i += 1) sets.push(mkSet(order++, workingLb, sug.reps, {
+    targetWeightLb: sug.weightLb, plannedWeightLb: workingLb, plannedReps: sug.reps,
+    perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex),
+  }));
+  const se = { order: 0, exerciseName: track.exerciseName, notes: "", phase: sug.phase || null,
+    targetWeightLb: sug.weightLb, plannedWeightLb: workingLb, plannedSets: sug.sets, plannedReps: sug.reps, sets };
   const id = await Sessions.save({ date: iso(new Date()), notes: "", isCompleted: false, gymId: gym?.id || null, gymName: gym?.name || null, exercises: [se] });
   return id;
 }
@@ -165,10 +180,10 @@ export async function openSession(id) {
   const setUnit = (se, set) => unitByEx[se.exerciseName] || set.enteredUnit || exUnit(se);
   const barFor = (se) => (se.barId ? C.barById(se.barId) : null)
     || (gymState.value ? C.barById(gymState.value.defaultBarId) : C.BARS.bar45lb);
-  const synchronizeWarmups = (se, bar) => {
+  const synchronizeWarmups = (se, bar, overrideWorkingLb = null) => {
     const ex = exMap.get(se.exerciseName);
     const working = (se.sets || []).filter((set) => !set.isWarmup).sort((a, b) => a.order - b.order);
-    const workingLb = se.plannedWeightLb ?? working[0]?.weightLb;
+    const workingLb = overrideWorkingLb ?? se.plannedWeightLb ?? working[0]?.weightLb;
     if (!ex || !(workingLb > 0)) return;
     const desired = ex.type === "barbell"
       ? achievableWarmups(C.warmupRamp(workingLb, C.barLb(bar), 5), workingLb, bar, gymState.value)
@@ -178,6 +193,9 @@ export async function openSession(id) {
     const warmups = desired.map((target, index) => {
       const set = existing[index] || mkSet(index, target.weightLb, target.reps, { warm: true, unit: exUnit(se), ...loadOptions(ex) });
       set.weightLb = target.weightLb; set.reps = target.reps; set.isWarmup = true;
+      if (set.plannedWeightLb == null) set.plannedWeightLb = target.weightLb;
+      if (set.plannedReps == null) set.plannedReps = target.reps;
+      set.prescriptionBlock = "warmup";
       return set;
     });
     se.sets = [...warmups, ...working];
@@ -407,6 +425,11 @@ export async function openSession(id) {
         const t = u === "kg" ? C.kgFromLb(solution.totalLb) : solution.totalLb;
         wrap.append(ui.h("span", { class: "sub warn", text: `≈ closest ${C.trim(t)} ${u}` }));
       }
+      for (const detail of prescriptionPlateDetails(
+        s.targetWeightLb ?? se.targetWeightLb, s.weightLb, u, barFor(se), gymState.value,
+      )) {
+        wrap.append(ui.h("span", { class: `sub plate-detail${detail.kind === "target" ? " warn" : ""}`, text: detail.text }));
+      }
       return ui.h("div", {}, row, wrap);
     }
     if (ex && ex.type === "dumbbell" && s.weightLb > 0) {
@@ -442,12 +465,20 @@ export async function openSession(id) {
   function addSet(se) {
     const last = se.sets[se.sets.length - 1];
     const ex = exMap.get(se.exerciseName);
-    const w = last ? last.weightLb : (se.plannedWeightLb ?? 45);
-    const r = last ? last.reps : (se.plannedReps ?? 5);
+    const durationBased = ex && (ex.type === "timed" || ex.type === "conditioning");
+    const w = durationBased ? 0 : (last ? last.weightLb : (se.plannedWeightLb ?? 45));
+    const r = durationBased ? 1 : (last ? last.reps : (se.plannedReps ?? 5));
     const inheritedLoad = last && C.LOAD_BASES.includes(last.loadBasis)
       ? { loadBasis: last.loadBasis, implementCount: last.implementCount }
       : loadOptions(ex);
-    const set = mkSet(se.sets.length, w, r, { perSide: ex && ex.isUnilateral, ...inheritedLoad });
+    const durationSeconds = last?.durationSeconds ?? se.plannedDurationSeconds ?? 30;
+    const set = mkSet(se.sets.length, w, r, {
+      perSide: ex && ex.isUnilateral, ...inheritedLoad,
+      targetWeightLb: durationBased ? 0 : (last?.targetWeightLb ?? se.targetWeightLb ?? w),
+      plannedWeightLb: w, plannedReps: r,
+      plannedDurationSeconds: durationBased ? durationSeconds : null,
+      prescriptionBlock: ex?.type === "conditioning" ? "conditioning" : "work",
+    });
     set.enteredUnit = exUnit(se);
     if (ex && ex.type === "conditioning" && last) {
       // Repeat intervals: carry the last round's cardio prescription forward.
@@ -455,14 +486,13 @@ export async function openSession(id) {
       set.durationSeconds = last.durationSeconds ?? null;
       set.inclinePercent = last.inclinePercent ?? null;
     }
-    if (ex && ex.type === "timed") set.durationSeconds = last?.durationSeconds ?? 30;
+    if (durationBased) set.durationSeconds = durationSeconds;
     se.sets.push(set);
     syncSetPlan(se);
   }
 
   function syncSetPlan(se) {
     se.sets.forEach((set, index) => { set.order = index; });
-    se.plannedSets = se.sets.filter((set) => !set.isWarmup).length;
   }
 
   function removeSet(se, set) {
@@ -476,11 +506,25 @@ export async function openSession(id) {
       onClick: () => {
         // Shared plan (core parity): unflagged working sets only, each dropped
         // from its own weight — a back-off set is never raised.
-        const plan = C.dropLoadPlan(se.sets.map((x) => ({ weightLb: x.weightLb, isWarmup: !!x.isWarmup, isFlagged: x.status !== "planned" })));
+        const first = se.sets.find((x) => !x.isWarmup && x.status === "planned");
+        const fixedDrop = first && se.fallbackWeightLb != null ? Math.max(0, first.weightLb - se.fallbackWeightLb) : null;
+        const ex = exMap.get(se.exerciseName);
+        const step = C.programLoadStep(5, ex?.type);
+        const bar = barFor(se);
+        const plan = C.dropLoadPlan(
+          se.sets.map((x) => ({ weightLb: x.weightLb, isWarmup: !!x.isWarmup, isFlagged: x.status !== "planned" })),
+          step, ex?.type === "barbell" ? C.barLb(bar) : 0, fixedDrop,
+        );
         if (!plan.length) { ui.toast("All sets already logged — nothing to drop."); return; }
-        plan.forEach((p, i) => { const x = se.sets[p.index]; x.weightLb = p.weightLb; if (i === 0) x.autoregReason = reason; });
+        plan.forEach((p) => {
+          const x = se.sets[p.index];
+          x.weightLb = ex?.type === "barbell" && gymState.value
+            ? C.solve(p.weightLb, bar, availablePlates(gymState.value), 10,
+              gymState.value.collarWeightLb || 0, "under").totalLb : p.weightLb;
+          x.autoregReason = reason;
+        });
         save(); renderBody(body);
-        ui.toast(`Dropped to ${ui.fmtWeight(Math.max(...plan.map((p) => p.weightLb)))}`);
+        ui.toast(`Dropped to ${ui.fmtWeight(Math.max(...plan.map((p) => se.sets[p.index].weightLb)))}`);
       },
     })));
   }
@@ -498,13 +542,16 @@ export async function openSession(id) {
         c.append(ui.field("Reps", ui.stepper(reps, { min: 0, max: 100, onChange: (v) => { reps = v; } })));
         let warm = s.isWarmup, per = s.isPerSide, site = s.bodyFlagSite;
         let stopped = (s.flags || []).includes("stopped early");
-        let applyToRemaining = !s.isWarmup && s.status === "planned";
+        let applyWeightToRemaining = false;
+        let applyRepsToRemaining = !s.isWarmup && s.status === "planned";
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Warmup" }), ui.toggle(warm, (v) => { warm = v; })));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Per side" }), ui.toggle(per, (v) => { per = v; })));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Stopped early" }), ui.toggle(stopped, (v) => { stopped = v; })));
         if (!s.isWarmup && se.sets.some((candidate) => candidate !== s && !candidate.isWarmup && candidate.status === "planned")) {
-          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Apply weight and reps to remaining planned sets" }),
-            ui.toggle(applyToRemaining, (v) => { applyToRemaining = v; })));
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Apply reps to remaining planned sets" }),
+            ui.toggle(applyRepsToRemaining, (v) => { applyRepsToRemaining = v; })));
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Apply weight to remaining planned sets" }),
+            ui.toggle(applyWeightToRemaining, (v) => { applyWeightToRemaining = v; })));
         }
         const noteInput = ui.h("input", { type: "text", placeholder: "What did it feel like?", value: s.bodyFlagNote || "" });
         const siteSel = ui.h("select", {}, ui.h("option", { value: "", text: "None" }), ...BODY_SITES.map((b) => ui.h("option", { value: b, text: b, selected: b === site })));
@@ -515,19 +562,18 @@ export async function openSession(id) {
           onClick: () => {
             const val = parseFloat(wInput.value) || 0;
             const weightLb = val === 0 ? 0 : C.toLb(val, unit);
-            const targets = applyToRemaining && !warm
-              ? se.sets.filter((set) => !set.isWarmup && (set === s || set.status === "planned"))
-              : [s];
-            for (const target of targets) { target.weightLb = weightLb; target.enteredUnit = unit; target.reps = reps; }
+            const planned = s.plannedWeightLb ?? se.plannedWeightLb;
+            if (planned > 0 && weightLb > 0 && Math.abs(weightLb - planned) > 6
+                && !window.confirm(`This differs from the planned load by ${C.trim(Math.abs(weightLb - planned))} lb. Confirm the plates and use it?`)) return;
+            s.weightLb = weightLb; s.enteredUnit = unit; s.reps = reps;
+            const remaining = se.sets.filter((set) => set !== s && !set.isWarmup && set.status === "planned");
+            if (applyWeightToRemaining && !warm) for (const target of remaining) { target.weightLb = weightLb; target.enteredUnit = unit; }
+            if (applyRepsToRemaining && !warm) for (const target of remaining) target.reps = reps;
             s.isWarmup = warm; s.isPerSide = per;
             s.flags = C.normalizedSetFlags(C.setQuality(s.flags), stopped);
             s.bodyFlagSite = site; s.bodyFlagNote = site ? (noteInput.value || null) : null;
             syncSetPlan(se);
-            if (applyToRemaining && !warm) {
-              se.plannedWeightLb = weightLb;
-              se.plannedReps = reps;
-              synchronizeWarmups(se, barFor(se));
-            }
+            if (applyWeightToRemaining && !warm) synchronizeWarmups(se, barFor(se), weightLb);
             unitByEx[se.exerciseName] = unit; // keep the row display in the unit you just used
             api.close(); save(); renderBody(body);
           },
@@ -676,10 +722,12 @@ export async function completeSession(session) {
   // both pass; reset it on failure so a retry isn't no-opped by this guard.
   if (session.isCompleted) return { lines: [], milestones: [] };
   session.isCompleted = true;
+  session.completedAt = iso(new Date());
   try {
     return await completeSessionInner(session);
   } catch (e) {
     session.isCompleted = false;
+    session.completedAt = null;
     throw e;
   }
 }
@@ -688,10 +736,8 @@ async function completeSessionInner(session) {
   const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date));
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const lines = [], milestones = [], milestoneRecords = [];
-  // Keyed, not a list: a session with the same tracked exercise in two
-  // sections must advance the SAME in-memory track twice (as native does with
-  // its context-cached object) — re-reading the store would advance from the
-  // same base twice and commit only the last put.
+  // Keyed by lift: one banked exposure can advance a standalone track at most
+  // once, even when the same exercise appears in multiple sections.
   const trackByName = new Map();
   for (const se of session.exercises) {
     const completedSets = se.sets.filter((s) => !s.isWarmup && s.status === "completed");
@@ -727,20 +773,36 @@ async function completeSessionInner(session) {
     const events = C.prEvaluate({ exercise: se.exerciseName, sessionSets: working, historySets, historyVolumes, historySchemes, formatWeight: ui.fmtWeight });
     for (const e of events) { milestoneRecords.push({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
 
-    // Program-owned exercises advance via the program, never the standalone track.
-    const track = se.programRole ? null : (trackByName.get(se.exerciseName) ?? await Tracks.byName(se.exerciseName));
-    if (track) {
-      track.lastCompletedAt = iso(new Date());
-      if (track.mode === "cycle") {
-        const adv = C.advancing(trackState(track), track.nextPhase);
-        track.cycleNumber = adv.cycleNumber; track.baseWeightLb = adv.baseWeightLb; track.nextPhase = adv.nextPhase;
-      } else { track.baseWeightLb += track.incrementLb; }
-      trackByName.set(se.exerciseName, track);
-    }
     const top = working.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
     const topLabel = top.loadBasis === "bodyweight" ? `${top.reps} reps`
       : `${ui.fmtWeight(top.weightLb)}${C.loadBasisSuffix(top.loadBasis)} × ${top.reps}`;
     lines.push({ exerciseName: se.exerciseName, topSetLabel: topLabel, volumeLb: C.prVolume(working) });
+  }
+
+  const heldStandaloneTracks = [];
+  const standaloneByName = new Map();
+  for (const se of session.exercises) {
+    const definition = exerciseByName.get(se.exerciseName);
+    if (se.programRole || definition?.type === "timed" || definition?.type === "conditioning") continue;
+    if (!standaloneByName.has(se.exerciseName)) standaloneByName.set(se.exerciseName, []);
+    standaloneByName.get(se.exerciseName).push(se);
+  }
+  for (const [exerciseName, entries] of standaloneByName) {
+    const track = await Tracks.byName(exerciseName);
+    if (!track) continue;
+    const performed = entries.filter((se) => se.sets.some((set) => !set.isWarmup
+      && set.status === "completed" && (set.prescriptionBlock || "work") === "work"));
+    if (!performed.length) continue;
+    const advance = performed.length === entries.length
+      && C.earnsStandaloneTrackAdvance(performed.map((se) => cyclePerf(se, track.roundingLb)));
+    track.lastCompletedAt = iso(new Date());
+    if (advance) {
+      if (track.mode === "cycle") {
+        const adv = C.advancing(trackState(track), track.nextPhase);
+        track.cycleNumber = adv.cycleNumber; track.baseWeightLb = adv.baseWeightLb; track.nextPhase = adv.nextPhase;
+      } else { track.baseWeightLb += track.incrementLb; }
+    } else heldStandaloneTracks.push(exerciseName);
+    trackByName.set(exerciseName, track);
   }
 
   const hasCompletedWork = session.exercises.some((se) => se.sets.some((set) => !set.isWarmup && set.status === "completed"));
@@ -764,6 +826,7 @@ async function completeSessionInner(session) {
   if (incompleteSets.length) coachingNotes.push(`Modified session — ${completedSets.length} sets completed; unfinished or skipped sets were not credited as performed.`);
   else if (adjusted) coachingNotes.push("Completed with adjustments — progression was graded from the work actually logged.");
   else if (completedSets.length) coachingNotes.push("Completed as planned — progression advanced from the banked work.");
+  if (heldStandaloneTracks.length) coachingNotes.push(`Held progression for ${heldStandaloneTracks.sort().join(", ")} — actual work was saved, but the original prescription was not fully met.`);
   if (prog?.program) {
     const nextDay = prog.program.days.find((day) => day.order === prog.program.nextDayIndex) || prog.program.days[0];
     if (nextDay) coachingNotes.push(`Next: ${nextDay.name} · R${prog.program.currentWeek} ${C.PHASES[prog.program.currentWeek]?.name || "Volume"}.`);
@@ -773,7 +836,8 @@ async function completeSessionInner(session) {
 
 // ---- Performance summaries (built from logged sets, consumed by the core) ----
 function cyclePerf(se, roundingLb) {
-  const w = se.sets.filter((s) => !s.isWarmup && s.status === "completed");
+  const w = se.sets.filter((s) => !s.isWarmup && s.status === "completed"
+    && (s.prescriptionBlock || "work") === "work");
   const presReps = se.plannedReps ?? (w.length ? Math.max(...w.map((s) => s.reps)) : 0); // ?? not ||: mirrors Swift's nil-coalescing
   const top = w.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
   return {
@@ -786,12 +850,17 @@ function cyclePerf(se, roundingLb) {
     topSetWeightLb: top ? top.weightLb : 0, topSetReps: top ? top.reps : 0,
   };
 }
-function accPerf(se) {
-  const w = se.sets.filter((s) => !s.isWarmup && s.status === "completed");
+function accPerf(se, roundingLb = 5) {
+  const w = se.sets.filter((s) => !s.isWarmup && s.status === "completed"
+    && (s.prescriptionBlock || "work") === "work");
   return {
     completedSets: w.length,
     minRepsAchieved: w.length ? Math.min(...w.map((s) => s.reps)) : 0,
     anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
+    performedAtPlannedLoad: w.every((s) => !C.belowPlanLoad(
+      s.weightLb, s.plannedWeightLb ?? se.plannedWeightLb, roundingLb)),
+    grindyOrWobbleSets: w.filter((s) => (s.flags || []).some((f) => f === "grindy" || f === "wobble")).length,
+    bodyFlagSets: w.filter((s) => !!s.bodyFlagSite).length,
   };
 }
 
@@ -831,17 +900,48 @@ async function advanceProgram(session, milestones) {
     if (!se) continue;
     const completed = se.sets.filter((set) => !set.isWarmup && set.status === "completed");
     if (!completed.length) continue;
-    if (exerciseByName.get(acc.exerciseName)?.type === "timed") {
+    const exerciseType = exerciseByName.get(acc.exerciseName)?.type;
+    if (exerciseType === "conditioning") continue;
+    // A temporary red-readiness cut deliberately holds accessory progression.
+    if ((se.plannedSets ?? acc.sets) < acc.sets) continue;
+    if (exerciseType === "timed") {
       if (completed.length >= acc.sets
         && completed.every((set) => (set.durationSeconds || 0) >= (acc.targetSeconds || 30))
         && !completed.some((set) => (set.flags || []).includes("stopped early"))) {
         acc.targetSeconds = (acc.targetSeconds || 30) + (acc.durationStepSeconds ?? 5);
       }
-    } else Object.assign(acc, C.advanceAccessory(acc, accPerf(se)));
+    } else {
+      const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(acc.exerciseName)?.type);
+      Object.assign(acc, C.advanceAccessory(acc, accPerf(se, loadStep)));
+    }
+  }
+  // Lift slots can opt into rep-window progression instead of phase grading.
+  for (const lift of (day.lifts || []).filter((candidate) => candidate.prescription === "doubleProgression")) {
+    const se = session.exercises.find((entry) => entry.programSlotId === lift.id
+      || (!entry.programSlotId && entry.exerciseName === lift.exerciseName));
+    if (!se) continue;
+    if (!se.sets.some((set) => !set.isWarmup && set.status === "completed"
+      && (set.prescriptionBlock || "work") === "work")) continue;
+    const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
+    const state = {
+      sets: lift.doubleProgressionSets || 3, minReps: lift.minimumReps || 5,
+      maxReps: lift.maximumReps || 8, currentReps: lift.currentReps || lift.minimumReps || 5,
+      weightLb: lift.baseWeightLb, incrementLb: loadStep, stallCount: lift.stallCount || 0,
+    };
+    const next = C.advanceAccessory(state, accPerf(se, loadStep));
+    lift.baseWeightLb = next.weightLb; lift.currentReps = next.currentReps;
+    lift.stallCount = next.stallCount; lift.lastIncrementLb = next.weightLb - state.weightLb;
+  }
+  for (const lift of (day.lifts || []).filter((candidate) => candidate.peakSingleEnabled)) {
+    const se = session.exercises.find((entry) => entry.programSlotId === lift.id);
+    const single = se?.sets.find((set) => set.status === "completed" && set.prescriptionBlock === "topSingle"
+      && set.reps >= 1 && !set.autoregReason && !set.bodyFlagSite
+      && !(set.flags || []).some((flag) => flag === "grindy" || flag === "wobble"));
+    if (single) lift.lastPeakSingleLb = Math.max(lift.lastPeakSingleLb || 0, single.weightLb);
   }
   // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
   if (tag.week === 3) {
-    for (const lift of day.lifts || []) {
+    for (const lift of (day.lifts || []).filter((candidate) => candidate.prescription !== "doubleProgression")) {
       const se = session.exercises.find((e) => e.programSlotId === lift.id
         || (!e.programSlotId && e.exerciseName === lift.exerciseName && e.programRole === lift.role));
       if (se && se.sets.some((set) => !set.isWarmup && set.status === "completed")) {
@@ -860,7 +960,9 @@ async function advanceProgram(session, milestones) {
       // Rollover: apply each lift's pending (or treat a skipped peak as a stall).
       for (const d of program.days) {
         for (const lift of d.lifts || []) {
-          if (lift.pending) {
+          if (lift.prescription === "doubleProgression") {
+            // This slot advanced after each exposure; it has no Peak pending.
+          } else if (lift.pending) {
             const p = lift.pending.state;
             const oldBase = lift.baseWeightLb;
             lift.baseWeightLb = p.baseWeightLb; lift.estimatedMaxLb = p.estimatedMaxLb;
@@ -912,13 +1014,13 @@ async function advanceProgram(session, milestones) {
 // lonely 2.5); main lifts keep their fine progression, and non-barbell work is
 // left alone. Shared by session creation AND the Home preview so the "Start"
 // card and the stored prescription never disagree.
-export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym = null) {
+export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym = null, phase = null) {
   if (!exercise || exercise.type !== "barbell" || !(weightLb > 0)) return weightLb;
   const target = !isMain ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
   if (!gym) return target;
   const bar = C.barById(gym.defaultBarId);
-  return C.solve(target, bar, availablePlates(gym), 10,
-    gym.collarWeightLb || 0, gym.loadingPolicy || "closest").totalLb;
+  return C.prescriptionPlateOptions(target, bar, availablePlates(gym), 10,
+    gym.collarWeightLb || 0, gym.loadingPolicy || "closest", phase === 1).selected.totalLb;
 }
 
 function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
@@ -948,12 +1050,16 @@ export async function createSessionFromProgramDay(program, day) {
       program.cycleNumber, program.currentWeek, day.order,
       s.programTag.planNames || [], dayNames));
   if (openForDay) return openForDay.id;
-  const [allExercises, gym, settings] = await Promise.all([Exercises.all(), Gyms.default(), Settings.get()]);
+  const [allExercises, gym, settings, coachingDecisions] = await Promise.all([
+    Exercises.all(), Gyms.default(), Settings.get(), CoachingDecisions.all(),
+  ]);
   const exMap = new Map(allExercises.map((e) => [e.name, e]));
   const unit = C.primaryUnit(settings.unitDisplay);
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const barLb = C.barLb(bar);
-  const neat = (weightLb, ex, isMain) => neatProgramWeight(weightLb, ex, isMain, barLb, program.roundingLb, gym);
+  const neat = (weightLb, ex, isMain, phase = null) =>
+    neatProgramWeight(weightLb, ex, isMain, barLb, program.roundingLb, gym, phase);
+  const accessoryPercent = effectiveAccessoryPercent(program, coachingDecisions);
   const exercises = [];
   let order = 0;
   const lifts = sortedLifts;
@@ -961,39 +1067,76 @@ export async function createSessionFromProgramDay(program, day) {
   for (const lift of lifts) {
     const ex = exMap.get(lift.exerciseName);
     const loadStep = C.programLoadStep(program.roundingLb, ex?.type);
-    const plan = C.programPlanFor(
+    const configuration = { ...lift, workingSets: lift.doubleProgressionSets ?? 3 };
+    const prescription = C.sessionPrescription(
       { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
       program.roundingLb, ex?.type, ex?.movementGroup, lift.role, program.focus, lift.prescription || "automatic",
+      configuration, lift.estimatedMaxLb || 0,
     );
-    const weightLb = neat(plan.weightLb, ex, lift.role === "main");
+    const plan = prescription.mainWork;
+    const weightLb = neat(plan.weightLb, ex, lift.role === "main", program.currentWeek);
+    const blockLoads = prescription.blocks.map((block) => neat(block.weightLb, ex, lift.role === "main", program.currentWeek));
     const sets = [];
     let so = 0;
     const warmupPolicy = (lift.warmupPolicy || "automatic") === "automatic"
       ? (preparedMovementGroups.has(ex?.movementGroup) ? "short" : "full")
       : lift.warmupPolicy;
+    const topPreparationLoad = blockLoads.length ? Math.max(...blockLoads) : weightLb;
     if (ex && ex.type === "barbell" && warmupPolicy !== "none") {
-      const ramp = achievableWarmups(C.warmupRamp(weightLb, barLb, program.roundingLb), weightLb, bar, gym);
-      for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, ...loadOptions(ex) }));
+      const ramp = achievableWarmups(C.warmupRamp(topPreparationLoad, barLb, program.roundingLb), topPreparationLoad, bar, gym);
+      for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, prescriptionBlock: "warmup", ...loadOptions(ex) }));
     }
     if (ex && ex.type === "dumbbell" && warmupPolicy !== "none") {
-      const ramp = C.dumbbellWarmupRamp(weightLb, loadStep);
-      for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, perSide: ex.isUnilateral, ...loadOptions(ex) }));
+      const ramp = C.dumbbellWarmupRamp(topPreparationLoad, loadStep);
+      for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, prescriptionBlock: "warmup", perSide: ex.isUnilateral, ...loadOptions(ex) }));
     }
-    for (let i = 0; i < plan.sets; i += 1) sets.push(mkSet(so++, weightLb, plan.reps, { perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex) }));
-    exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps, programRole: lift.role, programSlotId: lift.id, sets });
+    prescription.blocks.forEach((block, blockIndex) => {
+      const achieved = blockLoads[blockIndex];
+      const isPrimer = block.kind === "primer";
+      const last = sets.at(-1);
+      if (isPrimer && last?.weightLb === achieved) return;
+      for (let i = 0; i < block.sets; i += 1) sets.push(mkSet(so++, achieved, block.reps, {
+        warm: isPrimer, perSide: ex && ex.isUnilateral, unit,
+        targetWeightLb: block.weightLb, plannedWeightLb: achieved, plannedReps: block.reps,
+        prescriptionBlock: block.kind, ...loadOptions(ex),
+      }));
+    });
+    const automaticDrop = ["squat", "hinge"].includes(ex?.movementGroup) ? 10 : 5;
+    const dropIncrement = lift.dropIncrementLb > 0 ? lift.dropIncrementLb : automaticDrop;
+    const rawFallback = C.droppedLoad(weightLb, loadStep, ex?.type === "barbell" ? barLb : 0, dropIncrement);
+    const fallbackWeightLb = ex?.type === "barbell" && gym
+      ? C.solve(rawFallback, bar, availablePlates(gym), 10, gym.collarWeightLb || 0, "under").totalLb
+      : rawFallback;
+    exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek,
+      targetWeightLb: plan.weightLb, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps,
+      fallbackWeightLb, prescriptionStyle: lift.prescription || "automatic",
+      programRole: lift.role, programSlotId: lift.id, sets });
     if (ex?.movementGroup) preparedMovementGroups.add(ex.movementGroup);
   }
   for (const acc of sortedAccessories) {
     const ex = exMap.get(acc.exerciseName);
     const weightLb = neat(acc.weightLb, ex, false);
-    const isTimed = ex?.type === "timed";
+    const isTimed = ex?.type === "timed" || ex?.type === "conditioning";
+    const effectiveSets = acc.capacityManaged === false
+      ? acc.sets : Math.max(1, Math.round(acc.sets * accessoryPercent / 100));
     const sets = [];
-    for (let i = 0; i < acc.sets; i += 1) {
-      const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : acc.currentReps, { perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex) });
+    for (let i = 0; i < effectiveSets; i += 1) {
+      const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : acc.currentReps, {
+        perSide: ex && ex.isUnilateral, unit,
+        targetWeightLb: isTimed ? 0 : acc.weightLb, plannedWeightLb: isTimed ? 0 : weightLb,
+        plannedReps: isTimed ? 1 : acc.currentReps,
+        plannedDurationSeconds: isTimed ? (acc.targetSeconds || 30) : null,
+        prescriptionBlock: ex?.type === "conditioning" ? "conditioning" : "work",
+        ...loadOptions(ex),
+      });
       if (isTimed) set.durationSeconds = acc.targetSeconds || 30;
       sets.push(set);
     }
-    exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null, plannedWeightLb: isTimed ? 0 : weightLb, plannedSets: acc.sets, plannedReps: isTimed ? 1 : acc.currentReps, programRole: "accessory", programSlotId: acc.id, sets });
+    exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null,
+      targetWeightLb: isTimed ? 0 : acc.weightLb, plannedWeightLb: isTimed ? 0 : weightLb,
+      plannedSets: effectiveSets, plannedReps: isTimed ? 1 : acc.currentReps,
+      plannedDurationSeconds: isTimed ? (acc.targetSeconds || 30) : null,
+      programRole: "accessory", programSlotId: acc.id, sets });
   }
   const id = await Sessions.save({
     date: iso(new Date()), notes: "", isCompleted: false, ...await defaultGymTag(),

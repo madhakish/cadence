@@ -15,7 +15,10 @@ struct LibraryView: View {
         return exercises.filter {
             $0.name.localizedCaseInsensitiveContains(search)
                 || $0.movementGroup.localizedCaseInsensitiveContains(search)
+                || $0.movementPattern.name.localizedCaseInsensitiveContains(search)
                 || $0.typeRaw.localizedCaseInsensitiveContains(search)
+                || $0.aliases.contains(where: { $0.localizedCaseInsensitiveContains(search) })
+                || $0.strategyTags.contains(where: { $0.localizedCaseInsensitiveContains(search) })
         }
     }
 
@@ -30,7 +33,7 @@ struct LibraryView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(exercise.name)
-                                    Text("\(exercise.movementGroup.capitalized) · \(exercise.typeRaw) · \(exercise.loadBasis.label)")
+                                    Text("\(exercise.movementPattern.name) · \(exercise.typeRaw) · \(exercise.loadBasis.label)")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -186,6 +189,22 @@ struct ExerciseDetailView: View {
                 }
                 TextField("Movement group", text: $exercise.movementGroup)
                     .textInputAutocapitalization(.never)
+                Picker("Movement pattern", selection: Binding(
+                    get: { exercise.movementPattern },
+                    set: { exercise.movementPattern = $0 }
+                )) {
+                    ForEach(MovementPattern.allCases, id: \.self) { pattern in
+                        Text(pattern.name).tag(pattern)
+                    }
+                }
+                TextField("Aliases, comma-separated", text: Binding(
+                    get: { exercise.aliases.joined(separator: ", ") },
+                    set: { exercise.aliases = Self.splitList($0) }
+                ))
+                TextField("Strategy tags, comma-separated", text: Binding(
+                    get: { exercise.strategyTags.joined(separator: ", ") },
+                    set: { exercise.strategyTags = Self.splitList($0) }
+                ))
                 Toggle("Unilateral (log per side)", isOn: $exercise.isUnilateral)
                 Picker("Load means", selection: Binding(
                     get: { exercise.loadBasis },
@@ -222,16 +241,55 @@ struct ExerciseDetailView: View {
             }
 
             Section {
-                Toggle("Shelved", isOn: $exercise.isShelved)
-                if exercise.isShelved {
-                    TextField("Re-entry test", text: $exercise.shelvedNote, axis: .vertical)
+                Picker("Gate", selection: Binding(
+                    get: { exercise.gateStatus },
+                    set: { exercise.gateStatus = $0 }
+                )) {
+                    ForEach(ExerciseGateStatus.allCases, id: \.self) { status in
+                        Text(status.name).tag(status)
+                    }
+                }
+                if exercise.gateStatus != .open {
+                    Picker("Site", selection: Binding(
+                        get: { exercise.gateSite },
+                        set: { exercise.gateSite = $0 }
+                    )) {
+                        Text("None").tag(BodySite?.none)
+                        ForEach(BodySite.allCases) { site in Text(site.rawValue).tag(BodySite?.some(site)) }
+                    }
+                    TextField("Coach note", text: $exercise.shelvedNote, axis: .vertical)
                         .lineLimit(2...5)
+                    TextField("Re-entry criteria — one per line", text: Binding(
+                        get: { exercise.reEntryCriteria.joined(separator: "\n") },
+                        set: { exercise.reEntryCriteria = Self.splitLines($0) }
+                    ), axis: .vertical)
+                    ForEach(exercise.reEntryCriteria, id: \.self) { criterion in
+                        Toggle(criterion, isOn: Binding(
+                            get: { exercise.completedReEntryCriteria.contains(criterion) },
+                            set: { complete in
+                                if complete, !exercise.completedReEntryCriteria.contains(criterion) {
+                                    exercise.completedReEntryCriteria.append(criterion)
+                                } else if !complete {
+                                    exercise.completedReEntryCriteria.removeAll { $0 == criterion }
+                                }
+                                if exercise.reEntryCriteriaComplete { exercise.gateStatus = .reEntry }
+                            }
+                        ))
+                    }
+                    if exercise.reEntryCriteriaComplete || exercise.gateStatus == .reEntry {
+                        Stepper("Test: \(exercise.reEntryTestSets) × \(exercise.reEntryTestReps)",
+                                value: $exercise.reEntryTestSets, in: 1...8)
+                        Stepper("Test reps: \(exercise.reEntryTestReps)",
+                                value: $exercise.reEntryTestReps, in: 1...12)
+                        Stepper("Test load: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: exercise.reEntryTestWeightLb))",
+                                value: $exercise.reEntryTestWeightLb, in: 0...1000, step: 5)
+                    }
                 }
             } header: {
                 Text("Status")
             } footer: {
-                if exercise.isShelved {
-                    Text("Stays in the library, out of the program, until the re-entry test passes.")
+                if exercise.gateStatus == .shelved {
+                    Text("Stays in the library and out of new programs until its user-defined re-entry criteria pass.")
                 }
             }
 
@@ -242,6 +300,14 @@ struct ExerciseDetailView: View {
         }
         .navigationTitle(exercise.name)
         .saveChangesOnDisappear(context, operation: "Saving the exercise")
+    }
+
+    private static func splitList(_ text: String) -> [String] {
+        text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    private static func splitLines(_ text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
     }
 }
 
@@ -254,6 +320,7 @@ private struct NewExerciseView: View {
     @State private var category: ExerciseCategory = .accessory
     @State private var type: ExerciseType = .dumbbell
     @State private var movementGroup = ""
+    @State private var movementPattern: MovementPattern = .unknown
     @State private var isUnilateral = false
     @State private var notes = ""
 
@@ -275,6 +342,9 @@ private struct NewExerciseView: View {
                     }
                     TextField("Movement group (press, pull, squat…)", text: $movementGroup)
                         .textInputAutocapitalization(.never)
+                    Picker("Movement pattern", selection: $movementPattern) {
+                        ForEach(MovementPattern.allCases, id: \.self) { Text($0.name).tag($0) }
+                    }
                     Toggle("Unilateral (log per side)", isOn: $isUnilateral)
                     TextField("Notes", text: $notes, axis: .vertical)
                 }
@@ -290,6 +360,7 @@ private struct NewExerciseView: View {
                     Button("Add") {
                         let exercise = Exercise(name: trimmedName, category: category, type: type,
                                                 movementGroup: movementGroup.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                                                movementPattern: movementPattern == .unknown ? nil : movementPattern,
                                                 isUnilateral: isUnilateral, notes: notes)
                         context.insert(exercise)
                         if PersistenceErrorCenter.shared.save(context, operation: "Adding the exercise") { dismiss() }

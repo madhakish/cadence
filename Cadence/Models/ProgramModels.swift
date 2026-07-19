@@ -32,6 +32,12 @@ final class Program {
     var nextDayIndex: Int
     var roundingLb: Double
     var isActive: Bool
+    var coachEnabled: Bool = true
+    /// Nil keeps all history eligible. Users with incomplete alpha-era logs
+    /// can explicitly choose the first reliable date without deleting data.
+    var reliableHistoryStart: Date?
+    var preferredSessionSpacingDays: Int = 3
+    var maximumAddedSetsPerRotation: Int = 6
     @Relationship(deleteRule: .cascade, inverse: \ProgramDay.program)
     var days: [ProgramDay]
     var createdAt: Date
@@ -45,6 +51,10 @@ final class Program {
         self.nextDayIndex = nextDayIndex
         self.roundingLb = roundingLb
         self.isActive = isActive
+        self.coachEnabled = true
+        self.reliableHistoryStart = nil
+        self.preferredSessionSpacingDays = 3
+        self.maximumAddedSetsPerRotation = 6
         self.days = []
         self.createdAt = .now
     }
@@ -107,6 +117,22 @@ final class ProgramLift {
     var order: Int = 0
     var prescriptionRaw: String = "automatic"
     var warmupPolicyRaw: String = "automatic"
+    /// Zero offsets mean use movement-aware defaults (25/33 lower body,
+    /// 10/15 upper body). Explicit values remain user-owned.
+    var loadOffsetLb: Double = 0
+    var peakOffsetLb: Double = 0
+    var deloadMultiplier: Double = 0.775
+    var doubleProgressionSets: Int = 3
+    var minimumReps: Int = 5
+    var maximumReps: Int = 8
+    var currentReps: Int = 5
+    var peakSingleEnabled: Bool = false
+    var lastPeakSingleLb: Double = 0
+    var peakSingleIncrementLb: Double = 5
+    var phasePrimerEnabled: Bool = true
+    var dropIncrementLb: Double = 0
+    var capacityManaged: Bool = true
+    var maximumSets: Int = 6
     var baseWeightLb: Double
     var estimatedMaxLb: Double
     var stallCount: Int
@@ -157,6 +183,23 @@ final class ProgramLift {
                          stallCount: stallCount, role: role, lastIncrementLb: lastIncrementLb)
     }
 
+    func prescriptionConfiguration(movementGroup: String) -> LiftPrescriptionConfiguration {
+        let lower = movementGroup == "squat" || movementGroup == "hinge"
+        return LiftPrescriptionConfiguration(
+            loadOffsetLb: loadOffsetLb > 0 ? loadOffsetLb : (lower ? 25 : 10),
+            peakOffsetLb: peakOffsetLb > 0 ? peakOffsetLb : (lower ? 33 : 15),
+            deloadMultiplier: deloadMultiplier > 0 ? deloadMultiplier : 0.775,
+            workingSets: max(1, doubleProgressionSets),
+            minimumReps: max(1, minimumReps),
+            maximumReps: max(minimumReps, maximumReps),
+            currentReps: currentReps,
+            peakSingleEnabled: peakSingleEnabled,
+            lastPeakSingleLb: lastPeakSingleLb,
+            peakSingleIncrementLb: peakSingleIncrementLb,
+            phasePrimerEnabled: phasePrimerEnabled
+        )
+    }
+
     func apply(_ s: ProgramLiftState) {
         baseWeightLb = s.baseWeightLb
         estimatedMaxLb = s.estimatedMaxLb
@@ -180,6 +223,12 @@ final class ProgramAccessory {
     /// fields so changing an exercise between typed and rep-based is lossless.
     var targetSeconds: Int = 30
     var durationStepSeconds: Int = 5
+    var capacityManaged: Bool = true
+    var maximumSets: Int = 6
+    /// Easy conditioning defaults to conversational effort. RPE zero means no
+    /// explicit target; it remains separate from lifting-set analytics.
+    var conditioningEffortRaw: String = "easy"
+    var targetRPE: Int = 0
     var weightLb: Double
     var incrementLb: Double
     var stallCount: Int
@@ -187,6 +236,11 @@ final class ProgramAccessory {
     /// at the next cycle rollover. nil = no revert pending.
     var revertToExerciseName: String?
     var day: ProgramDay?
+
+    var conditioningEffort: ConditioningEffort {
+        get { ConditioningEffort(rawValue: conditioningEffortRaw) ?? .easy }
+        set { conditioningEffortRaw = newValue.rawValue }
+    }
 
     init(id: String = UUID().uuidString, exerciseName: String, order: Int = 0, sets: Int, minReps: Int, maxReps: Int,
          currentReps: Int, targetSeconds: Int = 30, durationStepSeconds: Int = 5,
@@ -218,5 +272,19 @@ final class ProgramAccessory {
         weightLb = s.weightLb
         incrementLb = s.incrementLb
         stallCount = s.stallCount
+    }
+}
+
+enum ConditioningEffort: String, CaseIterable {
+    case easy
+    case interval
+    case mixed
+
+    var name: String {
+        switch self {
+        case .easy: return "Easy / conversational"
+        case .interval: return "Intervals"
+        case .mixed: return "Mixed"
+        }
     }
 }

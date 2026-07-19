@@ -12,13 +12,14 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const tick = (t) => { const d = new Date(t); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
 
 // series: [{ t:number(ms), y:number, ann?:string }] — assumed sorted by t.
-export function lineChart(series, { height = 200, fmtY = (v) => String(Math.round(v)) } = {}) {
+export function lineChart(series, { height = 200, fmtY = (v) => String(Math.round(v)), targetY = null, targetLabel = "Target" } = {}) {
   const W = 340, H = height, padL = 40, padR = 14, padT = 16, padB = 24;
   const svg = el("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img" });
   if (!series.length) return svg;
 
   const n = series.length;
   const ys = series.map((p) => p.y);
+  if (Number.isFinite(targetY)) ys.push(targetY);
   let ymin = Math.min(...ys), ymax = Math.max(...ys);
   if (ymin === ymax) { ymin -= 1; ymax += 1; }
   const padY = (ymax - ymin) * 0.12;
@@ -32,6 +33,13 @@ export function lineChart(series, { height = 200, fmtY = (v) => String(Math.roun
     const y = yAt(v);
     svg.append(el("line", { class: "axis", x1: padL, y1: y, x2: W - padR, y2: y, opacity: 0.5 }));
     svg.append(el("text", { class: "lbl", x: 4, y: y + 3 }, fmtY(v)));
+  }
+
+  if (Number.isFinite(targetY)) {
+    const y = yAt(targetY);
+    svg.append(el("line", { class: "target-line", x1: padL, y1: y, x2: W - padR, y2: y,
+      style: "stroke:var(--accent);stroke-dasharray:5 4;opacity:.8" }));
+    svg.append(el("text", { class: "ann", x: W - padR, y: y - 5, "text-anchor": "end" }, `${targetLabel} ${fmtY(targetY)}`));
   }
 
   // line path
@@ -90,7 +98,8 @@ export function sparkline(values, { width = 64, height = 20 } = {}) {
 // scale) + an HTML legend. Used by the rotation-split progression view —
 // compare this cycle's R1 against last cycle's R1 instead of reading a
 // sawtooth. Mirrors the native splitByRotation chart.
-export function multiLineChart(seriesByKey, { height = 200, fmtY = (v) => String(Math.round(v)), colors = ROTATION_COLORS } = {}) {
+export function multiLineChart(seriesByKey, { height = 200, fmtY = (v) => String(Math.round(v)), colors = ROTATION_COLORS,
+  targetY = null, targetLabel = "Target" } = {}) {
   const W = 340, H = height, padL = 40, padR = 14, padT = 16, padB = 24;
   const wrap = document.createElement("div");
   const svg = el("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img" });
@@ -99,7 +108,9 @@ export function multiLineChart(seriesByKey, { height = 200, fmtY = (v) => String
   const all = keys.flatMap((k) => seriesByKey[k]);
   if (!all.length) return wrap;
 
-  let ymin = Math.min(...all.map((p) => p.y)), ymax = Math.max(...all.map((p) => p.y));
+  const values = all.map((p) => p.y);
+  if (Number.isFinite(targetY)) values.push(targetY);
+  let ymin = Math.min(...values), ymax = Math.max(...values);
   if (ymin === ymax) { ymin -= 1; ymax += 1; }
   const padY = (ymax - ymin) * 0.12;
   ymin -= padY; ymax += padY;
@@ -111,6 +122,12 @@ export function multiLineChart(seriesByKey, { height = 200, fmtY = (v) => String
     const y = yAt(v);
     svg.append(el("line", { class: "axis", x1: padL, y1: y, x2: W - padR, y2: y, opacity: 0.5 }));
     svg.append(el("text", { class: "lbl", x: 4, y: y + 3 }, fmtY(v)));
+  }
+  if (Number.isFinite(targetY)) {
+    const y = yAt(targetY);
+    svg.append(el("line", { class: "target-line", x1: padL, y1: y, x2: W - padR, y2: y,
+      style: "stroke:var(--accent);stroke-dasharray:5 4;opacity:.8" }));
+    svg.append(el("text", { class: "ann", x: W - padR, y: y - 5, "text-anchor": "end" }, `${targetLabel} ${fmtY(targetY)}`));
   }
   for (const k of keys) {
     const color = colors[k] || "#888";

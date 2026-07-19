@@ -63,9 +63,11 @@ final class LiftTrack {
         }
     }
 
-    /// Mark the suggested session completed and advance the track.
-    func completeSession() {
+    /// Record a standalone exposure and advance only when its performed work
+    /// earned progression against the immutable prescription snapshot.
+    func completeSession(advance: Bool = true) {
         lastCompletedAt = .now
+        guard advance else { return }
         switch mode {
         case .cycle:
             let advanced = ProgramEngine.advancing(cycleState, afterCompleting: nextPhase)

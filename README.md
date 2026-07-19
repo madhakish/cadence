@@ -19,10 +19,12 @@ no quotes.
   achieved total shown in both units, warning when off target by > 2 lb.
   Reverse mode: tap in what's on the bar, get the total.
 - **Program engine** — 4-week microcycle per lift (Volume 5×5 → Load 5×3 →
-  Peak 3×3 → Deload 3×5), each lift on its own track keyed to its last
-  completed session, never the calendar. +10 lb/cycle lower, +5 upper.
-  Suggestions are editable in two taps; mid-session "Dropping load" recalcs
-  remaining sets and logs why (bar speed / wobble / joint / heat / fatigue).
+  Peak 3×3 → Deload 3×5), offset-based strength waves, double progression,
+  optional primers/top singles, and rotation-first readiness. Each lift keys
+  off completed performed work, never the calendar. Rack-aware targets keep
+  the theoretical prescription, achieved load, and final performed load
+  separate. Mid-session "Dropping load" uses a pre-computed fallback and logs
+  why (bar speed / wobble / joint / heat / fatigue / not there).
 - **Session logging** — pre-filled warmup ramps (barbell bar×10 +
   ~40/55/70/85%; main dumbbell ~40/60/80% per hand), add/remove individual
   sets, propagate weight/reps edits across the remaining planned work,
@@ -42,7 +44,7 @@ no quotes.
   inventories, per-lift increments, rest defaults, optional write-only
   HealthKit, full JSON + CSV export.
 
-Fresh installs contain a searchable, categorized library of 138 generic
+Fresh installs contain a searchable, categorized library of 141 generic
 strength, accessory, bodyweight, Olympic, and conditioning exercises plus a
 default gym. Existing installs receive missing generic definitions without
 overwriting their edits.

@@ -118,11 +118,7 @@ struct InjuryTimelineView: View {
     }
 
     private func shortName(_ site: BodySite) -> String {
-        switch site {
-        case .shoulder: return "Shoulder"
-        case .hip: return "Hip"
-        case .knee: return "Knee"
-        }
+        site.rawValue
     }
 }
 

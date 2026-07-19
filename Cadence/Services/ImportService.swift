@@ -31,9 +31,11 @@ enum ImportService {
         var sessions: [Session]?; var bodyweight: [Bodyweight]?; var protein: [Protein]?
         var checkIns: [CheckInDTO]?; var milestones: [MilestoneDTO]?; var programs: [ProgramDTO]?
         var tracks: [Track]?; var gyms: [GymDTO]?; var exercises: [ExerciseDef]?; var settings: SettingsDTO?
+        var coachingDecisions: [CoachingDecisionDTO]?
     }
     private struct Session: Decodable {
         var id: String?; var date: Date?; var notes: String?; var gym: String?; var gymId: String?; var isCompleted: Bool?
+        var completedAt: Date?
         var programTag: ProgramTag?; var exercises: [ExerciseEntry]?
     }
     private struct ProgramTag: Decodable {
@@ -55,10 +57,14 @@ enum ImportService {
     private struct ExerciseEntry: Decodable {
         var name: String?; var notes: String?; var phase: String?; var role: String?
         var programSlotId: String?; var barId: String?
-        var plannedWeightLb: Double?; var plannedSets: Int?; var plannedReps: Int?; var sets: [SetDTO]?
+        var plannedWeightLb: Double?; var targetWeightLb: Double?; var plannedSets: Int?; var plannedReps: Int?
+        var plannedDurationSeconds: Int?; var fallbackWeightLb: Double?; var prescriptionStyle: String?
+        var sets: [SetDTO]?
     }
     private struct SetDTO: Decodable {
         var weightLb: Double?; var reps: Int?; var isWarmup: Bool?; var isPerSide: Bool?
+        var targetWeightLb: Double?; var plannedWeightLb: Double?; var plannedReps: Int?
+        var plannedDurationSeconds: Int?; var prescriptionBlock: String?
         var loadBasis: String?; var implementCount: Int?
         var status: String?
         var enteredUnit: String?; var flags: [String]?; var bodyFlagSite: String?; var bodyFlagNote: String?
@@ -71,8 +77,13 @@ enum ImportService {
     private struct ProgramDTO: Decodable {
         var id: String?; var name: String?; var focus: String?; var cycleNumber: Int?; var currentWeek: Int?
         var nextDayIndex: Int?; var roundingLb: Double?; var isActive: Bool?; var days: [DayDTO]?
+        var coachEnabled: Bool?; var reliableHistoryStart: Date?; var preferredSessionSpacingDays: Int?
+        var maximumAddedSetsPerRotation: Int?
 
-        private enum CodingKeys: String, CodingKey { case id, name, focus, cycleNumber, currentWeek, nextDayIndex, roundingLb, isActive, days }
+        private enum CodingKeys: String, CodingKey {
+            case id, name, focus, cycleNumber, currentWeek, nextDayIndex, roundingLb, isActive, days
+            case coachEnabled, reliableHistoryStart, preferredSessionSpacingDays, maximumAddedSetsPerRotation
+        }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = (try? c.decode(String.self, forKey: .id))
@@ -85,12 +96,20 @@ enum ImportService {
             roundingLb = try? c.decode(Double.self, forKey: .roundingLb)
             isActive = try? c.decode(Bool.self, forKey: .isActive)
             days = try? c.decode([DayDTO].self, forKey: .days)
+            coachEnabled = try? c.decode(Bool.self, forKey: .coachEnabled)
+            reliableHistoryStart = try? c.decode(Date.self, forKey: .reliableHistoryStart)
+            preferredSessionSpacingDays = try? c.decode(Int.self, forKey: .preferredSessionSpacingDays)
+            maximumAddedSetsPerRotation = try? c.decode(Int.self, forKey: .maximumAddedSetsPerRotation)
         }
     }
     private struct DayDTO: Decodable { var name: String?; var order: Int?; var lifts: [LiftDTO]?; var accessories: [AccessoryDTO]? }
     private struct LiftDTO: Decodable {
         var id: String?; var exerciseName: String?; var role: String?; var order: Int?
         var prescription: String?; var warmupPolicy: String?; var baseWeightLb: Double?; var estimatedMaxLb: Double?
+        var loadOffsetLb: Double?; var peakOffsetLb: Double?; var deloadMultiplier: Double?
+        var doubleProgressionSets: Int?; var minimumReps: Int?; var maximumReps: Int?; var currentReps: Int?
+        var peakSingleEnabled: Bool?; var lastPeakSingleLb: Double?; var peakSingleIncrementLb: Double?
+        var phasePrimerEnabled: Bool?; var dropIncrementLb: Double?; var capacityManaged: Bool?; var maximumSets: Int?
         var stallCount: Int?; var lastIncrementLb: Double?; var pending: PendingDTO?
         var revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
@@ -99,6 +118,7 @@ enum ImportService {
     private struct AccessoryDTO: Decodable {
         var id: String?; var exerciseName: String?; var order: Int?; var sets: Int?; var minReps: Int?; var maxReps: Int?
         var currentReps: Int?; var targetSeconds: Int?; var durationStepSeconds: Int?
+        var capacityManaged: Bool?; var maximumSets: Int?; var conditioningEffort: String?; var targetRPE: Int?
         var weightLb: Double?; var incrementLb: Double?; var stallCount: Int?
         var revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
@@ -114,9 +134,17 @@ enum ImportService {
     private struct PlateToggleDTO: Decodable { var value: Double?; var unit: String?; var enabled: Bool? }
     private struct ExerciseDef: Decodable {
         var name: String?; var category: String?; var type: String?; var movementGroup: String?
+        var movementPattern: String?; var secondaryMovementPattern: String?; var aliases: [String]?; var strategyTags: [String]?
         var isUnilateral: Bool?; var loadBasis: String?; var implementCount: Int?
         var defaultRestSeconds: Int?; var notes: String?
         var isShelved: Bool?; var shelvedNote: String?; var watchSite: String?; var createdAt: Date?
+        var gateStatus: String?; var gateSite: String?; var reEntryCriteria: [String]?; var completedReEntryCriteria: [String]?
+        var reEntryTestWeightLb: Double?; var reEntryTestSets: Int?; var reEntryTestReps: Int?
+    }
+    private struct CoachingDecisionDTO: Decodable {
+        var id: String?; var date: Date?; var programId: String?; var ruleId: String?; var recommendationId: String?
+        var action: String?; var title: String?; var explanation: String?; var evidence: [String]?
+        var beforeValue: String?; var afterValue: String?
     }
     /// Web `settings.rest` — the PWA's canonical nested shape for the buckets.
     private struct RestDTO: Decodable {
@@ -209,13 +237,17 @@ enum ImportService {
         let liftRoles: Set<String> = ["main", "complementary"]
         let flags: Set<String> = ["clean", "grindy", "wobble", "stopped early"]
         let statuses = Set(SetStatus.allCases.map(\.rawValue))
-        let reasons: Set<String> = ["bar speed", "wobble", "joint signal", "heat", "fatigue"]
+        let reasons = Set(AutoregReason.allCases.map(\.rawValue))
         let loadBases = Set(LoadBasis.allCases.map(\.rawValue))
+        let blockKinds = Set(PrescriptionBlockKind.allCases.map(\.rawValue))
 
         for (si, session) in (bundle.sessions ?? []).enumerated() {
             let path = "sessions[\(si)]"
             if session.id != nil { _ = try portableID(session.id, "\(path).id") }
             try requireDate(session.date, "\(path).date")
+            if schemaVersion >= 3, session.isCompleted == true, session.completedAt != nil {
+                try requireDate(session.completedAt, "\(path).completedAt")
+            }
             if let tag = session.programTag {
                 if schemaVersion >= 1 { _ = try requiredText(tag.programName, "\(path).programTag.programName") }
                 if schemaVersion >= 2 { _ = try portableID(tag.programId, "\(path).programTag.programId", allowLegacy: true) }
@@ -232,12 +264,23 @@ enum ImportService {
                 try known(exercise.role, roles, "\(exercisePath).role")
                 if exercise.programSlotId != nil { _ = try portableID(exercise.programSlotId, "\(exercisePath).programSlotId") }
                 try finite(exercise.plannedWeightLb, "\(exercisePath).plannedWeightLb", min: 0)
+                try finite(exercise.targetWeightLb, "\(exercisePath).targetWeightLb", min: 0)
                 try integer(exercise.plannedSets, "\(exercisePath).plannedSets", min: 0)
                 try integer(exercise.plannedReps, "\(exercisePath).plannedReps", min: 0)
+                try integer(exercise.plannedDurationSeconds, "\(exercisePath).plannedDurationSeconds", min: 0)
+                try finite(exercise.fallbackWeightLb, "\(exercisePath).fallbackWeightLb", min: 0)
+                try known(exercise.prescriptionStyle, Set(PrescriptionStyle.allCases.map(\.rawValue)),
+                          "\(exercisePath).prescriptionStyle")
                 for (xi, set) in (exercise.sets ?? []).enumerated() {
                     let setPath = "\(exercisePath).sets[\(xi)]"
                     try finite(set.weightLb, "\(setPath).weightLb", required: true, min: 0)
                     try integer(set.reps, "\(setPath).reps", required: true, min: 0)
+                    try finite(set.targetWeightLb, "\(setPath).targetWeightLb", min: 0)
+                    try finite(set.plannedWeightLb, "\(setPath).plannedWeightLb", min: 0)
+                    try integer(set.plannedReps, "\(setPath).plannedReps", min: 0)
+                    try integer(set.plannedDurationSeconds, "\(setPath).plannedDurationSeconds", min: 0)
+                    try known(set.prescriptionBlock, blockKinds, "\(setPath).prescriptionBlock",
+                              required: schemaVersion >= 3)
                     try known(set.status, statuses, "\(setPath).status", required: schemaVersion >= 2)
                     try known(set.loadBasis, loadBases, "\(setPath).loadBasis")
                     try integer(set.implementCount, "\(setPath).implementCount", min: 1, max: 4)
@@ -289,6 +332,8 @@ enum ImportService {
             try integer(program.currentWeek, "\(path).currentWeek", min: 1, max: 4)
             try integer(program.nextDayIndex, "\(path).nextDayIndex", min: 0)
             try finite(program.roundingLb, "\(path).roundingLb", min: Double.leastNonzeroMagnitude)
+            try integer(program.preferredSessionSpacingDays, "\(path).preferredSessionSpacingDays", min: 2, max: 14)
+            try integer(program.maximumAddedSetsPerRotation, "\(path).maximumAddedSetsPerRotation", min: 0, max: 20)
             for (di, day) in (program.days ?? []).enumerated() {
                 let dayPath = "\(path).days[\(di)]"
                 _ = try requiredText(day.name, "\(dayPath).name")
@@ -301,6 +346,17 @@ enum ImportService {
                     try integer(lift.order, "\(liftPath).order", min: 0)
                     try known(lift.prescription, Set(PrescriptionStyle.allCases.map(\.rawValue)), "\(liftPath).prescription")
                     try known(lift.warmupPolicy, Set(WarmupPolicy.allCases.map(\.rawValue)), "\(liftPath).warmupPolicy")
+                    try finite(lift.loadOffsetLb, "\(liftPath).loadOffsetLb", min: 0)
+                    try finite(lift.peakOffsetLb, "\(liftPath).peakOffsetLb", min: 0)
+                    try finite(lift.deloadMultiplier, "\(liftPath).deloadMultiplier", min: 0.25, max: 1)
+                    try integer(lift.doubleProgressionSets, "\(liftPath).doubleProgressionSets", min: 1, max: 20)
+                    try integer(lift.minimumReps, "\(liftPath).minimumReps", min: 1, max: 100)
+                    try integer(lift.maximumReps, "\(liftPath).maximumReps", min: 1, max: 100)
+                    try integer(lift.currentReps, "\(liftPath).currentReps", min: 1, max: 100)
+                    try finite(lift.lastPeakSingleLb, "\(liftPath).lastPeakSingleLb", min: 0)
+                    try finite(lift.peakSingleIncrementLb, "\(liftPath).peakSingleIncrementLb", min: 0)
+                    try finite(lift.dropIncrementLb, "\(liftPath).dropIncrementLb", min: 0)
+                    try integer(lift.maximumSets, "\(liftPath).maximumSets", min: 1, max: 20)
                     try finite(lift.baseWeightLb, "\(liftPath).baseWeightLb", min: 0)
                     try finite(lift.estimatedMaxLb, "\(liftPath).estimatedMaxLb", min: 0)
                     try integer(lift.stallCount, "\(liftPath).stallCount", min: 0)
@@ -323,6 +379,10 @@ enum ImportService {
                     try integer(accessory.currentReps, "\(accessoryPath).currentReps", min: 0)
                     try integer(accessory.targetSeconds, "\(accessoryPath).targetSeconds", min: 0)
                     try integer(accessory.durationStepSeconds, "\(accessoryPath).durationStepSeconds", min: 0)
+                    try integer(accessory.maximumSets, "\(accessoryPath).maximumSets", min: 1, max: 20)
+                    try known(accessory.conditioningEffort, ["easy", "interval", "mixed"],
+                              "\(accessoryPath).conditioningEffort")
+                    try integer(accessory.targetRPE, "\(accessoryPath).targetRPE", min: 0, max: 10)
                     try finite(accessory.weightLb, "\(accessoryPath).weightLb", min: 0)
                     try finite(accessory.incrementLb, "\(accessoryPath).incrementLb", min: 0)
                     try integer(accessory.stallCount, "\(accessoryPath).stallCount", min: 0)
@@ -377,12 +437,34 @@ enum ImportService {
             _ = try requiredText(exercise.name, "\(path).name")
             try known(exercise.category, categories, "\(path).category", required: schemaVersion >= 1)
             try known(exercise.type, types, "\(path).type", required: schemaVersion >= 1)
+            try known(exercise.movementPattern, Set(MovementPattern.allCases.map(\.rawValue)),
+                      "\(path).movementPattern", required: schemaVersion >= 3)
+            try known(exercise.secondaryMovementPattern, Set(MovementPattern.allCases.map(\.rawValue)),
+                      "\(path).secondaryMovementPattern")
             try known(exercise.loadBasis, loadBases, "\(path).loadBasis")
             try integer(exercise.implementCount, "\(path).implementCount", min: 1, max: 4)
             try bodySite(exercise.watchSite, "\(path).watchSite")
+            try known(exercise.gateStatus, Set(ExerciseGateStatus.allCases.map(\.rawValue)),
+                      "\(path).gateStatus", required: schemaVersion >= 3)
+            try bodySite(exercise.gateSite, "\(path).gateSite")
+            try finite(exercise.reEntryTestWeightLb, "\(path).reEntryTestWeightLb", min: 0)
+            try integer(exercise.reEntryTestSets, "\(path).reEntryTestSets", min: 1, max: 20)
+            try integer(exercise.reEntryTestReps, "\(path).reEntryTestReps", min: 1, max: 100)
             try integer(exercise.defaultRestSeconds, "\(path).defaultRestSeconds", min: 0, max: 3600)
         }
         try unique((bundle.exercises ?? []).map { try requiredText($0.name, "exercises.name") }, "exercises")
+
+        for (i, decision) in (bundle.coachingDecisions ?? []).enumerated() {
+            let path = "coachingDecisions[\(i)]"
+            _ = try portableID(decision.id, "\(path).id")
+            try requireDate(decision.date, "\(path).date")
+            _ = try portableID(decision.programId, "\(path).programId")
+            _ = try requiredText(decision.ruleId, "\(path).ruleId")
+            _ = try requiredText(decision.recommendationId, "\(path).recommendationId")
+            try known(decision.action, Set(CoachingDecisionAction.allCases.map(\.rawValue)),
+                      "\(path).action", required: true)
+        }
+        try unique((bundle.coachingDecisions ?? []).compactMap(\.id), "coachingDecisions.id")
 
         if let settings = bundle.settings {
             try known(settings.unitDisplay, ["lbPrimary", "kgPrimary", "both"], "settings.unitDisplay", required: schemaVersion >= 1)
@@ -425,7 +507,7 @@ enum ImportService {
         let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
                            bundle.gyms != nil, bundle.exercises != nil, bundle.bodyweight != nil,
                            bundle.protein != nil, bundle.checkIns != nil, bundle.milestones != nil,
-                           bundle.settings != nil].contains(true)
+                           bundle.settings != nil, bundle.coachingDecisions != nil].contains(true)
         guard hasAnything else { throw ImportError.notABackup }
         try validate(bundle, schemaVersion: schemaVersion)
 
@@ -501,6 +583,10 @@ enum ImportService {
                                                programIDsByName: programIDsByName))
                 }
             }
+            if let decisions = bundle.coachingDecisions {
+                try context.delete(model: CoachingDecision.self)
+                for value in decisions { context.insert(makeCoachingDecision(value)) }
+            }
             if let st = bundle.settings {
                 try applySettings(st, restoredExercises: bundle.exercises != nil, in: context)
             } else if bundle.exercises != nil,
@@ -530,6 +616,9 @@ enum ImportService {
             category: ExerciseCategory(rawValue: d.category ?? "") ?? .accessory,
             type: ExerciseType(rawValue: d.type ?? "") ?? .barbell,
             movementGroup: d.movementGroup ?? "",
+            movementPattern: d.movementPattern.flatMap(MovementPattern.init(rawValue:)),
+            secondaryMovementPattern: d.secondaryMovementPattern.flatMap(MovementPattern.init(rawValue:)),
+            aliases: d.aliases ?? [], strategyTags: d.strategyTags ?? [],
             loadBasis: d.loadBasis.flatMap(LoadBasis.init(rawValue:)),
             implementCount: d.implementCount ?? 0,
             isUnilateral: d.isUnilateral ?? false,
@@ -543,6 +632,13 @@ enum ImportService {
             watchSite: BodySite.fromStorage(d.watchSite)
         )
         if let c = d.createdAt { e.createdAt = c }
+        e.gateStatus = ExerciseGateStatus(rawValue: d.gateStatus ?? "") ?? (d.isShelved == true ? .shelved : .open)
+        e.gateSite = BodySite.fromStorage(d.gateSite)
+        e.reEntryCriteria = d.reEntryCriteria ?? []
+        e.completedReEntryCriteria = d.completedReEntryCriteria ?? []
+        e.reEntryTestWeightLb = d.reEntryTestWeightLb ?? 0
+        e.reEntryTestSets = d.reEntryTestSets ?? 3
+        e.reEntryTestReps = d.reEntryTestReps ?? 5
         return e
     }
 
@@ -550,6 +646,10 @@ enum ImportService {
         if let v = d.category, let c = ExerciseCategory(rawValue: v) { e.category = c }
         if let v = d.type, let t = ExerciseType(rawValue: v) { e.type = t }
         if let v = d.movementGroup { e.movementGroup = v }
+        if let v = d.movementPattern, let pattern = MovementPattern(rawValue: v) { e.movementPattern = pattern }
+        if let v = d.secondaryMovementPattern { e.secondaryMovementPattern = MovementPattern(rawValue: v) }
+        if let v = d.aliases { e.aliases = v }
+        if let v = d.strategyTags { e.strategyTags = v }
         if let v = d.loadBasis, let basis = LoadBasis(rawValue: v) { e.loadBasis = basis }
         if let v = d.implementCount { e.implementCount = v }
         if let v = d.isUnilateral { e.isUnilateral = v }
@@ -558,6 +658,13 @@ enum ImportService {
         if let v = d.isShelved { e.isShelved = v }
         if let v = d.shelvedNote { e.shelvedNote = v }
         if let v = d.watchSite { e.watchSite = BodySite.fromStorage(v) }
+        if let v = d.gateStatus, let status = ExerciseGateStatus(rawValue: v) { e.gateStatus = status }
+        if d.gateSite != nil { e.gateSite = BodySite.fromStorage(d.gateSite) }
+        if let v = d.reEntryCriteria { e.reEntryCriteria = v }
+        if let v = d.completedReEntryCriteria { e.completedReEntryCriteria = v }
+        if let v = d.reEntryTestWeightLb { e.reEntryTestWeightLb = v }
+        if let v = d.reEntryTestSets { e.reEntryTestSets = v }
+        if let v = d.reEntryTestReps { e.reEntryTestReps = v }
     }
 
     private static func makeGym(_ g: GymDTO) -> Gym {
@@ -592,6 +699,10 @@ enum ImportService {
                            cycleNumber: p.cycleNumber ?? 1, currentWeek: p.currentWeek ?? 1,
                            nextDayIndex: p.nextDayIndex ?? 0, roundingLb: p.roundingLb ?? 5, isActive: p.isActive ?? false)
         if preserveID, let id = p.id { prog.id = id }
+        prog.coachEnabled = p.coachEnabled ?? true
+        prog.reliableHistoryStart = p.reliableHistoryStart
+        prog.preferredSessionSpacingDays = p.preferredSessionSpacingDays ?? 3
+        prog.maximumAddedSetsPerRotation = p.maximumAddedSetsPerRotation ?? 6
         for d in (p.days ?? []) {
             let day = ProgramDay(name: d.name ?? "Day", order: d.order ?? 0)
             day.program = prog
@@ -603,6 +714,20 @@ enum ImportService {
                                        warmupPolicy: WarmupPolicy(rawValue: l.warmupPolicy ?? "automatic") ?? .automatic,
                                        baseWeightLb: l.baseWeightLb ?? 45, estimatedMaxLb: l.estimatedMaxLb ?? 0,
                                        stallCount: l.stallCount ?? 0, lastIncrementLb: l.lastIncrementLb ?? 0)
+                lift.loadOffsetLb = l.loadOffsetLb ?? 0
+                lift.peakOffsetLb = l.peakOffsetLb ?? 0
+                lift.deloadMultiplier = l.deloadMultiplier ?? 0.775
+                lift.doubleProgressionSets = l.doubleProgressionSets ?? 3
+                lift.minimumReps = l.minimumReps ?? 5
+                lift.maximumReps = l.maximumReps ?? 8
+                lift.currentReps = l.currentReps ?? lift.minimumReps
+                lift.peakSingleEnabled = l.peakSingleEnabled ?? false
+                lift.lastPeakSingleLb = l.lastPeakSingleLb ?? 0
+                lift.peakSingleIncrementLb = l.peakSingleIncrementLb ?? 5
+                lift.phasePrimerEnabled = l.phasePrimerEnabled ?? true
+                lift.dropIncrementLb = l.dropIncrementLb ?? 0
+                lift.capacityManaged = l.capacityManaged ?? true
+                lift.maximumSets = l.maximumSets ?? 6
                 if let st = l.pending?.state {
                     lift.pendingBaseWeightLb = st.baseWeightLb
                     lift.pendingEstimatedMaxLb = st.estimatedMaxLb
@@ -623,6 +748,10 @@ enum ImportService {
                                            durationStepSeconds: a.durationStepSeconds ?? 5, weightLb: a.weightLb ?? 0,
                                            incrementLb: a.incrementLb ?? 0, stallCount: a.stallCount ?? 0)
                 acc.revertToExerciseName = a.revertToExerciseName
+                acc.capacityManaged = a.capacityManaged ?? true
+                acc.maximumSets = a.maximumSets ?? 6
+                acc.conditioningEffortRaw = a.conditioningEffort ?? "easy"
+                acc.targetRPE = a.targetRPE ?? 0
                 acc.day = day
                 day.accessories.append(acc)
             }
@@ -638,6 +767,7 @@ enum ImportService {
         // Legacy, unversioned backups only contained completed sessions, so a
         // missing flag means completed. Version 1 carries the actual state.
         session.isCompleted = s.isCompleted ?? true
+        session.completedAt = s.completedAt
         if let tag = s.programTag {
             session.programID = schemaVersion >= 2
                 ? tag.programId
@@ -654,8 +784,12 @@ enum ImportService {
             entry.programSlotID = e.programSlotId
             entry.barID = e.barId
             entry.plannedWeightLb = e.plannedWeightLb
+            entry.targetWeightLb = e.targetWeightLb
             entry.plannedSets = e.plannedSets
             entry.plannedReps = e.plannedReps
+            entry.plannedDurationSeconds = e.plannedDurationSeconds
+            entry.fallbackWeightLb = e.fallbackWeightLb
+            entry.prescriptionStyleRaw = e.prescriptionStyle ?? ""
             entry.phaseRaw = recoverPhase(e.phase)
             entry.session = session
             for (si, x) in (e.sets ?? []).enumerated() {
@@ -674,13 +808,36 @@ enum ImportService {
                                        ?? e.name.flatMap { exByName[$0]?.loadBasis },
                                    implementCount: x.implementCount
                                        ?? e.name.flatMap { exByName[$0]?.resolvedImplementCount } ?? 1,
-                                   autoregReason: AutoregReason(rawValue: x.autoregReason ?? ""))
+                                   autoregReason: AutoregReason(rawValue: x.autoregReason ?? ""),
+                                   targetWeightLb: x.targetWeightLb,
+                                   plannedWeightLb: x.plannedWeightLb,
+                                   plannedReps: x.plannedReps,
+                                   plannedDurationSeconds: x.plannedDurationSeconds,
+                                   prescriptionBlock: PrescriptionBlockKind(rawValue: x.prescriptionBlock ?? "")
+                                       ?? (x.isWarmup == true ? .warmup : .work))
                 set.sessionExercise = entry
                 entry.sets.append(set)
             }
             session.exercises.append(entry)
         }
         return session
+    }
+
+    private static func makeCoachingDecision(_ d: CoachingDecisionDTO) -> CoachingDecision {
+        let decision = CoachingDecision(
+            programID: d.programId ?? "",
+            ruleID: d.ruleId ?? "",
+            recommendationID: d.recommendationId ?? "",
+            action: CoachingDecisionAction(rawValue: d.action ?? "") ?? .deferred,
+            title: d.title ?? "",
+            explanation: d.explanation ?? "",
+            evidence: d.evidence ?? [],
+            beforeValue: d.beforeValue,
+            afterValue: d.afterValue
+        )
+        if let id = d.id { decision.id = id }
+        if let date = d.date { decision.date = date }
+        return decision
     }
 
     private static func applySettings(_ st: SettingsDTO, restoredExercises: Bool, in context: ModelContext) throws {

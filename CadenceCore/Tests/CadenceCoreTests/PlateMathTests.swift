@@ -174,6 +174,30 @@ final class PlateMathTests: XCTestCase {
         XCTAssertTrue(over.satisfiesPolicy)
     }
 
+    func testPrescriptionTieBreakAndAlternatives() throws {
+        let plates = [Plate(value: 45, unit: .lb), Plate(value: 25, unit: .lb), Plate(value: 5, unit: .lb)]
+        let volume = PlateMath.prescriptionOptions(
+            targetLb: 200, bar: .bar45lb, plates: plates, preferOverOnTie: true
+        )
+        XCTAssertEqual(volume.selected.loadout.totalLb, 205)
+        XCTAssertEqual(try XCTUnwrap(volume.below).loadout.totalLb, 195)
+        XCTAssertEqual(try XCTUnwrap(volume.above).loadout.totalLb, 205)
+
+        let peak = PlateMath.prescriptionOptions(
+            targetLb: 200, bar: .bar45lb, plates: plates, preferOverOnTie: false
+        )
+        XCTAssertEqual(peak.selected.loadout.totalLb, 195)
+    }
+
+    func testExplicitGymPolicyOverridesPrescriptionTieBreak() {
+        let plates = [Plate(value: 45, unit: .lb), Plate(value: 25, unit: .lb), Plate(value: 5, unit: .lb)]
+        let neverOver = PlateMath.prescriptionOptions(
+            targetLb: 200, bar: .bar45lb, plates: plates,
+            policy: .under, preferOverOnTie: true
+        )
+        XCTAssertEqual(neverOver.selected.loadout.totalLb, 195)
+    }
+
     func testNeverUnderSearchFindsDistantValidOvershoot() {
         let s = PlateMath.solve(targetLb: 50, bar: .bar45lb,
                                 plates: [Plate(value: 10, unit: .lb)], policy: .over)

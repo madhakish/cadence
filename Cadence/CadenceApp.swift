@@ -38,11 +38,17 @@ final class AppBootstrap: ObservableObject {
         do {
             let loaded: ModelContainer
             do {
-                loaded = try makeContainer(migrationPlan: CadencePre72MigrationPlan.self)
+                // Normal path after PR #73: the installed store is immutable
+                // V3 and upgrades through the explicit V3→V4 stage.
+                loaded = try makeContainer(migrationPlan: CadenceV3MigrationPlan.self)
             } catch {
-                // PR #72 changed the V1 checksum in place. A store first
-                // created by that build requires its separate linear plan.
-                loaded = try makeContainer(migrationPlan: Cadence72MigrationPlan.self)
+                do {
+                    loaded = try makeContainer(migrationPlan: CadencePre72MigrationPlan.self)
+                } catch {
+                    // PR #72 changed the V1 checksum in place. A store first
+                    // created by that build requires its separate linear plan.
+                    loaded = try makeContainer(migrationPlan: Cadence72MigrationPlan.self)
+                }
             }
             try prepare(loaded)
             container = loaded
@@ -70,7 +76,7 @@ final class AppBootstrap: ObservableObject {
         migrationPlan: Plan.Type,
         isStoredInMemoryOnly: Bool = false
     ) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV3.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isStoredInMemoryOnly)
         return try ModelContainer(
             for: schema,

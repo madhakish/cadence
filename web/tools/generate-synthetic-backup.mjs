@@ -32,7 +32,13 @@ const C = await import("../js/core.js");
 const session = await import("../js/views/session.js");
 const completeAll = async (workout) => {
   for (const exercise of workout.exercises || []) for (const set of exercise.sets || []) if (!set.isWarmup) set.status = "completed";
-  return session.completeSession(workout);
+  const result = await session.completeSession(workout);
+  // Production completion correctly uses the wall clock. A checked-in fixture
+  // must not: pin completion to its fictional session date so regeneration is
+  // byte-for-byte deterministic and never leaks a contributor's run time.
+  workout.completedAt = db.iso(workout.date);
+  await db.Sessions.save(workout);
+  return result;
 };
 
 // ---- deterministic helpers ----

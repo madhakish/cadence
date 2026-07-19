@@ -224,7 +224,8 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .volbar > i { display: block; height: 100%; background: var(--accent); opacity: 0.75; }
 
 /* barbell plate visualization */
-.barbell-wrap { display: flex; align-items: center; gap: 8px; padding: 0 0 8px 4px; }
+.barbell-wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 0 0 8px 4px; }
+.barbell-wrap .plate-detail { flex-basis: 100%; }
 svg.barbell { height: 36px; max-width: 100%; }
 svg.dumbbell { height: 36px; max-width: 100%; }
 .barbell-hero { padding: 10px 0 4px; }

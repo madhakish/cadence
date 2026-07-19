@@ -261,7 +261,10 @@ function pickExerciseSheet(onPick) {
       const paint = () => {
         ui.clear(results);
         const term = search.value.trim().toLowerCase();
-        const visible = term ? all.filter((exercise) => [exercise.name, exercise.movementGroup, exercise.type].some((value) => String(value || "").toLowerCase().includes(term))) : all;
+        const available = all.filter((exercise) => exercise.gateStatus !== "shelved" && !exercise.isShelved);
+        const visible = term ? available.filter((exercise) => [exercise.name, exercise.movementGroup, exercise.type,
+          C.movementPatternName(exercise.movementPattern), ...(exercise.aliases || []), ...(exercise.strategyTags || [])]
+          .some((value) => String(value || "").toLowerCase().includes(term))) : available;
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
           if (!inCat.length) continue;
@@ -307,8 +310,12 @@ async function programEditor(p) {
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const warningsFor = () => {
     const warnings = [];
-    const weekly = new Map();
-    const addSets = (group, sets) => { if (group) weekly.set(group, (weekly.get(group) || 0) + sets); };
+    const rotation = new Map(), patterns = new Map();
+    let intervalSlots = 0;
+    const addSets = (group, pattern, sets) => {
+      if (group) rotation.set(group, (rotation.get(group) || 0) + sets);
+      if (pattern) patterns.set(pattern, (patterns.get(pattern) || 0) + sets);
+    };
     for (const day of p.days || []) {
       if (!(day.lifts || []).some((lift) => lift.role === "main")) warnings.push(`${day.name} has no main lift.`);
       for (const lift of day.lifts || []) {
@@ -319,21 +326,35 @@ async function programEditor(p) {
           if (lift.estimatedMaxLb > 0 && ceiling > 0 && lift.baseWeightLb > lift.estimatedMaxLb * ceiling) warnings.push(`${lift.exerciseName}'s base is above the ${Math.round(ceiling * 100)}% training-max ceiling; verify its estimated 1RM or lower the base.`);
         }
         const exercise = exerciseByName.get(lift.exerciseName);
-        if (exercise) addSets(exercise.movementGroup, C.programPlanFor(
+        if (exercise) {
+          const plan = C.programPlanFor(
           { cycleNumber: 1, baseWeightLb: lift.baseWeightLb, nextPhase: 1, incrementLb: 0 },
-          p.roundingLb, exercise.type, exercise.movementGroup, lift.role, p.focus, lift.prescription || "automatic").sets);
+          p.roundingLb, exercise.type, exercise.movementGroup, lift.role, p.focus, lift.prescription || "automatic",
+          { ...lift, workingSets: lift.doubleProgressionSets ?? 3 });
+          addSets(exercise.movementGroup, exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup), plan.sets);
+          if ((exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup)) === "olympicPower" && plan.reps > 3) warnings.push(`${lift.exerciseName} is power work; keep programmed sets at 1–3 reps.`);
+        }
       }
       for (const accessory of day.accessories || []) {
         const exercise = exerciseByName.get(accessory.exerciseName);
-        if (exercise?.type !== "timed" && accessory.minReps > accessory.maxReps) warnings.push(`${accessory.exerciseName}'s minimum reps exceed its maximum.`);
-        else if (exercise?.type !== "timed" && (accessory.currentReps < accessory.minReps || accessory.currentReps > accessory.maxReps)) warnings.push(`${accessory.exerciseName}'s current reps are outside its rep range.`);
-        addSets(exercise?.movementGroup, accessory.sets);
+        const durationBased = exercise?.type === "timed" || exercise?.type === "conditioning";
+        if (!durationBased && accessory.minReps > accessory.maxReps) warnings.push(`${accessory.exerciseName}'s minimum reps exceed its maximum.`);
+        else if (!durationBased && (accessory.currentReps < accessory.minReps || accessory.currentReps > accessory.maxReps)) warnings.push(`${accessory.exerciseName}'s current reps are outside its rep range.`);
+        const pattern = exercise?.movementPattern || C.movementPattern(accessory.exerciseName, exercise?.movementGroup);
+        addSets(exercise?.movementGroup, pattern, accessory.sets);
+        if (pattern === "olympicPower" && accessory.currentReps > 3) warnings.push(`${accessory.exerciseName} is power work; keep programmed sets at 1–3 reps.`);
+        if (exercise?.type === "conditioning" && accessory.conditioningEffort === "interval") intervalSlots += 1;
       }
+      const hasPower = (day.lifts || []).some((lift) => exerciseByName.get(lift.exerciseName)?.movementPattern === "olympicPower");
+      const hasIntervals = (day.accessories || []).some((accessory) => exerciseByName.get(accessory.exerciseName)?.type === "conditioning" && accessory.conditioningEffort === "interval");
+      if (hasPower && hasIntervals) warnings.push(`Move intervals off ${day.name}; power work and intervals should not share a session.`);
     }
-    const press = weekly.get("press") || 0, pull = weekly.get("pull") || 0;
-    if (press >= 8 && pull * 5 < press * 4) warnings.push(`Weekly pulling volume (${pull} sets) trails pressing (${press}); consider more rows or pull-ups.`);
-    const squat = weekly.get("squat") || 0, hinge = weekly.get("hinge") || 0;
-    if (Math.max(squat, hinge) >= 8 && Math.min(squat, hinge) * 2 < Math.max(squat, hinge)) warnings.push(`Weekly squat/hinge volume is uneven (${squat}/${hinge} sets).`);
+    if (intervalSlots > 1) warnings.push(`The rotation has ${intervalSlots} interval blocks; keep one interval dose and make the rest easy conditioning.`);
+    const press = rotation.get("press") || 0, pull = rotation.get("pull") || 0;
+    if (press >= 8 && pull * 5 < press * 4) warnings.push(`Per-rotation pulling volume (${pull} sets) trails pressing (${press}); consider more rows or pull-ups.`);
+    if ((patterns.get("verticalPull") || 0) < 3) warnings.push(`Vertical pulling is ${patterns.get("verticalPull") || 0}/3 sets per rotation.`);
+    const squat = rotation.get("squat") || 0, hinge = rotation.get("hinge") || 0;
+    if (Math.max(squat, hinge) >= 8 && Math.min(squat, hinge) * 2 < Math.max(squat, hinge)) warnings.push(`Per-rotation squat/hinge volume is uneven (${squat}/${hinge} sets).`);
     return warnings;
   };
   ui.pushScreen({
@@ -356,6 +377,15 @@ async function programEditor(p) {
             ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: ui.fmtWeight, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
           ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Active (drives Today)" }),
             ui.toggle(p.isActive, async (v) => { if (v) await activateProgram(p); else p.isActive = false; await Programs.save(p); }))));
+        body.append(ui.h("div", { class: "section-title", text: "Deterministic coach" }));
+        body.append(ui.h("div", { class: "card" },
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Coaching proposals" }),
+            ui.toggle(p.coachEnabled !== false, async (v) => { p.coachEnabled = v; await Programs.save(p); })),
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Preferred spacing" }),
+            ui.stepper(p.preferredSessionSpacingDays ?? 3, { min: 2, max: 7, step: 1, format: (v) => `${v} days`, onChange: async (v) => { p.preferredSessionSpacingDays = v; await Programs.save(p); } })),
+          ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Max work added / rotation" }),
+            ui.stepper(p.maximumAddedSetsPerRotation ?? 6, { min: 0, max: 10, step: 1, format: (v) => `${v} sets`, onChange: async (v) => { p.maximumAddedSetsPerRotation = v; await Programs.save(p); } })),
+          ui.h("div", { class: "sub", style: { margin: "8px" }, text: "Uses completed output by full program rotation. Nothing changes until you apply a proposal." })));
         body.append(ui.h("div", { class: "section-title", text: "Where you are" }));
         const PHASE = ["", "Volume", "Load", "Peak", "Deload"];
         const sortedDays = [...p.days].sort((a, b) => a.order - b.order);
@@ -433,10 +463,11 @@ async function programDayEditor(p, day) {
               ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Prescription" }), (() => {
               const select = ui.h("select", {}, ...[
-                ["automatic", "Automatic"], ["wave", "Strength wave"], ["secondary", "Secondary strength"],
-                ["hypertrophy", "Hypertrophy"], ["technique", "Technique"],
+                ["automatic", "Automatic"], ["wave", "Strength wave"], ["offsetWave", "Strength wave — offsets"],
+                ["secondary", "Secondary strength"], ["hypertrophy", "Hypertrophy"], ["technique", "Technique"],
+                ["doubleProgression", "Double progression"],
               ].map(([value, label]) => ui.h("option", { value, text: label, selected: (l.prescription || "automatic") === value })));
-              select.addEventListener("change", async () => { l.prescription = select.value; await Programs.save(p); });
+              select.addEventListener("change", async () => { l.prescription = select.value; await Programs.save(p); draw(); });
               return select;
             })()),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Warm-up" }), (() => {
@@ -448,6 +479,25 @@ async function programDayEditor(p, day) {
             })()),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Rotation-1 base" }),
               ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
+            l.prescription === "offsetWave" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Load / peak offsets" }),
+              ui.h("div", { class: "btn-row" },
+                ui.stepper(l.loadOffsetLb ?? 0, { min: 0, max: 100, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.loadOffsetLb = v; await Programs.save(p); } }),
+                ui.stepper(l.peakOffsetLb ?? 0, { min: 0, max: 150, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakOffsetLb = v; await Programs.save(p); } }))) : null,
+            l.prescription === "doubleProgression" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Sets / rep window" }),
+              ui.h("div", { class: "btn-row" },
+                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); } }),
+                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; await Programs.save(p); } }),
+                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; await Programs.save(p); } }))) : null,
+            ui.h("div", { class: "row" }, ui.h("span", { text: "Peak top single" }),
+              ui.toggle(!!l.peakSingleEnabled, async (v) => { l.peakSingleEnabled = v; await Programs.save(p); draw(); })),
+            l.peakSingleEnabled ? ui.h("div", { class: "row" }, ui.h("span", { text: "Last clean / step" }),
+              ui.h("div", { class: "btn-row" },
+                ui.stepper(l.lastPeakSingleLb ?? 0, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.lastPeakSingleLb = v; await Programs.save(p); } }),
+                ui.stepper(l.peakSingleIncrementLb ?? 5, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakSingleIncrementLb = v; await Programs.save(p); } }))) : null,
+            ui.h("div", { class: "row" }, ui.h("span", { text: "Phase primer single" }),
+              ui.toggle(l.phasePrimerEnabled !== false, async (v) => { l.phasePrimerEnabled = v; await Programs.save(p); })),
+            ui.h("div", { class: "row" }, ui.h("span", { text: "One-tap drop (0 = auto)" }),
+              ui.stepper(l.dropIncrementLb ?? 0, { min: 0, max: 50, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.dropIncrementLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
               ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } }))));
         }
@@ -458,7 +508,9 @@ async function programDayEditor(p, day) {
 
         body.append(ui.h("div", { class: "section-title", text: "Accessories" }));
         for (const a of orderedSlots(day.accessories)) {
-          const isTimed = exerciseByName.get(a.exerciseName)?.type === "timed";
+          const exerciseType = exerciseByName.get(a.exerciseName)?.type;
+          const isTimed = exerciseType === "timed" || exerciseType === "conditioning";
+          const isConditioning = exerciseType === "conditioning";
           body.append(ui.h("div", { class: "card" },
             ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
               ui.h("span", { class: "title", text: a.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(a.exerciseName) }),
@@ -469,17 +521,30 @@ async function programDayEditor(p, day) {
               ui.stepper(a.weightLb, { min: 0, max: 500, step: 2.5, format: ui.fmtWeight, onChange: async (v) => { a.weightLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Sets" }),
               ui.stepper(a.sets, { min: 1, max: 8, format: (v) => `${v}`, onChange: async (v) => { a.sets = v; await Programs.save(p); } })),
-            isTimed ? ui.h("div", { class: "row" }, ui.h("span", { text: "Hold time" }),
+            isTimed ? ui.h("div", { class: "row" }, ui.h("span", { text: isConditioning ? "Duration" : "Hold time" }),
               ui.stepper(a.targetSeconds || 30, { min: 5, max: 1800, step: 5, format: C.cardioDurationLabel, onChange: async (v) => { a.targetSeconds = v; await Programs.save(p); } })) : ui.h("div", { class: "row" }, ui.h("span", { text: "Rep range" }),
               ui.h("div", { class: "btn-row" },
                 ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => { a.minReps = v; if (a.currentReps < v) a.currentReps = v; await Programs.save(p); } }),
                 ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => { a.maxReps = v; await Programs.save(p); } }))),
-            isTimed ? ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Progress by" }),
+            isConditioning ? ui.h("div", { class: "card" },
+              ui.h("div", { class: "row" }, ui.h("span", { text: "Effort" }), (() => {
+                const select = ui.h("select", {}, ...[["easy", "Easy / conversational"], ["interval", "Intervals"], ["mixed", "Mixed"]]
+                  .map(([value, text]) => ui.h("option", { value, text, selected: value === (a.conditioningEffort || "easy") })));
+                select.addEventListener("change", async () => { a.conditioningEffort = select.value; await Programs.save(p); });
+                return select;
+              })()),
+              ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Target RPE (0 = none)" }),
+                ui.stepper(a.targetRPE || 0, { min: 0, max: 10, onChange: async (v) => { a.targetRPE = v; await Programs.save(p); } })))
+              : isTimed ? ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Progress by" }),
               ui.stepper(a.durationStepSeconds ?? 5, { min: 0, max: 60, step: 5, format: (v) => `+${v} sec`, onChange: async (v) => { a.durationStepSeconds = v; await Programs.save(p); } })) : ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Load step (0 = bodyweight)" }),
               ui.stepper(a.incrementLb, { min: 0, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { a.incrementLb = v; await Programs.save(p); } }))));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add accessory", onClick: () => pickExerciseSheet(async (e) => {
-          day.accessories.push({ exerciseName: e.name, order: day.accessories.length, sets: 3, minReps: 8, maxReps: 12, currentReps: 8, targetSeconds: 30, durationStepSeconds: 5, weightLb: 0, incrementLb: 0, stallCount: 0 });
+          day.accessories.push({ exerciseName: e.name, order: day.accessories.length,
+            sets: e.type === "conditioning" ? 1 : 3, minReps: 8, maxReps: 12, currentReps: 8,
+            targetSeconds: e.type === "conditioning" ? 1_200 : 30, durationStepSeconds: 5,
+            weightLb: 0, incrementLb: 0, stallCount: 0, capacityManaged: true, maximumSets: 6,
+            conditioningEffort: "easy", targetRPE: 0 });
           await Programs.save(p); draw();
         }) }));
       };
@@ -525,14 +590,18 @@ function exerciseLibrary(exercises) {
       const paint = () => {
         ui.clear(results);
         const term = search.value.trim().toLowerCase();
-        const visible = term ? exercises.filter((e) => [e.name, e.movementGroup, e.type].some((value) => String(value || "").toLowerCase().includes(term))) : exercises;
+        const visible = term ? exercises.filter((e) => [e.name, e.movementGroup, e.type,
+          C.movementPatternName(e.movementPattern), ...(e.aliases || []), ...(e.strategyTags || [])]
+          .some((value) => String(value || "").toLowerCase().includes(term))) : exercises;
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
           if (!inCat.length) continue;
           results.append(ui.h("div", { class: "section-title", text: cat }));
           const card = ui.h("div", { class: "card list" });
           for (const e of inCat) {
-            const meta = [e.movementGroup, e.type, C.loadBasisLabel(C.resolvedLoadBasis(e)), e.isUnilateral ? "per side" : null, e.isShelved ? "shelved" : null].filter(Boolean).join(" · ");
+            const meta = [C.movementPatternName(e.movementPattern), e.type, C.loadBasisLabel(C.resolvedLoadBasis(e)),
+              e.isUnilateral ? "per side" : null, e.gateStatus && e.gateStatus !== "open" ? e.gateStatus : null]
+              .filter(Boolean).join(" · ");
             card.append(ui.h("div", { class: "row", onClick: () => exerciseDetail(e) },
               ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: e.name }),
                 ui.h("span", { class: "sub", text: meta })),
@@ -556,10 +625,15 @@ function newExerciseSheet(exercises, onSaved) {
       const category = ui.h("select", {}, ...CATEGORIES.map((value) => ui.h("option", { value, text: value, selected: value === "Accessory" })));
       const type = ui.h("select", {}, ...EX_TYPES.map((value) => ui.h("option", { value, text: value, selected: value === "dumbbell" })));
       const movementGroup = ui.h("input", { type: "text", placeholder: "press, pull, squat, hinge…" });
+      const movementPattern = ui.h("select", {}, ...C.MOVEMENT_PATTERNS.map((value) => ui.h("option", {
+        value, text: C.movementPatternName(value), selected: value === "unknown",
+      })));
+      const aliases = ui.h("input", { type: "text", placeholder: "comma-separated alternate names" });
       const notes = ui.h("textarea", { rows: 2, placeholder: "Notes" });
       let unilateral = false;
       c.append(ui.field("Name", name), ui.field("Category", category), ui.field("Type", type),
-        ui.field("Movement group", movementGroup),
+        ui.field("Movement group", movementGroup), ui.field("Movement pattern", movementPattern),
+        ui.field("Aliases", aliases),
         ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(false, (value) => { unilateral = value; })),
         ui.field("Notes", notes));
       c.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "10px" }, text: "Add", onClick: async () => {
@@ -569,8 +643,13 @@ function newExerciseSheet(exercises, onSaved) {
         const exercise = {
           name: trimmed, category: category.value, type: type.value,
           movementGroup: movementGroup.value.trim().toLowerCase(), isUnilateral: unilateral,
+          movementPattern: movementPattern.value,
+          secondaryMovementPattern: null,
+          aliases: aliases.value.split(",").map((value) => value.trim()).filter(Boolean), strategyTags: [],
           loadBasis: C.inferredLoadBasis(type.value), implementCount: C.inferredImplementCount(type.value),
           defaultRestSeconds: 0, notes: notes.value, isShelved: false, shelvedNote: "", watchSite: null,
+          gateStatus: "open", gateSite: null, reEntryCriteria: [], completedReEntryCriteria: [],
+          reEntryTestWeightLb: 0, reEntryTestSets: 3, reEntryTestReps: 5,
           createdAt: new Date().toISOString(),
         };
         await Exercises.save(exercise); exercises.push(exercise); exercises.sort((a, b) => a.name.localeCompare(b.name));
@@ -655,6 +734,22 @@ function exerciseDetail(e) {
         const groupInput = ui.h("input", { type: "text", value: e.movementGroup || "", placeholder: "press, pull, squat, hinge…" });
         groupInput.addEventListener("change", async () => { e.movementGroup = groupInput.value.trim().toLowerCase(); await Exercises.save(e); });
         body.append(ui.field("Movement group", groupInput));
+        const patternSel = ui.h("select", {}, ...C.MOVEMENT_PATTERNS.map((pattern) => ui.h("option", {
+          value: pattern, text: C.movementPatternName(pattern), selected: pattern === e.movementPattern,
+        })));
+        patternSel.addEventListener("change", async () => { e.movementPattern = patternSel.value; await Exercises.save(e); });
+        body.append(ui.field("Primary movement pattern", patternSel));
+        const secondarySel = ui.h("select", {}, ui.h("option", { value: "", text: "None", selected: !e.secondaryMovementPattern }),
+          ...C.MOVEMENT_PATTERNS.filter((pattern) => pattern !== "unknown").map((pattern) => ui.h("option", {
+            value: pattern, text: C.movementPatternName(pattern), selected: pattern === e.secondaryMovementPattern,
+          })));
+        secondarySel.addEventListener("change", async () => { e.secondaryMovementPattern = secondarySel.value || null; await Exercises.save(e); });
+        body.append(ui.field("Secondary pattern", secondarySel));
+        const aliases = ui.h("input", { type: "text", value: (e.aliases || []).join(", "), placeholder: "alternate names" });
+        aliases.addEventListener("change", async () => { e.aliases = aliases.value.split(",").map((value) => value.trim()).filter(Boolean); await Exercises.save(e); });
+        const tags = ui.h("input", { type: "text", value: (e.strategyTags || []).join(", "), placeholder: "low-fatigue, shoulder-friendly…" });
+        tags.addEventListener("change", async () => { e.strategyTags = tags.value.split(",").map((value) => value.trim()).filter(Boolean); await Exercises.save(e); });
+        body.append(ui.field("Aliases", aliases), ui.field("Programming tags", tags));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(e.isUnilateral, async (v) => { e.isUnilateral = v; await Exercises.save(e); })),
           // 0 = no rest of its own → the timer falls to the configurable rest
@@ -666,13 +761,48 @@ function exerciseDetail(e) {
         siteSel.addEventListener("change", async () => { e.watchSite = siteSel.value || null; await Exercises.save(e); });
         body.append(ui.field("Watch site", siteSel));
 
-        const shelvedNote = ui.h("textarea", { rows: 2, placeholder: "Re-entry test", value: e.shelvedNote || "" });
-        shelvedNote.addEventListener("change", async () => { e.shelvedNote = shelvedNote.value; await Exercises.save(e); });
-        const shelvedWrap = ui.h("div", {}, ui.field("Re-entry test", shelvedNote));
-        shelvedWrap.style.display = e.isShelved ? "" : "none";
-        body.append(ui.h("div", { class: "card" },
-          ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Shelved" }), ui.toggle(e.isShelved, async (v) => { e.isShelved = v; await Exercises.save(e); shelvedWrap.style.display = v ? "" : "none"; })),
-          shelvedWrap));
+        body.append(ui.h("div", { class: "section-title", text: "Availability & re-entry" }));
+        const gateStatus = ui.h("select", {}, ...[["open", "Open"], ["watch", "Watch"], ["shelved", "Shelved"], ["re-entry", "Re-entry test"]]
+          .map(([value, text]) => ui.h("option", { value, text, selected: value === (e.gateStatus || (e.isShelved ? "shelved" : "open")) })));
+        gateStatus.addEventListener("change", async () => {
+          e.gateStatus = gateStatus.value; e.isShelved = gateStatus.value === "shelved";
+          await Exercises.save(e); draw();
+        });
+        const gateSite = ui.h("select", {}, ui.h("option", { value: "", text: "No site", selected: !e.gateSite }),
+          ...BODY_SITES.map((site) => ui.h("option", { value: site, text: site, selected: site === e.gateSite })));
+        gateSite.addEventListener("change", async () => { e.gateSite = gateSite.value || null; await Exercises.save(e); });
+        body.append(ui.field("Status", gateStatus), ui.field("Site", gateSite));
+        if ((e.gateStatus || "open") !== "open") {
+          const criteria = ui.h("textarea", { rows: 3, value: (e.reEntryCriteria || []).join("\n"),
+            placeholder: "One objective criterion per line" });
+          criteria.addEventListener("change", async () => {
+            e.reEntryCriteria = criteria.value.split("\n").map((value) => value.trim()).filter(Boolean);
+            e.completedReEntryCriteria = (e.completedReEntryCriteria || []).filter((item) => e.reEntryCriteria.includes(item));
+            await Exercises.save(e); draw();
+          });
+          body.append(ui.field("Re-entry criteria", criteria));
+          for (const criterion of e.reEntryCriteria || []) {
+            body.append(ui.h("div", { class: "row" }, ui.h("span", { class: "sub", text: criterion }),
+              ui.toggle((e.completedReEntryCriteria || []).includes(criterion), async (checked) => {
+                const completed = new Set(e.completedReEntryCriteria || []);
+                if (checked) completed.add(criterion); else completed.delete(criterion);
+                e.completedReEntryCriteria = [...completed];
+                if ((e.reEntryCriteria || []).length && e.reEntryCriteria.every((item) => completed.has(item))) {
+                  e.gateStatus = "re-entry"; e.isShelved = false;
+                }
+                await Exercises.save(e);
+              })));
+          }
+          body.append(ui.h("div", { class: "card" },
+            ui.h("div", { class: "sub", text: "Light re-entry test" }),
+            ui.h("div", { class: "row" }, ui.h("span", { text: "Load" }), ui.stepper(e.reEntryTestWeightLb || 0, {
+              min: 0, max: 1000, step: 5, format: ui.fmtWeight, onChange: async (value) => { e.reEntryTestWeightLb = value; await Exercises.save(e); },
+            })),
+            ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Sets × reps" }),
+              ui.h("div", { class: "btn-row" },
+                ui.stepper(e.reEntryTestSets || 3, { min: 1, max: 10, onChange: async (value) => { e.reEntryTestSets = value; await Exercises.save(e); } }),
+                ui.stepper(e.reEntryTestReps || 5, { min: 1, max: 20, onChange: async (value) => { e.reEntryTestReps = value; await Exercises.save(e); } })))));
+        }
 
         const notes = ui.h("textarea", { rows: 3, placeholder: "Notes", value: e.notes || "" });
         notes.addEventListener("change", async () => { e.notes = notes.value; await Exercises.save(e); });

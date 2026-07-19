@@ -30,6 +30,8 @@ section that matches what you're trying to do.
   accessories, and every field they carry
 - [Progression rules](reference/progression-rules.md) — the 4-week wave,
   grading, increments, stalls, deloads
+- [Deterministic coaching rules](reference/coaching-rules.md) — rotation
+  boundaries, readiness lights, capacity budgets, and temporary reductions
 - [Swap rules](reference/swap-rules.md) — which exercises can substitute
   for which, and what each swap scope does
 - [Rest timers](reference/rest-timers.md) — how the rest countdown is

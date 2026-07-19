@@ -11,10 +11,29 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 // The plate denominations of the chosen unit that exist at this gym. The bar is
 // chosen separately (most bars are 45 lb regardless of which plates you load).
 export function stationPlates(unit, gym) {
-  const list = gym && gym.plateToggles
-    ? gym.plateToggles.filter((t) => t.enabled).map((t) => ({ value: t.value, unit: t.unit }))
-    : [];
-  return list.length ? list : (unit === "kg" ? C.STANDARD_KG : C.STANDARD_LB);
+  if (gym && Array.isArray(gym.plateToggles)) {
+    return gym.plateToggles.filter((t) => t.enabled).map((t) => ({ value: t.value, unit: t.unit }));
+  }
+  return unit === "kg" ? C.STANDARD_KG : C.STANDARD_LB;
+}
+
+/// Human-readable explanation when rack-aware snapping changes a prescribed
+/// target. Each line includes total load and the per-side stack.
+export function prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym) {
+  if (!(targetLb > 0) || Math.abs(targetLb - achievedLb) <= 0.01) return [];
+  const options = C.prescriptionPlateOptions(
+    targetLb, bar, stationPlates(unit, gym), 10,
+    gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest",
+  );
+  const fmt = (lb) => `${C.trim(unit === "kg" ? C.kgFromLb(lb) : lb)} ${unit}`;
+  const lines = [{ kind: "target", text: `Target ${fmt(targetLb)} · load ${fmt(achievedLb)}` }];
+  if (options.below) lines.push({
+    kind: "alternative", text: `Below ${fmt(options.below.totalLb)} · ${C.perSideLabel(options.below.perSide)}/side`,
+  });
+  if (options.above && (!options.below || Math.abs(options.above.totalLb - options.below.totalLb) > 0.01)) lines.push({
+    kind: "alternative", text: `Above ${fmt(options.above.totalLb)} · ${C.perSideLabel(options.above.perSide)}/side`,
+  });
+  return lines;
 }
 
 // Returns { svg, solution }. svg is a per-side barbell (heaviest plate inboard).

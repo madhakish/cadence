@@ -1,9 +1,10 @@
 import SwiftData
 
-/// Current persistence schema. Never edit an older schema in place: shipped
-/// stores identify it by both version and checksum.
-enum CadenceSchemaV3: VersionedSchema {
-    static var versionIdentifier = Schema.Version(3, 0, 0)
+/// Current persistence schema. V3 is frozen in PersistenceSchemaV3.swift;
+/// every V4 field has a literal migration-safe default and is backfilled after
+/// opening where historical values can be recovered.
+enum CadenceSchemaV4: VersionedSchema {
+    static var versionIdentifier = Schema.Version(4, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [
@@ -22,6 +23,7 @@ enum CadenceSchemaV3: VersionedSchema {
             ProgramDay.self,
             ProgramLift.self,
             ProgramAccessory.self,
+            CoachingDecision.self,
         ]
     }
 }
@@ -31,13 +33,15 @@ enum CadenceSchemaV3: VersionedSchema {
 /// needs its own path to the current schema.
 enum CadencePre72MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV1.self, CadenceSchemaV3.self]
+        [CadenceSchemaV1.self, CadenceSchemaV3.self, CadenceSchemaV4.self]
     }
 
     static var stages: [MigrationStage] {
         [
             .lightweight(fromVersion: CadenceSchemaV1.self,
                          toVersion: CadenceSchemaV3.self),
+            .lightweight(fromVersion: CadenceSchemaV3.self,
+                         toVersion: CadenceSchemaV4.self),
         ]
     }
 }
@@ -46,13 +50,29 @@ enum CadencePre72MigrationPlan: SchemaMigrationPlan {
 /// That build advertised V1 while writing a different model checksum.
 enum Cadence72MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV2.self, CadenceSchemaV3.self]
+        [CadenceSchemaV2.self, CadenceSchemaV3.self, CadenceSchemaV4.self]
     }
 
     static var stages: [MigrationStage] {
         [
             .lightweight(fromVersion: CadenceSchemaV2.self,
                          toVersion: CadenceSchemaV3.self),
+            .lightweight(fromVersion: CadenceSchemaV3.self,
+                         toVersion: CadenceSchemaV4.self),
+        ]
+    }
+}
+
+/// Normal path for an install already upgraded by PR #73.
+enum CadenceV3MigrationPlan: SchemaMigrationPlan {
+    static var schemas: [any VersionedSchema.Type] {
+        [CadenceSchemaV3.self, CadenceSchemaV4.self]
+    }
+
+    static var stages: [MigrationStage] {
+        [
+            .lightweight(fromVersion: CadenceSchemaV3.self,
+                         toVersion: CadenceSchemaV4.self),
         ]
     }
 }

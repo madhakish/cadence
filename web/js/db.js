@@ -6,8 +6,8 @@ import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 3;
-export const BACKUP_SCHEMA_VERSION = 2;
+const DB_VERSION = 4;
+export const BACKUP_SCHEMA_VERSION = 3;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -20,6 +20,7 @@ const STORES = {
   milestones: { keyPath: "id", autoIncrement: true },
   programs: { keyPath: "id", autoIncrement: true },
   checkpoints: { keyPath: "id", autoIncrement: true },
+  coachingDecisions: { keyPath: "id" },
 };
 
 let _db = null;
@@ -36,11 +37,12 @@ function open() {
       _opening = null;
       reject(error);
     };
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
       for (const [name, opts] of Object.entries(STORES)) {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, opts);
       }
+      if (event.oldVersion < 4) migrateToV4(req.transaction);
     };
     req.onsuccess = () => {
       if (settled) { req.result.close(); return; }
@@ -59,6 +61,24 @@ function open() {
     req.onerror = () => fail(req.error || new Error("Couldn't open Cadence storage."));
   });
   return _opening;
+}
+
+/// IndexedDB V4 preserves every V3 document and only adds migration-safe
+/// defaults. Historical sets keep nil planned snapshots rather than having a
+/// current program retroactively assigned to them.
+function migrateToV4(transaction) {
+  const rewrite = (storeName, transform) => {
+    const store = transaction.objectStore(storeName);
+    store.openCursor().onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (!cursor) return;
+      cursor.update(transform(cursor.value));
+      cursor.continue();
+    };
+  };
+  rewrite("exercises", normalizeExercise);
+  rewrite("programs", normalizeProgram);
+  rewrite("sessions", normalizeSession);
 }
 
 // One transaction over one or more stores. fn receives a store getter and is
@@ -121,6 +141,10 @@ const normalizeProgram = (p) => {
   return {
     ...p,
     uuid,
+    coachEnabled: p.coachEnabled !== false,
+    reliableHistoryStart: p.reliableHistoryStart || null,
+    preferredSessionSpacingDays: Number.isInteger(p.preferredSessionSpacingDays) ? p.preferredSessionSpacingDays : 3,
+    maximumAddedSetsPerRotation: Number.isInteger(p.maximumAddedSetsPerRotation) ? p.maximumAddedSetsPerRotation : 6,
     days: (p.days || []).map((day, dayIndex) => ({
       ...day,
       lifts: (day.lifts || []).map((lift, slotIndex) => ({
@@ -129,6 +153,20 @@ const normalizeProgram = (p) => {
         order: Number.isInteger(lift.order) ? lift.order : slotIndex,
         prescription: lift.prescription || "automatic",
         warmupPolicy: lift.warmupPolicy || "automatic",
+        loadOffsetLb: Number.isFinite(lift.loadOffsetLb) ? lift.loadOffsetLb : 0,
+        peakOffsetLb: Number.isFinite(lift.peakOffsetLb) ? lift.peakOffsetLb : 0,
+        deloadMultiplier: Number.isFinite(lift.deloadMultiplier) ? lift.deloadMultiplier : 0.775,
+        doubleProgressionSets: Number.isInteger(lift.doubleProgressionSets) ? lift.doubleProgressionSets : 3,
+        minimumReps: Number.isInteger(lift.minimumReps) ? lift.minimumReps : 5,
+        maximumReps: Number.isInteger(lift.maximumReps) ? lift.maximumReps : 8,
+        currentReps: Number.isInteger(lift.currentReps) ? lift.currentReps : 5,
+        peakSingleEnabled: !!lift.peakSingleEnabled,
+        lastPeakSingleLb: Number.isFinite(lift.lastPeakSingleLb) ? lift.lastPeakSingleLb : 0,
+        peakSingleIncrementLb: Number.isFinite(lift.peakSingleIncrementLb) ? lift.peakSingleIncrementLb : 5,
+        phasePrimerEnabled: lift.phasePrimerEnabled !== false,
+        dropIncrementLb: Number.isFinite(lift.dropIncrementLb) ? lift.dropIncrementLb : 0,
+        capacityManaged: lift.capacityManaged !== false,
+        maximumSets: Number.isInteger(lift.maximumSets) ? lift.maximumSets : 6,
       })),
       accessories: (day.accessories || []).map((accessory, slotIndex) => ({
         ...accessory,
@@ -136,6 +174,10 @@ const normalizeProgram = (p) => {
         order: Number.isInteger(accessory.order) ? accessory.order : slotIndex,
         targetSeconds: Number.isInteger(accessory.targetSeconds) ? accessory.targetSeconds : 30,
         durationStepSeconds: Number.isInteger(accessory.durationStepSeconds) ? accessory.durationStepSeconds : 5,
+        capacityManaged: accessory.capacityManaged !== false,
+        maximumSets: Number.isInteger(accessory.maximumSets) ? accessory.maximumSets : 6,
+        conditioningEffort: accessory.conditioningEffort || "easy",
+        targetRPE: Number.isInteger(accessory.targetRPE) ? accessory.targetRPE : 0,
       })),
     })),
   };
@@ -150,8 +192,13 @@ const hasPortableProgramSlots = (program) => (program.days || []).every((day) =>
   [...(day.lifts || []), ...(day.accessories || [])].every((slot) => isPortableUUID(slot.id)));
 const normalizeSession = (session) => ({
   ...session,
+  completedAt: session.completedAt || null,
   exercises: (session.exercises || []).map((exercise) => ({
     ...exercise,
+    targetWeightLb: exercise.targetWeightLb ?? null,
+    plannedDurationSeconds: exercise.plannedDurationSeconds ?? null,
+    fallbackWeightLb: exercise.fallbackWeightLb ?? null,
+    prescriptionStyle: exercise.prescriptionStyle || null,
     sets: (exercise.sets || []).map((set) => ({
       ...set,
       // Pre-v2 completed history is known performed work. An open record is
@@ -159,8 +206,31 @@ const normalizeSession = (session) => ({
       status: C.resolveSetStatus(set.status, !!session.isCompleted),
       flags: C.normalizedSetFlags(C.setQuality(set.flags), (set.flags || []).includes("stopped early")),
       bodyFlagSite: normalizeBodySite(set.bodyFlagSite),
+      targetWeightLb: set.targetWeightLb ?? null,
+      plannedWeightLb: set.plannedWeightLb ?? null,
+      plannedReps: set.plannedReps ?? null,
+      plannedDurationSeconds: set.plannedDurationSeconds ?? null,
+      prescriptionBlock: set.prescriptionBlock || (set.isWarmup ? "warmup" : "work"),
     })),
   })),
+});
+
+const normalizeExercise = (exercise) => ({
+  ...exercise,
+  movementPattern: C.MOVEMENT_PATTERNS.includes(exercise.movementPattern)
+    ? exercise.movementPattern : C.movementPattern(exercise.name, exercise.movementGroup),
+  secondaryMovementPattern: C.MOVEMENT_PATTERNS.includes(exercise.secondaryMovementPattern)
+    ? exercise.secondaryMovementPattern : null,
+  aliases: Array.isArray(exercise.aliases) ? exercise.aliases : [],
+  strategyTags: Array.isArray(exercise.strategyTags) ? exercise.strategyTags : [],
+  gateStatus: ["open", "watch", "shelved", "re-entry"].includes(exercise.gateStatus)
+    ? exercise.gateStatus : (exercise.isShelved ? "shelved" : "open"),
+  gateSite: normalizeBodySite(exercise.gateSite),
+  reEntryCriteria: Array.isArray(exercise.reEntryCriteria) ? exercise.reEntryCriteria : [],
+  completedReEntryCriteria: Array.isArray(exercise.completedReEntryCriteria) ? exercise.completedReEntryCriteria : [],
+  reEntryTestWeightLb: Number.isFinite(exercise.reEntryTestWeightLb) ? exercise.reEntryTestWeightLb : 0,
+  reEntryTestSets: Number.isInteger(exercise.reEntryTestSets) ? exercise.reEntryTestSets : 3,
+  reEntryTestReps: Number.isInteger(exercise.reEntryTestReps) ? exercise.reEntryTestReps : 5,
 });
 
 // ---- Date helpers ----
@@ -206,15 +276,15 @@ function defaultSettings() {
 // ---- Repositories ----
 export const Exercises = {
   async all() {
-    return (await getAll("exercises")).map((exercise) => ({
+    return (await getAll("exercises")).map((exercise) => normalizeExercise({
       ...exercise, watchSite: normalizeBodySite(exercise.watchSite),
     }));
   },
   async byName(name) {
     const exercise = await get("exercises", name);
-    return exercise ? { ...exercise, watchSite: normalizeBodySite(exercise.watchSite) } : null;
+    return exercise ? normalizeExercise({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) }) : null;
   },
-  save: (exercise) => put("exercises", { ...exercise, watchSite: normalizeBodySite(exercise.watchSite) }),
+  save: (exercise) => put("exercises", normalizeExercise({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) })),
 };
 export const Gyms = {
   async all() {
@@ -265,6 +335,11 @@ export const Checkins = {
 export const Milestones = {
   all: () => getAll("milestones"),
   add: (m) => put("milestones", m),
+};
+export const CoachingDecisions = {
+  all: () => getAll("coachingDecisions"),
+  save: (decision) => put("coachingDecisions", decision),
+  del: (id) => del("coachingDecisions", id),
 };
 export const Programs = {
   async all() {
@@ -334,6 +409,10 @@ export async function syncLibrary() {
     if (!cur) { await put("exercises", seed); continue; }
     let changed = false;
     if (!cur.movementGroup && seed.movementGroup) { cur.movementGroup = seed.movementGroup; changed = true; }
+    if (!C.MOVEMENT_PATTERNS.includes(cur.movementPattern) && seed.movementPattern) { cur.movementPattern = seed.movementPattern; changed = true; }
+    if (!cur.secondaryMovementPattern && seed.secondaryMovementPattern) { cur.secondaryMovementPattern = seed.secondaryMovementPattern; changed = true; }
+    if (!(cur.aliases || []).length && (seed.aliases || []).length) { cur.aliases = seed.aliases; changed = true; }
+    if (!(cur.strategyTags || []).length && (seed.strategyTags || []).length) { cur.strategyTags = seed.strategyTags; changed = true; }
     if (!C.LOAD_BASES.includes(cur.loadBasis)) { cur.loadBasis = seed.loadBasis; changed = true; }
     if (!(cur.implementCount > 0)) { cur.implementCount = seed.implementCount; changed = true; }
     if (changed) await put("exercises", cur);
@@ -393,11 +472,11 @@ export async function exportBundle() {
   });
   const portableSessionID = (session) => isPortableUUID(session.id)
     ? session.id : stableID(`session:${session.id ?? sessionFingerprint(session)}`);
-  const [sessions, bodyweight, protein, checkins, milestones, programs, tracks, gyms, exercises, settings] = await Promise.all([
+  const [sessions, bodyweight, protein, checkins, milestones, programs, tracks, gyms, exercises, settings, coachingDecisions] = await Promise.all([
     Sessions.all().then((all) => all.sort((a, b) => new Date(b.date) - new Date(a.date)
       || portableSessionID(a).localeCompare(portableSessionID(b)))),
     Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
-    Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(),
+    Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(), CoachingDecisions.all(),
   ]);
   const programsById = new Map(programs.flatMap((p) => [[p.id, p], [p.uuid, p]]));
   const programsByName = new Map(programs.map((p) => [p.name, p]));
@@ -431,6 +510,7 @@ export async function exportBundle() {
       id: portableSessionID(s),
       date: iso(s.date), notes: s.notes || "", gym: s.gymName || null,
       gymId: s.gymId || gymsByName.get(s.gymName)?.id || null, isCompleted: !!s.isCompleted,
+      completedAt: s.completedAt || null,
       programTag: exportProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e) => ({
         name: e.exerciseName, notes: e.notes || "",
@@ -438,9 +518,17 @@ export async function exportBundle() {
         role: e.programRole || null,
         programSlotId: e.programSlotId || null,
         barId: e.barId || null,
-        plannedWeightLb: e.plannedWeightLb ?? null, plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
+        plannedWeightLb: e.plannedWeightLb ?? null, targetWeightLb: e.targetWeightLb ?? null,
+        plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
+        plannedDurationSeconds: e.plannedDurationSeconds ?? null,
+        fallbackWeightLb: e.fallbackWeightLb ?? null,
+        prescriptionStyle: e.prescriptionStyle || null,
         sets: (e.sets || []).map((x) => ({
-          weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
+          weightLb: x.weightLb, reps: x.reps,
+          targetWeightLb: x.targetWeightLb ?? null, plannedWeightLb: x.plannedWeightLb ?? null,
+          plannedReps: x.plannedReps ?? null, plannedDurationSeconds: x.plannedDurationSeconds ?? null,
+          prescriptionBlock: x.prescriptionBlock || (x.isWarmup ? "warmup" : "work"),
+          isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
           status: x.status || (s.isCompleted ? "completed" : "planned"),
           loadBasis: C.LOAD_BASES.includes(x.loadBasis) ? x.loadBasis : C.resolvedLoadBasis(exerciseByName.get(e.exerciseName)),
           implementCount: x.implementCount || C.resolvedImplementCount(exerciseByName.get(e.exerciseName)),
@@ -462,11 +550,24 @@ export async function exportBundle() {
     programs: programs.map((p) => ({
       id: p.uuid, name: p.name, focus: p.focus, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
       nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: !!p.isActive,
+      coachEnabled: p.coachEnabled !== false, reliableHistoryStart: p.reliableHistoryStart || null,
+      preferredSessionSpacingDays: p.preferredSessionSpacingDays ?? 3,
+      maximumAddedSetsPerRotation: p.maximumAddedSetsPerRotation ?? 6,
       days: (p.days || []).map((d) => ({
         name: d.name, order: d.order,
         lifts: (d.lifts || []).map((l) => ({
           id: l.id, exerciseName: l.exerciseName, role: l.role, order: l.order ?? 0,
           prescription: l.prescription || "automatic", warmupPolicy: l.warmupPolicy || "automatic",
+          loadOffsetLb: l.loadOffsetLb ?? 0, peakOffsetLb: l.peakOffsetLb ?? 0,
+          deloadMultiplier: l.deloadMultiplier ?? 0.775,
+          doubleProgressionSets: l.doubleProgressionSets ?? 3,
+          minimumReps: l.minimumReps ?? 5, maximumReps: l.maximumReps ?? 8,
+          currentReps: l.currentReps ?? 5,
+          peakSingleEnabled: !!l.peakSingleEnabled, lastPeakSingleLb: l.lastPeakSingleLb ?? 0,
+          peakSingleIncrementLb: l.peakSingleIncrementLb ?? 5,
+          phasePrimerEnabled: l.phasePrimerEnabled !== false,
+          dropIncrementLb: l.dropIncrementLb ?? 0,
+          capacityManaged: l.capacityManaged !== false, maximumSets: l.maximumSets ?? 6,
           baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb,
           stallCount: l.stallCount || 0, lastIncrementLb: l.lastIncrementLb || 0,
           // Mid-cycle backup: the week-3 Peak stashes a pending result that is
@@ -477,14 +578,18 @@ export async function exportBundle() {
           // marker-free exports (and the synthetic fixture) stay byte-stable.
           ...(l.revertToExerciseName ? { revertToExerciseName: l.revertToExerciseName } : {}),
         })),
-        accessories: (d.accessories || []).map((a) => ({ id: a.id, exerciseName: a.exerciseName, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
+        accessories: (d.accessories || []).map((a) => ({ id: a.id, exerciseName: a.exerciseName, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, capacityManaged: a.capacityManaged !== false, maximumSets: a.maximumSets ?? 6, conditioningEffort: a.conditioningEffort || "easy", targetRPE: a.targetRPE ?? 0, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
       })),
     })),
     tracks, gyms: gyms.map(normalizeGym),
     exercises: exercises.map((exercise) => ({ ...exercise,
       loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
-      watchSite: normalizeBodySite(exercise.watchSite) })),
+      watchSite: normalizeBodySite(exercise.watchSite), gateSite: normalizeBodySite(exercise.gateSite) })),
     settings: settingsOut,
+    coachingDecisions: coachingDecisions.map((decision) => ({
+      ...decision, date: iso(decision.date), programId: decision.programId || decision.programID,
+      ruleId: decision.ruleId || decision.ruleID, recommendationId: decision.recommendationId || decision.recommendationID,
+    })),
   };
 }
 export const exportJSON = async () => JSON.stringify(await exportBundle(), null, 2);
@@ -566,13 +671,18 @@ const BACKUP_ENUMS = {
   roles: ["main", "complementary", "accessory"], liftRoles: ["main", "complementary"],
   statuses: C.SET_STATUSES,
   flags: [...C.SET_QUALITIES, "stopped early"],
-  reasons: ["bar speed", "wobble", "joint signal", "heat", "fatigue"],
+  reasons: ["bar speed", "wobble", "joint signal", "heat", "fatigue", "not there"],
   sites: BODY_SITES,
   categories: ["Main", "Accessory", "Conditioning"],
   exerciseTypes: ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"],
   focuses: ["strength", "hypertrophy", "maintain"], modes: ["cycle", "linear"],
-  prescriptions: ["automatic", "wave", "secondary", "hypertrophy", "technique"],
+  prescriptions: ["automatic", "wave", "offsetWave", "secondary", "hypertrophy", "technique", "doubleProgression"],
   warmupPolicies: ["automatic", "full", "short", "none"],
+  prescriptionBlocks: ["warmup", "primer", "topSingle", "work", "backoff", "conditioning"],
+  movementPatterns: C.MOVEMENT_PATTERNS,
+  gateStatuses: ["open", "watch", "shelved", "re-entry"],
+  conditioningEfforts: ["easy", "interval", "mixed"],
+  coachingActions: ["accepted", "deferred", "dismissed", "overridden"],
   milestoneKinds: ["heaviestSet", "volumePR", "firstScheme", "programNote"],
   loadBases: C.LOAD_BASES, loadingPolicies: C.LOADING_POLICIES,
 };
@@ -640,6 +750,7 @@ export function validateBackup(bundle) {
   each(sessions, "sessions", (session, path) => {
     if (session.id != null) portableID(session.id, `${path}.id`);
     dateValue(session.date, `${path}.date`, true);
+    dateValue(session.completedAt, `${path}.completedAt`);
     const tag = session.programTag;
     if (tag != null) {
       object(tag, `${path}.programTag`);
@@ -657,11 +768,20 @@ export function validateBackup(bundle) {
       if (exercise.programSlotId != null) portableID(exercise.programSlotId, `${exercisePath}.programSlotId`);
       textValue(exercise.barId, `${exercisePath}.barId`);
       numberValue(exercise.plannedWeightLb, `${exercisePath}.plannedWeightLb`, { min: 0 });
+      numberValue(exercise.targetWeightLb, `${exercisePath}.targetWeightLb`, { min: 0 });
       numberValue(exercise.plannedSets, `${exercisePath}.plannedSets`, { integer: true, min: 0 });
       numberValue(exercise.plannedReps, `${exercisePath}.plannedReps`, { integer: true, min: 0 });
+      numberValue(exercise.plannedDurationSeconds, `${exercisePath}.plannedDurationSeconds`, { integer: true, min: 0 });
+      numberValue(exercise.fallbackWeightLb, `${exercisePath}.fallbackWeightLb`, { min: 0 });
+      enumValue(exercise.prescriptionStyle, BACKUP_ENUMS.prescriptions, `${exercisePath}.prescriptionStyle`);
       each(array(exercise, "sets", `${exercisePath}.sets`), `${exercisePath}.sets`, (set, setPath) => {
         numberValue(set.weightLb, `${setPath}.weightLb`, { required: true, min: 0 });
         numberValue(set.reps, `${setPath}.reps`, { required: true, integer: true, min: 0 });
+        numberValue(set.targetWeightLb, `${setPath}.targetWeightLb`, { min: 0 });
+        numberValue(set.plannedWeightLb, `${setPath}.plannedWeightLb`, { min: 0 });
+        numberValue(set.plannedReps, `${setPath}.plannedReps`, { integer: true, min: 0 });
+        numberValue(set.plannedDurationSeconds, `${setPath}.plannedDurationSeconds`, { integer: true, min: 0 });
+        enumValue(set.prescriptionBlock, BACKUP_ENUMS.prescriptionBlocks, `${setPath}.prescriptionBlock`, schemaVersion >= 3);
         enumValue(set.status, BACKUP_ENUMS.statuses, `${setPath}.status`, schemaVersion >= 2);
         enumValue(set.loadBasis, BACKUP_ENUMS.loadBases, `${setPath}.loadBasis`);
         numberValue(set.implementCount, `${setPath}.implementCount`, { integer: true, min: 1, max: 4 });
@@ -709,6 +829,9 @@ export function validateBackup(bundle) {
     numberValue(program.currentWeek, `${path}.currentWeek`, { integer: true, min: 1 });
     numberValue(program.nextDayIndex, `${path}.nextDayIndex`, { integer: true, min: 0 });
     numberValue(program.roundingLb, `${path}.roundingLb`, { min: Number.MIN_VALUE });
+    dateValue(program.reliableHistoryStart, `${path}.reliableHistoryStart`);
+    numberValue(program.preferredSessionSpacingDays, `${path}.preferredSessionSpacingDays`, { integer: true, min: 2, max: 14 });
+    numberValue(program.maximumAddedSetsPerRotation, `${path}.maximumAddedSetsPerRotation`, { integer: true, min: 0, max: 20 });
     const days = array(program, "days", `${path}.days`);
     each(days, `${path}.days`, (day, dayPath) => {
       textValue(day.name, `${dayPath}.name`, true); numberValue(day.order, `${dayPath}.order`, { required: true, integer: true, min: 0 });
@@ -718,6 +841,9 @@ export function validateBackup(bundle) {
         numberValue(lift.order, `${liftPath}.order`, { integer: true, min: 0 });
         enumValue(lift.prescription, BACKUP_ENUMS.prescriptions, `${liftPath}.prescription`);
         enumValue(lift.warmupPolicy, BACKUP_ENUMS.warmupPolicies, `${liftPath}.warmupPolicy`);
+        for (const key of ["loadOffsetLb", "peakOffsetLb", "lastPeakSingleLb", "peakSingleIncrementLb", "dropIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
+        numberValue(lift.deloadMultiplier, `${liftPath}.deloadMultiplier`, { min: 0.25, max: 1 });
+        for (const key of ["doubleProgressionSets", "minimumReps", "maximumReps", "currentReps", "maximumSets"]) numberValue(lift[key], `${liftPath}.${key}`, { integer: true, min: 1, max: 100 });
         for (const key of ["baseWeightLb", "estimatedMaxLb", "lastIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
         numberValue(lift.stallCount, `${liftPath}.stallCount`, { integer: true, min: 0 });
         if (lift.pending != null) object(lift.pending, `${liftPath}.pending`);
@@ -727,6 +853,9 @@ export function validateBackup(bundle) {
         textValue(accessory.exerciseName, `${accessoryPath}.exerciseName`, true);
         for (const key of ["sets", "minReps", "maxReps", "currentReps", "stallCount"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { integer: true, min: 0 });
         for (const key of ["order", "targetSeconds", "durationStepSeconds"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { integer: true, min: 0 });
+        numberValue(accessory.maximumSets, `${accessoryPath}.maximumSets`, { integer: true, min: 1, max: 20 });
+        enumValue(accessory.conditioningEffort, BACKUP_ENUMS.conditioningEfforts, `${accessoryPath}.conditioningEffort`);
+        numberValue(accessory.targetRPE, `${accessoryPath}.targetRPE`, { integer: true, min: 0, max: 10 });
         for (const key of ["weightLb", "incrementLb"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { min: 0 });
       });
     });
@@ -768,12 +897,29 @@ export function validateBackup(bundle) {
   each(exercises, "exercises", (exercise, path) => {
     textValue(exercise.name, `${path}.name`, true); enumValue(exercise.category, BACKUP_ENUMS.categories, `${path}.category`, schemaVersion >= 1);
     enumValue(exercise.type, BACKUP_ENUMS.exerciseTypes, `${path}.type`, schemaVersion >= 1); bodySiteValue(exercise.watchSite, `${path}.watchSite`);
+    enumValue(exercise.movementPattern, BACKUP_ENUMS.movementPatterns, `${path}.movementPattern`, schemaVersion >= 3);
+    enumValue(exercise.secondaryMovementPattern, BACKUP_ENUMS.movementPatterns, `${path}.secondaryMovementPattern`);
+    enumValue(exercise.gateStatus, BACKUP_ENUMS.gateStatuses, `${path}.gateStatus`, schemaVersion >= 3);
+    bodySiteValue(exercise.gateSite, `${path}.gateSite`);
+    numberValue(exercise.reEntryTestWeightLb, `${path}.reEntryTestWeightLb`, { min: 0 });
+    numberValue(exercise.reEntryTestSets, `${path}.reEntryTestSets`, { integer: true, min: 1, max: 20 });
+    numberValue(exercise.reEntryTestReps, `${path}.reEntryTestReps`, { integer: true, min: 1, max: 100 });
     enumValue(exercise.loadBasis, BACKUP_ENUMS.loadBases, `${path}.loadBasis`);
     numberValue(exercise.implementCount, `${path}.implementCount`, { integer: true, min: 1, max: 4 });
     numberValue(exercise.defaultRestSeconds, `${path}.defaultRestSeconds`, { integer: true, min: 0, max: 3600 });
     dateValue(exercise.createdAt, `${path}.createdAt`);
   });
   if (exercises) unique(exercises, (exercise) => exercise.name.trim(), "exercises");
+
+  const coachingDecisions = array(bundle, "coachingDecisions");
+  each(coachingDecisions, "coachingDecisions", (decision, path) => {
+    portableID(decision.id, `${path}.id`); dateValue(decision.date, `${path}.date`, true);
+    portableID(decision.programId, `${path}.programId`);
+    textValue(decision.ruleId, `${path}.ruleId`, true);
+    textValue(decision.recommendationId, `${path}.recommendationId`, true);
+    enumValue(decision.action, BACKUP_ENUMS.coachingActions, `${path}.action`, true);
+  });
+  if (coachingDecisions) unique(coachingDecisions, (decision) => decision.id, "coachingDecisions.id");
 
   if ("settings" in bundle) {
     const settings = object(bundle.settings, "settings");
@@ -792,7 +938,7 @@ export function validateBackup(bundle) {
     }
   }
 
-  if (![sessions, bodyweight, protein, checkIns, milestones, programs, tracks, gyms, exercises].some((v) => v !== null) && !("settings" in bundle)) {
+  if (![sessions, bodyweight, protein, checkIns, milestones, programs, tracks, gyms, exercises, coachingDecisions].some((v) => v !== null) && !("settings" in bundle)) {
     throw new Error("Not a Cadence backup");
   }
 }
@@ -838,14 +984,23 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       // Version-0 bundles only exported completed sessions, so absence means
       // completed. Version 1 preserves open sessions explicitly.
       date: s.date, notes: s.notes || "", isCompleted: s.isCompleted !== false,
+      completedAt: s.completedAt || null,
       gymId: s.gymId || null, gymName: s.gym || null,
       programTag: importProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, notes: e.notes || "", phase: recoverPhase(e.phase),
         programRole: e.role || null, programSlotId: e.programSlotId || null, barId: e.barId || null,
-        plannedWeightLb: e.plannedWeightLb ?? null, plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
+        plannedWeightLb: e.plannedWeightLb ?? null, targetWeightLb: e.targetWeightLb ?? null,
+        plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
+        plannedDurationSeconds: e.plannedDurationSeconds ?? null,
+        fallbackWeightLb: e.fallbackWeightLb ?? null,
+        prescriptionStyle: e.prescriptionStyle || null,
         sets: (e.sets || []).map((x, si) => ({
-          order: si, weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
+          order: si, weightLb: x.weightLb, reps: x.reps,
+          targetWeightLb: x.targetWeightLb ?? null, plannedWeightLb: x.plannedWeightLb ?? null,
+          plannedReps: x.plannedReps ?? null, plannedDurationSeconds: x.plannedDurationSeconds ?? null,
+          prescriptionBlock: x.prescriptionBlock || (x.isWarmup ? "warmup" : "work"),
+          isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
           status: x.status || (s.isCompleted !== false ? "completed" : "planned"),
           loadBasis: C.LOAD_BASES.includes(x.loadBasis) ? x.loadBasis : C.resolvedLoadBasis(exerciseByName.get(e.name)),
           implementCount: x.implementCount || C.resolvedImplementCount(exerciseByName.get(e.name)),
@@ -873,8 +1028,14 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
     ...g,
     barcodeImage: isInlineImage(g.barcodeImage) ? g.barcodeImage : null,
   })));
-  if (bundle.exercises) writes.set("exercises", bundle.exercises.map((exercise) => ({
-    ...exercise, watchSite: normalizeBodySite(exercise.watchSite),
+  if (bundle.exercises) writes.set("exercises", bundle.exercises.map((exercise) => normalizeExercise({
+    ...exercise, watchSite: normalizeBodySite(exercise.watchSite), gateSite: normalizeBodySite(exercise.gateSite),
+  })));
+  if (bundle.coachingDecisions) writes.set("coachingDecisions", bundle.coachingDecisions.map((decision) => ({
+    ...decision,
+    programId: decision.programId,
+    ruleId: decision.ruleId,
+    recommendationId: decision.recommendationId,
   })));
   // restSeedStampsCleared describes the EXERCISE LIBRARY's migration state, so
   // it follows the bundle only when the library itself was restored from it:

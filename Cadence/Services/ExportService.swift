@@ -11,6 +11,11 @@ enum ExportService {
     struct ExportSet: Codable {
         let weightLb: Double
         let reps: Int
+        let targetWeightLb: Double?
+        let plannedWeightLb: Double?
+        let plannedReps: Int?
+        let plannedDurationSeconds: Int?
+        let prescriptionBlock: String
         let isWarmup: Bool
         let status: String
         let isPerSide: Bool
@@ -34,8 +39,12 @@ enum ExportService {
         let programSlotId: String?
         let barId: String?
         let plannedWeightLb: Double?
+        let targetWeightLb: Double?
         let plannedSets: Int?
         let plannedReps: Int?
+        let plannedDurationSeconds: Int?
+        let fallbackWeightLb: Double?
+        let prescriptionStyle: String?
         let sets: [ExportSet]
     }
 
@@ -56,6 +65,7 @@ enum ExportService {
         let gym: String?
         let gymId: String?
         let isCompleted: Bool
+        let completedAt: Date?
         let programTag: ExportProgramTag?
         let exercises: [ExportExercise]
     }
@@ -78,6 +88,7 @@ enum ExportService {
         let gyms: [ExportGym]
         let exercises: [ExportExerciseDef]
         let settings: ExportSettings?
+        let coachingDecisions: [ExportCoachingDecision]
     }
 
     /// Web `tracks` store record shape (imported verbatim there).
@@ -117,6 +128,10 @@ enum ExportService {
         let category: String
         let type: String
         let movementGroup: String
+        let movementPattern: String
+        let secondaryMovementPattern: String?
+        let aliases: [String]
+        let strategyTags: [String]
         let isUnilateral: Bool
         let loadBasis: String
         let implementCount: Int
@@ -125,6 +140,13 @@ enum ExportService {
         let isShelved: Bool
         let shelvedNote: String
         let watchSite: String?
+        let gateStatus: String
+        let gateSite: String?
+        let reEntryCriteria: [String]
+        let completedReEntryCriteria: [String]
+        let reEntryTestWeightLb: Double
+        let reEntryTestSets: Int
+        let reEntryTestReps: Int
         let createdAt: Date
     }
 
@@ -210,6 +232,20 @@ enum ExportService {
         let order: Int
         let prescription: String
         let warmupPolicy: String
+        let loadOffsetLb: Double
+        let peakOffsetLb: Double
+        let deloadMultiplier: Double
+        let doubleProgressionSets: Int
+        let minimumReps: Int
+        let maximumReps: Int
+        let currentReps: Int
+        let peakSingleEnabled: Bool
+        let lastPeakSingleLb: Double
+        let peakSingleIncrementLb: Double
+        let phasePrimerEnabled: Bool
+        let dropIncrementLb: Double
+        let capacityManaged: Bool
+        let maximumSets: Int
         let baseWeightLb: Double
         let estimatedMaxLb: Double
         let stallCount: Int
@@ -228,6 +264,10 @@ enum ExportService {
         let currentReps: Int
         let targetSeconds: Int
         let durationStepSeconds: Int
+        let capacityManaged: Bool
+        let maximumSets: Int
+        let conditioningEffort: String
+        let targetRPE: Int
         let weightLb: Double
         let incrementLb: Double
         let stallCount: Int
@@ -250,7 +290,25 @@ enum ExportService {
         let nextDayIndex: Int
         let roundingLb: Double
         let isActive: Bool
+        let coachEnabled: Bool
+        let reliableHistoryStart: Date?
+        let preferredSessionSpacingDays: Int
+        let maximumAddedSetsPerRotation: Int
         let days: [ExportProgramDay]
+    }
+
+    struct ExportCoachingDecision: Codable {
+        let id: String
+        let date: Date
+        let programId: String
+        let ruleId: String
+        let recommendationId: String
+        let action: String
+        let title: String
+        let explanation: String
+        let evidence: [String]
+        let beforeValue: String?
+        let afterValue: String?
     }
 
     // MARK: - JSON
@@ -335,6 +393,9 @@ enum ExportService {
             FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\.name)])
         )
         let settings = try context.fetch(FetchDescriptor<AppSettings>()).first
+        let coachingDecisions = try context.fetch(
+            FetchDescriptor<CoachingDecision>(sortBy: [SortDescriptor(\.date)])
+        )
 
         return ExportBundle(
             schemaVersion: BackupContract.currentSchemaVersion,
@@ -364,6 +425,7 @@ enum ExportService {
                     gym: session.gymName,
                     gymId: resolvedGymID,
                     isCompleted: session.isCompleted,
+                    completedAt: session.completedAt,
                     programTag: programTag,
                     exercises: session.orderedExercises.map { entry in
                         ExportExercise(
@@ -374,12 +436,21 @@ enum ExportService {
                             programSlotId: entry.programSlotID,
                             barId: entry.barID,
                             plannedWeightLb: entry.plannedWeightLb,
+                            targetWeightLb: entry.targetWeightLb,
                             plannedSets: entry.plannedSets,
                             plannedReps: entry.plannedReps,
+                            plannedDurationSeconds: entry.plannedDurationSeconds,
+                            fallbackWeightLb: entry.fallbackWeightLb,
+                            prescriptionStyle: entry.prescriptionStyleRaw.isEmpty ? nil : entry.prescriptionStyleRaw,
                             sets: entry.orderedSets.map { set in
                                 ExportSet(
                                     weightLb: set.weightLb,
                                     reps: set.reps,
+                                    targetWeightLb: set.targetWeightLb,
+                                    plannedWeightLb: set.plannedWeightLb,
+                                    plannedReps: set.plannedReps,
+                                    plannedDurationSeconds: set.plannedDurationSeconds,
+                                    prescriptionBlock: set.prescriptionBlock.rawValue,
                                     isWarmup: set.isWarmup,
                                     status: set.status.rawValue,
                                     isPerSide: set.isPerSide,
@@ -415,13 +486,27 @@ enum ExportService {
                 ExportProgram(
                     id: p.id, name: p.name, focus: p.focusRaw, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
                     nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: p.isActive,
+                    coachEnabled: p.coachEnabled, reliableHistoryStart: p.reliableHistoryStart,
+                    preferredSessionSpacingDays: p.preferredSessionSpacingDays,
+                    maximumAddedSetsPerRotation: p.maximumAddedSetsPerRotation,
                     days: p.orderedDays.map { d in
                         ExportProgramDay(
                             name: d.name, order: d.order,
                             lifts: d.orderedLifts.map { l in
                                 ExportProgramLift(
                                     id: l.id, exerciseName: l.exerciseName, role: l.roleRaw, order: l.order,
-                                    prescription: l.prescriptionRaw, warmupPolicy: l.warmupPolicyRaw, baseWeightLb: l.baseWeightLb,
+                                    prescription: l.prescriptionRaw, warmupPolicy: l.warmupPolicyRaw,
+                                    loadOffsetLb: l.loadOffsetLb, peakOffsetLb: l.peakOffsetLb,
+                                    deloadMultiplier: l.deloadMultiplier,
+                                    doubleProgressionSets: l.doubleProgressionSets,
+                                    minimumReps: l.minimumReps, maximumReps: l.maximumReps,
+                                    currentReps: l.currentReps, peakSingleEnabled: l.peakSingleEnabled,
+                                    lastPeakSingleLb: l.lastPeakSingleLb,
+                                    peakSingleIncrementLb: l.peakSingleIncrementLb,
+                                    phasePrimerEnabled: l.phasePrimerEnabled,
+                                    dropIncrementLb: l.dropIncrementLb,
+                                    capacityManaged: l.capacityManaged, maximumSets: l.maximumSets,
+                                    baseWeightLb: l.baseWeightLb,
                                     estimatedMaxLb: l.estimatedMaxLb, stallCount: l.stallCount, lastIncrementLb: l.lastIncrementLb,
                                     pending: l.pendingBaseWeightLb.map { pendingBase in
                                         ExportPendingResult(
@@ -440,7 +525,11 @@ enum ExportService {
                             accessories: d.orderedAccessories.map { a in
                                 ExportProgramAccessory(id: a.id, exerciseName: a.exerciseName, order: a.order, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
                                                        currentReps: a.currentReps, targetSeconds: a.targetSeconds,
-                                                       durationStepSeconds: a.durationStepSeconds, weightLb: a.weightLb,
+                                                       durationStepSeconds: a.durationStepSeconds,
+                                                       capacityManaged: a.capacityManaged,
+                                                       maximumSets: a.maximumSets,
+                                                       conditioningEffort: a.conditioningEffortRaw,
+                                                       targetRPE: a.targetRPE, weightLb: a.weightLb,
                                                        incrementLb: a.incrementLb, stallCount: a.stallCount,
                                                        revertToExerciseName: a.revertToExerciseName)
                             }
@@ -468,11 +557,19 @@ enum ExportService {
             },
             exercises: exerciseDefs.map { e in
                 ExportExerciseDef(name: e.name, category: e.categoryRaw, type: e.typeRaw, movementGroup: e.movementGroup,
+                                  movementPattern: e.movementPattern.rawValue,
+                                  secondaryMovementPattern: e.secondaryMovementPattern?.rawValue,
+                                  aliases: e.aliases, strategyTags: e.strategyTags,
                                   isUnilateral: e.isUnilateral, loadBasis: e.loadBasis.rawValue,
                                   implementCount: e.resolvedImplementCount,
                                   defaultRestSeconds: e.defaultRestSeconds, notes: e.notes,
                                   isShelved: e.isShelved, shelvedNote: e.shelvedNote,
-                                  watchSite: e.watchSite?.rawValue, createdAt: e.createdAt)
+                                  watchSite: e.watchSite?.rawValue, gateStatus: e.gateStatus.rawValue,
+                                  gateSite: e.gateSite?.rawValue, reEntryCriteria: e.reEntryCriteria,
+                                  completedReEntryCriteria: e.completedReEntryCriteria,
+                                  reEntryTestWeightLb: e.reEntryTestWeightLb,
+                                  reEntryTestSets: e.reEntryTestSets, reEntryTestReps: e.reEntryTestReps,
+                                  createdAt: e.createdAt)
             },
             settings: settings.map { s in
                 ExportSettings(unitDisplay: s.unitDisplayRaw, proteinTargetGrams: s.proteinTargetGrams,
@@ -489,6 +586,15 @@ enum ExportService {
                                restSeedStampsCleared: s.restSeedStampsCleared,
                                loadSemanticsMigrated: s.loadSemanticsMigrated,
                                seededAt: s.seededAt, theme: s.themeNameRaw)
+            },
+            coachingDecisions: coachingDecisions.map { decision in
+                ExportCoachingDecision(
+                    id: decision.id, date: decision.date, programId: decision.programID,
+                    ruleId: decision.ruleID, recommendationId: decision.recommendationID,
+                    action: decision.actionRaw, title: decision.title,
+                    explanation: decision.explanation, evidence: decision.evidence,
+                    beforeValue: decision.beforeValue, afterValue: decision.afterValue
+                )
             }
         )
     }
