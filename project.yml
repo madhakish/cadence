@@ -107,6 +107,25 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
 
+  # Hostless macOS test bundle for on-disk SwiftData compatibility. It compiles
+  # only persistence models + seeding so CI can create a real V1 SQLite store
+  # and prove the current schema opens it without involving simulator UI state.
+  CadenceMigrationTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Cadence/Models
+      - Cadence/Seed/Seeder.swift
+      - CadenceMigrationTests
+    dependencies:
+      - package: CadenceCore
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: true
+        CODE_SIGNING_ALLOWED: false
+
 schemes:
   Cadence:
     build:
@@ -115,3 +134,10 @@ schemes:
     test:
       targets:
         - package: CadenceCore/CadenceCoreTests
+  CadenceMigrationTests:
+    build:
+      targets:
+        CadenceMigrationTests: all
+    test:
+      targets:
+        - CadenceMigrationTests

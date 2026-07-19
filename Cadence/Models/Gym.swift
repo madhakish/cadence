@@ -29,7 +29,7 @@ final class Gym {
     var plateToggles: [PlateToggle]
     /// Combined collar/clip weight for the selected station, canonical pounds.
     var collarWeightLb: Double = 0
-    var loadingPolicyRaw: String = LoadingPolicy.closest.rawValue
+    var loadingPolicyRaw: String = "closest"
     /// Photo of the membership barcode/key tag, so a second car key ring
     /// isn't needed. Shown full-screen at max brightness for the scanner.
     @Attribute(.externalStorage) var barcodeImageData: Data?

@@ -1,256 +1,205 @@
-# Cadence — Project Instructions
+# Claude Code instructions for Cadence
 
-Repo and app are both named **Cadence**. Single-user, local-first workout-tracking
-app (no backend, no accounts). Migrated here from its temporary home in the-greenhouse
-repo (previously alpha-named Comeback).
+Read `AGENTS.md` before making changes. It is the canonical repository guide
+and applies to Claude as well as other coding agents. This file provides the
+Claude-specific startup checklist and repeats the safety contracts that must
+never depend on context or memory.
 
-It ships as **two apps that share one brain**: a **native iOS app** (SwiftUI +
-SwiftData, iOS 17+) and a **web PWA** (`web/` — vanilla JS, IndexedDB, no build
-step; the live daily driver at `madhakish.github.io/cadence/`). ALL computational
-logic lives in `CadenceCore` (pure Swift, Foundation-only, Linux-testable) and
-is **mirrored 1:1 in `web/js/core.js`** with identical tests (XCTest ≡ the node
-suite). That parity is non-negotiable — it's why the two apps can't drift.
+## Repository summary
 
-## Layout
+Cadence is a single-user, local-first strength-training logbook delivered as:
 
-| Path | Purpose |
-|------|---------|
-| `project.yml` | XcodeGen spec. `xcodegen generate` produces `Cadence.xcodeproj` (gitignored — never commit it) |
-| `CadenceCore/` | Pure-Swift package: plate math, program engine, warmup ramp, PR detection, units. ALL testable logic lives here |
-| `CadenceCore/Tests/` | Unit tests, including `CompileRegressionTests.swift` (see below) |
-| `Cadence/` | Native app target: SwiftUI views, SwiftData `@Model` classes, services, seed data |
-| `web/` | Web PWA: `js/core.js` (mirror of CadenceCore), `js/db.js` (IndexedDB), views, service worker. No build step |
-| `web/tests/` | `core.test.mjs` (parity checks vs XCTest) + `smoke.test.mjs` (jsdom + fake-indexeddb) + `fixtures/synthetic-backup.json` (broad-coverage dataset; regenerate with `web/tools/generate-synthetic-backup.mjs`, restores into BOTH apps) |
-| `docs/` | User documentation, Diátaxis-structured (tutorials/how-to/reference/explanation); `docs/README.md` is the index. Update alongside behavior changes |
-| `web/js/templates.js` ≡ `CadenceCore/…/ProgramTemplateData.swift` | Program style templates (data) behind the "+ Add program" picker. Parity ENFORCED: both suites assert against `web/tests/fixtures/program-templates.json` (regenerate via `web/tools/generate-template-fixture.mjs`). App-side instantiation: `Cadence/Seed/ProgramTemplates.swift`. Template exercises must use canonical seeded names — a variant spelling forks the library |
-| `web/js/anatomy.js` ≡ `CadenceCore/…/AnatomyData.swift` | Muscle map + figure geometry for the exercise detail view. Parity ENFORCED against `web/tests/fixtures/anatomy.json` (regenerate via `web/tools/generate-anatomy-fixture.mjs`) |
-| `BackupContract.currentSchemaVersion` ≡ `web/js/db.js` `BACKUP_SCHEMA_VERSION` | Cross-platform JSON backup schema. Missing means legacy v0; current exporters emit v2. Never bump one side alone |
-| `fastlane/`, `docs/TESTFLIGHT.md` | Mac-free TestFlight pipeline (dormant until configured) |
-| `.github/workflows/ci.yml`, `pages.yml` | CI + release pipeline; web tests + Pages deploy |
-| `.releaserc.json` | semantic-release config |
+- a native iOS 17+ SwiftUI/SwiftData app with a widget/Live Activity extension;
+- a vanilla-JavaScript PWA backed by IndexedDB; and
+- a Foundation-only Swift package, `CadenceCore`, containing deterministic
+  training logic mirrored by `web/js/core.js`.
 
-## Conventional Commits — REQUIRED
+There is no server-side source of truth. The user's on-device store and portable
+backup are the source of truth, so persistence compatibility has higher priority
+than implementation convenience.
 
-Releases are fully automated by semantic-release; commit messages on `main`
-ARE the version-bump and changelog mechanism. Use them correctly:
+## Start every task this way
 
-| Prefix | Effect on release |
-|--------|-------------------|
-| `fix:` | patch bump (x.y.Z) |
-| `feat:` | minor bump (x.Y.0) |
-| `feat!:` / `BREAKING CHANGE:` footer | major bump (X.0.0) |
-| `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `style:` | no release |
+1. Read `AGENTS.md` and any relevant user documentation in `docs/`.
+2. Inspect `git status` and preserve unrelated user work.
+3. Locate the production implementation, its mirrored native/web counterpart,
+   existing tests, persistence models, and import/export boundaries.
+4. Classify the change before editing:
+   - pure domain behavior;
+   - native UI/platform integration;
+   - web UI/runtime behavior;
+   - SwiftData or IndexedDB persistence;
+   - backup schema;
+   - privacy/permissions; or
+   - release/CI infrastructure.
+5. If persisted state changes, stop normal implementation flow and follow the
+   migration protocol below first.
 
-- Never hand-create `v*` tags or GitHub Releases — semantic-release owns them.
-- Never hand-bump versions. (`MARKETING_VERSION` in `project.yml` is only a
-  fallback; the TestFlight `beta` lane stamps `CFBundleShortVersionString` from
-  the released `v*` tag via `APP_VERSION`, so builds track the semantic version
-  1:1, and the sideload release filenames carry it too. Build number is
-  `latest_testflight_build_number + 1`.)
-- Scopes are fine: `fix(ci):`, `feat(release):`, etc.
-- Avoid `#word` tokens in commit messages (e.g. write "the Predicate macro",
-  not "#Predicate") — the release-notes generator parses them as issue
-  references and emits bogus "closes #…" links.
+## Absolute rules
 
-## Build & Test
+- Never delete/reset a store, tell the user to reinstall, or silently start a
+  replacement store as a persistence fix.
+- Never mutate an already released SwiftData `VersionedSchema` or reuse its
+  version identifier for a new checksum.
+- Never ship a schema change without an upgrade path and real on-disk migration
+  test.
+- Treat a breaking persisted-schema change as a SemVer major change. Use
+  `fix!:`/`feat!:` or a `BREAKING CHANGE:` footer in the merge/squash commit.
+- Never defer a required migration to another PR.
+- Never commit real workouts, body/health data, gym tags, membership details,
+  exports, credentials, or signing material.
+- Never edit or commit the generated `Cadence.xcodeproj`; edit `project.yml`.
+- Never put Apple-framework code into `CadenceCore`.
+- Never change shared domain behavior on only one client.
 
-- **Core logic (any OS, including Linux):** `cd CadenceCore && swift test`.
-  CadenceCore must stay Foundation-only so it keeps building and testing on
-  Linux — no SwiftUI/SwiftData/UIKit/HealthKit imports in the package.
-  Darwin-only tests go behind `#if canImport(Darwin)`.
-- **App (Mac with Xcode 15+ only):**
-  `brew install xcodegen && xcodegen generate && open Cadence.xcodeproj`.
-- This environment has no Apple toolchain; CI is the compiler. Expect to
-  iterate via Actions logs when touching app-target code.
+## Architecture and ownership
 
-## CI & Releases (`.github/workflows/ci.yml`)
+| Concern | Source of truth |
+| --- | --- |
+| Training math and deterministic state transitions | `CadenceCore/Sources/CadenceCore/` |
+| Swift domain regression tests | `CadenceCore/Tests/CadenceCoreTests/` |
+| JavaScript domain mirror | `web/js/core.js` and `web/tests/core.test.mjs` |
+| Native persistence | `Cadence/Models/`, `Cadence/Services/`, `Cadence/Seed/Seeder.swift` |
+| SwiftData compatibility | `PersistenceSchema*.swift`, `AppBootstrap`, `CadenceMigrationTests/` |
+| Web persistence | `web/js/db.js` and fake-indexeddb smoke coverage |
+| Portable backup contract | `BackupContract.swift`, `web/js/db.js`, import/export services, backup docs/fixtures |
+| Native UI | `Cadence/Views/` |
+| Live Activity and controls | `Cadence/LiveActivity/` and `CadenceWidgets/` |
+| Generic reference data | `Cadence/Seed/`, template/anatomy mirrored fixtures |
+| Build configuration | `project.yml` |
+| Release and distribution | `.github/workflows/`, `.releaserc.json`, `fastlane/` |
 
-Four jobs on push to `main` (the first three also on PRs):
+Keep views and persistence adapters thin. New testable logic belongs in
+`CadenceCore`; implement the equivalent function in `web/js/core.js` and give
+both suites matching cases.
 
-1. `core-tests` — `swift test` in the `swift:5.10` Linux container.
-2. `web-tests` — the node parity + smoke suites (`web/tests/`); enforces the
-   CadenceCore↔core.js mirror pre-merge.
-3. `app-build` (macos-latest) — `swift test` on Darwin, XcodeGen, Release
-   builds for iOS Simulator and unsigned device, uploads the
-   `Cadence-installer` artifact (`Cadence-unsigned.ipa` +
-   `Cadence-simulator.app.zip`).
-4. `release` — only on green `main` pushes, gated on ALL of the above
-   (including `web-tests` — a tag is never cut while the JS mirror fails):
-   semantic-release tags the next version, creates the GitHub Release, and
-   attaches the version-stamped installer files from the same run's artifact.
-   A `main` ruleset should require the three PR-run checks (`core-tests`,
-   `web-tests`, `app-build`) — NOT `release`/`testflight`, which only run on
-   `main` pushes and would make PRs unmergeable if required.
+## Persistence and migration protocol
 
-The `.ipa` is unsigned (no signing certs in CI) — it must be re-signed to
-sideload (AltStore/Sideloadly).
+### SwiftData
 
-**TestFlight** distribution is scaffolded and fully Mac-free: the `testflight`
-job runs `fastlane beta` (`fastlane/Fastfile`) on the macOS runner to sign and
-upload. It's **dormant** until you set the repo variable `TESTFLIGHT_ENABLED=true`
-and add the Apple secrets — see `docs/TESTFLIGHT.md`. Signing uses an App Store
-Connect API key + `fastlane match` (certs in a private repo); never commit the
-`.p8`, PAT, or `MATCH_PASSWORD`.
+Treat every released schema/checksum as immutable API history. The repository
+currently preserves both the pre-PR-72 V1 schema and the alternate schema that
+PR #72 wrote while still advertising V1. Both histories must keep upgrading.
 
-## Compile failures become tests
+Before changing a live `@Model` property, relationship, constraint, default,
+attribute, or registered model:
 
-Every compile failure found in CI gets its root cause captured in
-`CadenceCore/Tests/CadenceCoreTests/CompileRegressionTests.swift` as a
-minimal fixture that stops compiling (or fails) if the pattern returns.
-Existing entries — don't reintroduce these patterns:
+1. Identify the latest schema shipped on `main`.
+2. Freeze its exact declarations/checksum in an immutable
+   `PersistenceSchemaV<N>.swift` snapshot if needed.
+3. Create a new current schema with a monotonically increasing
+   `Schema.Version`; never alter the prior snapshot.
+4. Extend every production migration plan from every supported shipped
+   checksum. Keep separate linear plans and `AppBootstrap` fallback paths where
+   SwiftData cannot represent branched history in one plan.
+5. Choose lightweight migration only when it preserves data and relationships.
+   Use a custom migration for renames, conversions, constraint changes, or
+   identity repair that cannot be represented safely.
+6. Make post-open backfills idempotent. Preserve valid values; repair missing,
+   malformed, or duplicate IDs; propagate save errors.
+7. Extend `CadenceMigrationTests` to create representative real SQLite stores
+   for all affected old checksums, open them with the production current plan,
+   and assert data, relationships, manual training edits, settings, and
+   invariants survive.
+8. Keep the recovery path non-destructive and document upgrade/downgrade
+   implications.
 
-- A computed property body whose first token is `set` parses as a setter
-  declaration when the type has a property named `set`; qualify with `self.`.
-- SwiftData/Foundation `#Predicate` cannot reference a property of a captured
-  object (`track.exerciseName`); hoist the value into a local `let` first.
-- `Weight.trim` must strip trailing zeros at any precision (runtime, not
-  compile — caught by the Linux test job on the first ever run).
-- A large SwiftUI `ViewBuilder` closure holding a `let` binding plus a
-  many-argument view call can exceed the type-checker's budget ("unable to
-  type-check this expression in reasonable time") — hoist the content into a
-  computed property and do lookups via plain helper funcs. Not expressible as
-  a CadenceCore fixture (no SwiftUI in the package); pattern hit in
-  ActiveSessionView's List.
+Fresh-store or in-memory tests are insufficient. A successful compile is
+insufficient. CI's hostless macOS migration scheme is the required proof.
 
-## App conventions
+### IndexedDB
 
-- **All weights stored canonically in pounds (`Double`).** kg exists only at
-  entry/display boundaries via `Weight`/`UnitDisplay` in CadenceCore.
-- New computational logic goes in CadenceCore with tests, not in views.
-- SwiftData models live in `Cadence/Models/`; `Seed/Seeder.swift` may contain
-  generic reference data only. Never commit personal workouts, body metrics,
-  health signals, gym barcodes, or exported app backups.
-- HealthKit is optional and write-only by design; the app reads nothing.
-- **One workout Live Activity** (Lock Screen + Dynamic Island): a session
-  stopwatch (elapsed + current lift) that swaps to the rest countdown +
-  Pause/+0:30/End while resting. The contract, controller, and App Intents
-  live in `Cadence/LiveActivity/` and are compiled into BOTH the app and the
-  `CadenceWidgets` extension (one definition across processes); the rest
-  state math is `RestClock` in CadenceCore, mirrored as `restClock*` in
-  `web/js/core.js`. Quick rest control (start/skip) is `ToggleRestIntent` —
-  exposed via App Shortcuts (Action Button, Siri) and an iOS 18 Control
-  Center control. Deliberate: no volume/mute-button hijacking.
-- **Rest resolution** (`RestDefaults` in CadenceCore ≡ `restDefaultSeconds` in
-  core.js, lockstep-tested): per-exercise rest (`defaultRestSeconds > 0`, the
-  deliberate exception) → conditioning 0 → program role (complementary/accessory
-  buckets) → movementGroup bucket (Main squat/hinge → mainCompound, Main
-  olympic → olympic, other Main → mainUpper, else accessory). NEVER key on
-  exercise names. Seeds set `defaultRestSeconds` only for deliberate deviations
-  (0 = bucket-driven); the retired blanket stamps are cleared one-shot by
-  `syncLibrary` on both platforms (`retiredRestStamps` ≡ `RETIRED_REST_STAMPS`,
-  gated by `restSeedStampsCleared` in settings).
+Review `web/js/db.js` whenever persisted record shape or interpretation changes.
+Bump `DB_VERSION` when required, transform older data inside
+`onupgradeneeded`, and test opening a prior database version with current code.
+Do not mistake fresh seeding for migration coverage.
 
-## Workout Program (adaptive progression)
+### Backups
 
-A structured plan layered on top of the per-lift cycle engine. There are now two
-progression systems: standalone `LiftTrack`s (independent per-lift cycles, the
-"Next up"/Progression list) and a **Program** that bundles training days.
+The backup is cross-platform recovery, not an internal implementation detail.
+Keep native `BackupContract.currentSchemaVersion` and web
+`BACKUP_SCHEMA_VERSION` synchronized. Accept and migrate documented older
+versions, reject unsupported newer versions before writes, update native and
+web import/export together, regenerate synthetic fixtures deliberately, and
+update `docs/reference/backup-schema.md`.
 
-- **Model** (`Cadence/Models/ProgramModels.swift`, mirrored as the embedded
-  `programs` IndexedDB store in `web/js/db.js`): `Program` (focus, cycleNumber,
-  currentWeek 1–4, nextDayIndex, roundingLb, isActive) → `ProgramDay` (name, order)
-  → `ProgramLift` (main/complementary, baseWeightLb, estimatedMaxLb, stallCount) +
-  `ProgramAccessory` (sets, min/max/currentReps, weightLb, incrementLb). The
-  program owns its lifts' state and drives ONE 4-week wave; program lifts are
-  filtered out of the standalone "Next up" and are NOT advanced as `LiftTrack`s.
-- **Adaptive engine** lives in `CadenceCore/Sources/CadenceCore/ProgramProgression.swift`,
-  mirrored 1:1 in `web/js/core.js` with identical assertions in
-  `ProgramProgressionTests.swift` and `web/tests/core.test.mjs`. It is pure and
-  deterministic — it consumes a performance *summary*, never a session or a clock.
-  - `gradeCycle`: SUCCESS only on a clean Peak (all sets at target reps, no
-    stopped-early/dropped-load, ≤`QUALITY_FLAG_TOLERANCE` grindy/wobble); else HOLD/FAIL.
-  - `taperedIncrement`: a fraction of base × headroom to a focus-dependent ceiling
-    (`estimatedMax × tmFraction`), floored at plate granularity, 0 at/over the ceiling.
-  - `advanceCycleLift`: clean → tapered bump; non-success → stall, and at
-    `STALL_LIMIT` (2) auto-deload by `DELOAD_REBUILD_FRACTION` (−10%) with a note.
-  - `advanceAccessory`: weighted → double progression (earn the rep range, add load,
-    reset); bodyweight (`incrementLb <= 0`) → keep adding reps (maxReps advisory).
-  - Training focus (strength/hypertrophy/maintain) sets the ceiling + increment;
-    maintain never increments. Don't add nondeterminism to these functions.
-- **Swaps**: session-only by default — the program slot is untouched and simply
-  isn't performed that day (a swapped-out peak grades as skipped). Explicit
-  escalation: cycle scope (slot renamed, original kept in `revertToExerciseName`,
-  restored at rollover with a programNote) or program scope (renamed for good;
-  progression state stays with the slot either way). Candidates must share
-  movementGroup, category, and loadability, and never be shelved
-  (`SwapRules` in CadenceCore ≡ `swapCompatible` in core.js). The swap gesture
-  is native-only; the web app honors revert state arriving via backup.
-- **Generation + rollover**: `ProgramSession.make` / web `createSessionFromProgramDay`
-  build a tagged session (program/cycle/week/day + per-exercise role). Completion
-  (`SessionCompletion.swift` / web `completeSession`) grades each lift at the
-  **week-3 Peak** into a pending result and APPLIES it at the deload week's end
-  (rollover: cycle++, week→1, deload/ceiling notes written as `programNote`
-  milestones). Accessories double-progress every bank.
+### Semantic versioning
 
-## Design principles
+`semantic-release` reads commits on `main`:
 
-The app holds an opinion about training; these constraints keep it coherent.
+- `fix:` means patch.
+- `feat:` means minor.
+- `fix!:`/`feat!:` or `BREAKING CHANGE:` means major.
+- docs/test/ci/chore/refactor/style commits do not release.
 
-- **Adherence dominates outcome.** A simple, consistent plan gets executed.
-  Complexity lives *inside* the autoregulation, triggered by data — never exposed
-  as knobs.
-- **Guide, don't interrogate.** Minimize inputs; pre-fill everything predictable
-  (a program day pre-fills weight/sets/reps for one-tap confirm); every required
-  tap must earn itself.
-- **Knows when it doesn't know.** Prefer logging silently when confident and
-  asking one light question when not. Wrong auto-detection is worse than manual
-  entry — it corrupts the log.
-- **The program is the prior.** A known plan collapses "which of 470 exercises"
-  into "which of today's five." Lean on it.
-- **n=1.** Built for one user, ~30 movements, one gym. Refuse speculative
-  generality; generalize later from a working app + real data. (The program
-  style templates are the one sanctioned exception, added by owner decision —
-  data-only, fixture-locked, and editable into anything after creation.)
-- **Logic in CadenceCore, pure + tested + mirrored to JS.** Platform I/O
-  (HealthKit, IndexedDB/SwiftData, sensors) stays at the edges so the reasoning
-  is deterministic and unit-testable.
+A persisted format that requires conversion for old stores, prevents an old
+binary from opening newly written data, removes/renames data, changes types or
+relationships, or changes backup compatibility is breaking. Mark the release
+as major even if the new app performs the forward migration automatically. The
+same PR must include the upgrade path, tests, recovery notes, and contract docs.
 
-## Roadmap
+Never create release tags or hand-edit versions; semantic-release owns them.
 
-Build order is deliberately easy-first — never build the hard sensor-fusion
-thing before there's a working, distributed app.
+## Domain invariants to protect
 
-- **Phase 0 — simple logger + clear the Apple pipeline.** ~Done: the logger is
-  live (web) and the TestFlight pipeline is wired (dormant — see
-  `docs/TESTFLIGHT.md`). Deliverable is the credential + template, not revenue.
-- **Phase 1 — Program Engine + Readiness Engine.**
-  - Program Engine: **built** (adaptive progression above). Today's autoregulation
-    is *in-session only* (quality flags + dropped-load), not yet RPE/RIR shifting
-    with *pre-session* readiness.
-  - Readiness Engine: **not built.** Pivotal change — it needs **HealthKit READ**
-    (HRV, resting HR, sleep, respiratory rate, wrist temp), reversing the current
-    write-only stance; **native-only** (the web PWA can't read Apple Health).
-    Encode the math as **pure CadenceCore functions** (Banister fitness-fatigue,
-    acute:chronic workload ratio, MEV/MAV/MRV volume landmarks, RPE/RIR), with
-    constants **refit to the user's own data** (population norms transfer poorly).
-    Ship it as a **gentle nudge first** (RPE ±0.5, go/hold — never a dramatic
-    override) and **watch before it prescribes**: show the score would have been
-    right before it's allowed to move load.
-- **Phase 1.5 — durability + reach (planned).** Auto-backup first (scheduled
-  export of the bundle: iCloud/Files on iOS, download/File System Access on
-  web) so nobody loses data; then an **online portal** — login, synced app
-  data, and a bigger-screen UI for program/preference management. This
-  deliberately reverses the "no backend, no accounts" stance; the backup
-  bundle is already the cross-platform interchange and is the natural sync
-  payload. An **Android app** is also planned — before the portal, decide how
-  core logic ships to a third platform (Kotlin mirror vs a compiled shared
-  core), because the 1:1-mirror discipline gets expensive at three copies.
-- **Phase 2 — ambient capture.** Geofence → `HKWorkoutSession` → set/rest
-  detection → wrist-IMU exercise classification *under the day's program as a
-  strong prior* (5-way, not 470-from-scratch) → load **predicted** from program +
-  last session (unobservable from the wrist; not passive). Far off; watchOS.
+- Store all weights in canonical pounds. Convert only at entry/display.
+- History, goals, progression, volume, and PRs use performed values, not stale
+  programmed values. Preserve manual weight/repetition adjustments.
+- Editing reps cannot reset weight; editing weight cannot reset other set state.
+- Sets are independently addable/removable and deterministically ordered.
+- Planned/completed/skipped and warmup/working states stay distinct.
+- Load basis and implement count are explicit; do not guess from an exercise
+  name after semantics have been persisted.
+- Program progression is pure, deterministic, and based on completed summaries.
+- Seed data is generic and canonical across native, web, templates, search, and
+  swap rules.
+- The gym membership tag is a launch-level, trivially accessible workflow.
 
-Open questions to resolve while building Phase 1: HRV/sleep/RHR/temp weighting +
-per-user baselines; deload trigger (scheduled vs readiness vs hybrid)
-and its hysteresis; confirming watchOS high-rate capture needs an active
-`HKWorkoutSession`; the confidence threshold for silent-log vs ask.
+## Product expectations
 
-## Housekeeping
+Cadence is used mid-workout. Prefer predictable defaults, minimal taps, large
+targets, one-handed reachability, and edits that never disappear. Ask a small
+question only when a wrong inference would corrupt the log. Make planned versus
+actual work obvious without exposing internal state-machine complexity.
 
-- Never commit: `Cadence.xcodeproj` (generated), `.build/`, `DerivedData/`,
-  secrets/API keys of any kind.
-- Run `swift test` in `CadenceCore/` before pushing when Swift is available.
-- Keep CI green on `main`; broken `main` blocks all releases.
-- GitHub Actions runners deprecate Node versions periodically — bump
-  `actions/*` versions when CI warns.
-- Conventional Commits everywhere, including merge commits where practical.
+Check accessibility, Dynamic Type, VoiceOver labels, safe areas, themes,
+reduced motion, and destructive-action confirmation for UI changes. Native and
+web should share information architecture while using platform-appropriate UI.
+
+## Validation commands
+
+```bash
+cd CadenceCore && swift test
+```
+
+```bash
+cd web && npm ci && npm test
+```
+
+On a Mac:
+
+```bash
+xcodegen generate
+xcodebuild test -project Cadence.xcodeproj -scheme CadenceMigrationTests -destination 'platform=macOS'
+xcodebuild build -project Cadence.xcodeproj -scheme Cadence -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+```
+
+This workspace usually lacks Xcode. When app-target code changes, GitHub Actions
+is the compiler: wait for the exact PR head to pass migration tests, the iOS
+Simulator build, and the unsigned-device build before calling the work done.
+
+## Finish every task this way
+
+1. Review the diff for accidental personal data, secrets, generated files, and
+   unrelated formatting.
+2. Run the relevant core/web tests and `git diff --check`.
+3. Confirm mirrored contracts and fixtures are synchronized.
+4. Confirm schema/backup changes have versioning, upgrade tests, documentation,
+   and the correct SemVer major marker.
+5. Update user docs for changed behavior or data contracts.
+6. Use an intentional Conventional Commit and ensure the PR's final
+   merge/squash title carries the same release meaning.
+7. Verify all required CI jobs on the exact head commit.
+
+The complete definition of done, privacy rules, CI topology, and repository map
+remain in `AGENTS.md`; when the files differ, follow the stricter rule.
