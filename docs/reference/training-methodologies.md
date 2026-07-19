@@ -24,12 +24,13 @@ Two templates: **Novice Linear — 3×5** follows Rippetoe's Starting Strength
 prescription (3×5 across, squat every session, presses alternating by day,
 deadlift 1×5). **Novice Linear — 5×5** is the Bill Starr / StrongLifts-lineage
 variant — offered separately because 5×5 across is *not* the Starting Strength
-prescription. Both add weight every banked session that completes as
-prescribed; three consecutive misses deload that lift 10% and restart the
-count, which is the published reset. Slots that repeat a lift across the A/B
-days (the squat in both templates, the 3×5 deadlift) share one synchronized
-progression, so the weight genuinely moves every session, not every other
-exposure.
+prescription. Both add weight every banked session that completes cleanly;
+a grindy-but-complete session holds the weight (and breaks the miss chain),
+and three consecutive misses deload that lift 10% and restart the count,
+which is the published reset. Slots that repeat a lift across the A/B days
+(the squat in both templates, the 3×5 deadlift) share one synchronized
+progression while they remain in lockstep, so the weight genuinely moves
+every session; a manually diverged slot keeps its own base.
 
 ## Texas Method
 
@@ -54,7 +55,10 @@ quality reps are welcome and feed the e1RM estimate. Only the top set gates
 progression — hit the minimum across the cycle and the TM moves +5 lb (press,
 bench) or +10 lb (squat, deadlift) at rollover; miss it and the TM resets
 three cycles back (−15/−30 lb, Wendler's "five steps forward, three steps
-back"). Boring But Big supplies 5×10 volume at ~50% of the TM.
+back"); two consecutive compromised cycles — reps made only after an
+autoregulated or manual load reduction — apply the same correction, since a
+TM you can only hit at reduced load is set too high. Boring But Big supplies
+5×10 volume at ~50% of the TM.
 
 ## Conjugate — Westside-style
 
@@ -83,3 +87,6 @@ bar weight; bands and chains are a coach's call the app does not fake.
   fixed while every slot climbs +5 lb/week.
 - AMRAP sets are recorded as ordinary sets whose target is the minimum;
   Cadence never asks you to grind past technical failure.
+- A session completed with 2+ quality-flagged (grindy/wobble) sets holds the
+  weight instead of adding it — stricter than the books' grind-and-add, in
+  line with the app's quality-gated progression everywhere else.

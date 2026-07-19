@@ -68,17 +68,22 @@ published methodology's own progression (full details in
 - **Per-exposure styles** (`linearFives`, the three Texas day styles) act
   like double progression's schedule: they advance their base after
   every banked exposure that completes as prescribed, never participate
-  in Peak grading, and deload after their style's own stall limit
-  (3 misses → −10% novice; 2 misses → −5% Texas). Slots that repeat the
-  same lift and style across days (novice A/B squat, Texas A/B pairs)
-  are synchronized on every advance, so alternating days never fall out
-  of step.
+  in Peak grading, and deload after their style's own stall limit of
+  *consecutive* misses (3 → −10% novice; 2 → −5% Texas). A grindy but
+  fully completed session holds the weight and breaks the miss chain.
+  Slots that repeat the same lift and style across days (novice A/B
+  squat, Texas A/B pairs) stay synchronized while they remain in
+  lockstep; a manually edited or deliberately diverged slot keeps its
+  own progression from then on — re-align it by setting the bases equal.
 - **Cycle styles** (`fiveThreeOne`, `maxEffort`, `dynamicEffort`) still
   grade at week 3 and apply at rollover, but with fixed increments:
   +10 lb lower / +5 lb upper for 5/3/1 training maxes and made max-effort
-  singles; a missed 5/3/1 minimum resets the TM three cycles back; missed
-  singles and all dynamic-effort work hold. Dynamic-effort sets never
-  update the e1RM estimate.
+  singles. A missed 5/3/1 minimum resets the TM three cycles back, and
+  two consecutive compromised cycles (reps made only at reduced load)
+  apply the same correction; missed singles and all dynamic-effort work
+  hold. A skipped graded week holds rather than stalling toward the
+  wave-family 10% rebuild. Dynamic-effort sets never update the e1RM
+  estimate.
 
 ## Stale sessions
 

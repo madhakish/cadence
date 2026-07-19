@@ -242,8 +242,7 @@ public enum ProgramProgression {
         roundingLb: Double = ProgramEngine.defaultRoundingLb
     ) -> ProgressionResult {
         let grade = gradeCycle(perf)
-        let sample = epleyE1RM(weightLb: perf.topSetWeightLb, reps: perf.topSetReps)
-        let estimatedMaxLb = smoothE1RM(prior: state.estimatedMaxLb, sample: sample)
+        let estimatedMaxLb = smoothedMax(state, perf: perf)
         var next = state
         next.estimatedMaxLb = estimatedMaxLb
         var note: String?
@@ -339,7 +338,9 @@ public enum ProgramProgression {
         case .hold:
             // Grindy but every rep was made. The published novice rule is to
             // grind and keep adding; the conservative middle is to hold the
-            // weight WITHOUT accruing a miss toward the deload.
+            // weight WITHOUT accruing a miss — and a completed session breaks
+            // the consecutive-miss chain, so the deload note stays truthful.
+            next.stallCount = 0
             next.lastIncrementLb = 0
             note = "Grindy session — holding weight; misses were not counted."
         case .fail:
@@ -399,9 +400,20 @@ public enum ProgramProgression {
             } else {
                 next.stallCount = state.stallCount + 1
                 next.lastIncrementLb = 0
-                note = grade == .fail
-                    ? "Top set compromised — holding the training max this cycle."
-                    : "Grindy top set — holding the training max this cycle."
+                if grade == .fail, next.stallCount >= stallLimit {
+                    // Repeated compromised "+" sets mean the TM is set too
+                    // high even though the reps are technically appearing —
+                    // apply the same three-cycles-back correction and consume
+                    // the counter.
+                    let old = state.baseWeightLb
+                    next.baseWeightLb = Swift.max(roundingLb, Weight.round(old - 3 * increment, to: roundingLb))
+                    next.stallCount = 0
+                    note = "Two compromised cycles — training max reset \(Weight.trim(old))→\(Weight.trim(next.baseWeightLb)) lb (three cycles back)."
+                } else {
+                    note = grade == .fail
+                        ? "Top set compromised — holding the training max this cycle."
+                        : "Grindy top set — holding the training max this cycle."
+                }
             }
             return ProgressionResult(state: next, grade: grade, note: note)
         case .maxEffort:
@@ -415,7 +427,9 @@ public enum ProgramProgression {
                 next.lastIncrementLb = increment
                 note = "Made the top single — next target +\(Weight.trim(increment)) lb. Rotate the variation to keep it moving."
             } else {
-                next.stallCount = state.stallCount + 1
+                // Rotation, not accumulation, is this methodology's stall
+                // answer — no counter accrues (a stale count would detonate a
+                // spurious deload if the slot is later switched to a wave style).
                 next.lastIncrementLb = 0
                 note = "Missed the single — holding the target. Swap the variation rather than grinding the same lift."
             }

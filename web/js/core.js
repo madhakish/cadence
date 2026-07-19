@@ -67,9 +67,12 @@ export const defaultStartFraction = (style) => ({
 export function reconciledProgramBaseWeight(storedBaseWeightLb, previousPerformedWeightLb,
   previousPhase, currentPhase, programRoundingLb, exerciseType = null, movementGroup = null,
   role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {}) {
+  // Styles that manage their own base (rep windows, methodology fixed
+  // increments, training maxes, speed waves) are never re-anchored off a
+  // heavier performed set — their published progression owns the base.
   if (currentPhase !== previousPhase + 1 || ![2, 3].includes(currentPhase)
       || !(previousPerformedWeightLb > 0)
-      || resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus) === "doubleProgression") {
+      || buildsOwnSessionShape(resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus))) {
     return storedBaseWeightLb;
   }
   const plan = (baseWeightLb, nextPhase) => programPlanFor(
@@ -874,8 +877,7 @@ export function taperedIncrement(baseWeightLb, estimatedMaxLb, focus, roundingLb
 // returns { state, grade, note }
 export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDING_LB) {
   const grade = gradeCycle(perf);
-  const sample = epleyE1RM(perf.topSetWeightLb, perf.topSetReps);
-  const estimatedMaxLb = smoothE1RM(state.estimatedMaxLb, sample);
+  const estimatedMaxLb = smoothedMax(state, perf);
   const next = { ...state, estimatedMaxLb };
   let note = null;
 
@@ -935,7 +937,9 @@ export function advanceLinearLift(state, perf, rule, roundingLb = DEFAULT_ROUNDI
   } else if (grade === "hold") {
     // Grindy but every rep was made. The published novice rule is to grind
     // and keep adding; the conservative middle is to hold the weight WITHOUT
-    // accruing a miss toward the deload.
+    // accruing a miss — and a completed session breaks the consecutive-miss
+    // chain, so the deload note stays truthful.
+    next.stallCount = 0;
     next.lastIncrementLb = 0;
     note = "Grindy session — holding weight; misses were not counted.";
   } else {
@@ -980,9 +984,19 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
     } else {
       next.stallCount = state.stallCount + 1;
       next.lastIncrementLb = 0;
-      note = grade === "fail"
-        ? "Top set compromised — holding the training max this cycle."
-        : "Grindy top set — holding the training max this cycle.";
+      if (grade === "fail" && next.stallCount >= STALL_LIMIT) {
+        // Repeated compromised "+" sets mean the TM is set too high even
+        // though the reps are technically appearing — apply the same
+        // three-cycles-back correction and consume the counter.
+        const old = state.baseWeightLb;
+        next.baseWeightLb = Math.max(roundingLb, roundTo(old - 3 * increment, roundingLb));
+        next.stallCount = 0;
+        note = `Two compromised cycles — training max reset ${trim(old)}→${trim(next.baseWeightLb)} lb (three cycles back).`;
+      } else {
+        note = grade === "fail"
+          ? "Top set compromised — holding the training max this cycle."
+          : "Grindy top set — holding the training max this cycle.";
+      }
     }
     return { state: next, grade, note };
   }
@@ -996,7 +1010,9 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
       next.lastIncrementLb = increment;
       note = `Made the top single — next target +${trim(increment)} lb. Rotate the variation to keep it moving.`;
     } else {
-      next.stallCount = state.stallCount + 1;
+      // Rotation, not accumulation, is this methodology's stall answer — no
+      // counter accrues (a stale count would detonate a spurious deload if
+      // the slot is later switched to a wave style).
       next.lastIncrementLb = 0;
       note = "Missed the single — holding the target. Swap the variation rather than grinding the same lift.";
     }

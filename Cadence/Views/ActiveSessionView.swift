@@ -328,11 +328,11 @@ struct ActiveSessionView: View {
     private func dropLoad(_ entry: SessionExercise, reason: AutoregReason) {
         let ordered = entry.orderedSets
         let bar = entry.barID.map { Bar.by(id: $0) } ?? gym?.defaultBar ?? .bar45lb
-        // The configured drop derives from the MAIN work set. Ramp/backoff
-        // blocks can precede or trail it at lighter loads (5/3/1, max effort),
-        // so match the work block, not just the first non-warmup set.
+        // The configured drop derives from the MAIN work set — ramp/backoff
+        // blocks at lighter loads must not anchor it. With no planned work
+        // set left, fixedDrop stays nil and the generic percentage drop in
+        // dropLoadPlan takes over.
         let firstPlannedWork = ordered.first { !$0.isWarmup && $0.status == .planned && $0.prescriptionBlock == .work }
-            ?? ordered.first { !$0.isWarmup && $0.status == .planned }
         let fixedDrop = firstPlannedWork.flatMap { current in
             entry.fallbackWeightLb.map { max(0, current.weightLb - $0) }
         }

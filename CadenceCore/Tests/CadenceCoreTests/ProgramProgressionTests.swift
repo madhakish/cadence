@@ -245,7 +245,7 @@ final class ProgramProgressionTests: XCTestCase {
                                           topSetWeightLb: 205, topSetReps: 5)
         let heldGrind = ProgramProgression.advanceLinearLift(stalled, perf: grindy, rule: rule, roundingLb: 5)
         XCTAssertEqual(heldGrind.state.baseWeightLb, 205, "grindy-but-complete session holds the weight")
-        XCTAssertEqual(heldGrind.state.stallCount, 2, "grinding never counts as a miss toward the deload")
+        XCTAssertEqual(heldGrind.state.stallCount, 0, "a completed session breaks the consecutive-miss chain")
 
         let skipped = CycleLiftPerformance(prescribedSets: 3, prescribedReps: 5, completedSets: 0,
                                            anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0,
@@ -278,6 +278,13 @@ final class ProgramProgressionTests: XCTestCase {
                                                          style: .fiveThreeOne, movementGroup: "squat", roundingLb: 5)
         XCTAssertEqual(held.state.baseWeightLb, 300, "531 autoreg drop that made the reps holds the TM — no reset")
         XCTAssertEqual(held.grade, .fail)
+
+        var compromised = state
+        compromised.stallCount = 1
+        let second = ProgramProgression.advanceProgramLift(compromised, perf: droppedButMade, focus: .strength,
+                                                           style: .fiveThreeOne, movementGroup: "squat", roundingLb: 5)
+        XCTAssertEqual(second.state.baseWeightLb, 270, "two compromised cycles self-correct the TM three cycles back")
+        XCTAssertEqual(second.state.stallCount, 0, "the compromised-cycle counter is consumed by the reset")
     }
 
     func testMaxEffortAddsAfterMadeSinglesAndHoldsOnMisses() {
@@ -288,7 +295,8 @@ final class ProgramProgressionTests: XCTestCase {
         let miss = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: false), focus: .strength,
                                                          style: .maxEffort, movementGroup: "press", roundingLb: 5)
         XCTAssertEqual(miss.state.baseWeightLb, 315)
-        XCTAssertEqual(miss.state.stallCount, 1)
+        XCTAssertEqual(miss.state.stallCount, 0,
+                       "ME misses never accrue a counter another style could trip over")
     }
 
     func testDynamicEffortHoldsBaseAndNeverSmoothsE1RMOffSpeedWork() {

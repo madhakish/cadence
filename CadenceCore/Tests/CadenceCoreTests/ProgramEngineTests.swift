@@ -321,6 +321,15 @@ final class ProgramEngineTests: XCTestCase {
         }
     }
 
+    func testMethodologyBasesAreNeverReanchored() {
+        XCTAssertEqual(ProgramEngine.reconciledBaseWeight(
+            storedBaseWeightLb: 300, previousPerformedWeightLb: 190,
+            previousPhase: .volume, currentPhase: .load,
+            programRoundingLb: 5, exerciseType: "barbell", movementGroup: "press",
+            prescriptionStyle: .fiveThreeOne
+        ), 300, "a heavier performed set must not rewrite a training max")
+    }
+
     func testMethodologyStyleHelpers() {
         XCTAssertTrue(PrescriptionStyle.texasVolume.advancesPerExposure)
         XCTAssertTrue(PrescriptionStyle.linearFives.advancesPerExposure)

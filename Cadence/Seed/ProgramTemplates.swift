@@ -32,10 +32,16 @@ enum ProgramTemplates {
         }
 
         let existingPrograms = try context.fetch(FetchDescriptor<Program>())
-        let recordedMaxes = try recordedE1RMs(
-            for: Set(template.days.flatMap { $0.lifts.map(\.exercise) + $0.accessories.map(\.exercise) }),
-            context: context
-        )
+        // Only slots with a start fraction consume history; legacy templates
+        // skip the full-store scan entirely.
+        let fractionalNames = Set(template.days.flatMap { day in
+            day.lifts.filter { lift in
+                lift.startFraction > 0
+                    || (PrescriptionStyle(rawValue: lift.prescription) ?? .automatic).defaultStartFraction > 0
+            }.map(\.exercise)
+            + day.accessories.filter { $0.startFraction > 0 }.map(\.exercise)
+        })
+        let recordedMaxes = try recordedE1RMs(for: fractionalNames, context: context)
         let program = Program(
             name: uniqueProgramName(template.name, existing: existingPrograms.map(\.name)),
             focus: TrainingFocus(rawValue: template.focus) ?? .strength,
@@ -89,8 +95,10 @@ enum ProgramTemplates {
     private static func recordedE1RMs(for names: Set<String>, context: ModelContext) throws -> [String: Double] {
         guard !names.isEmpty else { return [:] }
         var best: [String: Double] = [:]
-        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
-        for session in sessions where session.isCompleted {
+        let sessions = try context.fetch(
+            FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.isCompleted })
+        )
+        for session in sessions {
             for entry in session.exercises {
                 guard let name = entry.exercise?.name, names.contains(name) else { continue }
                 for set in entry.workingSets where set.weightLb > 0 && set.reps >= 1 {

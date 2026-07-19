@@ -332,12 +332,15 @@ async function programEditor(p) {
           p.roundingLb, exercise.type, exercise.movementGroup, lift.role, p.focus, lift.prescription || "automatic",
           { ...lift, workingSets: lift.doubleProgressionSets ?? 3 });
           // Published methodology slots deliberately shape their own weekly
-          // balance (squat 3×/week, one heavy pull); the generic balance
-          // heuristics would permanently flag the canon, so they only count
-          // wave-family slots.
-          if (!C.buildsOwnSessionShape(lift.prescription || "automatic")) {
-            addSets(exercise.movementGroup, exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup), plan.sets);
-          }
+          // balance (squat 3×/week, one heavy pull); the press/pull and
+          // squat/hinge heuristics would permanently flag the canon, so those
+          // sums skip methodology slots — but NOT generic double-progression
+          // rows, and pattern coverage (vertical pulling) counts every slot.
+          const style = lift.prescription || "automatic";
+          const methodologySlot = C.buildsOwnSessionShape(style) && style !== "doubleProgression";
+          const pattern = exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup);
+          if (!methodologySlot) addSets(exercise.movementGroup, pattern, plan.sets);
+          else addSets(null, pattern, plan.sets);
           if ((exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup)) === "olympicPower" && plan.reps > 3) warnings.push(`${lift.exerciseName} is power work; keep programmed sets at 1–3 reps.`);
         }
       }

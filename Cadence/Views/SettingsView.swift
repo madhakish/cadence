@@ -512,12 +512,16 @@ struct ProgramEditorView: View {
                         configuration: lift.prescriptionConfiguration(movementGroup: exercise.movementGroup))
                     // Published methodology slots deliberately shape their
                     // own weekly balance (squat 3×/week, one heavy pull); the
-                    // generic balance heuristics would permanently flag the
-                    // canon, so they only count wave-family slots.
-                    if !lift.prescription.buildsOwnSessionShape {
+                    // press/pull and squat/hinge heuristics would permanently
+                    // flag the canon, so those sums skip methodology slots —
+                    // but NOT generic double-progression rows, and pattern
+                    // coverage (vertical pulling) counts every slot.
+                    let methodologySlot = lift.prescription.buildsOwnSessionShape
+                        && lift.prescription != .doubleProgression
+                    if !methodologySlot {
                         rotationSets[exercise.movementGroup, default: 0] += plan.sets
-                        patternSets[exercise.movementPattern, default: 0] += plan.sets
                     }
+                    patternSets[exercise.movementPattern, default: 0] += plan.sets
                     if exercise.movementPattern == .olympicPower, plan.reps > 3 {
                         messages.append("\(lift.exerciseName) is power work; keep programmed sets at 1–3 reps.")
                     }

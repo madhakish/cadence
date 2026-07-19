@@ -256,7 +256,7 @@ async function recordedE1RMs(names) {
 
 // Round DOWN to the plate step: methodology guidance is to err light when
 // deriving starting weights from an estimated max.
-const floorTo = (x, step) => Math.floor(x / step + 1e-9) * step;
+const floorTo = (x, step) => (step > 0 ? Math.floor(x / step + 1e-9) * step : x);
 
 /// Instantiate a template: ensure its exercises exist in the library (one
 /// read, never overwriting an existing record), then create the program —
@@ -269,8 +269,14 @@ export async function createProgramFromTemplate(template) {
   for (const e of template.exercises) {
     if (!have.has(e.name)) await Exercises.save({ ...e, createdAt: new Date().toISOString() });
   }
-  const known = await recordedE1RMs(template.days.flatMap((d) =>
-    [...(d.lifts || []).map((l) => l.exerciseName), ...(d.accessories || []).map((a) => a.exerciseName)]));
+  // Only slots with a start fraction consume history; legacy templates skip
+  // the full-store scan entirely.
+  const fractionalNames = template.days.flatMap((d) => [
+    ...(d.lifts || []).filter((l) => (l.startFraction || 0) > 0 || C.defaultStartFraction(l.prescription || "automatic") > 0)
+      .map((l) => l.exerciseName),
+    ...(d.accessories || []).filter((a) => (a.startFraction || 0) > 0).map((a) => a.exerciseName),
+  ]);
+  const known = fractionalNames.length ? await recordedE1RMs(fractionalNames) : new Map();
   const programs = await Programs.all();
   return Programs.save({
     name: uniqueName(template.name, new Set(programs.map((p) => p.name))),

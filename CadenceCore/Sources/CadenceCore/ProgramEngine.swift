@@ -312,10 +312,13 @@ public enum ProgramEngine {
         prescriptionStyle: PrescriptionStyle = .automatic,
         configuration: LiftPrescriptionConfiguration = .init()
     ) -> Double {
+        // Styles that manage their own base (rep windows, methodology fixed
+        // increments, training maxes, speed waves) are never re-anchored off a
+        // heavier performed set — their published progression owns the base.
         guard currentPhase.rawValue == previousPhase.rawValue + 1,
               currentPhase == .load || currentPhase == .peak,
               previousPerformedWeightLb > 0,
-              resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus) != .doubleProgression
+              !resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus).buildsOwnSessionShape
         else { return storedBaseWeightLb }
 
         func plan(base: Double, phase: CyclePhase) -> SessionPlan {
