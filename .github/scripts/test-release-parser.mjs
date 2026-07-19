@@ -30,5 +30,10 @@ assert.match(releaseJob, /needs\.core-tests\.result == 'success'/);
 assert.match(releaseJob, /needs\.web-tests\.result == 'success'/);
 assert.match(releaseJob, /needs\.app-build\.result == 'success'/);
 assert.match(releaseJob, /github\.ref == 'refs\/heads\/main'/);
+assert.match(
+  releaseJob,
+  /semantic-release\n(?:\s+#.*\n)*\s+git fetch --force --tags origin\n\s+after=/,
+  "Expected release detection to refresh tags after semantic-release"
+);
 
-console.log(`${cases.length + 6} semantic-release contract assertions passed`);
+console.log(`${cases.length + 7} semantic-release contract assertions passed`);
