@@ -103,9 +103,11 @@ cd web && npm ci && npm test
 ```
 
 Notes:
-- CI builds the app on every push (Linux + macOS jobs) and semantic-release
-  cuts versioned releases with installable artifacts; see `CLAUDE.md` for
-  the pipeline details and `docs/TESTFLIGHT.md` for TestFlight distribution.
+- CI always runs portable core/web checks, runs parallel native builds only
+  when needed, and reserves full shipped-store migration reconstruction for
+  persistence changes. Semantic-release cuts versioned releases with
+  installable artifacts; see `CLAUDE.md` for the safety contracts and
+  `docs/TESTFLIGHT.md` for TestFlight distribution and recovery.
 - HealthKit is optional: the capability is declared, the toggle lives in
   Settings, and the app only ever writes (workouts + bodyweight).
 - All weights are stored in lb (`Double`). kg exists only at entry/display.

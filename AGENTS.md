@@ -83,6 +83,10 @@ While editing:
 - Preserve stable exercise, program-slot, gym, and session identities. Display
   names are not reliable database keys unless the model explicitly defines
   them that way.
+- Mutate exactly one side of a SwiftData inverse relationship. Assigning the
+  child inverse and appending the same child to the parent collection can
+  persist duplicate references that render as mirrored rows. Startup repair
+  may deduplicate existing aliases, but new code must not create them.
 - Surface persistence failures through the existing error/recovery paths. Do
   not use `try?` where failure would mean lost training changes.
 - Update user documentation when behavior or a data contract changes.
@@ -237,6 +241,9 @@ into it. Guard genuinely Darwin-only tests with `#if canImport(Darwin)`.
   not silently reset other set state.
 - Users can add and remove individual sets. Preserve deterministic ordering and
   do not conflate removing a set with removing an exercise.
+- Program days, lifts, accessories, session exercises, and sets must contain
+  each persistent model reference once. Two visible editor rows must always be
+  two independently editable models with distinct stable slot identities.
 - Set lifecycle is explicit: planned, completed, and skipped are not
   interchangeable. Warmups do not count as working sets unless a rule says so.
 - Load semantics are explicit (`totalBar`, per implement/per hand, bodyweight,
@@ -313,17 +320,28 @@ build have completed successfully.
 
 ## CI and releases
 
-Pull requests run three required jobs:
+Pull requests always run Linux CadenceCore tests, web parity/runtime tests, and
+the stable `App build (macOS)` aggregate check. Native validation is
+change-aware behind that aggregate:
 
-1. CadenceCore tests in Linux Swift.
-2. Web parity and runtime smoke tests.
-3. Darwin core tests, XcodeGen, real-store migration tests, iOS Simulator build,
-   and unsigned device build on macOS.
+- current iOS Simulator and unsigned-device builds run in parallel for native,
+  shared-core, project, or CI-workflow changes;
+- docs/web-only changes do not consume macOS runners; and
+- the real shipped-store migration suite runs for persistence-affecting paths
+  only. Its generic historical stores are cached by immutable shipped lineage,
+  but a cache miss must regenerate them from the actually shipped apps.
 
-Green pushes to `main` run semantic-release and package release artifacts.
-TestFlight runs only when its repository variable and signing secrets are
-configured. See `docs/TESTFLIGHT.md`; do not weaken signing or secret controls
-to make CI convenient.
+Never broaden the migration skip list to make schema CI faster. If a model,
+Seeder, migration test, project definition, or shipped-store generator can
+affect compatibility, `.github/scripts/classify-ci-paths.sh` must classify it
+as a migration change and its classifier tests must be updated.
+
+Green pushes to `main` run semantic-release and package release artifacts. A
+signed TestFlight upload runs only when semantic-release publishes a new tag;
+`workflow_dispatch` with `force_testflight=true` is the explicit recovery path
+for re-uploading the latest tag. Web deploys reuse the CI web-test result;
+`pages.yml` is manual recovery only. See `docs/TESTFLIGHT.md`; do not weaken
+signing, migration, or secret controls to make CI convenient.
 
 ## Code and repository hygiene
 

@@ -85,15 +85,22 @@ Repository **secrets**:
 | `MATCH_PASSWORD` | a passphrase you choose (encrypts the certs) |
 
 ## Run it
-Push anything to `main` (or re-run the latest CI). The `testflight` job will
-`xcodegen generate` → `match` (creating the cert on first run) → build a signed
-Release archive with a TestFlight-incremented build number → upload. In a few
-minutes the build appears in **App Store Connect → TestFlight** and the
-**TestFlight app** on your phone (install TestFlight from the App Store, sign in
-with the same Apple ID).
+Merge a release-producing Conventional Commit to `main`. After the parallel
+validation jobs pass, semantic-release creates the version tag and the
+`testflight` job runs `xcodegen generate` → `match` → signed Release archive →
+upload. Non-release commits such as `docs:` and `ci:` do not waste time creating
+duplicate TestFlight builds.
 
-Builds last **90 days**; every push to `main` ships a fresh one, so it never
-expires in practice.
+If a release tag was created but its upload failed or never started, run the
+**CI** workflow manually on `main` with `force_testflight=true`. That explicit
+recovery option uploads the latest existing release tag even when the manual
+run does not create another release. Set `full_migrations=true` only when you
+also need to force regeneration/verification of every shipped-store upgrade
+path.
+
+The build then appears in **App Store Connect → TestFlight** and the
+**TestFlight app** on your phone (install TestFlight from the App Store and sign
+in with the same Apple ID). Builds last **90 days**.
 
 ## Notes / first-run gotchas
 - First run with `match` must be able to **create** the cert: set the repo
@@ -101,9 +108,9 @@ expires in practice.
   revert both (read-only is the default and the steady state). Apple allows a
   limited number of distribution certs per account; if you hit the cap, revoke
   an unused one in the Developer portal.
-- The in-app version shown is `MARKETING_VERSION` in `project.yml` (static today);
-  the build *number* auto-increments from TestFlight. Bump `MARKETING_VERSION`
-  when you want the displayed version to change.
+- The in-app marketing version comes from the semantic-release tag. The build
+  number increments from TestFlight automatically; do not hand-edit either one
+  for routine releases.
 - This is signing/registration work that can only be exercised with a real Apple
   account, so expect to iterate on the first run via the Actions logs (same
   "CI is the compiler" loop we use for the app build).

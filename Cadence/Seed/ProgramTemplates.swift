@@ -41,14 +41,16 @@ enum ProgramTemplates {
         context.insert(program)
         for (i, d) in template.days.enumerated() {
             let day = ProgramDay(name: d.name, order: i)
-            day.program = program
             context.insert(day)   // insert before appending children (Seeder pattern)
+            // Mutate one side of each SwiftData relationship only. Setting the
+            // inverse and appending as well stores the same model reference
+            // more than once, which makes editor rows mirror one another.
+            program.days.append(day)
             for (slotOrder, l) in d.lifts.enumerated() {
                 let lift = ProgramLift(exerciseName: l.exercise,
                                        role: LiftRole(rawValue: l.role) ?? .main,
                                        order: slotOrder,
                                        baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb)
-                lift.day = day
                 context.insert(lift)
                 day.lifts.append(lift)
             }
@@ -56,11 +58,9 @@ enum ProgramTemplates {
                 let acc = ProgramAccessory(exerciseName: a.exercise, order: slotOrder, sets: a.sets, minReps: a.minReps,
                                            maxReps: a.maxReps, currentReps: a.minReps,
                                            weightLb: a.weightLb, incrementLb: a.incrementLb)
-                acc.day = day
                 context.insert(acc)
                 day.accessories.append(acc)
             }
-            program.days.append(day)
         }
         return program
     }

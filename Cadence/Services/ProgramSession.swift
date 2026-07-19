@@ -105,7 +105,6 @@ enum ProgramSession {
                 roundingLb: loadStep, dropIncrementLb: lift.dropIncrementLb > 0 ? lift.dropIncrementLb : automaticDrop
             )
             entry.phase = phase
-            entry.session = session
             context.insert(entry)
             session.exercises.append(entry)
 
@@ -175,7 +174,6 @@ enum ProgramSession {
             entry.plannedSets = effectiveSets
             entry.plannedReps = isTimed ? 1 : acc.currentReps
             entry.plannedDurationSeconds = isTimed ? acc.targetSeconds : nil
-            entry.session = session
             context.insert(entry)
             session.exercises.append(entry)
             for i in 0..<effectiveSets {
@@ -283,7 +281,6 @@ enum ProgramSession {
                            targetWeightLb: targetWeight, plannedWeightLb: plannedWeight,
                            plannedReps: plannedReps, plannedDurationSeconds: plannedDurationSeconds,
                            prescriptionBlock: block)
-        set.sessionExercise = entry
         context.insert(set)
         entry.sets.append(set)
     }

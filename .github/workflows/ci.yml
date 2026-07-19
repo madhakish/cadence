@@ -5,17 +5,70 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      full_migrations:
+        description: Rebuild shipped stores and run the complete migration suite
+        required: false
+        default: false
+        type: boolean
+      force_testflight:
+        description: Upload the latest release tag even when this run creates no new release
+        required: false
+        default: false
+        type: boolean
 
-# Default every job's GITHUB_TOKEN to read-only; jobs that need more (release)
-# elevate themselves explicitly.
+# A new commit makes older PR validation irrelevant. Never cancel main because a
+# release or TestFlight upload may already be in progress.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Default every job's GITHUB_TOKEN to read-only; jobs that publish elevate
+# themselves explicitly.
 permissions:
   contents: read
 
 # All actions are pinned to full commit SHAs (with the version as a comment) so
-# a moved/re-pointed tag on an action repo can't inject code into these jobs —
-# the tj-actions/changed-files-style supply-chain attack. Dependabot
-# (.github/dependabot.yml) keeps the pins current.
+# a moved/re-pointed tag cannot inject code into these jobs. Dependabot keeps
+# the pins current.
 jobs:
+  changes:
+    name: Classify changes
+    runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.paths.outputs.native }}
+      migrations: ${{ steps.paths.outputs.migrations }}
+      web: ${{ steps.paths.outputs.web }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify changed paths
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FULL_MIGRATIONS: ${{ inputs.full_migrations || 'false' }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            {
+              echo "native=true"
+              echo "migrations=$FULL_MIGRATIONS"
+              echo "web=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          paths="$RUNNER_TEMP/changed-paths.txt"
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            git ls-tree -r --name-only "$HEAD_SHA" > "$paths"
+          else
+            git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$paths"
+          fi
+          bash .github/scripts/classify-ci-paths.sh < "$paths" | tee -a "$GITHUB_OUTPUT"
+
   core-tests:
     name: CadenceCore tests (Linux)
     runs-on: ubuntu-latest
@@ -28,9 +81,8 @@ jobs:
         working-directory: CadenceCore
         run: swift test
 
-  # The CadenceCore↔core.js parity mandate is enforced HERE, pre-merge: a PR
-  # that touches either side without its mirror fails these suites. (pages.yml
-  # re-runs them post-merge as the deploy gate.)
+  # The CadenceCore↔core.js parity mandate is enforced pre-merge: a PR that
+  # touches either side without its mirror fails these suites.
   web-tests:
     name: Web tests (parity + smoke)
     runs-on: ubuntu-latest
@@ -49,42 +101,128 @@ jobs:
       - name: Web parity, migration, and smoke tests
         working-directory: web
         run: npm test
+      - name: Verify CI path classification
+        run: bash .github/scripts/test-classify-ci-paths.sh
       - name: Install pinned release parser
         working-directory: .github/release
         run: npm ci
       - name: Verify semantic-version breaking markers
         run: node .github/scripts/test-release-parser.mjs
 
-  app-build:
-    name: App build (macOS)
+  # Current app builds are independent and run in parallel. Workflow-only PRs
+  # still exercise them; docs/web-only PRs do not spend macOS runner minutes.
+  simulator-build:
+    name: iOS Simulator build
+    needs: changes
+    if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      - name: Run unit tests (Darwin)
+        working-directory: CadenceCore
+        run: swift test
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build for iOS Simulator
+        run: >-
+          xcodebuild build
+          -project Cadence.xcodeproj
+          -scheme Cadence
+          -configuration Release
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath build/sim
+          CODE_SIGNING_ALLOWED=NO
+      - name: Package simulator artifact
+        run: |
+          mkdir -p dist
+          (cd build/sim/Build/Products/Release-iphonesimulator && zip -qry "$GITHUB_WORKSPACE/dist/Cadence-simulator.app.zip" Cadence.app)
+      - name: Upload simulator artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Cadence-simulator
+          path: dist/Cadence-simulator.app.zip
+          if-no-files-found: error
+
+  device-build:
+    name: Unsigned device build
+    needs: changes
+    if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build unsigned device app
+        run: >-
+          xcodebuild build
+          -project Cadence.xcodeproj
+          -scheme Cadence
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          -derivedDataPath build/device
+          CODE_SIGNING_ALLOWED=NO
+      - name: Package device artifact
+        run: |
+          mkdir -p dist/Payload
+          cp -R build/device/Build/Products/Release-iphoneos/Cadence.app dist/Payload/
+          (cd dist && zip -qry Cadence-unsigned.ipa Payload)
+      - name: Upload device artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Cadence-device
+          path: dist/Cadence-unsigned.ipa
+          if-no-files-found: error
+
+  # Rebuilding three historical apps is the expensive safety proof. Run it
+  # only when persistence can change, and cache the generic shipped stores by
+  # immutable source lineage. Current app compilation remains mandatory above.
+  migration-tests:
+    name: Shipped-store migration tests
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Restore shipped-store fixtures
+        id: shipped-store-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/cadence-shipped-stores
+          key: shipped-stores-v1-v129-d418550-pr72-c2026d8-pr73-11846b8-${{ hashFiles('.github/scripts/generate-shipped-stores.sh') }}
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: steps.shipped-store-cache.outputs.cache-hit != 'true'
         with:
           ref: v1.29.0
           path: shipped/v129
           persist-credentials: false
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: steps.shipped-store-cache.outputs.cache-hit != 'true'
         with:
           ref: c2026d81a61a23b8eb71c30a0ff1ba2e1cd67f85
           path: shipped/pr72
           persist-credentials: false
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: steps.shipped-store-cache.outputs.cache-hit != 'true'
         with:
           ref: 11846b8dbdf88aa227f6d54fbc7a23c1b8ba8fea
           path: shipped/pr73
           persist-credentials: false
-      - name: Run unit tests (Darwin)
-        working-directory: CadenceCore
-        run: swift test
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
       - name: Generate stores with the actually shipped apps
+        if: steps.shipped-store-cache.outputs.cache-hit != 'true'
         run: >-
           bash .github/scripts/generate-shipped-stores.sh
           shipped/v129
@@ -105,62 +243,60 @@ jobs:
           -destination 'platform=macOS'
           -derivedDataPath build/migration
           CODE_SIGNING_ALLOWED=NO
-      - name: Build for iOS Simulator
-        run: >-
-          xcodebuild build
-          -project Cadence.xcodeproj
-          -scheme Cadence
-          -configuration Release
-          -destination 'generic/platform=iOS Simulator'
-          -derivedDataPath build/sim
-          CODE_SIGNING_ALLOWED=NO
-      - name: Build unsigned device app
-        run: >-
-          xcodebuild build
-          -project Cadence.xcodeproj
-          -scheme Cadence
-          -configuration Release
-          -destination 'generic/platform=iOS'
-          -derivedDataPath build/device
-          CODE_SIGNING_ALLOWED=NO
-      - name: Package installer artifacts
+
+  # Preserve the existing required-check name while allowing the expensive
+  # macOS jobs to be split, parallel, and conditionally skipped.
+  app-build:
+    name: App build (macOS)
+    needs: [changes, simulator-build, device-build, migration-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required native jobs
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          NATIVE_REQUIRED: ${{ needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main' }}
+          MIGRATIONS_REQUIRED: ${{ needs.changes.outputs.migrations == 'true' }}
+          SIMULATOR_RESULT: ${{ needs.simulator-build.result }}
+          DEVICE_RESULT: ${{ needs.device-build.result }}
+          MIGRATION_RESULT: ${{ needs.migration-tests.result }}
         run: |
-          mkdir -p dist/Payload
-          cp -R build/device/Build/Products/Release-iphoneos/Cadence.app dist/Payload/
-          (cd dist && zip -qry Cadence-unsigned.ipa Payload)
-          (cd build/sim/Build/Products/Release-iphonesimulator && zip -qry "$GITHUB_WORKSPACE/dist/Cadence-simulator.app.zip" Cadence.app)
-      - name: Upload installer artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: Cadence-installer
-          path: |
-            dist/Cadence-unsigned.ipa
-            dist/Cadence-simulator.app.zip
-          if-no-files-found: error
+          [[ "$CHANGES_RESULT" == "success" ]]
+          if [[ "$NATIVE_REQUIRED" == "true" ]]; then
+            [[ "$SIMULATOR_RESULT" == "success" ]]
+            [[ "$DEVICE_RESULT" == "success" ]]
+          fi
+          if [[ "$MIGRATIONS_REQUIRED" == "true" ]]; then
+            [[ "$MIGRATION_RESULT" == "success" ]]
+          fi
 
   release:
     name: Semantic release
-    # web-tests gates the release too: a tag must never be cut while the JS
-    # mirror of CadenceCore is failing (the parity mandate, issue 21).
     needs: [core-tests, web-tests, app-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     concurrency:
       group: semantic-release
       cancel-in-progress: false
     permissions:
       contents: write
+    outputs:
+      published: ${{ steps.semantic-release.outputs.published }}
+      version: ${{ steps.semantic-release.outputs.version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-          # semantic-release authenticates via the GITHUB_TOKEN env var below;
-          # don't leave the job token sitting in .git/config for later steps.
           persist-credentials: false
-      - name: Download installer artifacts
+      - name: Download unsigned device artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: Cadence-installer
+          name: Cadence-device
+          path: dist
+      - name: Download simulator artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Cadence-simulator
           path: dist
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
@@ -168,51 +304,49 @@ jobs:
           cache: npm
           cache-dependency-path: .github/release/package-lock.json
       - name: Install pinned release toolchain
-        # `npm ci` against the committed lockfile — the release toolchain is
-        # content-addressed, not "whatever the registry serves today".
         working-directory: .github/release
         run: npm ci
       - name: Run semantic-release
+        id: semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./.github/release/node_modules/.bin/semantic-release
+        run: |
+          before="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          ./.github/release/node_modules/.bin/semantic-release
+          after="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [[ -n "$after" && "$after" != "$before" ]]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "version=${after#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
 
   testflight:
     name: TestFlight (fastlane)
-    # Runs after release so the version tag semantic-release just cut is on
-    # origin and maps into the uploaded build (CFBundleShortVersionString).
-    needs: [app-build, release]
-    # Dormant until you opt in: set the repo variable TESTFLIGHT_ENABLED=true
-    # (and add the Apple secrets). Until then this job is skipped — main stays green.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true'
+    needs: release
+    if: >-
+      needs.release.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      vars.TESTFLIGHT_ENABLED == 'true' &&
+      (needs.release.outputs.published == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_testflight))
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0   # need tags to resolve the semantic version
+          fetch-depth: 0
           persist-credentials: false
       - name: Resolve app version from the latest release tag
         id: ver
-        # The tag semantic-release owns (e.g. v1.13.0) becomes the marketing
-        # version, so TestFlight builds track the semantic version 1:1. Falls
-        # back to the project.yml value before the first release.
         run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.1.0)" >> "$GITHUB_OUTPUT"
       - uses: ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9 # v1.316.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
       - name: Select the latest stable Xcode
-        # App Store upload requires the current SDK; macos-latest still defaults
-        # to an older Xcode, which altool rejects with a 409 "SDK version issue".
-        # Every Xcode on the runner is already installed under /Applications, so
-        # "latest stable" is a version-sorted find + xcode-select. Deliberately
-        # NOT a third-party action: this job holds all the Apple signing
-        # secrets, and no external maintainer belongs in it.
-        # Version selection in python3 (always on the runner) instead of
-        # `sort -V`, which BSD/macOS sort builds don't reliably support.
         run: |
           LATEST="$(python3 -c '
-          import glob, re, sys
+          import glob, re
           apps = [a for a in glob.glob("/Applications/Xcode_*.app")
                   if not re.search(r"beta|release[_ .-]?candidate", a, re.I)]
           def ver(a):
@@ -220,12 +354,12 @@ jobs:
               return [int(x) for x in m.group(1).strip(".").split(".")] if m else [0]
           print(max(apps, key=ver) if apps else "")
           ')"
-          if [ -z "$LATEST" ]; then echo "No stable Xcode found on runner" >&2; exit 1; fi
+          if [[ -z "$LATEST" ]]; then echo "No stable Xcode found on runner" >&2; exit 1; fi
           echo "Selecting $LATEST"
           sudo xcode-select --switch "$LATEST/Contents/Developer"
           xcodebuild -version
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Build & upload to TestFlight
         env:
           APP_VERSION: ${{ steps.ver.outputs.version }}
@@ -237,8 +371,37 @@ jobs:
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          # Certs are fetched read-only by default (see Fastfile). For one-off
-          # re-provisioning set the repo variable MATCH_READONLY=false and use a
-          # read/write PAT, then revert both.
           MATCH_READONLY: ${{ vars.MATCH_READONLY }}
         run: bundle exec fastlane beta
+
+  # Deploy Pages from the already-passing web test job instead of launching a
+  # second workflow that repeats npm install and the entire test suite.
+  deploy-web:
+    name: Deploy web app (Pages)
+    needs: [changes, web-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Stamp build version into the service worker
+        run: sed -i "s/__BUILD__/${GITHUB_SHA::12}/" web/sw.js
+      - name: Upload web/ as Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: web
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

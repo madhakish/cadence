@@ -45,6 +45,123 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
+    func testRelationshipAliasRepairRestoresIndependentLowerBDayAndIsIdempotent() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+        try Seeder.seedIfNeeded(context: context)
+
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        let deadliftExercise = try XCTUnwrap(exercises.first { $0.name == "Deadlift" })
+        let squatExercise = try XCTUnwrap(exercises.first { $0.name == "Back Squat" })
+
+        let program = Program(name: "Synthetic Alias Regression")
+        let day = ProgramDay(name: "Lower B", order: 0)
+        let sharedSlotID = UUID().uuidString
+        let deadlift = ProgramLift(id: sharedSlotID, exerciseName: "Deadlift", role: .main,
+                                   order: 0, baseWeightLb: 225, estimatedMaxLb: 275)
+        let squat = ProgramLift(id: sharedSlotID, exerciseName: "Back Squat", role: .complementary,
+                                order: 1, baseWeightLb: 175, estimatedMaxLb: 225)
+        let walking = ProgramAccessory(exerciseName: "Walking Lunges", order: 0, sets: 3,
+                                       minReps: 8, maxReps: 12, currentReps: 8,
+                                       weightLb: 0, incrementLb: 0)
+        let swings = ProgramAccessory(exerciseName: "KB Swing", order: 1, sets: 3,
+                                      minReps: 8, maxReps: 12, currentReps: 8,
+                                      weightLb: 53, incrementLb: 5)
+        let sidePlank = ProgramAccessory(exerciseName: "Side Plank", order: 2, sets: 3,
+                                        minReps: 1, maxReps: 1, currentReps: 1,
+                                        weightLb: 0, incrementLb: 0)
+        context.insert(program)
+        context.insert(day)
+        context.insert(deadlift)
+        context.insert(squat)
+        context.insert(walking)
+        context.insert(swings)
+        context.insert(sidePlank)
+        program.days = [day, day]
+        day.lifts = [deadlift, deadlift, squat]
+        day.accessories = [walking, swings, swings, sidePlank]
+
+        let session = WorkoutSession()
+        session.programID = program.id
+        let deadliftEntry = SessionExercise(order: 0, exercise: deadliftExercise)
+        deadliftEntry.programRole = LiftRole.main.rawValue
+        deadliftEntry.programSlotID = sharedSlotID
+        let squatEntry = SessionExercise(order: 1, exercise: squatExercise)
+        squatEntry.programRole = LiftRole.complementary.rawValue
+        squatEntry.programSlotID = sharedSlotID
+        let work = SetEntry(order: 0, weightLb: 175, reps: 5)
+        context.insert(session)
+        context.insert(deadliftEntry)
+        context.insert(squatEntry)
+        context.insert(work)
+        session.exercises = [deadliftEntry, deadliftEntry, squatEntry]
+        squatEntry.sets = [work, work]
+        try context.save()
+
+        try Seeder.syncLibrary(context: context)
+
+        XCTAssertEqual(program.days.count, 1)
+        XCTAssertEqual(day.lifts.count, 2)
+        XCTAssertEqual(day.orderedLifts.map(\.exerciseName), ["Deadlift", "Back Squat"])
+        XCTAssertEqual(day.orderedLifts.map(\.role), [.main, .complementary])
+        XCTAssertEqual(day.accessories.count, 3)
+        XCTAssertEqual(day.orderedAccessories.map(\.exerciseName), ["Walking Lunges", "KB Swing", "Side Plank"])
+        XCTAssertEqual(session.exercises.count, 2)
+        XCTAssertEqual(squatEntry.sets.count, 1)
+        XCTAssertNotEqual(deadlift.id, squat.id)
+        XCTAssertEqual(deadliftEntry.programSlotID, deadlift.id)
+        XCTAssertEqual(squatEntry.programSlotID, squat.id)
+
+        let repairedIDs = [deadlift.id, squat.id, walking.id, swings.id, sidePlank.id]
+        try Seeder.syncLibrary(context: context)
+        XCTAssertEqual(day.lifts.count, 2)
+        XCTAssertEqual(day.accessories.count, 3)
+        XCTAssertEqual([deadlift.id, squat.id, walking.id, swings.id, sidePlank.id], repairedIDs)
+    }
+
+    func testRelationshipAliasRepairDoesNotGuessBetweenIdenticalCollidingSlots() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+        try Seeder.seedIfNeeded(context: context)
+
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        let deadliftExercise = try XCTUnwrap(exercises.first { $0.name == "Deadlift" })
+        let sharedSlotID = UUID().uuidString
+        let program = Program(name: "Synthetic Ambiguous Slot Regression")
+        let day = ProgramDay(name: "Lower B", order: 0)
+        let first = ProgramLift(id: sharedSlotID, exerciseName: "Deadlift", role: .main,
+                                order: 0, baseWeightLb: 225, estimatedMaxLb: 275)
+        let second = ProgramLift(id: sharedSlotID, exerciseName: "Deadlift", role: .main,
+                                 order: 1, baseWeightLb: 225, estimatedMaxLb: 275)
+        let session = WorkoutSession()
+        session.programID = program.id
+        let entry = SessionExercise(order: 0, exercise: deadliftExercise)
+        entry.programRole = LiftRole.main.rawValue
+        entry.programSlotID = sharedSlotID
+
+        context.insert(program)
+        context.insert(day)
+        context.insert(first)
+        context.insert(second)
+        context.insert(session)
+        context.insert(entry)
+        program.days = [day]
+        day.lifts = [first, second]
+        session.exercises = [entry]
+        try context.save()
+
+        try Seeder.syncLibrary(context: context)
+
+        XCTAssertEqual(first.id, sharedSlotID)
+        XCTAssertNotEqual(second.id, sharedSlotID)
+        XCTAssertEqual(entry.programSlotID, sharedSlotID,
+                       "Ambiguous history must remain bound to the unchanged slot")
+    }
+
     private func assertActualShippedStore(environmentKey: String) throws {
         guard let sourcePath = ProcessInfo.processInfo.environment[environmentKey] else {
             throw XCTSkip("The end-to-end shipped-store fixture is generated by macOS CI")

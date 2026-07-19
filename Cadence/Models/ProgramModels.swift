@@ -2,6 +2,15 @@ import Foundation
 import SwiftData
 import CadenceCore
 
+/// Relationship collections in shipped stores may contain the same model
+/// reference more than once after older code mutated both sides of an inverse.
+/// Collapse those aliases at every read boundary as well as repairing the
+/// persisted arrays in Seeder.
+private func uniqueProgramModels<Model: PersistentModel>(_ models: [Model]) -> [Model] {
+    var seen: Set<PersistentIdentifier> = []
+    return models.filter { seen.insert($0.persistentModelID).inserted }
+}
+
 enum WarmupPolicy: String, Codable, CaseIterable {
     case automatic
     case full
@@ -64,7 +73,9 @@ final class Program {
         set { focusRaw = newValue.rawValue }
     }
 
-    var orderedDays: [ProgramDay] { days.sorted { $0.order < $1.order } }
+    var orderedDays: [ProgramDay] {
+        uniqueProgramModels(days).sorted { $0.order < $1.order }
+    }
 
     /// All exercise names owned by this program (so Home can filter them out of
     /// the standalone "Next up" tracks).
@@ -93,16 +104,17 @@ final class ProgramDay {
     /// The coach's explicit order. Legacy stores whose slots predate the field
     /// retain the old main-first behavior until the day is reordered once.
     var orderedLifts: [ProgramLift] {
-        if Set(lifts.map(\.order)).count <= 1 {
-            return lifts.sorted {
+        let unique = uniqueProgramModels(lifts)
+        if Set(unique.map(\.order)).count <= 1 {
+            return unique.sorted {
                 ($0.role == .main ? 0 : 1, $0.exerciseName)
                     < ($1.role == .main ? 0 : 1, $1.exerciseName)
             }
         }
-        return lifts.sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
+        return unique.sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
     }
     var orderedAccessories: [ProgramAccessory] {
-        accessories.sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
+        uniqueProgramModels(accessories).sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
     }
 }
 
