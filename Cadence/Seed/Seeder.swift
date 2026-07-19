@@ -237,7 +237,7 @@ enum Seeder {
     static func ensureWorkoutSessionIDs(context: ModelContext) throws {
         var seen: Set<String> = []
         for session in try context.fetch(FetchDescriptor<WorkoutSession>()) {
-            if session.id.isEmpty || seen.contains(session.id) {
+            if UUID(uuidString: session.id) == nil || seen.contains(session.id) {
                 repeat { session.id = UUID().uuidString } while seen.contains(session.id)
             }
             seen.insert(session.id)

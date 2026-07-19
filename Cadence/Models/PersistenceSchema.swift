@@ -2,8 +2,8 @@ import SwiftData
 
 /// Current persistence schema. Never edit an older schema in place: shipped
 /// stores identify it by both version and checksum.
-enum CadenceSchemaV2: VersionedSchema {
-    static var versionIdentifier = Schema.Version(2, 0, 0)
+enum CadenceSchemaV3: VersionedSchema {
+    static var versionIdentifier = Schema.Version(3, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [
@@ -28,13 +28,18 @@ enum CadenceSchemaV2: VersionedSchema {
 
 enum CadenceMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV1.self, CadenceSchemaV2.self]
+        [CadenceSchemaV1.self, CadenceSchemaV2.self, CadenceSchemaV3.self]
     }
 
     static var stages: [MigrationStage] {
         [
+            // Two V1 checksums shipped: pre-#72 and #72's mutated model. Each
+            // migrates directly to the safe final shape; neither must pass
+            // through the other's incompatible WorkoutSession.id definition.
             .lightweight(fromVersion: CadenceSchemaV1.self,
-                         toVersion: CadenceSchemaV2.self),
+                         toVersion: CadenceSchemaV3.self),
+            .lightweight(fromVersion: CadenceSchemaV2.self,
+                         toVersion: CadenceSchemaV3.self),
         ]
     }
 }

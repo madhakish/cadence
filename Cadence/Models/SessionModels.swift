@@ -14,7 +14,7 @@ enum SetFlag: String, Codable, CaseIterable {
 final class WorkoutSession {
     /// Literal default keeps V1→V2 lightweight. Existing sessions are assigned
     /// unique IDs by Seeder immediately after migration; new sessions set one
-    /// in init. Database uniqueness is enforced by import validation/backfill.
+    /// in init. Import validation and the post-migration backfill enforce it.
     var id: String = ""
     var date: Date
     var notes: String

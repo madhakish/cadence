@@ -36,7 +36,7 @@ final class AppBootstrap: ObservableObject {
         errorMessage = nil
         isTemporary = false
         do {
-            let schema = Schema(versionedSchema: CadenceSchemaV2.self)
+            let schema = Schema(versionedSchema: CadenceSchemaV3.self)
             let config = ModelConfiguration(schema: schema)
             let loaded = try ModelContainer(for: schema, migrationPlan: CadenceMigrationPlan.self,
                                             configurations: config)
@@ -49,7 +49,7 @@ final class AppBootstrap: ObservableObject {
 
     func openTemporaryStore() {
         do {
-            let schema = Schema(versionedSchema: CadenceSchemaV2.self)
+            let schema = Schema(versionedSchema: CadenceSchemaV3.self)
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
             let loaded = try ModelContainer(for: schema, migrationPlan: CadenceMigrationPlan.self,
                                             configurations: config)
