@@ -322,6 +322,10 @@ jobs:
         run: |
           before="$(git describe --tags --abbrev=0 2>/dev/null || true)"
           ./.github/release/node_modules/.bin/semantic-release
+          # semantic-release pushes the new tag without updating this
+          # checkout's tag refs. Refresh them before deciding whether a
+          # release was published so TestFlight receives the true result.
+          git fetch --force --tags origin
           after="$(git describe --tags --abbrev=0 2>/dev/null || true)"
           if [[ -n "$after" && "$after" != "$before" ]]; then
             echo "published=true" >> "$GITHUB_OUTPUT"
