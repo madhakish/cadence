@@ -9,11 +9,15 @@ struct HistoryView: View {
            sort: \WorkoutSession.date, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \Milestone.date, order: .reverse) private var milestones: [Milestone]
     @Query private var settingsList: [AppSettings]
+    @Query private var programs: [Program]
+    @Query private var exercises: [Exercise]
+    @Query private var checkIns: [CheckIn]
 
-    @State private var view: ViewMode = .list
+    @State private var view: ViewMode = .rotations
 
     enum ViewMode: String, CaseIterable {
         case list = "Log"
+        case rotations = "Rotations"
         case charts = "Charts"
         case milestones = "Milestones"
     }
@@ -29,11 +33,86 @@ struct HistoryView: View {
 
                 switch view {
                 case .list: sessionList
+                case .rotations: rotationList
                 case .charts: ProgressionChartsView()
                 case .milestones: milestoneList
                 }
             }
             .navigationTitle("History")
+        }
+    }
+
+    private var rotationList: some View {
+        List {
+            if let program = programs.first(where: { $0.isActive }) ?? programs.first {
+                let report = CoachingService.report(
+                    program: program, sessions: sessions,
+                    exercises: exercises, checkIns: checkIns
+                )
+                Section("Rolling load") {
+                    LabeledContent("14 days", value: rollingSummary(days: 14))
+                    LabeledContent("28 days", value: rollingSummary(days: 28))
+                    Text("Working sets and conditioning are separate; warm-ups are excluded.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach(Array(report.rotations.reversed()), id: \.key) { rotation in
+                    Section("Cycle \(rotation.key.cycleNumber) · R\(rotation.key.rotation)") {
+                        HStack {
+                            Label(rotation.readiness.name, systemImage: readinessIcon(rotation.readiness))
+                                .foregroundStyle(readinessColor(rotation.readiness))
+                            Spacer()
+                            Text("\(rotation.completedWorkingSets)/\(rotation.plannedWorkingSets) sets")
+                                .font(.callout.monospacedDigit())
+                        }
+                        ForEach(rotation.patternSets.keys.sorted { $0.name < $1.name }, id: \.self) { pattern in
+                            if !pattern.isConditioning {
+                                LabeledContent(pattern.name, value: "\(rotation.patternSets[pattern, default: 0])")
+                            }
+                        }
+                        LabeledContent("Conditioning", value: "\(Int(rotation.conditioningMinutes.rounded())) min")
+                        if let reason = rotation.reasons.first {
+                            Text(reason).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if report.rotations.isEmpty {
+                    Text("Complete a full program rotation to establish the first baseline.")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ContentUnavailableView("No program", systemImage: "list.bullet.clipboard",
+                                       description: Text("Create a program to group training by rotation."))
+            }
+        }
+    }
+
+    private func rollingSummary(days: Int) -> String {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: .now) ?? .distantPast
+        let recent = sessions.filter { $0.date >= cutoff }
+        let work = recent.flatMap(\.exercises).flatMap(\.workingSets).filter {
+            guard let exercise = $0.sessionExercise?.exercise else { return true }
+            return !exercise.movementPattern.isConditioning
+        }.count
+        let seconds = recent.flatMap(\.exercises).filter { $0.exercise?.movementPattern.isConditioning == true }
+            .flatMap(\.workingSets).compactMap(\.durationSeconds).reduce(0, +)
+        return "\(work) work sets · \(seconds / 60) min conditioning"
+    }
+
+    private func readinessIcon(_ state: ReadinessState) -> String {
+        switch state {
+        case .green: return "circle.fill"
+        case .yellow: return "circle.lefthalf.filled"
+        case .red: return "exclamationmark.octagon.fill"
+        case .unknown: return "circle.dotted"
+        }
+    }
+
+    private func readinessColor(_ state: ReadinessState) -> Color {
+        switch state {
+        case .green: return .green
+        case .yellow: return .yellow
+        case .red: return .red
+        case .unknown: return .gray
         }
     }
 
@@ -226,6 +305,7 @@ struct ProgressionChartsView: View {
     @Query(filter: #Predicate<Exercise> { $0.categoryRaw == "Main" }, sort: \Exercise.name)
     private var mainLifts: [Exercise]
     @Query private var settingsList: [AppSettings]
+    @Query private var programs: [Program]
 
     // Defaults to the first main lift in the library on appear — no
     // hardcoded exercise name (the library is user data).
@@ -246,6 +326,12 @@ struct ProgressionChartsView: View {
         /// "R1 Volume" … "R4 Deload", or "Untracked" for sessions without a
         /// cycle phase — the rotation-split series key.
         let rotation: String
+    }
+
+    private struct RepRecord: Identifiable {
+        let reps: Int
+        let weightLb: Double
+        var id: Int { reps }
     }
 
     private var points: [Point] {
@@ -276,6 +362,28 @@ struct ProgressionChartsView: View {
     }
     private var chartUnitLabel: String { (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue }
 
+    private var peakTarget: Double? {
+        guard metric != .volume,
+              let lift = (programs.first(where: \.isActive) ?? programs.first)?.days
+                .flatMap(\.lifts).first(where: { $0.exerciseName == selectedLift }),
+              lift.peakSingleEnabled, lift.lastPeakSingleLb > 0 else { return nil }
+        let targetLb = lift.lastPeakSingleLb + lift.peakSingleIncrementLb
+        return (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit == .kg
+            ? Weight.kg(fromLb: targetLb) : targetLb
+    }
+
+    private var repRecords: [RepRecord] {
+        var best: [Int: Double] = [:]
+        for session in sessions {
+            for entry in session.exercises where entry.exercise?.name == selectedLift {
+                for set in entry.workingSets where (1...12).contains(set.reps) {
+                    best[set.reps] = max(best[set.reps, default: 0], set.weightLb)
+                }
+            }
+        }
+        return best.keys.sorted().map { RepRecord(reps: $0, weightLb: best[$0, default: 0]) }
+    }
+
     /// Rotation → line colour: escalating heat to Peak, muted Deload.
     private static let rotationColors: KeyValuePairs<String, Color> = [
         "R1 Volume": Color(hex: 0x5BA06A), "R2 Load": Color(hex: 0xE8B008),
@@ -301,26 +409,68 @@ struct ProgressionChartsView: View {
             if points.isEmpty {
                 ContentUnavailableView(Copy.emptyHistory, systemImage: "chart.xyaxis.line")
             } else if splitByRotation {
-                Chart(points) { point in
-                    LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value),
-                             series: .value("Rotation", point.rotation))
-                        .foregroundStyle(by: .value("Rotation", point.rotation))
-                    PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
-                        .foregroundStyle(by: .value("Rotation", point.rotation))
+                Chart {
+                    ForEach(points) { point in
+                        LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value),
+                                 series: .value("Rotation", point.rotation))
+                            .foregroundStyle(by: .value("Rotation", point.rotation))
+                        PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
+                            .foregroundStyle(by: .value("Rotation", point.rotation))
+                    }
+                    if let peakTarget {
+                        RuleMark(y: .value("Peak target", peakTarget))
+                            .foregroundStyle(Theme.accent.opacity(0.8))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                            .annotation(position: .top, alignment: .trailing) {
+                                Text("Peak target \(Weight.trim(peakTarget))")
+                                    .font(.caption2).foregroundStyle(Theme.accent)
+                            }
+                    }
                 }
                 .chartForegroundStyleScale(Self.rotationColors)
                 .chartYScale(domain: .automatic(includesZero: false))
                 .frame(maxHeight: 280)
                 .padding(.horizontal)
             } else {
-                Chart(points) { point in
-                    LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
-                        .foregroundStyle(Theme.accent)
-                    PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
-                        .foregroundStyle(Theme.accent)
+                Chart {
+                    ForEach(points) { point in
+                        LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
+                            .foregroundStyle(Theme.accent)
+                        PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
+                            .foregroundStyle(Theme.accent)
+                    }
+                    if let peakTarget {
+                        RuleMark(y: .value("Peak target", peakTarget))
+                            .foregroundStyle(Theme.accent.opacity(0.8))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                            .annotation(position: .top, alignment: .trailing) {
+                                Text("Peak target \(Weight.trim(peakTarget))")
+                                    .font(.caption2).foregroundStyle(Theme.accent)
+                            }
+                    }
                 }
                 .chartYScale(domain: .automatic(includesZero: false))
                 .frame(maxHeight: 280)
+                .padding(.horizontal)
+            }
+            if !repRecords.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Rep PRs").font(.headline)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(repRecords) { record in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(record.reps) rep\(record.reps == 1 ? "" : "s")")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    Text((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: record.weightLb))
+                                        .font(.callout.bold().monospacedDigit())
+                                }
+                                .padding(10)
+                                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
+                    }
+                }
                 .padding(.horizontal)
             }
             Spacer()

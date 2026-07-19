@@ -74,6 +74,10 @@ enum Seeder {
             Exercise(name: "GHD Sit-up", category: .accessory, type: .bodyweight, movementGroup: "core"),
             Exercise(name: "Plank", category: .accessory, type: .timed, movementGroup: "core", defaultRestSeconds: 60),
             Exercise(name: "Side Plank", category: .accessory, type: .timed, movementGroup: "core", isUnilateral: true, defaultRestSeconds: 60),
+            Exercise(name: "Copenhagen Plank", category: .accessory, type: .timed, movementGroup: "core",
+                     movementPattern: .adductor, isUnilateral: true, defaultRestSeconds: 60),
+            Exercise(name: "Cable Hip Adduction", category: .accessory, type: .machine, movementGroup: "squat",
+                     movementPattern: .adductor, isUnilateral: true),
             Exercise(name: "KB Swing", category: .accessory, type: .kettlebell, movementGroup: "hinge"),
             Exercise(name: "KB Clean", category: .accessory, type: .kettlebell, movementGroup: "olympic", isUnilateral: true),
             Exercise(name: "Dips", category: .accessory, type: .bodyweight, movementGroup: "press"),
@@ -125,6 +129,8 @@ enum Seeder {
             Exercise(name: "Glute Bridge", category: .accessory, type: .bodyweight, movementGroup: "hinge"),
             Exercise(name: "Cable Pull-through", category: .accessory, type: .machine, movementGroup: "hinge"),
             Exercise(name: "Back Extension", category: .accessory, type: .bodyweight, movementGroup: "hinge"),
+            Exercise(name: "GHD Back Extension", category: .accessory, type: .bodyweight, movementGroup: "hinge",
+                     movementPattern: .hipExtension),
             Exercise(name: "Standing Calf Raise", category: .accessory, type: .machine, movementGroup: "calves"),
             Exercise(name: "Seated Calf Raise", category: .accessory, type: .machine, movementGroup: "calves"),
             Exercise(name: "Barbell Curl", category: .accessory, type: .barbell, movementGroup: "arms"),
@@ -187,6 +193,18 @@ enum Seeder {
                 if current.movementGroup.isEmpty && !definition.movementGroup.isEmpty {
                     current.movementGroup = definition.movementGroup
                 }
+                if current.movementPatternRaw.isEmpty && !definition.movementPatternRaw.isEmpty {
+                    current.movementPatternRaw = definition.movementPatternRaw
+                }
+                if current.secondaryMovementPatternRaw.isEmpty && !definition.secondaryMovementPatternRaw.isEmpty {
+                    current.secondaryMovementPatternRaw = definition.secondaryMovementPatternRaw
+                }
+                if current.aliases.isEmpty && !definition.aliases.isEmpty {
+                    current.aliases = definition.aliases
+                }
+                if current.strategyTags.isEmpty && !definition.strategyTags.isEmpty {
+                    current.strategyTags = definition.strategyTags
+                }
                 if current.loadBasisRaw.isEmpty && !definition.loadBasisRaw.isEmpty {
                     current.loadBasisRaw = definition.loadBasisRaw
                 }
@@ -201,8 +219,36 @@ enum Seeder {
         try clearRetiredRestStamps(byName: byName, context: context)
         try ensureWorkoutSessionIDs(context: context)
         try snapshotLegacyLoadSemantics(context: context)
+        try normalizeV4PrescriptionBlocks(context: context)
+        try normalizeLegacyGymPlateInventories(context: context)
         do { try context.save() }
         catch { context.rollback(); throw error }
+    }
+
+    /// Early gym rows predate configurable inventory and persisted an empty
+    /// array. Materialize the standard rack so Settings is editable as well as
+    /// making the load solver safe. A nonempty/all-disabled rack is user intent
+    /// and is never changed.
+    private static func normalizeLegacyGymPlateInventories(context: ModelContext) throws {
+        for gym in try context.fetch(FetchDescriptor<Gym>()) where gym.plateToggles.isEmpty {
+            gym.plateToggles = Plate.allStandard.map { PlateToggle(plate: $0, enabled: true) }
+        }
+    }
+
+    /// V4 added a non-optional prescription-block discriminator so the schema
+    /// could migrate lightly. Its literal `work` default preserves every row,
+    /// but historical warm-ups and conditioning need their meaning recovered
+    /// from fields that already existed in V3. This is idempotent and never
+    /// fabricates a per-set planned load or rep target.
+    private static func normalizeV4PrescriptionBlocks(context: ModelContext) throws {
+        for set in try context.fetch(FetchDescriptor<SetEntry>())
+        where set.prescriptionBlockRaw == PrescriptionBlockKind.work.rawValue {
+            if set.isWarmup {
+                set.prescriptionBlockRaw = PrescriptionBlockKind.warmup.rawValue
+            } else if set.sessionExercise?.exercise?.type == .conditioning {
+                set.prescriptionBlockRaw = PrescriptionBlockKind.conditioning.rawValue
+            }
+        }
     }
 
     private static func clearRetiredRestStamps(byName: [String: Exercise], context: ModelContext) throws {

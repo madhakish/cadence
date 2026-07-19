@@ -6,6 +6,9 @@ import * as C from "./core.js";
 // same helper so native and web keep the same shape.
 export const ex = (name, category, type, group, o = {}) => ({
   name, category, type, movementGroup: group,
+  movementPattern: o.movementPattern || C.movementPattern(name, group),
+  secondaryMovementPattern: o.secondaryMovementPattern || null,
+  aliases: o.aliases || [], strategyTags: o.strategyTags || [],
   loadBasis: o.loadBasis || C.inferredLoadBasis(type),
   implementCount: o.implementCount || C.inferredImplementCount(type),
   isUnilateral: !!o.isUnilateral,
@@ -14,6 +17,8 @@ export const ex = (name, category, type, group, o = {}) => ({
   isShelved: false,
   shelvedNote: "",
   watchSite: null,
+  gateStatus: "open", gateSite: null, reEntryCriteria: [], completedReEntryCriteria: [],
+  reEntryTestWeightLb: 0, reEntryTestSets: 3, reEntryTestReps: 5,
   createdAt: o.createdAt || "2000-01-01T00:00:00.000Z",
 });
 
@@ -60,6 +65,8 @@ const exercises = [
   ex("GHD Sit-up", "Accessory", "bodyweight", "core"),
   ex("Plank", "Accessory", "timed", "core", { defaultRestSeconds: 60 }),
   ex("Side Plank", "Accessory", "timed", "core", { isUnilateral: true, defaultRestSeconds: 60 }),
+  ex("Copenhagen Plank", "Accessory", "timed", "core", { movementPattern: "adductor", isUnilateral: true, defaultRestSeconds: 60 }),
+  ex("Cable Hip Adduction", "Accessory", "machine", "squat", { movementPattern: "adductor", isUnilateral: true }),
   ex("KB Swing", "Accessory", "kettlebell", "hinge"),
   ex("KB Clean", "Accessory", "kettlebell", "olympic", { isUnilateral: true }),
   ex("Dips", "Accessory", "bodyweight", "press"),
@@ -110,6 +117,7 @@ const exercises = [
   ex("Glute Bridge", "Accessory", "bodyweight", "hinge"),
   ex("Cable Pull-through", "Accessory", "machine", "hinge"),
   ex("Back Extension", "Accessory", "bodyweight", "hinge"),
+  ex("GHD Back Extension", "Accessory", "bodyweight", "hinge", { movementPattern: "hipExtension" }),
   ex("Standing Calf Raise", "Accessory", "machine", "calves"),
   ex("Seated Calf Raise", "Accessory", "machine", "calves"),
   ex("Barbell Curl", "Accessory", "barbell", "arms"),

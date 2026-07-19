@@ -293,15 +293,34 @@ struct ActiveSessionView: View {
     /// not-yet-performed sets are touched, each dropped from its own weight.
     private func dropLoad(_ entry: SessionExercise, reason: AutoregReason) {
         let ordered = entry.orderedSets
+        let bar = entry.barID.map { Bar.by(id: $0) } ?? gym?.defaultBar ?? .bar45lb
+        let firstPlannedWork = ordered.first { !$0.isWarmup && $0.status == .planned }
+        let fixedDrop = firstPlannedWork.flatMap { current in
+            entry.fallbackWeightLb.map { max(0, current.weightLb - $0) }
+        }
         let plan = ProgramEngine.dropLoadPlan(
-            sets: ordered.map { (weightLb: $0.weightLb, isWarmup: $0.isWarmup, isFlagged: $0.status != .planned) }
+            sets: ordered.map { (weightLb: $0.weightLb, isWarmup: $0.isWarmup, isFlagged: $0.status != .planned) },
+            roundingLb: ProgramEngine.loadStep(
+                programRoundingLb: 5,
+                exerciseType: entry.exercise?.typeRaw
+            ),
+            barLb: entry.exercise?.type == .barbell ? bar.lb : 0,
+            dropIncrementLb: fixedDrop
         )
         guard !plan.isEmpty else { return }
-        for (i, target) in plan.enumerated() {
-            ordered[target.index].weightLb = target.weightLb
-            if i == 0 { ordered[target.index].autoregReason = reason }
+        for target in plan {
+            let set = ordered[target.index]
+            set.weightLb = ProgramSession.fallbackWeight(
+                from: set.weightLb,
+                exercise: entry.exercise,
+                gym: gym,
+                bar: bar,
+                roundingLb: ProgramEngine.loadStep(programRoundingLb: 5, exerciseType: entry.exercise?.typeRaw),
+                dropIncrementLb: fixedDrop ?? 0
+            )
+            set.autoregReason = reason
         }
-        let top = plan.map(\.weightLb).max() ?? 0
+        let top = plan.map { ordered[$0.index].weightLb }.max() ?? 0
         entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top)) — \(reason.rawValue)."
         PersistenceErrorCenter.shared.save(context, operation: "Dropping the load")
     }
@@ -508,7 +527,7 @@ private struct ExerciseSection: View {
                 let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }?.persistentModelID == set.persistentModelID
                 VStack(alignment: .leading, spacing: 4) {
                     SetRow(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
-                           targetLb: entry.plannedWeightLb, onLogged: {
+                           targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onLogged: {
                         onWork(entry)
                         // Auto-start only if the user opted in (manual is the
                         // default), and never restart a countdown already running.
@@ -520,7 +539,9 @@ private struct ExerciseSection: View {
                     // Loadout visualization — plates for barbell lifts, the
                     // rack number for dumbbell lifts. Mirrors web.
                     if entry.exercise?.type == .barbell && set.weightLb > 0 {
-                        BarbellView(weightLb: set.weightLb, unit: set.enteredUnit, bar: effectiveBar, gym: gym)
+                        BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
+                                    bar: effectiveBar, gym: gym,
+                                    targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb)
                     } else if entry.exercise?.type == .dumbbell && set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
@@ -660,7 +681,7 @@ private struct ExerciseSection: View {
 
     private func addSet() {
         let last = entry.orderedSets.last
-        let isTimed = entry.exercise?.type == .timed
+        let isTimed = entry.exercise?.type == .timed || entry.exercise?.type == .conditioning
         let set = SetEntry(
             order: entry.sets.count,
             weightLb: isTimed ? 0 : (last?.weightLb ?? entry.plannedWeightLb ?? 45),
@@ -669,12 +690,16 @@ private struct ExerciseSection: View {
             enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
             durationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil,
             loadBasis: last?.loadBasis ?? entry.exercise?.loadBasis,
-            implementCount: last?.resolvedImplementCount ?? entry.exercise?.resolvedImplementCount ?? 1
+            implementCount: last?.resolvedImplementCount ?? entry.exercise?.resolvedImplementCount ?? 1,
+            targetWeightLb: last?.targetWeightLb ?? entry.targetWeightLb,
+            plannedWeightLb: last?.weightLb ?? entry.plannedWeightLb,
+            plannedReps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
+            plannedDurationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil,
+            prescriptionBlock: entry.exercise?.type == .conditioning ? .conditioning : .work
         )
         set.sessionExercise = entry
         context.insert(set)
         entry.sets.append(set)
-        entry.plannedSets = entry.plannedWorkingSets.count
         PersistenceErrorCenter.shared.save(context, operation: "Adding the set")
     }
 
@@ -682,7 +707,6 @@ private struct ExerciseSection: View {
         entry.sets.removeAll { $0 === set }
         context.delete(set)
         for (index, remaining) in entry.orderedSets.enumerated() { remaining.order = index }
-        entry.plannedSets = entry.plannedWorkingSets.count
         if save { PersistenceErrorCenter.shared.save(context, operation: "Deleting the set") }
     }
 }
@@ -690,10 +714,11 @@ private struct ExerciseSection: View {
 /// Keep the editable prescription and its equipment illustration on the same
 /// bar context without discarding status/quality already logged on matching
 /// warmup rows.
-private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar, gym: Gym?,
+private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWorkingLb: Double? = nil,
+                                bar: Bar, gym: Gym?,
                                 enteredUnit: WeightUnit, context: ModelContext) {
     guard let exercise = entry.exercise,
-          let workingLb = entry.plannedWeightLb
+          let workingLb = overrideWorkingLb ?? entry.plannedWeightLb
             ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb,
           workingLb > 0 else { return }
     let desired: [WarmupSet]
@@ -721,7 +746,11 @@ private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar, gym: Gym?,
             let set = SetEntry(order: index, weightLb: target.weightLb, reps: target.reps,
                                isWarmup: true, enteredUnit: enteredUnit,
                                loadBasis: exercise.loadBasis,
-                               implementCount: exercise.resolvedImplementCount)
+                               implementCount: exercise.resolvedImplementCount,
+                               targetWeightLb: target.weightLb,
+                               plannedWeightLb: target.weightLb,
+                               plannedReps: target.reps,
+                               prescriptionBlock: .warmup)
             set.sessionExercise = entry
             context.insert(set)
             rebuilt.append(set)
@@ -794,7 +823,12 @@ private struct SetRow: View {
                                 .foregroundStyle(.tertiary)
                         }
                         if set.isWarmup {
-                            Text("warmup").font(.caption2).foregroundStyle(.secondary)
+                            Text(set.prescriptionBlock == .primer ? "primer" : "warmup")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        } else if set.prescriptionBlock == .topSingle {
+                            Text("top single").font(.caption2).foregroundStyle(Theme.accent)
+                        } else if set.prescriptionBlock == .backoff {
+                            Text("back-off").font(.caption2).foregroundStyle(.secondary)
                         }
                         if let reason = set.autoregReason {
                             Text("↓ \(reason.rawValue)").font(.caption2).foregroundStyle(Theme.warn)
@@ -1053,7 +1087,9 @@ private struct SetDetailSheet: View {
     @State private var stoppedEarly = false
     @State private var bodySite: BodySite?
     @State private var bodyNote = ""
-    @State private var applyToRemaining = true
+    @State private var applyWeightToRemaining = false
+    @State private var applyRepsToRemaining = true
+    @State private var confirmMisload = false
 
     private var isBarbell: Bool { exercise?.type == .barbell }
 
@@ -1138,7 +1174,8 @@ private struct SetDetailSheet: View {
                     Toggle("Per side", isOn: $isPerSide)
                     Toggle("Stopped early", isOn: $stoppedEarly)
                     if canApplyToRemaining {
-                        Toggle("Apply weight and reps to remaining planned sets", isOn: $applyToRemaining)
+                        Toggle("Apply reps to remaining planned sets", isOn: $applyRepsToRemaining)
+                        Toggle("Apply weight to remaining planned sets", isOn: $applyWeightToRemaining)
                     }
                 }
 
@@ -1166,8 +1203,8 @@ private struct SetDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        commitDraft()
-                        if PersistenceErrorCenter.shared.save(context, operation: "Saving the set") { dismiss() }
+                        if isLargePlanDifference { confirmMisload = true }
+                        else { saveAndDismiss() }
                     }
                 }
             }
@@ -1180,7 +1217,16 @@ private struct SetDetailSheet: View {
                 stoppedEarly = set.flags.contains(.stoppedEarly)
                 bodySite = set.bodyFlagSite
                 bodyNote = set.bodyFlagNote ?? ""
-                applyToRemaining = !set.isWarmup && set.status == .planned
+                applyRepsToRemaining = !set.isWarmup && set.status == .planned
+                applyWeightToRemaining = false
+            }
+            .alert("Confirm the loaded weight", isPresented: $confirmMisload) {
+                Button("Use \(Weight.trim(displayValue)) \(unit.rawValue)") { saveAndDismiss() }
+                Button("Keep editing", role: .cancel) {}
+            } message: {
+                if let targetLb {
+                    Text("This differs from the planned load by \(Weight.trim(abs(lb - targetLb))) lb. Confirm the plates before logging it.")
+                }
             }
         }
     }
@@ -1199,21 +1245,32 @@ private struct SetDetailSheet: View {
         }
     }
 
-    /// Commit the sheet as one draft. Propagating an edit also redefines this
-    /// session's target; progression then grades the explicitly accepted
-    /// prescription and actual completed load, not the stale generated weight.
+    private var isLargePlanDifference: Bool {
+        guard let targetLb, targetLb > 0, lb > 0 else { return false }
+        return abs(lb - targetLb) > 6
+    }
+
+    private func saveAndDismiss() {
+        commitDraft()
+        if PersistenceErrorCenter.shared.save(context, operation: "Saving the set") { dismiss() }
+    }
+
+    /// Commit actual values without rewriting the immutable per-set plan
+    /// snapshot. Reps and load propagate independently, so changing a rep
+    /// target cannot reset a deliberate weight adjustment (or vice versa).
     /// Completed/skipped rows are never rewritten.
     private func commitDraft() {
-        let targets: [SetEntry]
-        if applyToRemaining && !isWarmup {
-            targets = entry.plannedWorkingSets.filter { $0 === set || $0.status == .planned }
-        } else {
-            targets = [set]
-        }
-        for target in targets {
-            target.weightLb = lb
-            target.enteredUnit = unit
-            target.reps = reps
+        set.weightLb = lb
+        set.enteredUnit = unit
+        set.reps = reps
+        if !isWarmup {
+            let remaining = entry.plannedWorkingSets.filter { $0 !== set && $0.status == .planned }
+            if applyWeightToRemaining {
+                for target in remaining { target.weightLb = lb; target.enteredUnit = unit }
+            }
+            if applyRepsToRemaining {
+                for target in remaining { target.reps = reps }
+            }
         }
         set.isWarmup = isWarmup
         set.isPerSide = isPerSide
@@ -1223,11 +1280,11 @@ private struct SetDetailSheet: View {
         set.bodyFlagSite = bodySite
         set.bodyFlagNote = bodySite == nil || bodyNote.isEmpty ? nil : bodyNote
 
-        entry.plannedSets = entry.plannedWorkingSets.count
-        if applyToRemaining && !isWarmup {
-            entry.plannedWeightLb = lb
-            entry.plannedReps = reps
-            synchronizeWarmups(entry, bar: bar, gym: gym, enteredUnit: unit, context: context)
+        if applyWeightToRemaining && !isWarmup {
+            // Keep generated targets intact, but warm up for the load that will
+            // actually be used across the remaining work sets.
+            synchronizeWarmups(entry, workingLb: lb, bar: bar, gym: gym,
+                               enteredUnit: unit, context: context)
         }
     }
 }

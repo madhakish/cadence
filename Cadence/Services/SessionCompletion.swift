@@ -68,6 +68,7 @@ enum SessionCompletion {
             }
         }
         session.isCompleted = true
+        session.completedAt = .now
         let unitDisplay = (try? context.fetch(FetchDescriptor<AppSettings>()).first?.unitDisplay) ?? .lbPrimary
 
         var lines: [SessionSummary.LiftLine] = []
@@ -121,12 +122,15 @@ enum SessionCompletion {
             }
             allEvents.append(contentsOf: events)
 
-            // Program-owned exercises advance via the program, never the standalone track.
-            if entry.programRole == nil {
-                do { try advanceTrackIfNeeded(for: exercise.name, context: context) }
-                catch { context.rollback(); throw SaveFailure(underlying: error) }
-            }
         }
+
+        // Grade standalone tracks from all occurrences together. Actual reps,
+        // actual load, stopped/adjusted sets, and the original prescription
+        // snapshots determine whether the lift advances. A duplicated exercise
+        // is still one exposure and therefore advances at most once.
+        let heldStandaloneTracks: [String]
+        do { heldStandaloneTracks = try advanceStandaloneTracks(in: session, context: context) }
+        catch { context.rollback(); throw SaveFailure(underlying: error) }
 
         let isProgramSession = session.programID != nil || session.programName != nil
         if isProgramSession && session.hasCompletedWork {
@@ -167,9 +171,10 @@ enum SessionCompletion {
             Task { await HealthKitService.shared.saveWorkout(start: start, end: end, modality: modality) }
         }
 
-        let completedSets = session.exercises.flatMap(\.workingSets).filter { $0.status == .completed }
-        let skippedSets = session.exercises.flatMap(\.workingSets).filter { $0.status == .skipped }
-        let plannedSets = session.exercises.flatMap(\.workingSets).filter { $0.status == .planned }
+        let allPlannedWork = session.exercises.flatMap(\.plannedWorkingSets)
+        let completedSets = allPlannedWork.filter { $0.status == .completed }
+        let skippedSets = allPlannedWork.filter { $0.status == .skipped }
+        let plannedSets = allPlannedWork.filter { $0.status == .planned }
         let adjusted = completedSets.contains {
             $0.autoregReason != nil || $0.flags.contains(.stoppedEarly) || $0.quality == .grindy || $0.quality == .wobble
         }
@@ -180,6 +185,9 @@ enum SessionCompletion {
             coachingNotes.append("Completed with adjustments — progression was graded from the work actually logged.")
         } else if !completedSets.isEmpty {
             coachingNotes.append("Completed as planned — progression advanced from the banked work.")
+        }
+        if !heldStandaloneTracks.isEmpty {
+            coachingNotes.append("Held progression for \(heldStandaloneTracks.sorted().joined(separator: ", ")) — actual work was saved, but the original prescription was not fully met.")
         }
         if isProgramSession,
            let programs = try? context.fetch(FetchDescriptor<Program>()),
@@ -205,7 +213,9 @@ enum SessionCompletion {
     // MARK: - Program day/week/cycle advancement (mirrors web advanceProgram)
 
     private static func cyclePerf(_ entry: SessionExercise, roundingLb: Double) -> CycleLiftPerformance {
-        let w = entry.workingSets
+        // A primer and optional top single are observable preparation/practice.
+        // Only the prescribed work block can earn the cycle progression.
+        let w = entry.workingSets.filter { $0.prescriptionBlock == .work }
         let presReps = entry.plannedReps ?? (w.map(\.reps).max() ?? 0)
         let top = w.max { $0.weightLb < $1.weightLb }
         return CycleLiftPerformance(
@@ -224,12 +234,21 @@ enum SessionCompletion {
         )
     }
 
-    private static func accPerf(_ entry: SessionExercise) -> AccessoryPerformance {
-        let w = entry.workingSets
+    private static func accPerf(_ entry: SessionExercise, roundingLb: Double) -> AccessoryPerformance {
+        let w = entry.workingSets.filter { $0.prescriptionBlock == .work }
         return AccessoryPerformance(
             completedSets: w.count,
             minRepsAchieved: w.map(\.reps).min() ?? 0,
-            anyStoppedEarly: w.contains { $0.flags.contains(.stoppedEarly) }
+            anyStoppedEarly: w.contains { $0.flags.contains(.stoppedEarly) },
+            performedAtPlannedLoad: w.allSatisfy {
+                !ProgramProgression.belowPlanLoad(
+                    actualLb: $0.weightLb,
+                    plannedLb: $0.plannedWeightLb ?? entry.plannedWeightLb,
+                    roundingLb: roundingLb
+                )
+            },
+            grindyOrWobbleSets: w.filter { $0.quality == .grindy || $0.quality == .wobble }.count,
+            bodyFlagSets: w.filter { $0.bodyFlagSite != nil }.count
         )
     }
 
@@ -267,7 +286,14 @@ enum SessionCompletion {
                 ($0.programSlotID == acc.id || ($0.programSlotID == nil && $0.programRole == "accessory" && $0.exercise?.name == acc.exerciseName))
                     && !$0.workingSets.isEmpty
             }) {
-                if exerciseTypeByName[acc.exerciseName] == ExerciseType.timed.rawValue {
+                let exerciseType = exerciseTypeByName[acc.exerciseName]
+                if exerciseType == ExerciseType.conditioning.rawValue {
+                    continue
+                }
+                // A temporary red-readiness cut deliberately banks less work;
+                // it is a hold, not a failed double-progression exposure.
+                if (entry.plannedSets ?? acc.sets) < acc.sets { continue }
+                if exerciseType == ExerciseType.timed.rawValue {
                     let completed = entry.workingSets.filter { $0.status == .completed }
                     if completed.count >= acc.sets,
                        completed.allSatisfy({ ($0.durationSeconds ?? 0) >= acc.targetSeconds }),
@@ -275,14 +301,65 @@ enum SessionCompletion {
                         acc.targetSeconds += acc.durationStepSeconds
                     }
                 } else {
-                    acc.apply(ProgramProgression.advanceAccessory(acc.coreState, perf: accPerf(entry)))
+                    let loadStep = ProgramEngine.loadStep(
+                        programRoundingLb: program.roundingLb,
+                        exerciseType: entry.exercise?.typeRaw
+                    )
+                    acc.apply(ProgramProgression.advanceAccessory(
+                        acc.coreState,
+                        perf: accPerf(entry, roundingLb: loadStep)
+                    ))
                 }
+            }
+        }
+
+        // DB lifts and other coarse implements can opt into the same earned
+        // rep-window progression as accessories. It advances after each
+        // exposure, independent of the four-phase calendar.
+        for lift in day.lifts where lift.prescription == .doubleProgression {
+            guard let entry = session.exercises.first(where: {
+                ($0.programSlotID == lift.id || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName))
+                    && !$0.workingSets.isEmpty
+            }) else { continue }
+            let loadStep = ProgramEngine.loadStep(
+                programRoundingLb: program.roundingLb,
+                exerciseType: entry.exercise?.typeRaw
+            )
+            let prior = AccessoryState(
+                sets: max(1, lift.doubleProgressionSets),
+                minReps: max(1, lift.minimumReps),
+                maxReps: max(lift.minimumReps, lift.maximumReps),
+                currentReps: max(lift.minimumReps, lift.currentReps),
+                weightLb: lift.baseWeightLb,
+                incrementLb: loadStep,
+                stallCount: lift.stallCount
+            )
+            let next = ProgramProgression.advanceAccessory(
+                prior,
+                perf: accPerf(entry, roundingLb: loadStep)
+            )
+            lift.baseWeightLb = next.weightLb
+            lift.currentReps = next.currentReps
+            lift.stallCount = next.stallCount
+            lift.lastIncrementLb = next.weightLb - prior.weightLb
+        }
+
+        // A clean, completed top-single becomes the next peak projection's
+        // explicit anchor. Adjusted or quality-flagged singles do not.
+        for lift in day.lifts where lift.peakSingleEnabled {
+            guard let entry = session.exercises.first(where: { $0.programSlotID == lift.id }) else { continue }
+            if let single = entry.workingSets.first(where: {
+                $0.prescriptionBlock == .topSingle && $0.reps >= 1
+                    && $0.autoregReason == nil && $0.quality != .grindy && $0.quality != .wobble
+                    && $0.bodyFlagSite == nil
+            }) {
+                lift.lastPeakSingleLb = max(lift.lastPeakSingleLb, single.weightLb)
             }
         }
 
         // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
         if week == 3 {
-            for lift in day.lifts {
+            for lift in day.lifts where lift.prescription != .doubleProgression {
                 if let entry = session.exercises.first(where: {
                     ($0.programSlotID == lift.id || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue))
                         && !$0.workingSets.isEmpty
@@ -316,7 +393,10 @@ enum SessionCompletion {
         // Rollover at the deload week's last day.
         for d in program.days {
             for lift in d.lifts {
-                if let pendingBase = lift.pendingBaseWeightLb {
+                if lift.prescription == .doubleProgression {
+                    // Rep-window slots advance after every exposure and do not
+                    // participate in Peak grading or skipped-Peak stalls.
+                } else if let pendingBase = lift.pendingBaseWeightLb {
                     let oldBase = lift.baseWeightLb
                     lift.baseWeightLb = pendingBase
                     lift.estimatedMaxLb = lift.pendingEstimatedMaxLb ?? lift.estimatedMaxLb
@@ -404,11 +484,31 @@ enum SessionCompletion {
         return (sets, volumes, schemes)
     }
 
-    private static func advanceTrackIfNeeded(for exerciseName: String, context: ModelContext) throws {
-        let descriptor = FetchDescriptor<LiftTrack>(
-            predicate: #Predicate { $0.exerciseName == exerciseName }
-        )
-        guard let track = try context.fetch(descriptor).first else { return }
-        track.completeSession()
+    private static func advanceStandaloneTracks(in session: WorkoutSession, context: ModelContext) throws -> [String] {
+        let candidates = session.exercises.filter { entry in
+            guard entry.programRole == nil, let exercise = entry.exercise else { return false }
+            return exercise.type != .timed && exercise.type != .conditioning
+        }
+        let grouped = Dictionary(grouping: candidates) { $0.exercise?.name ?? "" }
+        let tracks = try context.fetch(FetchDescriptor<LiftTrack>())
+        var held: [String] = []
+
+        for (exerciseName, entries) in grouped where !exerciseName.isEmpty {
+            guard let track = tracks.first(where: { $0.exerciseName == exerciseName }) else { continue }
+            let performedEntries = entries.filter {
+                !$0.workingSets.filter { $0.prescriptionBlock == .work }.isEmpty
+            }
+            guard !performedEntries.isEmpty else { continue }
+
+            // An untouched duplicate occurrence is part of the prescription and
+            // must hold the exposure rather than disappearing from the grade.
+            let allOccurrencesPerformed = performedEntries.count == entries.count
+            let performances = performedEntries.map { cyclePerf($0, roundingLb: track.roundingLb) }
+            let advance = allOccurrencesPerformed
+                && ProgramProgression.earnsStandaloneTrackAdvance(performances)
+            track.completeSession(advance: advance)
+            if !advance { held.append(exerciseName) }
+        }
+        return held
     }
 }

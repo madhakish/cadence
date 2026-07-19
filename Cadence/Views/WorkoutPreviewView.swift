@@ -20,9 +20,9 @@ struct WorkoutPreviewView: View {
     private var unitDisplay: UnitDisplay { settingsList.first?.unitDisplay ?? .lbPrimary }
     private var phase: CyclePhase { CyclePhase(rawValue: program.currentWeek) ?? .volume }
 
-    private func plan(for lift: ProgramLift) -> SessionPlan {
+    private func targetPlan(for lift: ProgramLift) -> SessionPlan {
         let exercise = exercises.first { $0.name == lift.exerciseName }
-        let raw = ProgramEngine.programPlan(
+        return ProgramEngine.programPlan(
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb,
                             nextPhase: phase, incrementLb: 0),
             programRoundingLb: program.roundingLb,
@@ -30,12 +30,18 @@ struct WorkoutPreviewView: View {
             movementGroup: exercise?.movementGroup,
             role: lift.role,
             focus: program.focus,
-            prescriptionStyle: lift.prescription)
-        let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
-        let isBarbell = exercise?.type == .barbell
-        let weightLb = ProgramSession.neatWeight(raw.weightLb, isBarbell: isBarbell,
-                                                 isMain: lift.role.rawValue == "main",
-                                                 barLb: barLb, stepLb: program.roundingLb)
+            prescriptionStyle: lift.prescription,
+            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""))
+    }
+
+    private func plan(for lift: ProgramLift) -> SessionPlan {
+        let raw = targetPlan(for: lift)
+        let exercise = exercises.first { $0.name == lift.exerciseName }
+        let weightLb = ProgramSession.achievableWeight(
+            raw.weightLb, exercise: exercise, isMain: lift.role.rawValue == "main",
+            gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb,
+            stepLb: program.roundingLb, phase: phase
+        )
         return SessionPlan(weightLb: weightLb, sets: raw.sets, reps: raw.reps,
                            phase: raw.phase, cycleNumber: raw.cycleNumber)
     }
@@ -54,6 +60,7 @@ struct WorkoutPreviewView: View {
 
             Section("Lifts") {
                 ForEach(day.orderedLifts) { lift in
+                    let target = targetPlan(for: lift)
                     let p = plan(for: lift)
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline) {
@@ -76,7 +83,8 @@ struct WorkoutPreviewView: View {
                             let type = exercises.first(where: { $0.name == lift.exerciseName })?.type
                             if type == .barbell {
                                 BarbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit,
-                                            bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
+                                            bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym,
+                                            targetWeightLb: target.weightLb)
                             } else if type == .dumbbell {
                                 DumbbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit)
                             }
@@ -88,7 +96,8 @@ struct WorkoutPreviewView: View {
             if !day.accessories.isEmpty {
                 Section("Accessories") {
                     ForEach(day.orderedAccessories) { acc in
-                        let isTimed = exercises.first(where: { $0.name == acc.exerciseName })?.type == .timed
+                        let type = exercises.first(where: { $0.name == acc.exerciseName })?.type
+                        let isTimed = type == .timed || type == .conditioning
                         HStack {
                             NavigationLink {
                                 ExerciseDetailByNameView(name: acc.exerciseName)

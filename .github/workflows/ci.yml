@@ -46,12 +46,14 @@ jobs:
       - name: Install pinned test deps
         working-directory: web
         run: npm ci
-      - name: Core math parity tests
+      - name: Web parity, migration, and smoke tests
         working-directory: web
-        run: node tests/core.test.mjs
-      - name: Runtime smoke test (jsdom + fake-indexeddb)
-        working-directory: web
-        run: node tests/smoke.test.mjs
+        run: npm test
+      - name: Install pinned release parser
+        working-directory: .github/release
+        run: npm ci
+      - name: Verify semantic-version breaking markers
+        run: node .github/scripts/test-release-parser.mjs
 
   app-build:
     name: App build (macOS)
@@ -60,6 +62,21 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: v1.29.0
+          path: shipped/v129
+          persist-credentials: false
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: c2026d81a61a23b8eb71c30a0ff1ba2e1cd67f85
+          path: shipped/pr72
+          persist-credentials: false
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: 11846b8dbdf88aa227f6d54fbc7a23c1b8ba8fea
+          path: shipped/pr73
+          persist-credentials: false
       - name: Run unit tests (Darwin)
         working-directory: CadenceCore
         run: swift test
@@ -67,7 +84,19 @@ jobs:
         run: brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
-      - name: Verify V1 store migration
+      - name: Generate stores with the actually shipped apps
+        run: >-
+          bash .github/scripts/generate-shipped-stores.sh
+          shipped/v129
+          shipped/pr72
+          shipped/pr73
+          "$RUNNER_TEMP/cadence-shipped-stores"
+      - name: Verify shipped-store migrations
+        env:
+          CADENCE_V129_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v129
+          CADENCE_FAILED_UPGRADES_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v129-after-failed-upgrades
+          CADENCE_PR72_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr72
+          CADENCE_PR73_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr73
         run: >-
           xcodebuild test
           -project Cadence.xcodeproj

@@ -19,6 +19,9 @@ final class WorkoutSession {
     var date: Date
     var notes: String
     var isCompleted: Bool
+    /// Nil for open and historical pre-V4 sessions. New banks set the actual
+    /// completion time so duration/density and recovery intervals stay honest.
+    var completedAt: Date?
     /// Stable equipment linkage. `gymName` remains the historical display
     /// label and the fallback for records created before schema v2.
     var gymID: String?
@@ -43,6 +46,7 @@ final class WorkoutSession {
         self.date = date
         self.notes = notes
         self.isCompleted = false
+        self.completedAt = nil
         self.gymID = gymID
         self.gymName = gymName
         self.exercises = []
@@ -75,8 +79,14 @@ final class SessionExercise {
     var sets: [SetEntry]
     // The plan this started from, so edits vs. plan are visible later.
     var plannedWeightLb: Double?
+    /// The theoretical strategy target before the gym inventory resolves it.
+    var targetWeightLb: Double?
     var plannedSets: Int?
     var plannedReps: Int?
+    var plannedDurationSeconds: Int?
+    /// Pre-computed one-tap fallback for the leading work block.
+    var fallbackWeightLb: Double?
+    var prescriptionStyleRaw: String = ""
     var phaseRaw: Int?
     /// "main" / "complementary" / "accessory" when part of a program day; nil otherwise.
     var programRole: String?
@@ -116,6 +126,14 @@ final class SetEntry {
     /// Canonical pounds. Always. kg entry is converted at the keyboard.
     var weightLb: Double
     var reps: Int
+    /// Strategy target → achievable planned load → final performed load.
+    /// Historical V3 sets migrate with nil snapshots and retain their actual
+    /// values; new sessions fill all three before training starts.
+    var targetWeightLb: Double?
+    var plannedWeightLb: Double?
+    var plannedReps: Int?
+    var plannedDurationSeconds: Int?
+    var prescriptionBlockRaw: String = "work"
     var isWarmup: Bool
     /// Empty marks a pre-v2 record. Completed historical sessions migrate as
     /// performed; ambiguous open-session sets migrate as planned.
@@ -157,11 +175,21 @@ final class SetEntry {
         inclinePercent: Double? = nil,
         loadBasis: LoadBasis? = nil,
         implementCount: Int = 0,
-        autoregReason: AutoregReason? = nil
+        autoregReason: AutoregReason? = nil,
+        targetWeightLb: Double? = nil,
+        plannedWeightLb: Double? = nil,
+        plannedReps: Int? = nil,
+        plannedDurationSeconds: Int? = nil,
+        prescriptionBlock: PrescriptionBlockKind = .work
     ) {
         self.order = order
         self.weightLb = weightLb
         self.reps = reps
+        self.targetWeightLb = targetWeightLb
+        self.plannedWeightLb = plannedWeightLb
+        self.plannedReps = plannedReps
+        self.plannedDurationSeconds = plannedDurationSeconds
+        self.prescriptionBlockRaw = prescriptionBlock.rawValue
         self.isWarmup = isWarmup
         self.statusRaw = status.rawValue
         self.isPerSide = isPerSide
@@ -213,6 +241,11 @@ final class SetEntry {
     var autoregReason: AutoregReason? {
         get { autoregReasonRaw.flatMap(AutoregReason.init(rawValue:)) }
         set { autoregReasonRaw = newValue?.rawValue }
+    }
+
+    var prescriptionBlock: PrescriptionBlockKind {
+        get { PrescriptionBlockKind(rawValue: prescriptionBlockRaw) ?? (isWarmup ? .warmup : .work) }
+        set { prescriptionBlockRaw = newValue.rawValue }
     }
 
     var enteredUnit: WeightUnit {

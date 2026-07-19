@@ -62,18 +62,97 @@ public enum TrackMode: String, Codable, Sendable {
 public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
     case automatic
     case wave
+    case offsetWave
     case secondary
     case hypertrophy
     case technique
+    case doubleProgression
 
     public var name: String {
         switch self {
         case .automatic: return "Automatic"
         case .wave: return "Strength wave"
+        case .offsetWave: return "Strength wave — offsets"
         case .secondary: return "Secondary strength"
         case .hypertrophy: return "Hypertrophy"
         case .technique: return "Technique"
+        case .doubleProgression: return "Double progression"
         }
+    }
+}
+
+public enum PrescriptionBlockKind: String, Codable, CaseIterable, Sendable {
+    case warmup
+    case primer
+    case topSingle
+    case work
+    case backoff
+    case conditioning
+}
+
+/// Persistable knobs for a lift slot. Defaults preserve the shipped multiplier
+/// wave; an offset wave and double progression are explicit opt-ins.
+public struct LiftPrescriptionConfiguration: Codable, Hashable, Sendable {
+    public var loadOffsetLb: Double
+    public var peakOffsetLb: Double
+    public var deloadMultiplier: Double
+    public var workingSets: Int
+    public var minimumReps: Int
+    public var maximumReps: Int
+    public var currentReps: Int
+    public var peakSingleEnabled: Bool
+    public var lastPeakSingleLb: Double
+    public var peakSingleIncrementLb: Double
+    public var phasePrimerEnabled: Bool
+
+    public init(
+        loadOffsetLb: Double = 10,
+        peakOffsetLb: Double = 15,
+        deloadMultiplier: Double = 0.775,
+        workingSets: Int = 3,
+        minimumReps: Int = 5,
+        maximumReps: Int = 8,
+        currentReps: Int = 5,
+        peakSingleEnabled: Bool = false,
+        lastPeakSingleLb: Double = 0,
+        peakSingleIncrementLb: Double = 5,
+        phasePrimerEnabled: Bool = true
+    ) {
+        self.loadOffsetLb = loadOffsetLb
+        self.peakOffsetLb = peakOffsetLb
+        self.deloadMultiplier = deloadMultiplier
+        self.workingSets = workingSets
+        self.minimumReps = minimumReps
+        self.maximumReps = maximumReps
+        self.currentReps = currentReps
+        self.peakSingleEnabled = peakSingleEnabled
+        self.lastPeakSingleLb = lastPeakSingleLb
+        self.peakSingleIncrementLb = peakSingleIncrementLb
+        self.phasePrimerEnabled = phasePrimerEnabled
+    }
+}
+
+public struct PrescriptionBlock: Hashable, Sendable {
+    public let kind: PrescriptionBlockKind
+    public let weightLb: Double
+    public let sets: Int
+    public let reps: Int
+
+    public init(kind: PrescriptionBlockKind, weightLb: Double, sets: Int, reps: Int) {
+        self.kind = kind
+        self.weightLb = weightLb
+        self.sets = sets
+        self.reps = reps
+    }
+}
+
+public struct SessionPrescription: Hashable, Sendable {
+    public let mainWork: SessionPlan
+    public let blocks: [PrescriptionBlock]
+
+    public init(mainWork: SessionPlan, blocks: [PrescriptionBlock]) {
+        self.mainWork = mainWork
+        self.blocks = blocks
     }
 }
 
@@ -142,11 +221,12 @@ public enum ProgramEngine {
         movementGroup: String? = nil,
         role: LiftRole = .main,
         focus: TrainingFocus = .strength,
-        prescriptionStyle: PrescriptionStyle = .automatic
+        prescriptionStyle: PrescriptionStyle = .automatic,
+        configuration: LiftPrescriptionConfiguration = .init()
     ) -> SessionPlan {
         let step = loadStep(programRoundingLb: programRoundingLb, exerciseType: exerciseType)
         let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
-        let raw = plan(for: state, roundingLb: step, style: style)
+        let raw = plan(for: state, roundingLb: step, style: style, configuration: configuration)
         guard exerciseType == "dumbbell", raw.weightLb > state.baseWeightLb else { return raw }
         return SessionPlan(
             weightLb: Swift.min(raw.weightLb, state.baseWeightLb + 5),
@@ -179,13 +259,26 @@ public enum ProgramEngine {
     public static func plan(
         for state: CycleState,
         roundingLb: Double = defaultRoundingLb,
-        style: PrescriptionStyle
+        style: PrescriptionStyle,
+        configuration: LiftPrescriptionConfiguration = .init()
     ) -> SessionPlan {
         let phase = state.nextPhase
         let prescription: (sets: Int, reps: Int, multiplier: Double)
         switch style {
         case .automatic, .wave:
             prescription = (phase.sets, phase.reps, phase.multiplier)
+        case .offsetWave:
+            let weight: Double
+            switch phase {
+            case .volume: weight = state.baseWeightLb
+            case .load: weight = state.baseWeightLb + configuration.loadOffsetLb
+            case .peak: weight = state.baseWeightLb + configuration.peakOffsetLb
+            case .deload: weight = state.baseWeightLb * configuration.deloadMultiplier
+            }
+            return SessionPlan(
+                weightLb: Weight.round(weight, to: roundingLb),
+                sets: phase.sets, reps: phase.reps, phase: phase, cycleNumber: state.cycleNumber
+            )
         case .secondary:
             switch phase {
             case .volume: prescription = (3, 5, 1.0)
@@ -207,6 +300,14 @@ public enum ProgramEngine {
             case .peak: prescription = (6, 1, 1.10)
             case .deload: prescription = (3, 2, 0.80)
             }
+        case .doubleProgression:
+            return SessionPlan(
+                weightLb: Weight.round(state.baseWeightLb, to: roundingLb),
+                sets: max(1, configuration.workingSets),
+                reps: min(max(configuration.currentReps, configuration.minimumReps), configuration.maximumReps),
+                phase: phase,
+                cycleNumber: state.cycleNumber
+            )
         }
         return SessionPlan(
             weightLb: Weight.round(state.baseWeightLb * prescription.multiplier, to: roundingLb),
@@ -215,6 +316,67 @@ public enum ProgramEngine {
             phase: phase,
             cycleNumber: state.cycleNumber
         )
+    }
+
+    /// Full session prescription for slots that need more than one uniform
+    /// work block. Top singles are controlled, optional peak work; primers are
+    /// warm-up observations and never count toward the main work grade.
+    public static func sessionPrescription(
+        for state: CycleState,
+        programRoundingLb: Double,
+        exerciseType: String?,
+        movementGroup: String? = nil,
+        role: LiftRole = .main,
+        focus: TrainingFocus = .strength,
+        prescriptionStyle: PrescriptionStyle = .automatic,
+        configuration: LiftPrescriptionConfiguration = .init(),
+        estimatedMaxLb: Double = 0
+    ) -> SessionPrescription {
+        let step = loadStep(programRoundingLb: programRoundingLb, exerciseType: exerciseType)
+        let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
+        let work = programPlan(
+            for: state, programRoundingLb: programRoundingLb, exerciseType: exerciseType,
+            movementGroup: movementGroup, role: role, focus: focus,
+            prescriptionStyle: style, configuration: configuration
+        )
+        var blocks: [PrescriptionBlock] = []
+        if configuration.phasePrimerEnabled, style != .doubleProgression,
+           let primer = primerWeight(
+            baseWeightLb: state.baseWeightLb, phase: state.nextPhase, style: style,
+            roundingLb: step, configuration: configuration
+           ), primer > 0, primer < work.weightLb {
+            blocks.append(PrescriptionBlock(kind: .primer, weightLb: primer, sets: 1, reps: 1))
+        }
+        if configuration.peakSingleEnabled, state.nextPhase == .peak,
+           style != .technique, style != .doubleProgression {
+            let seed = configuration.lastPeakSingleLb > 0
+                ? configuration.lastPeakSingleLb + configuration.peakSingleIncrementLb
+                : estimatedMaxLb * 0.90
+            let target = Weight.round(seed, to: step)
+            if target > work.weightLb {
+                blocks.append(PrescriptionBlock(kind: .topSingle, weightLb: target, sets: 1, reps: 1))
+            }
+        }
+        blocks.append(PrescriptionBlock(kind: .work, weightLb: work.weightLb, sets: work.sets, reps: work.reps))
+        return SessionPrescription(mainWork: work, blocks: blocks)
+    }
+
+    public static func primerWeight(
+        baseWeightLb: Double,
+        phase: CyclePhase,
+        style: PrescriptionStyle,
+        roundingLb: Double,
+        configuration: LiftPrescriptionConfiguration = .init()
+    ) -> Double? {
+        switch phase {
+        case .volume, .deload: return nil
+        case .load: return Weight.round(baseWeightLb, to: roundingLb)
+        case .peak:
+            if style == .offsetWave {
+                return Weight.round(baseWeightLb + configuration.loadOffsetLb, to: roundingLb)
+            }
+            return Weight.round(baseWeightLb * CyclePhase.load.multiplier, to: roundingLb)
+        }
     }
 
     /// Next suggested session for a cycle-tracked lift.
@@ -249,9 +411,11 @@ public enum ProgramEngine {
     public static func droppedLoad(
         from currentLb: Double,
         roundingLb: Double = defaultRoundingLb,
-        barLb: Double = 45
+        barLb: Double = 45,
+        dropIncrementLb: Double? = nil
     ) -> Double {
-        let dropped = Weight.round(currentLb * 0.93, to: roundingLb)
+        let dropped = dropIncrementLb.flatMap { $0 > 0 ? currentLb - $0 : nil }
+            ?? Weight.round(currentLb * 0.93, to: roundingLb)
         // Guarantee an actual drop even when rounding lands on the same number.
         let result = dropped >= currentLb ? currentLb - roundingLb : dropped
         return Swift.max(result, barLb)
@@ -265,11 +429,13 @@ public enum ProgramEngine {
     public static func dropLoadPlan(
         sets: [(weightLb: Double, isWarmup: Bool, isFlagged: Bool)],
         roundingLb: Double = defaultRoundingLb,
-        barLb: Double = 45
+        barLb: Double = 45,
+        dropIncrementLb: Double? = nil
     ) -> [(index: Int, weightLb: Double)] {
         sets.enumerated().compactMap { i, s in
             guard !s.isWarmup, !s.isFlagged else { return nil }
-            return (index: i, weightLb: droppedLoad(from: s.weightLb, roundingLb: roundingLb, barLb: barLb))
+            return (index: i, weightLb: droppedLoad(from: s.weightLb, roundingLb: roundingLb,
+                                                    barLb: barLb, dropIncrementLb: dropIncrementLb))
         }
     }
 }
@@ -281,4 +447,5 @@ public enum AutoregReason: String, Codable, CaseIterable, Sendable {
     case jointSignal = "joint signal"
     case heat
     case fatigue
+    case notThere = "not there"
 }

@@ -109,11 +109,19 @@ public struct AccessoryPerformance: Hashable, Sendable {
     public var completedSets: Int
     public var minRepsAchieved: Int        // lowest rep count across the working sets
     public var anyStoppedEarly: Bool
+    public var performedAtPlannedLoad: Bool
+    public var grindyOrWobbleSets: Int
+    public var bodyFlagSets: Int
 
-    public init(completedSets: Int, minRepsAchieved: Int, anyStoppedEarly: Bool) {
+    public init(completedSets: Int, minRepsAchieved: Int, anyStoppedEarly: Bool,
+                performedAtPlannedLoad: Bool = true, grindyOrWobbleSets: Int = 0,
+                bodyFlagSets: Int = 0) {
         self.completedSets = completedSets
         self.minRepsAchieved = minRepsAchieved
         self.anyStoppedEarly = anyStoppedEarly
+        self.performedAtPlannedLoad = performedAtPlannedLoad
+        self.grindyOrWobbleSets = grindyOrWobbleSets
+        self.bodyFlagSets = bodyFlagSets
     }
 }
 
@@ -135,6 +143,15 @@ public enum ProgramProgression {
             || perf.anyBelowPlanLoad { return .fail }
         if perf.grindyOrWobbleSets > qualityFlagTolerance { return .hold }
         return .success
+    }
+
+    /// A standalone lift track advances once per banked exposure only when
+    /// every occurrence of that lift met its original prescription. This keeps
+    /// session-local rep/load edits as performed history without letting a
+    /// lighter or incomplete workout silently raise the next goal. Multiple
+    /// occurrences are one lift exposure, not multiple progression events.
+    public static func earnsStandaloneTrackAdvance(_ performances: [CycleLiftPerformance]) -> Bool {
+        !performances.isEmpty && performances.allSatisfy { gradeCycle($0) == .success }
     }
 
     /// Whether a working set's actual load fell below its prescription. Reps at
@@ -262,7 +279,9 @@ public enum ProgramProgression {
     /// that wasn't earned.
     public static func advanceAccessory(_ state: AccessoryState, perf: AccessoryPerformance) -> AccessoryState {
         var next = state
-        let hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= state.currentReps && !perf.anyStoppedEarly
+        let hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= state.currentReps
+            && !perf.anyStoppedEarly && perf.performedAtPlannedLoad
+            && perf.grindyOrWobbleSets <= qualityFlagTolerance && perf.bodyFlagSets == 0
         let weighted = state.incrementLb > 0
         if !hitAll {
             next.stallCount = state.stallCount + 1

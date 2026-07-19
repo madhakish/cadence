@@ -52,7 +52,11 @@ final class Gym {
 
     /// Plates currently available at this gym, for the solver.
     var availablePlates: [Plate] {
-        plateToggles.filter(\.enabled).map(\.plate)
+        // V1–V3 stores can legitimately contain an empty list because plate
+        // inventory was introduced after the gym row. Treat that as an
+        // uninitialised legacy rack. A nonempty, all-disabled list remains an
+        // intentional bar-only configuration.
+        plateToggles.isEmpty ? Plate.allStandard : plateToggles.filter(\.enabled).map(\.plate)
     }
 
     var loadingPolicy: LoadingPolicy {

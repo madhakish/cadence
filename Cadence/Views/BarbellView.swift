@@ -11,6 +11,9 @@ struct BarbellView: View {
     let unit: WeightUnit
     let bar: Bar
     let gym: Gym?
+    /// The unsnapped programming target. When it differs from `weightLb`, the
+    /// view explains the selected rack load and both directional alternatives.
+    var targetWeightLb: Double? = nil
     /// Draw THIS loadout instead of re-solving — the plate calculator's hero
     /// must match its own answer (which may span both unit systems), and
     /// reverse mode must draw exactly what the user says is on the bar.
@@ -32,10 +35,12 @@ struct BarbellView: View {
     private static let sleeve: CGFloat = 18
 
     /// Every enabled denomination at this gym. `unit` is only the fallback
-    /// rack when no gym inventory exists; a configured mixed rack must draw
-    /// the same achieved load the prescription solver stored.
+    /// rack when no gym exists; a configured mixed rack must draw the same
+    /// achieved load the prescription solver stored. `Gym.availablePlates`
+    /// also repairs legacy empty inventories without erasing an intentional
+    /// nonempty/all-disabled bar-only rack.
     private var stationPlates: [Plate] {
-        guard let gym, !gym.availablePlates.isEmpty else {
+        guard let gym else {
             return unit == .kg ? Plate.standardKg : Plate.standardLb
         }
         return gym.availablePlates
@@ -48,6 +53,15 @@ struct BarbellView: View {
                                policy: gym?.loadingPolicy ?? .closest)
         let plates = solution.loadout.perSide.flatMap { Array(repeating: $0.plate, count: $0.count) }
         let width = max(46, Self.sleeve + 6 + CGFloat(plates.count) * (Self.plateW + Self.gap) + 4)
+        let theoreticalTarget = targetWeightLb ?? weightLb
+        let alternatives = PlateMath.prescriptionOptions(
+            targetLb: theoreticalTarget, bar: bar, plates: stationPlates,
+            collarLb: gym?.collarWeightLb ?? 0, policy: gym?.loadingPolicy ?? .closest
+        )
+        let shown: (Double) -> String = { lb in
+            let value = unit == .kg ? Weight.kg(fromLb: lb) : lb
+            return "\(Weight.trim(value)) \(unit.rawValue)"
+        }
 
         VStack(alignment: .leading, spacing: 2) {
             Canvas { ctx, _ in
@@ -83,6 +97,21 @@ struct BarbellView: View {
                 Text("closest available · policy not exact")
                     .font(.caption2)
                     .foregroundStyle(Theme.warn)
+            }
+            if abs(theoreticalTarget - solution.loadout.totalLb) > 0.01 {
+                Text("Target \(shown(theoreticalTarget)) · load \(shown(solution.loadout.totalLb))")
+                    .font(.caption2.bold())
+                    .foregroundStyle(Theme.warn)
+                if let below = alternatives.below {
+                    Text("Below \(shown(below.loadout.totalLb)) · \(below.loadout.perSideLabel)/side")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                if let above = alternatives.above,
+                   alternatives.below == nil
+                    || abs(above.loadout.totalLb - (alternatives.below?.loadout.totalLb ?? 0)) > 0.01 {
+                    Text("Above \(shown(above.loadout.totalLb)) · \(above.loadout.perSideLabel)/side")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
             }
         }
         .accessibilityLabel("Barbell: \(solution.loadout.perSideLabel) per side on \(bar.label)\(solution.loadout.collarLb > 0 ? ", including collars" : "")")

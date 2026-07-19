@@ -52,9 +52,15 @@ enum ProgramSession {
         let session = WorkoutSession(gymID: defaultGym?.id, gymName: defaultGym?.name)
         let selectedBar = defaultGym?.defaultBar ?? .bar45lb
         let barLb = selectedBar.lb
-        func neat(_ weightLb: Double, _ exercise: Exercise?, isMain: Bool) -> Double {
+        let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
+        let accessoryPercent = try temporaryAccessoryPercent(
+            program: program, context: context
+        )
+        func neat(_ weightLb: Double, _ exercise: Exercise?, isMain: Bool,
+                  phase prescriptionPhase: CyclePhase? = nil) -> Double {
             achievableWeight(weightLb, exercise: exercise, isMain: isMain,
-                             gym: defaultGym, bar: selectedBar, stepLb: program.roundingLb)
+                             gym: defaultGym, bar: selectedBar, stepLb: program.roundingLb,
+                             phase: prescriptionPhase)
         }
         session.programID = program.id
         session.programName = program.name
@@ -64,7 +70,6 @@ enum ProgramSession {
         session.programPlanNames = dayNames   // the plan this session is built from
         context.insert(session)
 
-        let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         var order = 0
         var preparedMovementGroups: Set<String> = []
 
@@ -72,22 +77,33 @@ enum ProgramSession {
             let exercise = try findExercise(named: lift.exerciseName, context: context)
             let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
                                                   exerciseType: exercise.typeRaw)
-            let plan = ProgramEngine.programPlan(
+            let configuration = lift.prescriptionConfiguration(movementGroup: exercise.movementGroup)
+            let prescription = ProgramEngine.sessionPrescription(
                 for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
                 programRoundingLb: program.roundingLb,
                 exerciseType: exercise.typeRaw,
                 movementGroup: exercise.movementGroup,
                 role: lift.role,
                 focus: program.focus,
-                prescriptionStyle: lift.prescription
+                prescriptionStyle: lift.prescription,
+                configuration: configuration,
+                estimatedMaxLb: lift.estimatedMaxLb
             )
-            let weightLb = neat(plan.weightLb, exercise, isMain: lift.role.rawValue == "main")
+            let plan = prescription.mainWork
+            let weightLb = neat(plan.weightLb, exercise, isMain: lift.role.rawValue == "main", phase: phase)
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = lift.role.rawValue
             entry.programSlotID = lift.id
             entry.plannedWeightLb = weightLb
+            entry.targetWeightLb = plan.weightLb
             entry.plannedSets = plan.sets
             entry.plannedReps = plan.reps
+            entry.prescriptionStyleRaw = lift.prescription.rawValue
+            let automaticDrop = (exercise.movementGroup == "squat" || exercise.movementGroup == "hinge") ? 10.0 : 5.0
+            entry.fallbackWeightLb = fallbackWeight(
+                from: weightLb, exercise: exercise, gym: defaultGym, bar: selectedBar,
+                roundingLb: loadStep, dropIncrementLb: lift.dropIncrementLb > 0 ? lift.dropIncrementLb : automaticDrop
+            )
             entry.phase = phase
             entry.session = session
             context.insert(entry)
@@ -98,27 +114,47 @@ enum ProgramSession {
                 guard lift.warmupPolicy == .automatic else { return lift.warmupPolicy }
                 return preparedMovementGroups.contains(exercise.movementGroup) ? .short : .full
             }()
+            let blockLoads = prescription.blocks.map {
+                neat($0.weightLb, exercise, isMain: lift.role.rawValue == "main", phase: phase)
+            }
+            let topPreparationLoad = blockLoads.max() ?? weightLb
             if exercise.type == .barbell && resolvedWarmup != .none {
-                let fullRamp = WarmupRamp.ramp(workingLb: weightLb, barLb: barLb, roundingLb: program.roundingLb)
-                let achievedRamp = achievableWarmups(fullRamp, workingLb: weightLb,
+                let fullRamp = WarmupRamp.ramp(workingLb: topPreparationLoad, barLb: barLb, roundingLb: program.roundingLb)
+                let achievedRamp = achievableWarmups(fullRamp, workingLb: topPreparationLoad,
                                                      gym: defaultGym, bar: selectedBar)
                 let ramp = resolvedWarmup == .short ? Array(achievedRamp.suffix(2)) : achievedRamp
                 for wu in ramp {
-                    insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true, perSide: false, enteredUnit: entryUnit, context: context)
+                    insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true,
+                              perSide: false, enteredUnit: entryUnit, targetWeight: wu.weightLb,
+                              plannedWeight: wu.weightLb, plannedReps: wu.reps,
+                              block: .warmup, context: context)
                     so += 1
                 }
             } else if exercise.type == .dumbbell && resolvedWarmup != .none {
-                let fullRamp = WarmupRamp.dumbbellRamp(workingLb: weightLb, roundingLb: loadStep)
+                let fullRamp = WarmupRamp.dumbbellRamp(workingLb: topPreparationLoad, roundingLb: loadStep)
                 let ramp = resolvedWarmup == .short ? Array(fullRamp.suffix(2)) : fullRamp
                 for wu in ramp {
                     insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true,
-                              perSide: exercise.isUnilateral, enteredUnit: entryUnit, context: context)
+                              perSide: exercise.isUnilateral, enteredUnit: entryUnit,
+                              targetWeight: wu.weightLb, plannedWeight: wu.weightLb, plannedReps: wu.reps,
+                              block: .warmup, context: context)
                     so += 1
                 }
             }
-            for _ in 0..<plan.sets {
-                insertSet(entry, order: so, weight: weightLb, reps: plan.reps, warmup: false, perSide: exercise.isUnilateral, enteredUnit: entryUnit, context: context)
-                so += 1
+            for (blockIndex, block) in prescription.blocks.enumerated() {
+                let achieved = blockLoads[blockIndex]
+                let warmupBlock = block.kind == .primer
+                // A standard ramp may already end on the exact primer load.
+                // Keep only one observable set at that load.
+                if warmupBlock, entry.orderedSets.last?.weightLb == achieved { continue }
+                for _ in 0..<block.sets {
+                    insertSet(entry, order: so, weight: achieved, reps: block.reps,
+                              warmup: warmupBlock, perSide: exercise.isUnilateral,
+                              enteredUnit: entryUnit, targetWeight: block.weightLb,
+                              plannedWeight: achieved, plannedReps: block.reps,
+                              block: block.kind, context: context)
+                    so += 1
+                }
             }
             if !exercise.movementGroup.isEmpty { preparedMovementGroups.insert(exercise.movementGroup) }
             order += 1
@@ -127,25 +163,50 @@ enum ProgramSession {
         for acc in day.orderedAccessories {
             let exercise = try findExercise(named: acc.exerciseName, context: context)
             let weightLb = neat(acc.weightLb, exercise, isMain: false)
-            let isTimed = exercise.type == .timed
+            let isTimed = exercise.type == .timed || exercise.type == .conditioning
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = "accessory"
             entry.programSlotID = acc.id
             entry.plannedWeightLb = weightLb
-            entry.plannedSets = acc.sets
+            entry.targetWeightLb = acc.weightLb
+            let effectiveSets = acc.capacityManaged
+                ? max(1, Int((Double(acc.sets) * Double(accessoryPercent) / 100).rounded()))
+                : acc.sets
+            entry.plannedSets = effectiveSets
             entry.plannedReps = isTimed ? 1 : acc.currentReps
+            entry.plannedDurationSeconds = isTimed ? acc.targetSeconds : nil
             entry.session = session
             context.insert(entry)
             session.exercises.append(entry)
-            for i in 0..<acc.sets {
+            for i in 0..<effectiveSets {
                 insertSet(entry, order: i, weight: isTimed ? 0 : weightLb, reps: isTimed ? 1 : acc.currentReps,
                           warmup: false, perSide: exercise.isUnilateral, enteredUnit: entryUnit,
-                          durationSeconds: isTimed ? acc.targetSeconds : nil, context: context)
+                          durationSeconds: isTimed ? acc.targetSeconds : nil,
+                          targetWeight: isTimed ? 0 : acc.weightLb, plannedWeight: isTimed ? 0 : weightLb,
+                          plannedReps: isTimed ? 1 : acc.currentReps,
+                          plannedDurationSeconds: isTimed ? acc.targetSeconds : nil,
+                          block: exercise.type == .conditioning ? .conditioning : .work,
+                          context: context)
             }
             order += 1
         }
 
         return session
+    }
+
+    private static func temporaryAccessoryPercent(
+        program: Program, context: ModelContext
+    ) throws -> Int {
+        let decisions = try context.fetch(FetchDescriptor<CoachingDecision>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        ))
+        let value = decisions.first { decision in
+            guard decision.programID == program.id, decision.action == .accepted,
+                  let override = decision.temporaryAccessoryOverride else { return false }
+            return override.cycleNumber == program.cycleNumber
+                && override.rotation == program.currentWeek
+        }?.temporaryAccessoryOverride?.percent
+        return value ?? 100
     }
 
     /// Secondary/accessory barbell prescriptions snap to a neat bar-loadable
@@ -159,17 +220,19 @@ enum ProgramSession {
     /// achieved total is what the logger stores, so the plate picture, logged
     /// set, history, and next progression all describe the same load.
     static func achievableWeight(_ weightLb: Double, exercise: Exercise?, isMain: Bool,
-                                 gym: Gym?, bar: Bar, stepLb: Double) -> Double {
+                                 gym: Gym?, bar: Bar, stepLb: Double,
+                                 phase: CyclePhase? = nil) -> Double {
         guard exercise?.type == .barbell, weightLb > 0 else { return weightLb }
         let rounded = neatWeight(weightLb, isBarbell: true, isMain: isMain,
                                  barLb: bar.lb, stepLb: stepLb)
-        let solution = PlateMath.solve(
+        let options = PlateMath.prescriptionOptions(
             targetLb: rounded, bar: bar,
             plates: gym?.availablePlates ?? Plate.allStandard,
             collarLb: gym?.collarWeightLb ?? 0,
-            policy: gym?.loadingPolicy ?? .closest
+            policy: gym?.loadingPolicy ?? .closest,
+            preferOverOnTie: phase == .volume
         )
-        return solution.loadout.totalLb
+        return options.selected.loadout.totalLb
     }
 
     /// Resolve every theoretical warmup against the same rack, collars, and
@@ -192,13 +255,34 @@ enum ProgramSession {
         }
     }
 
+    static func fallbackWeight(from currentLb: Double, exercise: Exercise?, gym: Gym?, bar: Bar,
+                               roundingLb: Double, dropIncrementLb: Double) -> Double {
+        let target = ProgramEngine.droppedLoad(
+            from: currentLb, roundingLb: roundingLb, barLb: exercise?.type == .barbell ? bar.lb : 0,
+            dropIncrementLb: dropIncrementLb
+        )
+        guard exercise?.type == .barbell else { return target }
+        return PlateMath.solve(
+            targetLb: target, bar: bar,
+            plates: gym?.availablePlates ?? Plate.allStandard,
+            collarLb: gym?.collarWeightLb ?? 0,
+            policy: .under
+        ).loadout.totalLb
+    }
+
     private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool,
                                   perSide: Bool, enteredUnit: WeightUnit, durationSeconds: Int? = nil,
+                                  targetWeight: Double? = nil, plannedWeight: Double? = nil,
+                                  plannedReps: Int? = nil, plannedDurationSeconds: Int? = nil,
+                                  block: PrescriptionBlockKind = .work,
                                   context: ModelContext) {
         let set = SetEntry(order: order, weightLb: weight, reps: reps, isWarmup: warmup, isPerSide: perSide,
                            enteredUnit: enteredUnit, durationSeconds: durationSeconds,
                            loadBasis: entry.exercise?.loadBasis,
-                           implementCount: entry.exercise?.resolvedImplementCount ?? 1)
+                           implementCount: entry.exercise?.resolvedImplementCount ?? 1,
+                           targetWeightLb: targetWeight, plannedWeightLb: plannedWeight,
+                           plannedReps: plannedReps, plannedDurationSeconds: plannedDurationSeconds,
+                           prescriptionBlock: block)
         set.sessionExercise = entry
         context.insert(set)
         entry.sets.append(set)

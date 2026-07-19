@@ -15,7 +15,9 @@ export async function openPlateCalculator() {
   const counts = {}; // plateId -> count, for reverse mode
 
   const availablePlates = () => {
-    const list = gym && gym.plateToggles ? gym.plateToggles.filter((t) => t.enabled).map((t) => ({ value: t.value, unit: t.unit })) : C.ALL_STANDARD;
+    const list = gym && Array.isArray(gym.plateToggles) && gym.plateToggles.length
+      ? gym.plateToggles.filter((t) => t.enabled).map((t) => ({ value: t.value, unit: t.unit }))
+      : C.ALL_STANDARD;
     return [...list].sort((a, b) => C.plateLb(b) - C.plateLb(a));
   };
 

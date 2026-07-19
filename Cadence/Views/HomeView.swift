@@ -20,9 +20,11 @@ struct HomeView: View {
     @Query private var tracks: [LiftTrack]
     @Query private var programs: [Program]
     @Query private var exercises: [Exercise]
+    @Query(sort: \CoachingDecision.date, order: .reverse) private var coachingDecisions: [CoachingDecision]
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
     @Query private var proteinEntries: [ProteinEntry]
+    @Query private var checkIns: [CheckIn]
     @Query(filter: #Predicate<WorkoutSession> { !$0.isCompleted })
     private var openSessions: [WorkoutSession]
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date)
@@ -32,12 +34,20 @@ struct HomeView: View {
     @State private var showGymCard = false
     @State private var previewDay: ProgramDay?
     @State private var discardSession: WorkoutSession?
+    @State private var coachingMessage: String?
 
     private var settings: AppSettings? { settingsList.first }
     private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
     private var entryUnit: WeightUnit { unitDisplay.primaryUnit }
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
     private var activeProgram: Program? { programs.first { $0.isActive } ?? programs.first }
+    private var coachingReport: CoachingReport? {
+        guard let program = activeProgram, program.coachEnabled else { return nil }
+        return CoachingService.report(
+            program: program, sessions: completedSessions,
+            exercises: exercises, checkIns: checkIns
+        )
+    }
     private var ownedLiftNames: Set<String> {
         guard let p = activeProgram else { return [] }
         return Set(p.days.flatMap { $0.lifts.map(\.exerciseName) })
@@ -47,22 +57,29 @@ struct HomeView: View {
         program.orderedDays.first { $0.order == program.nextDayIndex } ?? program.orderedDays.first
     }
 
-    private func programPlan(_ program: Program, _ lift: ProgramLift) -> SessionPlan {
+    private func rawProgramPlan(_ program: Program, _ lift: ProgramLift) -> SessionPlan {
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         let exercise = exercises.first { $0.name == lift.exerciseName }
-        let plan = ProgramEngine.programPlan(
+        return ProgramEngine.programPlan(
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
             programRoundingLb: program.roundingLb,
             exerciseType: exercise?.typeRaw,
             movementGroup: exercise?.movementGroup,
             role: lift.role,
             focus: program.focus,
-            prescriptionStyle: lift.prescription)
+            prescriptionStyle: lift.prescription,
+            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""))
+    }
+
+    private func programPlan(_ program: Program, _ lift: ProgramLift) -> SessionPlan {
+        let plan = rawProgramPlan(program, lift)
+        let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
+        let exercise = exercises.first { $0.name == lift.exerciseName }
         // Preview the same snapped weight the session will store (secondary barbell lifts).
         let weightLb = ProgramSession.achievableWeight(
             plan.weightLb, exercise: exercise, isMain: lift.role.rawValue == "main",
             gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb,
-            stepLb: program.roundingLb)
+            stepLb: program.roundingLb, phase: phase)
         return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps, phase: plan.phase, cycleNumber: plan.cycleNumber)
     }
 
@@ -71,7 +88,8 @@ struct HomeView: View {
         let exercise = exercises.first { $0.name == track.exerciseName }
         let weightLb = ProgramSession.achievableWeight(
             plan.weightLb, exercise: exercise, isMain: true, gym: defaultGym,
-            bar: defaultGym?.defaultBar ?? .bar45lb, stepLb: track.roundingLb)
+            bar: defaultGym?.defaultBar ?? .bar45lb, stepLb: track.roundingLb,
+            phase: plan.phase)
         return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps,
                            phase: plan.phase, cycleNumber: plan.cycleNumber)
     }
@@ -145,6 +163,54 @@ struct HomeView: View {
                     }
                 }
 
+                if let program = activeProgram, let report = coachingReport {
+                    Section("Coach · per rotation") {
+                        HStack(spacing: 10) {
+                            Circle()
+                                .fill(readinessColor(report.currentReadiness))
+                                .frame(width: 11, height: 11)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(report.currentReadiness.name).font(.headline)
+                                Text(readinessSummary(report))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if report.greenRotationStreak > 0 {
+                                Text("\(report.greenRotationStreak) green")
+                                    .font(.caption.bold()).foregroundStyle(Theme.accent)
+                            }
+                        }
+
+                        if let latest = report.rotations.last {
+                            Text("\(latest.completedWorkingSets)/\(latest.plannedWorkingSets) work sets · \(Int(latest.conditioningMinutes.rounded())) conditioning min")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        ForEach(visibleRecommendations(report, program: program).prefix(3)) { recommendation in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(recommendation.title).font(.subheadline.bold())
+                                Text(recommendation.explanation)
+                                    .font(.caption).foregroundStyle(.secondary)
+                                HStack {
+                                    Button("Apply") {
+                                        apply(recommendation, report: report, program: program)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    Button("Not now") {
+                                        deferRecommendation(recommendation, report: report, program: program)
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                            .padding(.vertical, 3)
+                        }
+                        if let coachingMessage {
+                            Text(coachingMessage).font(.caption).foregroundStyle(Theme.accent)
+                        }
+                    }
+                }
+
                 if let program = activeProgram, let day = nextDay(program) {
                     Section("\(program.name) · Cycle \(program.cycleNumber)") {
                         // Tapping the day opens the full preview — browse the
@@ -166,6 +232,7 @@ struct HomeView: View {
                         }
                         .buttonStyle(.plain)
                         ForEach(day.orderedLifts) { lift in
+                            let target = rawProgramPlan(program, lift)
                             let plan = programPlan(program, lift)
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(alignment: .firstTextBaseline) {
@@ -189,7 +256,8 @@ struct HomeView: View {
                                     let type = exercises.first(where: { $0.name == lift.exerciseName })?.type
                                     if type == .barbell {
                                         BarbellView(weightLb: plan.weightLb, unit: entryUnit,
-                                                    bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym)
+                                                    bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym,
+                                                    targetWeightLb: target.weightLb)
                                     } else if type == .dumbbell {
                                         DumbbellView(weightLb: plan.weightLb, unit: entryUnit)
                                     }
@@ -303,6 +371,56 @@ struct HomeView: View {
         }
     }
 
+    private func visibleRecommendations(_ report: CoachingReport, program: Program) -> [CoachingRecommendation] {
+        let handled = Set(coachingDecisions.filter { $0.programID == program.id }.map(\.recommendationID))
+        return report.recommendations.filter { !handled.contains($0.id) }
+    }
+
+    private func readinessColor(_ state: ReadinessState) -> Color {
+        switch state {
+        case .green: return .green
+        case .yellow: return .yellow
+        case .red: return .red
+        case .unknown: return .secondary
+        }
+    }
+
+    private func readinessSummary(_ report: CoachingReport) -> String {
+        guard let latest = report.rotations.last else {
+            return "Bank program days to establish an output baseline."
+        }
+        return latest.reasons.first ?? "Readiness is computed from completed work and next-exposure output."
+    }
+
+    private func apply(_ recommendation: CoachingRecommendation, report: CoachingReport, program: Program) {
+        do {
+            coachingMessage = try CoachingService.accept(
+                recommendation,
+                for: program,
+                exercises: exercises,
+                evidence: report.rotations.last?.reasons ?? [],
+                context: context
+            )
+        } catch {
+            coachingMessage = error.localizedDescription
+        }
+    }
+
+    private func deferRecommendation(_ recommendation: CoachingRecommendation, report: CoachingReport, program: Program) {
+        do {
+            try CoachingService.record(
+                .deferred,
+                recommendation: recommendation,
+                program: program,
+                evidence: report.rotations.last?.reasons ?? [],
+                context: context
+            )
+            coachingMessage = "Deferred. The program was not changed."
+        } catch {
+            coachingMessage = error.localizedDescription
+        }
+    }
+
     private func openSessionLabel(_ session: WorkoutSession) -> String {
         let names = session.orderedExercises.compactMap { $0.exercise?.name }
         let workout = names.isEmpty ? "Blank session" : names.prefix(2).joined(separator: " · ")
@@ -346,6 +464,7 @@ struct HomeView: View {
         let entry = SessionExercise(order: 0, exercise: exercise)
         entry.session = session
         let plan = trackPlan(track)
+        entry.targetWeightLb = track.suggestion.weightLb
         entry.plannedWeightLb = plan.weightLb
         entry.plannedSets = plan.sets
         entry.plannedReps = plan.reps
@@ -366,7 +485,28 @@ struct HomeView: View {
             ) {
                 let set = SetEntry(order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps,
                                    isWarmup: true, enteredUnit: entryUnit,
-                                   loadBasis: exercise.loadBasis, implementCount: exercise.resolvedImplementCount)
+                                   loadBasis: exercise.loadBasis, implementCount: exercise.resolvedImplementCount,
+                                   targetWeightLb: warmup.weightLb, plannedWeightLb: warmup.weightLb,
+                                   plannedReps: warmup.reps, prescriptionBlock: .warmup)
+                set.sessionExercise = entry
+                context.insert(set)
+                entry.sets.append(set)
+            }
+        } else if exercise.type == .dumbbell {
+            for warmup in WarmupRamp.dumbbellRamp(
+                workingLb: plan.weightLb,
+                roundingLb: ProgramEngine.loadStep(
+                    programRoundingLb: track.roundingLb,
+                    exerciseType: exercise.typeRaw
+                )
+            ) {
+                let set = SetEntry(
+                    order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps,
+                    isWarmup: true, isPerSide: exercise.isUnilateral, enteredUnit: entryUnit,
+                    loadBasis: exercise.loadBasis, implementCount: exercise.resolvedImplementCount,
+                    targetWeightLb: warmup.weightLb, plannedWeightLb: warmup.weightLb,
+                    plannedReps: warmup.reps, prescriptionBlock: .warmup
+                )
                 set.sessionExercise = entry
                 context.insert(set)
                 entry.sets.append(set)
@@ -375,7 +515,10 @@ struct HomeView: View {
         for _ in 0..<plan.sets {
             let set = SetEntry(order: entry.sets.count, weightLb: plan.weightLb, reps: plan.reps,
                                enteredUnit: entryUnit, loadBasis: exercise.loadBasis,
-                               implementCount: exercise.resolvedImplementCount)
+                               implementCount: exercise.resolvedImplementCount,
+                               targetWeightLb: track.suggestion.weightLb,
+                               plannedWeightLb: plan.weightLb, plannedReps: plan.reps,
+                               prescriptionBlock: .work)
             set.sessionExercise = entry
             context.insert(set)
             entry.sets.append(set)

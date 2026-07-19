@@ -41,6 +41,9 @@ removes them too.
   the bundle are replaced (an old backup without `programs` leaves your
   programs alone), and a malformed file aborts without changing anything.
   Preflight reports the invalid field before storage is touched.
+- Version-3 backups keep programmed targets and final performed weights/reps as
+  separate values, plus movement taxonomy, coaching decisions, conditioning
+  prescriptions, and user-defined exercise re-entry gates.
 - Mid-cycle program state survives the round trip — pending peak
   results apply at the next rollover and cycle-scoped swaps still revert
   on schedule, whichever platform finishes the cycle.

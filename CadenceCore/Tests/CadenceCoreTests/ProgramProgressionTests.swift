@@ -36,6 +36,16 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(P.gradeCycle(p), .fail)
     }
 
+    func testStandaloneTrackAdvancesOnceOnlyFromActualPrescriptionSuccess() {
+        let clean = cleanPerf()
+        var adjusted = clean
+        adjusted.anyBelowPlanLoad = true
+        XCTAssertTrue(P.earnsStandaloneTrackAdvance([clean]))
+        XCTAssertTrue(P.earnsStandaloneTrackAdvance([clean, clean]), "duplicate sections form one successful exposure")
+        XCTAssertFalse(P.earnsStandaloneTrackAdvance([clean, adjusted]), "one adjusted occurrence holds the exposure")
+        XCTAssertFalse(P.earnsStandaloneTrackAdvance([]), "no performed work never advances")
+    }
+
     func testBelowPlanLoadTolerance() {
         // Met within half a rounding step; a full step down is a drop (issue 18).
         XCTAssertFalse(P.belowPlanLoad(actualLb: 175, plannedLb: 175, roundingLb: 5))
@@ -169,5 +179,26 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(a.weightLb, 0, accuracy: 1e-9)
         XCTAssertEqual(a.currentReps, 13)
         XCTAssertEqual(a.stallCount, 0)
+    }
+
+    func testAccessoryDoesNotAdvanceFromAdjustedLowerLoadOrPoorQuality() {
+        let state = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 10,
+                                   weightLb: 55, incrementLb: 5)
+        let adjusted = P.advanceAccessory(
+            state,
+            perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 10,
+                                       anyStoppedEarly: false, performedAtPlannedLoad: false)
+        )
+        XCTAssertEqual(adjusted.currentReps, 10)
+        XCTAssertEqual(adjusted.weightLb, 55)
+        XCTAssertEqual(adjusted.stallCount, 1)
+
+        let poorQuality = P.advanceAccessory(
+            state,
+            perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 10,
+                                       anyStoppedEarly: false, grindyOrWobbleSets: 2)
+        )
+        XCTAssertEqual(poorQuality.currentReps, 10)
+        XCTAssertEqual(poorQuality.stallCount, 1)
     }
 }

@@ -153,6 +153,15 @@ ok(directional.totalLb >= 133 && directional.satisfiesPolicy, "never-under polic
 directional = C.solve(50, C.BARS.bar45lb, [{ value: 10, unit: "lb" }], 10, 0, "over");
 eq(directional.totalLb, 65, "never-under searches past the unrestricted closest load");
 ok(directional.satisfiesPolicy, "distant never-under candidate satisfies policy");
+const tieRack = [{ value: 45, unit: "lb" }, { value: 25, unit: "lb" }, { value: 5, unit: "lb" }];
+let options = C.prescriptionPlateOptions(200, C.BARS.bar45lb, tieRack, 10, 0, "closest", true);
+eq(options.selected.totalLb, 205, "volume prescription tie selects heavier load");
+eq(options.below.totalLb, 195, "prescription exposes nearest load below");
+eq(options.above.totalLb, 205, "prescription exposes nearest load above");
+options = C.prescriptionPlateOptions(200, C.BARS.bar45lb, tieRack, 10, 0, "closest", false);
+eq(options.selected.totalLb, 195, "peak prescription tie selects lighter load");
+options = C.prescriptionPlateOptions(200, C.BARS.bar45lb, tieRack, 10, 0, "under", true);
+eq(options.selected.totalLb, 195, "explicit gym policy overrides phase tie-break");
 s = C.solve(133, C.BARS.bar45lb, [{ value: 5, unit: "lb" }], 10, 0, "exact");
 eq(s.satisfiesPolicy, false, "impossible exact load warns");
 eq(s.totalLb, 135, "impossible exact load returns closest fallback");
@@ -182,6 +191,19 @@ eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x5@200", "complem
 let techniquePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 100, nextPhase: 3, incrementLb: 0 }, 5,
   "barbell", "olympic", "main", "strength", "automatic");
 eq(`${techniquePlan.sets}x${techniquePlan.reps}@${techniquePlan.weightLb}`, "6x1@110", "Olympic peak is crisp singles");
+const offsetConfig = { loadOffsetLb: 25, peakOffsetLb: 33, deloadMultiplier: 0.80 };
+eq([1, 2, 3, 4].map((phase) => C.planForStyle(
+  { cycleNumber: 2, baseWeightLb: 221, nextPhase: phase }, 5, "offsetWave", offsetConfig).weightLb).join(","),
+"220,245,255,175", "offset wave derives every phase from the volume base");
+const multiBlock = C.sessionPrescription(
+  { cycleNumber: 2, baseWeightLb: 221, nextPhase: 3 }, 5, "barbell", "hinge", "main", "strength", "offsetWave",
+  { ...offsetConfig, peakSingleEnabled: true, lastPeakSingleLb: 270, peakSingleIncrementLb: 5, phasePrimerEnabled: true }, 300);
+eq(multiBlock.blocks.map((block) => block.kind).join(","), "primer,topSingle,work", "peak prescription separates primer, single, and work");
+eq(multiBlock.blocks.map((block) => block.weightLb).join(","), "245,275,255", "peak block weights derive correctly");
+const dbDouble = C.programPlanFor(
+  { cycleNumber: 1, baseWeightLb: 55, nextPhase: 2 }, 5, "dumbbell", "press", "main", "strength", "doubleProgression",
+  { workingSets: 5, minimumReps: 5, maximumReps: 8, currentReps: 5 });
+eq(`${dbDouble.sets}x${dbDouble.reps}@${dbDouble.weightLb}`, "5x5@55", "DB double progression holds load and uses current reps");
 r = C.dumbbellWarmupRamp(60);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([25, 35, 50]), "dumbbell ramp weights");
 ok(JSON.stringify(r.map((x) => x.reps)) === JSON.stringify([10, 5, 2]), "dumbbell ramp reps");
@@ -215,6 +237,8 @@ eq(C.droppedLoad(232), 215, "drop 232");
 eq(C.droppedLoad(100), 95, "drop 100");
 eq(C.droppedLoad(50), 45, "drop never below bar");
 eq(C.droppedLoad(45), 45, "drop at bar");
+eq(C.droppedLoad(205, 5, 45, 10), 195, "configured lower-body drop step");
+eq(C.droppedLoad(140, 5, 45, 5), 135, "configured upper-body drop step");
 ok(C.droppedLoad(65) < 65 && C.droppedLoad(65) >= 45, "drop always drops above bar");
 {
   // mirrors ProgramEngineTests.testDropLoadPlan…: unflagged working sets only,
@@ -308,6 +332,10 @@ eq(C.gradeCycle({ ...cleanPerf, completedSets: 2 }), "fail", "missed set → fai
 eq(C.gradeCycle({ ...cleanPerf, anyStoppedEarly: true }), "fail", "stopped early → fail");
 eq(C.gradeCycle({ ...cleanPerf, anyDroppedLoad: true }), "fail", "dropped load → fail");
 eq(C.gradeCycle({ ...cleanPerf, anyBelowPlanLoad: true }), "fail", "below-plan load → fail");
+eq(C.earnsStandaloneTrackAdvance([cleanPerf]), true, "clean standalone exposure advances");
+eq(C.earnsStandaloneTrackAdvance([cleanPerf, cleanPerf]), true, "duplicate clean sections are one successful exposure");
+eq(C.earnsStandaloneTrackAdvance([cleanPerf, { ...cleanPerf, anyBelowPlanLoad: true }]), false, "adjusted occurrence holds standalone exposure");
+eq(C.earnsStandaloneTrackAdvance([]), false, "no performed work never advances standalone track");
 
 // belowPlanLoad: met within half a rounding step; a full step down is a drop (issue 18)
 eq(C.belowPlanLoad(175, 175, 5), false, "at plan → met");
@@ -461,6 +489,10 @@ ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minReps
 ok(ac.weightLb === 50 && ac.currentReps === 11, "accessory below max → +1 rep, hold weight");
 ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 2, minRepsAchieved: 10, anyStoppedEarly: false });
 ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "accessory miss → hold + stall");
+ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minRepsAchieved: 10, anyStoppedEarly: false, performedAtPlannedLoad: false });
+ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "adjusted-lower accessory work never earns progression");
+ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minRepsAchieved: 10, anyStoppedEarly: false, grindyOrWobbleSets: 2 });
+ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "poor-quality accessory work holds progression");
 // bodyweight/timed accessory (0 increment) climbs reps past max — no reset, no weight added
 let bw = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0, stallCount: 0 };
 let bwa = C.advanceAccessory(bw, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
@@ -605,6 +637,96 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   eq(s.endEpoch, 350, "interruptions still deliver the full rest");
   eq(C.restClockRemaining(s, 300), 50, "post-round-trip remaining");
   eq(s.total, 180, "total untouched by pause/resume");
+}
+
+// ---- Rotation-first coaching parity (CoachingEngineTests.swift) ----
+{
+  eq(C.movementPattern("Barbell Row", "pull"), "horizontalPull", "rows classify horizontally");
+  eq(C.movementPattern("Lat Pulldown", "pull"), "verticalPull", "pulldowns classify vertically");
+  eq(C.movementPattern("Seated Leg Curl", "hinge"), "kneeFlexion", "leg curls classify as knee flexion");
+  eq(C.movementPattern("Back Extension", "hinge"), "hipExtension", "back extensions classify as hip extension");
+  eq(C.movementPattern("Overhead Press", "press"), "verticalPress", "OHP classifies vertically");
+
+  const coachingProgram = {
+    id: "program", expectedDayIndexes: [0, 1, 2, 3],
+    slots: [
+      { id: "squat", exerciseName: "Back Squat", dayIndex: 0, pattern: "squat", plannedSets: 3, isMain: true },
+      { id: "press-a", exerciseName: "Overhead Press", dayIndex: 1, pattern: "verticalPress", plannedSets: 3, isMain: true },
+      { id: "deadlift", exerciseName: "Deadlift", dayIndex: 2, pattern: "hipHinge", plannedSets: 3, isMain: true },
+      { id: "press-b", exerciseName: "Incline DB Press", dayIndex: 3, pattern: "horizontalPress", plannedSets: 3, isMain: true },
+      { id: "row", exerciseName: "Chest-supported Row", dayIndex: 3, pattern: "horizontalPull", plannedSets: 6, maximumSets: 6 },
+    ],
+  };
+  const coachingSession = (rotation, dayIndex, dayOffset, weight = 100, actual = weight) => {
+    const names = ["Back Squat", "Overhead Press", "Deadlift", "Incline DB Press"];
+    const patterns = ["squat", "verticalPress", "hipHinge", "horizontalPress"];
+    return {
+      id: `1-${rotation}-${dayIndex}`, date: new Date(1_700_000_000_000 + dayOffset * 86_400_000).toISOString(),
+      programID: "program", cycleNumber: 1, rotation, dayIndex, completed: true,
+      exercises: [{
+        slotID: `slot-${dayIndex}`, exerciseName: names[dayIndex], pattern: patterns[dayIndex],
+        plannedSets: 3, plannedWeightLb: weight, plannedReps: 5,
+        sets: Array.from({ length: 3 }, () => ({ actualWeightLb: actual, actualReps: 5, plannedWeightLb: weight, plannedReps: 5, completed: true })),
+      }],
+    };
+  };
+
+  let report = C.evaluateCoaching(coachingProgram, [coachingSession(1, 0, 0)]);
+  eq(report.currentReadiness, "unknown", "incomplete rotation is unknown");
+  eq(report.recommendations.length, 0, "incomplete rotation never adds volume");
+
+  const conditioningSessions = Array.from({ length: 4 }, (_, dayIndex) => coachingSession(1, dayIndex, dayIndex * 3));
+  conditioningSessions[1].exercises.push({
+    exerciseName: "Bike", pattern: "easyAerobic", plannedSets: 1,
+    sets: [{ actualWeightLb: 0, actualReps: 0, durationSeconds: 1_200, completed: true }],
+  });
+  conditioningSessions[0].exercises[0].sets.push({
+    actualWeightLb: 120, actualReps: 1, plannedWeightLb: 120, plannedReps: 1,
+    prescriptionBlock: "topSingle", completed: true,
+  });
+  report = C.evaluateCoaching(coachingProgram, conditioningSessions);
+  eq(report.rotations[0].plannedWorkingSets, 12, "conditioning does not inflate planned lifting sets");
+  eq(report.rotations[0].completedWorkingSets, 12, "conditioning does not inflate completed lifting sets");
+  eq(report.rotations[0].conditioningMinutes, 20, "conditioning remains in its minute ledger");
+  eq(report.rotations[0].patternSets.squat, 3, "top single is performance evidence, not a budget work set");
+
+  let sessions = [];
+  for (let rotation = 1; rotation <= 3; rotation++) {
+    for (let dayIndex = 0; dayIndex < 4; dayIndex++) {
+      sessions.push(coachingSession(rotation, dayIndex, ((rotation - 1) * 4 + dayIndex) * 3, 100 + (rotation - 1) * 5));
+    }
+  }
+  report = C.evaluateCoaching(coachingProgram, sessions);
+  eq(report.currentReadiness, "green", "two comparable rotations end green");
+  eq(report.greenRotationStreak, 2, "first rotation is the baseline");
+  const capacityPlan = report.recommendations.find((r) => r.change.type === "capacityPlan");
+  ok(!!capacityPlan, "capacity additions are bundled into one audited action");
+  const adds = capacityPlan.change.additions;
+  eq(adds.reduce((sum, addition) => sum + (addition.sets || addition.count), 0), 6, "capacity change capped at six targeted sets");
+  ok(adds.some((r) => r.pattern === "verticalPull"), "vertical pull gap is proposed");
+  const hamstrings = adds.find((r) => r.pattern === "kneeFlexion");
+  ok(!!hamstrings, "hamstring isolation gap is proposed");
+  eq(hamstrings.dayIndex, 0, "hamstrings slot onto the squat-led day");
+
+  sessions = [];
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3));
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(2, dayIndex, 12 + dayIndex * 3, 105, dayIndex === 0 ? 90 : 105));
+  report = C.evaluateCoaching(coachingProgram, sessions);
+  eq(report.currentReadiness, "yellow", "adjusted-lower work makes rotation yellow");
+  eq(report.recommendations[0].change.type, "hold", "yellow holds prescription");
+
+  sessions = [];
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(2, dayIndex, 12 + dayIndex * 3, 90));
+  report = C.evaluateCoaching(coachingProgram, sessions);
+  eq(report.currentReadiness, "red", "large repeated performance drops are red");
+  eq(report.recommendations[0].change.type, "reduceAccessoryVolume", "red proposes reduced accessories");
+
+  sessions = Array.from({ length: 4 }, (_, dayIndex) => coachingSession(1, dayIndex, dayIndex * 3));
+  sessions[2].hasHardStopCheckIn = true;
+  report = C.evaluateCoaching(coachingProgram, sessions);
+  eq(report.currentReadiness, "red", "hard-stop recovery check-in makes a complete rotation red");
+  ok(report.rotations[0].reasons.some((reason) => reason.includes("check-in")), "hard-stop check-in is explained");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

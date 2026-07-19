@@ -31,9 +31,14 @@ export function programLoadStep(programRoundingLb, exerciseType = null) {
 // jump to 65 lb at Peak. Above-base DB rotations stay within one 5 lb rack
 // jump; barbell/machine waves retain the normal percentages.
 export function programPlanFor(state, programRoundingLb, exerciseType = null, movementGroup = null,
-  role = "main", focus = "strength", prescriptionStyle = "automatic") {
+  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {}) {
   const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
-  const plan = planForStyle(state, programLoadStep(programRoundingLb, exerciseType), style);
+  const lower = ["squat", "hinge"].includes(movementGroup);
+  const config = { ...configuration,
+    loadOffsetLb: configuration.loadOffsetLb > 0 ? configuration.loadOffsetLb : (lower ? 25 : 10),
+    peakOffsetLb: configuration.peakOffsetLb > 0 ? configuration.peakOffsetLb : (lower ? 33 : 15),
+  };
+  const plan = planForStyle(state, programLoadStep(programRoundingLb, exerciseType), style, config);
   if (exerciseType !== "dumbbell" || plan.weightLb <= state.baseWeightLb) return plan;
   return { ...plan, weightLb: Math.min(plan.weightLb, state.baseWeightLb + 5) };
 }
@@ -347,6 +352,29 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
   return makeSolution(bar, perSide, targetLb, collarLb, policy, !!policyBest);
 }
 
+// Resolve a programmed target against the active rack and retain the nearest
+// achievable load on each side for the UI. Explicit gym policy wins; closest
+// ties can be phase-aware (volume over, peak/other under).
+export function prescriptionPlateOptions(targetLb, bar, plates, maxPerPlateSide = 10,
+  collarLb = 0, policy = "closest", preferOverOnTie = false) {
+  const underCandidate = solve(targetLb, bar, plates, maxPerPlateSide, collarLb, "under");
+  const overCandidate = solve(targetLb, bar, plates, maxPerPlateSide, collarLb, "over");
+  const below = underCandidate.satisfiesPolicy ? underCandidate : null;
+  const above = overCandidate.satisfiesPolicy ? overCandidate : null;
+  let selected;
+  if (policy !== "closest") {
+    selected = solve(targetLb, bar, plates, maxPerPlateSide, collarLb, policy);
+  } else if (below && above) {
+    const underMiss = Math.abs(below.deviationLb), overMiss = Math.abs(above.deviationLb);
+    selected = Math.abs(underMiss - overMiss) <= 1e-9
+      ? (preferOverOnTie ? above : below)
+      : (underMiss < overMiss ? below : above);
+  } else {
+    selected = below || above || solve(targetLb, bar, plates, maxPerPlateSide, collarLb, "closest");
+  }
+  return { targetLb, selected, below, above };
+}
+
 function makeSolution(bar, perSide, targetLb, collarLb = 0, policy = "closest", satisfiesPolicy = true) {
   const sortedPerSide = [...perSide].sort((a, b) => plateLb(b.plate) - plateLb(a.plate));
   const totalLb = loadoutTotalLb(bar, sortedPerSide, collarLb);
@@ -429,8 +457,30 @@ export function planFor(state, roundingLb = DEFAULT_ROUNDING_LB) {
   };
 }
 
-export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave") {
+export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave", configuration = {}) {
   const p = state.nextPhase;
+  const config = {
+    loadOffsetLb: 10, peakOffsetLb: 15, deloadMultiplier: 0.775,
+    workingSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 5,
+    peakSingleEnabled: false, lastPeakSingleLb: 0, peakSingleIncrementLb: 5,
+    phasePrimerEnabled: true, ...configuration,
+  };
+  if (style === "offsetWave") {
+    const weight = ({
+      1: state.baseWeightLb,
+      2: state.baseWeightLb + config.loadOffsetLb,
+      3: state.baseWeightLb + config.peakOffsetLb,
+      4: state.baseWeightLb * config.deloadMultiplier,
+    })[p];
+    const phase = PHASES[p];
+    return { weightLb: roundTo(weight, roundingLb), sets: phase.sets, reps: phase.reps, phase: p, cycleNumber: state.cycleNumber };
+  }
+  if (style === "doubleProgression") return {
+    weightLb: roundTo(state.baseWeightLb, roundingLb),
+    sets: Math.max(1, config.workingSets),
+    reps: Math.min(Math.max(config.currentReps, config.minimumReps), config.maximumReps),
+    phase: p, cycleNumber: state.cycleNumber,
+  };
   const byStyle = {
     wave: {
       1: [5, 5, 1.0], 2: [5, 3, 1.10], 3: [3, 3, 1.175], 4: [3, 5, 0.775],
@@ -452,6 +502,41 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
   };
 }
 
+export function primerWeight(baseWeightLb, phase, style, roundingLb = DEFAULT_ROUNDING_LB, configuration = {}) {
+  const config = { loadOffsetLb: 10, ...configuration };
+  if (phase === 1 || phase === 4) return null;
+  if (phase === 2) return roundTo(baseWeightLb, roundingLb);
+  if (style === "offsetWave") return roundTo(baseWeightLb + config.loadOffsetLb, roundingLb);
+  return roundTo(baseWeightLb * PHASES[2].multiplier, roundingLb);
+}
+
+export function sessionPrescription(state, programRoundingLb, exerciseType = null, movementGroup = null,
+  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {}, estimatedMaxLb = 0) {
+  const config = {
+    peakSingleEnabled: false, lastPeakSingleLb: 0, peakSingleIncrementLb: 5,
+    phasePrimerEnabled: true, ...configuration,
+  };
+  const lower = ["squat", "hinge"].includes(movementGroup);
+  if (!(config.loadOffsetLb > 0)) config.loadOffsetLb = lower ? 25 : 10;
+  if (!(config.peakOffsetLb > 0)) config.peakOffsetLb = lower ? 33 : 15;
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  const work = programPlanFor(state, programRoundingLb, exerciseType, movementGroup, role, focus, style, config);
+  const step = programLoadStep(programRoundingLb, exerciseType);
+  const blocks = [];
+  if (config.phasePrimerEnabled && style !== "doubleProgression") {
+    const primer = primerWeight(state.baseWeightLb, state.nextPhase, style, step, config);
+    if (primer > 0 && primer < work.weightLb) blocks.push({ kind: "primer", weightLb: primer, sets: 1, reps: 1 });
+  }
+  if (config.peakSingleEnabled && state.nextPhase === 3 && !["technique", "doubleProgression"].includes(style)) {
+    const seed = config.lastPeakSingleLb > 0
+      ? config.lastPeakSingleLb + config.peakSingleIncrementLb : estimatedMaxLb * 0.90;
+    const target = roundTo(seed, step);
+    if (target > work.weightLb) blocks.push({ kind: "topSingle", weightLb: target, sets: 1, reps: 1 });
+  }
+  blocks.push({ kind: "work", weightLb: work.weightLb, sets: work.sets, reps: work.reps });
+  return { mainWork: work, blocks };
+}
+
 export function advancing(state, afterCompleting) {
   const next = { ...state };
   if (afterCompleting === 4) {
@@ -465,8 +550,8 @@ export function advancing(state, afterCompleting) {
 }
 
 // One tap "dropping load": cut remaining sets ~7%, round, never below bar.
-export function droppedLoad(currentLb, roundingLb = DEFAULT_ROUNDING_LB, barLb = 45) {
-  const dropped = roundTo(currentLb * 0.93, roundingLb);
+export function droppedLoad(currentLb, roundingLb = DEFAULT_ROUNDING_LB, barLb = 45, dropIncrementLb = null) {
+  const dropped = dropIncrementLb > 0 ? currentLb - dropIncrementLb : roundTo(currentLb * 0.93, roundingLb);
   const result = dropped >= currentLb ? currentLb - roundingLb : dropped;
   return Math.max(result, barLb);
 }
@@ -476,16 +561,16 @@ export function droppedLoad(currentLb, roundingLb = DEFAULT_ROUNDING_LB, barLb =
 // is history — and each is dropped from ITS OWN weight, so a lighter back-off
 // set is never raised toward the top set's drop. Mirrors
 // ProgramEngine.dropLoadPlan.
-export function dropLoadPlan(sets, roundingLb = DEFAULT_ROUNDING_LB, barLb = 45) {
+export function dropLoadPlan(sets, roundingLb = DEFAULT_ROUNDING_LB, barLb = 45, dropIncrementLb = null) {
   const out = [];
   sets.forEach((s, index) => {
     if (s.isWarmup || s.isFlagged) return;
-    out.push({ index, weightLb: droppedLoad(s.weightLb, roundingLb, barLb) });
+    out.push({ index, weightLb: droppedLoad(s.weightLb, roundingLb, barLb, dropIncrementLb) });
   });
   return out;
 }
 
-export const AUTOREG_REASONS = ["bar speed", "wobble", "joint signal", "heat", "fatigue"];
+export const AUTOREG_REASONS = ["bar speed", "wobble", "joint signal", "heat", "fatigue", "not there"];
 
 // plan: { weightLb, sets, reps, phase? }
 export function sessionPlanLabel(plan) {
@@ -573,6 +658,12 @@ export function gradeCycle(perf) {
       || perf.anyBelowPlanLoad) return "fail";
   if (perf.grindyOrWobbleSets > QUALITY_FLAG_TOLERANCE) return "hold";
   return "success";
+}
+
+// One banked standalone exposure advances only when every occurrence met its
+// immutable prescription. Duplicate sections are one exposure, not two bumps.
+export function earnsStandaloneTrackAdvance(performances) {
+  return performances.length > 0 && performances.every((perf) => gradeCycle(perf) === "success");
 }
 
 // Whether a working set's actual load fell below its prescription. Reps at a
@@ -707,7 +798,9 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
 // weightLb, incrementLb, stallCount }; perf: { completedSets, minRepsAchieved, anyStoppedEarly }
 export function advanceAccessory(state, perf) {
   const next = { ...state };
-  const hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= state.currentReps && !perf.anyStoppedEarly;
+  const hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= state.currentReps
+    && !perf.anyStoppedEarly && perf.performedAtPlannedLoad !== false
+    && (perf.grindyOrWobbleSets || 0) <= 1 && (perf.bodyFlagSets || 0) === 0;
   const weighted = state.incrementLb > 0;
   if (!hitAll) {
     next.stallCount = state.stallCount + 1;
@@ -826,4 +919,271 @@ export function cardioSetLabel(distanceMiles, durationSeconds, inclinePercent) {
   if (mph !== null) parts.push(`${trim(mph)} mph`);
   if (inclinePercent > 0) parts.push(`${trim(inclinePercent)}%`);
   return parts.length ? parts.join(" · ") : "—";
+}
+
+// ---- Rotation-first coaching ----------------------------------------------
+// Pure deterministic mirror of CadenceCore/CoachingEngine.swift. Persistence
+// adapters pass immutable planned/performed snapshots; this layer never edits
+// a program or treats a calendar week as a rotation boundary.
+
+export const MOVEMENT_PATTERNS = [
+  "horizontalPress", "verticalPress", "horizontalPull", "verticalPull", "squat",
+  "hipHinge", "kneeFlexion", "hipExtension", "unilateralKnee", "olympicPower",
+  "shoulderStability", "arms", "core", "adductor", "calves", "carry",
+  "easyAerobic", "intervals", "mixedConditioning", "unknown",
+];
+
+export const movementPatternName = (pattern) => ({
+  horizontalPress: "Horizontal press", verticalPress: "Vertical press",
+  horizontalPull: "Horizontal pull", verticalPull: "Vertical pull", squat: "Squat",
+  hipHinge: "Hip hinge", kneeFlexion: "Hamstring isolation", hipExtension: "Hip extension",
+  unilateralKnee: "Unilateral lower", olympicPower: "Olympic power",
+  shoulderStability: "Rear delt / cuff", arms: "Arms", core: "Core",
+  adductor: "Adductor / groin", calves: "Calves", carry: "Carry",
+  easyAerobic: "Easy aerobic", intervals: "Intervals", mixedConditioning: "Mixed conditioning",
+  unknown: "Unclassified",
+}[pattern] || "Unclassified");
+
+export const isConditioningPattern = (pattern) =>
+  ["easyAerobic", "intervals", "mixedConditioning"].includes(pattern);
+
+const PATTERN_NAMES = {
+  verticalPress: new Set(["Overhead Press", "Push Press", "Push Jerk", "Split Jerk", "Overhead DB Press", "Seated Upright DB Press", "Arnold Press", "Landmine Press", "KB Press"]),
+  verticalPull: new Set(["Lat Pulldown", "Straight-arm Pulldown", "Pull-ups", "Chin-ups", "Assisted Pull-up"]),
+  horizontalPull: new Set(["Single-arm DB Row", "Chest-supported Row", "Ring Row", "Barbell Row", "Pendlay Row", "T-Bar Row", "Seated Cable Row", "One-arm Cable Row", "Bent-over DB Row", "Incline Bench DB Row", "KB Row", "Banded Row"]),
+  kneeFlexion: new Set(["Seated Leg Curl", "Lying Leg Curl", "Nordic Hamstring Curl"]),
+  hipExtension: new Set(["Back Extension", "Glute Bridge", "Barbell Hip Thrust", "Cable Pull-through"]),
+  unilateralKnee: new Set(["Walking Lunges", "Bulgarian Split Squat", "Reverse Lunge", "Forward Lunge", "Step-up"]),
+  shoulderStability: new Set(["Band Pull-aparts", "Face Pulls", "Y-T-W Raises", "Band External Rotation", "Rear Delt Fly", "Reverse Pec Deck"]),
+  easyAerobic: new Set(["Walk", "Bike", "Ruck", "Elliptical", "Stair Climber", "Swimming", "Row Erg", "Ski Erg"]),
+  intervals: new Set(["Run-Walk Intervals", "Jump Rope", "Sled Push", "Sled Pull", "Battle Ropes"]),
+};
+
+export function movementPattern(exerciseName, movementGroup, explicitPattern = null) {
+  if (explicitPattern && MOVEMENT_PATTERNS.includes(explicitPattern) && explicitPattern !== "unknown") return explicitPattern;
+  for (const [pattern, names] of Object.entries(PATTERN_NAMES)) if (names.has(exerciseName)) return pattern;
+  if (/copenhagen/i.test(exerciseName)) return "adductor";
+  return ({
+    press: "horizontalPress", pull: "horizontalPull", squat: "squat", hinge: "hipHinge",
+    olympic: "olympicPower", shoulder: "shoulderStability", arms: "arms", core: "core",
+    calves: "calves", carry: "carry", conditioning: "mixedConditioning",
+  })[movementGroup] || "unknown";
+}
+
+export const COACHING_RULE_VERSION = 1;
+export const GREEN_COMPLETION_FLOOR = 0.90;
+export const RED_COMPLETION_FLOOR = 0.80;
+export const GREEN_AT_PLAN_FLOOR = 0.90;
+export const YELLOW_PERFORMANCE_DROP = -0.02;
+export const RED_PERFORMANCE_DROP = -0.05;
+
+const epoch = (date) => typeof date === "number" ? date : Date.parse(date);
+const atPlan = (set) => {
+  const repsMet = (set.actualReps ?? 0) >= (set.plannedReps ?? set.actualReps ?? 0);
+  return repsMet && (!(set.plannedWeightLb > 0) || (set.actualWeightLb ?? 0) >= set.plannedWeightLb - 0.01);
+};
+const performanceByExercise = (sessions) => {
+  const result = {};
+  for (const exercise of sessions.flatMap((session) => session.exercises || [])) {
+    if (isConditioningPattern(exercise.pattern)) continue;
+    const best = Math.max(0, ...(exercise.sets || [])
+      .filter((set) => !set.isWarmup && set.completed !== false && set.actualReps > 0)
+      .map((set) => epleyE1RM(set.actualWeightLb, set.actualReps)));
+    if (best > 0) result[exercise.exerciseName] = Math.max(result[exercise.exerciseName] || 0, best);
+  }
+  return result;
+};
+
+function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerformance, priorReadiness) {
+  const completedDayIndexes = [...new Set(sessions.map((session) => session.dayIndex))];
+  const complete = expectedDayIndexes.every((day) => completedDayIndexes.includes(day));
+  const exercises = sessions.flatMap((session) => session.exercises || []);
+  const allSets = exercises.flatMap((exercise) => exercise.sets || []);
+  // Conditioning is reported in minutes, not lifting sets, and therefore
+  // cannot raise or lower lifting prescription completion/readiness.
+  const liftingExercises = exercises.filter((exercise) => !isConditioningPattern(exercise.pattern));
+  const working = liftingExercises.flatMap((exercise) => exercise.sets || []).filter((set) =>
+    !set.isWarmup && (set.prescriptionBlock || "work") === "work");
+  const completedWorking = working.filter((set) => set.completed !== false);
+  const plannedWorkingSets = liftingExercises.reduce((sum, exercise) =>
+    sum + Math.max(0, exercise.plannedSets || 0), 0);
+  const atPlanWorkingSets = completedWorking.filter(atPlan).length;
+  const patternSets = {};
+  for (const exercise of exercises) patternSets[exercise.pattern] = (patternSets[exercise.pattern] || 0)
+    + (exercise.sets || []).filter((set) => !set.isWarmup
+      && (set.prescriptionBlock || "work") === "work" && set.completed !== false).length;
+  const conditioningSeconds = exercises.filter((exercise) => isConditioningPattern(exercise.pattern))
+    .flatMap((exercise) => exercise.sets || []).filter((set) => set.completed !== false)
+    .reduce((sum, set) => sum + (set.durationSeconds || 0), 0);
+  const bodyFlags = allSets.filter((set) => !!set.hasBodyFlag).length;
+  const stoppedWithBody = allSets.some((set) => set.stoppedEarly && set.hasBodyFlag);
+  const hardStopCheckIn = sessions.some((session) => !!session.hasHardStopCheckIn);
+  const warmupQualityFlags = allSets.filter((set) => set.isWarmup && ["grindy", "wobble"].includes(set.quality)).length;
+  const workingQualityFlags = completedWorking.filter((set) => ["grindy", "wobble"].includes(set.quality)).length;
+  const currentPerformance = performanceByExercise(sessions);
+  const deltas = Object.entries(currentPerformance).flatMap(([name, value]) => priorPerformance[name] > 0
+    ? [(value - priorPerformance[name]) / priorPerformance[name]] : []);
+  const meaningfulDrops = deltas.filter((delta) => delta <= RED_PERFORMANCE_DROP).length;
+  const performanceDelta = deltas.length ? deltas.reduce((sum, value) => sum + value, 0) / deltas.length : null;
+  const completionRate = plannedWorkingSets > 0 ? completedWorking.length / plannedWorkingSets : 0;
+  const atPlanRate = plannedWorkingSets > 0 ? atPlanWorkingSets / plannedWorkingSets : 0;
+  const reasons = [];
+  let readiness;
+  if (!complete) {
+    readiness = "unknown";
+    reasons.push(`Rotation is still in progress (${completedDayIndexes.length}/${expectedDayIndexes.length} days banked).`);
+  } else if (hardStopCheckIn || stoppedWithBody || completionRate < RED_COMPLETION_FLOOR || meaningfulDrops >= 2
+      || (priorReadiness === "red" && (completionRate < GREEN_COMPLETION_FLOOR || bodyFlags > 0))) {
+    readiness = "red";
+    if (hardStopCheckIn) reasons.push("A post-session body check-in reported a hard-stop signal.");
+    if (stoppedWithBody) reasons.push("A body signal stopped work early.");
+    if (completionRate < RED_COMPLETION_FLOOR) reasons.push(`Only ${Math.round(completionRate * 100)}% of prescribed working sets were completed.`);
+    if (meaningfulDrops >= 2) reasons.push(`Performance fell at least 5% on ${meaningfulDrops} repeated lifts.`);
+  } else if (completionRate < GREEN_COMPLETION_FLOOR || atPlanRate < GREEN_AT_PLAN_FLOOR
+      || bodyFlags > 0 || warmupQualityFlags > 0
+      || workingQualityFlags > Math.max(1, Math.floor(completedWorking.length / 4))
+      || (performanceDelta ?? 0) < YELLOW_PERFORMANCE_DROP) {
+    readiness = "yellow";
+    if (completionRate < GREEN_COMPLETION_FLOOR) reasons.push(`Prescription completion was ${Math.round(completionRate * 100)}%.`);
+    if (atPlanRate < GREEN_AT_PLAN_FLOOR) reasons.push("Some completed work was below its planned load or reps.");
+    if (bodyFlags > 0) reasons.push(`${bodyFlags} body signal${bodyFlags === 1 ? "" : "s"} logged.`);
+    if (warmupQualityFlags > 0) reasons.push("Warm-up quality was flagged.");
+    if (workingQualityFlags > Math.max(1, Math.floor(completedWorking.length / 4))) reasons.push("More than a quarter of working sets were grindy or wobbly.");
+    if (performanceDelta !== null && performanceDelta < YELLOW_PERFORMANCE_DROP) reasons.push(`Repeated-lift output fell ${Math.round(Math.abs(performanceDelta * 100))}% on average.`);
+  } else if (!Object.keys(priorPerformance).length) {
+    readiness = "unknown";
+    reasons.push("First complete reliable rotation establishes the comparison baseline.");
+  } else {
+    readiness = "green";
+    reasons.push("At least 90% of prescribed work was completed at plan without a body stop.");
+    if (performanceDelta !== null) reasons.push(`Repeated-lift output changed ${performanceDelta >= 0 ? "+" : ""}${Math.round(performanceDelta * 100)}%.`);
+  }
+  return {
+    key, startedAt: Math.min(...sessions.map((session) => epoch(session.date))),
+    completedAt: complete ? Math.max(...sessions.map((session) => epoch(session.date))) : null,
+    completedDayIndexes, expectedDayIndexes, isComplete: complete, plannedWorkingSets,
+    completedWorkingSets: completedWorking.length, atPlanWorkingSets,
+    conditioningMinutes: conditioningSeconds / 60, patternSets, readiness, reasons,
+    performanceDelta, completionRate,
+  };
+}
+
+const preferredCoachingDay = (pattern, slots) => {
+  if (["kneeFlexion", "hipExtension"].includes(pattern)) {
+    const squat = slots.find((slot) => slot.isMain && slot.pattern === "squat");
+    if (squat) return squat.dayIndex;
+  }
+  if (["verticalPull", "shoulderStability"].includes(pattern)) {
+    const upper = slots.find((slot) => slot.isMain && ["horizontalPress", "verticalPress"].includes(slot.pattern));
+    if (upper) return upper.dayIndex;
+  }
+  return slots.length ? Math.min(...slots.map((slot) => slot.dayIndex)) : 0;
+};
+
+const shorterSpacingTrial = (sessions) => {
+  const ordered = [...sessions].sort((a, b) => epoch(a.date) - epoch(b.date));
+  if (ordered.length < 4) return null;
+  const intervals = ordered.slice(1).map((session, index) =>
+    Math.floor((epoch(session.date) - epoch(ordered[index].date)) / 86_400_000)).filter((days) => days > 0).sort((a, b) => a - b);
+  if (intervals.length < 3) return null;
+  const median = intervals[Math.floor(intervals.length / 2)];
+  return median >= 4 ? Math.max(2, median - 1) : null;
+};
+
+function coachingRecommendations(program, latest, greenRotationStreak, sessions) {
+  if (!latest) return [];
+  const evidenceKey = `c${latest.key.cycleNumber}-r${latest.key.rotation}`;
+  if (latest.readiness === "red") return [{
+    id: `readiness.red.reduce-accessories.v${COACHING_RULE_VERSION}:${evidenceKey}`,
+    ruleID: `readiness.red.reduce-accessories.v${COACHING_RULE_VERSION}`, priority: 100,
+    title: "Run one lower-volume rotation",
+    explanation: "Repeated output markers are red. Hold main-lift loading and cut accessory sets about 25% for one rotation.",
+    change: { type: "reduceAccessoryVolume", percent: 25 },
+  }];
+  if (latest.readiness === "yellow") return [{
+    id: `readiness.yellow.hold.v${COACHING_RULE_VERSION}:${evidenceKey}`,
+    ruleID: `readiness.yellow.hold.v${COACHING_RULE_VERSION}`, priority: 80,
+    title: "Hold the current prescription", explanation: latest.reasons[0] || "Another exposure is needed before adding work.",
+    change: { type: "hold" },
+  }];
+  if (greenRotationStreak < 2) return [];
+  const budgets = [["verticalPull", 3], ["kneeFlexion", 3], ["shoulderStability", 2], ["adductor", 2], ["core", 4]];
+  const planned = {};
+  for (const slot of program.slots || []) planned[slot.pattern] = (planned[slot.pattern] || 0) + slot.plannedSets;
+  const capacity = Math.max(0, program.maximumAddedSetsPerRotation ?? 6);
+  let changes = 0;
+  const result = [];
+  const capacityAdjustments = [];
+  const capacityEvidence = [];
+  for (const [pattern, target] of budgets) {
+    const current = planned[pattern] || 0;
+    if (current >= target || changes >= capacity) continue;
+    const amount = Math.min(target - current, capacity - changes);
+    const slot = (program.slots || []).find((candidate) => candidate.pattern === pattern
+      && candidate.capacityManaged !== false && !candidate.isMain
+      && candidate.plannedSets < (candidate.maximumSets || 6));
+    if (slot) {
+      const add = Math.min(amount, (slot.maximumSets || 6) - slot.plannedSets);
+      if (add <= 0) continue;
+      capacityAdjustments.push({ type: "addSet", slotID: slot.id, exerciseName: slot.exerciseName, count: add });
+      capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${add}`);
+      changes += add;
+    } else {
+      const dayIndex = preferredCoachingDay(pattern, program.slots || []);
+      capacityAdjustments.push({ type: "addPattern", pattern, dayIndex, sets: amount });
+      capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${amount}`);
+      changes += amount;
+    }
+  }
+  if (capacityAdjustments.length) result.push({
+    id: `capacity.rotation-plan.v${COACHING_RULE_VERSION}:${evidenceKey}`,
+    ruleID: `capacity.rotation-plan.v${COACHING_RULE_VERSION}`, priority: 40,
+    title: `Add ${changes} targeted set${changes === 1 ? "" : "s"}`,
+    explanation: `Two rotations were green. ${capacityEvidence.join("; ")}.`,
+    change: { type: "capacityPlan", additions: capacityAdjustments },
+  });
+  const shorter = shorterSpacingTrial(sessions);
+  if (shorter !== null) result.push({
+    id: `cadence.shorter-trial.v${COACHING_RULE_VERSION}:${evidenceKey}`,
+    ruleID: `cadence.shorter-trial.v${COACHING_RULE_VERSION}`, priority: 20,
+    title: "A shorter recovery trial is supported",
+    explanation: `Recent exposures stayed green at the observed spacing. Try the next session after ${shorter} days once, then reassess output.`,
+    change: { type: "tryShorterSpacing", days: shorter },
+  });
+  return result.sort((a, b) => b.priority - a.priority || b.id.localeCompare(a.id));
+}
+
+export function evaluateCoaching(program, sessions, reliableHistoryStart = null) {
+  const reliable = reliableHistoryStart == null ? -Infinity : epoch(reliableHistoryStart);
+  const relevant = sessions.filter((session) => session.completed !== false
+    && session.programID === program.id && epoch(session.date) >= reliable);
+  const groups = new Map();
+  for (const session of relevant) {
+    const id = `${session.programID}:${session.cycleNumber}:${session.rotation}`;
+    if (!groups.has(id)) groups.set(id, { key: { programID: session.programID, cycleNumber: session.cycleNumber, rotation: session.rotation }, sessions: [] });
+    groups.get(id).sessions.push(session);
+  }
+  const ordered = [...groups.values()].sort((a, b) =>
+    Math.min(...a.sessions.map((session) => epoch(session.date))) - Math.min(...b.sessions.map((session) => epoch(session.date))));
+  const rotations = [];
+  let priorPerformance = {}, priorReadiness = "unknown";
+  for (const group of ordered) {
+    const assessment = assessCoachingRotation(group.key, group.sessions, [...program.expectedDayIndexes], priorPerformance, priorReadiness);
+    rotations.push(assessment);
+    if (assessment.isComplete) {
+      priorPerformance = performanceByExercise(group.sessions);
+      priorReadiness = assessment.readiness;
+    }
+  }
+  const completed = rotations.filter((rotation) => rotation.isComplete);
+  const currentReadiness = completed.at(-1)?.readiness || "unknown";
+  let greenRotationStreak = 0;
+  for (const rotation of [...completed].reverse()) {
+    if (rotation.readiness !== "green") break;
+    greenRotationStreak += 1;
+  }
+  return {
+    rotations, currentReadiness, greenRotationStreak,
+    recommendations: coachingRecommendations(program, completed.at(-1), greenRotationStreak, relevant),
+  };
 }
