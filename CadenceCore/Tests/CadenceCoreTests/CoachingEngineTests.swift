@@ -106,6 +106,7 @@ final class CoachingEngineTests: XCTestCase {
             session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day)
         }
         sessions[1].exercises.append(CoachingExerciseSnapshot(
+            slotID: "bike", programRole: "accessory",
             exerciseName: "Bike", pattern: .easyAerobic, plannedSets: 1,
             sets: [CoachingSetSnapshot(
                 actualWeightLb: 0, actualReps: 0, plannedReps: 0,
@@ -116,11 +117,57 @@ final class CoachingEngineTests: XCTestCase {
             actualWeightLb: 120, actualReps: 1, plannedWeightLb: 120,
             plannedReps: 1, prescriptionBlock: .topSingle
         ))
+        sessions[0].exercises[0].sets.append(CoachingSetSnapshot(
+            actualWeightLb: 500, actualReps: 20, plannedWeightLb: 500,
+            plannedReps: 20
+        ))
+        sessions[0].exercises.append(CoachingExerciseSnapshot(
+            exerciseName: "Back Squat", pattern: .squat, plannedSets: 1,
+            sets: [CoachingSetSnapshot(actualWeightLb: 500, actualReps: 20)]
+        ))
         let rotation = CoachingEngine.evaluate(program: program(), sessions: sessions).rotations[0]
         XCTAssertEqual(rotation.plannedWorkingSets, 12)
         XCTAssertEqual(rotation.completedWorkingSets, 12)
         XCTAssertEqual(rotation.conditioningMinutes, 20)
-        XCTAssertEqual(rotation.patternSets[.squat], 3, "top single is performance evidence, not a budget work set")
+        XCTAssertEqual(rotation.patternSets[.squat], 3,
+                       "top singles, added sets, and slotless exercises are not program distribution")
+    }
+
+    func testSameExerciseOnTwoDaysIsComparedByProgramSlot() {
+        let snapshot = CoachingProgramSnapshot(
+            id: "program", expectedDayIndexes: [0, 1], slots: [
+                CoachingProgramSlot(id: "lower-b-main", exerciseName: "Back Squat", dayIndex: 0,
+                                    pattern: .squat, plannedSets: 3, role: "main", isMain: true),
+                CoachingProgramSlot(id: "lower-a-complementary", exerciseName: "Back Squat", dayIndex: 1,
+                                    pattern: .squat, plannedSets: 3, role: "complementary"),
+            ]
+        )
+        func exposure(rotation: Int, dayIndex: Int, slotID: String, role: String,
+                      weight: Double) -> CoachingSessionSnapshot {
+            CoachingSessionSnapshot(
+                id: "\(rotation)-\(dayIndex)",
+                date: Date(timeIntervalSince1970: Double(rotation * 10 + dayIndex) * day),
+                programID: "program", cycleNumber: 1, rotation: rotation, dayIndex: dayIndex,
+                exercises: [CoachingExerciseSnapshot(
+                    slotID: slotID, programRole: role, exerciseName: "Back Squat", pattern: .squat,
+                    plannedSets: 3, plannedWeightLb: weight, plannedReps: 3,
+                    sets: (0..<3).map { _ in CoachingSetSnapshot(
+                        actualWeightLb: weight, actualReps: 3,
+                        plannedWeightLb: weight, plannedReps: 3
+                    ) }
+                )]
+            )
+        }
+        let sessions = [
+            exposure(rotation: 1, dayIndex: 0, slotID: "lower-b-main", role: "main", weight: 225),
+            exposure(rotation: 1, dayIndex: 1, slotID: "lower-a-complementary", role: "complementary", weight: 175),
+            exposure(rotation: 2, dayIndex: 0, slotID: "lower-b-main", role: "main", weight: 225),
+            exposure(rotation: 2, dayIndex: 1, slotID: "lower-a-complementary", role: "complementary", weight: 140),
+        ]
+
+        let report = CoachingEngine.evaluate(program: snapshot, sessions: sessions)
+        XCTAssertEqual(report.currentReadiness, .yellow,
+                       "the complementary slot drop must not hide behind the same-name main slot")
     }
 
     private func program() -> CoachingProgramSnapshot {
@@ -129,15 +176,17 @@ final class CoachingEngineTests: XCTestCase {
             expectedDayIndexes: Set(0...3),
             slots: [
                 CoachingProgramSlot(id: "squat", exerciseName: "Back Squat", dayIndex: 0,
-                                    pattern: .squat, plannedSets: 3, isMain: true),
+                                    pattern: .squat, plannedSets: 3, role: "main", isMain: true),
                 CoachingProgramSlot(id: "press-a", exerciseName: "Overhead Press", dayIndex: 1,
-                                    pattern: .verticalPress, plannedSets: 3, isMain: true),
+                                    pattern: .verticalPress, plannedSets: 3, role: "main", isMain: true),
                 CoachingProgramSlot(id: "deadlift", exerciseName: "Deadlift", dayIndex: 2,
-                                    pattern: .hipHinge, plannedSets: 3, isMain: true),
+                                    pattern: .hipHinge, plannedSets: 3, role: "main", isMain: true),
                 CoachingProgramSlot(id: "press-b", exerciseName: "Incline DB Press", dayIndex: 3,
-                                    pattern: .horizontalPress, plannedSets: 3, isMain: true),
+                                    pattern: .horizontalPress, plannedSets: 3, role: "main", isMain: true),
                 CoachingProgramSlot(id: "row", exerciseName: "Chest-supported Row", dayIndex: 3,
-                                    pattern: .horizontalPull, plannedSets: 6),
+                                    pattern: .horizontalPull, plannedSets: 6, role: "accessory"),
+                CoachingProgramSlot(id: "bike", exerciseName: "Bike", dayIndex: 1,
+                                    pattern: .easyAerobic, plannedSets: 1, role: "accessory"),
             ]
         )
     }
@@ -152,6 +201,7 @@ final class CoachingEngineTests: XCTestCase {
     ) -> CoachingSessionSnapshot {
         let actual = actualWeight ?? weight
         let names = ["Back Squat", "Overhead Press", "Deadlift", "Incline DB Press"]
+        let slotIDs = ["squat", "press-a", "deadlift", "press-b"]
         let patterns: [MovementPattern] = [.squat, .verticalPress, .hipHinge, .horizontalPress]
         let work = (0..<3).map { _ in
             CoachingSetSnapshot(actualWeightLb: actual, actualReps: 5,
@@ -162,7 +212,8 @@ final class CoachingEngineTests: XCTestCase {
             date: Date(timeIntervalSince1970: date),
             programID: "program", cycleNumber: cycle, rotation: rotation, dayIndex: dayIndex,
             exercises: [CoachingExerciseSnapshot(
-                slotID: "slot-\(dayIndex)", exerciseName: names[dayIndex], pattern: patterns[dayIndex],
+                slotID: slotIDs[dayIndex], programRole: "main",
+                exerciseName: names[dayIndex], pattern: patterns[dayIndex],
                 plannedSets: 3, plannedWeightLb: weight, plannedReps: 5, sets: work
             )]
         )

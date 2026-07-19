@@ -90,7 +90,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -195,7 +195,7 @@ jobs:
           persist-credentials: false
       - name: Restore shipped-store fixtures
         id: shipped-store-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/cadence-shipped-stores
           key: shipped-stores-v1-v129-d418550-pr72-c2026d8-pr73-11846b8-${{ hashFiles('.github/scripts/generate-shipped-stores.sh') }}
@@ -273,7 +273,16 @@ jobs:
   release:
     name: Semantic release
     needs: [core-tests, web-tests, app-build]
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    # Evaluate the release gate even when an app-build dependency was
+    # intentionally skipped (for example, shipped-store migrations). The
+    # aggregate app-build job is the source of truth for native CI health.
+    if: >-
+      always() &&
+      needs.core-tests.result == 'success' &&
+      needs.web-tests.result == 'success' &&
+      needs.app-build.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     concurrency:
       group: semantic-release
@@ -298,7 +307,7 @@ jobs:
         with:
           name: Cadence-simulator
           path: dist
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -339,7 +348,7 @@ jobs:
       - name: Resolve app version from the latest release tag
         id: ver
         run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.1.0)" >> "$GITHUB_OUTPUT"
-      - uses: ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9 # v1.316.0
+      - uses: ruby/setup-ruby@003a5c4d8d6321bd302e38f6f0ec593f77f06600 # v1.319.0
         with:
           ruby-version: "3.3"
           bundler-cache: true

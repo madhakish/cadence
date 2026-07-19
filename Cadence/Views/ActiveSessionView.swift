@@ -14,6 +14,7 @@ struct ActiveSessionView: View {
     @Environment(WorkoutClock.self) private var workoutClock
     @Query private var settingsList: [AppSettings]
     @Query private var gyms: [Gym]
+    @Query private var programs: [Program]
     @Query(sort: \Exercise.name) private var allExercises: [Exercise]
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date, order: .reverse)
     private var completedSessions: [WorkoutSession]
@@ -214,9 +215,11 @@ struct ActiveSessionView: View {
         }
     }
 
-    private func recallLine(for entry: SessionExercise, in recall: [String: String]) -> String? {
-        guard let name = entry.exercise?.name else { return nil }
-        return recall[name]
+    private func recallLine(
+        for entry: SessionExercise,
+        in recall: [PersistentIdentifier: String]
+    ) -> String? {
+        recall[entry.persistentModelID]
     }
 
     /// Drop an exercise from this session (session-only — the program slot is
@@ -247,38 +250,70 @@ struct ActiveSessionView: View {
         }
     }
 
-    /// Compact previous-performance context per lift in THIS session, searched
-    /// across ALL history (not just this
-    /// program), so a lift you swapped away from months ago still tells you
-    /// where you left off. One newest-first pass over history, stopping as
-    /// soon as every lift on today's card has an answer.
-    private func recallLines() -> [String: String] {
-        var wanted = Set(session.orderedExercises.compactMap { $0.exercise?.name })
-        var lines: [String: String] = [:]
+    /// Program entries recall the exact slot that prescribed them. The same
+    /// exercise on another day or in another role is a different exposure;
+    /// slotless exercises retain generic exercise-history recall.
+    private func recallLines() -> [PersistentIdentifier: String] {
+        let wanted = session.orderedExercises.filter { $0.exercise != nil }
+        var lines: [PersistentIdentifier: String] = [:]
         guard !wanted.isEmpty else { return lines }
         for past in completedSessions where past.persistentModelID != session.persistentModelID {
-            for entry in past.exercises {
-                guard let exercise = entry.exercise, wanted.contains(exercise.name),
-                      let top = entry.topSet else { continue }
-                let name = exercise.name
+            for current in wanted where lines[current.persistentModelID] == nil {
+                guard let entry = past.exercises.first(where: {
+                    sameRecallSlot(current: current, past: $0, pastSession: past)
+                }), let exercise = entry.exercise else { continue }
+                let recalledSets: [SetEntry]
+                if current.programRole != nil {
+                    let prescribed = entry.orderedSets.filter {
+                        !$0.isWarmup
+                            && ($0.prescriptionBlock == .work || $0.prescriptionBlock == .conditioning)
+                    }
+                    recalledSets = Array(prescribed.prefix(entry.plannedSets ?? prescribed.count))
+                        .filter { $0.status == .completed }
+                } else {
+                    recalledSets = entry.workingSets
+                }
+                guard let top = recalledSets.max(by: { $0.weightLb < $1.weightLb }) else { continue }
+                let prefix = recallPrefix(for: current)
                 if exercise.type == .timed {
-                    let longest = past.exercises.filter { $0.exercise?.name == name }
-                        .flatMap(\.workingSets).compactMap(\.durationSeconds).max() ?? 0
+                    let longest = recalledSets.compactMap(\.durationSeconds).max() ?? 0
                     let when = past.date.formatted(date: .abbreviated, time: .omitted)
-                    lines[name] = "Last: \(CardioFormat.durationLabel(seconds: longest)) · \(when) (\(agoLabel(past.date)))"
-                    wanted.remove(name)
+                    lines[current.persistentModelID] = "\(prefix): \(CardioFormat.durationLabel(seconds: longest)) · \(when) (\(agoLabel(past.date)))"
                     continue
                 }
-                let better = past.exercises.filter { $0.exercise?.name == name }.compactMap(\.topSet)
-                    .max { $0.weightLb < $1.weightLb } ?? top
-                let weight = better.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: better.weightLb)
+                let weight = top.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb)
                 let when = past.date.formatted(date: .abbreviated, time: .omitted)
-                lines[name] = "Last: \(weight)×\(better.reps) · \(when) (\(agoLabel(past.date)))"
-                wanted.remove(name)
+                lines[current.persistentModelID] = "\(prefix): \(weight)×\(top.reps) · \(when) (\(agoLabel(past.date)))"
             }
-            if wanted.isEmpty { break }
+            if lines.count == wanted.count { break }
         }
         return lines
+    }
+
+    private func sameRecallSlot(
+        current: SessionExercise,
+        past: SessionExercise,
+        pastSession: WorkoutSession
+    ) -> Bool {
+        guard current.exercise?.name == past.exercise?.name else { return false }
+        guard current.programRole != nil else { return past.programRole == nil }
+        let sameProgram = (session.programID != nil && session.programID == pastSession.programID)
+            || (pastSession.programID == nil && session.programName == pastSession.programName)
+        guard sameProgram else { return false }
+        if let slotID = current.programSlotID, past.programSlotID == slotID { return true }
+        return past.programSlotID == nil
+            && current.programRole == past.programRole
+            && session.programDayIndex == pastSession.programDayIndex
+    }
+
+    private func recallPrefix(for entry: SessionExercise) -> String {
+        guard let role = entry.programRole else { return "Last" }
+        let program = session.programID.flatMap { id in programs.first { $0.id == id } }
+            ?? programs.first { $0.name == session.programName }
+        let day = session.programDayIndex.flatMap { index in
+            program?.orderedDays.first { $0.order == index }?.name
+        }
+        return ["Last", role, day].compactMap { $0 }.joined(separator: " ")
     }
 
     private func addExercise(_ exercise: Exercise) {

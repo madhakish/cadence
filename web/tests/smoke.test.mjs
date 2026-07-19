@@ -663,6 +663,82 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.importBundle(parsed);
 }
 
+// ---- exact prior slot repairs a stale next target; extras stay extra ----
+{
+  const name = "Fixture Exact Prior Slot";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 7, currentWeek: 3, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower B", order: 0,
+      lifts: [cyc("Back Squat", "main", 150, 240), cyc("Deadlift", "complementary", 180, 250)],
+      accessories: [] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const day = program.days[0];
+  const squat = day.lifts.find((lift) => lift.role === "main");
+  const workSet = (order, weightLb) => ({
+    order, weightLb, reps: 3, plannedWeightLb: weightLb, plannedReps: 3,
+    isWarmup: false, status: "completed", flags: [], bodyFlagSite: null,
+    autoregReason: null, prescriptionBlock: "work",
+  });
+  const exactSets = Array.from({ length: 5 }, (_, index) => workSet(index, 215));
+  // Appended volume and a separate slotless Squat entry are both explicitly
+  // extra. Neither can become the program's prior exposure.
+  exactSets.push(workSet(5, 315));
+  const priorId = await db.Sessions.save({
+    date: "2026-07-12T12:00:00.000Z", completedAt: "2026-07-12T13:00:00.000Z",
+    notes: "Fictional exact-slot regression fixture", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name, cycleNumber: 7,
+      week: 2, dayIndex: 0, planNames: ["Back Squat", "Deadlift"] },
+    exercises: [
+      { order: 0, exerciseName: "Back Squat", programRole: "main", programSlotId: squat.id,
+        plannedSets: 5, plannedReps: 3, plannedWeightLb: 215, sets: exactSets },
+      { order: 2, exerciseName: "Back Squat", programRole: null, programSlotId: null,
+        plannedSets: 1, plannedReps: 1, plannedWeightLb: 405, sets: [workSet(0, 405)] },
+    ],
+  });
+  const staleOpenId = await db.Sessions.save({
+    date: "2026-07-19T12:00:00.000Z", notes: "Fictional stale preview fixture", isCompleted: false,
+    programTag: { programId: program.uuid, programName: name, cycleNumber: 7,
+      week: 3, dayIndex: 0, planNames: ["Back Squat", "Deadlift"] },
+    exercises: [{ order: 0, exerciseName: "Back Squat", programRole: "main", programSlotId: squat.id,
+      targetWeightLb: 175, plannedWeightLb: 175, plannedSets: 3, plannedReps: 3,
+      sets: Array.from({ length: 3 }, (_, index) => ({ ...workSet(index, 175), status: "planned" })) }],
+  });
+
+  const repairedId = await session.createSessionFromProgramDay(program, day);
+  const repaired = await db.Sessions.get(repairedId);
+  const repairedSquat = repaired.exercises.find((entry) => entry.programSlotId === squat.id);
+  ok(repairedId !== staleOpenId, "a stale open target is rebuilt after exact-slot history repairs the plan");
+  ok(repairedSquat.targetWeightLb === 230,
+    `clean 5x3 at 215 drives the next programmed Squat exposure (got ${repairedSquat.targetWeightLb})`);
+  await session.openSession(repairedId); await tick();
+  const activeOverlay = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const recallText = activeOverlay?.textContent || "";
+  ok(recallText.includes("Last main Lower B:") && recallText.includes("215 lb×3"),
+    `logger recall names the exact role/day and shows its prescribed work (${recallText})`);
+  ok(!recallText.includes("315 lb×3") && !recallText.includes("405 lb×3"),
+    "logger recall ignores appended and slotless extra Squat work");
+  activeOverlay?.querySelector(".overlay-head button")?.click(); await tick();
+  for (const entry of repaired.exercises) {
+    for (const set of entry.sets || []) if (!set.isWarmup) set.status = "skipped";
+  }
+  repaired.exercises.push({
+    order: repaired.exercises.length, exerciseName: "Back Squat", programRole: null,
+    programSlotId: null, plannedSets: 1, plannedReps: 1, plannedWeightLb: 405,
+    sets: [{ ...workSet(0, 405), status: "completed" }],
+  });
+  await session.completeSession(repaired);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.currentWeek === 3 && program.nextDayIndex === 0,
+    "banking only extra work does not advance the program day or phase");
+  ok(program.days[0].lifts.find((lift) => lift.id === squat.id).baseWeightLb === 195,
+    "the repaired exact-slot base is persisted for preview/session parity");
+
+  await db.Sessions.del(priorId); await db.Sessions.del(staleOpenId); await db.Sessions.del(repairedId);
+  await db.Programs.del(program.id);
+}
+
 // ---- program: bank a full 4-week cycle, assert adaptive progression ----
 {
   const sqTrackBase = (await db.Tracks.byName("Back Squat")).baseWeightLb; // standalone, must not move

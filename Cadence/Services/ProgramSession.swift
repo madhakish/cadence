@@ -18,6 +18,24 @@ enum ProgramSession {
     }
 
     static func make(program: Program, day: ProgramDay, context: ModelContext) throws -> WorkoutSession {
+        let allExercises = try context.fetch(FetchDescriptor<Exercise>())
+        let completedSessions = try context.fetch(FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.isCompleted },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        ))
+        // A stale base must not turn the next rising phase into a regression.
+        // Re-anchor only from clean prescribed work in the immediately prior
+        // phase of this exact program/day/slot; extras and same-name slots are
+        // intentionally invisible here.
+        for lift in day.orderedLifts {
+            let exercise = allExercises.first { $0.name == lift.exerciseName }
+            let base = reconciledBaseWeight(
+                for: lift, program: program, day: day,
+                exercise: exercise, sessions: completedSessions
+            )
+            if base != lift.baseWeightLb { lift.baseWeightLb = base }
+        }
+
         // Resume, don't duplicate (mirrors web createSessionFromProgramDay):
         // an open session for THIS day at the current position, whose content
         // still matches the plan, is resumed instead of duplicated (issue 17).
@@ -43,7 +61,8 @@ enum ProgramSession {
                 tagDayIndex: s.programDayIndex ?? -1,
                 cycleNumber: program.cycleNumber, currentWeek: program.currentWeek, dayIndex: day.order,
                 sessionPlanNames: s.programPlanNames ?? [],
-                dayPlanNames: dayNames)
+                dayPlanNames: dayNames) &&
+            sessionTargetsMatch(s, program: program, day: day, exercises: allExercises)
         }) { return existing }
 
         let gyms = try context.fetch(FetchDescriptor<Gym>())
@@ -195,6 +214,109 @@ enum ProgramSession {
         }
 
         return session
+    }
+
+    /// Preview/start shared repair for program state that would otherwise put
+    /// a rising phase below the clean work just banked for this exact slot.
+    static func reconciledBaseWeight(
+        for lift: ProgramLift,
+        program: Program,
+        day: ProgramDay,
+        exercise: Exercise?,
+        sessions: [WorkoutSession]
+    ) -> Double {
+        guard let currentPhase = CyclePhase(rawValue: program.currentWeek),
+              let previousPhase = CyclePhase(rawValue: program.currentWeek - 1),
+              currentPhase == .load || currentPhase == .peak
+        else { return lift.baseWeightLb }
+
+        let prior = sessions
+            .filter { session in
+                session.isCompleted
+                    && (session.programID == program.id
+                        || (session.programID == nil && session.programName == program.name))
+                    && session.programCycleNumber == program.cycleNumber
+                    && session.programWeek == previousPhase.rawValue
+                    && session.programDayIndex == day.order
+            }
+            .sorted { ($0.completedAt ?? $0.date) > ($1.completedAt ?? $1.date) }
+            .first
+        guard let prior,
+              let entry = prior.exercises.first(where: { $0.programSlotID == lift.id })
+                ?? prior.exercises.first(where: {
+                    $0.programSlotID == nil
+                        && $0.programRole == lift.role.rawValue
+                        && $0.exercise?.name == lift.exerciseName
+                })
+        else { return lift.baseWeightLb }
+
+        let candidates = entry.orderedSets.filter {
+            !$0.isWarmup && $0.prescriptionBlock == .work
+        }
+        let required = entry.plannedSets ?? candidates.count
+        let prescribed = Array(candidates.prefix(required))
+        guard required > 0, prescribed.count == required,
+              prescribed.allSatisfy({ set in
+                  set.status == .completed
+                      && set.reps >= (set.plannedReps ?? entry.plannedReps ?? 0)
+                      && set.autoregReason == nil
+                      && !set.flags.contains(.stoppedEarly)
+                      && set.quality != .grindy && set.quality != .wobble
+                      && set.bodyFlagSite == nil
+              }),
+              let performedWeight = prescribed.map(\.weightLb).min()
+        else { return lift.baseWeightLb }
+
+        return ProgramEngine.reconciledBaseWeight(
+            storedBaseWeightLb: lift.baseWeightLb,
+            previousPerformedWeightLb: performedWeight,
+            previousPhase: previousPhase,
+            currentPhase: currentPhase,
+            programRoundingLb: program.roundingLb,
+            exerciseType: exercise?.typeRaw,
+            movementGroup: exercise?.movementGroup,
+            role: lift.role,
+            focus: program.focus,
+            prescriptionStyle: lift.prescription,
+            configuration: lift.prescriptionConfiguration(
+                movementGroup: exercise?.movementGroup ?? ""
+            )
+        )
+    }
+
+    private static func sessionTargetsMatch(
+        _ session: WorkoutSession,
+        program: Program,
+        day: ProgramDay,
+        exercises: [Exercise]
+    ) -> Bool {
+        guard let phase = CyclePhase(rawValue: program.currentWeek) else { return false }
+        return day.orderedLifts.allSatisfy { lift in
+            let exercise = exercises.first { $0.name == lift.exerciseName }
+            let expected = ProgramEngine.programPlan(
+                for: CycleState(cycleNumber: program.cycleNumber,
+                                baseWeightLb: lift.baseWeightLb,
+                                nextPhase: phase, incrementLb: 0),
+                programRoundingLb: program.roundingLb,
+                exerciseType: exercise?.typeRaw,
+                movementGroup: exercise?.movementGroup,
+                role: lift.role,
+                focus: program.focus,
+                prescriptionStyle: lift.prescription,
+                configuration: lift.prescriptionConfiguration(
+                    movementGroup: exercise?.movementGroup ?? ""
+                )
+            ).weightLb
+            guard let entry = session.exercises.first(where: { $0.programSlotID == lift.id })
+                ?? session.exercises.first(where: {
+                    $0.programSlotID == nil
+                        && $0.programRole == lift.role.rawValue
+                        && $0.exercise?.name == lift.exerciseName
+                })
+            else { return true } // a session-local removal stays removed on resume
+            guard let target = entry.targetWeightLb ?? entry.plannedWeightLb else { return false }
+            return abs(target - expected) < 0.01
+        }
     }
 
     private static func temporaryAccessoryPercent(
