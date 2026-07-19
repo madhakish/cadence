@@ -479,7 +479,7 @@ public enum CoachingEngine {
             .flatMap(\.sets).filter(\.completed).compactMap(\.durationSeconds).reduce(0, +)
         let bodyFlags = allSets.filter(\.hasBodyFlag).count
         let stoppedWithBody = allSets.contains { $0.stoppedEarly && $0.hasBodyFlag }
-        let hardStopCheckIn = sessions.contains(\.hasHardStopCheckIn)
+        let hardStopCheckIn = sessions.contains(where: \.hasHardStopCheckIn)
         let warmupQualityFlags = allSets.filter {
             $0.isWarmup && ($0.quality == .grindy || $0.quality == .wobble)
         }.count
