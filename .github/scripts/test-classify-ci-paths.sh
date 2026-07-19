@@ -51,4 +51,9 @@ assert_classification \
   $'native=true\nmigrations=false\nweb=false' \
   '.github/workflows/ci.yml'
 
+assert_classification \
+  "classifier changes cannot bypass native validation" \
+  $'native=true\nmigrations=false\nweb=false' \
+  '.github/scripts/classify-ci-paths.sh'
+
 echo "CI path classifier tests passed"

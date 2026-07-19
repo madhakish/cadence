@@ -303,18 +303,20 @@ enum Seeder {
     ///
     /// Slot IDs are repaired at the same boundary because duplicate IDs cause
     /// the same aliasing in SwiftUI and make completion routing ambiguous. A
-    /// matching historical session entry follows a repaired slot when its
-    /// exercise name and role identify that slot unambiguously.
+    /// matching historical session entry follows a repaired slot only when its
+    /// old ID, exercise name, and role identify exactly one live slot.
     static func normalizeRelationshipAliases(context: ModelContext) throws {
-        struct SlotRepair {
+        struct HistoricalSlotKey: Hashable {
             let programID: String
             let oldID: String
-            let newID: String
             let exerciseName: String
             let role: String
         }
 
-        var slotRepairs: [SlotRepair] = []
+        // Index every live slot, including the slot that keeps a colliding ID.
+        // A set with more than one resolved ID is deliberately ambiguous: old
+        // sessions do not contain enough information to choose between them.
+        var liveSlotIDs: [HistoricalSlotKey: Set<String>] = [:]
         let programs = try context.fetch(FetchDescriptor<Program>())
             .sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
 
@@ -329,24 +331,24 @@ enum Seeder {
                 for lift in day.orderedLifts {
                     let oldID = lift.id
                     if UUID(uuidString: oldID) == nil || !seenSlotIDs.insert(oldID).inserted {
-                        let newID = uniqueUUID(excluding: &seenSlotIDs)
-                        lift.id = newID
-                        slotRepairs.append(SlotRepair(
-                            programID: program.id, oldID: oldID, newID: newID,
-                            exerciseName: lift.exerciseName, role: lift.role.rawValue
-                        ))
+                        lift.id = uniqueUUID(excluding: &seenSlotIDs)
                     }
+                    let key = HistoricalSlotKey(
+                        programID: program.id, oldID: oldID,
+                        exerciseName: lift.exerciseName, role: lift.role.rawValue
+                    )
+                    liveSlotIDs[key, default: []].insert(lift.id)
                 }
                 for accessory in day.orderedAccessories {
                     let oldID = accessory.id
                     if UUID(uuidString: oldID) == nil || !seenSlotIDs.insert(oldID).inserted {
-                        let newID = uniqueUUID(excluding: &seenSlotIDs)
-                        accessory.id = newID
-                        slotRepairs.append(SlotRepair(
-                            programID: program.id, oldID: oldID, newID: newID,
-                            exerciseName: accessory.exerciseName, role: "accessory"
-                        ))
+                        accessory.id = uniqueUUID(excluding: &seenSlotIDs)
                     }
+                    let key = HistoricalSlotKey(
+                        programID: program.id, oldID: oldID,
+                        exerciseName: accessory.exerciseName, role: "accessory"
+                    )
+                    liveSlotIDs[key, default: []].insert(accessory.id)
                 }
             }
         }
@@ -358,12 +360,13 @@ enum Seeder {
                 guard let programID = session.programID,
                       let slotID = entry.programSlotID,
                       let exerciseName = entry.exercise?.name else { continue }
-                let matches = slotRepairs.filter {
-                    $0.programID == programID && $0.oldID == slotID
-                        && $0.exerciseName == exerciseName
-                        && $0.role == (entry.programRole ?? "accessory")
+                let key = HistoricalSlotKey(
+                    programID: programID, oldID: slotID, exerciseName: exerciseName,
+                    role: entry.programRole ?? "accessory"
+                )
+                if let candidates = liveSlotIDs[key], candidates.count == 1 {
+                    entry.programSlotID = candidates.first
                 }
-                if matches.count == 1 { entry.programSlotID = matches[0].newID }
             }
         }
     }

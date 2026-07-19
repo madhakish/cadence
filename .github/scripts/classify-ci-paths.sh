@@ -13,7 +13,7 @@ while IFS= read -r path; do
   [[ -z "$path" ]] && continue
 
   case "$path" in
-    Cadence/*|CadenceWidgets/*|CadenceCore/*|CadenceMigrationTests/*|project.yml|.github/workflows/ci.yml)
+    Cadence/*|CadenceWidgets/*|CadenceCore/*|CadenceMigrationTests/*|project.yml|.github/workflows/ci.yml|.github/scripts/classify-ci-paths.sh|.github/scripts/test-classify-ci-paths.sh)
       native=true
       ;;
   esac
