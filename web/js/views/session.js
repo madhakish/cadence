@@ -9,25 +9,61 @@ import { barbellSVG, dumbbellSVG } from "../barbell.js";
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
   order, weightLb: w, reps: r, isWarmup: !!o.warm, isPerSide: !!o.perSide, enteredUnit: o.unit || "lb",
+  loadBasis: C.LOAD_BASES.includes(o.loadBasis) ? o.loadBasis : C.inferredLoadBasis(o.exerciseType),
+  implementCount: Math.max(1, o.implementCount || C.inferredImplementCount(o.exerciseType)),
   status: "planned",
   flags: [], bodyFlagSite: null, bodyFlagNote: null, durationSeconds: null, distanceMiles: null,
   inclinePercent: null, autoregReason: null,
 });
+const loadOptions = (exercise) => ({
+  loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
+  exerciseType: exercise?.type,
+});
+
+const availablePlates = (gym) => {
+  if (!gym || !Array.isArray(gym.plateToggles)) return C.ALL_STANDARD;
+  return gym.plateToggles.filter((toggle) => toggle.enabled)
+    .map((toggle) => ({ value: toggle.value, unit: toggle.unit }));
+};
+
+// The theoretical ramp describes useful jumps; the stored ramp must describe
+// plates that actually exist. Collapse duplicate/equal-to-working results when
+// a sparse rack maps several targets to the same achievable load.
+export function achievableWarmups(ramp, workingLb, bar, gym = null) {
+  const plates = availablePlates(gym);
+  const collarLb = gym?.collarWeightLb || 0;
+  const policy = gym?.loadingPolicy || "closest";
+  const seen = new Set();
+  const achieved = [];
+  for (const warmup of ramp) {
+    const weightLb = C.solve(warmup.weightLb, bar, plates, 10, collarLb, policy).totalLb;
+    const key = weightLb.toFixed(6);
+    if (weightLb >= workingLb - 1e-9 || seen.has(key)) continue;
+    seen.add(key);
+    achieved.push({ ...warmup, weightLb });
+  }
+  return achieved;
+}
 
 async function defaultGymTag() { const g = await Gyms.default(); return { gymId: g?.id || null, gymName: g?.name || null }; }
 
 export async function createSessionFromTrack(track) {
   const [ex, gym, settings] = await Promise.all([Exercises.byName(track.exerciseName), Gyms.default(), Settings.get()]);
   const unit = C.primaryUnit(settings.unitDisplay);
-  const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
+  const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
+  const barLb = C.barLb(bar);
   const sug = track.mode === "cycle" ? C.planFor(trackState(track)) : C.linearPlan(track.baseWeightLb);
+  const workingLb = ex?.type === "barbell" && gym
+    ? neatProgramWeight(sug.weightLb, ex, true, barLb, track.roundingLb, gym)
+    : sug.weightLb;
   const sets = [];
   let order = 0;
   if (ex && ex.type === "barbell") {
-    for (const w of C.warmupRamp(sug.weightLb, barLb, track.roundingLb)) sets.push(mkSet(order++, w.weightLb, w.reps, { warm: true, unit }));
+    const ramp = achievableWarmups(C.warmupRamp(workingLb, barLb, track.roundingLb), workingLb, bar, gym);
+    for (const w of ramp) sets.push(mkSet(order++, w.weightLb, w.reps, { warm: true, unit, ...loadOptions(ex) }));
   }
-  for (let i = 0; i < sug.sets; i += 1) sets.push(mkSet(order++, sug.weightLb, sug.reps, { perSide: ex && ex.isUnilateral, unit }));
-  const se = { order: 0, exerciseName: track.exerciseName, notes: "", phase: sug.phase || null, plannedWeightLb: sug.weightLb, plannedSets: sug.sets, plannedReps: sug.reps, sets };
+  for (let i = 0; i < sug.sets; i += 1) sets.push(mkSet(order++, workingLb, sug.reps, { perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex) }));
+  const se = { order: 0, exerciseName: track.exerciseName, notes: "", phase: sug.phase || null, plannedWeightLb: workingLb, plannedSets: sug.sets, plannedReps: sug.reps, sets };
   const id = await Sessions.save({ date: iso(new Date()), notes: "", isCompleted: false, gymId: gym?.id || null, gymName: gym?.name || null, exercises: [se] });
   return id;
 }
@@ -135,12 +171,12 @@ export async function openSession(id) {
     const workingLb = se.plannedWeightLb ?? working[0]?.weightLb;
     if (!ex || !(workingLb > 0)) return;
     const desired = ex.type === "barbell"
-      ? C.warmupRamp(workingLb, C.barLb(bar), 5)
+      ? achievableWarmups(C.warmupRamp(workingLb, C.barLb(bar), 5), workingLb, bar, gymState.value)
       : (ex.type === "dumbbell" && se.programRole === "main" ? C.dumbbellWarmupRamp(workingLb, 5) : null);
     if (!desired) return;
     const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
     const warmups = desired.map((target, index) => {
-      const set = existing[index] || mkSet(index, target.weightLb, target.reps, { warm: true, unit: exUnit(se) });
+      const set = existing[index] || mkSet(index, target.weightLb, target.reps, { warm: true, unit: exUnit(se), ...loadOptions(ex) });
       set.weightLb = target.weightLb; set.reps = target.reps; set.isWarmup = true;
       return set;
     });
@@ -327,7 +363,7 @@ export async function openSession(id) {
           ui.h("span", { class: "wt mono", text: C.cardioDurationLabel(s.durationSeconds || 0) }),
           ui.h("span", { class: "sub", text: " hold time" }))
         : ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editSet(se, s, body) },
-          ui.h("span", { class: "wt mono" + (s.isWarmup ? " muted" : ""), text: s.weightLb === 0 ? "BW" : `${C.trim(u === "kg" ? C.kgFromLb(s.weightLb) : s.weightLb)} ${u}` }),
+          ui.h("span", { class: "wt mono" + (s.isWarmup ? " muted" : ""), text: s.weightLb === 0 ? "BW" : `${C.trim(u === "kg" ? C.kgFromLb(s.weightLb) : s.weightLb)} ${u}${C.loadBasisSuffix(s.loadBasis)}` }),
           ui.h("span", { class: "sub mono", text: ` × ${s.reps}${s.isPerSide ? "/side" : ""}` }));
     const tags = ui.h("span", { class: "sub" });
     if (s.isWarmup) tags.append(ui.h("span", { class: "pill", text: "warmup" }));
@@ -408,7 +444,10 @@ export async function openSession(id) {
     const ex = exMap.get(se.exerciseName);
     const w = last ? last.weightLb : (se.plannedWeightLb ?? 45);
     const r = last ? last.reps : (se.plannedReps ?? 5);
-    const set = mkSet(se.sets.length, w, r, { perSide: ex && ex.isUnilateral });
+    const inheritedLoad = last && C.LOAD_BASES.includes(last.loadBasis)
+      ? { loadBasis: last.loadBasis, implementCount: last.implementCount }
+      : loadOptions(ex);
+    const set = mkSet(se.sets.length, w, r, { perSide: ex && ex.isUnilateral, ...inheritedLoad });
     set.enteredUnit = exUnit(se);
     if (ex && ex.type === "conditioning" && last) {
       // Repeat intervals: carry the last round's cardio prescription forward.
@@ -656,9 +695,15 @@ async function completeSessionInner(session) {
   const trackByName = new Map();
   for (const se of session.exercises) {
     const completedSets = se.sets.filter((s) => !s.isWarmup && s.status === "completed");
-    const working = completedSets.map((s) => ({ weightLb: s.weightLb, reps: s.reps }));
+    const definition = exerciseByName.get(se.exerciseName);
+    const sample = (set) => ({
+      weightLb: set.weightLb, reps: set.reps, isPerSide: !!set.isPerSide,
+      loadBasis: C.LOAD_BASES.includes(set.loadBasis) ? set.loadBasis : C.resolvedLoadBasis(definition),
+      implementCount: set.implementCount || C.resolvedImplementCount(definition),
+    });
+    const working = completedSets.map(sample);
     if (!working.length) continue;
-    const exerciseType = exerciseByName.get(se.exerciseName)?.type;
+    const exerciseType = definition?.type;
     if (exerciseType === "timed") {
       const durations = completedSets.map((set) => set.durationSeconds || 0).filter(Boolean);
       if (durations.length) lines.push({ exerciseName: se.exerciseName,
@@ -671,10 +716,11 @@ async function completeSessionInner(session) {
     for (const ps of prior) {
       for (const pe of ps.exercises) {
         if (pe.exerciseName !== se.exerciseName) continue;
-        const w = pe.sets.filter((x) => !x.isWarmup && x.status === "completed").map((x) => ({ weightLb: x.weightLb, reps: x.reps }));
+        const w = pe.sets.filter((x) => !x.isWarmup && x.status === "completed").map(sample)
+          .filter((set) => set.loadBasis === working[0].loadBasis);
         if (!w.length) continue;
         historySets.push(...w);
-        historyVolumes.push(w.reduce((a, b) => a + b.weightLb * b.reps, 0));
+        historyVolumes.push(C.prVolume(w));
         const top = C.prTopScheme(w); if (top) historySchemes.add(`${top.sets}×${top.reps}`);
       }
     }
@@ -692,7 +738,9 @@ async function completeSessionInner(session) {
       trackByName.set(se.exerciseName, track);
     }
     const top = working.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
-    lines.push({ exerciseName: se.exerciseName, topSetLabel: `${ui.fmtWeight(top.weightLb)} × ${top.reps}`, volumeLb: working.reduce((a, s) => a + s.weightLb * s.reps, 0) });
+    const topLabel = top.loadBasis === "bodyweight" ? `${top.reps} reps`
+      : `${ui.fmtWeight(top.weightLb)}${C.loadBasisSuffix(top.loadBasis)} × ${top.reps}`;
+    lines.push({ exerciseName: se.exerciseName, topSetLabel: topLabel, volumeLb: C.prVolume(working) });
   }
 
   const hasCompletedWork = session.exercises.some((se) => se.sets.some((set) => !set.isWarmup && set.status === "completed"));
@@ -864,8 +912,13 @@ async function advanceProgram(session, milestones) {
 // lonely 2.5); main lifts keep their fine progression, and non-barbell work is
 // left alone. Shared by session creation AND the Home preview so the "Start"
 // card and the stored prescription never disagree.
-export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb) {
-  return (!isMain && exercise && exercise.type === "barbell") ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
+export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym = null) {
+  if (!exercise || exercise.type !== "barbell" || !(weightLb > 0)) return weightLb;
+  const target = !isMain ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
+  if (!gym) return target;
+  const bar = C.barById(gym.defaultBarId);
+  return C.solve(target, bar, availablePlates(gym), 10,
+    gym.collarWeightLb || 0, gym.loadingPolicy || "closest").totalLb;
 }
 
 function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
@@ -898,8 +951,9 @@ export async function createSessionFromProgramDay(program, day) {
   const [allExercises, gym, settings] = await Promise.all([Exercises.all(), Gyms.default(), Settings.get()]);
   const exMap = new Map(allExercises.map((e) => [e.name, e]));
   const unit = C.primaryUnit(settings.unitDisplay);
-  const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
-  const neat = (weightLb, ex, isMain) => neatProgramWeight(weightLb, ex, isMain, barLb, program.roundingLb);
+  const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
+  const barLb = C.barLb(bar);
+  const neat = (weightLb, ex, isMain) => neatProgramWeight(weightLb, ex, isMain, barLb, program.roundingLb, gym);
   const exercises = [];
   let order = 0;
   const lifts = sortedLifts;
@@ -918,14 +972,14 @@ export async function createSessionFromProgramDay(program, day) {
       ? (preparedMovementGroups.has(ex?.movementGroup) ? "short" : "full")
       : lift.warmupPolicy;
     if (ex && ex.type === "barbell" && warmupPolicy !== "none") {
-      const ramp = C.warmupRamp(weightLb, barLb, program.roundingLb);
-      for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit }));
+      const ramp = achievableWarmups(C.warmupRamp(weightLb, barLb, program.roundingLb), weightLb, bar, gym);
+      for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, ...loadOptions(ex) }));
     }
     if (ex && ex.type === "dumbbell" && warmupPolicy !== "none") {
       const ramp = C.dumbbellWarmupRamp(weightLb, loadStep);
-      for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, perSide: ex.isUnilateral }));
+      for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, perSide: ex.isUnilateral, ...loadOptions(ex) }));
     }
-    for (let i = 0; i < plan.sets; i += 1) sets.push(mkSet(so++, weightLb, plan.reps, { perSide: ex && ex.isUnilateral, unit }));
+    for (let i = 0; i < plan.sets; i += 1) sets.push(mkSet(so++, weightLb, plan.reps, { perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex) }));
     exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps, programRole: lift.role, programSlotId: lift.id, sets });
     if (ex?.movementGroup) preparedMovementGroups.add(ex.movementGroup);
   }
@@ -935,7 +989,7 @@ export async function createSessionFromProgramDay(program, day) {
     const isTimed = ex?.type === "timed";
     const sets = [];
     for (let i = 0; i < acc.sets; i += 1) {
-      const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : acc.currentReps, { perSide: ex && ex.isUnilateral, unit });
+      const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : acc.currentReps, { perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex) });
       if (isTimed) set.durationSeconds = acc.targetSeconds || 30;
       sets.push(set);
     }

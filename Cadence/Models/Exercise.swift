@@ -61,6 +61,10 @@ final class Exercise {
     /// Movement pattern for swap-a-similar-lift (all presses, squat/hinge
     /// variants, the oly lifts). Mirrors web `movementGroup`. Empty = ungrouped.
     var movementGroup: String = ""
+    /// Empty/zero are legacy inference sentinels. Explicit values decouple
+    /// progression/volume meaning from display equipment.
+    var loadBasisRaw: String = ""
+    var implementCount: Int = 0
     var createdAt: Date
 
     init(
@@ -68,6 +72,8 @@ final class Exercise {
         category: ExerciseCategory,
         type: ExerciseType,
         movementGroup: String = "",
+        loadBasis: LoadBasis? = nil,
+        implementCount: Int = 0,
         isUnilateral: Bool = false,
         defaultRestSeconds: Int = 0,
         notes: String = "",
@@ -79,6 +85,8 @@ final class Exercise {
         self.categoryRaw = category.rawValue
         self.typeRaw = type.rawValue
         self.movementGroup = movementGroup
+        self.loadBasisRaw = loadBasis?.rawValue ?? ""
+        self.implementCount = implementCount
         self.isUnilateral = isUnilateral
         self.defaultRestSeconds = defaultRestSeconds
         self.notes = notes
@@ -101,6 +109,16 @@ final class Exercise {
     var watchSite: BodySite? {
         get { BodySite.fromStorage(watchSiteRaw) }
         set { watchSiteRaw = newValue?.rawValue }
+    }
+
+    var loadBasis: LoadBasis {
+        get { LoadBasis(rawValue: loadBasisRaw) ?? LoadSemantics.inferredBasis(exerciseType: typeRaw) }
+        set { loadBasisRaw = newValue.rawValue }
+    }
+
+    var resolvedImplementCount: Int {
+        let inferred = LoadSemantics.inferredImplementCount(exerciseType: typeRaw)
+        return LoadSemantics.normalizedImplementCount(implementCount > 0 ? implementCount : inferred, basis: loadBasis)
     }
 
     var isMainLift: Bool { category == .main }

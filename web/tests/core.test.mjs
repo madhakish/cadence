@@ -142,6 +142,21 @@ s = C.solve(C.lbFromKg(100), C.BARS.bar20kg, C.STANDARD_KG);
 near(s.deviationLb, 0, 1e-9, "100kg exact");
 near(kgPerSide(s), 40, 1e-9, "100kg→40kg/side");
 
+s = C.solve(140, C.BARS.bar45lb, C.STANDARD_LB, 10, 5);
+eq(s.totalLb, 140, "collars count toward achieved weight");
+eq(s.collarLb, 5, "collar weight retained");
+eq(C.totalOnBar(C.BARS.bar45lb, s.perSide, 5), 140, "reverse mode counts collars");
+let directional = C.solve(133, C.BARS.bar45lb, [{ value: 5, unit: "lb" }], 10, 0, "under");
+ok(directional.totalLb <= 133 && directional.satisfiesPolicy, "never-over policy");
+directional = C.solve(133, C.BARS.bar45lb, [{ value: 5, unit: "lb" }], 10, 0, "over");
+ok(directional.totalLb >= 133 && directional.satisfiesPolicy, "never-under policy");
+directional = C.solve(50, C.BARS.bar45lb, [{ value: 10, unit: "lb" }], 10, 0, "over");
+eq(directional.totalLb, 65, "never-under searches past the unrestricted closest load");
+ok(directional.satisfiesPolicy, "distant never-under candidate satisfies policy");
+s = C.solve(133, C.BARS.bar45lb, [{ value: 5, unit: "lb" }], 10, 0, "exact");
+eq(s.satisfiesPolicy, false, "impossible exact load warns");
+eq(s.totalLb, 135, "impossible exact load returns closest fallback");
+
 // ---- Warmup ramp ----
 let r = C.warmupRamp(245);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45, 100, 135, 170, 210]), "ramp 245 weights");
@@ -217,6 +232,12 @@ ok(C.droppedLoad(65) < 65 && C.droppedLoad(65) >= 45, "drop always drops above b
 }
 
 // ---- PR detection ----
+eq(C.inferredLoadBasis("barbell"), "totalBar", "barbell load basis inference");
+eq(C.inferredLoadBasis("dumbbell"), "perImplement", "dumbbell load basis inference");
+eq(C.loadVolume({ weightLb: 60, reps: 5, loadBasis: "perImplement", implementCount: 2 }), 600, "pair of dumbbells counts both implements");
+eq(C.loadVolume({ weightLb: 60, reps: 5, isPerSide: true, loadBasis: "perImplement", implementCount: 1 }), 600, "unilateral reps count both sides");
+eq(C.loadVolume({ weightLb: 40, reps: 8, loadBasis: "assisted", implementCount: 1 }), null, "assistance has no tonnage");
+
 const dlHistory = [
   { weightLb: 221, reps: 3 }, { weightLb: 221, reps: 3 },
   ...Array(3).fill({ weightLb: 210, reps: 5 }),
@@ -407,6 +428,7 @@ eq(pres.grade, "success", "advance clean grade");
 eq(pres.state.baseWeightLb, 180, "clean cycle adds one plate");
 eq(pres.state.stallCount, 0, "clean resets stall");
 eq(pres.state.lastIncrementLb, 5, "increment recorded");
+eq(pres.note, "Clean peak — add 5 lb next cycle.", "clean result explains next-cycle change");
 
 // grindy → HOLD
 pres = C.advanceCycleLift(liftState(), { ...cleanPerf, grindyOrWobbleSets: 3 }, "strength", 5);

@@ -1,13 +1,31 @@
 import Foundation
 
+public enum LoadingPolicy: String, Codable, CaseIterable, Sendable {
+    case closest, under, over, exact
+
+    public var label: String {
+        switch self {
+        case .closest: return "Closest"
+        case .under: return "Never over"
+        case .over: return "Never under"
+        case .exact: return "Exact / competition"
+        }
+    }
+}
+
 /// Result of a plate-math solve.
 public struct PlateSolution: Hashable, Codable, Sendable {
     public let loadout: Loadout
     public let targetLb: Double
+    public let policy: LoadingPolicy
+    public let satisfiesPolicy: Bool
 
-    public init(loadout: Loadout, targetLb: Double) {
+    public init(loadout: Loadout, targetLb: Double, policy: LoadingPolicy = .closest,
+                satisfiesPolicy: Bool = true) {
         self.loadout = loadout
         self.targetLb = targetLb
+        self.policy = policy
+        self.satisfiesPolicy = satisfiesPolicy
     }
 
     /// achieved − target, in lb. Positive = bar is heavier than asked.
@@ -52,19 +70,26 @@ public enum PlateMath {
         targetLb: Double,
         bar: Bar,
         plates: [Plate],
+        collarLb: Double = 0,
+        policy: LoadingPolicy = .closest,
         maxPerPlateSide: Int = 10
     ) -> PlateSolution {
-        let perSideTarget = (targetLb - bar.lb) / 2.0
+        let collarLb = max(0, collarLb)
+        let perSideTarget = (targetLb - bar.lb - collarLb) / 2.0
         let sorted = Array(Set(plates)).sorted { $0.lb > $1.lb }
 
         guard perSideTarget > 1e-9, !sorted.isEmpty else {
-            return PlateSolution(loadout: Loadout(bar: bar, perSide: []), targetLb: targetLb)
+            let loadout = Loadout(bar: bar, perSide: [], collarLb: collarLb)
+            return PlateSolution(loadout: loadout, targetLb: targetLb, policy: policy,
+                                 satisfiesPolicy: policyAllows(loadout.totalLb - targetLb, policy: policy))
         }
 
         let values = sorted.map(\.lb)
         var counts = [Int](repeating: 0, count: sorted.count)
         var bestCounts = counts
         var best: Candidate? = nil
+        var policyBestCounts = counts
+        var policyBest: Candidate? = nil
         var nodes = 0
 
         func isBetter(_ c: Candidate, than b: Candidate?) -> Bool {
@@ -112,6 +137,10 @@ public enum PlateMath {
                 && isGreedyCanonical(achieved: perSideTarget - remaining, mixed: mixed, used: used)
             let c: Candidate = (dev: abs(signed), signed: signed, used: used, distinct: distinct, mixed: mixed, canonical: canonical)
             if isBetter(c, than: best) { best = c; bestCounts = counts }
+            if Self.policyAllows(signed, policy: policy), isBetter(c, than: policyBest) {
+                policyBest = c
+                policyBestCounts = counts
+            }
         }
 
         func search(_ index: Int, _ remaining: Double, _ used: Int, _ distinct: Int, _ kg: Int, _ lb: Int) {
@@ -123,9 +152,15 @@ public enum PlateMath {
             let isKg = sorted[index].unit == .kg
             // +1 allows one plate of overshoot so "closest over" is reachable.
             let maxCount = min(maxPerPlateSide, Int((remaining / v).rounded(.down)) + 1)
-            // Prune overshoots past the good-enough band AND the best deviation
-            // so far, so cleaner in-tolerance loads are never pruned away.
-            let bound = max(toleranceLb, best?.dev ?? perSideTarget * 2.0)
+            // Prune overshoots past the good-enough band and the best relevant
+            // deviation. A never-under search cannot borrow the unrestricted
+            // closest result as its initial bound: the nearest valid overshoot
+            // may be much farther away (50 target, 45 bar, 10s -> 65).
+            let directionalBound = policy == .over
+                ? (policyBest?.dev ?? Double.infinity)
+                : 0
+            let bound = max(toleranceLb,
+                            max(best?.dev ?? perSideTarget * 2.0, directionalBound))
             var c = maxCount
             while c >= 0 {
                 let next = remaining - Double(c) * v
@@ -160,14 +195,25 @@ public enum PlateMath {
 
         search(0, perSideTarget, 0, 0, 0, 0)
 
-        let perSide = zip(sorted, bestCounts).compactMap { plate, count in
+        let selectedCounts = policyBest == nil ? bestCounts : policyBestCounts
+        let perSide = zip(sorted, selectedCounts).compactMap { plate, count in
             count > 0 ? PlateCount(plate: plate, count: count) : nil
         }
-        return PlateSolution(loadout: Loadout(bar: bar, perSide: perSide), targetLb: targetLb)
+        return PlateSolution(loadout: Loadout(bar: bar, perSide: perSide, collarLb: collarLb),
+                             targetLb: targetLb, policy: policy, satisfiesPolicy: policyBest != nil)
+    }
+
+    private static func policyAllows(_ deviationLb: Double, policy: LoadingPolicy) -> Bool {
+        switch policy {
+        case .closest: return true
+        case .under: return deviationLb <= 1e-9
+        case .over: return deviationLb >= -1e-9
+        case .exact: return abs(deviationLb) <= 0.01
+        }
     }
 
     /// Reverse mode: what's on the bar (per side, mixed units) → total.
-    public static func total(bar: Bar, perSide: [PlateCount]) -> Double {
-        Loadout(bar: bar, perSide: perSide).totalLb
+    public static func total(bar: Bar, perSide: [PlateCount], collarLb: Double = 0) -> Double {
+        Loadout(bar: bar, perSide: perSide, collarLb: collarLb).totalLb
     }
 }

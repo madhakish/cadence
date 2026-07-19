@@ -5,6 +5,7 @@ import CadenceCore
 /// Today: suggested next session per lift, one-tap session start,
 /// gym tag, protein running total. Nothing motivational.
 struct HomeView: View {
+    @Binding var pendingSessionID: String?
     private enum StartError: LocalizedError {
         case missingExercise(String)
         var errorDescription: String? {
@@ -14,6 +15,8 @@ struct HomeView: View {
         }
     }
     @Environment(\.modelContext) private var context
+    @Environment(RestTimer.self) private var restTimer
+    @Environment(WorkoutClock.self) private var workoutClock
     @Query private var tracks: [LiftTrack]
     @Query private var programs: [Program]
     @Query private var exercises: [Exercise]
@@ -28,6 +31,7 @@ struct HomeView: View {
     @State private var activeSession: WorkoutSession?
     @State private var showGymCard = false
     @State private var previewDay: ProgramDay?
+    @State private var discardSession: WorkoutSession?
 
     private var settings: AppSettings? { settingsList.first }
     private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
@@ -55,11 +59,21 @@ struct HomeView: View {
             focus: program.focus,
             prescriptionStyle: lift.prescription)
         // Preview the same snapped weight the session will store (secondary barbell lifts).
-        let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
-        let isBarbell = exercise?.type == .barbell
-        let weightLb = ProgramSession.neatWeight(plan.weightLb, isBarbell: isBarbell,
-                                                 isMain: lift.role.rawValue == "main", barLb: barLb, stepLb: program.roundingLb)
+        let weightLb = ProgramSession.achievableWeight(
+            plan.weightLb, exercise: exercise, isMain: lift.role.rawValue == "main",
+            gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb,
+            stepLb: program.roundingLb)
         return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps, phase: plan.phase, cycleNumber: plan.cycleNumber)
+    }
+
+    private func trackPlan(_ track: LiftTrack) -> SessionPlan {
+        let plan = track.suggestion
+        let exercise = exercises.first { $0.name == track.exerciseName }
+        let weightLb = ProgramSession.achievableWeight(
+            plan.weightLb, exercise: exercise, isMain: true, gym: defaultGym,
+            bar: defaultGym?.defaultBar ?? .bar45lb, stepLb: track.roundingLb)
+        return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps,
+                           phase: plan.phase, cycleNumber: plan.cycleNumber)
     }
 
     /// Last 8 top working weights for a lift, oldest → newest (sparkline source).
@@ -108,14 +122,25 @@ struct HomeView: View {
                     .accessibilityHint("Shows the default membership barcode at full brightness")
                 }
 
-                if let open = openSessions.first {
-                    Section {
-                        Button {
-                            activeSession = open
-                        } label: {
-                            Label("Resume session — \(open.date.formatted(date: .abbreviated, time: .shortened))",
-                                  systemImage: "play.fill")
-                                .font(.headline)
+                if !openSessions.isEmpty {
+                    Section("Open sessions") {
+                        ForEach(openSessions.sorted { $0.date > $1.date }) { open in
+                            Button {
+                                activeSession = open
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Label("Resume session", systemImage: "play.fill").font(.headline)
+                                    Text(openSessionLabel(open))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .swipeActions {
+                                Button(role: .destructive) {
+                                    discardSession = open
+                                } label: {
+                                    Label("Discard", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                 }
@@ -186,6 +211,7 @@ struct HomeView: View {
 
                 Section(activeProgram == nil ? "Next up" : "Other tracked lifts") {
                     ForEach(tracks.filter { !ownedLiftNames.contains($0.exerciseName) }.sorted { $0.exerciseName < $1.exerciseName }) { track in
+                        let plan = trackPlan(track)
                         Button {
                             startSession(with: track)
                         } label: {
@@ -194,7 +220,7 @@ struct HomeView: View {
                                     Text(track.exerciseName)
                                         .font(.headline)
                                         .foregroundStyle(.primary)
-                                    Text("\(unitDisplay.format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
+                                    Text("\(unitDisplay.format(lb: plan.weightLb)) · \(plan.sets)×\(plan.reps)")
                                         .font(.title3.bold())
                                         .foregroundStyle(Theme.accent)
                                     if track.mode == .cycle {
@@ -254,7 +280,40 @@ struct HomeView: View {
             .sheet(isPresented: $showGymCard) {
                 GymCardView(gym: defaultGym)
             }
+            .task { openPendingSessionIfNeeded() }
+            .onChange(of: pendingSessionID) { _, _ in openPendingSessionIfNeeded() }
+            .confirmationDialog("Discard this open session?", isPresented: Binding(
+                get: { discardSession != nil },
+                set: { if !$0 { discardSession = nil } }
+            ), titleVisibility: .visible) {
+                Button("Discard session", role: .destructive) {
+                    guard let session = discardSession else { return }
+                    if workoutClock.isTracking(sessionID: session.id) {
+                        restTimer.stop()
+                        workoutClock.end()
+                    }
+                    context.delete(session)
+                    PersistenceErrorCenter.shared.save(context, operation: "Discarding the session")
+                    discardSession = nil
+                }
+                Button("Cancel", role: .cancel) { discardSession = nil }
+            } message: {
+                Text("Only this unbanked session is removed. Completed history and the program are unchanged.")
+            }
         }
+    }
+
+    private func openSessionLabel(_ session: WorkoutSession) -> String {
+        let names = session.orderedExercises.compactMap { $0.exercise?.name }
+        let workout = names.isEmpty ? "Blank session" : names.prefix(2).joined(separator: " · ")
+        return "\(workout) · \(session.date.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    private func openPendingSessionIfNeeded() {
+        guard let id = pendingSessionID else { return }
+        pendingSessionID = nil
+        guard let session = openSessions.first(where: { $0.id == id }) else { return }
+        activeSession = session
     }
 
     private func proteinButton(_ label: String, grams: Double) -> some View {
@@ -286,7 +345,7 @@ struct HomeView: View {
 
         let entry = SessionExercise(order: 0, exercise: exercise)
         entry.session = session
-        let plan = track.suggestion
+        let plan = trackPlan(track)
         entry.plannedWeightLb = plan.weightLb
         entry.plannedSets = plan.sets
         entry.plannedReps = plan.reps
@@ -296,19 +355,27 @@ struct HomeView: View {
 
         // Pre-fill warmup ramp + working sets. All editable.
         if exercise.type == .barbell {
-            for warmup in WarmupRamp.ramp(
+            let theoretical = WarmupRamp.ramp(
                 workingLb: plan.weightLb,
                 barLb: (defaultGym?.defaultBar ?? .bar45lb).lb,
                 roundingLb: track.roundingLb
+            )
+            for warmup in ProgramSession.achievableWarmups(
+                theoretical, workingLb: plan.weightLb,
+                gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb
             ) {
-                let set = SetEntry(order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps, isWarmup: true, enteredUnit: entryUnit)
+                let set = SetEntry(order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps,
+                                   isWarmup: true, enteredUnit: entryUnit,
+                                   loadBasis: exercise.loadBasis, implementCount: exercise.resolvedImplementCount)
                 set.sessionExercise = entry
                 context.insert(set)
                 entry.sets.append(set)
             }
         }
         for _ in 0..<plan.sets {
-            let set = SetEntry(order: entry.sets.count, weightLb: plan.weightLb, reps: plan.reps, enteredUnit: entryUnit)
+            let set = SetEntry(order: entry.sets.count, weightLb: plan.weightLb, reps: plan.reps,
+                               enteredUnit: entryUnit, loadBasis: exercise.loadBasis,
+                               implementCount: exercise.resolvedImplementCount)
             set.sessionExercise = entry
             context.insert(set)
             entry.sets.append(set)

@@ -97,7 +97,7 @@ export async function render(host) {
   }
   root.append(gymList);
   root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add gym", onClick: async () => {
-    const g = { name: `Gym ${gyms.length + 1}`, isDefault: gyms.length === 0, defaultBarId: C.barId(C.BARS.bar45lb), plateToggles: C.ALL_STANDARD.map((p) => ({ value: p.value, unit: p.unit, enabled: true })), barcodeImage: null, barcodeLabel: "Membership tag" };
+    const g = { name: `Gym ${gyms.length + 1}`, isDefault: gyms.length === 0, defaultBarId: C.barId(C.BARS.bar45lb), collarWeightLb: 0, loadingPolicy: "closest", plateToggles: C.ALL_STANDARD.map((p) => ({ value: p.value, unit: p.unit, enabled: true })), barcodeImage: null, barcodeLabel: "Membership tag" };
     await Gyms.save(g); ui.nav.refresh();
   } }));
 
@@ -210,6 +210,16 @@ function gymEditor(g) {
         const barSel = ui.h("select", {}, ...C.ALL_BARS.map((b) => ui.h("option", { value: C.barId(b), text: C.barLabel(b), selected: C.barId(b) === g.defaultBarId })));
         barSel.addEventListener("change", async () => { g.defaultBarId = barSel.value; await Gyms.save(g); });
         body.append(ui.field("Default bar", barSel));
+        body.append(ui.field("Collars (combined lb)", ui.stepper(g.collarWeightLb || 0, {
+          min: 0, max: 20, step: 0.5, format: (v) => `${C.trim(v)} lb`,
+          onChange: async (v) => { g.collarWeightLb = v; await Gyms.save(g); },
+        })));
+        const policySel = ui.h("select", {}, ...C.LOADING_POLICIES.map((policy) => ui.h("option", {
+          value: policy, text: C.loadingPolicyLabel(policy), selected: policy === (g.loadingPolicy || "closest"),
+        })));
+        policySel.addEventListener("change", async () => { g.loadingPolicy = policySel.value; await Gyms.save(g); });
+        body.append(ui.field("Loading policy", policySel));
+        body.append(ui.h("div", { class: "sub", text: "Collars count toward achieved weight. The policy is applied whenever Cadence snaps a barbell target to this gym's plate inventory." }));
 
         body.append(ui.h("div", { class: "section-title", text: "Plate inventory" }));
         const inv = ui.h("div", { class: "card" });
@@ -522,7 +532,7 @@ function exerciseLibrary(exercises) {
           results.append(ui.h("div", { class: "section-title", text: cat }));
           const card = ui.h("div", { class: "card list" });
           for (const e of inCat) {
-            const meta = [e.movementGroup, e.type, e.isUnilateral ? "per side" : null, e.isShelved ? "shelved" : null].filter(Boolean).join(" · ");
+            const meta = [e.movementGroup, e.type, C.loadBasisLabel(C.resolvedLoadBasis(e)), e.isUnilateral ? "per side" : null, e.isShelved ? "shelved" : null].filter(Boolean).join(" · ");
             card.append(ui.h("div", { class: "row", onClick: () => exerciseDetail(e) },
               ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: e.name }),
                 ui.h("span", { class: "sub", text: meta })),
@@ -559,6 +569,7 @@ function newExerciseSheet(exercises, onSaved) {
         const exercise = {
           name: trimmed, category: category.value, type: type.value,
           movementGroup: movementGroup.value.trim().toLowerCase(), isUnilateral: unilateral,
+          loadBasis: C.inferredLoadBasis(type.value), implementCount: C.inferredImplementCount(type.value),
           defaultRestSeconds: 0, notes: notes.value, isShelved: false, shelvedNote: "", watchSite: null,
           createdAt: new Date().toISOString(),
         };
@@ -596,7 +607,7 @@ async function exerciseInsight(wrap, e) {
   const last = hist[0];
   card.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Last done" }),
     ui.h("span", { class: "sub", text: last
-      ? `${ui.fmtDate(last.date)} — ${e.type === "timed" ? C.cardioDurationLabel(last.longestSeconds) : `${ui.fmtWeight(last.top.weightLb)} × ${last.top.reps}`}${last.prog ? ` · ${last.prog}` : ""}`
+      ? `${ui.fmtDate(last.date)} — ${e.type === "timed" ? C.cardioDurationLabel(last.longestSeconds) : `${ui.fmtWeight(last.top.weightLb)}${C.loadBasisSuffix(last.top.loadBasis || C.resolvedLoadBasis(e))} × ${last.top.reps}`}${last.prog ? ` · ${last.prog}` : ""}`
       : "not yet" })));
   card.append(ui.h("div", { class: "row" }, ui.h("span", { text: "In programs" }),
     ui.h("span", { class: "sub", style: { textAlign: "right", whiteSpace: "pre-line" }, text: memberships.join("\n") || "none" })));
@@ -631,6 +642,16 @@ function exerciseDetail(e) {
         const typeSel = ui.h("select", {}, ...EX_TYPES.map((t) => ui.h("option", { value: t, text: t, selected: t === e.type })));
         typeSel.addEventListener("change", async () => { e.type = typeSel.value; await Exercises.save(e); });
         body.append(ui.field("Type", typeSel));
+        const basisSel = ui.h("select", {}, ...C.LOAD_BASES.map((basis) => ui.h("option", {
+          value: basis, text: C.loadBasisLabel(basis), selected: basis === C.resolvedLoadBasis(e),
+        })));
+        basisSel.addEventListener("change", async () => { e.loadBasis = basisSel.value; await Exercises.save(e); draw(); });
+        body.append(ui.field("Entered load means", basisSel));
+        if (C.resolvedLoadBasis(e) === "perImplement") {
+          body.append(ui.field("Implements used", ui.stepper(C.resolvedImplementCount(e), {
+            min: 1, max: 4, step: 1, onChange: async (v) => { e.implementCount = v; await Exercises.save(e); },
+          })));
+        }
         const groupInput = ui.h("input", { type: "text", value: e.movementGroup || "", placeholder: "press, pull, squat, hinge…" });
         groupInput.addEventListener("change", async () => { e.movementGroup = groupInput.value.trim().toLowerCase(); await Exercises.save(e); });
         body.append(ui.field("Movement group", groupInput));

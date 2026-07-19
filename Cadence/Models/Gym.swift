@@ -27,6 +27,9 @@ final class Gym {
     /// ("45.0-lb"); `Bar.by(id:)` accepts both.
     var defaultBarID: String
     var plateToggles: [PlateToggle]
+    /// Combined collar/clip weight for the selected station, canonical pounds.
+    var collarWeightLb: Double = 0
+    var loadingPolicyRaw: String = LoadingPolicy.closest.rawValue
     /// Photo of the membership barcode/key tag, so a second car key ring
     /// isn't needed. Shown full-screen at max brightness for the scanner.
     @Attribute(.externalStorage) var barcodeImageData: Data?
@@ -37,6 +40,8 @@ final class Gym {
         self.isDefault = isDefault
         self.defaultBarID = defaultBar.id
         self.plateToggles = Plate.allStandard.map { PlateToggle(plate: $0, enabled: true) }
+        self.collarWeightLb = 0
+        self.loadingPolicyRaw = LoadingPolicy.closest.rawValue
         self.barcodeLabel = "Membership tag"
     }
 
@@ -48,6 +53,11 @@ final class Gym {
     /// Plates currently available at this gym, for the solver.
     var availablePlates: [Plate] {
         plateToggles.filter(\.enabled).map(\.plate)
+    }
+
+    var loadingPolicy: LoadingPolicy {
+        get { LoadingPolicy(rawValue: loadingPolicyRaw) ?? .closest }
+        set { loadingPolicyRaw = newValue.rawValue }
     }
 }
 
@@ -76,6 +86,9 @@ final class AppSettings {
     /// library out of the rest buckets. `Seeder.syncLibrary` clears values that
     /// still equal those retired stamps exactly once, then sets this.
     var restSeedStampsCleared: Bool = false
+    /// One-shot snapshot migration for load basis/implement count. Once set,
+    /// historical sets no longer inherit later library edits.
+    var loadSemanticsMigrated: Bool = false
     var healthKitEnabled: Bool
     var seededAt: Date?
     /// Selected theme, raw value of `ThemeName` (mirrors web `settings.theme`).
@@ -97,6 +110,7 @@ final class AppSettings {
         // property's stored default stays false so PRE-EXISTING stores (which
         // carry the old stamps) run the one-shot clear in syncLibrary.
         self.restSeedStampsCleared = true
+        self.loadSemanticsMigrated = false
         self.healthKitEnabled = false
         self.seededAt = nil
         self.themeNameRaw = "carbon"

@@ -43,9 +43,9 @@ enum WorkoutActivityController {
     /// screen, or the clock re-adopting after an app relaunch); otherwise tear
     /// down whatever is up and start fresh. A rest running on the torn-down
     /// activity (quick rest armed before the session opened) carries over.
-    static func beginSession(startDate: Date, currentLift: String, defaultRestSeconds: Int) async {
+    static func beginSession(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int) async {
         guard isSupported else { return }
-        if let a = current, a.attributes.startDate == startDate, !a.attributes.isAdHoc {
+        if let a = current, a.content.state.sessionID == sessionID, !a.attributes.isAdHoc {
             var s = a.content.state
             s.currentLift = currentLift
             s.defaultRestSeconds = defaultRestSeconds
@@ -55,7 +55,8 @@ enum WorkoutActivityController {
         let carriedRest = current.flatMap { activeRest($0.content.state.rest) }
         await endAllActivities()
         let state = WorkoutActivityAttributes.ContentState(
-            currentLift: currentLift, defaultRestSeconds: defaultRestSeconds, rest: carriedRest
+            sessionID: sessionID, currentLift: currentLift,
+            defaultRestSeconds: defaultRestSeconds, rest: carriedRest
         )
         _ = try? Activity.request(
             attributes: WorkoutActivityAttributes(startDate: startDate, isAdHoc: false),
@@ -206,8 +207,9 @@ enum WorkoutActivityController {
         }
     }
 
-    static func beginSessionDetached(startDate: Date, currentLift: String, defaultRestSeconds: Int) {
-        enqueue { await beginSession(startDate: startDate, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
+    static func beginSessionDetached(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int) {
+        enqueue { await beginSession(sessionID: sessionID, startDate: startDate,
+                                     currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
     }
 
     static func updateContextDetached(currentLift: String, defaultRestSeconds: Int) {

@@ -81,6 +81,36 @@ export function unitFormat(mode, lb) {
 }
 export const primaryUnit = (mode) => (mode === "kgPrimary" ? "kg" : "lb");
 
+// ---- Load semantics --------------------------------------------------------
+// Equipment describes what is used; load basis describes what the entered
+// number means. Sets snapshot both basis and implement count so later library
+// edits cannot rewrite historical tonnage or PR meaning.
+export const LOAD_BASES = ["totalBar", "perImplement", "externalTotal", "assisted", "bodyweight"];
+export const loadBasisLabel = (basis) => ({
+  totalBar: "Total bar weight", perImplement: "Per implement", externalTotal: "External total",
+  assisted: "Assistance", bodyweight: "Bodyweight",
+}[basis] || "External total");
+export const loadBasisSuffix = (basis) => basis === "perImplement" ? " each" : (basis === "assisted" ? " assistance" : "");
+export const inferredLoadBasis = (exerciseType) => {
+  if (exerciseType === "barbell") return "totalBar";
+  if (exerciseType === "dumbbell" || exerciseType === "kettlebell") return "perImplement";
+  if (exerciseType === "bodyweight") return "bodyweight";
+  return "externalTotal";
+};
+export const inferredImplementCount = (exerciseType) => exerciseType === "dumbbell" ? 2 : 1;
+export const resolvedLoadBasis = (exercise) => LOAD_BASES.includes(exercise?.loadBasis)
+  ? exercise.loadBasis : inferredLoadBasis(exercise?.type);
+export const resolvedImplementCount = (exercise) => resolvedLoadBasis(exercise) === "perImplement"
+  ? Math.max(1, Number.isInteger(exercise?.implementCount) && exercise.implementCount > 0
+    ? exercise.implementCount : inferredImplementCount(exercise?.type)) : 1;
+export const supportsLoadPR = (basis) => ["totalBar", "perImplement", "externalTotal"].includes(basis);
+export function loadVolume(set) {
+  const basis = LOAD_BASES.includes(set.loadBasis) ? set.loadBasis : "externalTotal";
+  if (!supportsLoadPR(basis) || !(set.weightLb >= 0) || !(set.reps > 0)) return null;
+  const implementMultiplier = basis === "perImplement" ? Math.max(1, set.implementCount || 1) : 1;
+  return set.weightLb * set.reps * implementMultiplier * (set.isPerSide ? 2 : 1);
+}
+
 // ---- Explicit set lifecycle -------------------------------------------------
 export const SET_STATUSES = ["planned", "completed", "skipped"];
 export const SET_QUALITIES = ["clean", "grindy", "wobble"];
@@ -155,8 +185,8 @@ export const plateCountLabel = (pc) =>
 export function loadoutPerSideLb(perSide) {
   return perSide.reduce((s, pc) => s + plateCountLb(pc), 0);
 }
-export function loadoutTotalLb(bar, perSide) {
-  return barLb(bar) + 2 * loadoutPerSideLb(perSide);
+export function loadoutTotalLb(bar, perSide, collarLb = 0) {
+  return barLb(bar) + Math.max(0, collarLb) + 2 * loadoutPerSideLb(perSide);
 }
 export function perSideLabel(perSide) {
   if (!perSide.length) return "bar only";
@@ -180,21 +210,38 @@ export const TOLERANCE_LB = 2.0;
 // heaviest-first greedy fill of its own weight (in its own unit system) beats
 // any re-shuffled stack — 105/side is 45+45+10+5, never 35×3. Between greedy
 // stacks the fewest plates win (220 → 2×20 kg, not 45+35+5+2.5).
-export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
-  const perSideTarget = (targetLb - barLb(bar)) / 2.0;
+export const LOADING_POLICIES = ["closest", "under", "over", "exact"];
+export const loadingPolicyLabel = (policy) => ({
+  closest: "Closest", under: "Never over", over: "Never under", exact: "Exact / competition",
+}[policy] || "Closest");
+
+const policyAllows = (deviationLb, policy) => {
+  if (policy === "under") return deviationLb <= 1e-9;
+  if (policy === "over") return deviationLb >= -1e-9;
+  if (policy === "exact") return Math.abs(deviationLb) <= 0.01;
+  return true;
+};
+
+export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0, policy = "closest") {
+  collarLb = Math.max(0, collarLb);
+  policy = LOADING_POLICIES.includes(policy) ? policy : "closest";
+  const perSideTarget = (targetLb - barLb(bar) - collarLb) / 2.0;
 
   // dedup by id, sort heaviest-lb first
   const seen = new Map();
   for (const p of plates) seen.set(plateId(p), p);
   const sorted = [...seen.values()].sort((a, b) => plateLb(b) - plateLb(a));
 
-  const empty = () => makeSolution(bar, [], targetLb);
+  const empty = () => makeSolution(bar, [], targetLb, collarLb, policy,
+    policyAllows(loadoutTotalLb(bar, [], collarLb) - targetLb, policy));
   if (!(perSideTarget > 1e-9) || sorted.length === 0) return empty();
 
   const values = sorted.map(plateLb);
   const counts = new Array(sorted.length).fill(0);
   let bestCounts = counts.slice();
   let best = null; // { dev, signed, used, distinct, mixed }
+  let policyBestCounts = counts.slice();
+  let policyBest = null;
   let nodes = 0;
 
   const isBetter = (c, b) => {
@@ -244,6 +291,9 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
       && isGreedyCanonical(perSideTarget - remaining, mixed, used);
     const c = { dev: Math.abs(signed), signed, used, distinct, mixed, canonical };
     if (isBetter(c, best)) { best = c; bestCounts = counts.slice(); }
+    if (policyAllows(signed, policy) && isBetter(c, policyBest)) {
+      policyBest = c; policyBestCounts = counts.slice();
+    }
   };
 
   const search = (index, remaining, used, distinct, kg, lb) => {
@@ -254,9 +304,11 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
     const v = values[index];
     const isKg = sorted[index].unit === "kg";
     const maxCount = Math.min(maxPerPlateSide, Math.floor(remaining / v) + 1);
-    // Prune overshoots past the good-enough band AND the best deviation so far,
-    // so cleaner in-tolerance loads are never pruned away.
-    const bound = Math.max(TOLERANCE_LB, best ? best.dev : perSideTarget * 2.0);
+    // A never-under search cannot use the unrestricted closest result as its
+    // initial overshoot bound: the nearest valid load may be much farther away
+    // (50 target, 45 bar, 10s -> 65).
+    const directionalBound = policy === "over" ? (policyBest ? policyBest.dev : Infinity) : 0;
+    const bound = Math.max(TOLERANCE_LB, best ? best.dev : perSideTarget * 2.0, directionalBound);
     for (let c = maxCount; c >= 0; c -= 1) {
       const next = remaining - c * v;
       if (next < 0 && -next * 2.0 > bound + 1e-9) continue; // overshoot past the band
@@ -287,21 +339,25 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10) {
 
   search(0, perSideTarget, 0, 0, 0, 0);
 
+  const selectedCounts = policyBest ? policyBestCounts : bestCounts;
   const perSide = [];
   for (let i = 0; i < sorted.length; i += 1) {
-    if (bestCounts[i] > 0) perSide.push({ plate: sorted[i], count: bestCounts[i] });
+    if (selectedCounts[i] > 0) perSide.push({ plate: sorted[i], count: selectedCounts[i] });
   }
-  return makeSolution(bar, perSide, targetLb);
+  return makeSolution(bar, perSide, targetLb, collarLb, policy, !!policyBest);
 }
 
-function makeSolution(bar, perSide, targetLb) {
+function makeSolution(bar, perSide, targetLb, collarLb = 0, policy = "closest", satisfiesPolicy = true) {
   const sortedPerSide = [...perSide].sort((a, b) => plateLb(b.plate) - plateLb(a.plate));
-  const totalLb = loadoutTotalLb(bar, sortedPerSide);
+  const totalLb = loadoutTotalLb(bar, sortedPerSide, collarLb);
   const deviationLb = totalLb - targetLb;
   return {
     bar,
+    collarLb,
     perSide: sortedPerSide,
     targetLb,
+    policy,
+    satisfiesPolicy,
     totalLb,
     deviationLb,
     isOffTarget: Math.abs(deviationLb) > TOLERANCE_LB,
@@ -309,7 +365,7 @@ function makeSolution(bar, perSide, targetLb) {
 }
 
 // Reverse mode: what's on the bar → total.
-export const totalOnBar = (bar, perSide) => loadoutTotalLb(bar, perSide);
+export const totalOnBar = (bar, perSide, collarLb = 0) => loadoutTotalLb(bar, perSide, collarLb);
 
 // ---- Warmup ramp -----------------------------------------------------------
 
@@ -444,7 +500,7 @@ export const linearPlan = (baseWeightLb) => ({ weightLb: baseWeightLb, sets: 3, 
 // ---- PR detection ----------------------------------------------------------
 
 // sets: [{ weightLb, reps }]
-export const prVolume = (sets) => sets.reduce((s, x) => s + x.weightLb * x.reps, 0);
+export const prVolume = (sets) => sets.reduce((sum, set) => sum + (loadVolume(set) ?? 0), 0);
 
 export function prTopScheme(sets) {
   if (!sets.length) return null;
@@ -460,12 +516,15 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
   if (!sessionSets.length) return [];
   const events = [];
   const weightLabel = formatWeight || trim;
-  const priorMax = historySets.length ? Math.max(...historySets.map((s) => s.weightLb)) : 0;
-  const top = prTopScheme(sessionSets);
+  const basis = LOAD_BASES.includes(sessionSets[0].loadBasis) ? sessionSets[0].loadBasis : "totalBar";
+  const comparableSession = sessionSets.filter((set) => (set.loadBasis || basis) === basis);
+  const comparableHistory = historySets.filter((set) => (set.loadBasis || basis) === basis);
+  const priorMax = comparableHistory.length ? Math.max(...comparableHistory.map((s) => s.weightLb)) : 0;
+  const top = prTopScheme(comparableSession);
   const schemes = historySchemes instanceof Set ? historySchemes : new Set(historySchemes);
 
   if (top) {
-    if (top.weightLb > priorMax + 1e-9) {
+    if (supportsLoadPR(basis) && top.weightLb > priorMax + 1e-9) {
       const scheme = top.sets > 1
         ? `${weightLabel(top.weightLb)}×${top.sets}×${top.reps}`
         : `${weightLabel(top.weightLb)}×${top.reps}`;
@@ -477,9 +536,9 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
     }
   }
 
-  const vol = prVolume(sessionSets);
+  const vol = prVolume(comparableSession);
   const priorVolMax = historyVolumes.length ? Math.max(...historyVolumes) : 0;
-  if (vol > priorVolMax + 1e-9 && historyVolumes.length) {
+  if (supportsLoadPR(basis) && vol > priorVolMax + 1e-9 && historyVolumes.length) {
     const volumeLabel = formatWeight ? formatWeight(vol) : `${trim(vol)} lb`;
     events.push({ kind: "volumePR", exercise, label: `Volume PR — ${volumeLabel} total ${exercise.toLowerCase()}` });
   }
@@ -626,7 +685,8 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
     const inc = taperedIncrement(state.baseWeightLb, estimatedMaxLb, focus, roundingLb);
     next.baseWeightLb = state.baseWeightLb + inc;
     next.lastIncrementLb = inc;
-    if (inc === 0) note = focusParams(focus).inc <= 0 ? "Maintaining — holding weight." : "At training-max ceiling — holding weight.";
+    note = inc > 0 ? `Clean peak — add ${trim(inc)} lb next cycle.`
+      : (focusParams(focus).inc <= 0 ? "Maintaining — holding weight." : "At training-max ceiling — holding weight.");
   } else {
     next.stallCount = state.stallCount + 1;
     next.lastIncrementLb = 0;

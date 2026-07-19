@@ -59,7 +59,8 @@ enum Seeder {
             Exercise(name: "Snatch-grip Deadlift", category: .accessory, type: .barbell, movementGroup: "hinge", defaultRestSeconds: 180),
             Exercise(name: "Good Morning", category: .accessory, type: .barbell, movementGroup: "hinge", defaultRestSeconds: 120),
             Exercise(name: "Turkish Get-up", category: .accessory, type: .kettlebell, movementGroup: "core", isUnilateral: true),
-            Exercise(name: "Single-arm DB Row", category: .accessory, type: .dumbbell, movementGroup: "pull", isUnilateral: true),
+            Exercise(name: "Single-arm DB Row", category: .accessory, type: .dumbbell, movementGroup: "pull",
+                     implementCount: 1, isUnilateral: true),
             Exercise(name: "Lat Pulldown", category: .accessory, type: .machine, movementGroup: "pull"),
             Exercise(name: "Chest-supported Row", category: .accessory, type: .machine, movementGroup: "pull"),
             Exercise(name: "Ring Row", category: .accessory, type: .bodyweight, movementGroup: "pull", notes: "Face-pull style"),
@@ -90,7 +91,8 @@ enum Seeder {
             Exercise(name: "T-Bar Row", category: .main, type: .machine, movementGroup: "pull"),
             Exercise(name: "Pull-ups", category: .accessory, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
             Exercise(name: "Chin-ups", category: .accessory, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
-            Exercise(name: "Assisted Pull-up", category: .accessory, type: .machine, movementGroup: "pull"),
+            Exercise(name: "Assisted Pull-up", category: .accessory, type: .machine, movementGroup: "pull",
+                     loadBasis: .assisted),
             Exercise(name: "Seated Cable Row", category: .accessory, type: .machine, movementGroup: "pull"),
             Exercise(name: "One-arm Cable Row", category: .accessory, type: .machine, movementGroup: "pull", isUnilateral: true),
             Exercise(name: "Bent-over DB Row", category: .accessory, type: .dumbbell, movementGroup: "pull"),
@@ -143,7 +145,8 @@ enum Seeder {
             Exercise(name: "Hanging Knee Raise", category: .accessory, type: .bodyweight, movementGroup: "core"),
             Exercise(name: "Sit-ups", category: .accessory, type: .bodyweight, movementGroup: "core", defaultRestSeconds: 45),
             Exercise(name: "Farmer Carry", category: .accessory, type: .dumbbell, movementGroup: "carry"),
-            Exercise(name: "Suitcase Carry", category: .accessory, type: .dumbbell, movementGroup: "carry", isUnilateral: true),
+            Exercise(name: "Suitcase Carry", category: .accessory, type: .dumbbell, movementGroup: "carry",
+                     implementCount: 1, isUnilateral: true),
             Exercise(name: "Hang Clean", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
             Exercise(name: "Hang Snatch", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
             Exercise(name: "Muscle Clean", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
@@ -184,12 +187,19 @@ enum Seeder {
                 if current.movementGroup.isEmpty && !definition.movementGroup.isEmpty {
                     current.movementGroup = definition.movementGroup
                 }
+                if current.loadBasisRaw.isEmpty && !definition.loadBasisRaw.isEmpty {
+                    current.loadBasisRaw = definition.loadBasisRaw
+                }
+                if current.implementCount <= 0 && definition.implementCount > 0 {
+                    current.implementCount = definition.implementCount
+                }
             } else {
                 context.insert(definition)
                 byName[definition.name] = definition
             }
         }
         try clearRetiredRestStamps(byName: byName, context: context)
+        try snapshotLegacyLoadSemantics(context: context)
         do { try context.save() }
         catch { context.rollback(); throw error }
     }
@@ -203,6 +213,21 @@ enum Seeder {
             }
         }
         settings.restSeedStampsCleared = true
+    }
+
+    private static func snapshotLegacyLoadSemantics(context: ModelContext) throws {
+        guard let settings = try context.fetch(FetchDescriptor<AppSettings>()).first,
+              !settings.loadSemanticsMigrated else { return }
+        for set in try context.fetch(FetchDescriptor<SetEntry>()) {
+            let exercise = set.sessionExercise?.exercise
+            if set.loadBasisRaw.isEmpty {
+                set.loadBasisRaw = (exercise?.loadBasis ?? .externalTotal).rawValue
+            }
+            if set.implementCount <= 0 {
+                set.implementCount = exercise?.resolvedImplementCount ?? 1
+            }
+        }
+        settings.loadSemanticsMigrated = true
     }
 
     static let retiredRestStamps: [String: Int] = [

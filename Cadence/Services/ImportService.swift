@@ -33,7 +33,7 @@ enum ImportService {
         var tracks: [Track]?; var gyms: [GymDTO]?; var exercises: [ExerciseDef]?; var settings: SettingsDTO?
     }
     private struct Session: Decodable {
-        var date: Date?; var notes: String?; var gym: String?; var gymId: String?; var isCompleted: Bool?
+        var id: String?; var date: Date?; var notes: String?; var gym: String?; var gymId: String?; var isCompleted: Bool?
         var programTag: ProgramTag?; var exercises: [ExerciseEntry]?
     }
     private struct ProgramTag: Decodable {
@@ -59,6 +59,7 @@ enum ImportService {
     }
     private struct SetDTO: Decodable {
         var weightLb: Double?; var reps: Int?; var isWarmup: Bool?; var isPerSide: Bool?
+        var loadBasis: String?; var implementCount: Int?
         var status: String?
         var enteredUnit: String?; var flags: [String]?; var bodyFlagSite: String?; var bodyFlagNote: String?
         var durationSeconds: Int?; var distanceMiles: Double?; var inclinePercent: Double?; var autoregReason: String?
@@ -107,12 +108,14 @@ enum ImportService {
     }
     private struct GymDTO: Decodable {
         var id: String?; var name: String?; var isDefault: Bool?; var defaultBarId: String?
+        var collarWeightLb: Double?; var loadingPolicy: String?
         var plateToggles: [PlateToggleDTO]?; var barcodeImage: String?; var barcodeLabel: String?
     }
     private struct PlateToggleDTO: Decodable { var value: Double?; var unit: String?; var enabled: Bool? }
     private struct ExerciseDef: Decodable {
         var name: String?; var category: String?; var type: String?; var movementGroup: String?
-        var isUnilateral: Bool?; var defaultRestSeconds: Int?; var notes: String?
+        var isUnilateral: Bool?; var loadBasis: String?; var implementCount: Int?
+        var defaultRestSeconds: Int?; var notes: String?
         var isShelved: Bool?; var shelvedNote: String?; var watchSite: String?; var createdAt: Date?
     }
     /// Web `settings.rest` — the PWA's canonical nested shape for the buckets.
@@ -125,6 +128,7 @@ enum ImportService {
         var mainCompoundRestSeconds: Int?; var olympicRestSeconds: Int?; var mainUpperRestSeconds: Int?; var secondaryRestSeconds: Int?
         var rest: RestDTO?
         var autoStartRest: Bool?; var haptics: Bool?; var gymTagFirstLaunchOfDay: Bool?; var restSeedStampsCleared: Bool?
+        var loadSemanticsMigrated: Bool?
         var seededAt: Date?; var theme: String?
     }
 
@@ -206,9 +210,11 @@ enum ImportService {
         let flags: Set<String> = ["clean", "grindy", "wobble", "stopped early"]
         let statuses = Set(SetStatus.allCases.map(\.rawValue))
         let reasons: Set<String> = ["bar speed", "wobble", "joint signal", "heat", "fatigue"]
+        let loadBases = Set(LoadBasis.allCases.map(\.rawValue))
 
         for (si, session) in (bundle.sessions ?? []).enumerated() {
             let path = "sessions[\(si)]"
+            if session.id != nil { _ = try portableID(session.id, "\(path).id") }
             try requireDate(session.date, "\(path).date")
             if let tag = session.programTag {
                 if schemaVersion >= 1 { _ = try requiredText(tag.programName, "\(path).programTag.programName") }
@@ -233,6 +239,8 @@ enum ImportService {
                     try finite(set.weightLb, "\(setPath).weightLb", required: true, min: 0)
                     try integer(set.reps, "\(setPath).reps", required: true, min: 0)
                     try known(set.status, statuses, "\(setPath).status", required: schemaVersion >= 2)
+                    try known(set.loadBasis, loadBases, "\(setPath).loadBasis")
+                    try integer(set.implementCount, "\(setPath).implementCount", min: 1, max: 4)
                     try known(set.enteredUnit, units, "\(setPath).enteredUnit", required: schemaVersion >= 1)
                     let setFlags = set.flags ?? []
                     for (fi, flag) in setFlags.enumerated() { try known(flag, flags, "\(setPath).flags[\(fi)]") }
@@ -247,6 +255,7 @@ enum ImportService {
                 }
             }
         }
+        try unique((bundle.sessions ?? []).compactMap(\.id), "sessions.id")
 
         for (i, entry) in (bundle.bodyweight ?? []).enumerated() {
             try requireDate(entry.date, "bodyweight[\(i)].date")
@@ -348,6 +357,8 @@ enum ImportService {
         for (i, gym) in (bundle.gyms ?? []).enumerated() {
             if schemaVersion >= 2 { _ = try portableID(gym.id, "gyms[\(i)].id") }
             _ = try requiredText(gym.name, "gyms[\(i)].name")
+            try finite(gym.collarWeightLb, "gyms[\(i)].collarWeightLb", min: 0, max: 20)
+            try known(gym.loadingPolicy, Set(LoadingPolicy.allCases.map(\.rawValue)), "gyms[\(i)].loadingPolicy")
             for (pi, plate) in (gym.plateToggles ?? []).enumerated() {
                 try finite(plate.value, "gyms[\(i)].plateToggles[\(pi)].value", required: true, min: Double.leastNonzeroMagnitude)
                 _ = try requiredText(plate.unit, "gyms[\(i)].plateToggles[\(pi)].unit")
@@ -366,6 +377,8 @@ enum ImportService {
             _ = try requiredText(exercise.name, "\(path).name")
             try known(exercise.category, categories, "\(path).category", required: schemaVersion >= 1)
             try known(exercise.type, types, "\(path).type", required: schemaVersion >= 1)
+            try known(exercise.loadBasis, loadBases, "\(path).loadBasis")
+            try integer(exercise.implementCount, "\(path).implementCount", min: 1, max: 4)
             try bodySite(exercise.watchSite, "\(path).watchSite")
             try integer(exercise.defaultRestSeconds, "\(path).defaultRestSeconds", min: 0, max: 3600)
         }
@@ -496,6 +509,7 @@ enum ImportService {
                 // unknown vintage — re-arm the retired-rest-stamp check so the
                 // next launch's syncLibrary re-inspects the restored records.
                 s.restSeedStampsCleared = false
+                s.loadSemanticsMigrated = false
             }
 
             try context.save()
@@ -516,6 +530,8 @@ enum ImportService {
             category: ExerciseCategory(rawValue: d.category ?? "") ?? .accessory,
             type: ExerciseType(rawValue: d.type ?? "") ?? .barbell,
             movementGroup: d.movementGroup ?? "",
+            loadBasis: d.loadBasis.flatMap(LoadBasis.init(rawValue:)),
+            implementCount: d.implementCount ?? 0,
             isUnilateral: d.isUnilateral ?? false,
             // 0 = bucket-driven; a missing key must NOT mint a per-exercise
             // override (90 was the retired blanket stamp — web imports the
@@ -534,6 +550,8 @@ enum ImportService {
         if let v = d.category, let c = ExerciseCategory(rawValue: v) { e.category = c }
         if let v = d.type, let t = ExerciseType(rawValue: v) { e.type = t }
         if let v = d.movementGroup { e.movementGroup = v }
+        if let v = d.loadBasis, let basis = LoadBasis(rawValue: v) { e.loadBasis = basis }
+        if let v = d.implementCount { e.implementCount = v }
         if let v = d.isUnilateral { e.isUnilateral = v }
         if let v = d.defaultRestSeconds { e.defaultRestSeconds = v }
         if let v = d.notes { e.notes = v }
@@ -545,6 +563,8 @@ enum ImportService {
     private static func makeGym(_ g: GymDTO) -> Gym {
         let gym = Gym(name: g.name ?? "Gym", isDefault: g.isDefault ?? false, defaultBar: Bar.by(id: g.defaultBarId ?? "45-lb"))
         if let id = g.id { gym.id = id }
+        gym.collarWeightLb = g.collarWeightLb ?? 0
+        gym.loadingPolicy = g.loadingPolicy.flatMap(LoadingPolicy.init(rawValue:)) ?? .closest
         gym.plateToggles = (g.plateToggles ?? []).map {
             PlateToggle(plate: Plate(value: $0.value ?? 0, unit: WeightUnit(rawValue: $0.unit ?? "lb") ?? .lb), enabled: $0.enabled ?? true)
         }
@@ -614,6 +634,7 @@ enum ImportService {
     private static func makeSession(_ s: Session, schemaVersion: Int, exByName: [String: Exercise],
                                     programIDsByName: [String: String]) -> WorkoutSession {
         let session = WorkoutSession(date: s.date ?? .now, notes: s.notes ?? "", gymID: s.gymId, gymName: s.gym)
+        if let id = s.id, UUID(uuidString: id) != nil { session.id = id }
         // Legacy, unversioned backups only contained completed sessions, so a
         // missing flag means completed. Version 1 carries the actual state.
         session.isCompleted = s.isCompleted ?? true
@@ -649,6 +670,10 @@ enum ImportService {
                                    bodyFlagNote: x.bodyFlagNote,
                                    durationSeconds: x.durationSeconds, distanceMiles: x.distanceMiles,
                                    inclinePercent: x.inclinePercent,
+                                   loadBasis: x.loadBasis.flatMap(LoadBasis.init(rawValue:))
+                                       ?? e.name.flatMap { exByName[$0]?.loadBasis },
+                                   implementCount: x.implementCount
+                                       ?? e.name.flatMap { exByName[$0]?.resolvedImplementCount } ?? 1,
                                    autoregReason: AutoregReason(rawValue: x.autoregReason ?? ""))
                 set.sessionExercise = entry
                 entry.sets.append(set)
@@ -688,6 +713,7 @@ enum ImportService {
         // it over an untouched library could eat a user-set rest that happens
         // to equal a retired stamp (Codex). Mirrors web importBundle.
         if restoredExercises { settings.restSeedStampsCleared = st.restSeedStampsCleared ?? false }
+        if restoredExercises { settings.loadSemanticsMigrated = st.loadSemanticsMigrated ?? false }
         // Only accept a known theme; an unknown value would round-trip as
         // garbage on the next export (the UI would silently show Carbon anyway).
         if let v = st.theme, ThemeName(rawValue: v) != nil { settings.themeNameRaw = v }

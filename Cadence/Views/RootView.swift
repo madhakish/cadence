@@ -12,11 +12,12 @@ struct RootView: View {
     @State private var showGymTag = false
     @State private var restTimer = RestTimer()
     @State private var workoutClock = WorkoutClock()
+    @State private var pendingSessionID: String?
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             TabView(selection: $selection) {
-                HomeView()
+                HomeView(pendingSessionID: $pendingSessionID)
                     .tabItem { Label("Today", systemImage: "figure.strengthtraining.traditional") }
                     .tag(0)
                 HistoryView()
@@ -60,8 +61,13 @@ struct RootView: View {
             autoPresentGymTagIfNeeded()
         }
         .onOpenURL { url in
-            guard url.scheme == "cadence", url.host == "gym-tag" else { return }
-            showGymTag = true
+            guard url.scheme == "cadence" else { return }
+            if url.host == "gym-tag" {
+                showGymTag = true
+            } else if url.host == "workout", let id = url.pathComponents.dropFirst().first, !id.isEmpty {
+                selection = 0
+                pendingSessionID = id
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             // The user may have paused/resumed/extended/skipped the rest from

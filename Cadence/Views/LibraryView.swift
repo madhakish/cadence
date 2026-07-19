@@ -30,7 +30,7 @@ struct LibraryView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(exercise.name)
-                                    Text("\(exercise.movementGroup.capitalized) · \(exercise.typeRaw)")
+                                    Text("\(exercise.movementGroup.capitalized) · \(exercise.typeRaw) · \(exercise.loadBasis.label)")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -187,6 +187,18 @@ struct ExerciseDetailView: View {
                 TextField("Movement group", text: $exercise.movementGroup)
                     .textInputAutocapitalization(.never)
                 Toggle("Unilateral (log per side)", isOn: $exercise.isUnilateral)
+                Picker("Load means", selection: Binding(
+                    get: { exercise.loadBasis },
+                    set: { exercise.loadBasis = $0 }
+                )) {
+                    ForEach(LoadBasis.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                if exercise.loadBasis == .perImplement {
+                    Stepper("Implements used: \(exercise.resolvedImplementCount)", value: Binding(
+                        get: { exercise.resolvedImplementCount },
+                        set: { exercise.implementCount = $0 }
+                    ), in: 1...4)
+                }
                 // 0 = no rest of its own → the timer falls to the configurable
                 // rest buckets in Settings; any value set here wins everywhere.
                 Stepper(

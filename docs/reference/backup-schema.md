@@ -23,7 +23,7 @@ These values must change together.
 
 Every session carries:
 
-- `date`, `notes`, optional historical `gym`, and optional stable `gymId`
+- optional stable `id`, `date`, `notes`, optional historical `gym`, and optional stable `gymId`
 - `isCompleted`, preserving both open and banked sessions
 - optional `programTag`
 - ordered `exercises`, each with its planned prescription, optional stable
@@ -38,6 +38,15 @@ Every set carries a `status` of `planned`, `completed`, or `skipped`. Only
 completed sets contribute to volume, PRs, charts, HealthKit metadata, or
 progression. Quality remains optional and mutually exclusive (`clean`,
 `grindy`, or `wobble`); `stopped early` is an independent observation.
+
+Newer version-2 exports also snapshot each set's `loadBasis` and
+`implementCount`. The basis distinguishes total bar weight, per-implement
+weight, total external resistance, assistance, and unloaded bodyweight. This
+keeps historical tonnage and PR comparisons stable if an exercise definition
+is edited later. Exercise definitions carry the same defaults. Gym records may
+carry combined `collarWeightLb` and a `loadingPolicy` (`closest`, `under`,
+`over`, or `exact`); both clients fall back to zero-weight collars and closest
+loading when those optional keys are absent.
 
 Programs, program lift/accessory slots, and gyms each export their stable ID.
 The session exercise's `programSlotId` points at the exact lift or accessory

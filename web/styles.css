@@ -128,6 +128,10 @@ input, select, textarea {
   border-radius: 11px; padding: 11px 12px; font-size: 17px; font-family: inherit; width: 100%;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
 input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .seg { display: flex; background: var(--card2); border-radius: 11px; padding: 3px; gap: 3px; }
 .seg button { flex: 1; min-height: 44px; border: 0; background: none; color: var(--muted); padding: 8px 6px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }

@@ -183,7 +183,7 @@ struct ActiveSessionView: View {
                         session.gymID = selected.id
                         session.gymName = selected.name
                         for entry in session.exercises where entry.barID == nil {
-                            synchronizeWarmups(entry, bar: selected.defaultBar,
+                            synchronizeWarmups(entry, bar: selected.defaultBar, gym: selected,
                                                enteredUnit: settingsList.first?.unitDisplay.primaryUnit ?? .lb,
                                                context: context)
                         }
@@ -432,7 +432,13 @@ private struct ExerciseSection: View {
             }
         }
         entry.exercise = newExercise
-        entry.sets.forEach { $0.isPerSide = newExercise.isUnilateral }
+        entry.sets.forEach { set in
+            set.isPerSide = newExercise.isUnilateral
+            if set.status == .planned {
+                set.loadBasis = newExercise.loadBasis
+                set.implementCount = newExercise.resolvedImplementCount
+            }
+        }
         reconcileWarmups(oldType: oldType, newExercise: newExercise)
         if PersistenceErrorCenter.shared.save(context, operation: "Swapping the exercise") { onWork(entry) }
     }
@@ -453,7 +459,7 @@ private struct ExerciseSection: View {
             // leftover gaps (3,4,5) would collide with the next added set.
             for (i, set) in entry.orderedSets.enumerated() { set.order = i }
         } else {
-            synchronizeWarmups(entry, bar: effectiveBar,
+            synchronizeWarmups(entry, bar: effectiveBar, gym: gym,
                                enteredUnit: settings?.unitDisplay.primaryUnit ?? .lb,
                                context: context)
         }
@@ -570,7 +576,7 @@ private struct ExerciseSection: View {
                     get: { effectiveBar },
                     set: {
                         entry.barID = $0.id
-                        synchronizeWarmups(entry, bar: $0,
+                        synchronizeWarmups(entry, bar: $0, gym: gym,
                                            enteredUnit: settings?.unitDisplay.primaryUnit ?? .lb,
                                            context: context)
                         PersistenceErrorCenter.shared.save(context, operation: "Changing the exercise bar")
@@ -661,7 +667,9 @@ private struct ExerciseSection: View {
             reps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             isPerSide: entry.exercise?.isUnilateral ?? false,
             enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
-            durationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil
+            durationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil,
+            loadBasis: last?.loadBasis ?? entry.exercise?.loadBasis,
+            implementCount: last?.resolvedImplementCount ?? entry.exercise?.resolvedImplementCount ?? 1
         )
         set.sessionExercise = entry
         context.insert(set)
@@ -682,7 +690,7 @@ private struct ExerciseSection: View {
 /// Keep the editable prescription and its equipment illustration on the same
 /// bar context without discarding status/quality already logged on matching
 /// warmup rows.
-private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar,
+private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar, gym: Gym?,
                                 enteredUnit: WeightUnit, context: ModelContext) {
     guard let exercise = entry.exercise,
           let workingLb = entry.plannedWeightLb
@@ -690,8 +698,10 @@ private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar,
           workingLb > 0 else { return }
     let desired: [WarmupSet]
     if exercise.type == .barbell {
-        desired = WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
-                                  roundingLb: ProgramEngine.defaultRoundingLb)
+        desired = ProgramSession.achievableWarmups(
+            WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
+                            roundingLb: ProgramEngine.defaultRoundingLb),
+            workingLb: workingLb, gym: gym, bar: bar)
     } else if exercise.type == .dumbbell && entry.programRole == LiftRole.main.rawValue {
         desired = WarmupRamp.dumbbellRamp(workingLb: workingLb,
                                           roundingLb: ProgramEngine.loadStep(
@@ -709,7 +719,9 @@ private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar,
             rebuilt.append(existing[index])
         } else {
             let set = SetEntry(order: index, weightLb: target.weightLb, reps: target.reps,
-                               isWarmup: true, enteredUnit: enteredUnit)
+                               isWarmup: true, enteredUnit: enteredUnit,
+                               loadBasis: exercise.loadBasis,
+                               implementCount: exercise.resolvedImplementCount)
             set.sessionExercise = entry
             context.insert(set)
             rebuilt.append(set)
@@ -818,9 +830,10 @@ private struct SetRow: View {
 
     private var weightLabel: String {
         if set.weightLb == 0 { return "BW" }
+        let suffix = set.loadBasis.shortSuffix
         switch set.enteredUnit {
-        case .lb: return "\(Weight.trim(set.weightLb)) lb"
-        case .kg: return "\(Weight.trim(Weight.kg(fromLb: set.weightLb))) kg"
+        case .lb: return "\(Weight.trim(set.weightLb)) lb\(suffix)"
+        case .kg: return "\(Weight.trim(Weight.kg(fromLb: set.weightLb))) kg\(suffix)"
         }
     }
 }
@@ -1214,7 +1227,7 @@ private struct SetDetailSheet: View {
         if applyToRemaining && !isWarmup {
             entry.plannedWeightLb = lb
             entry.plannedReps = reps
-            synchronizeWarmups(entry, bar: bar, enteredUnit: unit, context: context)
+            synchronizeWarmups(entry, bar: bar, gym: gym, enteredUnit: unit, context: context)
         }
     }
 }

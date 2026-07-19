@@ -31,18 +31,21 @@ struct BarbellView: View {
     private static let gap: CGFloat = 1.5
     private static let sleeve: CGFloat = 18
 
-    /// The plate denominations of the chosen unit that exist at this gym
-    /// (mirrors web `stationPlates`).
+    /// Every enabled denomination at this gym. `unit` is only the fallback
+    /// rack when no gym inventory exists; a configured mixed rack must draw
+    /// the same achieved load the prescription solver stored.
     private var stationPlates: [Plate] {
-        var list = gym?.availablePlates ?? Plate.allStandard
-        list = list.filter { $0.unit == unit }
-        if list.isEmpty { list = unit == .kg ? Plate.standardKg : Plate.standardLb }
-        return list
+        guard let gym, !gym.availablePlates.isEmpty else {
+            return unit == .kg ? Plate.standardKg : Plate.standardLb
+        }
+        return gym.availablePlates
     }
 
     var body: some View {
         let solution = loadout.map { PlateSolution(loadout: $0, targetLb: weightLb) }
-            ?? PlateMath.solve(targetLb: weightLb, bar: bar, plates: stationPlates)
+            ?? PlateMath.solve(targetLb: weightLb, bar: bar, plates: stationPlates,
+                               collarLb: gym?.collarWeightLb ?? 0,
+                               policy: gym?.loadingPolicy ?? .closest)
         let plates = solution.loadout.perSide.flatMap { Array(repeating: $0.plate, count: $0.count) }
         let width = max(46, Self.sleeve + 6 + CGFloat(plates.count) * (Self.plateW + Self.gap) + 4)
 
@@ -76,9 +79,13 @@ struct BarbellView: View {
                 Text("≈ closest \(Weight.trim(total)) \(unit.rawValue)")
                     .font(.caption2)
                     .foregroundStyle(Theme.warn)
+            } else if !solution.satisfiesPolicy {
+                Text("closest available · policy not exact")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.warn)
             }
         }
-        .accessibilityLabel("Barbell: \(solution.loadout.perSideLabel) per side on \(bar.label)")
+        .accessibilityLabel("Barbell: \(solution.loadout.perSideLabel) per side on \(bar.label)\(solution.loadout.collarLb > 0 ? ", including collars" : "")")
     }
 }
 // Plate colours use the shared Color(hex:) from Theme.swift.

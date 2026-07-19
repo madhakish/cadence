@@ -157,6 +157,37 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(PlateMath.total(bar: .bar20kg, perSide: []), 44.09, accuracy: 0.01)
     }
 
+    func testCollarsCountTowardAchievedWeight() {
+        let s = PlateMath.solve(targetLb: 140, bar: .bar45lb, plates: Plate.standardLb, collarLb: 5)
+        XCTAssertEqual(s.loadout.totalLb, 140, accuracy: 1e-9)
+        XCTAssertEqual(s.loadout.collarLb, 5, accuracy: 1e-9)
+        XCTAssertEqual(PlateMath.total(bar: .bar45lb, perSide: s.loadout.perSide, collarLb: 5), 140, accuracy: 1e-9)
+    }
+
+    func testDirectionalLoadingPolicies() {
+        let plates = [Plate(value: 5, unit: .lb)]
+        let under = PlateMath.solve(targetLb: 133, bar: .bar45lb, plates: plates, policy: .under)
+        let over = PlateMath.solve(targetLb: 133, bar: .bar45lb, plates: plates, policy: .over)
+        XCTAssertLessThanOrEqual(under.loadout.totalLb, 133)
+        XCTAssertGreaterThanOrEqual(over.loadout.totalLb, 133)
+        XCTAssertTrue(under.satisfiesPolicy)
+        XCTAssertTrue(over.satisfiesPolicy)
+    }
+
+    func testNeverUnderSearchFindsDistantValidOvershoot() {
+        let s = PlateMath.solve(targetLb: 50, bar: .bar45lb,
+                                plates: [Plate(value: 10, unit: .lb)], policy: .over)
+        XCTAssertEqual(s.loadout.totalLb, 65, accuracy: 1e-9)
+        XCTAssertTrue(s.satisfiesPolicy)
+    }
+
+    func testImpossibleExactPolicyReturnsClosestWithWarning() {
+        let s = PlateMath.solve(targetLb: 133, bar: .bar45lb,
+                                plates: [Plate(value: 5, unit: .lb)], policy: .exact)
+        XCTAssertFalse(s.satisfiesPolicy)
+        XCTAssertEqual(s.loadout.totalLb, 135, accuracy: 1e-9)
+    }
+
     // MARK: - 20 kg bar
 
     func testKgBarKgPlates() {
