@@ -149,6 +149,46 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(ProgramEngine.resolvedStyle(.automatic, movementGroup: "olympic", role: .main, focus: .strength), .technique)
     }
 
+    func testStaleSquatBaseReanchorsFromExactPriorLoadExposure() {
+        let repaired = ProgramEngine.reconciledBaseWeight(
+            storedBaseWeightLb: 150,
+            previousPerformedWeightLb: 215,
+            previousPhase: .load,
+            currentPhase: .peak,
+            programRoundingLb: 5,
+            exerciseType: "barbell",
+            movementGroup: "squat"
+        )
+        XCTAssertEqual(repaired, 195)
+        XCTAssertEqual(ProgramEngine.programPlan(
+            for: CycleState(baseWeightLb: repaired, nextPhase: .peak),
+            programRoundingLb: 5,
+            exerciseType: "barbell",
+            movementGroup: "squat"
+        ).weightLb, 230)
+    }
+
+    func testReanchorLeavesValidRisingPlanAndDeloadAlone() {
+        XCTAssertEqual(ProgramEngine.reconciledBaseWeight(
+            storedBaseWeightLb: 200,
+            previousPerformedWeightLb: 215,
+            previousPhase: .load,
+            currentPhase: .peak,
+            programRoundingLb: 5,
+            exerciseType: "barbell",
+            movementGroup: "squat"
+        ), 200)
+        XCTAssertEqual(ProgramEngine.reconciledBaseWeight(
+            storedBaseWeightLb: 150,
+            previousPerformedWeightLb: 215,
+            previousPhase: .peak,
+            currentPhase: .deload,
+            programRoundingLb: 5,
+            exerciseType: "barbell",
+            movementGroup: "squat"
+        ), 150)
+    }
+
     func testComplementaryVolumeDoesNotInheritMainFiveByFive() {
         let state = CycleState(baseWeightLb: 200, nextPhase: .volume)
         let plan = ProgramEngine.programPlan(for: state, programRoundingLb: 5, exerciseType: "barbell",

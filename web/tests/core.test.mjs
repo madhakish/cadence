@@ -185,6 +185,20 @@ eq(C.resolvedPrescriptionStyle("automatic", "press", "main", "strength"), "wave"
 eq(C.resolvedPrescriptionStyle("automatic", "hinge", "complementary", "strength"), "secondary", "automatic complementary uses lower-fatigue strategy");
 eq(C.resolvedPrescriptionStyle("automatic", "press", "main", "hypertrophy"), "hypertrophy", "focus drives hypertrophy prescription");
 eq(C.resolvedPrescriptionStyle("automatic", "olympic", "main", "strength"), "technique", "Olympic lift prioritizes technique");
+const repairedSquatBase = C.reconciledProgramBaseWeight(
+  150, 215, 2, 3, 5, "barbell", "squat", "main", "strength", "automatic",
+);
+eq(repairedSquatBase, 195, "stale squat base re-anchors from exact prior Load exposure");
+eq(C.programPlanFor(
+  { cycleNumber: 1, baseWeightLb: repairedSquatBase, nextPhase: 3, incrementLb: 0 },
+  5, "barbell", "squat", "main", "strength", "automatic",
+).weightLb, 230, "re-anchored squat Peak follows the programmed wave");
+eq(C.reconciledProgramBaseWeight(
+  200, 215, 2, 3, 5, "barbell", "squat", "main", "strength", "automatic",
+), 200, "already-rising stored prescription remains authoritative");
+eq(C.reconciledProgramBaseWeight(
+  150, 215, 3, 4, 5, "barbell", "squat", "main", "strength", "automatic",
+), 150, "deload is never re-anchored upward");
 let rolePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 0 }, 5,
   "barbell", "hinge", "complementary", "strength", "automatic");
 eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x5@200", "complementary volume avoids a second 5x5");
@@ -650,21 +664,24 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   const coachingProgram = {
     id: "program", expectedDayIndexes: [0, 1, 2, 3],
     slots: [
-      { id: "squat", exerciseName: "Back Squat", dayIndex: 0, pattern: "squat", plannedSets: 3, isMain: true },
-      { id: "press-a", exerciseName: "Overhead Press", dayIndex: 1, pattern: "verticalPress", plannedSets: 3, isMain: true },
-      { id: "deadlift", exerciseName: "Deadlift", dayIndex: 2, pattern: "hipHinge", plannedSets: 3, isMain: true },
-      { id: "press-b", exerciseName: "Incline DB Press", dayIndex: 3, pattern: "horizontalPress", plannedSets: 3, isMain: true },
-      { id: "row", exerciseName: "Chest-supported Row", dayIndex: 3, pattern: "horizontalPull", plannedSets: 6, maximumSets: 6 },
+      { id: "squat", exerciseName: "Back Squat", dayIndex: 0, pattern: "squat", plannedSets: 3, role: "main", isMain: true },
+      { id: "press-a", exerciseName: "Overhead Press", dayIndex: 1, pattern: "verticalPress", plannedSets: 3, role: "main", isMain: true },
+      { id: "deadlift", exerciseName: "Deadlift", dayIndex: 2, pattern: "hipHinge", plannedSets: 3, role: "main", isMain: true },
+      { id: "press-b", exerciseName: "Incline DB Press", dayIndex: 3, pattern: "horizontalPress", plannedSets: 3, role: "main", isMain: true },
+      { id: "row", exerciseName: "Chest-supported Row", dayIndex: 3, pattern: "horizontalPull", plannedSets: 6, role: "accessory", maximumSets: 6 },
+      { id: "bike", exerciseName: "Bike", dayIndex: 1, pattern: "easyAerobic", plannedSets: 1, role: "accessory" },
     ],
   };
   const coachingSession = (rotation, dayIndex, dayOffset, weight = 100, actual = weight) => {
     const names = ["Back Squat", "Overhead Press", "Deadlift", "Incline DB Press"];
     const patterns = ["squat", "verticalPress", "hipHinge", "horizontalPress"];
+    const slotIDs = ["squat", "press-a", "deadlift", "press-b"];
     return {
       id: `1-${rotation}-${dayIndex}`, date: new Date(1_700_000_000_000 + dayOffset * 86_400_000).toISOString(),
       programID: "program", cycleNumber: 1, rotation, dayIndex, completed: true,
       exercises: [{
-        slotID: `slot-${dayIndex}`, exerciseName: names[dayIndex], pattern: patterns[dayIndex],
+        slotID: slotIDs[dayIndex], programRole: "main",
+        exerciseName: names[dayIndex], pattern: patterns[dayIndex],
         plannedSets: 3, plannedWeightLb: weight, plannedReps: 5,
         sets: Array.from({ length: 3 }, () => ({ actualWeightLb: actual, actualReps: 5, plannedWeightLb: weight, plannedReps: 5, completed: true })),
       }],
@@ -677,6 +694,7 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
 
   const conditioningSessions = Array.from({ length: 4 }, (_, dayIndex) => coachingSession(1, dayIndex, dayIndex * 3));
   conditioningSessions[1].exercises.push({
+    slotID: "bike", programRole: "accessory",
     exerciseName: "Bike", pattern: "easyAerobic", plannedSets: 1,
     sets: [{ actualWeightLb: 0, actualReps: 0, durationSeconds: 1_200, completed: true }],
   });
@@ -684,11 +702,42 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
     actualWeightLb: 120, actualReps: 1, plannedWeightLb: 120, plannedReps: 1,
     prescriptionBlock: "topSingle", completed: true,
   });
+  conditioningSessions[0].exercises[0].sets.push({
+    actualWeightLb: 500, actualReps: 20, plannedWeightLb: 500, plannedReps: 20,
+    completed: true,
+  });
+  conditioningSessions[0].exercises.push({
+    exerciseName: "Back Squat", pattern: "squat", plannedSets: 1,
+    sets: [{ actualWeightLb: 500, actualReps: 20, completed: true }],
+  });
   report = C.evaluateCoaching(coachingProgram, conditioningSessions);
   eq(report.rotations[0].plannedWorkingSets, 12, "conditioning does not inflate planned lifting sets");
   eq(report.rotations[0].completedWorkingSets, 12, "conditioning does not inflate completed lifting sets");
   eq(report.rotations[0].conditioningMinutes, 20, "conditioning remains in its minute ledger");
-  eq(report.rotations[0].patternSets.squat, 3, "top single is performance evidence, not a budget work set");
+  eq(report.rotations[0].patternSets.squat, 3,
+    "top singles, added sets, and slotless exercises are not program distribution");
+
+  const sameLiftProgram = {
+    id: "program", expectedDayIndexes: [0, 1], slots: [
+      { id: "lower-b-main", exerciseName: "Back Squat", dayIndex: 0, pattern: "squat", plannedSets: 3, role: "main", isMain: true },
+      { id: "lower-a-complementary", exerciseName: "Back Squat", dayIndex: 1, pattern: "squat", plannedSets: 3, role: "complementary" },
+    ],
+  };
+  const squatExposure = (rotation, dayIndex, slotID, role, weight) => ({
+    id: `${rotation}-${dayIndex}`, date: new Date(1_700_000_000_000 + (rotation * 10 + dayIndex) * 86_400_000).toISOString(),
+    programID: "program", cycleNumber: 1, rotation, dayIndex, completed: true,
+    exercises: [{ slotID, programRole: role, exerciseName: "Back Squat", pattern: "squat",
+      plannedSets: 3, plannedWeightLb: weight, plannedReps: 3,
+      sets: Array.from({ length: 3 }, () => ({ actualWeightLb: weight, actualReps: 3,
+        plannedWeightLb: weight, plannedReps: 3, completed: true })) }],
+  });
+  report = C.evaluateCoaching(sameLiftProgram, [
+    squatExposure(1, 0, "lower-b-main", "main", 225),
+    squatExposure(1, 1, "lower-a-complementary", "complementary", 175),
+    squatExposure(2, 0, "lower-b-main", "main", 225),
+    squatExposure(2, 1, "lower-a-complementary", "complementary", 140),
+  ]);
+  eq(report.currentReadiness, "yellow", "same-name main and complementary output is compared by slot");
 
   let sessions = [];
   for (let rotation = 1; rotation <= 3; rotation++) {

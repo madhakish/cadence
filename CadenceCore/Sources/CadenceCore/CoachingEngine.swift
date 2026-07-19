@@ -187,6 +187,7 @@ public struct CoachingSetSnapshot: Hashable, Sendable {
 
 public struct CoachingExerciseSnapshot: Hashable, Sendable {
     public var slotID: String?
+    public var programRole: String?
     public var exerciseName: String
     public var pattern: MovementPattern
     public var plannedSets: Int
@@ -197,6 +198,7 @@ public struct CoachingExerciseSnapshot: Hashable, Sendable {
 
     public init(
         slotID: String? = nil,
+        programRole: String? = nil,
         exerciseName: String,
         pattern: MovementPattern,
         plannedSets: Int,
@@ -206,6 +208,7 @@ public struct CoachingExerciseSnapshot: Hashable, Sendable {
         sets: [CoachingSetSnapshot]
     ) {
         self.slotID = slotID
+        self.programRole = programRole
         self.exerciseName = exerciseName
         self.pattern = pattern
         self.plannedSets = plannedSets
@@ -258,6 +261,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
     public var dayIndex: Int
     public var pattern: MovementPattern
     public var plannedSets: Int
+    public var role: String
     public var isMain: Bool
     public var capacityManaged: Bool
     public var maximumSets: Int
@@ -268,6 +272,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         dayIndex: Int,
         pattern: MovementPattern,
         plannedSets: Int,
+        role: String? = nil,
         isMain: Bool = false,
         capacityManaged: Bool = true,
         maximumSets: Int = 6
@@ -277,6 +282,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         self.dayIndex = dayIndex
         self.pattern = pattern
         self.plannedSets = plannedSets
+        self.role = role ?? (isMain ? LiftRole.main.rawValue : "accessory")
         self.isMain = isMain
         self.capacityManaged = capacityManaged
         self.maximumSets = maximumSets
@@ -400,7 +406,7 @@ public enum CoachingEngine {
         let relevant = sessions.filter { session in
             guard session.completed, session.programID == program.id else { return false }
             return reliableHistoryStart.map { session.date >= $0 } ?? true
-        }
+        }.map { programmedSnapshot($0, slots: program.slots) }
         let grouped = Dictionary(grouping: relevant) {
             RotationKey(programID: $0.programID, cycleNumber: $0.cycleNumber, rotation: $0.rotation)
         }
@@ -421,7 +427,7 @@ public enum CoachingEngine {
             )
             rotations.append(assessment)
             if assessment.isComplete {
-                previousPerformance = performanceByExercise(group)
+                previousPerformance = performanceBySlot(group)
                 previousReadiness = assessment.readiness
             }
         }
@@ -456,6 +462,10 @@ public enum CoachingEngine {
     ) -> RotationAssessment {
         let completedDays = Set(sessions.map(\.dayIndex))
         let isComplete = completedDays.isSuperset(of: expectedDayIndexes)
+        // Program coaching is keyed to the durable day/role slot. A same-name
+        // lift from another day, an exercise added on the fly, and sets beyond
+        // the slot's immutable prescription remain valid workout history, but
+        // none of them get a vote on program readiness or distribution.
         let allExercises = sessions.flatMap(\.exercises)
         let allSets = allExercises.flatMap(\.sets)
         // Conditioning has its own ledger. Its minutes remain visible on the
@@ -486,9 +496,9 @@ public enum CoachingEngine {
         let workingQualityFlags = completedWorking.filter {
             $0.quality == .grindy || $0.quality == .wobble
         }.count
-        let currentPerformance = performanceByExercise(sessions)
-        let deltas = currentPerformance.compactMap { name, value -> Double? in
-            guard let prior = priorPerformance[name], prior > 0 else { return nil }
+        let currentPerformance = performanceBySlot(sessions)
+        let deltas = currentPerformance.compactMap { slotID, value -> Double? in
+            guard let prior = priorPerformance[slotID], prior > 0 else { return nil }
             return (value - prior) / prior
         }
         let meaningfulDrops = deltas.filter { $0 <= redPerformanceDrop }.count
@@ -551,15 +561,68 @@ public enum CoachingEngine {
         return repsMet && set.actualWeightLb >= planned - 0.01
     }
 
-    private static func performanceByExercise(_ sessions: [CoachingSessionSnapshot]) -> [String: Double] {
+    private static func performanceBySlot(_ sessions: [CoachingSessionSnapshot]) -> [String: Double] {
         var result: [String: Double] = [:]
         for exercise in sessions.flatMap(\.exercises) where !exercise.pattern.isConditioning {
-            let best = exercise.sets.filter { !$0.isWarmup && $0.completed && $0.actualReps > 0 }
+            guard let slotID = exercise.slotID else { continue }
+            let best = exercise.sets.filter {
+                !$0.isWarmup && $0.prescriptionBlock == .work && $0.completed && $0.actualReps > 0
+            }
                 .map { ProgramProgression.epleyE1RM(weightLb: $0.actualWeightLb, reps: $0.actualReps) }
                 .max() ?? 0
-            if best > 0 { result[exercise.exerciseName] = max(result[exercise.exerciseName] ?? 0, best) }
+            if best > 0 { result[slotID] = max(result[slotID] ?? 0, best) }
         }
         return result
+    }
+
+    /// Resolve an exercise only to the slot that prescribed it. Exact IDs are
+    /// authoritative. The day/name/role path exists solely for pre-slot-ID
+    /// history and succeeds only when it identifies one unambiguous slot.
+    private static func resolvedSlot(
+        for exercise: CoachingExerciseSnapshot,
+        dayIndex: Int,
+        slots: [CoachingProgramSlot]
+    ) -> CoachingProgramSlot? {
+        if let slotID = exercise.slotID,
+           let exact = slots.first(where: { $0.id == slotID && $0.dayIndex == dayIndex }) {
+            return exact
+        }
+        guard let role = exercise.programRole else { return nil }
+        let legacy = slots.filter {
+            $0.dayIndex == dayIndex && $0.exerciseName == exercise.exerciseName && $0.role == role
+        }
+        return legacy.count == 1 ? legacy[0] : nil
+    }
+
+    private static func programmedSnapshot(
+        _ session: CoachingSessionSnapshot,
+        slots: [CoachingProgramSlot]
+    ) -> CoachingSessionSnapshot {
+        var copy = session
+        copy.exercises = session.exercises.compactMap { exercise in
+            guard let slot = resolvedSlot(for: exercise, dayIndex: session.dayIndex, slots: slots) else {
+                return nil
+            }
+            var programmed = exercise
+            programmed.slotID = slot.id
+            programmed.programRole = slot.role
+            programmed.pattern = slot.pattern
+
+            // Added sets are appended after the immutable planned block. Keep
+            // non-work prescription blocks for safety/quality observations,
+            // but cap work and conditioning to what this slot prescribed.
+            var remainingWork = max(0, exercise.plannedSets)
+            programmed.sets = exercise.sets.filter { set in
+                guard set.prescriptionBlock == .work || set.prescriptionBlock == .conditioning else {
+                    return true
+                }
+                guard remainingWork > 0 else { return false }
+                remainingWork -= 1
+                return true
+            }
+            return programmed
+        }
+        return copy
     }
 
     private static func recommend(

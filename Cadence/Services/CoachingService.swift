@@ -42,6 +42,7 @@ enum CoachingService {
                     dayIndex: day.order,
                     pattern: exercise?.movementPattern ?? .unknown,
                     plannedSets: plan.sets,
+                    role: lift.role.rawValue,
                     isMain: lift.role == .main,
                     capacityManaged: lift.capacityManaged,
                     maximumSets: lift.maximumSets
@@ -54,6 +55,7 @@ enum CoachingService {
                     dayIndex: day.order,
                     pattern: exerciseByName[accessory.exerciseName]?.movementPattern ?? .unknown,
                     plannedSets: accessory.sets,
+                    role: "accessory",
                     capacityManaged: accessory.capacityManaged,
                     maximumSets: accessory.maximumSets
                 )
@@ -91,6 +93,7 @@ enum CoachingService {
                 }
                 return CoachingExerciseSnapshot(
                     slotID: entry.programSlotID,
+                    programRole: entry.programRole,
                     exerciseName: exercise.name,
                     pattern: exercise.movementPattern,
                     plannedSets: entry.plannedSets ?? entry.plannedWorkingSets.count,
