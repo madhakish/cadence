@@ -16,14 +16,14 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
       );
       return { id: lift.id, exerciseName: lift.exerciseName, dayIndex: day.order,
         pattern: exercise?.movementPattern || C.movementPattern(lift.exerciseName, exercise?.movementGroup),
-        plannedSets: plan.sets, isMain: lift.role === "main", capacityManaged: lift.capacityManaged !== false,
+        plannedSets: plan.sets, role: lift.role, isMain: lift.role === "main", capacityManaged: lift.capacityManaged !== false,
         maximumSets: lift.maximumSets || 6 };
     }),
     ...(day.accessories || []).map((accessory) => {
       const exercise = exMap.get(accessory.exerciseName);
       return { id: accessory.id, exerciseName: accessory.exerciseName, dayIndex: day.order,
         pattern: exercise?.movementPattern || C.movementPattern(accessory.exerciseName, exercise?.movementGroup),
-        plannedSets: accessory.sets, isMain: false, capacityManaged: accessory.capacityManaged !== false,
+        plannedSets: accessory.sets, role: "accessory", isMain: false, capacityManaged: accessory.capacityManaged !== false,
         maximumSets: accessory.maximumSets || 6 };
     }),
   ]);
@@ -41,7 +41,7 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
       }),
       exercises: (session.exercises || []).map((entry) => {
         const exercise = exMap.get(entry.exerciseName);
-        return { slotID: entry.programSlotId || null, exerciseName: entry.exerciseName,
+        return { slotID: entry.programSlotId || null, programRole: entry.programRole || null, exerciseName: entry.exerciseName,
           pattern: exercise?.movementPattern || C.movementPattern(entry.exerciseName, exercise?.movementGroup),
           plannedSets: entry.plannedSets ?? (entry.sets || []).filter((set) => !set.isWarmup).length,
           plannedWeightLb: entry.plannedWeightLb ?? null, plannedReps: entry.plannedReps ?? null,

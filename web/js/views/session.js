@@ -153,20 +153,44 @@ export async function openSession(id) {
   const priorSessions = (await Sessions.completed())
     .filter((s) => s.id !== session.id)
     .sort((a, b) => new Date(b.date) - new Date(a.date)); // newest first, sorted once
+  const sessionProgram = session.programTag
+    ? await Programs.byStableId(session.programTag.programId)
+      || (await Programs.all()).find((candidate) => candidate.name === session.programTag.programName)
+    : null;
   const save = () => Sessions.save(session);
 
-  // Compact previous-performance context searched across ALL history (not
-  // just this program), so a lift you
-  // swapped away from months ago still tells you where you left off.
-  // Mirrors the native ActiveSessionView.lastTime.
-  function lastTimeLine(name) {
+  // Program recall is slot-scoped. Same-name main/complementary work on other
+  // days and slotless extra work are different exposures.
+  function lastTimeLine(current) {
+    const tag = session.programTag;
+    const sameSlot = (past, candidate) => {
+      if (candidate.exerciseName !== current.exerciseName) return false;
+      if (!current.programRole) return !candidate.programRole;
+      const pastTag = past.programTag;
+      if (!tag || !pastTag) return false;
+      const programIds = new Set([tag.programId, sessionProgram?.uuid, sessionProgram?.id]
+        .filter((value) => value != null));
+      const sameProgram = programIds.has(pastTag.programId)
+        || (pastTag.programId == null && tag.programName === pastTag.programName);
+      if (!sameProgram) return false;
+      if (current.programSlotId && candidate.programSlotId === current.programSlotId) return true;
+      return !candidate.programSlotId && candidate.programRole === current.programRole
+        && tag.dayIndex === pastTag.dayIndex;
+    };
+    const dayName = tag ? sessionProgram?.days?.find((day) => day.order === tag.dayIndex)?.name : null;
+    const prefix = ["Last", current.programRole, dayName].filter(Boolean).join(" ");
     for (const p of priorSessions) {
-      const entries = (p.exercises || []).filter((e) => e.exerciseName === name);
-      const tops = entries.map((e) => topSetOf(e)).filter(Boolean);
-      if (!tops.length) continue;
-      const top = tops.reduce((b, t) => (t.weightLb > b.weightLb ? t : b));
+      const entry = (p.exercises || []).find((candidate) => sameSlot(p, candidate));
+      const recalledSets = entry && current.programRole
+        ? (entry.sets || []).filter((set) => !set.isWarmup
+          && ["work", "conditioning"].includes(set.prescriptionBlock || "work"))
+          .slice(0, entry.plannedSets ?? entry.sets.length)
+          .filter((set) => set.status === "completed")
+        : (entry?.sets || []).filter((set) => !set.isWarmup && set.status === "completed");
+      const top = recalledSets.reduce((best, set) => (!best || set.weightLb > best.weightLb ? set : best), null);
+      if (!top) continue;
       const w = top.weightLb === 0 ? "BW" : ui.fmtWeight(top.weightLb);
-      return `Last: ${w}×${top.reps} · ${ui.fmtDate(p.date)} (${agoLabel(p.date)})`;
+      return `${prefix}: ${w}×${top.reps} · ${ui.fmtDate(p.date)} (${agoLabel(p.date)})`;
     }
     return null;
   }
@@ -299,7 +323,7 @@ export async function openSession(id) {
         ui.h("button", { class: "btn sm ghost", text: `⏱ ${ui.mmss(restFor(ex, se.programRole))}`, onClick: () => editRest(se, ex, body) }),
         ex && ex.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null));
     const card = ui.h("div", { class: "card" }, head);
-    const last = lastTimeLine(se.exerciseName);
+    const last = lastTimeLine(se);
     if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
 
     se.sets.sort((a, b) => a.order - b.order);
@@ -805,8 +829,15 @@ async function completeSessionInner(session) {
     trackByName.set(exerciseName, track);
   }
 
-  const hasCompletedWork = session.exercises.some((se) => se.sets.some((set) => !set.isWarmup && set.status === "completed"));
-  const prog = session.programTag && hasCompletedWork ? await advanceProgram(session, milestones) : null;
+  const hasCompletedProgramInstruction = session.exercises.some((se) => {
+    if (!se.programSlotId && !se.programRole) return false;
+    const candidates = (se.sets || []).filter((set) => !set.isWarmup
+      && ["work", "conditioning"].includes(set.prescriptionBlock || "work"));
+    return candidates.slice(0, se.plannedSets ?? candidates.length)
+      .some((set) => set.status === "completed");
+  });
+  const prog = session.programTag && hasCompletedProgramInstruction
+    ? await advanceProgram(session, milestones) : null;
   if (prog) milestoneRecords.push(...prog.noteRecords);
 
   // One transaction: milestones, track advances, program state, and the
@@ -835,9 +866,21 @@ async function completeSessionInner(session) {
 }
 
 // ---- Performance summaries (built from logged sets, consumed by the core) ----
+function prescribedWork(se) {
+  const candidates = (se.sets || []).filter((set) => !set.isWarmup
+    && (set.prescriptionBlock || "work") === "work");
+  return candidates.slice(0, se.plannedSets ?? candidates.length)
+    .filter((set) => set.status === "completed");
+}
+
+function programmedEntry(session, slot) {
+  return session.exercises.find((entry) => entry.programSlotId === slot.id)
+    || session.exercises.find((entry) => !entry.programSlotId
+      && entry.programRole === slot.role && entry.exerciseName === slot.exerciseName);
+}
+
 function cyclePerf(se, roundingLb) {
-  const w = se.sets.filter((s) => !s.isWarmup && s.status === "completed"
-    && (s.prescriptionBlock || "work") === "work");
+  const w = prescribedWork(se);
   const presReps = se.plannedReps ?? (w.length ? Math.max(...w.map((s) => s.reps)) : 0); // ?? not ||: mirrors Swift's nil-coalescing
   const top = w.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
   return {
@@ -851,8 +894,7 @@ function cyclePerf(se, roundingLb) {
   };
 }
 function accPerf(se, roundingLb = 5) {
-  const w = se.sets.filter((s) => !s.isWarmup && s.status === "completed"
-    && (s.prescriptionBlock || "work") === "work");
+  const w = prescribedWork(se);
   return {
     completedSets: w.length,
     minRepsAchieved: w.length ? Math.min(...w.map((s) => s.reps)) : 0,
@@ -895,10 +937,9 @@ async function advanceProgram(session, milestones) {
 
   // Accessories: double progression, evaluated every bank.
   for (const acc of day.accessories || []) {
-    const se = session.exercises.find((e) => e.programSlotId === acc.id
-      || (!e.programSlotId && e.programRole === "accessory" && e.exerciseName === acc.exerciseName));
+    const se = programmedEntry(session, { ...acc, role: "accessory" });
     if (!se) continue;
-    const completed = se.sets.filter((set) => !set.isWarmup && set.status === "completed");
+    const completed = prescribedWork(se);
     if (!completed.length) continue;
     const exerciseType = exerciseByName.get(acc.exerciseName)?.type;
     if (exerciseType === "conditioning") continue;
@@ -917,11 +958,9 @@ async function advanceProgram(session, milestones) {
   }
   // Lift slots can opt into rep-window progression instead of phase grading.
   for (const lift of (day.lifts || []).filter((candidate) => candidate.prescription === "doubleProgression")) {
-    const se = session.exercises.find((entry) => entry.programSlotId === lift.id
-      || (!entry.programSlotId && entry.exerciseName === lift.exerciseName));
+    const se = programmedEntry(session, lift);
     if (!se) continue;
-    if (!se.sets.some((set) => !set.isWarmup && set.status === "completed"
-      && (set.prescriptionBlock || "work") === "work")) continue;
+    if (!prescribedWork(se).length) continue;
     const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
     const state = {
       sets: lift.doubleProgressionSets || 3, minReps: lift.minimumReps || 5,
@@ -933,7 +972,7 @@ async function advanceProgram(session, milestones) {
     lift.stallCount = next.stallCount; lift.lastIncrementLb = next.weightLb - state.weightLb;
   }
   for (const lift of (day.lifts || []).filter((candidate) => candidate.peakSingleEnabled)) {
-    const se = session.exercises.find((entry) => entry.programSlotId === lift.id);
+    const se = programmedEntry(session, lift);
     const single = se?.sets.find((set) => set.status === "completed" && set.prescriptionBlock === "topSingle"
       && set.reps >= 1 && !set.autoregReason && !set.bodyFlagSite
       && !(set.flags || []).some((flag) => flag === "grindy" || flag === "wobble"));
@@ -942,9 +981,8 @@ async function advanceProgram(session, milestones) {
   // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
   if (tag.week === 3) {
     for (const lift of (day.lifts || []).filter((candidate) => candidate.prescription !== "doubleProgression")) {
-      const se = session.exercises.find((e) => e.programSlotId === lift.id
-        || (!e.programSlotId && e.exerciseName === lift.exerciseName && e.programRole === lift.role));
-      if (se && se.sets.some((set) => !set.isWarmup && set.status === "completed")) {
+      const se = programmedEntry(session, lift);
+      if (se && prescribedWork(se).length) {
         const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(se.exerciseName)?.type);
         lift.pending = C.advanceCycleLift(lift, cyclePerf(se, loadStep), program.focus, loadStep);
       }
@@ -1034,6 +1072,70 @@ function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
   });
 }
 
+// Preview/start shared repair. Only clean prescribed work from the immediately
+// prior phase of this exact program/day/slot can re-anchor a stale base. Extra
+// entries, appended volume, and same-name main/complementary slots do not count.
+export function reconciledProgramBase(program, day, lift, completedSessions, exercise) {
+  const currentPhase = Number(program.currentWeek);
+  const previousPhase = currentPhase - 1;
+  if (![2, 3].includes(currentPhase)) return lift.baseWeightLb;
+  const programIds = new Set([program.uuid, program.id].filter((id) => id != null));
+  const prior = [...(completedSessions || [])]
+    .filter((session) => {
+      const tag = session.programTag;
+      return session.isCompleted && tag
+        && (programIds.has(tag.programId) || (tag.programId == null && tag.programName === program.name))
+        && tag.cycleNumber === program.cycleNumber
+        && tag.week === previousPhase
+        && tag.dayIndex === day.order;
+    })
+    .sort((a, b) => new Date(b.completedAt || b.date) - new Date(a.completedAt || a.date))[0];
+  if (!prior) return lift.baseWeightLb;
+  const entry = (prior.exercises || []).find((candidate) => candidate.programSlotId === lift.id)
+    || (prior.exercises || []).find((candidate) => !candidate.programSlotId
+      && candidate.programRole === lift.role && candidate.exerciseName === lift.exerciseName);
+  if (!entry) return lift.baseWeightLb;
+
+  const candidates = (entry.sets || []).filter((set) => !set.isWarmup
+    && (set.prescriptionBlock || "work") === "work");
+  const required = entry.plannedSets ?? candidates.length;
+  const prescribed = candidates.slice(0, required);
+  const clean = required > 0 && prescribed.length === required && prescribed.every((set) =>
+    set.status === "completed"
+      && set.reps >= (set.plannedReps ?? entry.plannedReps ?? 0)
+      && !set.autoregReason && !set.bodyFlagSite
+      && !(set.flags || []).some((flag) => ["stopped early", "grindy", "wobble"].includes(flag)));
+  if (!clean) return lift.baseWeightLb;
+  const performedWeightLb = Math.min(...prescribed.map((set) => set.weightLb));
+  return C.reconciledProgramBaseWeight(
+    lift.baseWeightLb, performedWeightLb, previousPhase, currentPhase,
+    program.roundingLb, exercise?.type, exercise?.movementGroup,
+    lift.role, program.focus, lift.prescription || "automatic",
+    { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+  );
+}
+
+function sessionTargetsMatch(session, program, day, exMap) {
+  return orderedProgramSlots(day.lifts, true).every((lift) => {
+    const exercise = exMap.get(lift.exerciseName);
+    const expected = C.programPlanFor(
+      { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb,
+        nextPhase: program.currentWeek, incrementLb: 0 },
+      program.roundingLb, exercise?.type, exercise?.movementGroup,
+      lift.role, program.focus, lift.prescription || "automatic",
+      { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+    ).weightLb;
+    const entry = (session.exercises || []).find((candidate) => candidate.programSlotId === lift.id)
+      || (session.exercises || []).find((candidate) => !candidate.programSlotId
+        && candidate.programRole === lift.role && candidate.exerciseName === lift.exerciseName);
+    // Session-local removals are deliberate and must remain resumable. Compare
+    // only slots still present in the open snapshot.
+    if (!entry) return true;
+    const target = entry?.targetWeightLb ?? entry?.plannedWeightLb;
+    return Number.isFinite(target) && Math.abs(target - expected) < 0.01;
+  });
+}
+
 export async function createSessionFromProgramDay(program, day) {
   // Resume, don't duplicate — but only a session for THIS day at the current
   // position whose BUILT-FROM plan still matches the current plan (issue 17).
@@ -1044,16 +1146,23 @@ export async function createSessionFromProgramDay(program, day) {
   const sortedAccessories = orderedProgramSlots(day.accessories);
   const dayNames = [...sortedLifts.map((l) => l.exerciseName), ...sortedAccessories.map((a) => a.exerciseName)];
   const stableProgramID = program.uuid || program.id;
-  const openForDay = (await Sessions.all()).find((s) => !s.isCompleted && s.programTag
+  const [allSessions, allExercises, gym, settings, coachingDecisions, completedSessions] = await Promise.all([
+    Sessions.all(), Exercises.all(), Gyms.default(), Settings.get(), CoachingDecisions.all(), Sessions.completed(),
+  ]);
+  const exMap = new Map(allExercises.map((e) => [e.name, e]));
+  let repairedProgram = false;
+  for (const lift of sortedLifts) {
+    const base = reconciledProgramBase(program, day, lift, completedSessions, exMap.get(lift.exerciseName));
+    if (base !== lift.baseWeightLb) { lift.baseWeightLb = base; repairedProgram = true; }
+  }
+  if (repairedProgram) await Programs.save(program);
+  const openForDay = allSessions.find((s) => !s.isCompleted && s.programTag
     && (s.programTag.programId === stableProgramID || (s.programTag.programId == null && s.programTag.programName === program.name))
     && C.canResumeSession(s.programTag.cycleNumber, s.programTag.week, s.programTag.dayIndex,
       program.cycleNumber, program.currentWeek, day.order,
-      s.programTag.planNames || [], dayNames));
+      s.programTag.planNames || [], dayNames)
+    && sessionTargetsMatch(s, program, day, exMap));
   if (openForDay) return openForDay.id;
-  const [allExercises, gym, settings, coachingDecisions] = await Promise.all([
-    Exercises.all(), Gyms.default(), Settings.get(), CoachingDecisions.all(),
-  ]);
-  const exMap = new Map(allExercises.map((e) => [e.name, e]));
   const unit = C.primaryUnit(settings.unitDisplay);
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const barLb = C.barLb(bar);

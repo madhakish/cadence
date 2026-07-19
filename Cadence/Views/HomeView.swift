@@ -57,11 +57,15 @@ struct HomeView: View {
         program.orderedDays.first { $0.order == program.nextDayIndex } ?? program.orderedDays.first
     }
 
-    private func rawProgramPlan(_ program: Program, _ lift: ProgramLift) -> SessionPlan {
+    private func rawProgramPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         let exercise = exercises.first { $0.name == lift.exerciseName }
+        let baseWeightLb = ProgramSession.reconciledBaseWeight(
+            for: lift, program: program, day: day,
+            exercise: exercise, sessions: completedSessions
+        )
         return ProgramEngine.programPlan(
-            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
+            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: baseWeightLb, nextPhase: phase, incrementLb: 0),
             programRoundingLb: program.roundingLb,
             exerciseType: exercise?.typeRaw,
             movementGroup: exercise?.movementGroup,
@@ -71,8 +75,8 @@ struct HomeView: View {
             configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""))
     }
 
-    private func programPlan(_ program: Program, _ lift: ProgramLift) -> SessionPlan {
-        let plan = rawProgramPlan(program, lift)
+    private func programPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {
+        let plan = rawProgramPlan(program, day, lift)
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         let exercise = exercises.first { $0.name == lift.exerciseName }
         // Preview the same snapped weight the session will store (secondary barbell lifts).
@@ -232,8 +236,8 @@ struct HomeView: View {
                         }
                         .buttonStyle(.plain)
                         ForEach(day.orderedLifts) { lift in
-                            let target = rawProgramPlan(program, lift)
-                            let plan = programPlan(program, lift)
+                            let target = rawProgramPlan(program, day, lift)
+                            let plan = programPlan(program, day, lift)
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(alignment: .firstTextBaseline) {
                                     VStack(alignment: .leading, spacing: 2) {

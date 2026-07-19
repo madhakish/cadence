@@ -43,6 +43,40 @@ export function programPlanFor(state, programRoundingLb, exerciseType = null, mo
   return { ...plan, weightLb: Math.min(plan.weightLb, state.baseWeightLb + 5) };
 }
 
+// Repair an impossible rising-wave prescription from the immediately prior
+// clean exposure of this exact program slot. Deloads, new cycles, holds above
+// the prior load, double progression, and adjusted work keep stored state.
+export function reconciledProgramBaseWeight(storedBaseWeightLb, previousPerformedWeightLb,
+  previousPhase, currentPhase, programRoundingLb, exerciseType = null, movementGroup = null,
+  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {}) {
+  if (currentPhase !== previousPhase + 1 || ![2, 3].includes(currentPhase)
+      || !(previousPerformedWeightLb > 0)
+      || resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus) === "doubleProgression") {
+    return storedBaseWeightLb;
+  }
+  const plan = (baseWeightLb, nextPhase) => programPlanFor(
+    { cycleNumber: 1, baseWeightLb, nextPhase, incrementLb: 0 },
+    programRoundingLb, exerciseType, movementGroup, role, focus, prescriptionStyle, configuration,
+  );
+  const storedNext = plan(storedBaseWeightLb, currentPhase).weightLb;
+  if (storedNext > previousPerformedWeightLb) return storedBaseWeightLb;
+
+  const step = Math.max(0.5, programLoadStep(programRoundingLb, exerciseType));
+  const upper = Math.max(2000, previousPerformedWeightLb * 2);
+  let bestBase = storedBaseWeightLb;
+  let bestError = Number.POSITIVE_INFINITY;
+  for (let candidate = step; candidate <= upper; candidate += step) {
+    const error = Math.abs(plan(candidate, previousPhase).weightLb - previousPerformedWeightLb);
+    if (error < bestError - 1e-9
+        || (Math.abs(error - bestError) < 1e-9
+          && Math.abs(candidate - storedBaseWeightLb) < Math.abs(bestBase - storedBaseWeightLb))) {
+      bestBase = candidate;
+      bestError = error;
+    }
+  }
+  return plan(bestBase, currentPhase).weightLb > storedNext ? bestBase : storedBaseWeightLb;
+}
+
 export function resolvedPrescriptionStyle(requested = "automatic", movementGroup = null,
   role = "main", focus = "strength") {
   if (requested !== "automatic") return requested;
@@ -982,17 +1016,45 @@ const atPlan = (set) => {
   const repsMet = (set.actualReps ?? 0) >= (set.plannedReps ?? set.actualReps ?? 0);
   return repsMet && (!(set.plannedWeightLb > 0) || (set.actualWeightLb ?? 0) >= set.plannedWeightLb - 0.01);
 };
-const performanceByExercise = (sessions) => {
+const performanceBySlot = (sessions) => {
   const result = {};
   for (const exercise of sessions.flatMap((session) => session.exercises || [])) {
-    if (isConditioningPattern(exercise.pattern)) continue;
+    if (!exercise.slotID || isConditioningPattern(exercise.pattern)) continue;
     const best = Math.max(0, ...(exercise.sets || [])
-      .filter((set) => !set.isWarmup && set.completed !== false && set.actualReps > 0)
+      .filter((set) => !set.isWarmup && (set.prescriptionBlock || "work") === "work"
+        && set.completed !== false && set.actualReps > 0)
       .map((set) => epleyE1RM(set.actualWeightLb, set.actualReps)));
-    if (best > 0) result[exercise.exerciseName] = Math.max(result[exercise.exerciseName] || 0, best);
+    if (best > 0) result[exercise.slotID] = Math.max(result[exercise.slotID] || 0, best);
   }
   return result;
 };
+
+function programmedCoachingSession(session, slots) {
+  return {
+    ...session,
+    exercises: (session.exercises || []).flatMap((exercise) => {
+      let slot = exercise.slotID
+        ? slots.find((candidate) => candidate.id === exercise.slotID && candidate.dayIndex === session.dayIndex)
+        : null;
+      if (!slot && exercise.programRole) {
+        const legacy = slots.filter((candidate) => candidate.dayIndex === session.dayIndex
+          && candidate.exerciseName === exercise.exerciseName && candidate.role === exercise.programRole);
+        if (legacy.length === 1) [slot] = legacy;
+      }
+      if (!slot) return [];
+
+      let remainingWork = Math.max(0, exercise.plannedSets || 0);
+      const sets = (exercise.sets || []).filter((set) => {
+        const block = set.prescriptionBlock || (set.isWarmup ? "warmup" : "work");
+        if (!["work", "conditioning"].includes(block)) return true;
+        if (remainingWork <= 0) return false;
+        remainingWork -= 1;
+        return true;
+      });
+      return [{ ...exercise, slotID: slot.id, programRole: slot.role, pattern: slot.pattern, sets }];
+    }),
+  };
+}
 
 function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerformance, priorReadiness) {
   const completedDayIndexes = [...new Set(sessions.map((session) => session.dayIndex))];
@@ -1020,9 +1082,9 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
   const hardStopCheckIn = sessions.some((session) => !!session.hasHardStopCheckIn);
   const warmupQualityFlags = allSets.filter((set) => set.isWarmup && ["grindy", "wobble"].includes(set.quality)).length;
   const workingQualityFlags = completedWorking.filter((set) => ["grindy", "wobble"].includes(set.quality)).length;
-  const currentPerformance = performanceByExercise(sessions);
-  const deltas = Object.entries(currentPerformance).flatMap(([name, value]) => priorPerformance[name] > 0
-    ? [(value - priorPerformance[name]) / priorPerformance[name]] : []);
+  const currentPerformance = performanceBySlot(sessions);
+  const deltas = Object.entries(currentPerformance).flatMap(([slotID, value]) => priorPerformance[slotID] > 0
+    ? [(value - priorPerformance[slotID]) / priorPerformance[slotID]] : []);
   const meaningfulDrops = deltas.filter((delta) => delta <= RED_PERFORMANCE_DROP).length;
   const performanceDelta = deltas.length ? deltas.reduce((sum, value) => sum + value, 0) / deltas.length : null;
   const completionRate = plannedWorkingSets > 0 ? completedWorking.length / plannedWorkingSets : 0;
@@ -1156,7 +1218,8 @@ function coachingRecommendations(program, latest, greenRotationStreak, sessions)
 export function evaluateCoaching(program, sessions, reliableHistoryStart = null) {
   const reliable = reliableHistoryStart == null ? -Infinity : epoch(reliableHistoryStart);
   const relevant = sessions.filter((session) => session.completed !== false
-    && session.programID === program.id && epoch(session.date) >= reliable);
+    && session.programID === program.id && epoch(session.date) >= reliable)
+    .map((session) => programmedCoachingSession(session, program.slots || []));
   const groups = new Map();
   for (const session of relevant) {
     const id = `${session.programID}:${session.cycleNumber}:${session.rotation}`;
@@ -1171,7 +1234,7 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null)
     const assessment = assessCoachingRotation(group.key, group.sessions, [...program.expectedDayIndexes], priorPerformance, priorReadiness);
     rotations.push(assessment);
     if (assessment.isComplete) {
-      priorPerformance = performanceByExercise(group.sessions);
+      priorPerformance = performanceBySlot(group.sessions);
       priorReadiness = assessment.readiness;
     }
   }

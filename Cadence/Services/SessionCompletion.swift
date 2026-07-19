@@ -133,7 +133,7 @@ enum SessionCompletion {
         catch { context.rollback(); throw SaveFailure(underlying: error) }
 
         let isProgramSession = session.programID != nil || session.programName != nil
-        if isProgramSession && session.hasCompletedWork {
+        if isProgramSession && hasCompletedProgramInstruction(in: session) {
             do { try advanceProgram(session, context: context, unitDisplay: unitDisplay, events: &allEvents) }
             catch { context.rollback(); throw SaveFailure(underlying: error) }
         }
@@ -212,10 +212,45 @@ enum SessionCompletion {
 
     // MARK: - Program day/week/cycle advancement (mirrors web advanceProgram)
 
+    /// The set rows created with the session are the prescription. User-added
+    /// rows are appended after them and remain history-only bonus work.
+    private static func prescribedWork(_ entry: SessionExercise) -> [SetEntry] {
+        let candidates = entry.orderedSets.filter {
+            !$0.isWarmup && $0.prescriptionBlock == .work
+        }
+        return Array(candidates.prefix(entry.plannedSets ?? candidates.count))
+            .filter { $0.status == .completed }
+    }
+
+    private static func hasCompletedProgramInstruction(in session: WorkoutSession) -> Bool {
+        session.exercises.contains { entry in
+            guard entry.programSlotID != nil || entry.programRole != nil else { return false }
+            let candidates = entry.orderedSets.filter {
+                !$0.isWarmup
+                    && ($0.prescriptionBlock == .work || $0.prescriptionBlock == .conditioning)
+            }
+            return candidates.prefix(entry.plannedSets ?? candidates.count)
+                .contains { $0.status == .completed }
+        }
+    }
+
+    private static func programmedEntry(
+        for slotID: String,
+        exerciseName: String,
+        role: String,
+        in session: WorkoutSession
+    ) -> SessionExercise? {
+        session.exercises.first { $0.programSlotID == slotID }
+            ?? session.exercises.first {
+                $0.programSlotID == nil && $0.programRole == role
+                    && $0.exercise?.name == exerciseName
+            }
+    }
+
     private static func cyclePerf(_ entry: SessionExercise, roundingLb: Double) -> CycleLiftPerformance {
         // A primer and optional top single are observable preparation/practice.
         // Only the prescribed work block can earn the cycle progression.
-        let w = entry.workingSets.filter { $0.prescriptionBlock == .work }
+        let w = prescribedWork(entry)
         let presReps = entry.plannedReps ?? (w.map(\.reps).max() ?? 0)
         let top = w.max { $0.weightLb < $1.weightLb }
         return CycleLiftPerformance(
@@ -235,7 +270,7 @@ enum SessionCompletion {
     }
 
     private static func accPerf(_ entry: SessionExercise, roundingLb: Double) -> AccessoryPerformance {
-        let w = entry.workingSets.filter { $0.prescriptionBlock == .work }
+        let w = prescribedWork(entry)
         return AccessoryPerformance(
             completedSets: w.count,
             minRepsAchieved: w.map(\.reps).min() ?? 0,
@@ -282,10 +317,10 @@ enum SessionCompletion {
 
         // Accessories: double progression, every bank.
         for acc in day.accessories {
-            if let entry = session.exercises.first(where: {
-                ($0.programSlotID == acc.id || ($0.programSlotID == nil && $0.programRole == "accessory" && $0.exercise?.name == acc.exerciseName))
-                    && !$0.workingSets.isEmpty
-            }) {
+            if let entry = programmedEntry(
+                for: acc.id, exerciseName: acc.exerciseName,
+                role: "accessory", in: session
+            ), !prescribedWork(entry).isEmpty {
                 let exerciseType = exerciseTypeByName[acc.exerciseName]
                 if exerciseType == ExerciseType.conditioning.rawValue {
                     continue
@@ -317,10 +352,10 @@ enum SessionCompletion {
         // rep-window progression as accessories. It advances after each
         // exposure, independent of the four-phase calendar.
         for lift in day.lifts where lift.prescription == .doubleProgression {
-            guard let entry = session.exercises.first(where: {
-                ($0.programSlotID == lift.id || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName))
-                    && !$0.workingSets.isEmpty
-            }) else { continue }
+            guard let entry = programmedEntry(
+                for: lift.id, exerciseName: lift.exerciseName,
+                role: lift.role.rawValue, in: session
+            ), !prescribedWork(entry).isEmpty else { continue }
             let loadStep = ProgramEngine.loadStep(
                 programRoundingLb: program.roundingLb,
                 exerciseType: entry.exercise?.typeRaw
@@ -347,9 +382,13 @@ enum SessionCompletion {
         // A clean, completed top-single becomes the next peak projection's
         // explicit anchor. Adjusted or quality-flagged singles do not.
         for lift in day.lifts where lift.peakSingleEnabled {
-            guard let entry = session.exercises.first(where: { $0.programSlotID == lift.id }) else { continue }
-            if let single = entry.workingSets.first(where: {
+            guard let entry = programmedEntry(
+                for: lift.id, exerciseName: lift.exerciseName,
+                role: lift.role.rawValue, in: session
+            ) else { continue }
+            if let single = entry.orderedSets.first(where: {
                 $0.prescriptionBlock == .topSingle && $0.reps >= 1
+                    && $0.status == .completed
                     && $0.autoregReason == nil && $0.quality != .grindy && $0.quality != .wobble
                     && $0.bodyFlagSite == nil
             }) {
@@ -360,10 +399,10 @@ enum SessionCompletion {
         // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
         if week == 3 {
             for lift in day.lifts where lift.prescription != .doubleProgression {
-                if let entry = session.exercises.first(where: {
-                    ($0.programSlotID == lift.id || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue))
-                        && !$0.workingSets.isEmpty
-                }) {
+                if let entry = programmedEntry(
+                    for: lift.id, exerciseName: lift.exerciseName,
+                    role: lift.role.rawValue, in: session
+                ), !prescribedWork(entry).isEmpty {
                     let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
                                                           exerciseType: entry.exercise?.typeRaw)
                     let result = ProgramProgression.advanceCycleLift(
