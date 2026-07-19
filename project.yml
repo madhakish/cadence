@@ -123,6 +123,8 @@ targets:
     settings:
       base:
         SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: true
+        CODE_SIGNING_ALLOWED: false
 
 schemes:
   Cadence:
