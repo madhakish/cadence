@@ -23,6 +23,11 @@ for (const [message, expected] of cases) {
 
 const workflow = await readFile(new URL("../workflows/ci.yml", import.meta.url), "utf8");
 const releaseJob = workflow.match(/\n  release:\n(?<job>[\s\S]*?)\n  testflight:\n/)?.groups?.job;
+const testflightJob = workflow.match(/\n  testflight:\n(?<job>[\s\S]*?)\n  deploy-web:\n/)?.groups?.job;
+const releaseConfig = JSON.parse(
+  await readFile(new URL("../../.releaserc.json", import.meta.url), "utf8")
+);
+const execPlugin = releaseConfig.plugins.find(([name]) => name === "@semantic-release/exec");
 
 assert.ok(releaseJob, "Expected ci.yml to define release before testflight");
 assert.match(releaseJob, /if: >-\n\s+always\(\) &&/);
@@ -32,8 +37,12 @@ assert.match(releaseJob, /needs\.app-build\.result == 'success'/);
 assert.match(releaseJob, /github\.ref == 'refs\/heads\/main'/);
 assert.match(
   releaseJob,
-  /semantic-release\n(?:\s+#.*\n)*\s+git fetch --force --tags origin\n\s+after=/,
-  "Expected release detection to refresh tags after semantic-release"
+  /marker="\$RUNNER_TEMP\/semantic-release-version"[\s\S]*semantic-release[\s\S]*\[\[ -s "\$marker" \]\]/,
+  "Expected the release job to consume semantic-release's success marker"
 );
+assert.match(execPlugin?.[1]?.successCmd ?? "", /RUNNER_TEMP\/semantic-release-version/);
+assert.ok(testflightJob, "Expected ci.yml to define testflight before deploy-web");
+assert.doesNotMatch(testflightJob, /TESTFLIGHT_ENABLED/);
+assert.match(testflightJob, /needs\.release\.outputs\.published == 'true'/);
 
-console.log(`${cases.length + 7} semantic-release contract assertions passed`);
+console.log(`${cases.length + 11} semantic-release contract assertions passed`);

@@ -6,8 +6,9 @@ CI runners (`testflight` job in `.github/workflows/ci.yml`, driven by
 `main`, the cloud does the rest, and the build shows up in the TestFlight app on
 your phone.
 
-The pipeline is **dormant** until you do the one-time Apple setup below and set
-`TESTFLIGHT_ENABLED=true`. Until then the job is skipped and `main` stays green.
+The pipeline requires the one-time Apple setup below. Once semantic-release
+publishes a tag, TestFlight must upload it; missing Apple or signing
+configuration fails the workflow visibly instead of silently skipping it.
 
 ## One-time setup (≈ 30–45 min, mostly waiting on Apple)
 
@@ -69,7 +70,6 @@ automatically on the first CI run.)
 Repository **variables**:
 | Name | Value |
 |------|-------|
-| `TESTFLIGHT_ENABLED` | `true` |
 | `APP_IDENTIFIER` | `com.madhakish.Cadence` (or your own reverse-DNS id) |
 | `MATCH_READONLY` | `false` **only during first-run provisioning** (with a read/write PAT), then delete — unset means read-only |
 
