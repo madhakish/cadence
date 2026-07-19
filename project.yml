@@ -133,6 +133,9 @@ schemes:
       targets:
         - package: CadenceCore/CadenceCoreTests
   CadenceMigrationTests:
+    build:
+      targets:
+        CadenceMigrationTests: all
     test:
       targets:
         - CadenceMigrationTests
