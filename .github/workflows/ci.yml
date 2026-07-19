@@ -335,6 +335,7 @@ jobs:
     name: TestFlight (fastlane)
     needs: release
     if: >-
+      always() &&
       needs.release.result == 'success' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
