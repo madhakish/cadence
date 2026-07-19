@@ -199,6 +199,7 @@ enum Seeder {
             }
         }
         try clearRetiredRestStamps(byName: byName, context: context)
+        try ensureWorkoutSessionIDs(context: context)
         try snapshotLegacyLoadSemantics(context: context)
         do { try context.save() }
         catch { context.rollback(); throw error }
@@ -228,6 +229,19 @@ enum Seeder {
             }
         }
         settings.loadSemanticsMigrated = true
+    }
+
+    /// V1 sessions predate portable IDs. Backfill after the lightweight schema
+    /// migration, preserving any valid IDs already restored from a backup and
+    /// repairing duplicates defensively before routing/export can observe them.
+    static func ensureWorkoutSessionIDs(context: ModelContext) throws {
+        var seen: Set<String> = []
+        for session in try context.fetch(FetchDescriptor<WorkoutSession>()) {
+            if session.id.isEmpty || seen.contains(session.id) {
+                repeat { session.id = UUID().uuidString } while seen.contains(session.id)
+            }
+            seen.insert(session.id)
+        }
     }
 
     static let retiredRestStamps: [String: Int] = [

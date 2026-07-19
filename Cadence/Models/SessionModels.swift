@@ -12,7 +12,10 @@ enum SetFlag: String, Codable, CaseIterable {
 
 @Model
 final class WorkoutSession {
-    @Attribute(.unique) var id: String = UUID().uuidString
+    /// Literal default keeps V1→V2 lightweight. Existing sessions are assigned
+    /// unique IDs by Seeder immediately after migration; new sessions set one
+    /// in init. Database uniqueness is enforced by import validation/backfill.
+    var id: String = ""
     var date: Date
     var notes: String
     var isCompleted: Bool

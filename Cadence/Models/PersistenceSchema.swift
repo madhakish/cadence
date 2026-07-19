@@ -1,9 +1,9 @@
 import SwiftData
 
-/// Explicit persistence baseline. Future model changes add a new version and
-/// migration stage instead of asking SwiftData to infer the app's history.
-enum CadenceSchemaV1: VersionedSchema {
-    static var versionIdentifier = Schema.Version(1, 0, 0)
+/// Current persistence schema. Never edit an older schema in place: shipped
+/// stores identify it by both version and checksum.
+enum CadenceSchemaV2: VersionedSchema {
+    static var versionIdentifier = Schema.Version(2, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [
@@ -27,6 +27,14 @@ enum CadenceSchemaV1: VersionedSchema {
 }
 
 enum CadenceMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [CadenceSchemaV1.self] }
-    static var stages: [MigrationStage] { [] }
+    static var schemas: [any VersionedSchema.Type] {
+        [CadenceSchemaV1.self, CadenceSchemaV2.self]
+    }
+
+    static var stages: [MigrationStage] {
+        [
+            .lightweight(fromVersion: CadenceSchemaV1.self,
+                         toVersion: CadenceSchemaV2.self),
+        ]
+    }
 }

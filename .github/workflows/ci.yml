@@ -67,6 +67,14 @@ jobs:
         run: brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
+      - name: Verify V1 store migration
+        run: >-
+          xcodebuild test
+          -project Cadence.xcodeproj
+          -scheme CadenceMigrationTests
+          -configuration Release
+          -destination 'platform=macOS'
+          -derivedDataPath build/migration
       - name: Build for iOS Simulator
         run: >-
           xcodebuild build
