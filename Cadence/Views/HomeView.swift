@@ -15,6 +15,8 @@ struct HomeView: View {
         }
     }
     @Environment(\.modelContext) private var context
+    @Environment(RestTimer.self) private var restTimer
+    @Environment(WorkoutClock.self) private var workoutClock
     @Query private var tracks: [LiftTrack]
     @Query private var programs: [Program]
     @Query private var exercises: [Exercise]
@@ -286,6 +288,10 @@ struct HomeView: View {
             ), titleVisibility: .visible) {
                 Button("Discard session", role: .destructive) {
                     guard let session = discardSession else { return }
+                    if workoutClock.isTracking(sessionID: session.id) {
+                        restTimer.stop()
+                        workoutClock.end()
+                    }
                     context.delete(session)
                     PersistenceErrorCenter.shared.save(context, operation: "Discarding the session")
                     discardSession = nil
@@ -349,10 +355,14 @@ struct HomeView: View {
 
         // Pre-fill warmup ramp + working sets. All editable.
         if exercise.type == .barbell {
-            for warmup in WarmupRamp.ramp(
+            let theoretical = WarmupRamp.ramp(
                 workingLb: plan.weightLb,
                 barLb: (defaultGym?.defaultBar ?? .bar45lb).lb,
                 roundingLb: track.roundingLb
+            )
+            for warmup in ProgramSession.achievableWarmups(
+                theoretical, workingLb: plan.weightLb,
+                gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb
             ) {
                 let set = SetEntry(order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps,
                                    isWarmup: true, enteredUnit: entryUnit,

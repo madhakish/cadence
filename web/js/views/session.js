@@ -20,12 +20,38 @@ const loadOptions = (exercise) => ({
   exerciseType: exercise?.type,
 });
 
+const availablePlates = (gym) => {
+  if (!gym || !Array.isArray(gym.plateToggles)) return C.ALL_STANDARD;
+  return gym.plateToggles.filter((toggle) => toggle.enabled)
+    .map((toggle) => ({ value: toggle.value, unit: toggle.unit }));
+};
+
+// The theoretical ramp describes useful jumps; the stored ramp must describe
+// plates that actually exist. Collapse duplicate/equal-to-working results when
+// a sparse rack maps several targets to the same achievable load.
+export function achievableWarmups(ramp, workingLb, bar, gym = null) {
+  const plates = availablePlates(gym);
+  const collarLb = gym?.collarWeightLb || 0;
+  const policy = gym?.loadingPolicy || "closest";
+  const seen = new Set();
+  const achieved = [];
+  for (const warmup of ramp) {
+    const weightLb = C.solve(warmup.weightLb, bar, plates, 10, collarLb, policy).totalLb;
+    const key = weightLb.toFixed(6);
+    if (weightLb >= workingLb - 1e-9 || seen.has(key)) continue;
+    seen.add(key);
+    achieved.push({ ...warmup, weightLb });
+  }
+  return achieved;
+}
+
 async function defaultGymTag() { const g = await Gyms.default(); return { gymId: g?.id || null, gymName: g?.name || null }; }
 
 export async function createSessionFromTrack(track) {
   const [ex, gym, settings] = await Promise.all([Exercises.byName(track.exerciseName), Gyms.default(), Settings.get()]);
   const unit = C.primaryUnit(settings.unitDisplay);
-  const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
+  const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
+  const barLb = C.barLb(bar);
   const sug = track.mode === "cycle" ? C.planFor(trackState(track)) : C.linearPlan(track.baseWeightLb);
   const workingLb = ex?.type === "barbell" && gym
     ? neatProgramWeight(sug.weightLb, ex, true, barLb, track.roundingLb, gym)
@@ -33,7 +59,8 @@ export async function createSessionFromTrack(track) {
   const sets = [];
   let order = 0;
   if (ex && ex.type === "barbell") {
-    for (const w of C.warmupRamp(workingLb, barLb, track.roundingLb)) sets.push(mkSet(order++, w.weightLb, w.reps, { warm: true, unit, ...loadOptions(ex) }));
+    const ramp = achievableWarmups(C.warmupRamp(workingLb, barLb, track.roundingLb), workingLb, bar, gym);
+    for (const w of ramp) sets.push(mkSet(order++, w.weightLb, w.reps, { warm: true, unit, ...loadOptions(ex) }));
   }
   for (let i = 0; i < sug.sets; i += 1) sets.push(mkSet(order++, workingLb, sug.reps, { perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex) }));
   const se = { order: 0, exerciseName: track.exerciseName, notes: "", phase: sug.phase || null, plannedWeightLb: workingLb, plannedSets: sug.sets, plannedReps: sug.reps, sets };
@@ -144,7 +171,7 @@ export async function openSession(id) {
     const workingLb = se.plannedWeightLb ?? working[0]?.weightLb;
     if (!ex || !(workingLb > 0)) return;
     const desired = ex.type === "barbell"
-      ? C.warmupRamp(workingLb, C.barLb(bar), 5)
+      ? achievableWarmups(C.warmupRamp(workingLb, C.barLb(bar), 5), workingLb, bar, gymState.value)
       : (ex.type === "dumbbell" && se.programRole === "main" ? C.dumbbellWarmupRamp(workingLb, 5) : null);
     if (!desired) return;
     const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
@@ -693,7 +720,7 @@ async function completeSessionInner(session) {
           .filter((set) => set.loadBasis === working[0].loadBasis);
         if (!w.length) continue;
         historySets.push(...w);
-        historyVolumes.push(w.reduce((a, b) => a + b.weightLb * b.reps, 0));
+        historyVolumes.push(C.prVolume(w));
         const top = C.prTopScheme(w); if (top) historySchemes.add(`${top.sets}×${top.reps}`);
       }
     }
@@ -890,9 +917,7 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
   const target = !isMain ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
   if (!gym) return target;
   const bar = C.barById(gym.defaultBarId);
-  const plates = (gym.plateToggles || []).filter((toggle) => toggle.enabled)
-    .map((toggle) => ({ value: toggle.value, unit: toggle.unit }));
-  return C.solve(target, bar, plates.length ? plates : C.ALL_STANDARD, 10,
+  return C.solve(target, bar, availablePlates(gym), 10,
     gym.collarWeightLb || 0, gym.loadingPolicy || "closest").totalLb;
 }
 
@@ -926,7 +951,8 @@ export async function createSessionFromProgramDay(program, day) {
   const [allExercises, gym, settings] = await Promise.all([Exercises.all(), Gyms.default(), Settings.get()]);
   const exMap = new Map(allExercises.map((e) => [e.name, e]));
   const unit = C.primaryUnit(settings.unitDisplay);
-  const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
+  const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
+  const barLb = C.barLb(bar);
   const neat = (weightLb, ex, isMain) => neatProgramWeight(weightLb, ex, isMain, barLb, program.roundingLb, gym);
   const exercises = [];
   let order = 0;
@@ -946,7 +972,7 @@ export async function createSessionFromProgramDay(program, day) {
       ? (preparedMovementGroups.has(ex?.movementGroup) ? "short" : "full")
       : lift.warmupPolicy;
     if (ex && ex.type === "barbell" && warmupPolicy !== "none") {
-      const ramp = C.warmupRamp(weightLb, barLb, program.roundingLb);
+      const ramp = achievableWarmups(C.warmupRamp(weightLb, barLb, program.roundingLb), weightLb, bar, gym);
       for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, ...loadOptions(ex) }));
     }
     if (ex && ex.type === "dumbbell" && warmupPolicy !== "none") {

@@ -15,6 +15,13 @@ final class WorkoutClock {
     var isRunning: Bool { startDate != nil }
     var isPaused: Bool { pausedAt != nil }
 
+    /// True only for the open session that owns the root-scoped stopwatch and
+    /// Live Activity. Used by destructive session actions so another workout's
+    /// clock is never stopped accidentally.
+    func isTracking(sessionID candidate: String) -> Bool {
+        sessionID == candidate && startDate != nil
+    }
+
     /// Begin (or continue) the stopwatch for a session. Re-entering the same
     /// session keeps the running clock and just refreshes the activity's
     /// context; a different session restarts both. On a cold start with a

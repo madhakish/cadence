@@ -304,9 +304,11 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
     const v = values[index];
     const isKg = sorted[index].unit === "kg";
     const maxCount = Math.min(maxPerPlateSide, Math.floor(remaining / v) + 1);
-    // Prune overshoots past the good-enough band AND the best deviation so far,
-    // so cleaner in-tolerance loads are never pruned away.
-    const bound = Math.max(TOLERANCE_LB, best ? best.dev : perSideTarget * 2.0);
+    // A never-under search cannot use the unrestricted closest result as its
+    // initial overshoot bound: the nearest valid load may be much farther away
+    // (50 target, 45 bar, 10s -> 65).
+    const directionalBound = policy === "over" ? (policyBest ? policyBest.dev : Infinity) : 0;
+    const bound = Math.max(TOLERANCE_LB, best ? best.dev : perSideTarget * 2.0, directionalBound);
     for (let c = maxCount; c >= 0; c -= 1) {
       const next = remaining - c * v;
       if (next < 0 && -next * 2.0 > bound + 1e-9) continue; // overshoot past the band

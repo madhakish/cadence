@@ -152,9 +152,15 @@ public enum PlateMath {
             let isKg = sorted[index].unit == .kg
             // +1 allows one plate of overshoot so "closest over" is reachable.
             let maxCount = min(maxPerPlateSide, Int((remaining / v).rounded(.down)) + 1)
-            // Prune overshoots past the good-enough band AND the best deviation
-            // so far, so cleaner in-tolerance loads are never pruned away.
-            let bound = max(toleranceLb, best?.dev ?? perSideTarget * 2.0)
+            // Prune overshoots past the good-enough band and the best relevant
+            // deviation. A never-under search cannot borrow the unrestricted
+            // closest result as its initial bound: the nearest valid overshoot
+            // may be much farther away (50 target, 45 bar, 10s -> 65).
+            let directionalBound = policy == .over
+                ? (policyBest?.dev ?? Double.infinity)
+                : 0
+            let bound = max(toleranceLb,
+                            max(best?.dev ?? perSideTarget * 2.0, directionalBound))
             var c = maxCount
             while c >= 0 {
                 let next = remaining - Double(c) * v

@@ -174,6 +174,13 @@ final class PlateMathTests: XCTestCase {
         XCTAssertTrue(over.satisfiesPolicy)
     }
 
+    func testNeverUnderSearchFindsDistantValidOvershoot() {
+        let s = PlateMath.solve(targetLb: 50, bar: .bar45lb,
+                                plates: [Plate(value: 10, unit: .lb)], policy: .over)
+        XCTAssertEqual(s.loadout.totalLb, 65, accuracy: 1e-9)
+        XCTAssertTrue(s.satisfiesPolicy)
+    }
+
     func testImpossibleExactPolicyReturnsClosestWithWarning() {
         let s = PlateMath.solve(targetLb: 133, bar: .bar45lb,
                                 plates: [Plate(value: 5, unit: .lb)], policy: .exact)

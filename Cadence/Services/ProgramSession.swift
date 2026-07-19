@@ -100,7 +100,9 @@ enum ProgramSession {
             }()
             if exercise.type == .barbell && resolvedWarmup != .none {
                 let fullRamp = WarmupRamp.ramp(workingLb: weightLb, barLb: barLb, roundingLb: program.roundingLb)
-                let ramp = resolvedWarmup == .short ? Array(fullRamp.suffix(2)) : fullRamp
+                let achievedRamp = achievableWarmups(fullRamp, workingLb: weightLb,
+                                                     gym: defaultGym, bar: selectedBar)
+                let ramp = resolvedWarmup == .short ? Array(achievedRamp.suffix(2)) : achievedRamp
                 for wu in ramp {
                     insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true, perSide: false, enteredUnit: entryUnit, context: context)
                     so += 1
@@ -168,6 +170,26 @@ enum ProgramSession {
             policy: gym?.loadingPolicy ?? .closest
         )
         return solution.loadout.totalLb
+    }
+
+    /// Resolve every theoretical warmup against the same rack, collars, and
+    /// directional policy as the working prescription. Sparse inventories can
+    /// collapse several targets to one load; never store duplicates or an
+    /// extra warmup equal to the working weight.
+    static func achievableWarmups(_ ramp: [WarmupSet], workingLb: Double,
+                                  gym: Gym?, bar: Bar) -> [WarmupSet] {
+        var seen: Set<Double> = []
+        return ramp.compactMap { warmup in
+            let solution = PlateMath.solve(
+                targetLb: warmup.weightLb, bar: bar,
+                plates: gym?.availablePlates ?? Plate.allStandard,
+                collarLb: gym?.collarWeightLb ?? 0,
+                policy: gym?.loadingPolicy ?? .closest
+            )
+            let achieved = solution.loadout.totalLb
+            guard achieved < workingLb - 1e-9, seen.insert(achieved).inserted else { return nil }
+            return WarmupSet(weightLb: achieved, reps: warmup.reps)
+        }
     }
 
     private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool,

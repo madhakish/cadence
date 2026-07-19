@@ -26,6 +26,7 @@ const signals = await import("../js/views/signals.js");
 const settings = await import("../js/views/settings.js");
 const session = await import("../js/views/session.js");
 const plates = await import("../js/views/plates.js");
+const C = await import("../js/core.js");
 const completeAll = async (workout) => {
   for (const exercise of workout.exercises || []) for (const set of exercise.sets || []) if (!set.isWarmup) set.status = "completed";
   return session.completeSession(workout);
@@ -97,6 +98,51 @@ for (const track of [
   { exerciseName: "Back Squat", mode: "cycle", cycleNumber: 1, baseWeightLb: 175, nextPhase: 2, incrementLb: 10, roundingLb: 5, lastCompletedAt: null },
   { exerciseName: "Incline DB Press", mode: "linear", cycleNumber: 1, baseWeightLb: 45, nextPhase: 1, incrementLb: 5, roundingLb: 5, lastCompletedAt: null },
 ]) await db.Tracks.save(track);
+
+// Equipment truth: an explicitly empty rack means bar/collars only, and every
+// stored warmup is solved against the same rack configuration as working sets.
+{
+  const squat = await db.Exercises.byName("Back Squat");
+  const gym = await db.Gyms.default();
+  const emptyRack = { ...gym, plateToggles: [], collarWeightLb: 5, loadingPolicy: "closest" };
+  ok(session.neatProgramWeight(135, squat, true, 45, 5, emptyRack) === 50,
+    "explicitly empty plate inventory stays bar-and-collars only");
+
+  const rack = { ...gym, collarWeightLb: 5, loadingPolicy: "closest" };
+  const achieved = session.achievableWarmups(
+    C.warmupRamp(135, 45, 5), 135, C.BARS.bar45lb, rack);
+  ok(achieved.length > 0 && achieved[0].weightLb === 50,
+    "warmup opener includes configured collars");
+  ok(achieved.every((set) => C.solve(set.weightLb, C.BARS.bar45lb,
+    rack.plateToggles.filter((toggle) => toggle.enabled), 10, 5, "closest").totalLb === set.weightLb),
+    "every generated warmup is achievable on the configured rack");
+}
+
+// Historical and current volume must use the same load multiplier. Two
+// identical two-dumbbell sessions are not a volume PR.
+{
+  const exerciseName = "Flat DB Press";
+  const exercise = await db.Exercises.byName(exerciseName);
+  const section = () => ({
+    order: 0, exerciseName, notes: "", phase: null, programRole: null,
+    plannedWeightLb: 50, plannedSets: 1, plannedReps: 5,
+    sets: [{ order: 0, weightLb: 50, reps: 5, isWarmup: false, isPerSide: false,
+      enteredUnit: "lb", loadBasis: "perImplement", implementCount: 2,
+      status: "completed", flags: ["clean"], bodyFlagSite: null, bodyFlagNote: null,
+      durationSeconds: null, distanceMiles: null, autoregReason: null }],
+  });
+  ok(exercise?.loadBasis === "perImplement", "DB fixture carries per-implement load semantics");
+  const priorID = await db.Sessions.save({ date: "2020-01-01T12:00:00.000Z", notes: "", isCompleted: true,
+    gymName: null, exercises: [section()] });
+  const currentID = await db.Sessions.save({ date: "2020-01-02T12:00:00.000Z", notes: "", isCompleted: false,
+    gymName: null, exercises: [section()] });
+  const result = await session.completeSession(await db.Sessions.get(currentID));
+  ok(!result.milestones.some((event) => event.kind === "volumePR"),
+    "identical two-dumbbell history does not emit a false volume PR");
+  await db.Sessions.del(priorID);
+  await db.Sessions.del(currentID);
+}
+
 for (let i = 0; i < 10; i++) {
   await db.Sessions.save({
     date: new Date(Date.UTC(2000, 0, i + 1)).toISOString(), notes: "Fictional regression record",

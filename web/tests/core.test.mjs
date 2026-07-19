@@ -150,6 +150,9 @@ let directional = C.solve(133, C.BARS.bar45lb, [{ value: 5, unit: "lb" }], 10, 0
 ok(directional.totalLb <= 133 && directional.satisfiesPolicy, "never-over policy");
 directional = C.solve(133, C.BARS.bar45lb, [{ value: 5, unit: "lb" }], 10, 0, "over");
 ok(directional.totalLb >= 133 && directional.satisfiesPolicy, "never-under policy");
+directional = C.solve(50, C.BARS.bar45lb, [{ value: 10, unit: "lb" }], 10, 0, "over");
+eq(directional.totalLb, 65, "never-under searches past the unrestricted closest load");
+ok(directional.satisfiesPolicy, "distant never-under candidate satisfies policy");
 s = C.solve(133, C.BARS.bar45lb, [{ value: 5, unit: "lb" }], 10, 0, "exact");
 eq(s.satisfiesPolicy, false, "impossible exact load warns");
 eq(s.totalLb, 135, "impossible exact load returns closest fallback");
