@@ -11,9 +11,9 @@ That is what makes program switching cheap — the app already knows your lifts.
 | Style | Start (× e1RM) | Session shape | Progression |
 | --- | --- | --- | --- |
 | Linear fives (novice) | 0.74 | sets-across of 5 | +10 lb lower / +5 upper per session |
-| Texas — volume day | 0.77 | 5×5 across | +10 lower / +5 upper per completion |
-| Texas — light day | 0.62 | 2×5 (squat) · 3×5 (press) | same, tracks its own base |
-| Texas — intensity day | 0.86 | 1×5 PR set | same (≈ +5 lb/week per lift) |
+| Texas — volume day | 0.77 | 5×5 across | +5 per completion, twin slots synced |
+| Texas — light day | 0.62 | 2×5 (squat) · 3×5 (press) | same, synced with its twin |
+| Texas — intensity day | 0.86 | 1×5 PR set | same (= +5 lb/week per lift) |
 | 5/3/1 wave | 0.90 (= training max) | 2 ramp sets + top "+" set | +10 lower / +5 upper TM per cycle |
 | Max effort | 0.90 | top single + 3×3 back-off @80% | +10 / +5 after a made single |
 | Dynamic effort | 0.50 (0.60 speed pulls) | speed sets, 3-week wave | holds; wave supplies progression |
@@ -26,7 +26,10 @@ deadlift 1×5). **Novice Linear — 5×5** is the Bill Starr / StrongLifts-linea
 variant — offered separately because 5×5 across is *not* the Starting Strength
 prescription. Both add weight every banked session that completes as
 prescribed; three consecutive misses deload that lift 10% and restart the
-count, which is the published reset.
+count, which is the published reset. Slots that repeat a lift across the A/B
+days (the squat in both templates, the 3×5 deadlift) share one synchronized
+progression, so the weight genuinely moves every session, not every other
+exposure.
 
 ## Texas Method
 
@@ -36,9 +39,10 @@ One template pass covers two calendar weeks (Volume/Light/Intensity **A**, then
 intensity day is a single 5RM PR set. The deadlift takes its 1×5 PR on
 intensity day — *Practical Programming*'s base template pulls on volume day,
 but the intensity-day PR is the dominant published practice and needs no
-coached Olympic lifts. Each day-slot owns its base and advances on its own
-completion (+10 lower / +5 upper), which nets the canonical +5 lb per lift per
-week; two misses reset that slot 5%.
+coached Olympic lifts. Twin A/B slots of the same lift and day type share one
+synchronized progression at +5 lb per completion — the canonical +5 lb per
+lift per week, and +5 per appearance for the weekly-alternating presses; two
+misses reset that slot 5%.
 
 ## 5/3/1 — Wendler
 
@@ -59,8 +63,10 @@ back-off at 80%; the deload rotation trades the single for 70% triples. A made
 single moves the target +5/+10; a miss holds it — in this methodology you
 **rotate the variation** (use the swap gesture; the swap pools are the
 rotation pools) rather than grind the same bar. Dynamic-effort days wave
-speed work at 50→55→60% of the slot max: 10×2 for the squat pattern, 6×1
-speed pulls, 9×3 for the bench. Speed sets never update the e1RM estimate —
+the slot base ×1.0 → ×1.10 → ×1.20 across the three loading rotations: with
+bases at 50% of the max (squat, bench) and 60% (speed pulls), that is
+50→55→60% for the squat and bench patterns and 60→66→72% for pulls — 10×2
+for the squat pattern, 6×1 speed pulls, 9×3 for the bench. Speed sets never update the e1RM estimate —
 a fast double at 55% says nothing about your max. Prescriptions are straight
 bar weight; bands and chains are a coach's call the app does not fake.
 
@@ -71,8 +77,9 @@ bar weight; bands and chains are a coach's call the app does not fake.
   doctrine everywhere.
 - Phase-based methodologies ride Cadence's existing four-rotation calendar, so
   a program's rotation label (R1–R4) is the 5/3/1 week or the DE wave step.
-- Texas Method day slots progress independently rather than recomputing from
-  one shared 5RM; the ratios hold because all three slots move at the same
-  weekly rate.
+- Texas Method volume/light/intensity slots move in parallel at the same
+  weekly rate rather than recomputing from one shared 5RM; twin A/B slots of
+  the same lift are synchronized, so the absolute gaps between day types stay
+  fixed while every slot climbs +5 lb/week.
 - AMRAP sets are recorded as ordinary sets whose target is the minimum;
   Cadence never asks you to grind past technical failure.

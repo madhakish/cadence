@@ -279,10 +279,13 @@ public enum ProgramProgression {
     ///
     /// - Novice linear fives: +10 lb per exposure for squat/hinge patterns,
     ///   +5 lb for everything else; three consecutive misses deload 10%
-    ///   (Starting Strength's reset).
-    /// - Texas day slots: each day of the week is its own slot completed once
-    ///   per template pass, so lower-body slots take +10 and uppers +5 to land
-    ///   on the published +5 lb/week per lift; two misses reset 5%.
+    ///   (Starting Strength's reset). Repeated slots of the same lift are
+    ///   synchronized by the banking layer, so "weight every session" holds
+    ///   across alternating A/B days.
+    /// - Texas day slots: +5 lb per completion for every lift — with the A/B
+    ///   twin slots synchronized, that is the published +5 lb/week (and +5
+    ///   per appearance for the weekly-alternating presses); two misses
+    ///   reset 5%.
     public struct LinearRule: Hashable, Sendable {
         public let incrementLb: Double
         public let stallLimit: Int
@@ -301,7 +304,7 @@ public enum ProgramProgression {
         case .linearFives:
             return LinearRule(incrementLb: lower ? 10 : 5, stallLimit: 3, deloadFraction: 0.90)
         default:
-            return LinearRule(incrementLb: lower ? 10 : 5, stallLimit: 2, deloadFraction: 0.95)
+            return LinearRule(incrementLb: 5, stallLimit: 2, deloadFraction: 0.95)
         }
     }
 

@@ -782,6 +782,7 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   const rule = C.linearRule("linearFives", "squat");
   eq(`${rule.incrementLb}/${rule.stallLimit}/${rule.deloadFraction}`, "10/3/0.9", "novice lower rule");
   eq(C.linearRule("texasVolume", "press").incrementLb, 5, "texas upper +5 per completion");
+  eq(C.linearRule("texasVolume", "squat").incrementLb, 5, "texas lower also +5 — twin A/B slots are synced");
   eq(C.linearRule("texasIntensity", "hinge").stallLimit, 2, "texas resets after 2 misses");
   const fives = { prescribedSets: 3, prescribedReps: 5, completedSets: 3, anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false, grindyOrWobbleSets: 0, topSetWeightLb: 205, topSetReps: 5 };
   const lin = { baseWeightLb: 205, estimatedMaxLb: 280, stallCount: 0, role: "main", lastIncrementLb: 0 };

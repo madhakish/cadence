@@ -560,7 +560,7 @@
           },
           {
             "exercise": "Overhead Press",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 65,
             "estimatedMaxLb": 95,
             "prescription": "linearFives",
@@ -569,7 +569,7 @@
           },
           {
             "exercise": "Deadlift",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 135,
             "estimatedMaxLb": 205,
             "prescription": "linearFives",
@@ -593,7 +593,7 @@
           },
           {
             "exercise": "Barbell Bench",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 85,
             "estimatedMaxLb": 125,
             "prescription": "linearFives",
@@ -602,7 +602,7 @@
           },
           {
             "exercise": "Deadlift",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 135,
             "estimatedMaxLb": 205,
             "prescription": "linearFives",
@@ -646,7 +646,7 @@
           },
           {
             "exercise": "Barbell Bench",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 85,
             "estimatedMaxLb": 125,
             "prescription": "linearFives",
@@ -655,7 +655,7 @@
           },
           {
             "exercise": "Barbell Row",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 95,
             "estimatedMaxLb": 135,
             "prescription": "linearFives",
@@ -679,7 +679,7 @@
           },
           {
             "exercise": "Overhead Press",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 65,
             "estimatedMaxLb": 95,
             "prescription": "linearFives",
@@ -688,7 +688,7 @@
           },
           {
             "exercise": "Deadlift",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 135,
             "estimatedMaxLb": 205,
             "prescription": "linearFives",
@@ -732,7 +732,7 @@
           },
           {
             "exercise": "Barbell Bench",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 85,
             "estimatedMaxLb": 125,
             "prescription": "texasVolume",
@@ -766,7 +766,7 @@
           },
           {
             "exercise": "Overhead Press",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 55,
             "estimatedMaxLb": 95,
             "prescription": "texasLight",
@@ -800,7 +800,7 @@
           },
           {
             "exercise": "Barbell Bench",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 95,
             "estimatedMaxLb": 125,
             "prescription": "texasIntensity",
@@ -809,7 +809,7 @@
           },
           {
             "exercise": "Deadlift",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 185,
             "estimatedMaxLb": 245,
             "prescription": "texasIntensity",
@@ -833,7 +833,7 @@
           },
           {
             "exercise": "Overhead Press",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 65,
             "estimatedMaxLb": 95,
             "prescription": "texasVolume",
@@ -867,7 +867,7 @@
           },
           {
             "exercise": "Barbell Bench",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 75,
             "estimatedMaxLb": 125,
             "prescription": "texasLight",
@@ -901,7 +901,7 @@
           },
           {
             "exercise": "Overhead Press",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 80,
             "estimatedMaxLb": 95,
             "prescription": "texasIntensity",
@@ -910,7 +910,7 @@
           },
           {
             "exercise": "Deadlift",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 185,
             "estimatedMaxLb": 245,
             "prescription": "texasIntensity",
@@ -1176,7 +1176,7 @@
           },
           {
             "exercise": "Deadlift",
-            "role": "main",
+            "role": "complementary",
             "baseWeightLb": 145,
             "estimatedMaxLb": 245,
             "prescription": "dynamicEffort",

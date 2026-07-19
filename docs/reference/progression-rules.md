@@ -66,10 +66,13 @@ published methodology's own progression (full details in
 [Training methodologies](training-methodologies.md)):
 
 - **Per-exposure styles** (`linearFives`, the three Texas day styles) act
-  like double progression's schedule: they advance their own base after
+  like double progression's schedule: they advance their base after
   every banked exposure that completes as prescribed, never participate
   in Peak grading, and deload after their style's own stall limit
-  (3 misses → −10% novice; 2 misses → −5% Texas).
+  (3 misses → −10% novice; 2 misses → −5% Texas). Slots that repeat the
+  same lift and style across days (novice A/B squat, Texas A/B pairs)
+  are synchronized on every advance, so alternating days never fall out
+  of step.
 - **Cycle styles** (`fiveThreeOne`, `maxEffort`, `dynamicEffort`) still
   grade at week 3 and apply at rollover, but with fixed increments:
   +10 lb lower / +5 lb upper for 5/3/1 training maxes and made max-effort

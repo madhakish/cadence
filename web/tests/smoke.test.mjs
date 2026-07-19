@@ -895,6 +895,20 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   }));
   ok(noHistory.days[0].lifts[0].baseWeightLb === 40, "no recorded history → template base stands");
   await db.Programs.del(noHistory.id);
+  // Twin-slot synchronization: banking Day A's squat must advance Day B's
+  // squat slot too — novice weight moves every session, not every other one.
+  const novice = await db.Programs.get(await createProgramFromTemplate(
+    PROGRAM_TEMPLATES.find((t) => t.id === "novice-linear-3x5")));
+  const dayA = novice.days.find((d) => d.name === "Day A");
+  const squatBase = dayA.lifts[0].baseWeightLb;
+  const noviceSession = await db.Sessions.get(await session.createSessionFromProgramDay(novice, dayA));
+  await completeAll(noviceSession);
+  const noviceAfter = await db.Programs.get(novice.id);
+  const squatA = noviceAfter.days.find((d) => d.name === "Day A").lifts[0];
+  const squatB = noviceAfter.days.find((d) => d.name === "Day B").lifts[0];
+  ok(squatA.baseWeightLb === squatBase + 10, `banked novice squat advances +10 (got +${squatA.baseWeightLb - squatBase})`);
+  ok(squatB.baseWeightLb === squatA.baseWeightLb, "Day B squat slot stays in sync with Day A");
+  await db.Programs.del(novice.id);
 }
 
 // ---- anatomy: muscle-map parity, coverage, and figure rendering ----

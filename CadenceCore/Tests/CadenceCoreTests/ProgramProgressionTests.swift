@@ -216,6 +216,8 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(novice.stallLimit, 3)
         XCTAssertEqual(novice.deloadFraction, 0.90)
         XCTAssertEqual(ProgramProgression.linearRule(for: .texasVolume, movementGroup: "press").incrementLb, 5)
+        XCTAssertEqual(ProgramProgression.linearRule(for: .texasVolume, movementGroup: "squat").incrementLb, 5,
+                       "Texas lower is also +5 — twin A/B slots are synchronized by the banking layer")
         XCTAssertEqual(ProgramProgression.linearRule(for: .texasIntensity, movementGroup: "hinge").stallLimit, 2)
     }
 

@@ -372,6 +372,21 @@ enum SessionCompletion {
                 context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
                 events.append(PREvent(kind: .programNote, exercise: lift.exerciseName, label: label))
             }
+            // Repeated slots of the same lift and style (novice squat on Day
+            // A and Day B, Texas A/B day pairs) share ONE progression: mirror
+            // the advanced state into every twin so "weight every session"
+            // holds across alternating days instead of each slot advancing
+            // every other exposure.
+            for twinDay in program.days {
+                for twin in twinDay.lifts where twin.id != lift.id
+                    && twin.exerciseName == lift.exerciseName
+                    && twin.prescription == lift.prescription {
+                    twin.baseWeightLb = lift.baseWeightLb
+                    twin.estimatedMaxLb = lift.estimatedMaxLb
+                    twin.stallCount = lift.stallCount
+                    twin.lastIncrementLb = lift.lastIncrementLb
+                }
+            }
         }
 
         // A clean, completed top-single becomes the next peak projection's

@@ -950,6 +950,18 @@ async function advanceProgram(session, milestones) {
     lift.baseWeightLb = adv.state.baseWeightLb; lift.estimatedMaxLb = adv.state.estimatedMaxLb;
     lift.stallCount = adv.state.stallCount; lift.lastIncrementLb = adv.state.lastIncrementLb;
     if (deloaded && adv.note) note(`${lift.exerciseName}: ${adv.note}`, lift.exerciseName);
+    // Repeated slots of the same lift and style (novice squat on Day A and
+    // Day B, Texas A/B day pairs) share ONE progression: mirror the advanced
+    // state into every twin so "weight every session" holds across
+    // alternating days instead of each slot advancing every other exposure.
+    for (const twinDay of program.days) {
+      for (const twin of twinDay.lifts || []) {
+        if (twin === lift || twin.exerciseName !== lift.exerciseName
+          || twin.prescription !== lift.prescription) continue;
+        twin.baseWeightLb = lift.baseWeightLb; twin.estimatedMaxLb = lift.estimatedMaxLb;
+        twin.stallCount = lift.stallCount; twin.lastIncrementLb = lift.lastIncrementLb;
+      }
+    }
   }
   for (const lift of (day.lifts || []).filter((candidate) => candidate.peakSingleEnabled)) {
     const se = session.exercises.find((entry) => entry.programSlotId === lift.id);

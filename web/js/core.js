@@ -874,7 +874,9 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
 export function linearRule(style, movementGroup = null) {
   const lower = ["squat", "hinge"].includes(movementGroup);
   if (style === "linearFives") return { incrementLb: lower ? 10 : 5, stallLimit: 3, deloadFraction: 0.90 };
-  return { incrementLb: lower ? 10 : 5, stallLimit: 2, deloadFraction: 0.95 };
+  // Texas day slots: flat +5 per completion — twin A/B slots are synchronized
+  // by the banking layer, which lands on the published +5 lb/week per lift.
+  return { incrementLb: 5, stallLimit: 2, deloadFraction: 0.95 };
 }
 
 // Advance a per-exposure linear slot after a banked session. Mirrors
