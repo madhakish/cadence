@@ -221,4 +221,75 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(WarmupRamp.dumbbellRamp(workingLb: 60).map(\.reps), [10, 5, 2])
         XCTAssertTrue(WarmupRamp.dumbbellRamp(workingLb: 5).isEmpty)
     }
+
+    // MARK: - Methodology styles (mirrors core.test.mjs)
+
+    func testFiveThreeOnePlansTheWaveOffTheTrainingMax() {
+        func top(_ phase: CyclePhase) -> SessionPlan {
+            ProgramEngine.plan(for: CycleState(baseWeightLb: 300, nextPhase: phase),
+                               roundingLb: 5, style: .fiveThreeOne)
+        }
+        XCTAssertEqual([top(.volume).weightLb, top(.load).weightLb, top(.peak).weightLb, top(.deload).weightLb],
+                       [255, 270, 285, 180])
+        XCTAssertEqual([top(.volume).reps, top(.load).reps, top(.peak).reps, top(.deload).reps], [5, 3, 1, 5])
+        XCTAssertEqual(top(.peak).sets, 1)
+    }
+
+    func testFiveThreeOneSessionEmitsRampThenTopSet() {
+        let prescription = ProgramEngine.sessionPrescription(
+            for: CycleState(baseWeightLb: 300, nextPhase: .peak),
+            programRoundingLb: 5, exerciseType: "barbell", movementGroup: "squat",
+            prescriptionStyle: .fiveThreeOne)
+        XCTAssertEqual(prescription.blocks.map(\.kind), [.backoff, .backoff, .work])
+        XCTAssertEqual(prescription.blocks.map(\.weightLb), [225, 255, 285])
+        XCTAssertEqual(prescription.blocks.map(\.reps), [5, 3, 1])
+        XCTAssertEqual(prescription.mainWork.weightLb, 285)
+    }
+
+    func testMaxEffortTopSingleWithBackoffTriplesAndDeload() {
+        let prescription = ProgramEngine.sessionPrescription(
+            for: CycleState(baseWeightLb: 315, nextPhase: .volume),
+            programRoundingLb: 5, exerciseType: "barbell", movementGroup: "squat",
+            prescriptionStyle: .maxEffort)
+        XCTAssertEqual(prescription.mainWork.weightLb, 315)
+        XCTAssertEqual(prescription.blocks.map(\.kind), [.work, .backoff])
+        XCTAssertEqual(prescription.blocks.last?.weightLb, 250)
+        let deload = ProgramEngine.plan(for: CycleState(baseWeightLb: 315, nextPhase: .deload),
+                                        roundingLb: 5, style: .maxEffort)
+        XCTAssertEqual([deload.weightLb, Double(deload.sets), Double(deload.reps)], [220, 3, 3])
+    }
+
+    func testDynamicEffortSpeedSchemesByMovementPattern() {
+        let squat = ProgramEngine.plan(for: CycleState(baseWeightLb: 150, nextPhase: .load),
+                                       roundingLb: 5, style: .dynamicEffort, movementGroup: "squat")
+        XCTAssertEqual([squat.weightLb, Double(squat.sets), Double(squat.reps)], [165, 10, 2])
+        let pull = ProgramEngine.plan(for: CycleState(baseWeightLb: 185, nextPhase: .volume),
+                                      roundingLb: 5, style: .dynamicEffort, movementGroup: "hinge")
+        XCTAssertEqual([Double(pull.sets), Double(pull.reps)], [6, 1])
+        let bench = ProgramEngine.plan(for: CycleState(baseWeightLb: 100, nextPhase: .peak),
+                                       roundingLb: 5, style: .dynamicEffort, movementGroup: "press")
+        XCTAssertEqual([bench.weightLb, Double(bench.sets), Double(bench.reps)], [120, 9, 3])
+    }
+
+    func testLinearFivesSetsAcrossIgnoresThePhaseWave() {
+        for phase in CyclePhase.allCases {
+            let plan = ProgramEngine.plan(for: CycleState(baseWeightLb: 205, nextPhase: phase),
+                                          roundingLb: 5, style: .linearFives,
+                                          configuration: .init(workingSets: 3))
+            XCTAssertEqual([plan.weightLb, Double(plan.sets), Double(plan.reps)], [205, 3, 5],
+                           "phase \(phase.rawValue) must not reshape linear fives")
+        }
+    }
+
+    func testMethodologyStyleHelpers() {
+        XCTAssertTrue(PrescriptionStyle.texasVolume.advancesPerExposure)
+        XCTAssertTrue(PrescriptionStyle.linearFives.advancesPerExposure)
+        XCTAssertFalse(PrescriptionStyle.fiveThreeOne.advancesPerExposure)
+        XCTAssertFalse(PrescriptionStyle.wave.advancesPerExposure)
+        XCTAssertTrue(PrescriptionStyle.dynamicEffort.buildsOwnSessionShape)
+        XCTAssertFalse(PrescriptionStyle.wave.buildsOwnSessionShape)
+        XCTAssertEqual(PrescriptionStyle.fiveThreeOne.defaultStartFraction, 0.90)
+        XCTAssertEqual(PrescriptionStyle.dynamicEffort.defaultStartFraction, 0.50)
+        XCTAssertEqual(PrescriptionStyle.wave.defaultStartFraction, 0)
+    }
 }

@@ -932,6 +932,25 @@ async function advanceProgram(session, milestones) {
     lift.baseWeightLb = next.weightLb; lift.currentReps = next.currentReps;
     lift.stallCount = next.stallCount; lift.lastIncrementLb = next.weightLb - state.weightLb;
   }
+  // Methodology slots on session-to-session linear progression: novice fives
+  // and the Texas day slots advance their own base after every banked
+  // exposure instead of waiting for a Peak grade.
+  for (const lift of (day.lifts || []).filter((candidate) =>
+    C.advancesPerExposure(candidate.prescription) && candidate.prescription !== "doubleProgression")) {
+    const se = session.exercises.find((entry) => entry.programSlotId === lift.id
+      || (!entry.programSlotId && entry.exerciseName === lift.exerciseName));
+    if (!se) continue;
+    if (!se.sets.some((set) => !set.isWarmup && set.status === "completed"
+      && (set.prescriptionBlock || "work") === "work")) continue;
+    const exercise = exerciseByName.get(lift.exerciseName);
+    const loadStep = C.programLoadStep(program.roundingLb, exercise?.type);
+    const adv = C.advanceLinearLift(lift, cyclePerf(se, loadStep),
+      C.linearRule(lift.prescription, exercise?.movementGroup), loadStep);
+    const deloaded = adv.state.baseWeightLb < lift.baseWeightLb;
+    lift.baseWeightLb = adv.state.baseWeightLb; lift.estimatedMaxLb = adv.state.estimatedMaxLb;
+    lift.stallCount = adv.state.stallCount; lift.lastIncrementLb = adv.state.lastIncrementLb;
+    if (deloaded && adv.note) note(`${lift.exerciseName}: ${adv.note}`, lift.exerciseName);
+  }
   for (const lift of (day.lifts || []).filter((candidate) => candidate.peakSingleEnabled)) {
     const se = session.exercises.find((entry) => entry.programSlotId === lift.id);
     const single = se?.sets.find((set) => set.status === "completed" && set.prescriptionBlock === "topSingle"
@@ -941,12 +960,13 @@ async function advanceProgram(session, milestones) {
   }
   // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
   if (tag.week === 3) {
-    for (const lift of (day.lifts || []).filter((candidate) => candidate.prescription !== "doubleProgression")) {
+    for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
       const se = session.exercises.find((e) => e.programSlotId === lift.id
         || (!e.programSlotId && e.exerciseName === lift.exerciseName && e.programRole === lift.role));
       if (se && se.sets.some((set) => !set.isWarmup && set.status === "completed")) {
         const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(se.exerciseName)?.type);
-        lift.pending = C.advanceCycleLift(lift, cyclePerf(se, loadStep), program.focus, loadStep);
+        lift.pending = C.advanceProgramLift(lift, cyclePerf(se, loadStep), program.focus,
+          lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep);
       }
     }
   }
@@ -960,7 +980,7 @@ async function advanceProgram(session, milestones) {
       // Rollover: apply each lift's pending (or treat a skipped peak as a stall).
       for (const d of program.days) {
         for (const lift of d.lifts || []) {
-          if (lift.prescription === "doubleProgression") {
+          if (C.advancesPerExposure(lift.prescription)) {
             // This slot advanced after each exposure; it has no Peak pending.
           } else if (lift.pending) {
             const p = lift.pending.state;

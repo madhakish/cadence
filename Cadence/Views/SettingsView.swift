@@ -925,6 +925,15 @@ private struct ProgramLiftRow: View {
                 Text("Current target: \(lift.currentReps) reps · add \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: loadStep)) only after every set reaches the top of the window.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            if lift.prescription.advancesPerExposure && lift.prescription != .doubleProgression {
+                Stepper("Working sets: \(lift.doubleProgressionSets)", value: $lift.doubleProgressionSets, in: 1...10)
+                Text("Sets-across of five. The base moves every banked session; the Est. 1RM above is what the coach derives it from.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if lift.prescription == .fiveThreeOne {
+                Text("The base above is the TRAINING MAX (≈90% of 1RM), not a working weight. The top set each week is as many quality reps as you have.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Toggle("Peak top single", isOn: $lift.peakSingleEnabled)
             if lift.peakSingleEnabled {
                 Stepper("Last clean single: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.lastPeakSingleLb))",

@@ -33,8 +33,18 @@ public enum ProgramTemplateData {
         public let role: String       // "main" | "complementary"
         public let baseWeightLb: Double
         public let estimatedMaxLb: Double
-        init(_ exercise: String, _ role: String, _ base: Double, _ max: Double) {
+        /// PrescriptionStyle rawValue driving the slot ("automatic" = classic wave).
+        public let prescription: String
+        /// Working sets for sets-across styles (0 = the style's own default).
+        public let sets: Int
+        /// Starting base as a fraction of the lifter's recorded e1RM; 0 keeps
+        /// the template's hand-set base. Instantiation uses this to compute
+        /// real starting weights from logged history.
+        public let startFraction: Double
+        init(_ exercise: String, _ role: String, _ base: Double, _ max: Double,
+             prescription: String = "automatic", sets: Int = 0, startFraction: Double = 0) {
             self.exercise = exercise; self.role = role; self.baseWeightLb = base; self.estimatedMaxLb = max
+            self.prescription = prescription; self.sets = sets; self.startFraction = startFraction
         }
     }
     public struct TemplateAccessory: Codable, Equatable {
@@ -44,10 +54,14 @@ public enum ProgramTemplateData {
         public let maxReps: Int
         public let weightLb: Double
         public let incrementLb: Double
+        /// Starting weight as a fraction of the matching exercise's recorded
+        /// e1RM (e.g. Boring-But-Big volume at ~45% ≈ 50% of the training max).
+        public let startFraction: Double
         init(_ exercise: String, _ sets: Int, _ minReps: Int, _ maxReps: Int,
-             weightLb: Double = 0, incrementLb: Double = 0) {
+             weightLb: Double = 0, incrementLb: Double = 0, startFraction: Double = 0) {
             self.exercise = exercise; self.sets = sets; self.minReps = minReps
             self.maxReps = maxReps; self.weightLb = weightLb; self.incrementLb = incrementLb
+            self.startFraction = startFraction
         }
     }
     public struct TemplateDay: Codable, Equatable {
@@ -161,6 +175,187 @@ public enum ProgramTemplateData {
                             accessories: [TemplateAccessory("Box Jumps", 4, 8, 15),
                                           TemplateAccessory("Goblet Squat", 4, 10, 20, weightLb: 35),
                                           TemplateAccessory("Walking Lunges", 4, 12, 24)]),
+            ]
+        ),
+        // Novice linear progression in Rippetoe's canonical 3×5-across shape:
+        // squat every session, presses alternate by day, deadlift one heavy
+        // set. Weight moves every completed session, not per 4-week rotation.
+        Template(
+            id: "novice-linear-3x5",
+            name: "Novice Linear — 3×5",
+            tagline: "3 days/wk · Starting Strength-style A/B · weight every session",
+            focus: "strength", roundingLb: 5,
+            exercises: [],
+            days: [
+                TemplateDay("Day A",
+                            lifts: [TemplateLift("Back Squat", "main", 95, 150,
+                                                 prescription: "linearFives", sets: 3, startFraction: 0.74),
+                                    TemplateLift("Overhead Press", "main", 65, 95,
+                                                 prescription: "linearFives", sets: 3, startFraction: 0.74),
+                                    TemplateLift("Deadlift", "main", 135, 205,
+                                                 prescription: "linearFives", sets: 1, startFraction: 0.74)],
+                            accessories: []),
+                TemplateDay("Day B",
+                            lifts: [TemplateLift("Back Squat", "main", 95, 150,
+                                                 prescription: "linearFives", sets: 3, startFraction: 0.74),
+                                    TemplateLift("Barbell Bench", "main", 85, 125,
+                                                 prescription: "linearFives", sets: 3, startFraction: 0.74),
+                                    TemplateLift("Deadlift", "main", 135, 205,
+                                                 prescription: "linearFives", sets: 1, startFraction: 0.74)],
+                            accessories: [TemplateAccessory("Chin-ups", 3, 5, 10)]),
+            ]
+        ),
+        // The 5×5-across novice variant (Bill Starr lineage, popularized as
+        // StrongLifts) — offered separately because 5×5 across is NOT the
+        // Starting Strength prescription.
+        Template(
+            id: "novice-linear-5x5",
+            name: "Novice Linear — 5×5",
+            tagline: "3 days/wk · StrongLifts-style A/B · squat every session",
+            focus: "strength", roundingLb: 5,
+            exercises: [],
+            days: [
+                TemplateDay("Day A",
+                            lifts: [TemplateLift("Back Squat", "main", 95, 150,
+                                                 prescription: "linearFives", sets: 5, startFraction: 0.74),
+                                    TemplateLift("Barbell Bench", "main", 85, 125,
+                                                 prescription: "linearFives", sets: 5, startFraction: 0.74),
+                                    TemplateLift("Barbell Row", "main", 95, 135,
+                                                 prescription: "linearFives", sets: 5, startFraction: 0.74)],
+                            accessories: []),
+                TemplateDay("Day B",
+                            lifts: [TemplateLift("Back Squat", "main", 95, 150,
+                                                 prescription: "linearFives", sets: 5, startFraction: 0.74),
+                                    TemplateLift("Overhead Press", "main", 65, 95,
+                                                 prescription: "linearFives", sets: 5, startFraction: 0.74),
+                                    TemplateLift("Deadlift", "main", 135, 205,
+                                                 prescription: "linearFives", sets: 1, startFraction: 0.74)],
+                            accessories: [TemplateAccessory("Chin-ups", 3, 5, 10)]),
+            ]
+        ),
+        // Texas Method week as six slots over a two-week A/B pass so the
+        // presses alternate weekly. Each slot owns its base at the published
+        // ratio of the lift's 5RM (volume 90%, light 80% of volume, intensity
+        // = the 5RM PR set); lower slots take +10 per completion so each lift
+        // lands on +5 lb/week.
+        Template(
+            id: "texas-method",
+            name: "Texas Method",
+            tagline: "3 days/wk · volume, light, intensity · presses alternate weekly",
+            focus: "strength", roundingLb: 5,
+            exercises: [],
+            days: [
+                TemplateDay("Volume A",
+                            lifts: [TemplateLift("Back Squat", "main", 135, 205,
+                                                 prescription: "texasVolume", sets: 5, startFraction: 0.77),
+                                    TemplateLift("Barbell Bench", "main", 85, 125,
+                                                 prescription: "texasVolume", sets: 5, startFraction: 0.77)],
+                            accessories: [TemplateAccessory("Back Extension", 3, 10, 15)]),
+                TemplateDay("Light A",
+                            lifts: [TemplateLift("Back Squat", "main", 110, 205,
+                                                 prescription: "texasLight", sets: 2, startFraction: 0.62),
+                                    TemplateLift("Overhead Press", "main", 55, 95,
+                                                 prescription: "texasLight", sets: 3, startFraction: 0.69)],
+                            accessories: [TemplateAccessory("Chin-ups", 3, 5, 10)]),
+                TemplateDay("Intensity A",
+                            lifts: [TemplateLift("Back Squat", "main", 150, 205,
+                                                 prescription: "texasIntensity", sets: 1, startFraction: 0.86),
+                                    TemplateLift("Barbell Bench", "main", 95, 125,
+                                                 prescription: "texasIntensity", sets: 1, startFraction: 0.86),
+                                    TemplateLift("Deadlift", "main", 185, 245,
+                                                 prescription: "texasIntensity", sets: 1, startFraction: 0.86)],
+                            accessories: []),
+                TemplateDay("Volume B",
+                            lifts: [TemplateLift("Back Squat", "main", 135, 205,
+                                                 prescription: "texasVolume", sets: 5, startFraction: 0.77),
+                                    TemplateLift("Overhead Press", "main", 65, 95,
+                                                 prescription: "texasVolume", sets: 5, startFraction: 0.77)],
+                            accessories: [TemplateAccessory("Back Extension", 3, 10, 15)]),
+                TemplateDay("Light B",
+                            lifts: [TemplateLift("Back Squat", "main", 110, 205,
+                                                 prescription: "texasLight", sets: 2, startFraction: 0.62),
+                                    TemplateLift("Barbell Bench", "main", 75, 125,
+                                                 prescription: "texasLight", sets: 3, startFraction: 0.69)],
+                            accessories: [TemplateAccessory("Chin-ups", 3, 5, 10)]),
+                TemplateDay("Intensity B",
+                            lifts: [TemplateLift("Back Squat", "main", 150, 205,
+                                                 prescription: "texasIntensity", sets: 1, startFraction: 0.86),
+                                    TemplateLift("Overhead Press", "main", 80, 95,
+                                                 prescription: "texasIntensity", sets: 1, startFraction: 0.86),
+                                    TemplateLift("Deadlift", "main", 185, 245,
+                                                 prescription: "texasIntensity", sets: 1, startFraction: 0.86)],
+                            accessories: []),
+            ]
+        ),
+        // Wendler 5/3/1 with the original 90% training max, the three-week
+        // 5s/3s/531 wave plus deload, and Boring-But-Big volume after the
+        // main work. The slot base IS the training max.
+        Template(
+            id: "five-three-one",
+            name: "5/3/1 — Wendler",
+            tagline: "4 days/wk · training-max waves · top set is as many quality reps as you have",
+            focus: "strength", roundingLb: 5,
+            exercises: [],
+            days: [
+                TemplateDay("Press Day",
+                            lifts: [TemplateLift("Overhead Press", "main", 85, 95,
+                                                 prescription: "fiveThreeOne", startFraction: 0.90)],
+                            accessories: [TemplateAccessory("Overhead Press", 5, 10, 10, weightLb: 45, incrementLb: 5, startFraction: 0.45),
+                                          TemplateAccessory("Chin-ups", 5, 5, 10)]),
+                TemplateDay("Deadlift Day",
+                            lifts: [TemplateLift("Deadlift", "main", 220, 245,
+                                                 prescription: "fiveThreeOne", startFraction: 0.90)],
+                            accessories: [TemplateAccessory("Deadlift", 5, 10, 10, weightLb: 115, incrementLb: 5, startFraction: 0.45),
+                                          TemplateAccessory("Hanging Knee Raise", 5, 10, 15)]),
+                TemplateDay("Bench Day",
+                            lifts: [TemplateLift("Barbell Bench", "main", 115, 125,
+                                                 prescription: "fiveThreeOne", startFraction: 0.90)],
+                            accessories: [TemplateAccessory("Barbell Bench", 5, 10, 10, weightLb: 55, incrementLb: 5, startFraction: 0.45),
+                                          TemplateAccessory("Barbell Row", 5, 10, 10, weightLb: 95, incrementLb: 5)]),
+                TemplateDay("Squat Day",
+                            lifts: [TemplateLift("Back Squat", "main", 185, 205,
+                                                 prescription: "fiveThreeOne", startFraction: 0.90)],
+                            accessories: [TemplateAccessory("Back Squat", 5, 10, 10, weightLb: 95, incrementLb: 5, startFraction: 0.45),
+                                          TemplateAccessory("Lying Leg Curl", 5, 10, 12, weightLb: 70, incrementLb: 5)]),
+            ]
+        ),
+        // Westside-style conjugate: max-effort top singles with repetition
+        // accessories, and dynamic-effort speed waves at ~50–60%. Rotate the
+        // max-effort variation with the existing swap gesture — rotation, not
+        // grinding, is the methodology's stall answer. Straight bar weight
+        // only; bands/chains are a coach's call the app does not fake.
+        Template(
+            id: "conjugate",
+            name: "Conjugate — Westside-style",
+            tagline: "4 days/wk · max-effort singles + speed work · rotate variations by swapping",
+            focus: "strength", roundingLb: 5,
+            exercises: [],
+            days: [
+                TemplateDay("Max Effort Lower",
+                            lifts: [TemplateLift("Back Squat", "main", 185, 205,
+                                                 prescription: "maxEffort", startFraction: 0.90)],
+                            accessories: [TemplateAccessory("Nordic Hamstring Curl", 4, 6, 10),
+                                          TemplateAccessory("Back Extension", 4, 10, 15),
+                                          TemplateAccessory("Hanging Knee Raise", 4, 10, 15)]),
+                TemplateDay("Max Effort Upper",
+                            lifts: [TemplateLift("Barbell Bench", "main", 115, 125,
+                                                 prescription: "maxEffort", startFraction: 0.90)],
+                            accessories: [TemplateAccessory("Skull Crusher", 4, 8, 12, weightLb: 30, incrementLb: 5),
+                                          TemplateAccessory("Barbell Row", 4, 8, 12, weightLb: 95, incrementLb: 5),
+                                          TemplateAccessory("Face Pulls", 3, 12, 15, weightLb: 25, incrementLb: 5)]),
+                TemplateDay("Dynamic Effort Lower",
+                            lifts: [TemplateLift("Back Squat", "main", 95, 205,
+                                                 prescription: "dynamicEffort", startFraction: 0.50),
+                                    TemplateLift("Deadlift", "main", 145, 245,
+                                                 prescription: "dynamicEffort", startFraction: 0.60)],
+                            accessories: [TemplateAccessory("Walking Lunges", 3, 10, 20),
+                                          TemplateAccessory("Back Extension", 3, 10, 15)]),
+                TemplateDay("Dynamic Effort Upper",
+                            lifts: [TemplateLift("Barbell Bench", "main", 65, 125,
+                                                 prescription: "dynamicEffort", startFraction: 0.50)],
+                            accessories: [TemplateAccessory("Triceps Pushdown", 4, 10, 15, weightLb: 40, incrementLb: 5),
+                                          TemplateAccessory("Lat Pulldown", 4, 8, 12, weightLb: 80, incrementLb: 5),
+                                          TemplateAccessory("Rear Delt Fly", 3, 12, 15, weightLb: 15, incrementLb: 5)]),
             ]
         ),
     ]

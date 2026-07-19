@@ -201,4 +201,84 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(poorQuality.currentReps, 10)
         XCTAssertEqual(poorQuality.stallCount, 1)
     }
+
+    // MARK: - Methodology progression (mirrors core.test.mjs)
+
+    private func fivesPerf(completedSets: Int = 3, topSetReps: Int = 5, stoppedEarly: Bool = false) -> CycleLiftPerformance {
+        CycleLiftPerformance(prescribedSets: 3, prescribedReps: 5, completedSets: completedSets,
+                             anyStoppedEarly: stoppedEarly, anyDroppedLoad: false, grindyOrWobbleSets: 0,
+                             topSetWeightLb: 205, topSetReps: topSetReps)
+    }
+
+    func testLinearRuleIncrementsByMovementPatternAndStyle() {
+        let novice = ProgramProgression.linearRule(for: .linearFives, movementGroup: "squat")
+        XCTAssertEqual(novice.incrementLb, 10)
+        XCTAssertEqual(novice.stallLimit, 3)
+        XCTAssertEqual(novice.deloadFraction, 0.90)
+        XCTAssertEqual(ProgramProgression.linearRule(for: .texasVolume, movementGroup: "press").incrementLb, 5)
+        XCTAssertEqual(ProgramProgression.linearRule(for: .texasIntensity, movementGroup: "hinge").stallLimit, 2)
+    }
+
+    func testLinearFivesAdvancesEverySessionAndDeloadsAfterThreeMisses() {
+        let rule = ProgramProgression.linearRule(for: .linearFives, movementGroup: "squat")
+        let state = ProgramLiftState(baseWeightLb: 205, estimatedMaxLb: 280)
+
+        let up = ProgramProgression.advanceLinearLift(state, perf: fivesPerf(), rule: rule, roundingLb: 5)
+        XCTAssertEqual(up.state.baseWeightLb, 215)
+        XCTAssertEqual(up.state.stallCount, 0)
+        XCTAssertEqual(up.grade, .success)
+
+        let held = ProgramProgression.advanceLinearLift(state, perf: fivesPerf(completedSets: 2, topSetReps: 4), rule: rule, roundingLb: 5)
+        XCTAssertEqual(held.state.baseWeightLb, 205)
+        XCTAssertEqual(held.state.stallCount, 1)
+
+        var stalled = state
+        stalled.stallCount = 2
+        let third = ProgramProgression.advanceLinearLift(stalled, perf: fivesPerf(completedSets: 2, topSetReps: 4), rule: rule, roundingLb: 5)
+        XCTAssertEqual(third.state.baseWeightLb, 185)
+        XCTAssertEqual(third.state.stallCount, 0)
+    }
+
+    private func topSetPerf(made: Bool) -> CycleLiftPerformance {
+        CycleLiftPerformance(prescribedSets: 1, prescribedReps: 1, completedSets: made ? 1 : 0,
+                             anyStoppedEarly: !made, anyDroppedLoad: false, grindyOrWobbleSets: 0,
+                             topSetWeightLb: 285, topSetReps: made ? 3 : 0)
+    }
+
+    func testFiveThreeOneCycleIncrementsAndThreeCycleReset() {
+        let state = ProgramLiftState(baseWeightLb: 300, estimatedMaxLb: 330)
+        let up = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: true), focus: .strength,
+                                                       style: .fiveThreeOne, movementGroup: "squat", roundingLb: 5)
+        XCTAssertEqual(up.state.baseWeightLb, 310)
+        let reset = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: false), focus: .strength,
+                                                          style: .fiveThreeOne, movementGroup: "squat", roundingLb: 5)
+        XCTAssertEqual(reset.state.baseWeightLb, 270)
+        XCTAssertEqual(reset.grade, .fail)
+    }
+
+    func testMaxEffortAddsAfterMadeSinglesAndHoldsOnMisses() {
+        let state = ProgramLiftState(baseWeightLb: 315, estimatedMaxLb: 330)
+        let up = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: true), focus: .strength,
+                                                       style: .maxEffort, movementGroup: "press", roundingLb: 5)
+        XCTAssertEqual(up.state.baseWeightLb, 320)
+        let miss = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: false), focus: .strength,
+                                                         style: .maxEffort, movementGroup: "press", roundingLb: 5)
+        XCTAssertEqual(miss.state.baseWeightLb, 315)
+        XCTAssertEqual(miss.state.stallCount, 1)
+    }
+
+    func testDynamicEffortHoldsBaseAndNeverSmoothsE1RMOffSpeedWork() {
+        let state = ProgramLiftState(baseWeightLb: 150, estimatedMaxLb: 330)
+        let result = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: true), focus: .strength,
+                                                           style: .dynamicEffort, movementGroup: "squat", roundingLb: 5)
+        XCTAssertEqual(result.state.baseWeightLb, 150)
+        XCTAssertEqual(result.state.estimatedMaxLb, 330)
+    }
+
+    func testNonMethodologyStylesKeepTheTaperedRule() {
+        let state = ProgramLiftState(baseWeightLb: 300, estimatedMaxLb: 330)
+        let result = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: true), focus: .strength,
+                                                           style: .wave, movementGroup: "squat", roundingLb: 5)
+        XCTAssertGreaterThanOrEqual(result.state.baseWeightLb, 300)
+    }
 }

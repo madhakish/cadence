@@ -38,10 +38,29 @@ export function programPlanFor(state, programRoundingLb, exerciseType = null, mo
     loadOffsetLb: configuration.loadOffsetLb > 0 ? configuration.loadOffsetLb : (lower ? 25 : 10),
     peakOffsetLb: configuration.peakOffsetLb > 0 ? configuration.peakOffsetLb : (lower ? 33 : 15),
   };
-  const plan = planForStyle(state, programLoadStep(programRoundingLb, exerciseType), style, config);
+  const plan = planForStyle(state, programLoadStep(programRoundingLb, exerciseType), style, config, movementGroup);
   if (exerciseType !== "dumbbell" || plan.weightLb <= state.baseWeightLb) return plan;
   return { ...plan, weightLb: Math.min(plan.weightLb, state.baseWeightLb + 5) };
 }
+
+// ---- Methodology styles (mirrors PrescriptionStyle helpers in Swift) -------
+
+// Styles whose base advances after every banked exposure of the slot instead
+// of being graded once per 4-week rotation at the Peak.
+export const advancesPerExposure = (style) =>
+  ["doubleProgression", "linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(style);
+
+// Styles that build their own session shape (sets-across, ramps, singles,
+// speed sets) — the generic phase primer and peak-single add-ons never apply.
+export const buildsOwnSessionShape = (style) =>
+  advancesPerExposure(style) || ["fiveThreeOne", "maxEffort", "dynamicEffort"].includes(style);
+
+// Starting base weight as a fraction of a known e1RM for history-driven
+// program creation; 0 keeps the template's hand-set base.
+export const defaultStartFraction = (style) => ({
+  linearFives: 0.74, texasVolume: 0.77, texasLight: 0.62, texasIntensity: 0.86,
+  fiveThreeOne: 0.90, maxEffort: 0.90, dynamicEffort: 0.50,
+}[style] || 0);
 
 export function resolvedPrescriptionStyle(requested = "automatic", movementGroup = null,
   role = "main", focus = "strength") {
@@ -457,7 +476,7 @@ export function planFor(state, roundingLb = DEFAULT_ROUNDING_LB) {
   };
 }
 
-export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave", configuration = {}) {
+export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave", configuration = {}, movementGroup = null) {
   const p = state.nextPhase;
   const config = {
     loadOffsetLb: 10, peakOffsetLb: 15, deloadMultiplier: 0.775,
@@ -465,6 +484,46 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     peakSingleEnabled: false, lastPeakSingleLb: 0, peakSingleIncrementLb: 5,
     phasePrimerEnabled: true, ...configuration,
   };
+  if (["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(style)) {
+    // Sets-across at the slot's own base; the base moves per exposure
+    // (advanceLinearLift), so the 4-week phase never shapes the weight.
+    return {
+      weightLb: roundTo(state.baseWeightLb, roundingLb),
+      sets: Math.max(1, config.workingSets), reps: 5, phase: p, cycleNumber: state.cycleNumber,
+    };
+  }
+  if (style === "fiveThreeOne") {
+    // baseWeightLb is the TRAINING MAX. The plan is the graded top ("+") set;
+    // the two ramp sets are emitted by sessionPrescription.
+    const top = { 1: [0.85, 5], 2: [0.90, 3], 3: [0.95, 1], 4: [0.60, 5] }[p];
+    return {
+      weightLb: roundTo(state.baseWeightLb * top[0], roundingLb),
+      sets: 1, reps: top[1], phase: p, cycleNumber: state.cycleNumber,
+    };
+  }
+  if (style === "maxEffort") {
+    // Work up to a top single at the slot's current target; the deload
+    // rotation trades the single for moderate triples.
+    if (p === 4) return {
+      weightLb: roundTo(state.baseWeightLb * 0.70, roundingLb),
+      sets: 3, reps: 3, phase: p, cycleNumber: state.cycleNumber,
+    };
+    return {
+      weightLb: roundTo(state.baseWeightLb, roundingLb),
+      sets: 1, reps: 1, phase: p, cycleNumber: state.cycleNumber,
+    };
+  }
+  if (style === "dynamicEffort") {
+    // Speed work: base ≈ 50% of the slot's max, waved up over the two middle
+    // rotations, back to the wave floor on deload. Squat pattern takes speed
+    // doubles, hinge takes speed pulls, presses take triples.
+    const scheme = movementGroup === "squat" ? [10, 2] : movementGroup === "hinge" ? [6, 1] : [9, 3];
+    const multiplier = { 1: 1.0, 2: 1.10, 3: 1.20, 4: 1.0 }[p];
+    return {
+      weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
+      sets: scheme[0], reps: scheme[1], phase: p, cycleNumber: state.cycleNumber,
+    };
+  }
   if (style === "offsetWave") {
     const weight = ({
       1: state.baseWeightLb,
@@ -523,17 +582,33 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
   const work = programPlanFor(state, programRoundingLb, exerciseType, movementGroup, role, focus, style, config);
   const step = programLoadStep(programRoundingLb, exerciseType);
   const blocks = [];
-  if (config.phasePrimerEnabled && style !== "doubleProgression") {
+  if (config.phasePrimerEnabled && !buildsOwnSessionShape(style)) {
     const primer = primerWeight(state.baseWeightLb, state.nextPhase, style, step, config);
     if (primer > 0 && primer < work.weightLb) blocks.push({ kind: "primer", weightLb: primer, sets: 1, reps: 1 });
   }
-  if (config.peakSingleEnabled && state.nextPhase === 3 && !["technique", "doubleProgression"].includes(style)) {
+  if (config.peakSingleEnabled && state.nextPhase === 3
+    && style !== "technique" && !buildsOwnSessionShape(style)) {
     const seed = config.lastPeakSingleLb > 0
       ? config.lastPeakSingleLb + config.peakSingleIncrementLb : estimatedMaxLb * 0.90;
     const target = roundTo(seed, step);
     if (target > work.weightLb) blocks.push({ kind: "topSingle", weightLb: target, sets: 1, reps: 1 });
   }
+  if (style === "fiveThreeOne") {
+    // The two ramp sets below the "+" set. Real prescribed work, but only the
+    // top set gates progression, so they carry the non-graded backoff kind;
+    // block order puts them before the top set.
+    const ramp = {
+      1: [[0.65, 5], [0.75, 5]], 2: [[0.70, 3], [0.80, 3]],
+      3: [[0.75, 5], [0.85, 3]], 4: [[0.40, 5], [0.50, 5]],
+    }[state.nextPhase];
+    for (const [pct, reps] of ramp) {
+      blocks.push({ kind: "backoff", weightLb: roundTo(state.baseWeightLb * pct, step), sets: 1, reps });
+    }
+  }
   blocks.push({ kind: "work", weightLb: work.weightLb, sets: work.sets, reps: work.reps });
+  if (style === "maxEffort" && state.nextPhase !== 4) {
+    blocks.push({ kind: "backoff", weightLb: roundTo(state.baseWeightLb * 0.80, step), sets: 3, reps: 3 });
+  }
   return { mainWork: work, blocks };
 }
 
@@ -792,6 +867,98 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
     }
   }
   return { state: next, grade, note };
+}
+
+// Per-exposure linear rule for methodology styles that add weight every time
+// the slot completes as prescribed. Mirrors ProgramProgression.linearRule.
+export function linearRule(style, movementGroup = null) {
+  const lower = ["squat", "hinge"].includes(movementGroup);
+  if (style === "linearFives") return { incrementLb: lower ? 10 : 5, stallLimit: 3, deloadFraction: 0.90 };
+  return { incrementLb: lower ? 10 : 5, stallLimit: 2, deloadFraction: 0.95 };
+}
+
+// Advance a per-exposure linear slot after a banked session. Mirrors
+// ProgramProgression.advanceLinearLift.
+export function advanceLinearLift(state, perf, rule, roundingLb = DEFAULT_ROUNDING_LB) {
+  const grade = gradeCycle(perf);
+  const sample = epleyE1RM(perf.topSetWeightLb, perf.topSetReps);
+  const next = { ...state, estimatedMaxLb: smoothE1RM(state.estimatedMaxLb, sample) };
+  let note = null;
+
+  if (grade === "success") {
+    next.stallCount = 0;
+    next.baseWeightLb = state.baseWeightLb + rule.incrementLb;
+    next.lastIncrementLb = rule.incrementLb;
+    note = `Completed as prescribed — add ${trim(rule.incrementLb)} lb next time.`;
+  } else {
+    next.stallCount = state.stallCount + 1;
+    next.lastIncrementLb = 0;
+    if (next.stallCount >= rule.stallLimit) {
+      const old = state.baseWeightLb;
+      next.baseWeightLb = roundTo(old * rule.deloadFraction, roundingLb);
+      next.stallCount = 0;
+      note = `Missed ${rule.stallLimit} in a row — deloaded ${trim(old)}→${trim(next.baseWeightLb)} lb to rebuild.`;
+    } else {
+      note = "Prescription not fully met — holding weight, try it again.";
+    }
+  }
+  return { state: next, grade, note };
+}
+
+// Style-aware cycle progression at the Peak grade / rollover. Methodology
+// styles use their published fixed increments; everything else keeps the
+// tapered headroom rule. Mirrors ProgramProgression.advanceProgramLift.
+export function advanceProgramLift(state, perf, focus, style, movementGroup = null, roundingLb = DEFAULT_ROUNDING_LB) {
+  const lower = ["squat", "hinge"].includes(movementGroup);
+  const increment = lower ? 10 : 5;
+  if (style === "fiveThreeOne") {
+    const grade = gradeCycle(perf);
+    const sample = epleyE1RM(perf.topSetWeightLb, perf.topSetReps);
+    const next = { ...state, estimatedMaxLb: smoothE1RM(state.estimatedMaxLb, sample) };
+    let note = null;
+    if (grade === "success") {
+      next.stallCount = 0;
+      next.baseWeightLb = state.baseWeightLb + increment;
+      next.lastIncrementLb = increment;
+      note = `Hit the top set — training max +${trim(increment)} lb next cycle.`;
+    } else if (grade === "fail") {
+      const old = state.baseWeightLb;
+      next.baseWeightLb = Math.max(roundingLb, roundTo(old - 3 * increment, roundingLb));
+      next.stallCount = 0;
+      next.lastIncrementLb = 0;
+      note = `Missed the minimum reps — training max reset ${trim(old)}→${trim(next.baseWeightLb)} lb (three cycles back).`;
+    } else {
+      next.stallCount = state.stallCount + 1;
+      next.lastIncrementLb = 0;
+      note = "Grindy top set — holding the training max this cycle.";
+    }
+    return { state: next, grade, note };
+  }
+  if (style === "maxEffort") {
+    const grade = gradeCycle(perf);
+    const sample = epleyE1RM(perf.topSetWeightLb, perf.topSetReps);
+    const next = { ...state, estimatedMaxLb: smoothE1RM(state.estimatedMaxLb, sample) };
+    let note = null;
+    if (grade === "success") {
+      next.stallCount = 0;
+      next.baseWeightLb = state.baseWeightLb + increment;
+      next.lastIncrementLb = increment;
+      note = `Made the top single — next target +${trim(increment)} lb. Rotate the variation to keep it moving.`;
+    } else {
+      next.stallCount = state.stallCount + 1;
+      next.lastIncrementLb = 0;
+      note = "Missed the single — holding the target. Swap the variation rather than grinding the same lift.";
+    }
+    return { state: next, grade, note };
+  }
+  if (style === "dynamicEffort") {
+    // Speed doubles are not an e1RM sample; leave the estimate alone.
+    return {
+      state: { ...state, lastIncrementLb: 0 }, grade: gradeCycle(perf),
+      note: "Speed work holds — raise this slot when the max-effort lift moves.",
+    };
+  }
+  return advanceCycleLift(state, perf, focus, roundingLb);
 }
 
 // Accessory double progression. state: { sets, minReps, maxReps, currentReps,

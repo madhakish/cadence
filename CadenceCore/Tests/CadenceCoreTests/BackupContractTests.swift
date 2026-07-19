@@ -2,8 +2,8 @@ import XCTest
 @testable import CadenceCore
 
 final class BackupContractTests: XCTestCase {
-    func testCurrentVersionIsV3() {
-        XCTAssertEqual(BackupContract.currentSchemaVersion, 3)
+    func testCurrentVersionIsV4() {
+        XCTAssertEqual(BackupContract.currentSchemaVersion, 4)
     }
 
     func testCurrentAndLegacyVersionsAreSupported() {

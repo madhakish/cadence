@@ -67,6 +67,13 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
     case hypertrophy
     case technique
     case doubleProgression
+    case linearFives
+    case texasVolume
+    case texasLight
+    case texasIntensity
+    case fiveThreeOne
+    case maxEffort
+    case dynamicEffort
 
     public var name: String {
         switch self {
@@ -77,6 +84,51 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
         case .hypertrophy: return "Hypertrophy"
         case .technique: return "Technique"
         case .doubleProgression: return "Double progression"
+        case .linearFives: return "Linear fives"
+        case .texasVolume: return "Texas — volume day"
+        case .texasLight: return "Texas — light day"
+        case .texasIntensity: return "Texas — intensity day"
+        case .fiveThreeOne: return "5/3/1 wave"
+        case .maxEffort: return "Max effort"
+        case .dynamicEffort: return "Dynamic effort"
+        }
+    }
+
+    /// Styles whose base advances after every banked exposure of the slot
+    /// (session-to-session or week-to-week linear progression) instead of
+    /// being graded once per 4-week rotation at the Peak.
+    public var advancesPerExposure: Bool {
+        switch self {
+        case .doubleProgression, .linearFives, .texasVolume, .texasLight, .texasIntensity:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Styles that build their own session shape (sets-across, ramps, singles,
+    /// speed sets). The generic phase primer and peak-single add-ons never
+    /// apply to them.
+    public var buildsOwnSessionShape: Bool {
+        advancesPerExposure || self == .fiveThreeOne || self == .maxEffort || self == .dynamicEffort
+    }
+
+    /// Starting base weight as a fraction of a known estimated 1RM, used when
+    /// a program is created from recorded history. 0 = keep the template's
+    /// hand-set base. Values follow each methodology's published guidance:
+    /// novice work starts with runway below a ~5RM, Texas days derive from the
+    /// intensity 5RM (≈0.86 × 1RM), a 5/3/1 training max is 90% of 1RM, a max-
+    /// effort target starts at 90%, and speed work sits at ~50%.
+    public var defaultStartFraction: Double {
+        switch self {
+        case .linearFives: return 0.74
+        case .texasVolume: return 0.77
+        case .texasLight: return 0.62
+        case .texasIntensity: return 0.86
+        case .fiveThreeOne: return 0.90
+        case .maxEffort: return 0.90
+        case .dynamicEffort: return 0.50
+        default: return 0
         }
     }
 }
@@ -226,7 +278,8 @@ public enum ProgramEngine {
     ) -> SessionPlan {
         let step = loadStep(programRoundingLb: programRoundingLb, exerciseType: exerciseType)
         let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
-        let raw = plan(for: state, roundingLb: step, style: style, configuration: configuration)
+        let raw = plan(for: state, roundingLb: step, style: style, configuration: configuration,
+                       movementGroup: movementGroup)
         guard exerciseType == "dumbbell", raw.weightLb > state.baseWeightLb else { return raw }
         return SessionPlan(
             weightLb: Swift.min(raw.weightLb, state.baseWeightLb + 5),
@@ -260,13 +313,63 @@ public enum ProgramEngine {
         for state: CycleState,
         roundingLb: Double = defaultRoundingLb,
         style: PrescriptionStyle,
-        configuration: LiftPrescriptionConfiguration = .init()
+        configuration: LiftPrescriptionConfiguration = .init(),
+        movementGroup: String? = nil
     ) -> SessionPlan {
         let phase = state.nextPhase
         let prescription: (sets: Int, reps: Int, multiplier: Double)
         switch style {
         case .automatic, .wave:
             prescription = (phase.sets, phase.reps, phase.multiplier)
+        case .linearFives, .texasVolume, .texasLight, .texasIntensity:
+            // Sets-across at the slot's own base; the base moves per exposure
+            // (advanceLinearLift), so the 4-week phase never shapes the weight.
+            prescription = (max(1, configuration.workingSets), 5, 1.0)
+        case .fiveThreeOne:
+            // baseWeightLb is the TRAINING MAX. The plan is the graded top set
+            // ("+" set); the two ramp sets are emitted by sessionPrescription.
+            let top: (pct: Double, reps: Int)
+            switch phase {
+            case .volume: top = (0.85, 5)
+            case .load: top = (0.90, 3)
+            case .peak: top = (0.95, 1)
+            case .deload: top = (0.60, 5)
+            }
+            return SessionPlan(
+                weightLb: Weight.round(state.baseWeightLb * top.pct, to: roundingLb),
+                sets: 1, reps: top.reps, phase: phase, cycleNumber: state.cycleNumber
+            )
+        case .maxEffort:
+            // Work up to a top single at the slot's current target; the deload
+            // rotation trades the single for moderate triples.
+            if phase == .deload {
+                return SessionPlan(
+                    weightLb: Weight.round(state.baseWeightLb * 0.70, to: roundingLb),
+                    sets: 3, reps: 3, phase: phase, cycleNumber: state.cycleNumber
+                )
+            }
+            return SessionPlan(
+                weightLb: Weight.round(state.baseWeightLb, to: roundingLb),
+                sets: 1, reps: 1, phase: phase, cycleNumber: state.cycleNumber
+            )
+        case .dynamicEffort:
+            // Speed work: base ≈ 50% of the slot's max, waved up over the two
+            // middle rotations, back to the wave floor on deload. Squat pattern
+            // takes speed doubles, hinge takes speed pulls, presses take triples.
+            let scheme: (sets: Int, reps: Int)
+            if movementGroup == "squat" { scheme = (10, 2) }
+            else if movementGroup == "hinge" { scheme = (6, 1) }
+            else { scheme = (9, 3) }
+            let multiplier: Double
+            switch phase {
+            case .volume, .deload: multiplier = 1.0
+            case .load: multiplier = 1.10
+            case .peak: multiplier = 1.20
+            }
+            return SessionPlan(
+                weightLb: Weight.round(state.baseWeightLb * multiplier, to: roundingLb),
+                sets: scheme.sets, reps: scheme.reps, phase: phase, cycleNumber: state.cycleNumber
+            )
         case .offsetWave:
             let weight: Double
             switch phase {
@@ -340,7 +443,7 @@ public enum ProgramEngine {
             prescriptionStyle: style, configuration: configuration
         )
         var blocks: [PrescriptionBlock] = []
-        if configuration.phasePrimerEnabled, style != .doubleProgression,
+        if configuration.phasePrimerEnabled, !style.buildsOwnSessionShape,
            let primer = primerWeight(
             baseWeightLb: state.baseWeightLb, phase: state.nextPhase, style: style,
             roundingLb: step, configuration: configuration
@@ -348,7 +451,7 @@ public enum ProgramEngine {
             blocks.append(PrescriptionBlock(kind: .primer, weightLb: primer, sets: 1, reps: 1))
         }
         if configuration.peakSingleEnabled, state.nextPhase == .peak,
-           style != .technique, style != .doubleProgression {
+           style != .technique, !style.buildsOwnSessionShape {
             let seed = configuration.lastPeakSingleLb > 0
                 ? configuration.lastPeakSingleLb + configuration.peakSingleIncrementLb
                 : estimatedMaxLb * 0.90
@@ -357,7 +460,33 @@ public enum ProgramEngine {
                 blocks.append(PrescriptionBlock(kind: .topSingle, weightLb: target, sets: 1, reps: 1))
             }
         }
+        if style == .fiveThreeOne {
+            // The two ramp sets below the "+" set. They are real prescribed
+            // work but only the top set gates progression, so they carry the
+            // non-graded backoff kind; block order puts them before the top set.
+            let ramp: [(pct: Double, reps: Int)]
+            switch state.nextPhase {
+            case .volume: ramp = [(0.65, 5), (0.75, 5)]
+            case .load: ramp = [(0.70, 3), (0.80, 3)]
+            case .peak: ramp = [(0.75, 5), (0.85, 3)]
+            case .deload: ramp = [(0.40, 5), (0.50, 5)]
+            }
+            for step531 in ramp {
+                blocks.append(PrescriptionBlock(
+                    kind: .backoff,
+                    weightLb: Weight.round(state.baseWeightLb * step531.pct, to: step),
+                    sets: 1, reps: step531.reps
+                ))
+            }
+        }
         blocks.append(PrescriptionBlock(kind: .work, weightLb: work.weightLb, sets: work.sets, reps: work.reps))
+        if style == .maxEffort, state.nextPhase != .deload {
+            blocks.append(PrescriptionBlock(
+                kind: .backoff,
+                weightLb: Weight.round(state.baseWeightLb * 0.80, to: step),
+                sets: 3, reps: 3
+            ))
+        }
         return SessionPrescription(mainWork: work, blocks: blocks)
     }
 

@@ -32,6 +32,10 @@ enum ProgramTemplates {
         }
 
         let existingPrograms = try context.fetch(FetchDescriptor<Program>())
+        let recordedMaxes = try recordedE1RMs(
+            for: Set(template.days.flatMap { $0.lifts.map(\.exercise) + $0.accessories.map(\.exercise) }),
+            context: context
+        )
         let program = Program(
             name: uniqueProgramName(template.name, existing: existingPrograms.map(\.name)),
             focus: TrainingFocus(rawValue: template.focus) ?? .strength,
@@ -47,22 +51,62 @@ enum ProgramTemplates {
             // more than once, which makes editor rows mirror one another.
             program.days.append(day)
             for (slotOrder, l) in d.lifts.enumerated() {
+                var base = l.baseWeightLb
+                var max = l.estimatedMaxLb
+                let style = PrescriptionStyle(rawValue: l.prescription) ?? .automatic
+                let fraction = l.startFraction > 0 ? l.startFraction : style.defaultStartFraction
+                if fraction > 0, let e1RM = recordedMaxes[l.exercise], e1RM > 0 {
+                    base = Swift.max(45, floorTo(fraction * e1RM, step: template.roundingLb))
+                    max = (e1RM).rounded()
+                }
                 let lift = ProgramLift(exerciseName: l.exercise,
                                        role: LiftRole(rawValue: l.role) ?? .main,
                                        order: slotOrder,
-                                       baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb)
+                                       baseWeightLb: base, estimatedMaxLb: max)
+                lift.prescription = style
+                if l.sets > 0 { lift.doubleProgressionSets = l.sets }
                 context.insert(lift)
                 day.lifts.append(lift)
             }
             for (slotOrder, a) in d.accessories.enumerated() {
+                var weight = a.weightLb
+                if a.startFraction > 0, let e1RM = recordedMaxes[a.exercise], e1RM > 0 {
+                    weight = Swift.max(45, floorTo(a.startFraction * e1RM, step: template.roundingLb))
+                }
                 let acc = ProgramAccessory(exerciseName: a.exercise, order: slotOrder, sets: a.sets, minReps: a.minReps,
                                            maxReps: a.maxReps, currentReps: a.minReps,
-                                           weightLb: a.weightLb, incrementLb: a.incrementLb)
+                                           weightLb: weight, incrementLb: a.incrementLb)
                 context.insert(acc)
                 day.accessories.append(acc)
             }
         }
         return program
+    }
+
+    /// Best recorded e1RM per exercise from completed, banked working sets —
+    /// the lifter's known history, used to compute methodology starting
+    /// weights. Mirrors web recordedE1RMs.
+    private static func recordedE1RMs(for names: Set<String>, context: ModelContext) throws -> [String: Double] {
+        guard !names.isEmpty else { return [:] }
+        var best: [String: Double] = [:]
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        for session in sessions where session.isCompleted {
+            for entry in session.exercises {
+                guard let name = entry.exercise?.name, names.contains(name) else { continue }
+                for set in entry.workingSets where set.weightLb > 0 && set.reps >= 1 {
+                    let sample = ProgramProgression.epleyE1RM(weightLb: set.weightLb, reps: set.reps)
+                    if sample > best[name] ?? 0 { best[name] = sample }
+                }
+            }
+        }
+        return best
+    }
+
+    /// Round DOWN to the plate step: methodology guidance is to err light when
+    /// deriving starting weights from an estimated max.
+    private static func floorTo(_ value: Double, step: Double) -> Double {
+        guard step > 0 else { return value }
+        return (value / step + 1e-9).rounded(.down) * step
     }
 
     /// First free name in "base", "base 2", "base 3"… — shared by the

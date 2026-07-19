@@ -14,10 +14,13 @@ export async function normalizedTemplates() {
       lifts: d.lifts.map((l) => ({
         exercise: l.exerciseName, role: l.role,
         baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb,
+        prescription: l.prescription || "automatic", sets: l.sets || 0,
+        startFraction: l.startFraction || 0,
       })),
       accessories: d.accessories.map((a) => ({
         exercise: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
         weightLb: a.weightLb, incrementLb: a.incrementLb,
+        startFraction: a.startFraction || 0,
       })),
     })),
   }));

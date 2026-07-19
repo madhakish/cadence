@@ -59,6 +59,24 @@ early → target +1 rep. At the top of the range with a load step → add
 the step, reset to the range bottom. Load step 0 (bodyweight) keeps
 adding reps; the range top is advisory.
 
+## Methodology styles
+
+Some prescription styles replace the tapered wave rules above with a
+published methodology's own progression (full details in
+[Training methodologies](training-methodologies.md)):
+
+- **Per-exposure styles** (`linearFives`, the three Texas day styles) act
+  like double progression's schedule: they advance their own base after
+  every banked exposure that completes as prescribed, never participate
+  in Peak grading, and deload after their style's own stall limit
+  (3 misses → −10% novice; 2 misses → −5% Texas).
+- **Cycle styles** (`fiveThreeOne`, `maxEffort`, `dynamicEffort`) still
+  grade at week 3 and apply at rollover, but with fixed increments:
+  +10 lb lower / +5 lb upper for 5/3/1 training maxes and made max-effort
+  singles; a missed 5/3/1 minimum resets the TM three cycles back; missed
+  singles and all dynamic-effort work hold. Dynamic-effort sets never
+  update the e1RM estimate.
+
 ## Stale sessions
 
 A banked session only advances the program if it was started from the

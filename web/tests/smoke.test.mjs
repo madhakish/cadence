@@ -864,6 +864,37 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.Programs.del(dupA); await db.Programs.del(dupB);
   const squatAfter = await db.Exercises.byName("Back Squat");
   ok(JSON.stringify(squatAfter) === JSON.stringify(squatBefore), "existing exercises never overwritten by templates");
+
+  // History-driven starting weights: with a recorded 315×5 squat (e1RM 367.5),
+  // a 5/3/1 program must open at TM = floor(0.90 × 367.5 → /5) = 330, and the
+  // Boring-But-Big accessory at floor(0.45 × 367.5) = 165. No history → the
+  // template's deliberately light hand-set bases stand (asserted above by the
+  // fixture parity + instantiate/bank loop that ran before this history existed).
+  await db.Sessions.save({
+    date: new Date("2025-06-01T10:00:00Z").toISOString(), notes: "", isCompleted: true,
+    exercises: [{ exerciseName: "Back Squat", sets: [
+      { order: 0, weightLb: 315, reps: 5, isWarmup: false, status: "completed", flags: [] },
+    ] }],
+  });
+  const t531 = PROGRAM_TEMPLATES.find((t) => t.id === "five-three-one");
+  const p531 = await db.Programs.get(await createProgramFromTemplate(t531));
+  const squatDay = p531.days.find((d) => d.name === "Squat Day");
+  ok(squatDay.lifts[0].baseWeightLb === 330, `531 TM derives from recorded e1RM (got ${squatDay.lifts[0].baseWeightLb})`);
+  ok(squatDay.lifts[0].estimatedMaxLb === 368, "531 slot e1RM captured from history");
+  ok(squatDay.lifts[0].prescription === "fiveThreeOne", "531 slot carries its methodology style");
+  ok(squatDay.accessories[0].weightLb === 165, `BBB volume at ~50% of TM (got ${squatDay.accessories[0].weightLb})`);
+  await db.Programs.del(p531.id);
+  // No recorded history for a slot → the template's hand-set base stands.
+  const noHistory = await db.Programs.get(await createProgramFromTemplate({
+    id: "test-fallback", name: "Fallback Check", tagline: "", focus: "strength", roundingLb: 5,
+    exercises: [],
+    days: [{ name: "Day", accessories: [], lifts: [{
+      exerciseName: "Landmine Press", role: "main", baseWeightLb: 40, estimatedMaxLb: 60,
+      stallCount: 0, lastIncrementLb: 0, prescription: "fiveThreeOne", sets: 0, startFraction: 0.90,
+    }] }],
+  }));
+  ok(noHistory.days[0].lifts[0].baseWeightLb === 40, "no recorded history → template base stands");
+  await db.Programs.del(noHistory.id);
 }
 
 // ---- anatomy: muscle-map parity, coverage, and figure rendering ----

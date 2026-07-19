@@ -344,6 +344,36 @@ enum SessionCompletion {
             lift.lastIncrementLb = next.weightLb - prior.weightLb
         }
 
+        // Methodology slots on session-to-session linear progression: novice
+        // fives and the Texas day slots advance their own base after every
+        // banked exposure instead of waiting for a Peak grade.
+        for lift in day.lifts where lift.prescription.advancesPerExposure && lift.prescription != .doubleProgression {
+            guard let entry = session.exercises.first(where: {
+                ($0.programSlotID == lift.id || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName))
+                    && !$0.workingSets.isEmpty
+            }) else { continue }
+            let loadStep = ProgramEngine.loadStep(
+                programRoundingLb: program.roundingLb,
+                exerciseType: entry.exercise?.typeRaw
+            )
+            let rule = ProgramProgression.linearRule(for: lift.prescription,
+                                                     movementGroup: entry.exercise?.movementGroup)
+            let result = ProgramProgression.advanceLinearLift(
+                lift.coreState, perf: cyclePerf(entry, roundingLb: loadStep),
+                rule: rule, roundingLb: loadStep
+            )
+            let deloaded = result.state.baseWeightLb < lift.baseWeightLb
+            lift.baseWeightLb = result.state.baseWeightLb
+            lift.estimatedMaxLb = result.state.estimatedMaxLb
+            lift.stallCount = result.state.stallCount
+            lift.lastIncrementLb = result.state.lastIncrementLb
+            if deloaded, let note = result.note {
+                let label = "\(lift.exerciseName): \(note)"
+                context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
+                events.append(PREvent(kind: .programNote, exercise: lift.exerciseName, label: label))
+            }
+        }
+
         // A clean, completed top-single becomes the next peak projection's
         // explicit anchor. Adjusted or quality-flagged singles do not.
         for lift in day.lifts where lift.peakSingleEnabled {
@@ -359,17 +389,19 @@ enum SessionCompletion {
 
         // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
         if week == 3 {
-            for lift in day.lifts where lift.prescription != .doubleProgression {
+            for lift in day.lifts where !lift.prescription.advancesPerExposure {
                 if let entry = session.exercises.first(where: {
                     ($0.programSlotID == lift.id || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName && $0.programRole == lift.role.rawValue))
                         && !$0.workingSets.isEmpty
                 }) {
                     let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
                                                           exerciseType: entry.exercise?.typeRaw)
-                    let result = ProgramProgression.advanceCycleLift(
+                    let result = ProgramProgression.advanceProgramLift(
                         lift.coreState,
                         perf: cyclePerf(entry, roundingLb: loadStep),
                         focus: program.focus,
+                        style: lift.prescription,
+                        movementGroup: entry.exercise?.movementGroup,
                         roundingLb: loadStep
                     )
                     lift.pendingBaseWeightLb = result.state.baseWeightLb
@@ -393,8 +425,9 @@ enum SessionCompletion {
         // Rollover at the deload week's last day.
         for d in program.days {
             for lift in d.lifts {
-                if lift.prescription == .doubleProgression {
-                    // Rep-window slots advance after every exposure and do not
+                if lift.prescription.advancesPerExposure {
+                    // Per-exposure slots (rep windows, novice fives, Texas
+                    // days) advance after every banked session and do not
                     // participate in Peak grading or skipped-Peak stalls.
                 } else if let pendingBase = lift.pendingBaseWeightLb {
                     let oldBase = lift.baseWeightLb

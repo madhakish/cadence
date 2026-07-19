@@ -44,11 +44,28 @@ Every day carries core work.
 | Engine B | Push-ups 4×10–25 · Ring Row 4×8–15 · Sit-ups 4×15–30 |
 | Engine C | Box Jumps 4×8–15 · Goblet Squat 4×10–20 @35 · Walking Lunges 4×12–24 |
 
+## Methodology templates
+
+Five templates automate published programs — see
+[Training methodologies](training-methodologies.md) for the full rules,
+percentages, and progression each one runs:
+
+| Template | Days | Structure |
+|---|---|---|
+| Novice Linear — 3×5 | A/B ×3/wk | Squat 3×5 every day · press/bench alternate 3×5 · deadlift 1×5 |
+| Novice Linear — 5×5 | A/B ×3/wk | Squat 5×5 · bench+row / press+deadlift split |
+| Texas Method | 6 (two weeks) | Volume 5×5 · light day · intensity 1×5 PR; presses alternate weekly |
+| 5/3/1 — Wendler | 4 | One main lift per day off a 90% training max, plus Boring-But-Big 5×10 |
+| Conjugate — Westside-style | 4 | Max-effort singles ×2 · dynamic-effort speed days ×2 |
+
 ## Behavior on creation
 
 - Library exercises the template needs are created if missing (with
   movement groups, so [swaps](swap-rules.md) work); existing exercises
   are never modified.
 - The program is created **inactive** unless it's your first.
+- Slots that declare a start fraction derive their opening weights from
+  your best recorded e1RM for that exercise (rounded down to the plate
+  step); with no logged history the template's light default stands.
 - Everything — days, lifts, weights, ranges — is editable afterward like
   any custom program.
