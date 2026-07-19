@@ -11,7 +11,7 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 // The plate denominations of the chosen unit that exist at this gym. The bar is
 // chosen separately (most bars are 45 lb regardless of which plates you load).
 export function stationPlates(unit, gym) {
-  if (gym && Array.isArray(gym.plateToggles)) {
+  if (gym && Array.isArray(gym.plateToggles) && gym.plateToggles.length) {
     return gym.plateToggles.filter((t) => t.enabled).map((t) => ({ value: t.value, unit: t.unit }));
   }
   return unit === "kg" ? C.STANDARD_KG : C.STANDARD_LB;

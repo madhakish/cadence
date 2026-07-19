@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import XCTest
+import CadenceCore
 
 @MainActor
 final class PersistenceMigrationTests: XCTestCase {
@@ -14,6 +15,10 @@ final class PersistenceMigrationTests: XCTestCase {
 
     func testStoreSurvivesTheActual72And73FailedUpgradeLineage() throws {
         try assertActualShippedStore(environmentKey: "CADENCE_FAILED_UPGRADES_STORE_DIR")
+    }
+
+    func testActualPR73V3StoreMigratesWithoutDataLoss() throws {
+        try assertActualShippedStore(environmentKey: "CADENCE_PR73_STORE_DIR")
     }
 
     func testPre72V1StoreMigratesWithoutDataLoss() throws {
@@ -66,7 +71,9 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try Seeder.syncLibrary(context: context)
         XCTAssertNotNil(try context.fetch(FetchDescriptor<Exercise>()).first { $0.name == "Back Squat" })
-        XCTAssertFalse(try context.fetch(FetchDescriptor<Gym>()).isEmpty)
+        let gyms = try context.fetch(FetchDescriptor<Gym>())
+        XCTAssertFalse(gyms.isEmpty)
+        XCTAssertEqual(gyms.first?.plateToggles.count, Plate.allStandard.count)
     }
 
     private func openUsingProductionStrategies(storeURL: URL) throws -> ModelContainer {
@@ -133,8 +140,13 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(gyms.first?.name, "Migration Gym")
         XCTAssertEqual(gyms.first?.collarWeightLb, 0)
         XCTAssertEqual(gyms.first?.loadingPolicy, .closest)
+        XCTAssertEqual(gyms.first?.availablePlates.count, Plate.allStandard.count,
+                       "a legacy empty inventory resolves to the standard rack before normalization")
 
         try Seeder.syncLibrary(context: context)
+
+        XCTAssertEqual(gyms.first?.plateToggles.count, Plate.allStandard.count,
+                       "library sync materializes the legacy rack for Settings")
 
         let migrated = try XCTUnwrap(try context.fetch(FetchDescriptor<WorkoutSession>()).first)
         XCTAssertNotNil(UUID(uuidString: migrated.id))

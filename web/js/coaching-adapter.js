@@ -2,7 +2,7 @@
 // Evaluation is read-only. Program mutations cross an explicit user-accepted
 // boundary and the caller persists a CoachingDecision audit record.
 import * as C from "./core.js";
-import { Programs, iso } from "./db.js";
+import { iso } from "./db.js";
 
 export function coachingReport(program, sessions, exMap, checkins = []) {
   const id = program.uuid || program.id;
@@ -132,7 +132,6 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     program.preferredSessionSpacingDays = Math.max(2, change.days);
     message = `Preferred spacing: ${old} → ${program.preferredSessionSpacingDays} days.`;
   }
-  await Programs.save(program);
   return message;
 }
 

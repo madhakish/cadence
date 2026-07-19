@@ -26,6 +26,7 @@ const signals = await import("../js/views/signals.js");
 const settings = await import("../js/views/settings.js");
 const session = await import("../js/views/session.js");
 const plates = await import("../js/views/plates.js");
+const barbell = await import("../js/barbell.js");
 const C = await import("../js/core.js");
 const coach = await import("../js/coaching-adapter.js");
 const completeAll = async (workout) => {
@@ -110,14 +111,27 @@ for (const track of [
   { exerciseName: "Incline DB Press", mode: "linear", cycleNumber: 1, baseWeightLb: 45, nextPhase: 1, incrementLb: 5, roundingLb: 5, lastCompletedAt: null },
 ]) await db.Tracks.save(track);
 
-// Equipment truth: an explicitly empty rack means bar/collars only, and every
-// stored warmup is solved against the same rack configuration as working sets.
+// Equipment truth: legacy gyms used [] for an inventory that had never been
+// initialized. A nonempty all-disabled rack is the explicit bar-only state.
+// Every stored warmup uses the same rack configuration as working sets.
 {
   const squat = await db.Exercises.byName("Back Squat");
   const gym = await db.Gyms.default();
-  const emptyRack = { ...gym, plateToggles: [], collarWeightLb: 5, loadingPolicy: "closest" };
-  ok(session.neatProgramWeight(135, squat, true, 45, 5, emptyRack) === 50,
-    "explicitly empty plate inventory stays bar-and-collars only");
+  const legacyRack = { ...gym, plateToggles: [], collarWeightLb: 5, loadingPolicy: "closest" };
+  ok(session.neatProgramWeight(135, squat, true, 45, 5, legacyRack) === 135,
+    "legacy empty plate inventory falls back to the standard rack");
+  ok(barbell.stationPlates("lb", legacyRack).length === C.STANDARD_LB.length,
+    "legacy empty inventory also renders the standard rack");
+  const barOnlyRack = { ...legacyRack, plateToggles: [{ value: 45, unit: "lb", enabled: false }] };
+  ok(session.neatProgramWeight(135, squat, true, 45, 5, barOnlyRack) === 50,
+    "nonempty all-disabled inventory remains an intentional bar-only rack");
+  ok(barbell.stationPlates("lb", barOnlyRack).length === 0,
+    "bar-only intent survives in the loadout renderer");
+  await db.Gyms.save(legacyRack);
+  await db.syncLibrary();
+  ok((await db.Gyms.default()).plateToggles.length === C.ALL_STANDARD.length,
+    "library sync materializes a legacy rack for the gym editor");
+  await db.Gyms.save(gym);
 
   const rack = { ...gym, collarWeightLb: 5, loadingPolicy: "closest" };
   const achieved = session.achievableWarmups(
@@ -128,6 +142,36 @@ for (const track of [
     rack.plateToggles.filter((toggle) => toggle.enabled), 10, 5, "closest").totalLb === set.weightLb),
     "every generated warmup is achievable on the configured rack");
 }
+
+// Program changes and their audit records are one transaction. The adapter
+// only mutates a proposed copy, and a bad audit row must roll the program back.
+{
+  const original = await db.Programs.active();
+  const recommendation = { id: "atomic-recommendation", ruleID: "spacing", title: "Try two days",
+    explanation: "Fixture recommendation", change: { type: "tryShorterSpacing", days: 2 } };
+  const proposed = structuredClone(original);
+  await coach.applyCoachingRecommendation(proposed, recommendation, seededExercises);
+  ok((await db.Programs.active()).preferredSessionSpacingDays === original.preferredSessionSpacingDays,
+    "coaching adapter does not persist before the audit transaction");
+  let rolledBack = false;
+  try { await db.Programs.saveWithDecision(proposed, { action: "accepted" }); }
+  catch { rolledBack = true; }
+  ok(rolledBack, "invalid audit row rejects the combined transaction");
+  ok((await db.Programs.active()).preferredSessionSpacingDays === original.preferredSessionSpacingDays,
+    "failed audit insert rolls the program mutation back");
+  const decision = coach.coachingDecision(proposed, recommendation, "accepted", ["fixture"]);
+  await db.Programs.saveWithDecision(proposed, decision);
+  ok((await db.Programs.active()).preferredSessionSpacingDays === 2
+      && (await db.CoachingDecisions.all()).some((item) => item.id === decision.id),
+    "program mutation and accepted-decision audit commit together");
+  await db.Programs.save(original);
+  await db.CoachingDecisions.del(decision.id);
+}
+
+const serviceWorkerSource = await (await import("node:fs/promises")).readFile(
+  new URL("../sw.js", import.meta.url), "utf8");
+ok(serviceWorkerSource.includes('"js/coaching-adapter.js"'),
+  "offline shell precaches the eagerly imported coaching adapter");
 
 // Historical and current volume must use the same load multiplier. Two
 // identical two-dumbbell sessions are not a volume PR.

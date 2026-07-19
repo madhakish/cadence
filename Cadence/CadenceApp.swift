@@ -48,14 +48,24 @@ final class AppBootstrap: ObservableObject {
         ]
         var failures: [String] = []
         for (label, open) in candidates {
+            let loaded: ModelContainer
             do {
-                let loaded = try open()
+                loaded = try open()
+            } catch {
+                let nsError = error as NSError
+                failures.append("\(label): \(nsError.domain) \(nsError.code)")
+                continue
+            }
+            do {
                 try prepare(loaded)
                 container = loaded
                 return
             } catch {
                 let nsError = error as NSError
-                failures.append("\(label): \(nsError.domain) \(nsError.code)")
+                errorMessage = "Cadence opened your store with \(label), but could not finish its "
+                    + "non-destructive data preparation (\(nsError.domain) \(nsError.code)): "
+                    + error.localizedDescription
+                return
             }
         }
         errorMessage = "Cadence could not match this store to a supported schema. "

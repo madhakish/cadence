@@ -27,7 +27,7 @@ const loadOptions = (exercise) => ({
 });
 
 const availablePlates = (gym) => {
-  if (!gym || !Array.isArray(gym.plateToggles)) return C.ALL_STANDARD;
+  if (!gym || !Array.isArray(gym.plateToggles) || !gym.plateToggles.length) return C.ALL_STANDARD;
   return gym.plateToggles.filter((toggle) => toggle.enabled)
     .map((toggle) => ({ value: toggle.value, unit: toggle.unit }));
 };

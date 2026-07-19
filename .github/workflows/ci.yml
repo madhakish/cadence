@@ -46,12 +46,14 @@ jobs:
       - name: Install pinned test deps
         working-directory: web
         run: npm ci
-      - name: Core math parity tests
+      - name: Web parity, migration, and smoke tests
         working-directory: web
-        run: node tests/core.test.mjs
-      - name: Runtime smoke test (jsdom + fake-indexeddb)
-        working-directory: web
-        run: node tests/smoke.test.mjs
+        run: npm test
+      - name: Install pinned release parser
+        working-directory: .github/release
+        run: npm ci
+      - name: Verify semantic-version breaking markers
+        run: node .github/scripts/test-release-parser.mjs
 
   app-build:
     name: App build (macOS)
@@ -94,6 +96,7 @@ jobs:
           CADENCE_V129_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v129
           CADENCE_FAILED_UPGRADES_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v129-after-failed-upgrades
           CADENCE_PR72_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr72
+          CADENCE_PR73_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr73
         run: >-
           xcodebuild test
           -project Cadence.xcodeproj

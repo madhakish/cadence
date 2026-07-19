@@ -75,6 +75,12 @@ build_app "pr73" "$pr73_source"
 launch_app
 copy_store "v129-after-failed-upgrades"
 
+# A clean #73 install writes the nominal V3 schema. This catches the same
+# snapshot-vs-shipped-binary mistake on the new V3→V4 boundary.
+xcrun simctl uninstall "$device_id" com.madhakish.Cadence 2>/dev/null || true
+launch_app
+copy_store "pr73"
+
 # Also cover a store first created by #72, whose advertised version is V1 but
 # whose model checksum differs from v1.29.
 xcrun simctl uninstall "$device_id" com.madhakish.Cadence 2>/dev/null || true

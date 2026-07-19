@@ -220,8 +220,19 @@ enum Seeder {
         try ensureWorkoutSessionIDs(context: context)
         try snapshotLegacyLoadSemantics(context: context)
         try normalizeV4PrescriptionBlocks(context: context)
+        try normalizeLegacyGymPlateInventories(context: context)
         do { try context.save() }
         catch { context.rollback(); throw error }
+    }
+
+    /// Early gym rows predate configurable inventory and persisted an empty
+    /// array. Materialize the standard rack so Settings is editable as well as
+    /// making the load solver safe. A nonempty/all-disabled rack is user intent
+    /// and is never changed.
+    private static func normalizeLegacyGymPlateInventories(context: ModelContext) throws {
+        for gym in try context.fetch(FetchDescriptor<Gym>()) where gym.plateToggles.isEmpty {
+            gym.plateToggles = Plate.allStandard.map { PlateToggle(plate: $0, enabled: true) }
+        }
     }
 
     /// V4 added a non-optional prescription-block discriminator so the schema

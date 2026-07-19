@@ -350,6 +350,24 @@ export const Programs = {
   },
   get: (id) => get("programs", id),
   save: (p) => put("programs", normalizeProgram(p)),
+  saveWithDecision: (p, decision) => {
+    const normalized = normalizeProgram(p);
+    return runAll(["programs", "coachingDecisions"], "readwrite", (os) => {
+      // Queue the key-bearing audit record first. An invalid/missing decision
+      // ID then throws before any program write has even been requested.
+      const decisionRequest = os("coachingDecisions").put(decision);
+      let programRequest;
+      try { programRequest = os("programs").put(normalized); }
+      catch (error) {
+        // The transaction abort below will fail the already queued request;
+        // consume that event so a synchronous program-key error cannot leak an
+        // unhandled rejection in browsers or fake-indexeddb.
+        decisionRequest.onerror = () => {};
+        throw error;
+      }
+      return Promise.all([reqP(programRequest), reqP(decisionRequest)]);
+    });
+  },
   del: (id) => del("programs", id),
   async active() { const all = await Programs.all(); return all.find((p) => p.isActive) || all[0] || null; },
   async byStableId(id) { const all = await Programs.all(); return all.find((p) => p.uuid === id || p.id === id) || null; },
@@ -403,6 +421,14 @@ const RETIRED_REST_STAMPS = {
 // backfills movementGroup on older records — WITHOUT clobbering user edits to
 // exercises that already exist (rest, shelved, watch site, etc.).
 export async function syncLibrary() {
+  // Early gym documents used [] for an inventory that had never been
+  // initialized. Persist the standard rack so the editor is populated. A
+  // nonempty/all-disabled list remains an intentional bar-only rack.
+  for (const gym of await Gyms.all()) {
+    if (!Array.isArray(gym.plateToggles) || !gym.plateToggles.length) {
+      await Gyms.save({ ...gym, plateToggles: C.ALL_STANDARD.map((plate) => ({ ...plate, enabled: true })) });
+    }
+  }
   const have = new Map((await Exercises.all()).map((e) => [e.name, e]));
   for (const seed of SEED.exercises) {
     const cur = have.get(seed.name);

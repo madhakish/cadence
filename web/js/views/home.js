@@ -101,8 +101,12 @@ export async function render(host) {
         ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: recommendation.title }), ui.h("span", { class: "sub", text: recommendation.explanation })),
         ui.h("div", { class: "btn-row" },
           ui.h("button", { class: "btn sm primary", text: "Apply", onClick: async () => {
-            const message = await applyCoachingRecommendation(program, recommendation, allExercises);
-            await CoachingDecisions.save(coachingDecision(program, recommendation, "accepted", latest?.reasons || []));
+            // Keep the rendered program unchanged unless both the program
+            // edit and its audit record commit in one IndexedDB transaction.
+            const proposed = structuredClone(program);
+            const message = await applyCoachingRecommendation(proposed, recommendation, allExercises);
+            const decision = coachingDecision(proposed, recommendation, "accepted", latest?.reasons || []);
+            await Programs.saveWithDecision(proposed, decision);
             ui.toast(message); ui.nav.refresh();
           } }),
           ui.h("button", { class: "btn sm ghost", text: "Not now", onClick: async () => {

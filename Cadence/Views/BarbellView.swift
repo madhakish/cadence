@@ -35,8 +35,10 @@ struct BarbellView: View {
     private static let sleeve: CGFloat = 18
 
     /// Every enabled denomination at this gym. `unit` is only the fallback
-    /// rack when no gym inventory exists; a configured mixed rack must draw
-    /// the same achieved load the prescription solver stored.
+    /// rack when no gym exists; a configured mixed rack must draw the same
+    /// achieved load the prescription solver stored. `Gym.availablePlates`
+    /// also repairs legacy empty inventories without erasing an intentional
+    /// nonempty/all-disabled bar-only rack.
     private var stationPlates: [Plate] {
         guard let gym else {
             return unit == .kg ? Plate.standardKg : Plate.standardLb
