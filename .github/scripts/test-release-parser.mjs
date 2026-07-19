@@ -1,4 +1,6 @@
 import { analyzeCommits } from "../release/node_modules/@semantic-release/commit-analyzer/index.js";
+import { readFile } from "node:fs/promises";
+import assert from "node:assert/strict";
 
 const logger = { log() {} };
 const cases = [
@@ -19,4 +21,14 @@ for (const [message, expected] of cases) {
   }
 }
 
-console.log(`${cases.length} semantic-release contract assertions passed`);
+const workflow = await readFile(new URL("../workflows/ci.yml", import.meta.url), "utf8");
+const releaseJob = workflow.match(/\n  release:\n(?<job>[\s\S]*?)\n  testflight:\n/)?.groups?.job;
+
+assert.ok(releaseJob, "Expected ci.yml to define release before testflight");
+assert.match(releaseJob, /if: >-\n\s+always\(\) &&/);
+assert.match(releaseJob, /needs\.core-tests\.result == 'success'/);
+assert.match(releaseJob, /needs\.web-tests\.result == 'success'/);
+assert.match(releaseJob, /needs\.app-build\.result == 'success'/);
+assert.match(releaseJob, /github\.ref == 'refs\/heads\/main'/);
+
+console.log(`${cases.length + 6} semantic-release contract assertions passed`);
