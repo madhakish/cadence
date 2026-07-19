@@ -339,7 +339,7 @@ jobs:
       - name: Resolve app version from the latest release tag
         id: ver
         run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.1.0)" >> "$GITHUB_OUTPUT"
-      - uses: ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9 # v1.316.0
+      - uses: ruby/setup-ruby@003a5c4d8d6321bd302e38f6f0ec593f77f06600 # v1.319.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
