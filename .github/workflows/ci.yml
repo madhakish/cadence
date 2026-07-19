@@ -143,7 +143,10 @@ jobs:
     # web-tests gates the release too: a tag must never be cut while the JS
     # mirror of CadenceCore is failing (the parity mandate, issue 21).
     needs: [core-tests, web-tests, app-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # `workflow_dispatch` is the recovery path when an automated/API merge does
+    # not emit a push workflow. Keep it main-only so manually running another
+    # branch can never publish a release.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     concurrency:
       group: semantic-release
@@ -184,7 +187,7 @@ jobs:
     needs: [app-build, release]
     # Dormant until you opt in: set the repo variable TESTFLIGHT_ENABLED=true
     # (and add the Apple secrets). Until then this job is skipped — main stays green.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.TESTFLIGHT_ENABLED == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
