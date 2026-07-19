@@ -36,10 +36,14 @@ final class AppBootstrap: ObservableObject {
         errorMessage = nil
         isTemporary = false
         do {
-            let schema = Schema(versionedSchema: CadenceSchemaV3.self)
-            let config = ModelConfiguration(schema: schema)
-            let loaded = try ModelContainer(for: schema, migrationPlan: CadenceMigrationPlan.self,
-                                            configurations: config)
+            let loaded: ModelContainer
+            do {
+                loaded = try makeContainer(migrationPlan: CadencePre72MigrationPlan.self)
+            } catch {
+                // PR #72 changed the V1 checksum in place. A store first
+                // created by that build requires its separate linear plan.
+                loaded = try makeContainer(migrationPlan: Cadence72MigrationPlan.self)
+            }
             try prepare(loaded)
             container = loaded
         } catch {
@@ -49,10 +53,10 @@ final class AppBootstrap: ObservableObject {
 
     func openTemporaryStore() {
         do {
-            let schema = Schema(versionedSchema: CadenceSchemaV3.self)
-            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-            let loaded = try ModelContainer(for: schema, migrationPlan: CadenceMigrationPlan.self,
-                                            configurations: config)
+            let loaded = try makeContainer(
+                migrationPlan: CadencePre72MigrationPlan.self,
+                isStoredInMemoryOnly: true
+            )
             try prepare(loaded)
             isTemporary = true
             container = loaded
@@ -60,6 +64,19 @@ final class AppBootstrap: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func makeContainer<Plan: SchemaMigrationPlan>(
+        migrationPlan: Plan.Type,
+        isStoredInMemoryOnly: Bool = false
+    ) throws -> ModelContainer {
+        let schema = Schema(versionedSchema: CadenceSchemaV3.self)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isStoredInMemoryOnly)
+        return try ModelContainer(
+            for: schema,
+            migrationPlan: migrationPlan,
+            configurations: config
+        )
     }
 
     private func prepare(_ container: ModelContainer) throws {

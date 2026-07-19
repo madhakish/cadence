@@ -26,18 +26,31 @@ enum CadenceSchemaV3: VersionedSchema {
     }
 }
 
-enum CadenceMigrationPlan: SchemaMigrationPlan {
+/// Migration path for stores created before PR #72 changed the V1 model in
+/// place. SwiftData migration plans are linear, so this historical checksum
+/// needs its own path to the current schema.
+enum CadencePre72MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV1.self, CadenceSchemaV2.self, CadenceSchemaV3.self]
+        [CadenceSchemaV1.self, CadenceSchemaV3.self]
     }
 
     static var stages: [MigrationStage] {
         [
-            // Two V1 checksums shipped: pre-#72 and #72's mutated model. Each
-            // migrates directly to the safe final shape; neither must pass
-            // through the other's incompatible WorkoutSession.id definition.
             .lightweight(fromVersion: CadenceSchemaV1.self,
                          toVersion: CadenceSchemaV3.self),
+        ]
+    }
+}
+
+/// Migration path for a fresh store first created by the broken #72 build.
+/// That build advertised V1 while writing a different model checksum.
+enum Cadence72MigrationPlan: SchemaMigrationPlan {
+    static var schemas: [any VersionedSchema.Type] {
+        [CadenceSchemaV2.self, CadenceSchemaV3.self]
+    }
+
+    static var stages: [MigrationStage] {
+        [
             .lightweight(fromVersion: CadenceSchemaV2.self,
                          toVersion: CadenceSchemaV3.self),
         ]

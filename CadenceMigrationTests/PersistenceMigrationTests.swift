@@ -5,15 +5,26 @@ import XCTest
 @MainActor
 final class PersistenceMigrationTests: XCTestCase {
     func testPre72V1StoreMigratesWithoutDataLoss() throws {
-        try assertMigration(createStore: createV1Store, expectsExistingSessionID: false)
+        try assertMigration(
+            createStore: createV1Store,
+            migrationPlan: CadencePre72MigrationPlan.self,
+            expectsExistingSessionID: false
+        )
     }
 
     func testStoreCreatedBy72BuildAlsoMigratesWithoutDataLoss() throws {
-        try assertMigration(createStore: createShipped72Store, expectsExistingSessionID: true)
+        try assertMigration(
+            createStore: createShipped72Store,
+            migrationPlan: Cadence72MigrationPlan.self,
+            expectsExistingSessionID: true
+        )
     }
 
-    private func assertMigration(createStore: (URL) throws -> Void,
-                                 expectsExistingSessionID: Bool) throws {
+    private func assertMigration<Plan: SchemaMigrationPlan>(
+        createStore: (URL) throws -> Void,
+        migrationPlan: Plan.Type,
+        expectsExistingSessionID: Bool
+    ) throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cadence-migration-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -26,7 +37,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema,
-            migrationPlan: CadenceMigrationPlan.self,
+            migrationPlan: migrationPlan,
             configurations: configuration
         )
         let context = container.mainContext
