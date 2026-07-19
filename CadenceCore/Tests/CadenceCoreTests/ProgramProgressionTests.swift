@@ -112,6 +112,7 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(r.state.baseWeightLb, 180, accuracy: 1e-9)
         XCTAssertEqual(r.state.stallCount, 0)
         XCTAssertEqual(r.state.lastIncrementLb, 5, accuracy: 1e-9)
+        XCTAssertEqual(r.note, "Clean peak — add 5 lb next cycle.")
     }
 
     func testGrindyHolds() {

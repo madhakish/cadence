@@ -50,7 +50,8 @@ export async function openPlateCalculator() {
         result();
         function result() {
           const targetLb = C.toLb(targetVal, unit);
-          const sol = C.solve(targetLb, bar, availablePlates());
+          const sol = C.solve(targetLb, bar, availablePlates(), 10,
+            gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
           ui.clear(out);
           // The answer, drawn: the loaded bar itself, big — the SAME solution
           // as the list below (which may pick the other unit system).
@@ -66,7 +67,11 @@ export async function openPlateCalculator() {
           }
           out.append(ui.h("div", { class: "section-title", text: "Total achieved" }));
           out.append(ui.h("div", { class: "big mono", text: C.both(sol.totalLb) }));
-          out.append(ui.h("div", { class: "sub", text: `on ${C.barLabel(bar)}` }));
+          out.append(ui.h("div", { class: "sub", text: `on ${C.barLabel(bar)}${sol.collarLb ? ` + ${C.trim(sol.collarLb)} lb collars` : ""} · ${C.loadingPolicyLabel(sol.policy)}` }));
+          if (!sol.satisfiesPolicy) {
+            out.append(ui.h("div", { class: "card", style: { background: "rgba(255,204,0,0.16)", marginTop: "10px" } },
+              ui.h("span", { class: "warn", text: `⚠︎ No available plate stack satisfies ${C.loadingPolicyLabel(sol.policy).toLowerCase()}; showing the closest load.` })));
+          }
           if (sol.isOffTarget) {
             const deviation = unit === "kg" ? C.kgFromLb(Math.abs(sol.deviationLb)) : Math.abs(sol.deviationLb);
             out.append(ui.h("div", { class: "card", style: { background: "rgba(255,204,0,0.16)", marginTop: "10px" } },
@@ -83,12 +88,13 @@ export async function openPlateCalculator() {
         const sub = ui.h("div", { class: "sub" });
         const recompute = () => {
           const perSide = plates.map((pl) => ({ plate: pl, count: counts[C.plateId(pl)] || 0 })).filter((pc) => pc.count > 0);
-          const totalLb = C.totalOnBar(bar, perSide);
+          const collarLb = gym?.collarWeightLb || 0;
+          const totalLb = C.totalOnBar(bar, perSide, collarLb);
           // Draw exactly what the user says is on the bar — never re-solve it.
           ui.clear(hero);
-          hero.append(barbellSVG(totalLb, "lb", bar, gym, { perSide, totalLb }).svg);
+          hero.append(barbellSVG(totalLb, "lb", bar, gym, { perSide, totalLb, collarLb }).svg);
           total.textContent = C.both(totalLb);
-          sub.textContent = `total on ${C.barLabel(bar)}`;
+          sub.textContent = `total on ${C.barLabel(bar)}${collarLb ? ` + ${C.trim(collarLb)} lb collars` : ""}`;
         };
         for (const pl of plates) {
           const id = C.plateId(pl);

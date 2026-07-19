@@ -123,14 +123,17 @@ public struct PlateCount: Hashable, Codable, Sendable, Identifiable {
 public struct Loadout: Hashable, Codable, Sendable {
     public let bar: Bar
     public let perSide: [PlateCount]
+    /// Combined weight of the pair of collars/clips, canonical pounds.
+    public let collarLb: Double
 
-    public init(bar: Bar, perSide: [PlateCount]) {
+    public init(bar: Bar, perSide: [PlateCount], collarLb: Double = 0) {
         self.bar = bar
         self.perSide = perSide.sorted { $0.plate.lb > $1.plate.lb }
+        self.collarLb = max(0, collarLb)
     }
 
     public var perSideLb: Double { perSide.reduce(0) { $0 + $1.lb } }
-    public var totalLb: Double { bar.lb + 2 * perSideLb }
+    public var totalLb: Double { bar.lb + collarLb + 2 * perSideLb }
 
     /// "45 lb + 15 kg" loading order, heaviest first.
     public var perSideLabel: String {

@@ -236,7 +236,11 @@ public enum ProgramProgression {
             let inc = taperedIncrement(baseWeightLb: state.baseWeightLb, estimatedMaxLb: estimatedMaxLb, focus: focus, roundingLb: roundingLb)
             next.baseWeightLb = state.baseWeightLb + inc
             next.lastIncrementLb = inc
-            if inc == 0 { note = focus.incrementFraction <= 0 ? "Maintaining — holding weight." : "At training-max ceiling — holding weight." }
+            if inc > 0 {
+                note = "Clean peak — add \(Weight.trim(inc)) lb next cycle."
+            } else {
+                note = focus.incrementFraction <= 0 ? "Maintaining — holding weight." : "At training-max ceiling — holding weight."
+            }
         } else {
             next.stallCount = state.stallCount + 1
             next.lastIncrementLb = 0

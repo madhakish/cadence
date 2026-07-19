@@ -12,6 +12,9 @@ import Foundation
 /// no push.
 struct WorkoutActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
+        /// Stable workout identifier used by taps to reopen the exact logger.
+        /// nil for an ad-hoc rest started outside a session.
+        var sessionID: String? = nil
         /// The lift being worked (elapsed face) or rested (rest face).
         var currentLift: String
         /// What a quick rest (Action Button / Control Center) should arm for

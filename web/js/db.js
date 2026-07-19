@@ -140,7 +140,12 @@ const normalizeProgram = (p) => {
     })),
   };
 };
-const normalizeGym = (g) => ({ ...g, id: isPortableUUID(g.id) ? g.id : stableID(`gym:${g.name}`) });
+const normalizeGym = (g) => ({
+  ...g,
+  id: isPortableUUID(g.id) ? g.id : stableID(`gym:${g.name}`),
+  collarWeightLb: Number.isFinite(g.collarWeightLb) ? Math.max(0, g.collarWeightLb) : 0,
+  loadingPolicy: C.LOADING_POLICIES.includes(g.loadingPolicy) ? g.loadingPolicy : "closest",
+});
 const hasPortableProgramSlots = (program) => (program.days || []).every((day) =>
   [...(day.lifts || []), ...(day.accessories || [])].every((slot) => isPortableUUID(slot.id)));
 const normalizeSession = (session) => ({
@@ -189,6 +194,7 @@ function defaultSettings() {
     autoStartRest: false, // manual start by default — auto lies if you rested first
     haptics: true,
     gymTagFirstLaunchOfDay: false,
+    loadSemanticsMigrated: false,
     // Fresh installs seed a stamp-free library — nothing to migrate (see
     // RETIRED_REST_STAMPS). Absent on pre-bucket stores, so they get the
     // one-shot clear in syncLibrary.
@@ -232,6 +238,7 @@ export const Sessions = {
   async get(id) { const session = await get("sessions", id); return session ? normalizeSession(session) : null; },
   save: (s) => put("sessions", normalizeSession(s)),
   del: (id) => del("sessions", id),
+  async openAll() { const all = await Sessions.all(); return all.filter((s) => !s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date)); },
   async open() { const all = await Sessions.all(); return all.filter((s) => !s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null; },
   async completed() { const all = await Sessions.all(); return all.filter((s) => s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date)); },
 };
@@ -279,7 +286,8 @@ export function topSet(sessionExercise) {
   return working.reduce((best, s) => (!best || s.weightLb > best.weightLb ? s : best), null);
 }
 export function workingVolume(sessionExercise) {
-  return sessionExercise.sets.filter((s) => !s.isWarmup && s.status === "completed").reduce((sum, s) => sum + s.weightLb * s.reps, 0);
+  return sessionExercise.sets.filter((s) => !s.isWarmup && s.status === "completed")
+    .reduce((sum, set) => sum + (C.loadVolume(set) ?? 0), 0);
 }
 // ---- Seeding ----
 export async function ensureSeeded() {
@@ -324,7 +332,11 @@ export async function syncLibrary() {
   for (const seed of SEED.exercises) {
     const cur = have.get(seed.name);
     if (!cur) { await put("exercises", seed); continue; }
-    if (!cur.movementGroup && seed.movementGroup) { cur.movementGroup = seed.movementGroup; await put("exercises", cur); }
+    let changed = false;
+    if (!cur.movementGroup && seed.movementGroup) { cur.movementGroup = seed.movementGroup; changed = true; }
+    if (!C.LOAD_BASES.includes(cur.loadBasis)) { cur.loadBasis = seed.loadBasis; changed = true; }
+    if (!(cur.implementCount > 0)) { cur.implementCount = seed.implementCount; changed = true; }
+    if (changed) await put("exercises", cur);
   }
   // One-shot repair: old seeds stamped EVERY exercise with a rest, and the
   // per-exercise value wins over the buckets — so the rest settings (and the
@@ -340,6 +352,29 @@ export async function syncLibrary() {
     settings.restSeedStampsCleared = true;
     await Settings.save(settings);
   }
+
+  // One-time snapshot of legacy load meaning. Historical sets must keep the
+  // interpretation they had at migration time even if the library definition
+  // is edited later (for example, a cable entry changed from stack total to
+  // per-handle).
+  if (!settings.loadSemanticsMigrated) {
+    const exerciseMap = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
+    const sessions = await Sessions.all();
+    for (const session of sessions) {
+      for (const entry of session.exercises || []) {
+        const exercise = exerciseMap.get(entry.exerciseName);
+        for (const set of entry.sets || []) {
+          if (!C.LOAD_BASES.includes(set.loadBasis)) set.loadBasis = C.resolvedLoadBasis(exercise);
+          if (!(set.implementCount > 0)) set.implementCount = C.resolvedImplementCount(exercise);
+        }
+      }
+    }
+    settings.loadSemanticsMigrated = true;
+    await runAll(["sessions", "settings"], "readwrite", (os) => {
+      for (const session of sessions) os("sessions").put(session);
+      os("settings").put({ ...normalizeSettings(settings), id: "app" });
+    });
+  }
 }
 
 // ---- Export / Import ----
@@ -348,14 +383,26 @@ export async function syncLibrary() {
 // (barcode image, plate inventory, default bar), the exercise library (rest,
 // shelved, watch sites), and settings ride along with sessions.
 export async function exportBundle() {
+  const sessionFingerprint = (session) => JSON.stringify({
+    date: iso(session.date), notes: session.notes || "", gym: session.gymName || "",
+    program: session.programTag || null,
+    exercises: (session.exercises || []).map((entry) => ({
+      name: entry.exerciseName, role: entry.programRole || null,
+      sets: (entry.sets || []).map((set) => [set.weightLb, set.reps, !!set.isWarmup]),
+    })),
+  });
+  const portableSessionID = (session) => isPortableUUID(session.id)
+    ? session.id : stableID(`session:${session.id ?? sessionFingerprint(session)}`);
   const [sessions, bodyweight, protein, checkins, milestones, programs, tracks, gyms, exercises, settings] = await Promise.all([
-    Sessions.all().then((all) => all.sort((a, b) => new Date(b.date) - new Date(a.date))),
+    Sessions.all().then((all) => all.sort((a, b) => new Date(b.date) - new Date(a.date)
+      || portableSessionID(a).localeCompare(portableSessionID(b)))),
     Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
     Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(),
   ]);
   const programsById = new Map(programs.flatMap((p) => [[p.id, p], [p.uuid, p]]));
   const programsByName = new Map(programs.map((p) => [p.name, p]));
   const gymsByName = new Map(gyms.map((g) => [g.name, g]));
+  const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
   const exportProgramTag = (tag) => {
     if (!tag) return null;
     const linked = programsById.get(tag.programId) || programsByName.get(tag.programName);
@@ -381,6 +428,7 @@ export async function exportBundle() {
     exportedAt: iso(new Date()),
     appVersion: "web",
     sessions: sessions.map((s) => ({
+      id: portableSessionID(s),
       date: iso(s.date), notes: s.notes || "", gym: s.gymName || null,
       gymId: s.gymId || gymsByName.get(s.gymName)?.id || null, isCompleted: !!s.isCompleted,
       programTag: exportProgramTag(s.programTag),
@@ -394,6 +442,8 @@ export async function exportBundle() {
         sets: (e.sets || []).map((x) => ({
           weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
           status: x.status || (s.isCompleted ? "completed" : "planned"),
+          loadBasis: C.LOAD_BASES.includes(x.loadBasis) ? x.loadBasis : C.resolvedLoadBasis(exerciseByName.get(e.exerciseName)),
+          implementCount: x.implementCount || C.resolvedImplementCount(exerciseByName.get(e.exerciseName)),
           enteredUnit: x.enteredUnit || "lb",
           flags: x.flags || [], bodyFlagSite: normalizeBodySite(x.bodyFlagSite), bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
@@ -430,8 +480,10 @@ export async function exportBundle() {
         accessories: (d.accessories || []).map((a) => ({ id: a.id, exerciseName: a.exerciseName, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
       })),
     })),
-    tracks, gyms,
-    exercises: exercises.map((exercise) => ({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) })),
+    tracks, gyms: gyms.map(normalizeGym),
+    exercises: exercises.map((exercise) => ({ ...exercise,
+      loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
+      watchSite: normalizeBodySite(exercise.watchSite) })),
     settings: settingsOut,
   };
 }
@@ -439,7 +491,7 @@ export const exportJSON = async () => JSON.stringify(await exportBundle(), null,
 
 export async function exportCSV() {
   const sessions = await Sessions.completed();
-  const head = ["date", "exercise", "set_index", "weight_lb", "weight_kg", "reps", "is_warmup", "status", "per_side", "flags", "body_flag_site", "body_flag_note", "autoreg_reason", "session_notes"];
+  const head = ["date", "exercise", "set_index", "weight_lb", "weight_kg", "reps", "is_warmup", "status", "per_side", "load_basis", "implement_count", "flags", "body_flag_site", "body_flag_note", "autoreg_reason", "session_notes"];
   const esc = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const rows = [head.join(",")];
   for (const s of sessions) {
@@ -447,7 +499,8 @@ export async function exportCSV() {
       (e.sets || []).forEach((x, i) => {
         rows.push([
           iso(s.date), e.exerciseName, i, C.trim(x.weightLb), C.trim(C.kgFromLb(x.weightLb)), x.reps,
-          x.isWarmup, x.status || "completed", x.isPerSide, (x.flags || []).join(";"), normalizeBodySite(x.bodyFlagSite) || "", x.bodyFlagNote || "",
+          x.isWarmup, x.status || "completed", x.isPerSide, x.loadBasis || "", x.implementCount || 1,
+          (x.flags || []).join(";"), normalizeBodySite(x.bodyFlagSite) || "", x.bodyFlagNote || "",
           x.autoregReason || "", s.notes || "",
         ].map(esc).join(","));
       });
@@ -521,6 +574,7 @@ const BACKUP_ENUMS = {
   prescriptions: ["automatic", "wave", "secondary", "hypertrophy", "technique"],
   warmupPolicies: ["automatic", "full", "short", "none"],
   milestoneKinds: ["heaviestSet", "volumePR", "firstScheme", "programNote"],
+  loadBases: C.LOAD_BASES, loadingPolicies: C.LOADING_POLICIES,
 };
 
 // Validate the entire payload before the first read or write. IndexedDB will
@@ -584,6 +638,7 @@ export function validateBackup(bundle) {
 
   const sessions = array(bundle, "sessions");
   each(sessions, "sessions", (session, path) => {
+    if (session.id != null) portableID(session.id, `${path}.id`);
     dateValue(session.date, `${path}.date`, true);
     const tag = session.programTag;
     if (tag != null) {
@@ -608,6 +663,8 @@ export function validateBackup(bundle) {
         numberValue(set.weightLb, `${setPath}.weightLb`, { required: true, min: 0 });
         numberValue(set.reps, `${setPath}.reps`, { required: true, integer: true, min: 0 });
         enumValue(set.status, BACKUP_ENUMS.statuses, `${setPath}.status`, schemaVersion >= 2);
+        enumValue(set.loadBasis, BACKUP_ENUMS.loadBases, `${setPath}.loadBasis`);
+        numberValue(set.implementCount, `${setPath}.implementCount`, { integer: true, min: 1, max: 4 });
         enumValue(set.enteredUnit, BACKUP_ENUMS.units, `${setPath}.enteredUnit`, schemaVersion >= 1);
         const flags = array(set, "flags", `${setPath}.flags`);
         flags?.forEach((flag, i) => enumValue(flag, BACKUP_ENUMS.flags, `${setPath}.flags[${i}]`));
@@ -622,6 +679,7 @@ export function validateBackup(bundle) {
       });
     });
   });
+  if (sessions) unique(sessions.filter((session) => session.id != null), (session) => session.id, "sessions.id");
 
   const bodyweight = array(bundle, "bodyweight");
   each(bodyweight, "bodyweight", (entry, path) => {
@@ -696,6 +754,8 @@ export function validateBackup(bundle) {
   each(gyms, "gyms", (gym, path) => {
     if (schemaVersion >= 2) portableID(gym.id, `${path}.id`);
     textValue(gym.name, `${path}.name`, true);
+    numberValue(gym.collarWeightLb, `${path}.collarWeightLb`, { min: 0, max: 20 });
+    enumValue(gym.loadingPolicy, BACKUP_ENUMS.loadingPolicies, `${path}.loadingPolicy`);
     each(array(gym, "plateToggles", `${path}.plateToggles`), `${path}.plateToggles`, (plate, platePath) => {
       numberValue(plate.value, `${platePath}.value`, { required: true, min: Number.MIN_VALUE });
       enumValue(plate.unit, BACKUP_ENUMS.units, `${platePath}.unit`, schemaVersion >= 1);
@@ -708,6 +768,8 @@ export function validateBackup(bundle) {
   each(exercises, "exercises", (exercise, path) => {
     textValue(exercise.name, `${path}.name`, true); enumValue(exercise.category, BACKUP_ENUMS.categories, `${path}.category`, schemaVersion >= 1);
     enumValue(exercise.type, BACKUP_ENUMS.exerciseTypes, `${path}.type`, schemaVersion >= 1); bodySiteValue(exercise.watchSite, `${path}.watchSite`);
+    enumValue(exercise.loadBasis, BACKUP_ENUMS.loadBases, `${path}.loadBasis`);
+    numberValue(exercise.implementCount, `${path}.implementCount`, { integer: true, min: 1, max: 4 });
     numberValue(exercise.defaultRestSeconds, `${path}.defaultRestSeconds`, { integer: true, min: 0, max: 3600 });
     dateValue(exercise.createdAt, `${path}.createdAt`);
   });
@@ -767,9 +829,12 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       planNames: tag.planNames || [],
     };
   };
+  const knownExercises = bundle.exercises || await Exercises.all();
+  const exerciseByName = new Map(knownExercises.map((exercise) => [exercise.name, exercise]));
 
   if (bundle.sessions) {
     writes.set("sessions", bundle.sessions.map((s) => ({
+      ...(s.id ? { id: s.id } : {}),
       // Version-0 bundles only exported completed sessions, so absence means
       // completed. Version 1 preserves open sessions explicitly.
       date: s.date, notes: s.notes || "", isCompleted: s.isCompleted !== false,
@@ -782,6 +847,8 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
         sets: (e.sets || []).map((x, si) => ({
           order: si, weightLb: x.weightLb, reps: x.reps, isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
           status: x.status || (s.isCompleted !== false ? "completed" : "planned"),
+          loadBasis: C.LOAD_BASES.includes(x.loadBasis) ? x.loadBasis : C.resolvedLoadBasis(exerciseByName.get(e.name)),
+          implementCount: x.implementCount || C.resolvedImplementCount(exerciseByName.get(e.name)),
           enteredUnit: x.enteredUnit || "lb", flags: x.flags || [], bodyFlagSite: normalizeBodySite(x.bodyFlagSite), bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
           ...(x.inclinePercent != null ? { inclinePercent: x.inclinePercent } : {}),
@@ -822,11 +889,13 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       const cur = await get("settings", "app");
       if (cur && cur.restSeedStampsCleared !== undefined) s.restSeedStampsCleared = cur.restSeedStampsCleared;
       else delete s.restSeedStampsCleared;
+      if (cur && cur.loadSemanticsMigrated !== undefined) s.loadSemanticsMigrated = cur.loadSemanticsMigrated;
+      else delete s.loadSemanticsMigrated;
     }
     writes.set("settings", [s]);
   } else if (bundle.exercises) {
     const cur = await get("settings", "app");
-    if (cur) writes.set("settings", [{ ...cur, restSeedStampsCleared: false }]);
+    if (cur) writes.set("settings", [{ ...cur, restSeedStampsCleared: false, loadSemanticsMigrated: false }]);
   }
 
   const stores = [...writes.keys()];

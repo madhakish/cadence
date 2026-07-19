@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import SwiftData
 
 /// The session stopwatch. Lives at the root (not the session screen), so the
 /// elapsed clock survives leaving and re-entering the logger — and, via the
@@ -11,7 +10,7 @@ final class WorkoutClock {
     private(set) var startDate: Date?
     /// Set while the stopwatch is paused; elapsed freezes at (pausedAt − start).
     private(set) var pausedAt: Date?
-    private var sessionID: PersistentIdentifier?
+    private var sessionID: String?
 
     var isRunning: Bool { startDate != nil }
     var isPaused: Bool { pausedAt != nil }
@@ -23,20 +22,22 @@ final class WorkoutClock {
     /// adopts the activity's origin — including a pause in effect — instead
     /// of resetting to zero.
     func begin(for session: WorkoutSession, currentLift: String, defaultRestSeconds: Int) {
-        if sessionID == session.persistentModelID, startDate != nil {
+        if sessionID == session.id, startDate != nil {
             WorkoutActivityController.updateContextDetached(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
             return
         }
         var start = Date()
         var paused: Date?
-        if sessionID == nil, let snap = WorkoutActivityController.snapshot, !snap.isAdHoc {
+        if sessionID == nil, let snap = WorkoutActivityController.snapshot, !snap.isAdHoc,
+           snap.state.sessionID == session.id {
             start = snap.state.stopwatchStart ?? snap.startDate
             paused = snap.state.stopwatchPausedAt
         }
         startDate = start
         pausedAt = paused
-        sessionID = session.persistentModelID
-        WorkoutActivityController.beginSessionDetached(startDate: start, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
+        sessionID = session.id
+        WorkoutActivityController.beginSessionDetached(sessionID: session.id, startDate: start,
+                                                        currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
         // A shifted origin or live pause re-applies after the (queued) begin.
         if paused != nil {
             WorkoutActivityController.updateStopwatchDetached(origin: start, pausedAt: paused)

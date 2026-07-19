@@ -18,8 +18,8 @@ const orderedSlots = (slots = [], roleAwareLegacy = false) => {
 };
 
 export async function render(host) {
-  const [open, tracks, gym, settings, proteinTotal, program, allExercises, completed] = await Promise.all([
-    Sessions.open(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(), Programs.active(), Exercises.all(), Sessions.completed(),
+  const [openSessions, tracks, gym, settings, proteinTotal, program, allExercises, completed] = await Promise.all([
+    Sessions.openAll(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(), Programs.active(), Exercises.all(), Sessions.completed(),
   ]);
   // Last 8 top working weights for a lift, oldest→newest (sparkline source).
   const topsFor = (name) => completed
@@ -53,9 +53,22 @@ export async function render(host) {
     queueMicrotask(() => showGymTag(gym));
   }
 
-  if (open) {
-    root.append(ui.h("div", { class: "card" },
-      ui.h("button", { class: "btn primary wide", text: `▶︎ Resume session — ${ui.fmtDate(open.date)}`, onClick: () => openSession(open.id) })));
+  if (openSessions.length) {
+    root.append(ui.h("div", { class: "section-title", text: "Open sessions" }));
+    const openCard = ui.h("div", { class: "card list" });
+    for (const open of openSessions) {
+      const names = (open.exercises || []).map((entry) => entry.exerciseName).filter(Boolean);
+      const summary = names.length ? names.slice(0, 2).join(" · ") : "Blank session";
+      openCard.append(ui.h("div", { class: "row" },
+        ui.h("button", { class: "btn primary", style: { flex: "1" }, text: `▶︎ ${summary} — ${ui.fmtDate(open.date)}`, onClick: () => openSession(open.id) }),
+        ui.h("button", { class: "btn ghost danger", "aria-label": `Discard ${summary}`, text: "Discard", onClick: () => {
+          ui.actionSheet("Discard this open session? Completed history and the program are unchanged.", [
+            { label: "Discard session", role: "destructive", onClick: async () => { await Sessions.del(open.id); ui.nav.refresh(); } },
+            { label: "Cancel", role: "cancel", onClick: () => {} },
+          ]);
+        } })));
+    }
+    root.append(openCard);
   }
 
   // Program — the next scheduled day
@@ -79,7 +92,7 @@ export async function render(host) {
       const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
         program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic");
       // Preview the same snapped weight the session will store (secondary barbell lifts).
-      plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb);
+      plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb, gym);
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
         ui.h("div", { class: "lead" },
           ui.h("span", { class: "title", text: l.exerciseName }),
@@ -188,7 +201,7 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
         const ex = exMap.get(l.exerciseName);
         const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic");
-        plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb);
+        plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb, gym);
         liftCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
           ui.h("div", { class: "lead" },
             ui.h("span", { class: "title", text: l.exerciseName }),

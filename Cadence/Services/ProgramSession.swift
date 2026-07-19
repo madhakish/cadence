@@ -50,9 +50,11 @@ enum ProgramSession {
         let defaultGym = gyms.first(where: { $0.isDefault }) ?? gyms.first
         let entryUnit = try context.fetch(FetchDescriptor<AppSettings>()).first?.unitDisplay.primaryUnit ?? .lb
         let session = WorkoutSession(gymID: defaultGym?.id, gymName: defaultGym?.name)
-        let barLb = (defaultGym?.defaultBar ?? .bar45lb).lb
+        let selectedBar = defaultGym?.defaultBar ?? .bar45lb
+        let barLb = selectedBar.lb
         func neat(_ weightLb: Double, _ exercise: Exercise?, isMain: Bool) -> Double {
-            neatWeight(weightLb, isBarbell: exercise?.type == .barbell, isMain: isMain, barLb: barLb, stepLb: program.roundingLb)
+            achievableWeight(weightLb, exercise: exercise, isMain: isMain,
+                             gym: defaultGym, bar: selectedBar, stepLb: program.roundingLb)
         }
         session.programID = program.id
         session.programName = program.name
@@ -151,11 +153,30 @@ enum ProgramSession {
         (!isMain && isBarbell) ? Weight.barLoadable(weightLb, barLb: barLb, stepLb: stepLb) : weightLb
     }
 
+    /// Resolve the prescription to equipment that exists at this gym. The
+    /// achieved total is what the logger stores, so the plate picture, logged
+    /// set, history, and next progression all describe the same load.
+    static func achievableWeight(_ weightLb: Double, exercise: Exercise?, isMain: Bool,
+                                 gym: Gym?, bar: Bar, stepLb: Double) -> Double {
+        guard exercise?.type == .barbell, weightLb > 0 else { return weightLb }
+        let rounded = neatWeight(weightLb, isBarbell: true, isMain: isMain,
+                                 barLb: bar.lb, stepLb: stepLb)
+        let solution = PlateMath.solve(
+            targetLb: rounded, bar: bar,
+            plates: gym?.availablePlates ?? Plate.allStandard,
+            collarLb: gym?.collarWeightLb ?? 0,
+            policy: gym?.loadingPolicy ?? .closest
+        )
+        return solution.loadout.totalLb
+    }
+
     private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool,
                                   perSide: Bool, enteredUnit: WeightUnit, durationSeconds: Int? = nil,
                                   context: ModelContext) {
         let set = SetEntry(order: order, weightLb: weight, reps: reps, isWarmup: warmup, isPerSide: perSide,
-                           enteredUnit: enteredUnit, durationSeconds: durationSeconds)
+                           enteredUnit: enteredUnit, durationSeconds: durationSeconds,
+                           loadBasis: entry.exercise?.loadBasis,
+                           implementCount: entry.exercise?.resolvedImplementCount ?? 1)
         set.sessionExercise = entry
         context.insert(set)
         entry.sets.append(set)

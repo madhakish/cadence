@@ -432,7 +432,13 @@ private struct ExerciseSection: View {
             }
         }
         entry.exercise = newExercise
-        entry.sets.forEach { $0.isPerSide = newExercise.isUnilateral }
+        entry.sets.forEach { set in
+            set.isPerSide = newExercise.isUnilateral
+            if set.status == .planned {
+                set.loadBasis = newExercise.loadBasis
+                set.implementCount = newExercise.resolvedImplementCount
+            }
+        }
         reconcileWarmups(oldType: oldType, newExercise: newExercise)
         if PersistenceErrorCenter.shared.save(context, operation: "Swapping the exercise") { onWork(entry) }
     }
@@ -661,7 +667,9 @@ private struct ExerciseSection: View {
             reps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             isPerSide: entry.exercise?.isUnilateral ?? false,
             enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
-            durationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil
+            durationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil,
+            loadBasis: last?.loadBasis ?? entry.exercise?.loadBasis,
+            implementCount: last?.resolvedImplementCount ?? entry.exercise?.resolvedImplementCount ?? 1
         )
         set.sessionExercise = entry
         context.insert(set)
@@ -709,7 +717,9 @@ private func synchronizeWarmups(_ entry: SessionExercise, bar: Bar,
             rebuilt.append(existing[index])
         } else {
             let set = SetEntry(order: index, weightLb: target.weightLb, reps: target.reps,
-                               isWarmup: true, enteredUnit: enteredUnit)
+                               isWarmup: true, enteredUnit: enteredUnit,
+                               loadBasis: exercise.loadBasis,
+                               implementCount: exercise.resolvedImplementCount)
             set.sessionExercise = entry
             context.insert(set)
             rebuilt.append(set)
@@ -818,9 +828,10 @@ private struct SetRow: View {
 
     private var weightLabel: String {
         if set.weightLb == 0 { return "BW" }
+        let suffix = set.loadBasis.shortSuffix
         switch set.enteredUnit {
-        case .lb: return "\(Weight.trim(set.weightLb)) lb"
-        case .kg: return "\(Weight.trim(Weight.kg(fromLb: set.weightLb))) kg"
+        case .lb: return "\(Weight.trim(set.weightLb)) lb\(suffix)"
+        case .kg: return "\(Weight.trim(Weight.kg(fromLb: set.weightLb))) kg\(suffix)"
         }
     }
 }

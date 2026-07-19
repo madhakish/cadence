@@ -192,7 +192,7 @@ ok(document.querySelector("#overlays .overlay"), "plate calculator opened");
 document.querySelector("#overlays .overlay .overlay-head button").click(); // close
 await tick();
 
-// ---- full session flow: start Deadlift (peak 245×3×3), complete, expect PR + advance ----
+// ---- full session flow: start Deadlift (245 target snapped to achieved load), complete, expect PR + advance ----
 // First prove untouched prescriptions are not performed work.
 {
   const track = (await db.Tracks.all()).find((t) => t.exerciseName === "Incline DB Press");
@@ -209,8 +209,10 @@ const id = await session.createSessionFromTrack(dl);
 const created = await db.Sessions.get(id);
 const work = created.exercises[0].sets.filter((s) => !s.isWarmup);
 const warm = created.exercises[0].sets.filter((s) => s.isWarmup);
+const achievedDeadlift = created.exercises[0].plannedWeightLb;
 ok(warm.length === 5 && warm[0].weightLb === 45, "deadlift got a warmup ramp");
-ok(work.length === 3 && work.every((s) => s.weightLb === 245 && s.reps === 3), "3 working sets at 245×3");
+ok(work.length === 3 && work.every((s) => s.weightLb === achievedDeadlift && s.reps === 3)
+  && Math.abs(achievedDeadlift - 245) <= 2, "3 working sets store the achievable 245-target load");
 work.forEach((set) => { set.status = "completed"; });
 await db.Sessions.save(created);
 
@@ -238,7 +240,7 @@ ok(completed === 11, `session banked (now ${completed} completed)`);
 const dlAfter = await db.Tracks.byName("Deadlift");
 ok(dlAfter.nextPhase === 4, `deadlift advanced peak→deload (nextPhase=${dlAfter.nextPhase})`);
 const ms = await db.Milestones.all();
-ok(ms.some((m) => m.exerciseName === "Deadlift" && m.kind === "heaviestSet" && m.label.includes("245")), "245 heaviest-set milestone logged");
+ok(ms.some((m) => m.exerciseName === "Deadlift" && m.kind === "heaviestSet"), "achieved deadlift heaviest-set milestone logged");
 
 // ---- export / import round trip ----
 const json = await db.exportJSON();

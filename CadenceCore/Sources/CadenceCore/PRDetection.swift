@@ -4,10 +4,17 @@ import Foundation
 public struct SetSample: Hashable, Codable, Sendable {
     public let weightLb: Double
     public let reps: Int
+    public let isPerSide: Bool
+    public let loadBasis: LoadBasis
+    public let implementCount: Int
 
-    public init(weightLb: Double, reps: Int) {
+    public init(weightLb: Double, reps: Int, isPerSide: Bool = false,
+                loadBasis: LoadBasis = .totalBar, implementCount: Int = 1) {
         self.weightLb = weightLb
         self.reps = reps
+        self.isPerSide = isPerSide
+        self.loadBasis = loadBasis
+        self.implementCount = implementCount
     }
 }
 
@@ -34,7 +41,10 @@ public struct PREvent: Hashable, Codable, Sendable {
 public enum PRDetection {
     /// Total working volume (Σ weight × reps) of a set list.
     public static func volume(_ sets: [SetSample]) -> Double {
-        sets.reduce(0) { $0 + $1.weightLb * Double($1.reps) }
+        sets.compactMap {
+            LoadSemantics.volume(weightLb: $0.weightLb, reps: $0.reps, isPerSide: $0.isPerSide,
+                                 basis: $0.loadBasis, implementCount: $0.implementCount)
+        }.reduce(0, +)
     }
 
     /// "5×3" scheme string for the top-weight group of a session.
@@ -64,11 +74,14 @@ public enum PRDetection {
         guard !sessionSets.isEmpty else { return [] }
         var events: [PREvent] = []
         let weightLabel = formatWeight ?? { Weight.trim($0) }
+        let basis = sessionSets[0].loadBasis
+        let comparableSession = sessionSets.filter { LoadSemantics.compatible($0.loadBasis, basis) }
+        let comparableHistory = historySets.filter { LoadSemantics.compatible($0.loadBasis, basis) }
 
-        let priorMax = historySets.map(\.weightLb).max() ?? 0
+        let priorMax = comparableHistory.map(\.weightLb).max() ?? 0
 
-        if let top = topScheme(sessionSets) {
-            if top.weightLb > priorMax + 1e-9 {
+        if let top = topScheme(comparableSession) {
+            if basis.supportsLoadPR, top.weightLb > priorMax + 1e-9 {
                 let scheme = top.sets > 1 ? "\(weightLabel(top.weightLb))×\(top.sets)×\(top.reps)" : "\(weightLabel(top.weightLb))×\(top.reps)"
                 events.append(PREvent(
                     kind: .heaviestSet,
@@ -87,9 +100,9 @@ public enum PRDetection {
             }
         }
 
-        let vol = volume(sessionSets)
+        let vol = volume(comparableSession)
         let priorVolMax = historyVolumes.max() ?? 0
-        if vol > priorVolMax + 1e-9, !historyVolumes.isEmpty {
+        if basis.supportsVolume, vol > priorVolMax + 1e-9, !historyVolumes.isEmpty {
             let volumeLabel = formatWeight?(vol) ?? "\(Weight.trim(vol)) lb"
             events.append(PREvent(
                 kind: .volumePR,

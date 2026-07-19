@@ -75,7 +75,7 @@ enum SessionCompletion {
 
         for entry in session.orderedExercises {
             guard let exercise = entry.exercise else { continue }
-            let working = entry.workingSets.map { SetSample(weightLb: $0.weightLb, reps: $0.reps) }
+            let working = entry.workingSets.map(sample)
             guard !working.isEmpty else { continue }
 
             if exercise.type == .timed {
@@ -94,13 +94,16 @@ enum SessionCompletion {
             if let top = entry.topSet {
                 lines.append(SessionSummary.LiftLine(
                     exerciseName: exercise.name,
-                    topSetLabel: "\(unitDisplay.format(lb: top.weightLb)) × \(top.reps)",
+                    topSetLabel: top.loadBasis == .bodyweight
+                        ? "\(top.reps) reps"
+                        : "\(unitDisplay.format(lb: top.weightLb))\(top.loadBasis.shortSuffix) × \(top.reps)",
                     volumeLb: entry.workingVolumeLb
                 ))
             }
 
             let history: (sets: [SetSample], volumes: [Double], schemes: Set<String>)
-            do { history = try priorHistory(for: exercise.name, before: session.date, context: context) }
+            do { history = try priorHistory(for: exercise.name, basis: working[0].loadBasis,
+                                            before: session.date, context: context) }
             catch { context.rollback(); throw SaveFailure(underlying: error) }
             let events = PRDetection.evaluate(
                 exercise: exercise.name,
@@ -155,7 +158,13 @@ enum SessionCompletion {
            session.hasCompletedWork,
            healthKitEnabled(context) {
             let end = Date()
-            Task { await HealthKitService.shared.saveStrengthWorkout(start: start, end: end) }
+            let completedKinds = session.exercises.compactMap { entry -> CompletedExerciseKind? in
+                guard !entry.workingSets.isEmpty, let exercise = entry.exercise else { return nil }
+                return CompletedExerciseKind(name: exercise.name, type: exercise.typeRaw,
+                                             category: exercise.categoryRaw)
+            }
+            let modality = WorkoutClassification.classify(completedKinds)
+            Task { await HealthKitService.shared.saveWorkout(start: start, end: end, modality: modality) }
         }
 
         let completedSets = session.exercises.flatMap(\.workingSets).filter { $0.status == .completed }
@@ -186,6 +195,11 @@ enum SessionCompletion {
     private static func healthKitEnabled(_ context: ModelContext) -> Bool {
         let descriptor = FetchDescriptor<AppSettings>()
         return (try? context.fetch(descriptor).first?.healthKitEnabled) ?? false
+    }
+
+    private static func sample(_ set: SetEntry) -> SetSample {
+        SetSample(weightLb: set.weightLb, reps: set.reps, isPerSide: set.isPerSide,
+                  loadBasis: set.loadBasis, implementCount: set.resolvedImplementCount)
     }
 
     // MARK: - Program day/week/cycle advancement (mirrors web advanceProgram)
@@ -363,6 +377,7 @@ enum SessionCompletion {
     /// completed sessions.
     private static func priorHistory(
         for exerciseName: String,
+        basis: LoadBasis,
         before date: Date,
         context: ModelContext
     ) throws -> (sets: [SetSample], volumes: [Double], schemes: Set<String>) {
@@ -377,7 +392,7 @@ enum SessionCompletion {
 
         for s in sessions {
             for entry in s.exercises where entry.exercise?.name == exerciseName {
-                let working = entry.workingSets.map { SetSample(weightLb: $0.weightLb, reps: $0.reps) }
+                let working = entry.workingSets.map(sample).filter { $0.loadBasis == basis }
                 guard !working.isEmpty else { continue }
                 sets.append(contentsOf: working)
                 volumes.append(PRDetection.volume(working))

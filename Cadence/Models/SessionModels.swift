@@ -12,6 +12,7 @@ enum SetFlag: String, Codable, CaseIterable {
 
 @Model
 final class WorkoutSession {
+    @Attribute(.unique) var id: String = UUID().uuidString
     var date: Date
     var notes: String
     var isCompleted: Bool
@@ -35,6 +36,7 @@ final class WorkoutSession {
     var exercises: [SessionExercise]
 
     init(date: Date = .now, notes: String = "", gymID: String? = nil, gymName: String? = nil) {
+        self.id = UUID().uuidString
         self.date = date
         self.notes = notes
         self.isCompleted = false
@@ -97,7 +99,7 @@ final class SessionExercise {
     var workingSets: [SetEntry] { plannedWorkingSets.filter { $0.status == .completed } }
 
     var workingVolumeLb: Double {
-        workingSets.reduce(0) { $0 + $1.weightLb * Double($1.reps) }
+        workingSets.compactMap(\.volumeLb).reduce(0, +)
     }
 
     var topSet: SetEntry? {
@@ -128,6 +130,10 @@ final class SetEntry {
     var distanceMiles: Double?
     /// Conditioning treadmill/road grade, percent.
     var inclinePercent: Double?
+    /// Snapshot of the load interpretation used when this set was created.
+    /// Empty/zero are legacy records and fall back to the linked exercise.
+    var loadBasisRaw: String = ""
+    var implementCount: Int = 0
     /// Set when this set's load came from a mid-session "dropping load" tap.
     var autoregReasonRaw: String?
     var sessionExercise: SessionExercise?
@@ -146,6 +152,8 @@ final class SetEntry {
         durationSeconds: Int? = nil,
         distanceMiles: Double? = nil,
         inclinePercent: Double? = nil,
+        loadBasis: LoadBasis? = nil,
+        implementCount: Int = 0,
         autoregReason: AutoregReason? = nil
     ) {
         self.order = order
@@ -161,6 +169,8 @@ final class SetEntry {
         self.durationSeconds = durationSeconds
         self.distanceMiles = distanceMiles
         self.inclinePercent = inclinePercent
+        self.loadBasisRaw = loadBasis?.rawValue ?? ""
+        self.implementCount = implementCount
         self.autoregReasonRaw = autoregReason?.rawValue
     }
 
@@ -205,5 +215,24 @@ final class SetEntry {
     var enteredUnit: WeightUnit {
         get { WeightUnit(rawValue: enteredUnitRaw) ?? .lb }
         set { enteredUnitRaw = newValue.rawValue }
+    }
+
+    var loadBasis: LoadBasis {
+        get {
+            LoadBasis(rawValue: loadBasisRaw)
+                ?? sessionExercise?.exercise?.loadBasis
+                ?? .externalTotal
+        }
+        set { loadBasisRaw = newValue.rawValue }
+    }
+
+    var resolvedImplementCount: Int {
+        let linked = sessionExercise?.exercise?.resolvedImplementCount ?? 1
+        return LoadSemantics.normalizedImplementCount(implementCount > 0 ? implementCount : linked, basis: loadBasis)
+    }
+
+    var volumeLb: Double? {
+        LoadSemantics.volume(weightLb: weightLb, reps: reps, isPerSide: isPerSide,
+                             basis: loadBasis, implementCount: resolvedImplementCount)
     }
 }

@@ -31,6 +31,7 @@ struct WorkoutActivityWidget: Widget {
             WorkoutLockScreenView(context: context)
                 .activityBackgroundTint(Color.black.opacity(0.6))
                 .activitySystemActionForegroundColor(.white)
+                .widgetURL(workoutURL(context.state))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -80,9 +81,13 @@ struct WorkoutActivityWidget: Widget {
                 Image(systemName: context.state.rest == nil ? "stopwatch" : "timer")
                     .foregroundStyle(context.state.rest == nil ? .secondary : restAccent)
             }
-            // Tapping the activity opens the app by default; no deep link handled.
+            .widgetURL(workoutURL(context.state))
         }
     }
+}
+
+private func workoutURL(_ state: WorkoutActivityAttributes.ContentState) -> URL? {
+    state.sessionID.flatMap { URL(string: "cadence://workout/\($0)") }
 }
 
 private struct WorkoutLockScreenView: View {

@@ -6,6 +6,8 @@ import * as C from "./core.js";
 // same helper so native and web keep the same shape.
 export const ex = (name, category, type, group, o = {}) => ({
   name, category, type, movementGroup: group,
+  loadBasis: o.loadBasis || C.inferredLoadBasis(type),
+  implementCount: o.implementCount || C.inferredImplementCount(type),
   isUnilateral: !!o.isUnilateral,
   defaultRestSeconds: o.defaultRestSeconds ?? 0,
   notes: o.notes || "",
@@ -44,7 +46,7 @@ const exercises = [
   ex("Snatch-grip Deadlift", "Accessory", "barbell", "hinge", { defaultRestSeconds: 180 }),
   ex("Good Morning", "Accessory", "barbell", "hinge", { defaultRestSeconds: 120 }),
   ex("Turkish Get-up", "Accessory", "kettlebell", "core", { isUnilateral: true }),
-  ex("Single-arm DB Row", "Accessory", "dumbbell", "pull", { isUnilateral: true }),
+  ex("Single-arm DB Row", "Accessory", "dumbbell", "pull", { implementCount: 1, isUnilateral: true }),
   ex("Lat Pulldown", "Accessory", "machine", "pull"),
   ex("Chest-supported Row", "Accessory", "machine", "pull"),
   ex("Ring Row", "Accessory", "bodyweight", "pull", { notes: "Face-pull style" }),
@@ -75,7 +77,7 @@ const exercises = [
   ex("T-Bar Row", "Main", "machine", "pull"),
   ex("Pull-ups", "Accessory", "bodyweight", "pull", { defaultRestSeconds: 120 }),
   ex("Chin-ups", "Accessory", "bodyweight", "pull", { defaultRestSeconds: 120 }),
-  ex("Assisted Pull-up", "Accessory", "machine", "pull"),
+  ex("Assisted Pull-up", "Accessory", "machine", "pull", { loadBasis: "assisted" }),
   ex("Seated Cable Row", "Accessory", "machine", "pull"),
   ex("One-arm Cable Row", "Accessory", "machine", "pull", { isUnilateral: true }),
   ex("Bent-over DB Row", "Accessory", "dumbbell", "pull"),
@@ -128,7 +130,7 @@ const exercises = [
   ex("Hanging Knee Raise", "Accessory", "bodyweight", "core"),
   ex("Sit-ups", "Accessory", "bodyweight", "core", { defaultRestSeconds: 45 }),
   ex("Farmer Carry", "Accessory", "dumbbell", "carry"),
-  ex("Suitcase Carry", "Accessory", "dumbbell", "carry", { isUnilateral: true }),
+  ex("Suitcase Carry", "Accessory", "dumbbell", "carry", { implementCount: 1, isUnilateral: true }),
   ex("Hang Clean", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180 }),
   ex("Hang Snatch", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180 }),
   ex("Muscle Clean", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180 }),
@@ -160,6 +162,7 @@ const exercises = [
 
 const gyms = [{
   name: "Main Gym", isDefault: true, defaultBarId: C.barId(C.BARS.bar45lb),
+  collarWeightLb: 0, loadingPolicy: "closest",
   plateToggles: C.ALL_STANDARD.map((plate) => ({ value: plate.value, unit: plate.unit, enabled: true })),
   barcodeImage: null, barcodeLabel: "Membership tag",
 }];

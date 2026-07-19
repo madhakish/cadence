@@ -353,6 +353,22 @@ struct GymEditorView: View {
                 )) {
                     ForEach(Bar.all) { Text($0.label).tag($0) }
                 }
+                Stepper(
+                    "Collars: \(Weight.trim(gym.collarWeightLb)) lb combined",
+                    value: $gym.collarWeightLb,
+                    in: 0...20,
+                    step: 0.5
+                )
+                Picker("Loading policy", selection: Binding(
+                    get: { gym.loadingPolicy },
+                    set: { gym.loadingPolicy = $0 }
+                )) {
+                    ForEach(LoadingPolicy.allCases, id: \.self) { policy in
+                        Text(policy.label).tag(policy)
+                    }
+                }
+            } footer: {
+                Text("Cadence includes collars in the achieved weight and applies this policy whenever a barbell prescription is snapped to your available plates.")
             }
 
             Section {

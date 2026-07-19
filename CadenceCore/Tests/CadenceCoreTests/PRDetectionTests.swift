@@ -96,4 +96,25 @@ final class PRDetectionTests: XCTestCase {
         )
         XCTAssertTrue(events.allSatisfy { $0.label.contains("100 kg") })
     }
+
+    func testAssistanceNeverCreatesLoadOrVolumePR() {
+        let assisted = [SetSample(weightLb: 40, reps: 8, loadBasis: .assisted)]
+        let events = PRDetection.evaluate(
+            exercise: "Assisted Pull-up", sessionSets: assisted,
+            historySets: [SetSample(weightLb: 60, reps: 8, loadBasis: .assisted)],
+            historyVolumes: [480], historySchemes: []
+        )
+        XCTAssertFalse(events.contains { $0.kind == .heaviestSet || $0.kind == .volumePR })
+        XCTAssertTrue(events.contains { $0.kind == .firstScheme })
+    }
+
+    func testDifferentLoadBasesAreNotCompared() {
+        let events = PRDetection.evaluate(
+            exercise: "Cable Row",
+            sessionSets: [SetSample(weightLb: 50, reps: 10, loadBasis: .perImplement)],
+            historySets: [SetSample(weightLb: 100, reps: 10, loadBasis: .externalTotal)],
+            historyVolumes: [], historySchemes: []
+        )
+        XCTAssertTrue(events.contains { $0.kind == .heaviestSet })
+    }
 }

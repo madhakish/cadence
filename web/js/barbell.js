@@ -11,10 +11,10 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 // The plate denominations of the chosen unit that exist at this gym. The bar is
 // chosen separately (most bars are 45 lb regardless of which plates you load).
 export function stationPlates(unit, gym) {
-  let list = gym && gym.plateToggles ? gym.plateToggles.filter((t) => t.enabled).map((t) => ({ value: t.value, unit: t.unit })) : C.ALL_STANDARD;
-  list = list.filter((p) => p.unit === unit);
-  if (!list.length) list = unit === "kg" ? C.STANDARD_KG : C.STANDARD_LB;
-  return list;
+  const list = gym && gym.plateToggles
+    ? gym.plateToggles.filter((t) => t.enabled).map((t) => ({ value: t.value, unit: t.unit }))
+    : [];
+  return list.length ? list : (unit === "kg" ? C.STANDARD_KG : C.STANDARD_LB);
 }
 
 // Returns { svg, solution }. svg is a per-side barbell (heaviest plate inboard).
@@ -23,7 +23,8 @@ export function stationPlates(unit, gym) {
 // of re-solving — the plate calculator's hero must match its own answer, which
 // may span both unit systems.
 export function barbellSVG(weightLb, unit, bar, gym, preSolved = null) {
-  const solution = preSolved || C.solve(weightLb, bar, stationPlates(unit, gym));
+  const solution = preSolved || C.solve(weightLb, bar, stationPlates(unit, gym), 10,
+    gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
   const plates = [];
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);
 

@@ -14,6 +14,8 @@ enum ExportService {
         let isWarmup: Bool
         let status: String
         let isPerSide: Bool
+        let loadBasis: String
+        let implementCount: Int
         let enteredUnit: String
         let flags: [String]
         let bodyFlagSite: String?
@@ -48,6 +50,7 @@ enum ExportService {
     }
 
     struct ExportSession: Codable {
+        let id: String
         let date: Date
         let notes: String
         let gym: String?
@@ -101,6 +104,8 @@ enum ExportService {
         let name: String
         let isDefault: Bool
         let defaultBarId: String
+        let collarWeightLb: Double
+        let loadingPolicy: String
         let plateToggles: [ExportPlateToggle]
         let barcodeImage: String?
         let barcodeLabel: String
@@ -113,6 +118,8 @@ enum ExportService {
         let type: String
         let movementGroup: String
         let isUnilateral: Bool
+        let loadBasis: String
+        let implementCount: Int
         let defaultRestSeconds: Int
         let notes: String
         let isShelved: Bool
@@ -149,6 +156,7 @@ enum ExportService {
         /// Rides in the bundle so restoring a post-migration backup doesn't
         /// re-run the retired-rest-stamp clear; absent in old backups → re-run.
         let restSeedStampsCleared: Bool?
+        let loadSemanticsMigrated: Bool?
         let seededAt: Date?
         let theme: String?
     }
@@ -259,7 +267,7 @@ enum ExportService {
 
     static func csvData(context: ModelContext) throws -> Data {
         let bundle = try buildBundle(context: context)
-        var rows = ["date,exercise,set_index,weight_lb,weight_kg,reps,is_warmup,status,per_side,flags,body_flag_site,body_flag_note,autoreg_reason,session_notes"]
+        var rows = ["date,exercise,set_index,weight_lb,weight_kg,reps,is_warmup,status,per_side,load_basis,implement_count,flags,body_flag_site,body_flag_note,autoreg_reason,session_notes"]
         let formatter = ISO8601DateFormatter()
         for session in bundle.sessions {
             for exercise in session.exercises {
@@ -274,6 +282,8 @@ enum ExportService {
                         "\(set.isWarmup)",
                         set.status,
                         "\(set.isPerSide)",
+                        set.loadBasis,
+                        "\(set.implementCount)",
                         set.flags.joined(separator: ";"),
                         set.bodyFlagSite ?? "",
                         set.bodyFlagNote ?? "",
@@ -348,6 +358,7 @@ enum ExportService {
                     programTag = nil
                 }
                 return ExportSession(
+                    id: session.id,
                     date: session.date,
                     notes: session.notes,
                     gym: session.gymName,
@@ -372,6 +383,8 @@ enum ExportService {
                                     isWarmup: set.isWarmup,
                                     status: set.status.rawValue,
                                     isPerSide: set.isPerSide,
+                                    loadBasis: set.loadBasis.rawValue,
+                                    implementCount: set.resolvedImplementCount,
                                     enteredUnit: set.enteredUnitRaw,
                                     flags: set.flags.map(\.rawValue),
                                     bodyFlagSite: set.bodyFlagSite?.rawValue,
@@ -446,6 +459,8 @@ enum ExportService {
                     // Normalize through Bar.by so legacy untrimmed ids export
                     // in the shared format the web can resolve.
                     defaultBarId: Bar.by(id: g.defaultBarID).id,
+                    collarWeightLb: g.collarWeightLb,
+                    loadingPolicy: g.loadingPolicy.rawValue,
                     plateToggles: g.plateToggles.map { ExportPlateToggle(value: $0.value, unit: $0.unitRaw, enabled: $0.enabled) },
                     barcodeImage: dataURL(g.barcodeImageData),
                     barcodeLabel: g.barcodeLabel
@@ -453,7 +468,9 @@ enum ExportService {
             },
             exercises: exerciseDefs.map { e in
                 ExportExerciseDef(name: e.name, category: e.categoryRaw, type: e.typeRaw, movementGroup: e.movementGroup,
-                                  isUnilateral: e.isUnilateral, defaultRestSeconds: e.defaultRestSeconds, notes: e.notes,
+                                  isUnilateral: e.isUnilateral, loadBasis: e.loadBasis.rawValue,
+                                  implementCount: e.resolvedImplementCount,
+                                  defaultRestSeconds: e.defaultRestSeconds, notes: e.notes,
                                   isShelved: e.isShelved, shelvedNote: e.shelvedNote,
                                   watchSite: e.watchSite?.rawValue, createdAt: e.createdAt)
             },
@@ -470,6 +487,7 @@ enum ExportService {
                                autoStartRest: s.autoStartRest,
                                haptics: s.haptics, gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay,
                                restSeedStampsCleared: s.restSeedStampsCleared,
+                               loadSemanticsMigrated: s.loadSemanticsMigrated,
                                seededAt: s.seededAt, theme: s.themeNameRaw)
             }
         )

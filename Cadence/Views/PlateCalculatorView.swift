@@ -36,7 +36,9 @@ struct PlateCalculatorView: View {
 
     private var solution: PlateSolution? {
         guard let targetLb else { return nil }
-        return PlateMath.solve(targetLb: targetLb, bar: bar, plates: availablePlates)
+        return PlateMath.solve(targetLb: targetLb, bar: bar, plates: availablePlates,
+                               collarLb: gym?.collarWeightLb ?? 0,
+                               policy: gym?.loadingPolicy ?? .closest)
     }
 
     private var preferredUnit: WeightUnit {
@@ -131,9 +133,15 @@ struct PlateCalculatorView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(Weight.both(lb: solution.loadout.totalLb))
                         .font(.system(size: 30, weight: .heavy, design: .rounded))
-                    Text("achieved total on \(bar.label)")
+                    Text("achieved total on \(bar.label) · \((gym?.loadingPolicy ?? .closest).label.lowercased())")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if !solution.satisfiesPolicy {
+                        Label("No available stack satisfies this loading policy; showing the closest load.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.callout.bold())
+                            .foregroundStyle(Theme.warn)
+                    }
                     if solution.isOffTarget {
                         let deviation = targetUnit == .kg
                             ? Weight.kg(fromLb: solution.deviationLb)
@@ -179,16 +187,17 @@ struct PlateCalculatorView: View {
                 let count = reverseCounts[plate.id] ?? 0
                 return count > 0 ? PlateCount(plate: plate, count: count) : nil
             }
-            let total = PlateMath.total(bar: bar, perSide: perSide)
+            let collarLb = gym?.collarWeightLb ?? 0
+            let total = PlateMath.total(bar: bar, perSide: perSide, collarLb: collarLb)
             VStack(alignment: .leading, spacing: 6) {
                 // Draw exactly what the user says is on the bar — never re-solve it.
                 BarbellView(weightLb: total, unit: .lb, bar: bar, gym: gym,
-                            loadout: Loadout(bar: bar, perSide: perSide))
+                            loadout: Loadout(bar: bar, perSide: perSide, collarLb: collarLb))
                     .scaleEffect(1.6, anchor: .leading)
                     .frame(height: 52, alignment: .leading)
                 Text(Weight.both(lb: total))
                     .font(.system(size: 30, weight: .heavy, design: .rounded))
-                Text("total on \(bar.label)")
+                Text("total on \(bar.label)\(collarLb > 0 ? " + collars" : "")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
