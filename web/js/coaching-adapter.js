@@ -88,6 +88,10 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
         const slot = (program.days || []).flatMap((day) => [...(day.accessories || []), ...(day.lifts || [])])
           .find((candidate) => candidate.id === adjustment.slotID);
         if (!slot) continue;
+        // Lift slots only accept added sets on the rep-window style — a
+        // methodology slot's sets-across shape is part of its published
+        // prescription (mirrors the native applier).
+        if (!("sets" in slot) && (slot.prescription || "automatic") !== "doubleProgression") continue;
         const key = "sets" in slot ? "sets" : "doubleProgressionSets";
         const old = slot[key] || 1;
         slot[key] = Math.min(slot.maximumSets || 6, old + adjustment.count);
@@ -107,7 +111,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
   } else if (change.type === "addSet") {
     const slot = (program.days || []).flatMap((day) => [...(day.accessories || []), ...(day.lifts || [])])
       .find((candidate) => candidate.id === change.slotID);
-    if (slot) {
+    if (slot && (("sets" in slot) || (slot.prescription || "automatic") === "doubleProgression")) {
       const key = "sets" in slot ? "sets" : "doubleProgressionSets";
       const old = slot[key] || 1; slot[key] = Math.min(slot.maximumSets || 6, old + change.count);
       message = `${slot.exerciseName}: ${old} → ${slot[key]} sets per rotation.`;

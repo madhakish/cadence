@@ -379,6 +379,70 @@ enum SessionCompletion {
             lift.lastIncrementLb = next.weightLb - prior.weightLb
         }
 
+        // Methodology slots on session-to-session linear progression: novice
+        // fives and the Texas day slots advance their own base after every
+        // banked exposure instead of waiting for a Peak grade. A day that
+        // repeats the same lift+style is still ONE exposure — only the first
+        // slot advances (twin sync carries the rest), so duplicates can never
+        // double-progress.
+        var advancedLinearSlots = Set<String>()
+        for lift in day.lifts where lift.prescription.advancesPerExposure && lift.prescription != .doubleProgression {
+            let exposureKey = "\(lift.exerciseName)|\(lift.prescription.rawValue)"
+            guard !advancedLinearSlots.contains(exposureKey) else { continue }
+            // Slot-scoped matching and completed-work gating share the same
+            // helpers as the week-3 grading loop — mirrored 1:1 with web.
+            guard let entry = programmedEntry(
+                for: lift.id, exerciseName: lift.exerciseName,
+                role: lift.role.rawValue, in: session
+            ), !prescribedWork(entry).isEmpty else { continue }
+            advancedLinearSlots.insert(exposureKey)
+            let loadStep = ProgramEngine.loadStep(
+                programRoundingLb: program.roundingLb,
+                exerciseType: entry.exercise?.typeRaw
+            )
+            let rule = ProgramProgression.linearRule(for: lift.prescription,
+                                                     movementGroup: entry.exercise?.movementGroup)
+            let priorBase = lift.baseWeightLb
+            let priorMax = lift.estimatedMaxLb
+            let result = ProgramProgression.advanceLinearLift(
+                lift.coreState, perf: cyclePerf(entry, roundingLb: loadStep),
+                rule: rule, roundingLb: loadStep
+            )
+            lift.baseWeightLb = result.state.baseWeightLb
+            lift.estimatedMaxLb = result.state.estimatedMaxLb
+            lift.stallCount = result.state.stallCount
+            lift.lastIncrementLb = result.state.lastIncrementLb
+            // Non-success outcomes surface their explanation — a silent hold
+            // would read as a broken app, and a deload must always say why.
+            if result.grade != .success, let note = result.note {
+                let label = "\(lift.exerciseName): \(note)"
+                context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
+                events.append(PREvent(kind: .programNote, exercise: lift.exerciseName, label: label))
+            }
+            // Repeated slots of the same lift and style (novice squat on Day
+            // A and Day B, Texas A/B day pairs) share ONE progression: mirror
+            // the advanced state into every twin so "weight every session"
+            // holds across alternating days instead of each slot advancing
+            // every other exposure. Only twins still in lockstep (same base
+            // before this advance) are synchronized — a deliberately diverged
+            // or manually edited twin keeps its own base — and a hand-edited
+            // estimated 1RM on a twin survives the sync the same way; edits
+            // must never disappear.
+            for twinDay in program.days {
+                for twin in twinDay.lifts where twin.id != lift.id
+                    && twin.exerciseName == lift.exerciseName
+                    && twin.prescription == lift.prescription
+                    && abs(twin.baseWeightLb - priorBase) < 0.001 {
+                    if abs(twin.estimatedMaxLb - priorMax) < 0.001 {
+                        twin.estimatedMaxLb = lift.estimatedMaxLb
+                    }
+                    twin.baseWeightLb = lift.baseWeightLb
+                    twin.stallCount = lift.stallCount
+                    twin.lastIncrementLb = lift.lastIncrementLb
+                }
+            }
+        }
+
         // A clean, completed top-single becomes the next peak projection's
         // explicit anchor. Adjusted or quality-flagged singles do not.
         for lift in day.lifts where lift.peakSingleEnabled {
@@ -398,17 +462,19 @@ enum SessionCompletion {
 
         // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
         if week == 3 {
-            for lift in day.lifts where lift.prescription != .doubleProgression {
+            for lift in day.lifts where !lift.prescription.advancesPerExposure {
                 if let entry = programmedEntry(
                     for: lift.id, exerciseName: lift.exerciseName,
                     role: lift.role.rawValue, in: session
                 ), !prescribedWork(entry).isEmpty {
                     let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
                                                           exerciseType: entry.exercise?.typeRaw)
-                    let result = ProgramProgression.advanceCycleLift(
+                    let result = ProgramProgression.advanceProgramLift(
                         lift.coreState,
                         perf: cyclePerf(entry, roundingLb: loadStep),
                         focus: program.focus,
+                        style: lift.prescription,
+                        movementGroup: entry.exercise?.movementGroup,
                         roundingLb: loadStep
                     )
                     lift.pendingBaseWeightLb = result.state.baseWeightLb
@@ -432,9 +498,17 @@ enum SessionCompletion {
         // Rollover at the deload week's last day.
         for d in program.days {
             for lift in d.lifts {
-                if lift.prescription == .doubleProgression {
-                    // Rep-window slots advance after every exposure and do not
+                if lift.prescription.advancesPerExposure {
+                    // Per-exposure slots (rep windows, novice fives, Texas
+                    // days) advance after every banked session and do not
                     // participate in Peak grading or skipped-Peak stalls.
+                    // Clear any stale pending left by a style edit after a
+                    // grade — it must never apply months later.
+                    lift.pendingBaseWeightLb = nil
+                    lift.pendingEstimatedMaxLb = nil
+                    lift.pendingStallCount = nil
+                    lift.pendingLastIncrementLb = nil
+                    lift.pendingNote = nil
                 } else if let pendingBase = lift.pendingBaseWeightLb {
                     let oldBase = lift.baseWeightLb
                     lift.baseWeightLb = pendingBase
@@ -454,8 +528,12 @@ enum SessionCompletion {
                     lift.pendingStallCount = nil
                     lift.pendingLastIncrementLb = nil
                     lift.pendingNote = nil
-                } else {
-                    // Peak never banked → treat as a stall.
+                } else if !lift.prescription.buildsOwnSessionShape {
+                    // Wave-family slots: a peak never banked is a stall toward
+                    // the 10% rebuild. The methodology cycle styles (5/3/1,
+                    // max/dynamic effort) define their own miss rules and
+                    // simply hold when the graded week was skipped — a
+                    // skipped week is not missed reps.
                     lift.stallCount += 1
                     lift.lastIncrementLb = 0
                     if lift.stallCount >= ProgramProgression.stallLimit {
@@ -468,6 +546,11 @@ enum SessionCompletion {
                         context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
                         events.append(PREvent(kind: .programNote, exercise: lift.exerciseName, label: label))
                     }
+                } else {
+                    // Methodology cycle styles hold on a skipped graded week,
+                    // but the increment record must not keep advertising a
+                    // bump that never happened this cycle.
+                    lift.lastIncrementLb = 0
                 }
                 // A cycle-scoped swap ends with the cycle (mirrors web).
                 if let original = lift.revertToExerciseName {

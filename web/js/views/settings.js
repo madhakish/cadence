@@ -331,7 +331,16 @@ async function programEditor(p) {
           { cycleNumber: 1, baseWeightLb: lift.baseWeightLb, nextPhase: 1, incrementLb: 0 },
           p.roundingLb, exercise.type, exercise.movementGroup, lift.role, p.focus, lift.prescription || "automatic",
           { ...lift, workingSets: lift.doubleProgressionSets ?? 3 });
-          addSets(exercise.movementGroup, exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup), plan.sets);
+          // Published methodology slots deliberately shape their own weekly
+          // balance (squat 3×/week, one heavy pull); the press/pull and
+          // squat/hinge heuristics would permanently flag the canon, so those
+          // sums skip methodology slots — but NOT generic double-progression
+          // rows, and pattern coverage (vertical pulling) counts every slot.
+          const style = lift.prescription || "automatic";
+          const methodologySlot = C.buildsOwnSessionShape(style) && style !== "doubleProgression";
+          const pattern = exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup);
+          if (!methodologySlot) addSets(exercise.movementGroup, pattern, plan.sets);
+          else addSets(null, pattern, plan.sets);
           if ((exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup)) === "olympicPower" && plan.reps > 3) warnings.push(`${lift.exerciseName} is power work; keep programmed sets at 1–3 reps.`);
         }
       }
@@ -483,6 +492,9 @@ async function programDayEditor(p, day) {
                 ["automatic", "Automatic"], ["wave", "Strength wave"], ["offsetWave", "Strength wave — offsets"],
                 ["secondary", "Secondary strength"], ["hypertrophy", "Hypertrophy"], ["technique", "Technique"],
                 ["doubleProgression", "Double progression"],
+                ["linearFives", "Linear fives"], ["texasVolume", "Texas — volume day"],
+                ["texasLight", "Texas — light day"], ["texasIntensity", "Texas — intensity day"],
+                ["fiveThreeOne", "5/3/1 wave"], ["maxEffort", "Max effort"], ["dynamicEffort", "Dynamic effort"],
               ].map(([value, label]) => ui.h("option", { value, text: label, selected: (l.prescription || "automatic") === value })));
               select.addEventListener("change", async () => { l.prescription = select.value; await Programs.save(p); draw(); });
               return select;
@@ -500,6 +512,9 @@ async function programDayEditor(p, day) {
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.loadOffsetLb ?? 0, { min: 0, max: 100, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.loadOffsetLb = v; await Programs.save(p); } }),
                 ui.stepper(l.peakOffsetLb ?? 0, { min: 0, max: 150, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakOffsetLb = v; await Programs.save(p); } }))) : null,
+            ["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(l.prescription)
+              ? ui.h("div", { class: "row" }, ui.h("span", { text: "Working sets" }),
+                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 10, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); } })) : null,
             l.prescription === "doubleProgression" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Sets / rep window" }),
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); } }),

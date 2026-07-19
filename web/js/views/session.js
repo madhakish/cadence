@@ -530,7 +530,11 @@ export async function openSession(id) {
       onClick: () => {
         // Shared plan (core parity): unflagged working sets only, each dropped
         // from its own weight — a back-off set is never raised.
-        const first = se.sets.find((x) => !x.isWarmup && x.status === "planned");
+        // The configured drop derives from the MAIN work set — ramp/backoff
+        // blocks at lighter loads must not anchor it. With no planned work
+        // set left, fixedDrop stays null and the generic percentage drop in
+        // dropLoadPlan takes over.
+        const first = se.sets.find((x) => !x.isWarmup && x.status === "planned" && (x.prescriptionBlock || "work") === "work");
         const fixedDrop = first && se.fallbackWeightLb != null ? Math.max(0, first.weightLb - se.fallbackWeightLb) : null;
         const ex = exMap.get(se.exerciseName);
         const step = C.programLoadStep(5, ex?.type);
@@ -971,6 +975,50 @@ async function advanceProgram(session, milestones) {
     lift.baseWeightLb = next.weightLb; lift.currentReps = next.currentReps;
     lift.stallCount = next.stallCount; lift.lastIncrementLb = next.weightLb - state.weightLb;
   }
+  // Methodology slots on session-to-session linear progression: novice fives
+  // and the Texas day slots advance their own base after every banked
+  // exposure instead of waiting for a Peak grade. A day that repeats the
+  // same lift+style is still ONE exposure — only the first slot advances
+  // (twin sync carries the rest), so duplicates can never double-progress.
+  const advancedLinearSlots = new Set();
+  for (const lift of (day.lifts || []).filter((candidate) =>
+    C.advancesPerExposure(candidate.prescription) && candidate.prescription !== "doubleProgression")) {
+    const exposureKey = `${lift.exerciseName}|${lift.prescription}`;
+    if (advancedLinearSlots.has(exposureKey)) continue;
+    const se = programmedEntry(session, lift);
+    if (!se || !prescribedWork(se).length) continue;
+    advancedLinearSlots.add(exposureKey);
+    const exercise = exerciseByName.get(lift.exerciseName);
+    const loadStep = C.programLoadStep(program.roundingLb, exercise?.type);
+    const priorBase = lift.baseWeightLb;
+    const priorMax = lift.estimatedMaxLb;
+    const adv = C.advanceLinearLift(lift, cyclePerf(se, loadStep),
+      C.linearRule(lift.prescription, exercise?.movementGroup), loadStep);
+    const deloaded = adv.state.baseWeightLb < lift.baseWeightLb;
+    lift.baseWeightLb = adv.state.baseWeightLb; lift.estimatedMaxLb = adv.state.estimatedMaxLb;
+    lift.stallCount = adv.state.stallCount; lift.lastIncrementLb = adv.state.lastIncrementLb;
+    // Non-success outcomes surface their explanation — a silent hold would
+    // read as a broken app, and a deload must always say why.
+    if (adv.grade !== "success" && adv.note) note(`${lift.exerciseName}: ${adv.note}`, lift.exerciseName);
+    // Repeated slots of the same lift and style (novice squat on Day A and
+    // Day B, Texas A/B day pairs) share ONE progression: mirror the advanced
+    // state into every twin so "weight every session" holds across
+    // alternating days instead of each slot advancing every other exposure.
+    // Only twins still in lockstep (same base before this advance) are
+    // synchronized — a deliberately diverged or manually edited twin keeps
+    // its own base — and a hand-edited estimated 1RM on a twin survives the
+    // sync the same way; edits must never disappear.
+    for (const twinDay of program.days) {
+      for (const twin of twinDay.lifts || []) {
+        if (twin === lift || twin.exerciseName !== lift.exerciseName
+          || twin.prescription !== lift.prescription
+          || Math.abs(twin.baseWeightLb - priorBase) >= 0.001) continue;
+        if (Math.abs((twin.estimatedMaxLb || 0) - priorMax) < 0.001) twin.estimatedMaxLb = lift.estimatedMaxLb;
+        twin.baseWeightLb = lift.baseWeightLb;
+        twin.stallCount = lift.stallCount; twin.lastIncrementLb = lift.lastIncrementLb;
+      }
+    }
+  }
   for (const lift of (day.lifts || []).filter((candidate) => candidate.peakSingleEnabled)) {
     const se = programmedEntry(session, lift);
     const single = se?.sets.find((set) => set.status === "completed" && set.prescriptionBlock === "topSingle"
@@ -980,11 +1028,12 @@ async function advanceProgram(session, milestones) {
   }
   // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
   if (tag.week === 3) {
-    for (const lift of (day.lifts || []).filter((candidate) => candidate.prescription !== "doubleProgression")) {
+    for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
       const se = programmedEntry(session, lift);
       if (se && prescribedWork(se).length) {
         const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(se.exerciseName)?.type);
-        lift.pending = C.advanceCycleLift(lift, cyclePerf(se, loadStep), program.focus, loadStep);
+        lift.pending = C.advanceProgramLift(lift, cyclePerf(se, loadStep), program.focus,
+          lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep);
       }
     }
   }
@@ -998,8 +1047,11 @@ async function advanceProgram(session, milestones) {
       // Rollover: apply each lift's pending (or treat a skipped peak as a stall).
       for (const d of program.days) {
         for (const lift of d.lifts || []) {
-          if (lift.prescription === "doubleProgression") {
-            // This slot advanced after each exposure; it has no Peak pending.
+          if (C.advancesPerExposure(lift.prescription)) {
+            // This slot advanced after each exposure; it has no Peak
+            // pending. Clear any stale one left by a style edit after a
+            // grade — it must never apply months later.
+            delete lift.pending;
           } else if (lift.pending) {
             const p = lift.pending.state;
             const oldBase = lift.baseWeightLb;
@@ -1012,8 +1064,17 @@ async function advanceProgram(session, milestones) {
               note(`${lift.exerciseName}: ${presented}`, lift.exerciseName);
             }
             delete lift.pending;
-          } else {
+          } else if (!C.buildsOwnSessionShape(lift.prescription || "automatic")) {
+            // Wave-family slots: a peak never banked is a stall toward the
+            // 10% rebuild. The methodology cycle styles (5/3/1, max/dynamic
+            // effort) define their own miss rules and simply hold when the
+            // graded week was skipped — a skipped week is not missed reps.
             lift.stallCount = (lift.stallCount || 0) + 1; lift.lastIncrementLb = 0;
+          } else {
+            // Methodology cycle styles hold on a skipped graded week, but the
+            // increment record must not keep advertising a bump that never
+            // happened this cycle.
+            lift.lastIncrementLb = 0;
             if (lift.stallCount >= C.STALL_LIMIT) {
               const old = lift.baseWeightLb;
               const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
@@ -1183,8 +1244,12 @@ export async function createSessionFromProgramDay(program, day) {
       configuration, lift.estimatedMaxLb || 0,
     );
     const plan = prescription.mainWork;
-    const weightLb = neat(plan.weightLb, ex, lift.role === "main", program.currentWeek);
-    const blockLoads = prescription.blocks.map((block) => neat(block.weightLb, ex, lift.role === "main", program.currentWeek));
+    // Methodology slots prescribe exact loads (a +5/session contract, TM
+    // percentages, speed waves) — snap them like main lifts, never through
+    // the complementary per-side rounding that would distort the increments.
+    const exactLoad = lift.role === "main" || C.buildsOwnSessionShape(lift.prescription || "automatic");
+    const weightLb = neat(plan.weightLb, ex, exactLoad, program.currentWeek);
+    const blockLoads = prescription.blocks.map((block) => neat(block.weightLb, ex, exactLoad, program.currentWeek));
     const sets = [];
     let so = 0;
     const warmupPolicy = (lift.warmupPolicy || "automatic") === "automatic"

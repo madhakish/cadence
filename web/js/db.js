@@ -7,7 +7,7 @@ import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 4;
-export const BACKUP_SCHEMA_VERSION = 3;
+export const BACKUP_SCHEMA_VERSION = 4;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -702,9 +702,10 @@ const BACKUP_ENUMS = {
   categories: ["Main", "Accessory", "Conditioning"],
   exerciseTypes: ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"],
   focuses: ["strength", "hypertrophy", "maintain"], modes: ["cycle", "linear"],
-  prescriptions: ["automatic", "wave", "offsetWave", "secondary", "hypertrophy", "technique", "doubleProgression"],
+  prescriptions: ["automatic", "wave", "offsetWave", "secondary", "hypertrophy", "technique", "doubleProgression",
+    "linearFives", "texasVolume", "texasLight", "texasIntensity", "fiveThreeOne", "maxEffort", "dynamicEffort"],
   warmupPolicies: ["automatic", "full", "short", "none"],
-  prescriptionBlocks: ["warmup", "primer", "topSingle", "work", "backoff", "conditioning"],
+  prescriptionBlocks: ["warmup", "primer", "topSingle", "ramp", "work", "backoff", "conditioning"],
   movementPatterns: C.MOVEMENT_PATTERNS,
   gateStatuses: ["open", "watch", "shelved", "re-entry"],
   conditioningEfforts: ["easy", "interval", "mixed"],

@@ -38,6 +38,9 @@ section that matches what you're trying to do.
   chosen: per-exercise rest, program role, movement type
 - [Program templates](reference/templates.md) — exactly what each
   pre-programmed style contains
+- [Training methodologies](reference/training-methodologies.md) — the
+  published programs Cadence automates (novice linear, Texas Method,
+  5/3/1, conjugate) and how they initialize from your history
 - [Backup schema](reference/backup-schema.md) — versioning, session state,
   cross-platform program linkage, and compatibility rules
 

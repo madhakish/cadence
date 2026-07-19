@@ -109,7 +109,12 @@ enum ProgramSession {
                 estimatedMaxLb: lift.estimatedMaxLb
             )
             let plan = prescription.mainWork
-            let weightLb = neat(plan.weightLb, exercise, isMain: lift.role.rawValue == "main", phase: phase)
+            // Methodology slots prescribe exact loads (a +5/session contract, TM
+            // percentages, speed waves) — snap them like main lifts, never
+            // through the complementary per-side rounding that would distort
+            // the increments.
+            let exactLoad = lift.role.rawValue == "main" || lift.prescription.buildsOwnSessionShape
+            let weightLb = neat(plan.weightLb, exercise, isMain: exactLoad, phase: phase)
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = lift.role.rawValue
             entry.programSlotID = lift.id
@@ -133,7 +138,7 @@ enum ProgramSession {
                 return preparedMovementGroups.contains(exercise.movementGroup) ? .short : .full
             }()
             let blockLoads = prescription.blocks.map {
-                neat($0.weightLb, exercise, isMain: lift.role.rawValue == "main", phase: phase)
+                neat($0.weightLb, exercise, isMain: exactLoad, phase: phase)
             }
             let topPreparationLoad = blockLoads.max() ?? weightLb
             if exercise.type == .barbell && resolvedWarmup != .none {

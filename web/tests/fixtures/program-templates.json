@@ -31,13 +31,19 @@
             "exercise": "Overhead Press",
             "role": "main",
             "baseWeightLb": 65,
-            "estimatedMaxLb": 95
+            "estimatedMaxLb": 95,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Incline DB Press",
             "role": "complementary",
             "baseWeightLb": 50,
-            "estimatedMaxLb": 80
+            "estimatedMaxLb": 80,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           }
         ],
         "accessories": [
@@ -47,7 +53,8 @@
             "minReps": 8,
             "maxReps": 12,
             "weightLb": 20,
-            "incrementLb": 5
+            "incrementLb": 5,
+            "startFraction": 0
           },
           {
             "exercise": "Y-T-W Raises",
@@ -55,7 +62,8 @@
             "minReps": 10,
             "maxReps": 15,
             "weightLb": 10,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "GHD Sit-up",
@@ -63,7 +71,8 @@
             "minReps": 8,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       },
@@ -74,13 +83,19 @@
             "exercise": "Back Squat",
             "role": "main",
             "baseWeightLb": 135,
-            "estimatedMaxLb": 205
+            "estimatedMaxLb": 205,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Romanian Deadlift",
             "role": "complementary",
             "baseWeightLb": 95,
-            "estimatedMaxLb": 165
+            "estimatedMaxLb": 165,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           }
         ],
         "accessories": [
@@ -90,7 +105,8 @@
             "minReps": 10,
             "maxReps": 20,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Hanging Knee Raise",
@@ -98,7 +114,8 @@
             "minReps": 8,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       },
@@ -109,13 +126,19 @@
             "exercise": "Incline DB Press",
             "role": "main",
             "baseWeightLb": 50,
-            "estimatedMaxLb": 80
+            "estimatedMaxLb": 80,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Overhead Press",
             "role": "complementary",
             "baseWeightLb": 65,
-            "estimatedMaxLb": 95
+            "estimatedMaxLb": 95,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           }
         ],
         "accessories": [
@@ -125,7 +148,8 @@
             "minReps": 5,
             "maxReps": 12,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Band Pull-aparts",
@@ -133,7 +157,8 @@
             "minReps": 15,
             "maxReps": 25,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Hanging Knee Raise",
@@ -141,7 +166,8 @@
             "minReps": 8,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       },
@@ -152,13 +178,19 @@
             "exercise": "Deadlift",
             "role": "main",
             "baseWeightLb": 155,
-            "estimatedMaxLb": 245
+            "estimatedMaxLb": 245,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Front Squat",
             "role": "complementary",
             "baseWeightLb": 95,
-            "estimatedMaxLb": 155
+            "estimatedMaxLb": 155,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           }
         ],
         "accessories": [
@@ -168,7 +200,8 @@
             "minReps": 10,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "GHD Sit-up",
@@ -176,7 +209,8 @@
             "minReps": 8,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       }
@@ -222,13 +256,19 @@
             "exercise": "Snatch",
             "role": "main",
             "baseWeightLb": 65,
-            "estimatedMaxLb": 115
+            "estimatedMaxLb": 115,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Overhead Squat",
             "role": "complementary",
             "baseWeightLb": 65,
-            "estimatedMaxLb": 115
+            "estimatedMaxLb": 115,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           }
         ],
         "accessories": [
@@ -238,7 +278,8 @@
             "minReps": 3,
             "maxReps": 5,
             "weightLb": 95,
-            "incrementLb": 10
+            "incrementLb": 10,
+            "startFraction": 0
           },
           {
             "exercise": "Hanging Knee Raise",
@@ -246,7 +287,8 @@
             "minReps": 8,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       },
@@ -257,13 +299,19 @@
             "exercise": "Clean & Jerk",
             "role": "main",
             "baseWeightLb": 85,
-            "estimatedMaxLb": 145
+            "estimatedMaxLb": 145,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Front Squat",
             "role": "complementary",
             "baseWeightLb": 115,
-            "estimatedMaxLb": 185
+            "estimatedMaxLb": 185,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           }
         ],
         "accessories": [
@@ -273,7 +321,8 @@
             "minReps": 3,
             "maxReps": 5,
             "weightLb": 115,
-            "incrementLb": 10
+            "incrementLb": 10,
+            "startFraction": 0
           },
           {
             "exercise": "Pull-ups",
@@ -281,7 +330,8 @@
             "minReps": 5,
             "maxReps": 10,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       },
@@ -292,13 +342,19 @@
             "exercise": "Back Squat",
             "role": "main",
             "baseWeightLb": 135,
-            "estimatedMaxLb": 225
+            "estimatedMaxLb": 225,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Overhead Press",
             "role": "complementary",
             "baseWeightLb": 65,
-            "estimatedMaxLb": 105
+            "estimatedMaxLb": 105,
+            "prescription": "automatic",
+            "sets": 0,
+            "startFraction": 0
           }
         ],
         "accessories": [
@@ -308,7 +364,8 @@
             "minReps": 10,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Hanging Knee Raise",
@@ -316,7 +373,8 @@
             "minReps": 8,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       }
@@ -389,7 +447,8 @@
             "minReps": 10,
             "maxReps": 20,
             "weightLb": 35,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Burpees",
@@ -397,7 +456,8 @@
             "minReps": 8,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Mountain Climbers",
@@ -405,7 +465,8 @@
             "minReps": 20,
             "maxReps": 40,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       },
@@ -419,7 +480,8 @@
             "minReps": 10,
             "maxReps": 25,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Ring Row",
@@ -427,7 +489,8 @@
             "minReps": 8,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Sit-ups",
@@ -435,7 +498,8 @@
             "minReps": 15,
             "maxReps": 30,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       },
@@ -449,7 +513,8 @@
             "minReps": 8,
             "maxReps": 15,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Goblet Squat",
@@ -457,7 +522,8 @@
             "minReps": 10,
             "maxReps": 20,
             "weightLb": 35,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
           },
           {
             "exercise": "Walking Lunges",
@@ -465,7 +531,720 @@
             "minReps": 12,
             "maxReps": 24,
             "weightLb": 0,
-            "incrementLb": 0
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "novice-linear-3x5",
+    "name": "Novice Linear — 3×5",
+    "tagline": "3 days/wk · Starting Strength-style A/B · weight every session",
+    "focus": "strength",
+    "roundingLb": 5,
+    "exercises": [],
+    "days": [
+      {
+        "name": "Day A",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 95,
+            "estimatedMaxLb": 150,
+            "prescription": "linearFives",
+            "sets": 3,
+            "startFraction": 0.74
+          },
+          {
+            "exercise": "Overhead Press",
+            "role": "complementary",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 95,
+            "prescription": "linearFives",
+            "sets": 3,
+            "startFraction": 0.74
+          },
+          {
+            "exercise": "Deadlift",
+            "role": "complementary",
+            "baseWeightLb": 135,
+            "estimatedMaxLb": 205,
+            "prescription": "linearFives",
+            "sets": 1,
+            "startFraction": 0.74
+          }
+        ],
+        "accessories": []
+      },
+      {
+        "name": "Day B",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 95,
+            "estimatedMaxLb": 150,
+            "prescription": "linearFives",
+            "sets": 3,
+            "startFraction": 0.74
+          },
+          {
+            "exercise": "Barbell Bench",
+            "role": "complementary",
+            "baseWeightLb": 85,
+            "estimatedMaxLb": 125,
+            "prescription": "linearFives",
+            "sets": 3,
+            "startFraction": 0.74
+          },
+          {
+            "exercise": "Deadlift",
+            "role": "complementary",
+            "baseWeightLb": 135,
+            "estimatedMaxLb": 205,
+            "prescription": "linearFives",
+            "sets": 1,
+            "startFraction": 0.74
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Chin-ups",
+            "sets": 3,
+            "minReps": 5,
+            "maxReps": 10,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "novice-linear-5x5",
+    "name": "Novice Linear — 5×5",
+    "tagline": "3 days/wk · StrongLifts-style A/B · squat every session",
+    "focus": "strength",
+    "roundingLb": 5,
+    "exercises": [],
+    "days": [
+      {
+        "name": "Day A",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 95,
+            "estimatedMaxLb": 150,
+            "prescription": "linearFives",
+            "sets": 5,
+            "startFraction": 0.74
+          },
+          {
+            "exercise": "Barbell Bench",
+            "role": "complementary",
+            "baseWeightLb": 85,
+            "estimatedMaxLb": 125,
+            "prescription": "linearFives",
+            "sets": 5,
+            "startFraction": 0.74
+          },
+          {
+            "exercise": "Barbell Row",
+            "role": "complementary",
+            "baseWeightLb": 95,
+            "estimatedMaxLb": 135,
+            "prescription": "linearFives",
+            "sets": 5,
+            "startFraction": 0.74
+          }
+        ],
+        "accessories": []
+      },
+      {
+        "name": "Day B",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 95,
+            "estimatedMaxLb": 150,
+            "prescription": "linearFives",
+            "sets": 5,
+            "startFraction": 0.74
+          },
+          {
+            "exercise": "Overhead Press",
+            "role": "complementary",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 95,
+            "prescription": "linearFives",
+            "sets": 5,
+            "startFraction": 0.74
+          },
+          {
+            "exercise": "Deadlift",
+            "role": "complementary",
+            "baseWeightLb": 135,
+            "estimatedMaxLb": 205,
+            "prescription": "linearFives",
+            "sets": 1,
+            "startFraction": 0.74
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Chin-ups",
+            "sets": 3,
+            "minReps": 5,
+            "maxReps": 10,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "texas-method",
+    "name": "Texas Method",
+    "tagline": "3 days/wk · volume, light, intensity · presses alternate weekly",
+    "focus": "strength",
+    "roundingLb": 5,
+    "exercises": [],
+    "days": [
+      {
+        "name": "Volume A",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 135,
+            "estimatedMaxLb": 205,
+            "prescription": "texasVolume",
+            "sets": 5,
+            "startFraction": 0.77
+          },
+          {
+            "exercise": "Barbell Bench",
+            "role": "complementary",
+            "baseWeightLb": 85,
+            "estimatedMaxLb": 125,
+            "prescription": "texasVolume",
+            "sets": 5,
+            "startFraction": 0.77
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Back Extension",
+            "sets": 3,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Light A",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 110,
+            "estimatedMaxLb": 205,
+            "prescription": "texasLight",
+            "sets": 2,
+            "startFraction": 0.62
+          },
+          {
+            "exercise": "Overhead Press",
+            "role": "complementary",
+            "baseWeightLb": 55,
+            "estimatedMaxLb": 95,
+            "prescription": "texasLight",
+            "sets": 3,
+            "startFraction": 0.69
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Chin-ups",
+            "sets": 3,
+            "minReps": 5,
+            "maxReps": 10,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Intensity A",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 150,
+            "estimatedMaxLb": 205,
+            "prescription": "texasIntensity",
+            "sets": 1,
+            "startFraction": 0.86
+          },
+          {
+            "exercise": "Barbell Bench",
+            "role": "complementary",
+            "baseWeightLb": 95,
+            "estimatedMaxLb": 125,
+            "prescription": "texasIntensity",
+            "sets": 1,
+            "startFraction": 0.86
+          },
+          {
+            "exercise": "Deadlift",
+            "role": "complementary",
+            "baseWeightLb": 185,
+            "estimatedMaxLb": 245,
+            "prescription": "texasIntensity",
+            "sets": 1,
+            "startFraction": 0.86
+          }
+        ],
+        "accessories": []
+      },
+      {
+        "name": "Volume B",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 135,
+            "estimatedMaxLb": 205,
+            "prescription": "texasVolume",
+            "sets": 5,
+            "startFraction": 0.77
+          },
+          {
+            "exercise": "Overhead Press",
+            "role": "complementary",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 95,
+            "prescription": "texasVolume",
+            "sets": 5,
+            "startFraction": 0.77
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Back Extension",
+            "sets": 3,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Light B",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 110,
+            "estimatedMaxLb": 205,
+            "prescription": "texasLight",
+            "sets": 2,
+            "startFraction": 0.62
+          },
+          {
+            "exercise": "Barbell Bench",
+            "role": "complementary",
+            "baseWeightLb": 75,
+            "estimatedMaxLb": 125,
+            "prescription": "texasLight",
+            "sets": 3,
+            "startFraction": 0.69
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Chin-ups",
+            "sets": 3,
+            "minReps": 5,
+            "maxReps": 10,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Intensity B",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 150,
+            "estimatedMaxLb": 205,
+            "prescription": "texasIntensity",
+            "sets": 1,
+            "startFraction": 0.86
+          },
+          {
+            "exercise": "Overhead Press",
+            "role": "complementary",
+            "baseWeightLb": 80,
+            "estimatedMaxLb": 95,
+            "prescription": "texasIntensity",
+            "sets": 1,
+            "startFraction": 0.86
+          },
+          {
+            "exercise": "Deadlift",
+            "role": "complementary",
+            "baseWeightLb": 185,
+            "estimatedMaxLb": 245,
+            "prescription": "texasIntensity",
+            "sets": 1,
+            "startFraction": 0.86
+          }
+        ],
+        "accessories": []
+      }
+    ]
+  },
+  {
+    "id": "five-three-one",
+    "name": "5/3/1 — Wendler",
+    "tagline": "4 days/wk · training-max waves · top set is as many quality reps as you have",
+    "focus": "strength",
+    "roundingLb": 5,
+    "exercises": [],
+    "days": [
+      {
+        "name": "Press Day",
+        "lifts": [
+          {
+            "exercise": "Overhead Press",
+            "role": "main",
+            "baseWeightLb": 85,
+            "estimatedMaxLb": 95,
+            "prescription": "fiveThreeOne",
+            "sets": 0,
+            "startFraction": 0.9
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Overhead Press",
+            "sets": 5,
+            "minReps": 10,
+            "maxReps": 10,
+            "weightLb": 45,
+            "incrementLb": 5,
+            "startFraction": 0.45
+          },
+          {
+            "exercise": "Chin-ups",
+            "sets": 5,
+            "minReps": 5,
+            "maxReps": 10,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Deadlift Day",
+        "lifts": [
+          {
+            "exercise": "Deadlift",
+            "role": "main",
+            "baseWeightLb": 220,
+            "estimatedMaxLb": 245,
+            "prescription": "fiveThreeOne",
+            "sets": 0,
+            "startFraction": 0.9
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Deadlift",
+            "sets": 5,
+            "minReps": 10,
+            "maxReps": 10,
+            "weightLb": 115,
+            "incrementLb": 5,
+            "startFraction": 0.45
+          },
+          {
+            "exercise": "Hanging Knee Raise",
+            "sets": 5,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Bench Day",
+        "lifts": [
+          {
+            "exercise": "Barbell Bench",
+            "role": "main",
+            "baseWeightLb": 110,
+            "estimatedMaxLb": 125,
+            "prescription": "fiveThreeOne",
+            "sets": 0,
+            "startFraction": 0.9
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Barbell Bench",
+            "sets": 5,
+            "minReps": 10,
+            "maxReps": 10,
+            "weightLb": 55,
+            "incrementLb": 5,
+            "startFraction": 0.45
+          },
+          {
+            "exercise": "Barbell Row",
+            "sets": 5,
+            "minReps": 10,
+            "maxReps": 10,
+            "weightLb": 95,
+            "incrementLb": 5,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Squat Day",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 180,
+            "estimatedMaxLb": 205,
+            "prescription": "fiveThreeOne",
+            "sets": 0,
+            "startFraction": 0.9
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Back Squat",
+            "sets": 5,
+            "minReps": 10,
+            "maxReps": 10,
+            "weightLb": 95,
+            "incrementLb": 5,
+            "startFraction": 0.45
+          },
+          {
+            "exercise": "Lying Leg Curl",
+            "sets": 5,
+            "minReps": 10,
+            "maxReps": 12,
+            "weightLb": 70,
+            "incrementLb": 5,
+            "startFraction": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "conjugate",
+    "name": "Conjugate — Westside-style",
+    "tagline": "4 days/wk · max-effort singles + speed work · rotate variations by swapping",
+    "focus": "strength",
+    "roundingLb": 5,
+    "exercises": [],
+    "days": [
+      {
+        "name": "Max Effort Lower",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 180,
+            "estimatedMaxLb": 205,
+            "prescription": "maxEffort",
+            "sets": 0,
+            "startFraction": 0.9
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Nordic Hamstring Curl",
+            "sets": 4,
+            "minReps": 6,
+            "maxReps": 10,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          },
+          {
+            "exercise": "Back Extension",
+            "sets": 4,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          },
+          {
+            "exercise": "Hanging Knee Raise",
+            "sets": 4,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Max Effort Upper",
+        "lifts": [
+          {
+            "exercise": "Barbell Bench",
+            "role": "main",
+            "baseWeightLb": 110,
+            "estimatedMaxLb": 125,
+            "prescription": "maxEffort",
+            "sets": 0,
+            "startFraction": 0.9
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Skull Crusher",
+            "sets": 4,
+            "minReps": 8,
+            "maxReps": 12,
+            "weightLb": 30,
+            "incrementLb": 5,
+            "startFraction": 0
+          },
+          {
+            "exercise": "Barbell Row",
+            "sets": 4,
+            "minReps": 8,
+            "maxReps": 12,
+            "weightLb": 95,
+            "incrementLb": 5,
+            "startFraction": 0
+          },
+          {
+            "exercise": "Face Pulls",
+            "sets": 3,
+            "minReps": 12,
+            "maxReps": 15,
+            "weightLb": 25,
+            "incrementLb": 5,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Dynamic Effort Lower",
+        "lifts": [
+          {
+            "exercise": "Back Squat",
+            "role": "main",
+            "baseWeightLb": 95,
+            "estimatedMaxLb": 205,
+            "prescription": "dynamicEffort",
+            "sets": 0,
+            "startFraction": 0.5
+          },
+          {
+            "exercise": "Deadlift",
+            "role": "complementary",
+            "baseWeightLb": 145,
+            "estimatedMaxLb": 245,
+            "prescription": "dynamicEffort",
+            "sets": 0,
+            "startFraction": 0.6
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Walking Lunges",
+            "sets": 3,
+            "minReps": 10,
+            "maxReps": 20,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          },
+          {
+            "exercise": "Back Extension",
+            "sets": 3,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          }
+        ]
+      },
+      {
+        "name": "Dynamic Effort Upper",
+        "lifts": [
+          {
+            "exercise": "Barbell Bench",
+            "role": "main",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 125,
+            "prescription": "dynamicEffort",
+            "sets": 0,
+            "startFraction": 0.5
+          }
+        ],
+        "accessories": [
+          {
+            "exercise": "Triceps Pushdown",
+            "sets": 4,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 40,
+            "incrementLb": 5,
+            "startFraction": 0
+          },
+          {
+            "exercise": "Lat Pulldown",
+            "sets": 4,
+            "minReps": 8,
+            "maxReps": 12,
+            "weightLb": 80,
+            "incrementLb": 5,
+            "startFraction": 0
+          },
+          {
+            "exercise": "Rear Delt Fly",
+            "sets": 3,
+            "minReps": 12,
+            "maxReps": 15,
+            "weightLb": 15,
+            "incrementLb": 5,
+            "startFraction": 0
           }
         ]
       }

@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **3**. A missing version means the legacy version-0 shape.
+version **4**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,19 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/js/db.js`
 
 These values must change together.
+
+## Version 4 methodology styles
+
+Version 4 widens the program-lift (and session-exercise) `prescription`
+vocabulary with the training-methodology styles: `linearFives`,
+`texasVolume`, `texasLight`, `texasIntensity`, `fiveThreeOne`, `maxEffort`,
+and `dynamicEffort`. It also adds the `ramp` set kind to `prescriptionBlock` —
+prescribed sub-maximal sets before the day's top work (the 5/3/1 65/75%
+sets), distinct from post-work `backoff` sets. No field shapes changed.
+The version exists so an older importer rejects a backup containing the
+new styles cleanly by version instead of failing enum validation
+mid-file; version ≤3 backups import unchanged. For `fiveThreeOne` slots
+the persisted `baseWeightLb` is the training max, not a working weight.
 
 ## Version 3 coaching and prescription contract
 

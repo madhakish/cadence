@@ -510,7 +510,17 @@ struct ProgramEditorView: View {
                         movementGroup: exercise.movementGroup, role: lift.role, focus: program.focus,
                         prescriptionStyle: lift.prescription,
                         configuration: lift.prescriptionConfiguration(movementGroup: exercise.movementGroup))
-                    rotationSets[exercise.movementGroup, default: 0] += plan.sets
+                    // Published methodology slots deliberately shape their
+                    // own weekly balance (squat 3×/week, one heavy pull); the
+                    // press/pull and squat/hinge heuristics would permanently
+                    // flag the canon, so those sums skip methodology slots —
+                    // but NOT generic double-progression rows, and pattern
+                    // coverage (vertical pulling) counts every slot.
+                    let methodologySlot = lift.prescription.buildsOwnSessionShape
+                        && lift.prescription != .doubleProgression
+                    if !methodologySlot {
+                        rotationSets[exercise.movementGroup, default: 0] += plan.sets
+                    }
                     patternSets[exercise.movementPattern, default: 0] += plan.sets
                     if exercise.movementPattern == .olympicPower, plan.reps > 3 {
                         messages.append("\(lift.exerciseName) is power work; keep programmed sets at 1–3 reps.")
@@ -923,6 +933,15 @@ private struct ProgramLiftRow: View {
                 Stepper("Minimum reps: \(lift.minimumReps)", value: $lift.minimumReps, in: 1...20)
                 Stepper("Maximum reps: \(lift.maximumReps)", value: $lift.maximumReps, in: lift.minimumReps...30)
                 Text("Current target: \(lift.currentReps) reps · add \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: loadStep)) only after every set reaches the top of the window.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if lift.prescription.advancesPerExposure && lift.prescription != .doubleProgression {
+                Stepper("Working sets: \(lift.doubleProgressionSets)", value: $lift.doubleProgressionSets, in: 1...10)
+                Text("Sets-across of five. The base moves every banked session; the Est. 1RM above is what the coach derives it from.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if lift.prescription == .fiveThreeOne {
+                Text("The base above is the TRAINING MAX (≈90% of 1RM), not a working weight. The top set each week is as many quality reps as you have.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Toggle("Peak top single", isOn: $lift.peakSingleEnabled)

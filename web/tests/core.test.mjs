@@ -778,5 +778,111 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   ok(report.rotations[0].reasons.some((reason) => reason.includes("check-in")), "hard-stop check-in is explained");
 }
 
+// ---- Methodology styles: 5/3/1, max/dynamic effort, linear fives, Texas ----
+{
+  // 5/3/1 wave: base IS the training max; top set per week off the published %.
+  const tm = (phase) => ({ cycleNumber: 1, baseWeightLb: 300, nextPhase: phase, incrementLb: 0 });
+  let p = C.planForStyle(tm(1), 5, "fiveThreeOne");
+  eq(`${p.weightLb}/${p.sets}x${p.reps}`, "255/1x5", "531 week 1 top set 85%×5+");
+  p = C.planForStyle(tm(2), 5, "fiveThreeOne");
+  eq(`${p.weightLb}/${p.sets}x${p.reps}`, "270/1x3", "531 week 2 top set 90%×3+");
+  p = C.planForStyle(tm(3), 5, "fiveThreeOne");
+  eq(`${p.weightLb}/${p.sets}x${p.reps}`, "285/1x1", "531 week 3 top set 95%×1+");
+  p = C.planForStyle(tm(4), 5, "fiveThreeOne");
+  eq(`${p.weightLb}/${p.sets}x${p.reps}`, "180/1x5", "531 deload 60%×5");
+
+  const pres531 = C.sessionPrescription(tm(3), 5, "barbell", "squat", "main", "strength", "fiveThreeOne");
+  eq(pres531.blocks.map((b) => b.kind).join(","), "ramp,ramp,work", "531 ramp precedes the top set");
+  eq(pres531.blocks.map((b) => b.weightLb).join(","), "225,255,285", "531 week-3 ramp 75/85/95%");
+  eq(pres531.blocks.map((b) => b.reps).join(","), "5,3,1", "531 week-3 reps 5/3/1");
+
+  // Max effort: top single plus backoff triples; deload trades the single away.
+  const me = C.sessionPrescription({ cycleNumber: 1, baseWeightLb: 315, nextPhase: 1, incrementLb: 0 },
+    5, "barbell", "squat", "main", "strength", "maxEffort");
+  eq(me.mainWork.weightLb, 315, "ME top single at the slot target");
+  eq(me.blocks.map((b) => b.kind).join(","), "work,backoff", "ME single then backoff");
+  eq(me.blocks[1].weightLb, 250, "ME backoff at 80%");
+  const meDeload = C.planForStyle({ cycleNumber: 1, baseWeightLb: 315, nextPhase: 4, incrementLb: 0 }, 5, "maxEffort");
+  eq(`${meDeload.weightLb}/${meDeload.sets}x${meDeload.reps}`, "220/3x3", "ME deload is moderate triples");
+
+  // Dynamic effort: movement-pattern schemes and the 3-week wave.
+  let de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 150, nextPhase: 2, incrementLb: 0 }, 5, "dynamicEffort", {}, "squat");
+  eq(`${de.weightLb}/${de.sets}x${de.reps}`, "165/10x2", "DE squat wave week 2 (+10%)");
+  de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 185, nextPhase: 1, incrementLb: 0 }, 5, "dynamicEffort", {}, "hinge");
+  eq(`${de.sets}x${de.reps}`, "6x1", "DE speed pulls are singles");
+  de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 100, nextPhase: 3, incrementLb: 0 }, 5, "dynamicEffort", {}, "press");
+  eq(`${de.weightLb}/${de.sets}x${de.reps}`, "120/9x3", "DE bench wave week 3 (+20%)");
+
+  // Linear fives ignore the phase wave entirely.
+  for (const phase of [1, 2, 3, 4]) {
+    const lp = C.planForStyle({ cycleNumber: 1, baseWeightLb: 205, nextPhase: phase, incrementLb: 0 }, 5, "linearFives", { workingSets: 3 });
+    eq(`${lp.weightLb}/${lp.sets}x${lp.reps}`, "205/3x5", `linearFives constant at phase ${phase}`);
+  }
+
+  // Style helpers.
+  ok(C.advancesPerExposure("texasVolume") && C.advancesPerExposure("linearFives"), "linear styles advance per exposure");
+  ok(!C.advancesPerExposure("fiveThreeOne") && !C.advancesPerExposure("wave"), "wave styles grade at the Peak");
+  ok(C.buildsOwnSessionShape("dynamicEffort") && !C.buildsOwnSessionShape("wave"), "own-shape styles skip primers");
+  eq(C.defaultStartFraction("fiveThreeOne"), 0.90, "531 TM = 90% of e1RM");
+  eq(C.defaultStartFraction("dynamicEffort"), 0.50, "speed work at 50%");
+  eq(C.defaultStartFraction("wave"), 0, "classic wave keeps template bases");
+
+  // Per-exposure linear progression: +10 lower per session, SS 3-miss deload.
+  const rule = C.linearRule("linearFives", "squat");
+  eq(`${rule.incrementLb}/${rule.stallLimit}/${rule.deloadFraction}`, "10/3/0.9", "novice lower rule");
+  eq(C.linearRule("texasVolume", "press").incrementLb, 5, "texas upper +5 per completion");
+  eq(C.linearRule("texasVolume", "squat").incrementLb, 5, "texas lower also +5 — twin A/B slots are synced");
+  eq(C.linearRule("texasIntensity", "hinge").stallLimit, 2, "texas resets after 2 misses");
+  const fives = { prescribedSets: 3, prescribedReps: 5, completedSets: 3, anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false, grindyOrWobbleSets: 0, topSetWeightLb: 205, topSetReps: 5 };
+  const lin = { baseWeightLb: 205, estimatedMaxLb: 280, stallCount: 0, role: "main", lastIncrementLb: 0 };
+  const up = C.advanceLinearLift(lin, fives, rule, 5);
+  eq(up.state.baseWeightLb, 215, "novice squat +10 after a clean session");
+  eq(up.state.stallCount, 0, "clean session clears stalls");
+  const miss = { ...fives, completedSets: 2, topSetReps: 4 };
+  const held = C.advanceLinearLift(lin, miss, rule, 5);
+  eq(held.state.baseWeightLb, 205, "missed session holds the weight");
+  eq(held.state.stallCount, 1, "missed session counts a stall");
+  const third = C.advanceLinearLift({ ...lin, stallCount: 2 }, miss, rule, 5);
+  eq(third.state.baseWeightLb, 185, "third consecutive miss deloads 10%");
+  eq(third.state.stallCount, 0, "deload restarts the count");
+  const grindy = { ...fives, grindyOrWobbleSets: 2 };
+  const heldGrind = C.advanceLinearLift({ ...lin, stallCount: 2 }, grindy, rule, 5);
+  eq(heldGrind.state.baseWeightLb, 205, "grindy-but-complete session holds the weight");
+  eq(heldGrind.state.stallCount, 0, "a completed session breaks the consecutive-miss chain");
+  const skipped = { ...miss, completedSets: 0, topSetWeightLb: 0, topSetReps: 0 };
+  const heldSkip = C.advanceLinearLift(lin, skipped, rule, 5);
+  eq(heldSkip.state.estimatedMaxLb, 280, "a fully missed top set never smooths the e1RM toward zero");
+
+  // Cycle-graded methodology increments.
+  const cleanTop = { prescribedSets: 1, prescribedReps: 1, completedSets: 1, anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false, grindyOrWobbleSets: 0, topSetWeightLb: 285, topSetReps: 3 };
+  const tmState = { baseWeightLb: 300, estimatedMaxLb: 330, stallCount: 0, role: "main", lastIncrementLb: 0 };
+  const tmUp = C.advanceProgramLift(tmState, cleanTop, "strength", "fiveThreeOne", "squat", 5);
+  eq(tmUp.state.baseWeightLb, 310, "531 lower TM +10 per clean cycle");
+  const missedTop = { ...cleanTop, completedSets: 0, anyStoppedEarly: true, topSetReps: 0 };
+  const tmReset = C.advanceProgramLift(tmState, missedTop, "strength", "fiveThreeOne", "squat", 5);
+  eq(tmReset.state.baseWeightLb, 270, "531 missed minimum resets TM three cycles back");
+  eq(tmReset.state.estimatedMaxLb, 330, "531 reset never smooths the e1RM off a missed set");
+  const droppedButMade = { ...cleanTop, anyDroppedLoad: true };
+  const tmHeld = C.advanceProgramLift(tmState, droppedButMade, "strength", "fiveThreeOne", "squat", 5);
+  eq(tmHeld.state.baseWeightLb, 300, "531 autoreg drop that made the reps holds the TM — no reset");
+  eq(tmHeld.grade, "fail", "the compromised cycle still fails the grade");
+  const tmSecond = C.advanceProgramLift({ ...tmState, stallCount: 1 }, droppedButMade, "strength", "fiveThreeOne", "squat", 5);
+  eq(tmSecond.state.baseWeightLb, 270, "two compromised cycles self-correct the TM three cycles back");
+  eq(tmSecond.state.stallCount, 0, "the compromised-cycle counter is consumed by the reset");
+  const meMiss2 = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);
+  eq(meMiss2.state.stallCount, 0, "ME misses never accrue a counter another style could trip over");
+  eq(C.reconciledProgramBaseWeight(300, 190, 1, 2, 5, "barbell", "press", "main", "strength", "fiveThreeOne"), 300,
+    "methodology bases are never re-anchored off a heavier performed set");
+  const meUp = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, cleanTop, "strength", "maxEffort", "press", 5);
+  eq(meUp.state.baseWeightLb, 320, "ME upper target +5 after a made single");
+  const meMiss = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);
+  eq(meMiss.state.baseWeightLb, 315, "ME missed single holds — rotate instead");
+  const deHold = C.advanceProgramLift({ ...tmState, baseWeightLb: 150 }, cleanTop, "strength", "dynamicEffort", "squat", 5);
+  eq(deHold.state.baseWeightLb, 150, "DE base holds across cycles");
+  eq(deHold.state.estimatedMaxLb, 330, "DE never smooths e1RM off speed doubles");
+  const classic = C.advanceProgramLift(tmState, cleanTop, "strength", "wave", "squat", 5);
+  ok(classic.state.baseWeightLb >= 300, "non-methodology styles keep the tapered rule");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

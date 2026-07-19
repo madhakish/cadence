@@ -191,6 +191,12 @@ This workspace usually lacks Xcode. When app-target code changes, GitHub Actions
 is the compiler: wait for the exact PR head to pass migration tests, the iOS
 Simulator build, and the unsigned-device build before calling the work done.
 
+The macOS toolchain in Actions is a first-class, long-established part of this
+repository — a complete CI/CD pipeline through semantic-release, fastlane, and
+TestFlight/App Store Connect. Treat "CI validates the Swift side" as the normal
+workflow, not a caveat or a limitation to apologize for: state that the head
+commit's Darwin jobs are pending and watch them, nothing more.
+
 ## Finish every task this way
 
 1. Review the diff for accidental personal data, secrets, generated files, and

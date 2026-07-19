@@ -242,8 +242,7 @@ public enum ProgramProgression {
         roundingLb: Double = ProgramEngine.defaultRoundingLb
     ) -> ProgressionResult {
         let grade = gradeCycle(perf)
-        let sample = epleyE1RM(weightLb: perf.topSetWeightLb, reps: perf.topSetReps)
-        let estimatedMaxLb = smoothE1RM(prior: state.estimatedMaxLb, sample: sample)
+        let estimatedMaxLb = smoothedMax(state, perf: perf)
         var next = state
         next.estimatedMaxLb = estimatedMaxLb
         var note: String?
@@ -272,6 +271,180 @@ public enum ProgramProgression {
             }
         }
         return ProgressionResult(state: next, grade: grade, note: note)
+    }
+
+    /// Per-exposure linear rule for the methodology styles that add weight
+    /// every time the slot's work is completed as prescribed.
+    ///
+    /// - Novice linear fives: +10 lb per exposure for squat/hinge patterns,
+    ///   +5 lb for everything else; three consecutive misses deload 10%
+    ///   (Starting Strength's reset). Repeated slots of the same lift are
+    ///   synchronized by the banking layer, so "weight every session" holds
+    ///   across alternating A/B days.
+    /// - Texas day slots: +5 lb per completion for every lift — with the A/B
+    ///   twin slots synchronized, that is the published +5 lb/week (and +5
+    ///   per appearance for the weekly-alternating presses); two misses
+    ///   reset 5%.
+    public struct LinearRule: Hashable, Sendable {
+        public let incrementLb: Double
+        public let stallLimit: Int
+        public let deloadFraction: Double
+
+        public init(incrementLb: Double, stallLimit: Int, deloadFraction: Double) {
+            self.incrementLb = incrementLb
+            self.stallLimit = stallLimit
+            self.deloadFraction = deloadFraction
+        }
+    }
+
+    public static func linearRule(for style: PrescriptionStyle, movementGroup: String?) -> LinearRule {
+        let lower = movementGroup == "squat" || movementGroup == "hinge"
+        switch style {
+        case .linearFives:
+            return LinearRule(incrementLb: lower ? 10 : 5, stallLimit: 3, deloadFraction: 0.90)
+        default:
+            return LinearRule(incrementLb: 5, stallLimit: 2, deloadFraction: 0.95)
+        }
+    }
+
+    /// Advance a per-exposure linear slot after a banked session. Success adds
+    /// the rule's fixed increment; misses hold, and `stallLimit` consecutive
+    /// misses deload by the rule's fraction and restart the count. The e1RM
+    /// smooths from the top set (fives are honest samples).
+    /// A performed top set that actually happened. A skipped or fully-missed
+    /// top set reports weight/reps 0; smoothing that into the e1RM would crush
+    /// the estimate by 30% per occurrence, so only real samples smooth.
+    static func smoothedMax(_ state: ProgramLiftState, perf: CycleLiftPerformance) -> Double {
+        guard perf.topSetWeightLb > 0, perf.topSetReps >= 1 else { return state.estimatedMaxLb }
+        let sample = epleyE1RM(weightLb: perf.topSetWeightLb, reps: perf.topSetReps)
+        return smoothE1RM(prior: state.estimatedMaxLb, sample: sample)
+    }
+
+    public static func advanceLinearLift(
+        _ state: ProgramLiftState, perf: CycleLiftPerformance, rule: LinearRule,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> ProgressionResult {
+        let grade = gradeCycle(perf)
+        var next = state
+        next.estimatedMaxLb = smoothedMax(state, perf: perf)
+        var note: String?
+
+        switch grade {
+        case .success:
+            next.stallCount = 0
+            next.baseWeightLb = state.baseWeightLb + rule.incrementLb
+            next.lastIncrementLb = rule.incrementLb
+            note = "Completed as prescribed — add \(Weight.trim(rule.incrementLb)) lb next time."
+        case .hold:
+            // Grindy but every rep was made. The published novice rule is to
+            // grind and keep adding; the conservative middle is to hold the
+            // weight WITHOUT accruing a miss — and a completed session breaks
+            // the consecutive-miss chain, so the deload note stays truthful.
+            next.stallCount = 0
+            next.lastIncrementLb = 0
+            note = "Grindy session — holding weight; misses were not counted."
+        case .fail:
+            next.stallCount = state.stallCount + 1
+            next.lastIncrementLb = 0
+            if next.stallCount >= rule.stallLimit {
+                let old = state.baseWeightLb
+                next.baseWeightLb = Weight.round(old * rule.deloadFraction, to: roundingLb)
+                next.stallCount = 0
+                note = "Missed \(rule.stallLimit) in a row — deloaded \(Weight.trim(old))→\(Weight.trim(next.baseWeightLb)) lb to rebuild."
+            } else {
+                note = "Prescription not fully met — holding weight, try it again."
+            }
+        }
+        return ProgressionResult(state: next, grade: grade, note: note)
+    }
+
+    /// Style-aware cycle progression, applied at the Peak grade / rollover for
+    /// slots that are NOT per-exposure. Methodology styles use their published
+    /// fixed increments; every other style keeps the tapered headroom rule.
+    ///
+    /// - 5/3/1: +5 lb upper / +10 lb lower to the training max per clean
+    ///   cycle; missing the "+" set's minimum resets the TM three cycles back
+    ///   (Wendler's "five steps forward, three steps back").
+    /// - Max effort: +5/+10 to the target after a made single; a miss holds —
+    ///   Westside answers stalls by rotating the variation (the swap gesture),
+    ///   never by auto-raising a missed target.
+    /// - Dynamic effort: speed weight follows the slot's max; the base holds
+    ///   and the wave supplies intra-cycle progression.
+    public static func advanceProgramLift(
+        _ state: ProgramLiftState, perf: CycleLiftPerformance, focus: TrainingFocus,
+        style: PrescriptionStyle, movementGroup: String?,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> ProgressionResult {
+        let lower = movementGroup == "squat" || movementGroup == "hinge"
+        let increment = lower ? 10.0 : 5.0
+        switch style {
+        case .fiveThreeOne:
+            let grade = gradeCycle(perf)
+            var next = state
+            next.estimatedMaxLb = smoothedMax(state, perf: perf)
+            var note: String?
+            if grade == .success {
+                next.stallCount = 0
+                next.baseWeightLb = state.baseWeightLb + increment
+                next.lastIncrementLb = increment
+                note = "Hit the top set — training max +\(Weight.trim(increment)) lb next cycle."
+            } else if grade == .fail, perf.completedSets < perf.prescribedSets {
+                // Wendler's reset applies only to genuinely missing the "+"
+                // set's minimum reps. A fail from an autoreg drop or a light
+                // manual edit made the reps at reduced load — that holds.
+                let old = state.baseWeightLb
+                next.baseWeightLb = Swift.max(roundingLb, Weight.round(old - 3 * increment, to: roundingLb))
+                next.stallCount = 0
+                next.lastIncrementLb = 0
+                note = "Missed the minimum reps — training max reset \(Weight.trim(old))→\(Weight.trim(next.baseWeightLb)) lb (three cycles back)."
+            } else {
+                next.stallCount = state.stallCount + 1
+                next.lastIncrementLb = 0
+                if grade == .fail, next.stallCount >= stallLimit {
+                    // Repeated compromised "+" sets mean the TM is set too
+                    // high even though the reps are technically appearing —
+                    // apply the same three-cycles-back correction and consume
+                    // the counter.
+                    let old = state.baseWeightLb
+                    next.baseWeightLb = Swift.max(roundingLb, Weight.round(old - 3 * increment, to: roundingLb))
+                    next.stallCount = 0
+                    note = "Two compromised cycles — training max reset \(Weight.trim(old))→\(Weight.trim(next.baseWeightLb)) lb (three cycles back)."
+                } else {
+                    note = grade == .fail
+                        ? "Top set compromised — holding the training max this cycle."
+                        : "Grindy top set — holding the training max this cycle."
+                }
+            }
+            return ProgressionResult(state: next, grade: grade, note: note)
+        case .maxEffort:
+            let grade = gradeCycle(perf)
+            var next = state
+            next.estimatedMaxLb = smoothedMax(state, perf: perf)
+            var note: String?
+            if grade == .success {
+                next.stallCount = 0
+                next.baseWeightLb = state.baseWeightLb + increment
+                next.lastIncrementLb = increment
+                note = "Made the top single — next target +\(Weight.trim(increment)) lb. Rotate the variation to keep it moving."
+            } else {
+                // Rotation, not accumulation, is this methodology's stall
+                // answer — no counter accrues (a stale count would detonate a
+                // spurious deload if the slot is later switched to a wave style).
+                next.lastIncrementLb = 0
+                note = "Missed the single — holding the target. Swap the variation rather than grinding the same lift."
+            }
+            return ProgressionResult(state: next, grade: grade, note: note)
+        case .dynamicEffort:
+            // Speed doubles are not an e1RM sample; leave the estimate alone.
+            var next = state
+            next.lastIncrementLb = 0
+            return ProgressionResult(
+                state: next, grade: gradeCycle(perf),
+                note: "Speed work holds — raise this slot when the max-effort lift moves."
+            )
+        default:
+            return advanceCycleLift(state, perf: perf, focus: focus, roundingLb: roundingLb)
+        }
     }
 
     /// Accessory double progression: earn the top of the rep range across all
