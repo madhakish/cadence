@@ -1,9 +1,6 @@
 name: Deploy web app (Pages)
 
 on:
-  push:
-    branches: [main]
-    paths: ["web/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -17,6 +14,8 @@ concurrency:
 
 # Actions pinned to full commit SHAs (version in comment) — see ci.yml.
 jobs:
+  # Manual recovery path. Normal main-branch deploys live in ci.yml and reuse
+  # its already-passing web-tests job instead of running this suite twice.
   test:
     name: Web tests
     runs-on: ubuntu-latest

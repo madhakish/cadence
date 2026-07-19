@@ -462,7 +462,6 @@ struct HomeView: View {
         context.insert(session)
 
         let entry = SessionExercise(order: 0, exercise: exercise)
-        entry.session = session
         let plan = trackPlan(track)
         entry.targetWeightLb = track.suggestion.weightLb
         entry.plannedWeightLb = plan.weightLb
@@ -488,7 +487,6 @@ struct HomeView: View {
                                    loadBasis: exercise.loadBasis, implementCount: exercise.resolvedImplementCount,
                                    targetWeightLb: warmup.weightLb, plannedWeightLb: warmup.weightLb,
                                    plannedReps: warmup.reps, prescriptionBlock: .warmup)
-                set.sessionExercise = entry
                 context.insert(set)
                 entry.sets.append(set)
             }
@@ -507,7 +505,6 @@ struct HomeView: View {
                     targetWeightLb: warmup.weightLb, plannedWeightLb: warmup.weightLb,
                     plannedReps: warmup.reps, prescriptionBlock: .warmup
                 )
-                set.sessionExercise = entry
                 context.insert(set)
                 entry.sets.append(set)
             }
@@ -519,7 +516,6 @@ struct HomeView: View {
                                targetWeightLb: track.suggestion.weightLb,
                                plannedWeightLb: plan.weightLb, plannedReps: plan.reps,
                                prescriptionBlock: .work)
-            set.sessionExercise = entry
             context.insert(set)
             entry.sets.append(set)
         }

@@ -183,8 +183,9 @@ enum Seeder {
         ]
     }
 
-    /// Idempotent library top-up. Existing records remain user-owned; only a
-    /// missing movement group is backfilled.
+    /// Idempotent startup preparation. Existing training/program values remain
+    /// user-owned; generic taxonomy defaults and structural integrity repairs
+    /// are the only backfills.
     static func syncLibrary(context: ModelContext) throws {
         let existing = try context.fetch(FetchDescriptor<Exercise>())
         var byName = Dictionary(uniqueKeysWithValues: existing.map { ($0.name, $0) })
@@ -218,6 +219,7 @@ enum Seeder {
         }
         try clearRetiredRestStamps(byName: byName, context: context)
         try ensureWorkoutSessionIDs(context: context)
+        try normalizeRelationshipAliases(context: context)
         try snapshotLegacyLoadSemantics(context: context)
         try normalizeV4PrescriptionBlocks(context: context)
         try normalizeLegacyGymPlateInventories(context: context)
@@ -288,6 +290,93 @@ enum Seeder {
             }
             seen.insert(session.id)
         }
+    }
+
+    /// Older construction paths updated both sides of SwiftData inverse
+    /// relationships (for example `lift.day = day` and
+    /// `day.lifts.append(lift)`). SwiftData already mirrors either mutation,
+    /// so the second write could persist the same model reference more than
+    /// once. SwiftUI then rendered several rows backed by one object: editing
+    /// either row changed both and deleting one made unrelated rows appear to
+    /// rotate. Repair every affected collection in place without deleting any
+    /// model or changing user-owned programming values.
+    ///
+    /// Slot IDs are repaired at the same boundary because duplicate IDs cause
+    /// the same aliasing in SwiftUI and make completion routing ambiguous. A
+    /// matching historical session entry follows a repaired slot when its
+    /// exercise name and role identify that slot unambiguously.
+    static func normalizeRelationshipAliases(context: ModelContext) throws {
+        struct SlotRepair {
+            let programID: String
+            let oldID: String
+            let newID: String
+            let exerciseName: String
+            let role: String
+        }
+
+        var slotRepairs: [SlotRepair] = []
+        let programs = try context.fetch(FetchDescriptor<Program>())
+            .sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
+
+        for program in programs {
+            program.days = uniqueModels(program.days)
+            var seenSlotIDs: Set<String> = []
+
+            for day in program.orderedDays {
+                day.lifts = uniqueModels(day.lifts)
+                day.accessories = uniqueModels(day.accessories)
+
+                for lift in day.orderedLifts {
+                    let oldID = lift.id
+                    if UUID(uuidString: oldID) == nil || !seenSlotIDs.insert(oldID).inserted {
+                        let newID = uniqueUUID(excluding: &seenSlotIDs)
+                        lift.id = newID
+                        slotRepairs.append(SlotRepair(
+                            programID: program.id, oldID: oldID, newID: newID,
+                            exerciseName: lift.exerciseName, role: lift.role.rawValue
+                        ))
+                    }
+                }
+                for accessory in day.orderedAccessories {
+                    let oldID = accessory.id
+                    if UUID(uuidString: oldID) == nil || !seenSlotIDs.insert(oldID).inserted {
+                        let newID = uniqueUUID(excluding: &seenSlotIDs)
+                        accessory.id = newID
+                        slotRepairs.append(SlotRepair(
+                            programID: program.id, oldID: oldID, newID: newID,
+                            exerciseName: accessory.exerciseName, role: "accessory"
+                        ))
+                    }
+                }
+            }
+        }
+
+        for session in try context.fetch(FetchDescriptor<WorkoutSession>()) {
+            session.exercises = uniqueModels(session.exercises)
+            for entry in session.orderedExercises {
+                entry.sets = uniqueModels(entry.sets)
+                guard let programID = session.programID,
+                      let slotID = entry.programSlotID,
+                      let exerciseName = entry.exercise?.name else { continue }
+                let matches = slotRepairs.filter {
+                    $0.programID == programID && $0.oldID == slotID
+                        && $0.exerciseName == exerciseName
+                        && $0.role == (entry.programRole ?? "accessory")
+                }
+                if matches.count == 1 { entry.programSlotID = matches[0].newID }
+            }
+        }
+    }
+
+    private static func uniqueModels<Model: PersistentModel>(_ models: [Model]) -> [Model] {
+        var seen: Set<PersistentIdentifier> = []
+        return models.filter { seen.insert($0.persistentModelID).inserted }
+    }
+
+    private static func uniqueUUID(excluding seen: inout Set<String>) -> String {
+        var id = UUID().uuidString
+        while !seen.insert(id).inserted { id = UUID().uuidString }
+        return id
     }
 
     static let retiredRestStamps: [String: Int] = [

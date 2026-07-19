@@ -657,7 +657,6 @@ struct ProgramEditorView: View {
                 .onDelete(perform: deleteDays)
                 Button {
                     let day = ProgramDay(name: "Day \(program.days.count + 1)", order: program.days.count)
-                    day.program = program
                     program.days.append(day)
                     context.insert(day)
                     PersistenceErrorCenter.shared.save(context, operation: "Adding the program day")
@@ -732,8 +731,8 @@ struct ProgramEditorView: View {
         context.insert(copy)
         for sourceDay in program.orderedDays {
             let dayCopy = ProgramDay(name: sourceDay.name, order: sourceDay.order)
-            dayCopy.program = copy
             context.insert(dayCopy)
+            copy.days.append(dayCopy)
             for source in sourceDay.orderedLifts {
                 let lift = ProgramLift(exerciseName: source.exerciseName, role: source.role, order: source.order,
                                        prescription: source.prescription, warmupPolicy: source.warmupPolicy,
@@ -753,7 +752,6 @@ struct ProgramEditorView: View {
                 lift.dropIncrementLb = source.dropIncrementLb
                 lift.capacityManaged = source.capacityManaged
                 lift.maximumSets = source.maximumSets
-                lift.day = dayCopy
                 context.insert(lift)
                 dayCopy.lifts.append(lift)
             }
@@ -767,11 +765,9 @@ struct ProgramEditorView: View {
                 accessory.maximumSets = source.maximumSets
                 accessory.conditioningEffortRaw = source.conditioningEffortRaw
                 accessory.targetRPE = source.targetRPE
-                accessory.day = dayCopy
                 context.insert(accessory)
                 dayCopy.accessories.append(accessory)
             }
-            copy.days.append(dayCopy)
         }
         PersistenceErrorCenter.shared.save(context, operation: "Duplicating the program")
     }
@@ -834,9 +830,8 @@ struct ProgramDayEditorView: View {
                 case .lift:
                     let lift = ProgramLift(exerciseName: name, role: .complementary,
                                            order: day.lifts.count, baseWeightLb: 45, estimatedMaxLb: 52)
-                    lift.day = day
-                    day.lifts.append(lift)
                     context.insert(lift)
+                    day.lifts.append(lift)
                 case .accessory:
                     let type = exercises.first { $0.name == name }?.type
                     let acc = ProgramAccessory(exerciseName: name, order: day.accessories.count,
@@ -844,9 +839,8 @@ struct ProgramDayEditorView: View {
                                                minReps: 8, maxReps: 12, currentReps: 8,
                                                targetSeconds: type == .conditioning ? 1_200 : 30,
                                                weightLb: 0, incrementLb: 0)
-                    acc.day = day
-                    day.accessories.append(acc)
                     context.insert(acc)
+                    day.accessories.append(acc)
                 }
                 PersistenceErrorCenter.shared.save(context, operation: "Adding the program exercise")
                 picking = nil

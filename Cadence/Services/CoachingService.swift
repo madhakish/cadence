@@ -170,9 +170,8 @@ enum CoachingService {
                 weightLb: 0,
                 incrementLb: 0
             )
-            accessory.day = day
-            day.accessories.append(accessory)
             context.insert(accessory)
+            day.accessories.append(accessory)
             result = "Added \(sets) sets of \(exercise.name) to \(day.name)."
         case .capacityPlan(let adjustments):
             // Resolve every library/day dependency before mutating so a
@@ -215,9 +214,8 @@ enum CoachingService {
                         weightLb: 0,
                         incrementLb: 0
                     )
-                    accessory.day = resolved.3
-                    resolved.3.accessories.append(accessory)
                     context.insert(accessory)
+                    resolved.3.accessories.append(accessory)
                     messages.append("\(resolved.4.name) +\(sets)")
                 }
             }

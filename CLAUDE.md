@@ -147,6 +147,9 @@ Never create release tags or hand-edit versions; semantic-release owns them.
   programmed values. Preserve manual weight/repetition adjustments.
 - Editing reps cannot reset weight; editing weight cannot reset other set state.
 - Sets are independently addable/removable and deterministically ordered.
+- Update only one side of a SwiftData inverse relationship; never both assign
+  the child inverse and append that child to the parent collection. Collection
+  aliases produce mirrored editor rows and destructive deletes.
 - Planned/completed/skipped and warmup/working states stay distinct.
 - Load basis and implement count are explicit; do not guess from an exercise
   name after semantics have been persisted.

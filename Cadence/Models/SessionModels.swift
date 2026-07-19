@@ -2,6 +2,11 @@ import Foundation
 import SwiftData
 import CadenceCore
 
+private func uniqueSessionModels<Model: PersistentModel>(_ models: [Model]) -> [Model] {
+    var seen: Set<PersistentIdentifier> = []
+    return models.filter { seen.insert($0.persistentModelID).inserted }
+}
+
 /// Per-set quality flags. One thumb-tap each in the logger.
 enum SetFlag: String, Codable, CaseIterable {
     case clean
@@ -53,7 +58,7 @@ final class WorkoutSession {
     }
 
     var orderedExercises: [SessionExercise] {
-        exercises.sorted { $0.order < $1.order }
+        uniqueSessionModels(exercises).sorted { $0.order < $1.order }
     }
 
     /// True if this session contains a movement watched at the knee
@@ -106,7 +111,7 @@ final class SessionExercise {
         set { phaseRaw = newValue?.rawValue }
     }
 
-    var orderedSets: [SetEntry] { sets.sorted { $0.order < $1.order } }
+    var orderedSets: [SetEntry] { uniqueSessionModels(sets).sorted { $0.order < $1.order } }
     var plannedWorkingSets: [SetEntry] { orderedSets.filter { !$0.isWarmup } }
     /// Only performed work belongs in history, PRs, volume, or progression.
     var workingSets: [SetEntry] { plannedWorkingSets.filter { $0.status == .completed } }

@@ -728,7 +728,7 @@ enum ImportService {
         prog.maximumAddedSetsPerRotation = p.maximumAddedSetsPerRotation ?? 6
         for d in (p.days ?? []) {
             let day = ProgramDay(name: d.name ?? "Day", order: d.order ?? 0)
-            day.program = prog
+            prog.days.append(day)
             for (slotOrder, l) in (d.lifts ?? []).enumerated() {
                 let lift = ProgramLift(id: l.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? UUID().uuidString,
                                        exerciseName: l.exerciseName ?? "", role: LiftRole(rawValue: l.role ?? "main") ?? .main,
@@ -759,7 +759,6 @@ enum ImportService {
                     lift.pendingNote = l.pending?.note
                 }
                 lift.revertToExerciseName = l.revertToExerciseName
-                lift.day = day
                 day.lifts.append(lift)
             }
             for (slotOrder, a) in (d.accessories ?? []).enumerated() {
@@ -775,10 +774,8 @@ enum ImportService {
                 acc.maximumSets = a.maximumSets ?? 6
                 acc.conditioningEffortRaw = a.conditioningEffort ?? "easy"
                 acc.targetRPE = a.targetRPE ?? 0
-                acc.day = day
                 day.accessories.append(acc)
             }
-            prog.days.append(day)
         }
         return prog
     }
@@ -814,7 +811,6 @@ enum ImportService {
             entry.fallbackWeightLb = e.fallbackWeightLb
             entry.prescriptionStyleRaw = e.prescriptionStyle ?? ""
             entry.phaseRaw = recoverPhase(e.phase)
-            entry.session = session
             for (si, x) in (e.sets ?? []).enumerated() {
                 let set = SetEntry(order: si, weightLb: x.weightLb ?? 0, reps: x.reps ?? 0,
                                    isWarmup: x.isWarmup ?? false,
@@ -838,7 +834,6 @@ enum ImportService {
                                    plannedDurationSeconds: x.plannedDurationSeconds,
                                    prescriptionBlock: PrescriptionBlockKind(rawValue: x.prescriptionBlock ?? "")
                                        ?? (x.isWarmup == true ? .warmup : .work))
-                set.sessionExercise = entry
                 entry.sets.append(set)
             }
             session.exercises.append(entry)

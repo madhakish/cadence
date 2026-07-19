@@ -283,7 +283,6 @@ struct ActiveSessionView: View {
 
     private func addExercise(_ exercise: Exercise) {
         let entry = SessionExercise(order: session.exercises.count, exercise: exercise)
-        entry.session = session
         context.insert(entry)
         session.exercises.append(entry)
         PersistenceErrorCenter.shared.save(context, operation: "Adding the exercise")
@@ -697,7 +696,6 @@ private struct ExerciseSection: View {
             plannedDurationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil,
             prescriptionBlock: entry.exercise?.type == .conditioning ? .conditioning : .work
         )
-        set.sessionExercise = entry
         context.insert(set)
         entry.sets.append(set)
         PersistenceErrorCenter.shared.save(context, operation: "Adding the set")
@@ -751,7 +749,6 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
                                plannedWeightLb: target.weightLb,
                                plannedReps: target.reps,
                                prescriptionBlock: .warmup)
-            set.sessionExercise = entry
             context.insert(set)
             rebuilt.append(set)
         }
