@@ -312,22 +312,37 @@ public enum ProgramProgression {
     /// the rule's fixed increment; misses hold, and `stallLimit` consecutive
     /// misses deload by the rule's fraction and restart the count. The e1RM
     /// smooths from the top set (fives are honest samples).
+    /// A performed top set that actually happened. A skipped or fully-missed
+    /// top set reports weight/reps 0; smoothing that into the e1RM would crush
+    /// the estimate by 30% per occurrence, so only real samples smooth.
+    static func smoothedMax(_ state: ProgramLiftState, perf: CycleLiftPerformance) -> Double {
+        guard perf.topSetWeightLb > 0, perf.topSetReps >= 1 else { return state.estimatedMaxLb }
+        let sample = epleyE1RM(weightLb: perf.topSetWeightLb, reps: perf.topSetReps)
+        return smoothE1RM(prior: state.estimatedMaxLb, sample: sample)
+    }
+
     public static func advanceLinearLift(
         _ state: ProgramLiftState, perf: CycleLiftPerformance, rule: LinearRule,
         roundingLb: Double = ProgramEngine.defaultRoundingLb
     ) -> ProgressionResult {
         let grade = gradeCycle(perf)
-        let sample = epleyE1RM(weightLb: perf.topSetWeightLb, reps: perf.topSetReps)
         var next = state
-        next.estimatedMaxLb = smoothE1RM(prior: state.estimatedMaxLb, sample: sample)
+        next.estimatedMaxLb = smoothedMax(state, perf: perf)
         var note: String?
 
-        if grade == .success {
+        switch grade {
+        case .success:
             next.stallCount = 0
             next.baseWeightLb = state.baseWeightLb + rule.incrementLb
             next.lastIncrementLb = rule.incrementLb
             note = "Completed as prescribed — add \(Weight.trim(rule.incrementLb)) lb next time."
-        } else {
+        case .hold:
+            // Grindy but every rep was made. The published novice rule is to
+            // grind and keep adding; the conservative middle is to hold the
+            // weight WITHOUT accruing a miss toward the deload.
+            next.lastIncrementLb = 0
+            note = "Grindy session — holding weight; misses were not counted."
+        case .fail:
             next.stallCount = state.stallCount + 1
             next.lastIncrementLb = 0
             if next.stallCount >= rule.stallLimit {
@@ -364,16 +379,18 @@ public enum ProgramProgression {
         switch style {
         case .fiveThreeOne:
             let grade = gradeCycle(perf)
-            let sample = epleyE1RM(weightLb: perf.topSetWeightLb, reps: perf.topSetReps)
             var next = state
-            next.estimatedMaxLb = smoothE1RM(prior: state.estimatedMaxLb, sample: sample)
+            next.estimatedMaxLb = smoothedMax(state, perf: perf)
             var note: String?
             if grade == .success {
                 next.stallCount = 0
                 next.baseWeightLb = state.baseWeightLb + increment
                 next.lastIncrementLb = increment
                 note = "Hit the top set — training max +\(Weight.trim(increment)) lb next cycle."
-            } else if grade == .fail {
+            } else if grade == .fail, perf.completedSets < perf.prescribedSets {
+                // Wendler's reset applies only to genuinely missing the "+"
+                // set's minimum reps. A fail from an autoreg drop or a light
+                // manual edit made the reps at reduced load — that holds.
                 let old = state.baseWeightLb
                 next.baseWeightLb = Swift.max(roundingLb, Weight.round(old - 3 * increment, to: roundingLb))
                 next.stallCount = 0
@@ -382,14 +399,15 @@ public enum ProgramProgression {
             } else {
                 next.stallCount = state.stallCount + 1
                 next.lastIncrementLb = 0
-                note = "Grindy top set — holding the training max this cycle."
+                note = grade == .fail
+                    ? "Top set compromised — holding the training max this cycle."
+                    : "Grindy top set — holding the training max this cycle."
             }
             return ProgressionResult(state: next, grade: grade, note: note)
         case .maxEffort:
             let grade = gradeCycle(perf)
-            let sample = epleyE1RM(weightLb: perf.topSetWeightLb, reps: perf.topSetReps)
             var next = state
-            next.estimatedMaxLb = smoothE1RM(prior: state.estimatedMaxLb, sample: sample)
+            next.estimatedMaxLb = smoothedMax(state, perf: perf)
             var note: String?
             if grade == .success {
                 next.stallCount = 0

@@ -38,7 +38,8 @@ struct WorkoutPreviewView: View {
         let raw = targetPlan(for: lift)
         let exercise = exercises.first { $0.name == lift.exerciseName }
         let weightLb = ProgramSession.achievableWeight(
-            raw.weightLb, exercise: exercise, isMain: lift.role.rawValue == "main",
+            raw.weightLb, exercise: exercise,
+            isMain: lift.role.rawValue == "main" || lift.prescription.buildsOwnSessionShape,
             gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb,
             stepLb: program.roundingLb, phase: phase
         )

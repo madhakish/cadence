@@ -705,7 +705,7 @@ const BACKUP_ENUMS = {
   prescriptions: ["automatic", "wave", "offsetWave", "secondary", "hypertrophy", "technique", "doubleProgression",
     "linearFives", "texasVolume", "texasLight", "texasIntensity", "fiveThreeOne", "maxEffort", "dynamicEffort"],
   warmupPolicies: ["automatic", "full", "short", "none"],
-  prescriptionBlocks: ["warmup", "primer", "topSingle", "work", "backoff", "conditioning"],
+  prescriptionBlocks: ["warmup", "primer", "topSingle", "ramp", "work", "backoff", "conditioning"],
   movementPatterns: C.MOVEMENT_PATTERNS,
   gateStatuses: ["open", "watch", "shelved", "re-entry"],
   conditioningEfforts: ["easy", "interval", "mixed"],

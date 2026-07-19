@@ -239,6 +239,19 @@ final class ProgramProgressionTests: XCTestCase {
         let third = ProgramProgression.advanceLinearLift(stalled, perf: fivesPerf(completedSets: 2, topSetReps: 4), rule: rule, roundingLb: 5)
         XCTAssertEqual(third.state.baseWeightLb, 185)
         XCTAssertEqual(third.state.stallCount, 0)
+
+        let grindy = CycleLiftPerformance(prescribedSets: 3, prescribedReps: 5, completedSets: 3,
+                                          anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 2,
+                                          topSetWeightLb: 205, topSetReps: 5)
+        let heldGrind = ProgramProgression.advanceLinearLift(stalled, perf: grindy, rule: rule, roundingLb: 5)
+        XCTAssertEqual(heldGrind.state.baseWeightLb, 205, "grindy-but-complete session holds the weight")
+        XCTAssertEqual(heldGrind.state.stallCount, 2, "grinding never counts as a miss toward the deload")
+
+        let skipped = CycleLiftPerformance(prescribedSets: 3, prescribedReps: 5, completedSets: 0,
+                                           anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0,
+                                           topSetWeightLb: 0, topSetReps: 0)
+        let heldSkip = ProgramProgression.advanceLinearLift(state, perf: skipped, rule: rule, roundingLb: 5)
+        XCTAssertEqual(heldSkip.state.estimatedMaxLb, 280, "a fully missed top set never smooths the e1RM toward zero")
     }
 
     private func topSetPerf(made: Bool) -> CycleLiftPerformance {
@@ -256,6 +269,15 @@ final class ProgramProgressionTests: XCTestCase {
                                                           style: .fiveThreeOne, movementGroup: "squat", roundingLb: 5)
         XCTAssertEqual(reset.state.baseWeightLb, 270)
         XCTAssertEqual(reset.grade, .fail)
+        XCTAssertEqual(reset.state.estimatedMaxLb, 330, "531 reset never smooths the e1RM off a missed set")
+
+        let droppedButMade = CycleLiftPerformance(prescribedSets: 1, prescribedReps: 1, completedSets: 1,
+                                                  anyStoppedEarly: false, anyDroppedLoad: true, grindyOrWobbleSets: 0,
+                                                  topSetWeightLb: 285, topSetReps: 3)
+        let held = ProgramProgression.advanceProgramLift(state, perf: droppedButMade, focus: .strength,
+                                                         style: .fiveThreeOne, movementGroup: "squat", roundingLb: 5)
+        XCTAssertEqual(held.state.baseWeightLb, 300, "531 autoreg drop that made the reps holds the TM — no reset")
+        XCTAssertEqual(held.grade, .fail)
     }
 
     func testMaxEffortAddsAfterMadeSinglesAndHoldsOnMisses() {

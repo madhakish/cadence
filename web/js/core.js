@@ -595,14 +595,14 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
   }
   if (style === "fiveThreeOne") {
     // The two ramp sets below the "+" set. Real prescribed work, but only the
-    // top set gates progression, so they carry the non-graded backoff kind;
+    // top set gates progression, so they carry the non-graded ramp kind;
     // block order puts them before the top set.
     const ramp = {
       1: [[0.65, 5], [0.75, 5]], 2: [[0.70, 3], [0.80, 3]],
       3: [[0.75, 5], [0.85, 3]], 4: [[0.40, 5], [0.50, 5]],
     }[state.nextPhase];
     for (const [pct, reps] of ramp) {
-      blocks.push({ kind: "backoff", weightLb: roundTo(state.baseWeightLb * pct, step), sets: 1, reps });
+      blocks.push({ kind: "ramp", weightLb: roundTo(state.baseWeightLb * pct, step), sets: 1, reps });
     }
   }
   blocks.push({ kind: "work", weightLb: work.weightLb, sets: work.sets, reps: work.reps });
@@ -879,12 +879,19 @@ export function linearRule(style, movementGroup = null) {
   return { incrementLb: 5, stallLimit: 2, deloadFraction: 0.95 };
 }
 
+// A performed top set that actually happened. A skipped or fully-missed top
+// set reports weight/reps 0; smoothing that into the e1RM would crush the
+// estimate by 30% per occurrence, so only real samples smooth. Mirrors
+// ProgramProgression.smoothedMax.
+const smoothedMax = (state, perf) => (perf.topSetWeightLb > 0 && perf.topSetReps >= 1
+  ? smoothE1RM(state.estimatedMaxLb, epleyE1RM(perf.topSetWeightLb, perf.topSetReps))
+  : state.estimatedMaxLb);
+
 // Advance a per-exposure linear slot after a banked session. Mirrors
 // ProgramProgression.advanceLinearLift.
 export function advanceLinearLift(state, perf, rule, roundingLb = DEFAULT_ROUNDING_LB) {
   const grade = gradeCycle(perf);
-  const sample = epleyE1RM(perf.topSetWeightLb, perf.topSetReps);
-  const next = { ...state, estimatedMaxLb: smoothE1RM(state.estimatedMaxLb, sample) };
+  const next = { ...state, estimatedMaxLb: smoothedMax(state, perf) };
   let note = null;
 
   if (grade === "success") {
@@ -892,6 +899,12 @@ export function advanceLinearLift(state, perf, rule, roundingLb = DEFAULT_ROUNDI
     next.baseWeightLb = state.baseWeightLb + rule.incrementLb;
     next.lastIncrementLb = rule.incrementLb;
     note = `Completed as prescribed — add ${trim(rule.incrementLb)} lb next time.`;
+  } else if (grade === "hold") {
+    // Grindy but every rep was made. The published novice rule is to grind
+    // and keep adding; the conservative middle is to hold the weight WITHOUT
+    // accruing a miss toward the deload.
+    next.lastIncrementLb = 0;
+    note = "Grindy session — holding weight; misses were not counted.";
   } else {
     next.stallCount = state.stallCount + 1;
     next.lastIncrementLb = 0;
@@ -915,15 +928,17 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
   const increment = lower ? 10 : 5;
   if (style === "fiveThreeOne") {
     const grade = gradeCycle(perf);
-    const sample = epleyE1RM(perf.topSetWeightLb, perf.topSetReps);
-    const next = { ...state, estimatedMaxLb: smoothE1RM(state.estimatedMaxLb, sample) };
+    const next = { ...state, estimatedMaxLb: smoothedMax(state, perf) };
     let note = null;
     if (grade === "success") {
       next.stallCount = 0;
       next.baseWeightLb = state.baseWeightLb + increment;
       next.lastIncrementLb = increment;
       note = `Hit the top set — training max +${trim(increment)} lb next cycle.`;
-    } else if (grade === "fail") {
+    } else if (grade === "fail" && perf.completedSets < perf.prescribedSets) {
+      // Wendler's reset applies only to genuinely missing the "+" set's
+      // minimum reps. A fail from an autoreg drop or a light manual edit
+      // made the reps at reduced load — that holds.
       const old = state.baseWeightLb;
       next.baseWeightLb = Math.max(roundingLb, roundTo(old - 3 * increment, roundingLb));
       next.stallCount = 0;
@@ -932,14 +947,15 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
     } else {
       next.stallCount = state.stallCount + 1;
       next.lastIncrementLb = 0;
-      note = "Grindy top set — holding the training max this cycle.";
+      note = grade === "fail"
+        ? "Top set compromised — holding the training max this cycle."
+        : "Grindy top set — holding the training max this cycle.";
     }
     return { state: next, grade, note };
   }
   if (style === "maxEffort") {
     const grade = gradeCycle(perf);
-    const sample = epleyE1RM(perf.topSetWeightLb, perf.topSetReps);
-    const next = { ...state, estimatedMaxLb: smoothE1RM(state.estimatedMaxLb, sample) };
+    const next = { ...state, estimatedMaxLb: smoothedMax(state, perf) };
     let note = null;
     if (grade === "success") {
       next.stallCount = 0;

@@ -348,16 +348,21 @@ enum SessionCompletion {
         // fives and the Texas day slots advance their own base after every
         // banked exposure instead of waiting for a Peak grade.
         for lift in day.lifts where lift.prescription.advancesPerExposure && lift.prescription != .doubleProgression {
+            // Match like the week-3 grading loop (slot ID, or name + role for
+            // slot-ID-less legacy entries), then require a completed WORK
+            // block set — both mirrored 1:1 with the web banking gate.
             guard let entry = session.exercises.first(where: {
-                ($0.programSlotID == lift.id || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName))
-                    && !$0.workingSets.isEmpty
-            }) else { continue }
+                $0.programSlotID == lift.id
+                    || ($0.programSlotID == nil && $0.exercise?.name == lift.exerciseName
+                        && $0.programRole == lift.role.rawValue)
+            }), entry.workingSets.contains(where: { $0.prescriptionBlock == .work }) else { continue }
             let loadStep = ProgramEngine.loadStep(
                 programRoundingLb: program.roundingLb,
                 exerciseType: entry.exercise?.typeRaw
             )
             let rule = ProgramProgression.linearRule(for: lift.prescription,
                                                      movementGroup: entry.exercise?.movementGroup)
+            let priorBase = lift.baseWeightLb
             let result = ProgramProgression.advanceLinearLift(
                 lift.coreState, perf: cyclePerf(entry, roundingLb: loadStep),
                 rule: rule, roundingLb: loadStep
@@ -376,11 +381,15 @@ enum SessionCompletion {
             // A and Day B, Texas A/B day pairs) share ONE progression: mirror
             // the advanced state into every twin so "weight every session"
             // holds across alternating days instead of each slot advancing
-            // every other exposure.
+            // every other exposure. Only twins still in lockstep (same base
+            // before this advance) are synchronized — a deliberately diverged
+            // or manually edited twin keeps its own base; edits must never
+            // disappear.
             for twinDay in program.days {
                 for twin in twinDay.lifts where twin.id != lift.id
                     && twin.exerciseName == lift.exerciseName
-                    && twin.prescription == lift.prescription {
+                    && twin.prescription == lift.prescription
+                    && abs(twin.baseWeightLb - priorBase) < 0.001 {
                     twin.baseWeightLb = lift.baseWeightLb
                     twin.estimatedMaxLb = lift.estimatedMaxLb
                     twin.stallCount = lift.stallCount
@@ -463,8 +472,12 @@ enum SessionCompletion {
                     lift.pendingStallCount = nil
                     lift.pendingLastIncrementLb = nil
                     lift.pendingNote = nil
-                } else {
-                    // Peak never banked → treat as a stall.
+                } else if !lift.prescription.buildsOwnSessionShape {
+                    // Wave-family slots: a peak never banked is a stall toward
+                    // the 10% rebuild. The methodology cycle styles (5/3/1,
+                    // max/dynamic effort) define their own miss rules and
+                    // simply hold when the graded week was skipped — a
+                    // skipped week is not missed reps.
                     lift.stallCount += 1
                     lift.lastIncrementLb = 0
                     if lift.stallCount >= ProgramProgression.stallLimit {

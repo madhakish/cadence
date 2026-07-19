@@ -137,6 +137,9 @@ public enum PrescriptionBlockKind: String, Codable, CaseIterable, Sendable {
     case warmup
     case primer
     case topSingle
+    /// Prescribed sub-maximal sets BEFORE the day's top work (the 5/3/1
+    /// 65/75% sets). Real work, but not the set that gates progression.
+    case ramp
     case work
     case backoff
     case conditioning
@@ -463,7 +466,7 @@ public enum ProgramEngine {
         if style == .fiveThreeOne {
             // The two ramp sets below the "+" set. They are real prescribed
             // work but only the top set gates progression, so they carry the
-            // non-graded backoff kind; block order puts them before the top set.
+            // non-graded ramp kind; block order puts them before the top set.
             let ramp: [(pct: Double, reps: Int)]
             switch state.nextPhase {
             case .volume: ramp = [(0.65, 5), (0.75, 5)]
@@ -473,7 +476,7 @@ public enum ProgramEngine {
             }
             for step531 in ramp {
                 blocks.append(PrescriptionBlock(
-                    kind: .backoff,
+                    kind: .ramp,
                     weightLb: Weight.round(state.baseWeightLb * step531.pct, to: step),
                     sets: 1, reps: step531.reps
                 ))

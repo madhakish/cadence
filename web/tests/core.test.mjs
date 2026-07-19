@@ -743,7 +743,7 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   eq(`${p.weightLb}/${p.sets}x${p.reps}`, "180/1x5", "531 deload 60%×5");
 
   const pres531 = C.sessionPrescription(tm(3), 5, "barbell", "squat", "main", "strength", "fiveThreeOne");
-  eq(pres531.blocks.map((b) => b.kind).join(","), "backoff,backoff,work", "531 ramp precedes the top set");
+  eq(pres531.blocks.map((b) => b.kind).join(","), "ramp,ramp,work", "531 ramp precedes the top set");
   eq(pres531.blocks.map((b) => b.weightLb).join(","), "225,255,285", "531 week-3 ramp 75/85/95%");
   eq(pres531.blocks.map((b) => b.reps).join(","), "5,3,1", "531 week-3 reps 5/3/1");
 
@@ -796,6 +796,13 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   const third = C.advanceLinearLift({ ...lin, stallCount: 2 }, miss, rule, 5);
   eq(third.state.baseWeightLb, 185, "third consecutive miss deloads 10%");
   eq(third.state.stallCount, 0, "deload restarts the count");
+  const grindy = { ...fives, grindyOrWobbleSets: 2 };
+  const heldGrind = C.advanceLinearLift({ ...lin, stallCount: 2 }, grindy, rule, 5);
+  eq(heldGrind.state.baseWeightLb, 205, "grindy-but-complete session holds the weight");
+  eq(heldGrind.state.stallCount, 2, "grinding never counts as a miss toward the deload");
+  const skipped = { ...miss, completedSets: 0, topSetWeightLb: 0, topSetReps: 0 };
+  const heldSkip = C.advanceLinearLift(lin, skipped, rule, 5);
+  eq(heldSkip.state.estimatedMaxLb, 280, "a fully missed top set never smooths the e1RM toward zero");
 
   // Cycle-graded methodology increments.
   const cleanTop = { prescribedSets: 1, prescribedReps: 1, completedSets: 1, anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false, grindyOrWobbleSets: 0, topSetWeightLb: 285, topSetReps: 3 };
@@ -805,6 +812,11 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   const missedTop = { ...cleanTop, completedSets: 0, anyStoppedEarly: true, topSetReps: 0 };
   const tmReset = C.advanceProgramLift(tmState, missedTop, "strength", "fiveThreeOne", "squat", 5);
   eq(tmReset.state.baseWeightLb, 270, "531 missed minimum resets TM three cycles back");
+  eq(tmReset.state.estimatedMaxLb, 330, "531 reset never smooths the e1RM off a missed set");
+  const droppedButMade = { ...cleanTop, anyDroppedLoad: true };
+  const tmHeld = C.advanceProgramLift(tmState, droppedButMade, "strength", "fiveThreeOne", "squat", 5);
+  eq(tmHeld.state.baseWeightLb, 300, "531 autoreg drop that made the reps holds the TM — no reset");
+  eq(tmHeld.grade, "fail", "the compromised cycle still fails the grade");
   const meUp = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, cleanTop, "strength", "maxEffort", "press", 5);
   eq(meUp.state.baseWeightLb, 320, "ME upper target +5 after a made single");
   const meMiss = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);

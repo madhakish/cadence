@@ -240,7 +240,7 @@ final class ProgramEngineTests: XCTestCase {
             for: CycleState(baseWeightLb: 300, nextPhase: .peak),
             programRoundingLb: 5, exerciseType: "barbell", movementGroup: "squat",
             prescriptionStyle: .fiveThreeOne)
-        XCTAssertEqual(prescription.blocks.map(\.kind), [.backoff, .backoff, .work])
+        XCTAssertEqual(prescription.blocks.map(\.kind), [.ramp, .ramp, .work])
         XCTAssertEqual(prescription.blocks.map(\.weightLb), [225, 255, 285])
         XCTAssertEqual(prescription.blocks.map(\.reps), [5, 3, 1])
         XCTAssertEqual(prescription.mainWork.weightLb, 285)

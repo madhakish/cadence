@@ -1004,7 +1004,7 @@
           {
             "exercise": "Barbell Bench",
             "role": "main",
-            "baseWeightLb": 115,
+            "baseWeightLb": 110,
             "estimatedMaxLb": 125,
             "prescription": "fiveThreeOne",
             "sets": 0,
@@ -1038,7 +1038,7 @@
           {
             "exercise": "Back Squat",
             "role": "main",
-            "baseWeightLb": 185,
+            "baseWeightLb": 180,
             "estimatedMaxLb": 205,
             "prescription": "fiveThreeOne",
             "sets": 0,
@@ -1082,7 +1082,7 @@
           {
             "exercise": "Back Squat",
             "role": "main",
-            "baseWeightLb": 185,
+            "baseWeightLb": 180,
             "estimatedMaxLb": 205,
             "prescription": "maxEffort",
             "sets": 0,
@@ -1125,7 +1125,7 @@
           {
             "exercise": "Barbell Bench",
             "role": "main",
-            "baseWeightLb": 115,
+            "baseWeightLb": 110,
             "estimatedMaxLb": 125,
             "prescription": "maxEffort",
             "sets": 0,

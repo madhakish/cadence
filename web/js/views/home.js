@@ -140,7 +140,7 @@ export async function render(host) {
         { ...l, workingSets: l.doubleProgressionSets ?? 3 });
       // Preview the same snapped weight the session will store (secondary barbell lifts).
       const targetWeightLb = plan.weightLb;
-      plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb, gym, program.currentWeek);
+      plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main" || C.buildsOwnSessionShape(l.prescription || "automatic"), barLb, program.roundingLb, gym, program.currentWeek);
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
         ui.h("div", { class: "lead" },
           ui.h("span", { class: "title", text: l.exerciseName }),
@@ -252,7 +252,7 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
           program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
           { ...l, workingSets: l.doubleProgressionSets ?? 3 });
         const targetWeightLb = plan.weightLb;
-        plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main", barLb, program.roundingLb, gym, program.currentWeek);
+        plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main" || C.buildsOwnSessionShape(l.prescription || "automatic"), barLb, program.roundingLb, gym, program.currentWeek);
         liftCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
           ui.h("div", { class: "lead" },
             ui.h("span", { class: "title", text: l.exerciseName }),

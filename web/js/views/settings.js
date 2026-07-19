@@ -331,7 +331,13 @@ async function programEditor(p) {
           { cycleNumber: 1, baseWeightLb: lift.baseWeightLb, nextPhase: 1, incrementLb: 0 },
           p.roundingLb, exercise.type, exercise.movementGroup, lift.role, p.focus, lift.prescription || "automatic",
           { ...lift, workingSets: lift.doubleProgressionSets ?? 3 });
-          addSets(exercise.movementGroup, exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup), plan.sets);
+          // Published methodology slots deliberately shape their own weekly
+          // balance (squat 3×/week, one heavy pull); the generic balance
+          // heuristics would permanently flag the canon, so they only count
+          // wave-family slots.
+          if (!C.buildsOwnSessionShape(lift.prescription || "automatic")) {
+            addSets(exercise.movementGroup, exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup), plan.sets);
+          }
           if ((exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup)) === "olympicPower" && plan.reps > 3) warnings.push(`${lift.exerciseName} is power work; keep programmed sets at 1–3 reps.`);
         }
       }

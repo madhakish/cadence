@@ -24,11 +24,13 @@ These values must change together.
 Version 4 widens the program-lift (and session-exercise) `prescription`
 vocabulary with the training-methodology styles: `linearFives`,
 `texasVolume`, `texasLight`, `texasIntensity`, `fiveThreeOne`, `maxEffort`,
-and `dynamicEffort`. No field shapes changed. The version exists so an
-older importer rejects a backup containing the new styles cleanly by
-version instead of failing enum validation mid-file; version ≤3 backups
-import unchanged. For `fiveThreeOne` slots the persisted `baseWeightLb` is
-the training max, not a working weight.
+and `dynamicEffort`. It also adds the `ramp` set kind to `prescriptionBlock` —
+prescribed sub-maximal sets before the day's top work (the 5/3/1 65/75%
+sets), distinct from post-work `backoff` sets. No field shapes changed.
+The version exists so an older importer rejects a backup containing the
+new styles cleanly by version instead of failing enum validation
+mid-file; version ≤3 backups import unchanged. For `fiveThreeOne` slots
+the persisted `baseWeightLb` is the training max, not a working weight.
 
 ## Version 3 coaching and prescription contract
 

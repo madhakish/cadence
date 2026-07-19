@@ -293,7 +293,11 @@ struct ActiveSessionView: View {
     private func dropLoad(_ entry: SessionExercise, reason: AutoregReason) {
         let ordered = entry.orderedSets
         let bar = entry.barID.map { Bar.by(id: $0) } ?? gym?.defaultBar ?? .bar45lb
-        let firstPlannedWork = ordered.first { !$0.isWarmup && $0.status == .planned }
+        // The configured drop derives from the MAIN work set. Ramp/backoff
+        // blocks can precede or trail it at lighter loads (5/3/1, max effort),
+        // so match the work block, not just the first non-warmup set.
+        let firstPlannedWork = ordered.first { !$0.isWarmup && $0.status == .planned && $0.prescriptionBlock == .work }
+            ?? ordered.first { !$0.isWarmup && $0.status == .planned }
         let fixedDrop = firstPlannedWork.flatMap { current in
             entry.fallbackWeightLb.map { max(0, current.weightLb - $0) }
         }
@@ -824,6 +828,8 @@ private struct SetRow: View {
                                 .font(.caption2).foregroundStyle(.secondary)
                         } else if set.prescriptionBlock == .topSingle {
                             Text("top single").font(.caption2).foregroundStyle(Theme.accent)
+                        } else if set.prescriptionBlock == .ramp {
+                            Text("ramp").font(.caption2).foregroundStyle(.secondary)
                         } else if set.prescriptionBlock == .backoff {
                             Text("back-off").font(.caption2).foregroundStyle(.secondary)
                         }

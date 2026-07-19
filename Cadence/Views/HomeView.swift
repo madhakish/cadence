@@ -77,7 +77,8 @@ struct HomeView: View {
         let exercise = exercises.first { $0.name == lift.exerciseName }
         // Preview the same snapped weight the session will store (secondary barbell lifts).
         let weightLb = ProgramSession.achievableWeight(
-            plan.weightLb, exercise: exercise, isMain: lift.role.rawValue == "main",
+            plan.weightLb, exercise: exercise,
+            isMain: lift.role.rawValue == "main" || lift.prescription.buildsOwnSessionShape,
             gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb,
             stepLb: program.roundingLb, phase: phase)
         return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps, phase: plan.phase, cycleNumber: plan.cycleNumber)
