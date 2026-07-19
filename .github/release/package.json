@@ -5,6 +5,7 @@
   "description": "Pinned semantic-release toolchain for the release job in ci.yml. The lockfile is the supply-chain pin: CI installs exactly these bytes via `npm ci` instead of resolving packages from the registry at release time. Update via Dependabot PRs only.",
   "devDependencies": {
     "@semantic-release/exec": "7.1.0",
+    "conventional-changelog-conventionalcommits": "10.2.1",
     "semantic-release": "25.0.6"
   }
 }

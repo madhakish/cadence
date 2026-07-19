@@ -35,26 +35,31 @@ final class AppBootstrap: ObservableObject {
         container = nil
         errorMessage = nil
         isTemporary = false
-        do {
-            let loaded: ModelContainer
+        let candidates: [(String, () throws -> ModelContainer)] = [
+            ("V3 staged migration", { try self.makeContainer(migrationPlan: CadenceV3MigrationPlan.self) }),
+            ("pre-72 staged migration", { try self.makeContainer(migrationPlan: CadencePre72MigrationPlan.self) }),
+            ("72 staged migration", { try self.makeContainer(migrationPlan: Cadence72MigrationPlan.self) }),
+            // Builds before the schema repair changed the advertised V1
+            // checksum in place. If an installed checksum is not one of the
+            // two snapshots we know by name, let Core Data infer the same
+            // additive lightweight migration from the store metadata. This is
+            // non-destructive and is deliberately the last attempt.
+            ("inferred lightweight migration", { try self.makeUnplannedContainer() }),
+        ]
+        var failures: [String] = []
+        for (label, open) in candidates {
             do {
-                // Normal path after PR #73: the installed store is immutable
-                // V3 and upgrades through the explicit V3→V4 stage.
-                loaded = try makeContainer(migrationPlan: CadenceV3MigrationPlan.self)
+                let loaded = try open()
+                try prepare(loaded)
+                container = loaded
+                return
             } catch {
-                do {
-                    loaded = try makeContainer(migrationPlan: CadencePre72MigrationPlan.self)
-                } catch {
-                    // PR #72 changed the V1 checksum in place. A store first
-                    // created by that build requires its separate linear plan.
-                    loaded = try makeContainer(migrationPlan: Cadence72MigrationPlan.self)
-                }
+                let nsError = error as NSError
+                failures.append("\(label): \(nsError.domain) \(nsError.code)")
             }
-            try prepare(loaded)
-            container = loaded
-        } catch {
-            errorMessage = error.localizedDescription
         }
+        errorMessage = "Cadence could not match this store to a supported schema. "
+            + failures.joined(separator: " · ")
     }
 
     func openTemporaryStore() {
@@ -83,6 +88,12 @@ final class AppBootstrap: ObservableObject {
             migrationPlan: migrationPlan,
             configurations: config
         )
+    }
+
+    private func makeUnplannedContainer() throws -> ModelContainer {
+        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let config = ModelConfiguration(schema: schema)
+        return try ModelContainer(for: schema, migrationPlan: nil, configurations: config)
     }
 
     private func prepare(_ container: ModelContainer) throws {

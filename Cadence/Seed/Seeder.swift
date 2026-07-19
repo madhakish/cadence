@@ -219,8 +219,25 @@ enum Seeder {
         try clearRetiredRestStamps(byName: byName, context: context)
         try ensureWorkoutSessionIDs(context: context)
         try snapshotLegacyLoadSemantics(context: context)
+        try normalizeV4PrescriptionBlocks(context: context)
         do { try context.save() }
         catch { context.rollback(); throw error }
+    }
+
+    /// V4 added a non-optional prescription-block discriminator so the schema
+    /// could migrate lightly. Its literal `work` default preserves every row,
+    /// but historical warm-ups and conditioning need their meaning recovered
+    /// from fields that already existed in V3. This is idempotent and never
+    /// fabricates a per-set planned load or rep target.
+    private static func normalizeV4PrescriptionBlocks(context: ModelContext) throws {
+        for set in try context.fetch(FetchDescriptor<SetEntry>())
+        where set.prescriptionBlockRaw == PrescriptionBlockKind.work.rawValue {
+            if set.isWarmup {
+                set.prescriptionBlockRaw = PrescriptionBlockKind.warmup.rawValue
+            } else if set.sessionExercise?.exercise?.type == .conditioning {
+                set.prescriptionBlockRaw = PrescriptionBlockKind.conditioning.rawValue
+            }
+        }
     }
 
     private static func clearRetiredRestStamps(byName: [String: Exercise], context: ModelContext) throws {

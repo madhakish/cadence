@@ -355,6 +355,23 @@ async function programEditor(p) {
     if ((patterns.get("verticalPull") || 0) < 3) warnings.push(`Vertical pulling is ${patterns.get("verticalPull") || 0}/3 sets per rotation.`);
     const squat = rotation.get("squat") || 0, hinge = rotation.get("hinge") || 0;
     if (Math.max(squat, hinge) >= 8 && Math.min(squat, hinge) * 2 < Math.max(squat, hinge)) warnings.push(`Per-rotation squat/hinge volume is uneven (${squat}/${hinge} sets).`);
+    const orderedDays = [...(p.days || [])].sort((a, b) => a.order - b.order);
+    orderedDays.forEach((day, index) => {
+      if (!orderedDays.length) return;
+      const next = orderedDays[(index + 1) % orderedDays.length];
+      const nextIsHingeLed = (next.lifts || []).some((lift) => lift.role === "main"
+        && (exerciseByName.get(lift.exerciseName)?.movementPattern
+          || C.movementPattern(lift.exerciseName, exerciseByName.get(lift.exerciseName)?.movementGroup)) === "hipHinge");
+      const hasFatiguingHamstrings = (day.accessories || []).some((accessory) => {
+        const exercise = exerciseByName.get(accessory.exerciseName);
+        const pattern = exercise?.movementPattern
+          || C.movementPattern(accessory.exerciseName, exercise?.movementGroup);
+        return pattern === "kneeFlexion" || pattern === "hipExtension";
+      });
+      if (nextIsHingeLed && hasFatiguingHamstrings) {
+        warnings.push(`Move hamstring isolation/back extensions off ${day.name}; it immediately precedes hinge-led ${next.name}.`);
+      }
+    });
     return warnings;
   };
   ui.pushScreen({

@@ -601,7 +601,7 @@ struct ProgramEditorView: View {
                     if on { for p in allPrograms { p.isActive = (p === program) } } else { program.isActive = false }
                 }))
             }
-            Section("Deterministic coach") {
+            Section {
                 Toggle("Enable coaching proposals", isOn: $program.coachEnabled)
                 Stepper("Preferred spacing: \(program.preferredSessionSpacingDays) days",
                         value: $program.preferredSessionSpacingDays, in: 2...7)
@@ -617,6 +617,8 @@ struct ProgramEditorView: View {
                         set: { program.reliableHistoryStart = $0 }
                     ), displayedComponents: .date)
                 }
+            } header: {
+                Text("Deterministic coach")
             } footer: {
                 Text("Proposals use completed output by full program rotation. They never change the program until you apply them.")
             }

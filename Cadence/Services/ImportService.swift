@@ -522,7 +522,9 @@ enum ImportService {
                     // own a key, and two of them would collide on save.
                     let name = (d.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !name.isEmpty else { continue }
-                    if let existing = byName[name] { update(existing, from: d) }
+                    if let existing = byName[name] {
+                        update(existing, from: d, schemaVersion: schemaVersion)
+                    }
                     else { let e = makeExercise(d); context.insert(e); byName[name] = e }
                 }
             }
@@ -642,14 +644,24 @@ enum ImportService {
         return e
     }
 
-    private static func update(_ e: Exercise, from d: ExerciseDef) {
+    private static func update(_ e: Exercise, from d: ExerciseDef, schemaVersion: Int) {
         if let v = d.category, let c = ExerciseCategory(rawValue: v) { e.category = c }
         if let v = d.type, let t = ExerciseType(rawValue: v) { e.type = t }
         if let v = d.movementGroup { e.movementGroup = v }
         if let v = d.movementPattern, let pattern = MovementPattern(rawValue: v) { e.movementPattern = pattern }
-        if let v = d.secondaryMovementPattern { e.secondaryMovementPattern = MovementPattern(rawValue: v) }
-        if let v = d.aliases { e.aliases = v }
-        if let v = d.strategyTags { e.strategyTags = v }
+        if schemaVersion >= 3 {
+            // Schema-3 exporters emit these keys even when their value is nil
+            // or empty. Restore that absence explicitly; otherwise an import
+            // over the relationship-owned library would retain stale local
+            // gate/taxonomy state that is not present in the backup.
+            e.secondaryMovementPattern = d.secondaryMovementPattern.flatMap(MovementPattern.init(rawValue:))
+            e.aliases = d.aliases ?? []
+            e.strategyTags = d.strategyTags ?? []
+        } else {
+            if let v = d.secondaryMovementPattern { e.secondaryMovementPattern = MovementPattern(rawValue: v) }
+            if let v = d.aliases { e.aliases = v }
+            if let v = d.strategyTags { e.strategyTags = v }
+        }
         if let v = d.loadBasis, let basis = LoadBasis(rawValue: v) { e.loadBasis = basis }
         if let v = d.implementCount { e.implementCount = v }
         if let v = d.isUnilateral { e.isUnilateral = v }
@@ -657,14 +669,25 @@ enum ImportService {
         if let v = d.notes { e.notes = v }
         if let v = d.isShelved { e.isShelved = v }
         if let v = d.shelvedNote { e.shelvedNote = v }
-        if let v = d.watchSite { e.watchSite = BodySite.fromStorage(v) }
         if let v = d.gateStatus, let status = ExerciseGateStatus(rawValue: v) { e.gateStatus = status }
-        if d.gateSite != nil { e.gateSite = BodySite.fromStorage(d.gateSite) }
-        if let v = d.reEntryCriteria { e.reEntryCriteria = v }
-        if let v = d.completedReEntryCriteria { e.completedReEntryCriteria = v }
-        if let v = d.reEntryTestWeightLb { e.reEntryTestWeightLb = v }
-        if let v = d.reEntryTestSets { e.reEntryTestSets = v }
-        if let v = d.reEntryTestReps { e.reEntryTestReps = v }
+        if schemaVersion >= 3 {
+            e.watchSite = BodySite.fromStorage(d.watchSite)
+            e.gateSite = BodySite.fromStorage(d.gateSite)
+            e.reEntryCriteria = d.reEntryCriteria ?? []
+            e.completedReEntryCriteria = d.completedReEntryCriteria ?? []
+            e.reEntryTestWeightLb = d.reEntryTestWeightLb ?? 0
+            e.reEntryTestSets = d.reEntryTestSets ?? 3
+            e.reEntryTestReps = d.reEntryTestReps ?? 5
+            if let createdAt = d.createdAt { e.createdAt = createdAt }
+        } else {
+            if let v = d.watchSite { e.watchSite = BodySite.fromStorage(v) }
+            if d.gateSite != nil { e.gateSite = BodySite.fromStorage(d.gateSite) }
+            if let v = d.reEntryCriteria { e.reEntryCriteria = v }
+            if let v = d.completedReEntryCriteria { e.completedReEntryCriteria = v }
+            if let v = d.reEntryTestWeightLb { e.reEntryTestWeightLb = v }
+            if let v = d.reEntryTestSets { e.reEntryTestSets = v }
+            if let v = d.reEntryTestReps { e.reEntryTestReps = v }
+        }
     }
 
     private static func makeGym(_ g: GymDTO) -> Gym {
