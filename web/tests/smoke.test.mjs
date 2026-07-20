@@ -691,10 +691,23 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     programTag: { programId: program.uuid, programName: name, cycleNumber: 7,
       week: 2, dayIndex: 0, planNames: ["Back Squat", "Deadlift"] },
     exercises: [
-      { order: 0, exerciseName: "Back Squat", programRole: "main", programSlotId: squat.id,
+      { order: 0, exerciseName: "Back Squat", programRole: "main", programSlotId: "retired-lower-b-main",
         plannedSets: 5, plannedReps: 3, plannedWeightLb: 215, sets: exactSets },
       { order: 2, exerciseName: "Back Squat", programRole: null, programSlotId: null,
         plannedSets: 1, plannedReps: 1, plannedWeightLb: 405, sets: [workSet(0, 405)] },
+    ],
+  });
+  const distractionId = await db.Sessions.save({
+    date: "2026-07-13T12:00:00.000Z", completedAt: "2026-07-13T13:00:00.000Z",
+    notes: "Fictional later accessory-only exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name, cycleNumber: 7,
+      week: 2, dayIndex: 0, planNames: ["Back Squat"] },
+    exercises: [
+      { order: 0, exerciseName: "Back Squat", programRole: "accessory",
+        programSlotId: "conditioning-squat", plannedSets: 3, plannedReps: 10,
+        plannedWeightLb: 135, sets: Array.from({ length: 3 }, (_, index) => ({
+          ...workSet(index, 135), reps: 10, plannedReps: 10,
+        })) },
     ],
   });
   const staleOpenId = await db.Sessions.save({
@@ -735,7 +748,8 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(program.days[0].lifts.find((lift) => lift.id === squat.id).baseWeightLb === 195,
     "the repaired exact-slot base is persisted for preview/session parity");
 
-  await db.Sessions.del(priorId); await db.Sessions.del(staleOpenId); await db.Sessions.del(repairedId);
+  await db.Sessions.del(priorId); await db.Sessions.del(distractionId);
+  await db.Sessions.del(staleOpenId); await db.Sessions.del(repairedId);
   await db.Programs.del(program.id);
 }
 

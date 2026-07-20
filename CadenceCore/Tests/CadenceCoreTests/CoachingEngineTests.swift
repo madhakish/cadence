@@ -12,7 +12,7 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertEqual(MovementTaxonomy.pattern(exerciseName: "Overhead Press", movementGroup: "press"), .verticalPress)
     }
 
-    func testIncompleteRotationIsUnknownAndNeverAddsVolume() {
+    func testFirstIncompleteRotationIsUnknownAndNeverAddsVolume() {
         let report = CoachingEngine.evaluate(
             program: program(),
             sessions: [session(cycle: 1, rotation: 1, day: 0, date: 0)]
@@ -20,6 +20,22 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertEqual(report.currentReadiness, .unknown)
         XCTAssertTrue(report.recommendations.isEmpty)
         XCTAssertFalse(report.rotations[0].isComplete)
+    }
+
+    func testIncompleteRotationReportsProvisionalReadinessAfterBaseline() {
+        var sessions = (0...3).map {
+            session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day)
+        }
+        sessions += (0...1).map {
+            session(cycle: 1, rotation: 2, day: $0,
+                    date: Double(12 + $0 * 3) * day, weight: 105)
+        }
+        let report = CoachingEngine.evaluate(program: program(), sessions: sessions)
+        XCTAssertEqual(report.currentReadiness, .green)
+        XCTAssertFalse(report.rotations.last?.isComplete ?? true)
+        XCTAssertTrue(report.rotations.last?.reasons.first?.contains("2/4 days banked") ?? false)
+        XCTAssertTrue(report.recommendations.isEmpty,
+                      "provisional readiness must not mutate an incomplete rotation")
     }
 
     func testTwoGreenRotationsProposeSixTargetedSets() throws {

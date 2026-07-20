@@ -689,8 +689,18 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   };
 
   let report = C.evaluateCoaching(coachingProgram, [coachingSession(1, 0, 0)]);
-  eq(report.currentReadiness, "unknown", "incomplete rotation is unknown");
+  eq(report.currentReadiness, "unknown", "first incomplete rotation is unknown without a baseline");
   eq(report.recommendations.length, 0, "incomplete rotation never adds volume");
+
+  const partialComparable = Array.from({ length: 4 }, (_, dayIndex) =>
+    coachingSession(1, dayIndex, dayIndex * 3));
+  partialComparable.push(coachingSession(2, 0, 12, 105));
+  partialComparable.push(coachingSession(2, 1, 15, 105));
+  report = C.evaluateCoaching(coachingProgram, partialComparable);
+  eq(report.currentReadiness, "green", "incomplete rotation reports provisional readiness after a baseline");
+  ok(!report.rotations.at(-1).isComplete, "provisional readiness does not complete the rotation");
+  ok(report.rotations.at(-1).reasons[0].includes("2/4 days banked"), "partial readiness explains rotation progress");
+  eq(report.recommendations.length, 0, "provisional readiness never adds volume");
 
   const conditioningSessions = Array.from({ length: 4 }, (_, dayIndex) => coachingSession(1, dayIndex, dayIndex * 3));
   conditioningSessions[1].exercises.push({

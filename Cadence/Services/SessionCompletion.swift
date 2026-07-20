@@ -240,11 +240,13 @@ enum SessionCompletion {
         role: String,
         in session: WorkoutSession
     ) -> SessionExercise? {
-        session.exercises.first { $0.programSlotID == slotID }
-            ?? session.exercises.first {
-                $0.programSlotID == nil && $0.programRole == role
-                    && $0.exercise?.name == exerciseName
-            }
+        if let exact = session.exercises.first(where: { $0.programSlotID == slotID }) {
+            return exact
+        }
+        let lineage = session.exercises.filter {
+            $0.programRole == role && $0.exercise?.name == exerciseName
+        }
+        return lineage.count == 1 ? lineage[0] : nil
     }
 
     private static func cyclePerf(_ entry: SessionExercise, roundingLb: Double) -> CycleLiftPerformance {

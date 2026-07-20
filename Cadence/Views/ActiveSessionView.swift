@@ -259,9 +259,9 @@ struct ActiveSessionView: View {
         guard !wanted.isEmpty else { return lines }
         for past in completedSessions where past.persistentModelID != session.persistentModelID {
             for current in wanted where lines[current.persistentModelID] == nil {
-                guard let entry = past.exercises.first(where: {
-                    sameRecallSlot(current: current, past: $0, pastSession: past)
-                }), let exercise = entry.exercise else { continue }
+                guard let entry = recallEntry(
+                    for: current, in: past
+                ), let exercise = entry.exercise else { continue }
                 let recalledSets: [SetEntry]
                 if current.programRole != nil {
                     let prescribed = entry.orderedSets.filter {
@@ -290,20 +290,27 @@ struct ActiveSessionView: View {
         return lines
     }
 
-    private func sameRecallSlot(
-        current: SessionExercise,
-        past: SessionExercise,
-        pastSession: WorkoutSession
-    ) -> Bool {
-        guard current.exercise?.name == past.exercise?.name else { return false }
-        guard current.programRole != nil else { return past.programRole == nil }
+    private func recallEntry(
+        for current: SessionExercise,
+        in pastSession: WorkoutSession
+    ) -> SessionExercise? {
+        guard let exerciseName = current.exercise?.name else { return nil }
+        guard let role = current.programRole else {
+            return pastSession.exercises.first {
+                $0.exercise?.name == exerciseName && $0.programRole == nil
+            }
+        }
         let sameProgram = (session.programID != nil && session.programID == pastSession.programID)
             || (pastSession.programID == nil && session.programName == pastSession.programName)
-        guard sameProgram else { return false }
-        if let slotID = current.programSlotID, past.programSlotID == slotID { return true }
-        return past.programSlotID == nil
-            && current.programRole == past.programRole
-            && session.programDayIndex == pastSession.programDayIndex
+        guard sameProgram, session.programDayIndex == pastSession.programDayIndex else { return nil }
+        if let slotID = current.programSlotID,
+           let exact = pastSession.exercises.first(where: { $0.programSlotID == slotID }) {
+            return exact
+        }
+        let lineage = pastSession.exercises.filter {
+            $0.exercise?.name == exerciseName && $0.programRole == role
+        }
+        return lineage.count == 1 ? lineage[0] : nil
     }
 
     private func recallPrefix(for entry: SessionExercise) -> String {
