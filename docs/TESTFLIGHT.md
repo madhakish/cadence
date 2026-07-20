@@ -9,6 +9,9 @@ your phone.
 The pipeline requires the one-time Apple setup below. Once semantic-release
 publishes a tag, TestFlight must upload it; missing Apple or signing
 configuration fails the workflow visibly instead of silently skipping it.
+GitHub's downloadable unsigned/simulator assets upload in a separate retrying
+job, so an `uploads.github.com` outage cannot suppress the signed TestFlight
+build.
 
 ## One-time setup (≈ 30–45 min, mostly waiting on Apple)
 
@@ -90,6 +93,10 @@ validation jobs pass, semantic-release creates the version tag and the
 `testflight` job runs `xcodegen generate` → `match` → signed Release archive →
 upload. Non-release commits such as `docs:` and `ci:` do not waste time creating
 duplicate TestFlight builds.
+
+The release tag is the durable handoff. If semantic-release creates the tag and
+a later GitHub API call fails, a retry recognizes the exact tag on the `main`
+commit and continues to TestFlight instead of treating the release as a no-op.
 
 If a release tag was created but its upload failed or never started, run the
 **CI** workflow manually on `main` with `force_testflight=true`. That explicit

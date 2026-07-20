@@ -336,10 +336,12 @@ Seeder, migration test, project definition, or shipped-store generator can
 affect compatibility, `.github/scripts/classify-ci-paths.sh` must classify it
 as a migration change and its classifier tests must be updated.
 
-Green pushes to `main` run semantic-release and package release artifacts. A
-signed TestFlight upload runs only when semantic-release publishes a new tag;
-`workflow_dispatch` with `force_testflight=true` is the explicit recovery path
-for re-uploading the latest tag. Web deploys reuse the CI web-test result;
+Green pushes to `main` run semantic-release. An exact release tag on the main
+commit is the handoff to signed TestFlight publishing, including after a retry
+where semantic-release already created the tag. GitHub release-binary uploads
+run independently with retries and must never suppress TestFlight.
+`workflow_dispatch` with `force_testflight=true` remains the explicit recovery
+path for re-uploading the latest tag. Web deploys reuse the CI web-test result;
 `pages.yml` is manual recovery only. See `docs/TESTFLIGHT.md`; do not weaken
 signing, migration, or secret controls to make CI convenient.
 
@@ -371,3 +373,8 @@ A change is done only when:
 - no personal data or secret was introduced;
 - generated artifacts are absent from the diff; and
 - CI is green for the exact commit proposed for merge.
+
+A publishing fix is not proven by pull-request CI. After merge, verify the
+actual `main` run creates or reconciles the release tag and that the TestFlight
+job runs to completion. Do not report publishing fixed while that job is
+skipped, pending, or unobserved.

@@ -108,6 +108,8 @@ jobs:
         run: npm ci
       - name: Verify semantic-version breaking markers
         run: node .github/scripts/test-release-parser.mjs
+      - name: Verify release-state recovery
+        run: bash .github/scripts/test-reconcile-release-state.sh
 
   # Current app builds are independent and run in parallel. Workflow-only PRs
   # still exercise them; docs/web-only PRs do not spend macOS runner minutes.
@@ -290,13 +292,51 @@ jobs:
     permissions:
       contents: write
     outputs:
-      published: ${{ steps.semantic-release.outputs.published }}
-      version: ${{ steps.semantic-release.outputs.version }}
+      published: ${{ steps.release-state.outputs.published }}
+      version: ${{ steps.release-state.outputs.version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: .github/release/package-lock.json
+      - name: Install pinned release toolchain
+        working-directory: .github/release
+        run: npm ci
+      - name: Run semantic-release
+        id: semantic-release-command
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./.github/release/node_modules/.bin/semantic-release
+      - name: Reconcile published release tag
+        id: release-state
+        if: always()
+        env:
+          SEMANTIC_RELEASE_OUTCOME: ${{ steps.semantic-release-command.outcome }}
+        run: bash .github/scripts/reconcile-release-state.sh
+
+  # GitHub release binaries are useful downloads but are not the signed app
+  # publishing path. Upload them independently with retries so an
+  # uploads.github.com outage can fail visibly without suppressing TestFlight.
+  release-assets:
+    name: GitHub release assets
+    needs: release
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.release.outputs.published == 'true' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - name: Download unsigned device artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -307,36 +347,40 @@ jobs:
         with:
           name: Cadence-simulator
           path: dist
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: .github/release/package-lock.json
-      - name: Install pinned release toolchain
-        working-directory: .github/release
-        run: npm ci
-      - name: Run semantic-release
-        id: semantic-release
+      - name: Stage versioned release assets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
         run: |
-          marker="$RUNNER_TEMP/semantic-release-version"
-          rm -f "$marker"
-          ./.github/release/node_modules/.bin/semantic-release
-          if [[ -s "$marker" ]]; then
-            version="$(<"$marker")"
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "version=$version" >> "$GITHUB_OUTPUT"
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
+          mkdir -p release-assets
+          cp dist/Cadence-unsigned.ipa "release-assets/Cadence-$VERSION-unsigned.ipa"
+          cp dist/Cadence-simulator.app.zip "release-assets/Cadence-$VERSION-simulator.app.zip"
+      - name: Upload GitHub release assets with retry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ needs.release.outputs.version }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if gh release upload "$TAG" \
+              "release-assets/Cadence-${TAG#v}-unsigned.ipa#Unsigned device build (re-sign to sideload)" \
+              "release-assets/Cadence-${TAG#v}-simulator.app.zip#iOS Simulator app" \
+              --clobber; then
+              exit 0
+            fi
+            if [[ "$attempt" -lt 5 ]]; then
+              delay=$((attempt * 10))
+              echo "GitHub asset upload failed (attempt $attempt/5); retrying in ${delay}s" >&2
+              sleep "$delay"
+            fi
+          done
+          echo "GitHub release assets failed after five attempts" >&2
+          exit 1
 
   testflight:
     name: TestFlight (fastlane)
     needs: release
     if: >-
       always() &&
-      needs.release.result == 'success' &&
+      !cancelled() &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       (needs.release.outputs.published == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_testflight))
@@ -345,10 +389,18 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
       - name: Resolve app version from the latest release tag
         id: ver
-        run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.1.0)" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          version="$RELEASE_VERSION"
+          if [[ -z "$version" ]]; then
+            version="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.1.0)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: ruby/setup-ruby@003a5c4d8d6321bd302e38f6f0ec593f77f06600 # v1.319.0
         with:
           ruby-version: "3.3"
