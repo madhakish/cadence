@@ -209,6 +209,8 @@ commit's Darwin jobs are pending and watch them, nothing more.
 6. Use an intentional Conventional Commit and ensure the PR's final
    merge/squash title carries the same release meaning.
 7. Verify all required CI jobs on the exact head commit.
+8. For release/publishing changes, watch the post-merge `main` run through a
+   completed TestFlight job. Green PR checks do not prove publishing works.
 
 The complete definition of done, privacy rules, CI topology, and repository map
 remain in `AGENTS.md`; when the files differ, follow the stricter rule.

@@ -11,19 +11,8 @@
       { "preset": "conventionalcommits" }
     ],
     [
-      "@semantic-release/exec",
-      {
-        "prepareCmd": "mkdir -p release-assets && cp dist/Cadence-unsigned.ipa release-assets/Cadence-${nextRelease.version}-unsigned.ipa && cp dist/Cadence-simulator.app.zip release-assets/Cadence-${nextRelease.version}-simulator.app.zip",
-        "successCmd": "printf '%s\\n' '${nextRelease.version}' > \"$RUNNER_TEMP/semantic-release-version\""
-      }
-    ],
-    [
       "@semantic-release/github",
       {
-        "assets": [
-          { "path": "release-assets/*-unsigned.ipa", "label": "Unsigned device build (re-sign to sideload)" },
-          { "path": "release-assets/*-simulator.app.zip", "label": "iOS Simulator app" }
-        ],
         "successComment": false,
         "failComment": false
       }
