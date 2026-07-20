@@ -52,6 +52,7 @@ assert.ok(releaseAssetsJob, "Expected a separate GitHub release-assets job");
 assert.match(releaseAssetsJob, /if: >-\n\s+always\(\) &&\n\s+!cancelled\(\) &&/);
 assert.match(releaseAssetsJob, /needs\.release\.outputs\.published == 'true'/);
 assert.match(releaseAssetsJob, /for attempt in 1 2 3 4 5/);
+assert.match(releaseAssetsJob, /GH_REPO: \$\{\{ github\.repository \}\}/);
 assert.match(releaseAssetsJob, /gh release upload/);
 assert.ok(testflightJob, "Expected ci.yml to define testflight before deploy-web");
 assert.doesNotMatch(testflightJob, /TESTFLIGHT_ENABLED/);
@@ -61,4 +62,4 @@ assert.match(testflightJob, /needs\.release\.outputs\.published == 'true'/);
 assert.doesNotMatch(testflightJob, /needs:.*release-assets/);
 assert.match(testflightJob, /fetch-depth: 0\n\s+fetch-tags: true/);
 
-console.log(`${cases.length + 26} semantic-release contract assertions passed`);
+console.log(`${cases.length + 27} semantic-release contract assertions passed`);

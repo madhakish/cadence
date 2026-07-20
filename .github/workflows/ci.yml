@@ -357,6 +357,7 @@ jobs:
       - name: Upload GitHub release assets with retry
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG: v${{ needs.release.outputs.version }}
         run: |
           for attempt in 1 2 3 4 5; do
