@@ -433,7 +433,10 @@ public enum CoachingEngine {
         }
 
         let completed = rotations.filter(\.isComplete)
-        let readiness = completed.last?.readiness ?? .unknown
+        // Once a complete baseline exists, an in-progress rotation can report
+        // provisional readiness from the programmed slots already banked.
+        // Program changes still use complete rotations only.
+        let readiness = rotations.last?.readiness ?? .unknown
         var greenStreak = 0
         for rotation in completed.reversed() {
             guard rotation.readiness == .green else { break }
@@ -508,10 +511,7 @@ public enum CoachingEngine {
 
         var readiness: ReadinessState
         var reasons: [String] = []
-        if !isComplete {
-            readiness = .unknown
-            reasons.append("Rotation is still in progress (\(completedDays.count)/\(expectedDayIndexes.count) days banked).")
-        } else if hardStopCheckIn || stoppedWithBody || completionRate < redCompletionFloor || meaningfulDrops >= 2
+        if hardStopCheckIn || stoppedWithBody || completionRate < redCompletionFloor || meaningfulDrops >= 2
                     || (priorReadiness == .red && (completionRate < greenCompletionFloor || bodyFlags > 0)) {
             readiness = .red
             if hardStopCheckIn { reasons.append("A post-session body check-in reported a hard-stop signal.") }
@@ -536,6 +536,17 @@ public enum CoachingEngine {
             readiness = .green
             reasons.append("At least 90% of prescribed work was completed at plan without a body stop.")
             if let delta { reasons.append("Repeated-lift output changed \(signedPercent(delta)).") }
+        }
+
+        if !isComplete {
+            let progress = "Rotation is still in progress (\(completedDays.count)/\(expectedDayIndexes.count) days banked)."
+            if readiness == .green {
+                reasons[0] = "\(progress) Completed programmed slots are tracking at plan."
+            } else if readiness == .unknown {
+                reasons.insert(progress, at: 0)
+            } else {
+                reasons.append(progress)
+            }
         }
 
         return RotationAssessment(

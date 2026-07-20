@@ -70,7 +70,7 @@ export function reconciledProgramBaseWeight(storedBaseWeightLb, previousPerforme
   // Styles that manage their own base (rep windows, methodology fixed
   // increments, training maxes, speed waves) are never re-anchored off a
   // heavier performed set — their published progression owns the base.
-  if (currentPhase !== previousPhase + 1 || ![2, 3].includes(currentPhase)
+  if (!(previousPhase < currentPhase) || ![2, 3].includes(currentPhase)
       || !(previousPerformedWeightLb > 0)
       || buildsOwnSessionShape(resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus))) {
     return storedBaseWeightLb;
@@ -1291,10 +1291,7 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
   const atPlanRate = plannedWorkingSets > 0 ? atPlanWorkingSets / plannedWorkingSets : 0;
   const reasons = [];
   let readiness;
-  if (!complete) {
-    readiness = "unknown";
-    reasons.push(`Rotation is still in progress (${completedDayIndexes.length}/${expectedDayIndexes.length} days banked).`);
-  } else if (hardStopCheckIn || stoppedWithBody || completionRate < RED_COMPLETION_FLOOR || meaningfulDrops >= 2
+  if (hardStopCheckIn || stoppedWithBody || completionRate < RED_COMPLETION_FLOOR || meaningfulDrops >= 2
       || (priorReadiness === "red" && (completionRate < GREEN_COMPLETION_FLOOR || bodyFlags > 0))) {
     readiness = "red";
     if (hardStopCheckIn) reasons.push("A post-session body check-in reported a hard-stop signal.");
@@ -1319,6 +1316,12 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
     readiness = "green";
     reasons.push("At least 90% of prescribed work was completed at plan without a body stop.");
     if (performanceDelta !== null) reasons.push(`Repeated-lift output changed ${performanceDelta >= 0 ? "+" : ""}${Math.round(performanceDelta * 100)}%.`);
+  }
+  if (!complete) {
+    const progress = `Rotation is still in progress (${completedDayIndexes.length}/${expectedDayIndexes.length} days banked).`;
+    if (readiness === "green") reasons[0] = `${progress} Completed programmed slots are tracking at plan.`;
+    else if (readiness === "unknown") reasons.unshift(progress);
+    else reasons.push(progress);
   }
   return {
     key, startedAt: Math.min(...sessions.map((session) => epoch(session.date))),
@@ -1439,7 +1442,9 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null)
     }
   }
   const completed = rotations.filter((rotation) => rotation.isComplete);
-  const currentReadiness = completed.at(-1)?.readiness || "unknown";
+  // In-progress rotations can report provisional readiness after a complete
+  // baseline; recommendations and green streaks still require completion.
+  const currentReadiness = rotations.at(-1)?.readiness || "unknown";
   let greenRotationStreak = 0;
   for (const rotation of [...completed].reverse()) {
     if (rotation.readiness !== "green") break;

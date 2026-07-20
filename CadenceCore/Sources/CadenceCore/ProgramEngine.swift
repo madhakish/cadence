@@ -293,12 +293,12 @@ public enum ProgramEngine {
         )
     }
 
-    /// Repair an impossible rising-wave prescription from the immediately
-    /// preceding clean exposure of this exact program slot. This is deliberately
-    /// narrow: only Volume→Load and Load→Peak can re-anchor, and only when the
-    /// stored next plan would fail to exceed work the athlete just completed.
-    /// Deloads, new cycles, manual holds above the prior load, and unclean work
-    /// remain owned by the stored program state.
+    /// Repair an impossible rising-wave prescription from the latest earlier
+    /// clean exposure of this exact program slot in the current cycle. This is
+    /// deliberately narrow: only a prior rising phase feeding Load or Peak can
+    /// re-anchor, and only when the stored next plan would fail to exceed work
+    /// the athlete already completed. Deloads, new cycles, manual holds above
+    /// the prior load, and unclean work remain owned by stored program state.
     public static func reconciledBaseWeight(
         storedBaseWeightLb: Double,
         previousPerformedWeightLb: Double,
@@ -315,7 +315,7 @@ public enum ProgramEngine {
         // Styles that manage their own base (rep windows, methodology fixed
         // increments, training maxes, speed waves) are never re-anchored off a
         // heavier performed set — their published progression owns the base.
-        guard currentPhase.rawValue == previousPhase.rawValue + 1,
+        guard previousPhase.rawValue < currentPhase.rawValue,
               currentPhase == .load || currentPhase == .peak,
               previousPerformedWeightLb > 0,
               !resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus).buildsOwnSessionShape

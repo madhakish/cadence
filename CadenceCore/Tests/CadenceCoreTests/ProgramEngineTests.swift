@@ -189,6 +189,25 @@ final class ProgramEngineTests: XCTestCase {
         ), 150)
     }
 
+    func testStalePeakCanReanchorFromLatestEarlierRisingExposure() {
+        let repaired = ProgramEngine.reconciledBaseWeight(
+            storedBaseWeightLb: 150,
+            previousPerformedWeightLb: 195,
+            previousPhase: .volume,
+            currentPhase: .peak,
+            programRoundingLb: 5,
+            exerciseType: "barbell",
+            movementGroup: "squat"
+        )
+        XCTAssertEqual(repaired, 195)
+        XCTAssertEqual(ProgramEngine.programPlan(
+            for: CycleState(baseWeightLb: repaired, nextPhase: .peak),
+            programRoundingLb: 5,
+            exerciseType: "barbell",
+            movementGroup: "squat"
+        ).weightLb, 230)
+    }
+
     func testComplementaryVolumeDoesNotInheritMainFiveByFive() {
         let state = CycleState(baseWeightLb: 200, nextPhase: .volume)
         let plan = ProgramEngine.programPlan(for: state, programRoundingLb: 5, exerciseType: "barbell",

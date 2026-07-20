@@ -7,8 +7,11 @@ weeks remain an optional history view, while coaching and capacity decisions
 use rotations and rolling 14/28-day totals.
 
 The first complete rotation after the program's optional reliable-history date
-establishes a baseline. Incomplete rotations remain **Unknown** and never add
-work. Later rotations use performed weights, reps, set status, warm-up quality,
+establishes a baseline. Before that baseline, incomplete rotations remain
+**Unknown**. After it exists, an incomplete rotation shows provisional readiness
+from only the programmed slots already banked, matched by day and main,
+complementary, or accessory role. It never adds work until the rotation is
+complete. Later rotations use performed weights, reps, set status, warm-up quality,
 and body signals. They do not reconstruct history from today's program.
 
 ## Readiness lights
