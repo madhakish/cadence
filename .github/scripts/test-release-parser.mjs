@@ -43,6 +43,7 @@ assert.match(
 assert.match(execPlugin?.[1]?.successCmd ?? "", /RUNNER_TEMP\/semantic-release-version/);
 assert.ok(testflightJob, "Expected ci.yml to define testflight before deploy-web");
 assert.doesNotMatch(testflightJob, /TESTFLIGHT_ENABLED/);
+assert.match(testflightJob, /if: >-\n\s+always\(\) &&\n\s+needs\.release\.result == 'success'/);
 assert.match(testflightJob, /needs\.release\.outputs\.published == 'true'/);
 
-console.log(`${cases.length + 11} semantic-release contract assertions passed`);
+console.log(`${cases.length + 12} semantic-release contract assertions passed`);
