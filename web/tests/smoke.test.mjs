@@ -311,7 +311,8 @@ const created = await db.Sessions.get(id);
 const work = created.exercises[0].sets.filter((s) => !s.isWarmup);
 const warm = created.exercises[0].sets.filter((s) => s.isWarmup);
 const achievedDeadlift = created.exercises[0].plannedWeightLb;
-ok(warm.length === 5 && warm[0].weightLb === 45, "deadlift got a warmup ramp");
+ok(warm.length === 4 && warm[0].weightLb > 45
+  && warm.every((set) => set.weightLb !== 45), "deadlift ramp omits the empty bar");
 ok(work.length === 3 && work.every((s) => s.weightLb === achievedDeadlift && s.reps === 3)
   && Math.abs(achievedDeadlift - 245) <= 2, "3 working sets store the achievable 245-target load");
 work.forEach((set) => { set.status = "completed"; });
@@ -328,8 +329,8 @@ barSelect.value = "35-lb";
 barSelect.dispatchEvent(new window.Event("change")); await tick();
 const withBarOverride = await db.Sessions.get(id);
 ok(withBarOverride.exercises[0].barId === "35-lb", "per-exercise bar override persists on the session");
-ok(withBarOverride.exercises[0].sets.filter((s) => s.isWarmup)[0].weightLb === 35,
-  "bar override keeps the warmup ramp in the same equipment context");
+ok(withBarOverride.exercises[0].sets.filter((s) => s.isWarmup).every((set) => set.weightLb !== 35),
+  "deadlift bar override still omits the empty bar");
 ok(document.querySelector("#session-bar .clock").textContent.includes("session"), "session clock shows in the sticky bottom bar");
 ok([...document.querySelectorAll("#session-bar button")].some((b) => b.textContent.startsWith("Rest ")), "bottom-bar Rest button shows the current lift's rest");
 const bank = overlayButtons().find((b) => b.textContent === "Bank it.");

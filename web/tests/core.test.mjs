@@ -174,6 +174,8 @@ r = C.warmupRamp(65);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45, 55]), "ramp 65");
 r = C.warmupRamp(45);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45]) && r[0].reps === 10, "ramp 45 bar only");
+r = C.warmupRamp(245, 45, 5, false);
+ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([100, 135, 170, 210]), "ramp can omit empty bar");
 eq(C.programLoadStep(10, "dumbbell"), 5, "dumbbell program step capped per hand");
 eq(C.programLoadStep(2.5, "dumbbell"), 2.5, "fine dumbbell step preserved");
 eq(C.programLoadStep(10, "barbell"), 10, "barbell program step preserved");

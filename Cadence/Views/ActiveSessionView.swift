@@ -89,6 +89,10 @@ struct ActiveSessionView: View {
                 restSeconds: currentRestSeconds
             )
         }
+        // The logger has its own persistent bottom bar. Keyboard safe-area
+        // state can otherwise strand that bar at the keyboard's former top
+        // edge after editing a set, even after the keyboard has disappeared.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .onChange(of: settingsList.first?.haptics, initial: true) { _, on in restTimer.hapticsEnabled = on ?? true }
         .onAppear {
             // Start (or continue) the workout stopwatch + Live Activity.
@@ -769,7 +773,8 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
     if exercise.type == .barbell {
         desired = ProgramSession.achievableWarmups(
             WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
-                            roundingLb: ProgramEngine.defaultRoundingLb),
+                            roundingLb: ProgramEngine.defaultRoundingLb,
+                            includeEmptyBar: ProgramSession.includesEmptyBarWarmup(for: exercise)),
             workingLb: workingLb, gym: gym, bar: bar)
     } else if exercise.type == .dumbbell && entry.programRole == LiftRole.main.rawValue {
         desired = WarmupRamp.dumbbellRamp(workingLb: workingLb,

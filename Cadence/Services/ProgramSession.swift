@@ -126,7 +126,11 @@ enum ProgramSession {
             }
             let topPreparationLoad = blockLoads.max() ?? weightLb
             if exercise.type == .barbell && resolvedWarmup != .none {
-                let fullRamp = WarmupRamp.ramp(workingLb: topPreparationLoad, barLb: barLb, roundingLb: program.roundingLb)
+                let fullRamp = WarmupRamp.ramp(
+                    workingLb: topPreparationLoad, barLb: barLb,
+                    roundingLb: program.roundingLb,
+                    includeEmptyBar: includesEmptyBarWarmup(for: exercise)
+                )
                 let achievedRamp = achievableWarmups(fullRamp, workingLb: topPreparationLoad,
                                                      gym: defaultGym, bar: selectedBar)
                 let ramp = resolvedWarmup == .short ? Array(achievedRamp.suffix(2)) : achievedRamp
@@ -311,6 +315,14 @@ enum ProgramSession {
             guard achieved < workingLb - 1e-9, seen.insert(achieved).inserted else { return nil }
             return WarmupSet(weightLb: achieved, reps: warmup.reps)
         }
+    }
+
+    /// Back squats and deadlifts start their generated ramp at the first loaded
+    /// step. The empty bar remains available for other barbell movements and
+    /// every generated set remains editable.
+    static func includesEmptyBarWarmup(for exercise: Exercise) -> Bool {
+        let key = exercise.name.lowercased().filter { $0.isLetter || $0.isNumber }
+        return key != "backsquat" && key != "deadlift"
     }
 
     static func fallbackWeight(from currentLb: Double, exercise: Exercise?, gym: Gym?, bar: Bar,
