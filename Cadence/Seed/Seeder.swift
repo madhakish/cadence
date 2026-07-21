@@ -313,21 +313,34 @@ enum Seeder {
             let role: String
         }
 
+        let programs = try context.fetch(FetchDescriptor<Program>())
+            .sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+
+        // First make every relationship collection independent. A released
+        // aliasing bug could copy one day's lift matrix onto another day; the
+        // last completed session tagged for that day is the only durable copy
+        // of the intended exercise/role order. Recover it only when the live
+        // day is an exact mirror of a sibling day, so ordinary program edits
+        // remain user-owned.
+        for program in programs {
+            program.days = uniqueModels(program.days)
+            for day in program.orderedDays {
+                day.lifts = uniqueModels(day.lifts)
+                day.accessories = uniqueModels(day.accessories)
+            }
+            restoreMirroredDayMatrices(program: program, sessions: sessions)
+        }
+
         // Index every live slot, including the slot that keeps a colliding ID.
         // A set with more than one resolved ID is deliberately ambiguous: old
         // sessions do not contain enough information to choose between them.
         var liveSlotIDs: [HistoricalSlotKey: Set<String>] = [:]
-        let programs = try context.fetch(FetchDescriptor<Program>())
-            .sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
 
         for program in programs {
-            program.days = uniqueModels(program.days)
             var seenSlotIDs: Set<String> = []
 
             for day in program.orderedDays {
-                day.lifts = uniqueModels(day.lifts)
-                day.accessories = uniqueModels(day.accessories)
-
                 for lift in day.orderedLifts {
                     let oldID = lift.id
                     if UUID(uuidString: oldID) == nil || !seenSlotIDs.insert(oldID).inserted {
@@ -353,7 +366,7 @@ enum Seeder {
             }
         }
 
-        for session in try context.fetch(FetchDescriptor<WorkoutSession>()) {
+        for session in sessions {
             session.exercises = uniqueModels(session.exercises)
             for entry in session.orderedExercises {
                 entry.sets = uniqueModels(entry.sets)
@@ -367,6 +380,70 @@ enum Seeder {
                 if let candidates = liveSlotIDs[key], candidates.count == 1 {
                     entry.programSlotID = candidates.first
                 }
+            }
+        }
+    }
+
+    /// Restore a two-lift day whose role matrix was overwritten by the exact
+    /// matrix of another live day. The recovery source is the newest completed
+    /// session already tagged with this program/day and containing the same two
+    /// exercises. We change only role/order; each stable slot keeps its ID,
+    /// exercise, base, max, and progression state.
+    private static func restoreMirroredDayMatrices(
+        program: Program,
+        sessions: [WorkoutSession]
+    ) {
+        struct MatrixEntry: Hashable {
+            let exerciseName: String
+            let role: String
+        }
+
+        let days = program.orderedDays
+        let histories = sessions
+            .filter {
+                $0.isCompleted
+                    && ($0.programID == program.id
+                        || ($0.programID == nil && $0.programName == program.name))
+            }
+            .sorted { ($0.completedAt ?? $0.date) > ($1.completedAt ?? $1.date) }
+
+        for day in days {
+            let current = day.orderedLifts.map {
+                MatrixEntry(exerciseName: $0.exerciseName, role: $0.role.rawValue)
+            }
+            guard current.count == 2,
+                  Set(current.map(\.exerciseName)).count == current.count,
+                  days.contains(where: { sibling in
+                      sibling !== day
+                          && Set(sibling.orderedLifts.map {
+                              MatrixEntry(exerciseName: $0.exerciseName, role: $0.role.rawValue)
+                          }) == Set(current)
+                  })
+            else { continue }
+
+            for session in histories where session.programDayIndex == day.order {
+                let historical = session.orderedExercises.compactMap { entry -> MatrixEntry? in
+                    guard let roleRaw = entry.programRole,
+                          LiftRole(rawValue: roleRaw) != nil,
+                          let exerciseName = entry.exercise?.name
+                    else { return nil }
+                    return MatrixEntry(exerciseName: exerciseName, role: roleRaw)
+                }
+                guard historical.count == current.count,
+                      Set(historical.map(\.exerciseName)) == Set(current.map(\.exerciseName)),
+                      Set(historical.map(\.role))
+                        == Set([LiftRole.main.rawValue, LiftRole.complementary.rawValue]),
+                      Set(historical) != Set(current)
+                else { continue }
+
+                for (order, entry) in historical.enumerated() {
+                    guard let lift = day.lifts.first(where: {
+                        $0.exerciseName == entry.exerciseName
+                    }) else { continue }
+                    lift.role = LiftRole(rawValue: entry.role) ?? lift.role
+                    lift.order = order
+                }
+                break
             }
         }
     }

@@ -416,6 +416,59 @@ const RETIRED_REST_STAMPS = {
   "Back Extension": 90, "Hanging Knee Raise": 90,
 };
 
+// A released inverse-relationship bug could overwrite one program day's
+// two-lift role matrix with an exact copy of a sibling day. Recover only that
+// narrow corruption shape from the newest completed session already tagged
+// for the affected day. Stable slots keep their IDs, exercises, bases, maxes,
+// and progression state; only role/order are restored.
+async function restoreMirroredProgramDayMatrices() {
+  const [programs, sessions] = await Promise.all([Programs.all(), Sessions.completed()]);
+  const matrix = (day) => (day.lifts || []).map((lift) => ({
+    exerciseName: lift.exerciseName, role: lift.role,
+  }));
+  const signature = (entries) => [...entries]
+    .map((entry) => `${entry.exerciseName}\u0000${entry.role}`).sort().join("\u0001");
+  const names = (entries) => [...entries].map((entry) => entry.exerciseName).sort().join("\u0001");
+
+  for (const program of programs) {
+    const programIDs = new Set([program.id, program.uuid].filter((value) => value != null));
+    const histories = sessions.filter((session) => {
+      const tag = session.programTag;
+      return tag && (programIDs.has(tag.programId)
+        || (tag.programId == null && tag.programName === program.name));
+    }).sort((left, right) => new Date(right.completedAt || right.date)
+      - new Date(left.completedAt || left.date));
+    let changed = false;
+
+    for (const day of program.days || []) {
+      const current = matrix(day);
+      if (current.length !== 2 || new Set(current.map((entry) => entry.exerciseName)).size !== 2) continue;
+      const currentSignature = signature(current);
+      const mirrored = (program.days || []).some((sibling) => sibling !== day
+        && signature(matrix(sibling)) === currentSignature);
+      if (!mirrored) continue;
+
+      for (const session of histories.filter((candidate) => candidate.programTag.dayIndex === day.order)) {
+        const historical = (session.exercises || [])
+          .filter((entry) => ["main", "complementary"].includes(entry.programRole))
+          .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+          .map((entry) => ({ exerciseName: entry.exerciseName, role: entry.programRole }));
+        if (historical.length !== 2 || names(historical) !== names(current)
+          || new Set(historical.map((entry) => entry.role)).size !== 2
+          || signature(historical) === currentSignature) continue;
+
+        historical.forEach((entry, order) => {
+          const lift = (day.lifts || []).find((candidate) => candidate.exerciseName === entry.exerciseName);
+          if (lift) { lift.role = entry.role; lift.order = order; }
+        });
+        changed = true;
+        break;
+      }
+    }
+    if (changed) await Programs.save(program);
+  }
+}
+
 // Idempotent library top-up, run every launch: adds any SEED exercises an
 // already-seeded install is missing (new movements ship over time) and
 // backfills movementGroup on older records — WITHOUT clobbering user edits to
@@ -443,6 +496,7 @@ export async function syncLibrary() {
     if (!(cur.implementCount > 0)) { cur.implementCount = seed.implementCount; changed = true; }
     if (changed) await put("exercises", cur);
   }
+  await restoreMirroredProgramDayMatrices();
   // One-shot repair: old seeds stamped EVERY exercise with a rest, and the
   // per-exercise value wins over the buckets — so the rest settings (and the
   // complementary/accessory role timers) never applied to any seeded movement.

@@ -293,69 +293,6 @@ public enum ProgramEngine {
         )
     }
 
-    /// Repair an impossible rising-wave prescription from the latest earlier
-    /// clean exposure of this exact program slot in the current cycle. This is
-    /// deliberately narrow: only a prior rising phase feeding Load or Peak can
-    /// re-anchor, and only when the stored next plan would fail to exceed work
-    /// the athlete already completed. Deloads, new cycles, manual holds above
-    /// the prior load, and unclean work remain owned by stored program state.
-    public static func reconciledBaseWeight(
-        storedBaseWeightLb: Double,
-        previousPerformedWeightLb: Double,
-        previousPhase: CyclePhase,
-        currentPhase: CyclePhase,
-        programRoundingLb: Double,
-        exerciseType: String?,
-        movementGroup: String? = nil,
-        role: LiftRole = .main,
-        focus: TrainingFocus = .strength,
-        prescriptionStyle: PrescriptionStyle = .automatic,
-        configuration: LiftPrescriptionConfiguration = .init()
-    ) -> Double {
-        // Styles that manage their own base (rep windows, methodology fixed
-        // increments, training maxes, speed waves) are never re-anchored off a
-        // heavier performed set — their published progression owns the base.
-        guard previousPhase.rawValue < currentPhase.rawValue,
-              currentPhase == .load || currentPhase == .peak,
-              previousPerformedWeightLb > 0,
-              !resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus).buildsOwnSessionShape
-        else { return storedBaseWeightLb }
-
-        func plan(base: Double, phase: CyclePhase) -> SessionPlan {
-            programPlan(
-                for: CycleState(baseWeightLb: base, nextPhase: phase, incrementLb: 0),
-                programRoundingLb: programRoundingLb,
-                exerciseType: exerciseType,
-                movementGroup: movementGroup,
-                role: role,
-                focus: focus,
-                prescriptionStyle: prescriptionStyle,
-                configuration: configuration
-            )
-        }
-
-        let storedNext = plan(base: storedBaseWeightLb, phase: currentPhase).weightLb
-        guard storedNext <= previousPerformedWeightLb else { return storedBaseWeightLb }
-
-        let step = max(0.5, loadStep(programRoundingLb: programRoundingLb, exerciseType: exerciseType))
-        let upper = max(2_000, previousPerformedWeightLb * 2)
-        var bestBase = storedBaseWeightLb
-        var bestError = Double.greatestFiniteMagnitude
-        var candidate = step
-        while candidate <= upper {
-            let error = abs(plan(base: candidate, phase: previousPhase).weightLb - previousPerformedWeightLb)
-            if error < bestError - 1e-9
-                || (abs(error - bestError) < 1e-9
-                    && abs(candidate - storedBaseWeightLb) < abs(bestBase - storedBaseWeightLb)) {
-                bestBase = candidate
-                bestError = error
-            }
-            candidate += step
-        }
-        return plan(base: bestBase, phase: currentPhase).weightLb > storedNext
-            ? bestBase : storedBaseWeightLb
-    }
-
     /// Resolves the low-friction automatic choice. Olympic lifts prioritize
     /// crisp practice; hypertrophy programs use a rep-range wave; secondary
     /// lifts carry less fatigue than main lifts.

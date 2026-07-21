@@ -61,43 +61,6 @@ export const defaultStartFraction = (style) => ({
   linearFives: 0.74, texasVolume: 0.77, texasLight: 0.62, texasIntensity: 0.86,
   fiveThreeOne: 0.90, maxEffort: 0.90, dynamicEffort: 0.50,
 }[style] || 0);
-// Repair an impossible rising-wave prescription from the immediately prior
-// clean exposure of this exact program slot. Deloads, new cycles, holds above
-// the prior load, double progression, and adjusted work keep stored state.
-export function reconciledProgramBaseWeight(storedBaseWeightLb, previousPerformedWeightLb,
-  previousPhase, currentPhase, programRoundingLb, exerciseType = null, movementGroup = null,
-  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {}) {
-  // Styles that manage their own base (rep windows, methodology fixed
-  // increments, training maxes, speed waves) are never re-anchored off a
-  // heavier performed set — their published progression owns the base.
-  if (!(previousPhase < currentPhase) || ![2, 3].includes(currentPhase)
-      || !(previousPerformedWeightLb > 0)
-      || buildsOwnSessionShape(resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus))) {
-    return storedBaseWeightLb;
-  }
-  const plan = (baseWeightLb, nextPhase) => programPlanFor(
-    { cycleNumber: 1, baseWeightLb, nextPhase, incrementLb: 0 },
-    programRoundingLb, exerciseType, movementGroup, role, focus, prescriptionStyle, configuration,
-  );
-  const storedNext = plan(storedBaseWeightLb, currentPhase).weightLb;
-  if (storedNext > previousPerformedWeightLb) return storedBaseWeightLb;
-
-  const step = Math.max(0.5, programLoadStep(programRoundingLb, exerciseType));
-  const upper = Math.max(2000, previousPerformedWeightLb * 2);
-  let bestBase = storedBaseWeightLb;
-  let bestError = Number.POSITIVE_INFINITY;
-  for (let candidate = step; candidate <= upper; candidate += step) {
-    const error = Math.abs(plan(candidate, previousPhase).weightLb - previousPerformedWeightLb);
-    if (error < bestError - 1e-9
-        || (Math.abs(error - bestError) < 1e-9
-          && Math.abs(candidate - storedBaseWeightLb) < Math.abs(bestBase - storedBaseWeightLb))) {
-      bestBase = candidate;
-      bestError = error;
-    }
-  }
-  return plan(bestBase, currentPhase).weightLb > storedNext ? bestBase : storedBaseWeightLb;
-}
-
 export function resolvedPrescriptionStyle(requested = "automatic", movementGroup = null,
   role = "main", focus = "strength") {
   if (requested !== "automatic") return requested;

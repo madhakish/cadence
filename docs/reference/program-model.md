@@ -26,6 +26,13 @@ hypertrophy to 78% with 1.5%, maintain never increments.
 
 ## Lift (per day)
 
+The ordered day matrix is the prescription source of truth. For example,
+`Lower A: Back Squat/main + Deadlift/complementary` and
+`Lower B: Deadlift/main + Back Squat/complementary` are four independent
+slots even though the exercise names repeat. Preview and session creation read
+the selected day's slots directly; they do not scan recent same-name sets to
+reconstruct the program.
+
 | Field | Meaning |
 |---|---|
 | `id` | Stable slot identity; completion uses this rather than exercise name/order |
@@ -64,3 +71,9 @@ to the remaining planned sets also updates the session prescription, while
 completed and skipped rows remain untouched. Completion therefore compares
 performed work with the accepted, adjusted target rather than the originally
 generated number.
+
+Startup integrity repair is deliberately separate from prescription math. If
+an older relationship-aliasing bug made one two-lift day an exact role-for-role
+copy of another, Cadence can restore that day's role/order from its own newest
+tagged completed session while leaving every slot ID and progression value
+unchanged.

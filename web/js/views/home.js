@@ -5,7 +5,7 @@ import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Protein, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
-import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, reconciledProgramBase } from "./session.js";
+import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession } from "./session.js";
 
 const orderedSlots = (slots = [], roleAwareLegacy = false) => {
   const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
@@ -126,7 +126,7 @@ export async function render(host) {
     root.append(ui.h("div", { class: "section-title", text: `${program.name} · Cycle ${program.cycleNumber}` }));
     const card = ui.h("div", { class: "card" },
       ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px", cursor: "pointer" },
-        onClick: () => workoutPreview(program, day, { exMap, gym, barLb, completed }) },
+        onClick: () => workoutPreview(program, day, { exMap, gym, barLb }) },
         ui.h("span", { class: "title", text: day.name }),
         ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
           ui.wave(program.currentWeek),
@@ -135,8 +135,7 @@ export async function render(host) {
     const lifts = orderedSlots(day.lifts, true);
     for (const l of lifts) {
       const ex = exMap.get(l.exerciseName);
-      const baseWeightLb = reconciledProgramBase(program, day, l, completed, ex);
-      const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+      const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
         program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
         { ...l, workingSets: l.doubleProgressionSets ?? 3 });
       // Preview the same snapped weight the session will store (secondary barbell lifts).
@@ -232,7 +231,7 @@ function showGymTag(gym) {
 // creating a session; the Start button up top is what commits. Same preview
 // math as the Today card, so preview and started session never disagree.
 // (iOS mirror: WorkoutPreviewView.)
-function workoutPreview(program, day, { exMap, gym, barLb, completed }) {
+function workoutPreview(program, day, { exMap, gym, barLb }) {
   ui.pushScreen({
     title: day.name,
     build: (body) => {
@@ -249,8 +248,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed }) {
       if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No wave lifts this day." }));
       for (const l of lifts) {
         const ex = exMap.get(l.exerciseName);
-        const baseWeightLb = reconciledProgramBase(program, day, l, completed, ex);
-        const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+        const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
           { ...l, workingSets: l.doubleProgressionSets ?? 3 });
         const targetWeightLb = plan.weightLb;

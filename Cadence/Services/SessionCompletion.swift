@@ -234,13 +234,50 @@ enum SessionCompletion {
         }
     }
 
+    private static func completedProgramInstructionsMatch(
+        _ session: WorkoutSession,
+        day: ProgramDay
+    ) -> Bool {
+        let completed = session.exercises.filter { entry in
+            guard entry.programSlotID != nil || entry.programRole != nil else { return false }
+            let candidates = entry.orderedSets.filter {
+                !$0.isWarmup
+                    && ($0.prescriptionBlock == .work || $0.prescriptionBlock == .conditioning)
+            }
+            return candidates.prefix(entry.plannedSets ?? candidates.count)
+                .contains { $0.status == .completed }
+        }
+        guard !completed.isEmpty else { return false }
+        return completed.allSatisfy { entry in
+            guard let role = entry.programRole else { return false }
+            if role == LiftRole.main.rawValue || role == LiftRole.complementary.rawValue {
+                if let slotID = entry.programSlotID {
+                    return day.lifts.contains { $0.id == slotID && $0.role.rawValue == role }
+                }
+                let matches = day.lifts.filter {
+                    $0.role.rawValue == role && $0.exerciseName == entry.exercise?.name
+                }
+                return matches.count == 1
+            }
+            if role == "accessory" {
+                if let slotID = entry.programSlotID {
+                    return day.accessories.contains { $0.id == slotID }
+                }
+                return day.accessories.filter { $0.exerciseName == entry.exercise?.name }.count == 1
+            }
+            return false
+        }
+    }
+
     private static func programmedEntry(
         for slotID: String,
         exerciseName: String,
         role: String,
         in session: WorkoutSession
     ) -> SessionExercise? {
-        if let exact = session.exercises.first(where: { $0.programSlotID == slotID }) {
+        if let exact = session.exercises.first(where: {
+            $0.programSlotID == slotID && $0.programRole == role
+        }) {
             return exact
         }
         let lineage = session.exercises.filter {
@@ -312,6 +349,12 @@ enum SessionCompletion {
             nextDayIndex: program.nextDayIndex
         ) else {
             let label = "\(program.name): banked a session from cycle \(tagCycle) week \(week) day \(dayIndex + 1), but the program has moved on — kept as history, schedule not advanced twice."
+            context.insert(Milestone(date: session.date, exerciseName: nil, kind: .programNote, label: label))
+            events.append(PREvent(kind: .programNote, exercise: program.name, label: label))
+            return
+        }
+        guard completedProgramInstructionsMatch(session, day: day) else {
+            let label = "\(program.name): banked work from an older version of day \(dayIndex + 1) — kept as history, current schedule unchanged."
             context.insert(Milestone(date: session.date, exerciseName: nil, kind: .programNote, label: label))
             events.append(PREvent(kind: .programNote, exercise: program.name, label: label))
             return
