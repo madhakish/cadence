@@ -370,6 +370,15 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
   return makeSolution(bar, perSide, targetLb, collarLb, policy, !!policyBest);
 }
 
+// What a session stores for a solved rack load. Inside the good-enough band
+// the clean stack is loading GUIDANCE, not a new prescription — the programmed
+// number stays on the card (90, not the 89.1 lb a 10 kg pair happens to
+// weigh), and the barbell hint explains the actual plates. Only a genuinely
+// unreachable target stores the achieved load, so the log stays honest on
+// sparse racks. Mirrored 1:1 in CadenceCore PlateMath.storedPrescription.
+export const storedPrescription = (targetLb, achievedLb) =>
+  (Math.abs(achievedLb - targetLb) <= TOLERANCE_LB + 1e-9 ? targetLb : achievedLb);
+
 // Resolve a programmed target against the active rack and retain the nearest
 // achievable load on each side for the UI. Explicit gym policy wins; closest
 // ties can be phase-aware (volume over, peak/other under).
@@ -543,8 +552,11 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     wave: {
       1: [5, 5, 1.0], 2: [5, 3, 1.10], 3: [3, 3, 1.175], 4: [3, 5, 0.775],
     },
+    // Complementary work is volume after the day's heavy main — never a second
+    // miniature of the main wave. Sets stay at 5+ reps and at or below the
+    // slot's base (a 5-rep-calibrated weight; 8s sit ~90%).
     secondary: {
-      1: [3, 5, 1.0], 2: [3, 4, 1.05], 3: [3, 3, 1.10], 4: [2, 5, 0.80],
+      1: [3, 8, 0.90], 2: [3, 8, 0.95], 3: [3, 6, 1.0], 4: [2, 8, 0.75],
     },
     hypertrophy: {
       1: [4, 10, 1.0], 2: [4, 8, 1.025], 3: [3, 8, 1.05], 4: [2, 10, 0.85],

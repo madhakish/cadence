@@ -104,6 +104,15 @@ eq(s.perSide[1].plate.value, 15, "220 fills with the 15kg");
 ok(!s.isOffTarget, "220 within tolerance");
 eq(new Set(s.perSide.map((pc) => pc.plate.unit)).size, 1, "220 no unit mix");
 
+// The clean stack is loading guidance, not a new prescription: within the
+// band the programmed number is what gets stored; only genuinely unreachable
+// targets store the achieved load.
+eq(C.storedPrescription(90, 89.1), 90, "in-band kg stack keeps the neat 90");
+eq(C.storedPrescription(220, s.totalLb), 220, "220 card stays 220 despite the kg stack");
+eq(C.storedPrescription(155, 155), 155, "exact load passes through");
+eq(C.storedPrescription(90, 85), 85, "unreachable target stores the honest load");
+eq(C.storedPrescription(50, 65), 65, "sparse-rack overshoot stays honest");
+
 // Heaviest-first beats fewest-plates: 255 is 45+45+10+5 per side, never 35×3
 // (equal weight, fewer plates, but nobody skips the 45s).
 s = C.solve(255, C.BARS.bar45lb, C.STANDARD_LB);
@@ -189,7 +198,13 @@ eq(C.resolvedPrescriptionStyle("automatic", "press", "main", "hypertrophy"), "hy
 eq(C.resolvedPrescriptionStyle("automatic", "olympic", "main", "strength"), "technique", "Olympic lift prioritizes technique");
 let rolePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 0 }, 5,
   "barbell", "hinge", "complementary", "strength", "automatic");
-eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x5@200", "complementary volume avoids a second 5x5");
+eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x8@180", "complementary volume avoids a second 5x5");
+for (const [phase, expected] of [[1, "3x8@180"], [2, "3x8@190"], [3, "3x6@200"], [4, "2x8@150"]]) {
+  const p = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: phase, incrementLb: 0 }, 5,
+    "barbell", "hinge", "complementary", "strength", "automatic");
+  eq(`${p.sets}x${p.reps}@${p.weightLb}`, expected, `complementary phase ${phase} stays volume-oriented`);
+  ok(p.reps >= 5 && p.weightLb <= 200, `complementary phase ${phase} is 5+ reps at/below base`);
+}
 let techniquePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 100, nextPhase: 3, incrementLb: 0 }, 5,
   "barbell", "olympic", "main", "strength", "automatic");
 eq(`${techniquePlan.sets}x${techniquePlan.reps}@${techniquePlan.weightLb}`, "6x1@110", "Olympic peak is crisp singles");

@@ -60,9 +60,25 @@ reconstruct the program.
 
 Starting a program day pre-fills one session exercise per lift and
 accessory, tagged with the program, cycle, week, day, role, and exact slot ID.
-Barbell lifts get a warmup ramp; main dumbbell lifts get a short per-hand
-40/60/80% ramp. Complementary/accessory barbell work snaps to a neat
-bar-loadable weight. The program tag validates the schedule position and the
+Main barbell lifts get a full warmup ramp; main dumbbell lifts get a short
+per-hand 40/60/80% ramp. A **complementary** lift assumes the lifter is
+already warm from the day's main work: with the automatic warmup policy it
+bridges with the last **two** ramp steps only, then goes straight to its
+working sets (an explicit per-slot warmup policy still wins).
+
+Roles also shape the prescription itself. A main lift follows the phase wave
+(5×5 → 5×3 → 3×3 → deload). A complementary lift on the automatic style is
+**volume work, not a second miniature of that wave**: 3×8 at 90% of its base →
+3×8 at 95% → 3×6 at 100% → deload 2×8 at 75% — always 5+ reps, never above
+the slot's base weight.
+
+Complementary/accessory barbell work snaps to a neat bar-loadable weight.
+Plate math against the gym's rack is **loading guidance, not a new
+prescription**: when the closest clean stack lands within the 2 lb
+good-enough band of the programmed number (common when kg plates serve a lb
+prescription), the session stores the neat programmed weight and the barbell
+hint explains the actual plates; only a genuinely unreachable target stores
+the achieved load. The program tag validates the schedule position and the
 slot ID selects the progression record to advance — see
 [Progression rules](progression-rules.md#stale-sessions).
 

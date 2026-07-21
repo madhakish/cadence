@@ -138,9 +138,15 @@ for (const track of [
     C.warmupRamp(135, 45, 5), 135, C.BARS.bar45lb, rack);
   ok(achieved.length > 0 && achieved[0].weightLb === 50,
     "warmup opener includes configured collars");
-  ok(achieved.every((set) => C.solve(set.weightLb, C.BARS.bar45lb,
-    rack.plateToggles.filter((toggle) => toggle.enabled), 10, 5, "closest").totalLb === set.weightLb),
-    "every generated warmup is achievable on the configured rack");
+  // Stored warmups keep the neat programmed number whenever the rack lands
+  // within the good-enough band (a kg clean stack is loading guidance, not a
+  // new prescription); only unreachable targets store the achieved load.
+  ok(achieved.every((set) => Math.abs(C.solve(set.weightLb, C.BARS.bar45lb,
+    rack.plateToggles.filter((toggle) => toggle.enabled), 10, 5, "closest").totalLb - set.weightLb)
+    <= C.TOLERANCE_LB + 1e-9),
+    "every generated warmup is loadable within the good-enough band");
+  ok(session.neatProgramWeight(220, squat, true, 45, 5, { ...gym, collarWeightLb: 0 }) === 220,
+    "a near-miss kg clean stack never rewrites the neat programmed weight");
 }
 
 // Program changes and their audit records are one transaction. The adapter
@@ -776,6 +782,13 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(built.programTag && built.programTag.week === 1, "program session is tagged");
   const roles = built.exercises.map((e) => e.programRole);
   ok(roles.includes("main") && roles.includes("complementary") && roles.includes("accessory"), "day has main+complementary+accessories");
+  // The lifter is already warm from the main lift: a complementary barbell
+  // slot bridges with exactly two warmups, then goes straight to volume work.
+  const builtComp = built.exercises.find((e) => e.programRole === "complementary");
+  ok(builtComp.sets.filter((set) => set.isWarmup).length === 2,
+    "complementary lift gets two bridging warmups, not a full ramp");
+  ok(builtComp.plannedReps >= 5 && builtComp.plannedWeightLb <= 185,
+    "complementary work is volume at/below its base, not a heavy mirror of the main wave");
   await completeAll(built); // i=0 banked (Lower A, week 1)
 
   for (let i = 1; i < 16; i++) {        // remaining of 4 weeks × 4 days

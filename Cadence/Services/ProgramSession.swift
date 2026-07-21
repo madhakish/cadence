@@ -117,8 +117,12 @@ enum ProgramSession {
             session.exercises.append(entry)
 
             var so = 0
+            // A complementary lift follows the day's heavy main — the lifter
+            // is already warm, so two bridging sets are enough. An explicit
+            // per-slot policy still wins.
             let resolvedWarmup: WarmupPolicy = {
                 guard lift.warmupPolicy == .automatic else { return lift.warmupPolicy }
+                if lift.role == .complementary { return .short }
                 return preparedMovementGroups.contains(exercise.movementGroup) ? .short : .full
             }()
             let blockLoads = prescription.blocks.map {
@@ -294,7 +298,11 @@ enum ProgramSession {
             policy: gym?.loadingPolicy ?? .closest,
             preferOverOnTie: phase == .volume
         )
-        return options.selected.loadout.totalLb
+        // A near-miss clean stack (e.g. kg plates on a lb prescription) stays
+        // loading guidance — the neat programmed number is what gets stored.
+        return PlateMath.storedPrescription(
+            targetLb: rounded, achievedLb: options.selected.loadout.totalLb
+        )
     }
 
     /// Resolve every theoretical warmup against the same rack, collars, and
@@ -311,9 +319,11 @@ enum ProgramSession {
                 collarLb: gym?.collarWeightLb ?? 0,
                 policy: gym?.loadingPolicy ?? .closest
             )
-            let achieved = solution.loadout.totalLb
-            guard achieved < workingLb - 1e-9, seen.insert(achieved).inserted else { return nil }
-            return WarmupSet(weightLb: achieved, reps: warmup.reps)
+            let stored = PlateMath.storedPrescription(
+                targetLb: warmup.weightLb, achievedLb: solution.loadout.totalLb
+            )
+            guard stored < workingLb - 1e-9, seen.insert(stored).inserted else { return nil }
+            return WarmupSet(weightLb: stored, reps: warmup.reps)
         }
     }
 
@@ -332,12 +342,13 @@ enum ProgramSession {
             dropIncrementLb: dropIncrementLb
         )
         guard exercise?.type == .barbell else { return target }
-        return PlateMath.solve(
+        let achieved = PlateMath.solve(
             targetLb: target, bar: bar,
             plates: gym?.availablePlates ?? Plate.allStandard,
             collarLb: gym?.collarWeightLb ?? 0,
             policy: .under
         ).loadout.totalLb
+        return PlateMath.storedPrescription(targetLb: target, achievedLb: achieved)
     }
 
     private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool,
