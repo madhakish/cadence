@@ -185,20 +185,6 @@ eq(C.resolvedPrescriptionStyle("automatic", "press", "main", "strength"), "wave"
 eq(C.resolvedPrescriptionStyle("automatic", "hinge", "complementary", "strength"), "secondary", "automatic complementary uses lower-fatigue strategy");
 eq(C.resolvedPrescriptionStyle("automatic", "press", "main", "hypertrophy"), "hypertrophy", "focus drives hypertrophy prescription");
 eq(C.resolvedPrescriptionStyle("automatic", "olympic", "main", "strength"), "technique", "Olympic lift prioritizes technique");
-const repairedSquatBase = C.reconciledProgramBaseWeight(
-  150, 215, 2, 3, 5, "barbell", "squat", "main", "strength", "automatic",
-);
-eq(repairedSquatBase, 195, "stale squat base re-anchors from exact prior Load exposure");
-eq(C.programPlanFor(
-  { cycleNumber: 1, baseWeightLb: repairedSquatBase, nextPhase: 3, incrementLb: 0 },
-  5, "barbell", "squat", "main", "strength", "automatic",
-).weightLb, 230, "re-anchored squat Peak follows the programmed wave");
-eq(C.reconciledProgramBaseWeight(
-  200, 215, 2, 3, 5, "barbell", "squat", "main", "strength", "automatic",
-), 200, "already-rising stored prescription remains authoritative");
-eq(C.reconciledProgramBaseWeight(
-  150, 215, 3, 4, 5, "barbell", "squat", "main", "strength", "automatic",
-), 150, "deload is never re-anchored upward");
 let rolePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 0 }, 5,
   "barbell", "hinge", "complementary", "strength", "automatic");
 eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x5@200", "complementary volume avoids a second 5x5");
@@ -881,8 +867,6 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   eq(tmSecond.state.stallCount, 0, "the compromised-cycle counter is consumed by the reset");
   const meMiss2 = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);
   eq(meMiss2.state.stallCount, 0, "ME misses never accrue a counter another style could trip over");
-  eq(C.reconciledProgramBaseWeight(300, 190, 1, 2, 5, "barbell", "press", "main", "strength", "fiveThreeOne"), 300,
-    "methodology bases are never re-anchored off a heavier performed set");
   const meUp = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, cleanTop, "strength", "maxEffort", "press", 5);
   eq(meUp.state.baseWeightLb, 320, "ME upper target +5 after a made single");
   const meMiss = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);

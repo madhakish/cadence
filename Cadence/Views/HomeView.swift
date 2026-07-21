@@ -60,12 +60,8 @@ struct HomeView: View {
     private func rawProgramPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         let exercise = exercises.first { $0.name == lift.exerciseName }
-        let baseWeightLb = ProgramSession.reconciledBaseWeight(
-            for: lift, program: program, day: day,
-            exercise: exercise, sessions: completedSessions
-        )
         return ProgramEngine.programPlan(
-            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: baseWeightLb, nextPhase: phase, incrementLb: 0),
+            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
             programRoundingLb: program.roundingLb,
             exerciseType: exercise?.typeRaw,
             movementGroup: exercise?.movementGroup,

@@ -22,6 +22,10 @@ owner table for docs; other pages link here rather than restating).
 
 Banking the last day of a week advances the week; banking the last day
 of week 4 applies all stashed grades and starts the next cycle at week 1.
+The next prescription is always `nextDayIndex` → that exact day's stable
+slots → the current phase formula. Main, complementary, and unprogrammed extra
+work are separate records; recent same-name history never substitutes for a
+program slot.
 
 ## Grading a lift's peak (week 3)
 
@@ -90,5 +94,6 @@ published methodology's own progression (full details in
 A banked session only advances the program if it was started from the
 program's **current** cycle/week/day. Duplicates and leftovers still
 bank into history — with a note — but can't advance the schedule or
-accessories twice. Starting a day while its session is already open
-resumes the open session.
+accessories twice. A session whose saved slot roles no longer match the current
+day is likewise history-only. Starting a day while an unchanged session is
+already open resumes it; a changed day builds a fresh session.

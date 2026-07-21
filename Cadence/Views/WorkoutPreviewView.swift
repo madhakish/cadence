@@ -15,8 +15,6 @@ struct WorkoutPreviewView: View {
     @Query private var exercises: [Exercise]
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
-    @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date)
-    private var completedSessions: [WorkoutSession]
 
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
     private var unitDisplay: UnitDisplay { settingsList.first?.unitDisplay ?? .lbPrimary }
@@ -24,12 +22,8 @@ struct WorkoutPreviewView: View {
 
     private func targetPlan(for lift: ProgramLift) -> SessionPlan {
         let exercise = exercises.first { $0.name == lift.exerciseName }
-        let baseWeightLb = ProgramSession.reconciledBaseWeight(
-            for: lift, program: program, day: day,
-            exercise: exercise, sessions: completedSessions
-        )
         return ProgramEngine.programPlan(
-            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: baseWeightLb,
+            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb,
                             nextPhase: phase, incrementLb: 0),
             programRoundingLb: program.roundingLb,
             exerciseType: exercise?.typeRaw,

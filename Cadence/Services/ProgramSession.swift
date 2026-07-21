@@ -19,22 +19,6 @@ enum ProgramSession {
 
     static func make(program: Program, day: ProgramDay, context: ModelContext) throws -> WorkoutSession {
         let allExercises = try context.fetch(FetchDescriptor<Exercise>())
-        let completedSessions = try context.fetch(FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { $0.isCompleted },
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        ))
-        // A stale base must not turn the next rising phase into a regression.
-        // Re-anchor only from the latest clean prescribed exposure of this
-        // exact program/day/role lineage; extras and same-name slots in other
-        // roles are intentionally invisible here.
-        for lift in day.orderedLifts {
-            let exercise = allExercises.first { $0.name == lift.exerciseName }
-            let base = reconciledBaseWeight(
-                for: lift, program: program, day: day,
-                exercise: exercise, sessions: completedSessions
-            )
-            if base != lift.baseWeightLb { lift.baseWeightLb = base }
-        }
 
         // Resume, don't duplicate (mirrors web createSessionFromProgramDay):
         // an open session for THIS day at the current position, whose content
@@ -216,75 +200,6 @@ enum ProgramSession {
         return session
     }
 
-    /// Preview/start shared repair for program state that would otherwise put
-    /// a rising phase below the clean work just banked for this exact slot.
-    static func reconciledBaseWeight(
-        for lift: ProgramLift,
-        program: Program,
-        day: ProgramDay,
-        exercise: Exercise?,
-        sessions: [WorkoutSession]
-    ) -> Double {
-        guard let currentPhase = CyclePhase(rawValue: program.currentWeek),
-              currentPhase == .load || currentPhase == .peak
-        else { return lift.baseWeightLb }
-
-        // Find the latest matching EXPOSURE, not merely the latest session for
-        // this day. A later accessory-only or extra-work session must not hide
-        // the prior programmed main/complementary work.
-        let priorExposure = sessions
-            .sorted { ($0.completedAt ?? $0.date) > ($1.completedAt ?? $1.date) }
-            .compactMap { session -> (entry: SessionExercise, phase: CyclePhase)? in
-                guard session.isCompleted,
-                      (session.programID == program.id
-                        || (session.programID == nil && session.programName == program.name)),
-                      session.programCycleNumber == program.cycleNumber,
-                      session.programDayIndex == day.order,
-                      let phaseRaw = session.programWeek,
-                      let phase = CyclePhase(rawValue: phaseRaw),
-                      phase.rawValue < currentPhase.rawValue,
-                      let entry = programmedEntry(for: lift, in: session)
-                else { return nil }
-                return (entry, phase)
-            }
-            .first
-        guard let priorExposure else { return lift.baseWeightLb }
-        let entry = priorExposure.entry
-
-        let candidates = entry.orderedSets.filter {
-            !$0.isWarmup && $0.prescriptionBlock == .work
-        }
-        let required = entry.plannedSets ?? candidates.count
-        let prescribed = Array(candidates.prefix(required))
-        guard required > 0, prescribed.count == required,
-              prescribed.allSatisfy({ set in
-                  set.status == .completed
-                      && set.reps >= (set.plannedReps ?? entry.plannedReps ?? 0)
-                      && set.autoregReason == nil
-                      && !set.flags.contains(.stoppedEarly)
-                      && set.quality != .grindy && set.quality != .wobble
-                      && set.bodyFlagSite == nil
-              }),
-              let performedWeight = prescribed.map(\.weightLb).min()
-        else { return lift.baseWeightLb }
-
-        return ProgramEngine.reconciledBaseWeight(
-            storedBaseWeightLb: lift.baseWeightLb,
-            previousPerformedWeightLb: performedWeight,
-            previousPhase: priorExposure.phase,
-            currentPhase: currentPhase,
-            programRoundingLb: program.roundingLb,
-            exerciseType: exercise?.typeRaw,
-            movementGroup: exercise?.movementGroup,
-            role: lift.role,
-            focus: program.focus,
-            prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(
-                movementGroup: exercise?.movementGroup ?? ""
-            )
-        )
-    }
-
     private static func sessionTargetsMatch(
         _ session: WorkoutSession,
         program: Program,
@@ -308,6 +223,9 @@ enum ProgramSession {
                     movementGroup: exercise?.movementGroup ?? ""
                 )
             ).weightLb
+            if session.exercises.contains(where: {
+                $0.programSlotID == lift.id && $0.programRole != lift.role.rawValue
+            }) { return false }
             guard let entry = programmedEntry(for: lift, in: session)
             else { return true } // a session-local removal stays removed on resume
             guard let target = entry.targetWeightLb ?? entry.plannedWeightLb else { return false }
@@ -323,7 +241,9 @@ enum ProgramSession {
         for lift: ProgramLift,
         in session: WorkoutSession
     ) -> SessionExercise? {
-        if let exact = session.exercises.first(where: { $0.programSlotID == lift.id }) {
+        if let exact = session.exercises.first(where: {
+            $0.programSlotID == lift.id && $0.programRole == lift.role.rawValue
+        }) {
             return exact
         }
         let lineage = session.exercises.filter {
