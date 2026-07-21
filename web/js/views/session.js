@@ -51,6 +51,11 @@ export function achievableWarmups(ramp, workingLb, bar, gym = null) {
   return achieved;
 }
 
+export function includesEmptyBarWarmup(exerciseName) {
+  const key = String(exerciseName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return !["backsquat", "deadlift"].includes(key);
+}
+
 async function defaultGymTag() { const g = await Gyms.default(); return { gymId: g?.id || null, gymName: g?.name || null }; }
 
 export async function createSessionFromTrack(track) {
@@ -65,7 +70,10 @@ export async function createSessionFromTrack(track) {
   const sets = [];
   let order = 0;
   if (ex && ex.type === "barbell") {
-    const ramp = achievableWarmups(C.warmupRamp(workingLb, barLb, track.roundingLb), workingLb, bar, gym);
+    const ramp = achievableWarmups(
+      C.warmupRamp(workingLb, barLb, track.roundingLb, includesEmptyBarWarmup(ex.name)),
+      workingLb, bar, gym,
+    );
     for (const w of ramp) sets.push(mkSet(order++, w.weightLb, w.reps, { warm: true, unit, ...loadOptions(ex) }));
   }
   if (ex && ex.type === "dumbbell") {
@@ -208,7 +216,10 @@ export async function openSession(id) {
     const workingLb = overrideWorkingLb ?? se.plannedWeightLb ?? working[0]?.weightLb;
     if (!ex || !(workingLb > 0)) return;
     const desired = ex.type === "barbell"
-      ? achievableWarmups(C.warmupRamp(workingLb, C.barLb(bar), 5), workingLb, bar, gymState.value)
+      ? achievableWarmups(
+        C.warmupRamp(workingLb, C.barLb(bar), 5, includesEmptyBarWarmup(ex.name)),
+        workingLb, bar, gymState.value,
+      )
       : (ex.type === "dumbbell" && se.programRole === "main" ? C.dumbbellWarmupRamp(workingLb, 5) : null);
     if (!desired) return;
     const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
@@ -1241,7 +1252,11 @@ export async function createSessionFromProgramDay(program, day) {
       : lift.warmupPolicy;
     const topPreparationLoad = blockLoads.length ? Math.max(...blockLoads) : weightLb;
     if (ex && ex.type === "barbell" && warmupPolicy !== "none") {
-      const ramp = achievableWarmups(C.warmupRamp(topPreparationLoad, barLb, program.roundingLb), topPreparationLoad, bar, gym);
+      const ramp = achievableWarmups(
+        C.warmupRamp(topPreparationLoad, barLb, program.roundingLb,
+          includesEmptyBarWarmup(ex.name)),
+        topPreparationLoad, bar, gym,
+      );
       for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, prescriptionBlock: "warmup", ...loadOptions(ex) }));
     }
     if (ex && ex.type === "dumbbell" && warmupPolicy !== "none") {

@@ -22,6 +22,12 @@ final class WarmupRampTests: XCTestCase {
         XCTAssertEqual(ramp[0].reps, 10)
     }
 
+    func testRampCanOmitTheEmptyBarOpener() {
+        let ramp = WarmupRamp.ramp(workingLb: 245, includeEmptyBar: false)
+        XCTAssertEqual(ramp.map(\.weightLb), [100, 135, 170, 210])
+        XCTAssertEqual(ramp.map(\.reps), [5, 3, 2, 1])
+    }
+
     func testRampNeverReachesWorkingWeight() {
         for working in stride(from: 50.0, through: 500.0, by: 7.5) {
             for set in WarmupRamp.ramp(workingLb: working).dropFirst() {

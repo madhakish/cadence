@@ -477,7 +477,8 @@ struct HomeView: View {
             let theoretical = WarmupRamp.ramp(
                 workingLb: plan.weightLb,
                 barLb: (defaultGym?.defaultBar ?? .bar45lb).lb,
-                roundingLb: track.roundingLb
+                roundingLb: track.roundingLb,
+                includeEmptyBar: ProgramSession.includesEmptyBarWarmup(for: exercise)
             )
             for warmup in ProgramSession.achievableWarmups(
                 theoretical, workingLb: plan.weightLb,

@@ -422,8 +422,8 @@ const RAMP_STEPS = [
   { percent: 0.85, reps: 1 },
 ];
 
-export function warmupRamp(workingLb, barLb = 45, roundingLb = 5) {
-  const sets = [{ weightLb: barLb, reps: 10 }];
+export function warmupRamp(workingLb, barLb = 45, roundingLb = 5, includeEmptyBar = true) {
+  const sets = includeEmptyBar ? [{ weightLb: barLb, reps: 10 }] : [];
   for (const step of RAMP_STEPS) {
     const w = roundTo(workingLb * step.percent, roundingLb);
     if (w > barLb + 1e-9 && w < workingLb - 1e-9) sets.push({ weightLb: w, reps: step.reps });
