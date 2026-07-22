@@ -154,8 +154,24 @@ final class ProgramEngineTests: XCTestCase {
         let plan = ProgramEngine.programPlan(for: state, programRoundingLb: 5, exerciseType: "barbell",
                                              movementGroup: "hinge", role: .complementary)
         XCTAssertEqual(plan.sets, 3)
-        XCTAssertEqual(plan.reps, 5)
-        XCTAssertEqual(plan.weightLb, 200)
+        XCTAssertEqual(plan.reps, 8)
+        XCTAssertEqual(plan.weightLb, 180)
+    }
+
+    func testComplementaryStaysVolumeOrientedAcrossTheWholeRotation() {
+        // Complementary work never mirrors the main 5×5→5×3→3×3 wave: every
+        // phase prescribes 5+ reps at or below the slot's base weight.
+        let plans = CyclePhase.allCases.map { phase in
+            ProgramEngine.programPlan(
+                for: CycleState(baseWeightLb: 200, nextPhase: phase),
+                programRoundingLb: 5, exerciseType: "barbell",
+                movementGroup: "hinge", role: .complementary
+            )
+        }
+        XCTAssertEqual(plans.map(\.sets), [3, 3, 3, 2])
+        XCTAssertEqual(plans.map(\.reps), [8, 8, 6, 8])
+        XCTAssertEqual(plans.map(\.weightLb), [180, 190, 200, 150])
+        XCTAssertTrue(plans.allSatisfy { $0.reps >= 5 && $0.weightLb <= 200 })
     }
 
     func testTechniquePeakUsesCrispSingles() {

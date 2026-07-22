@@ -76,7 +76,7 @@ enum ProgramSession {
         var order = 0
         var preparedMovementGroups: Set<String> = []
 
-        for lift in day.orderedLifts {
+        for (liftIndex, lift) in day.orderedLifts.enumerated() {
             let exercise = try findExercise(named: lift.exerciseName, context: context)
             let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
                                                   exerciseType: exercise.typeRaw)
@@ -117,8 +117,13 @@ enum ProgramSession {
             session.exercises.append(entry)
 
             var so = 0
+            // A complementary lift that FOLLOWS other work finds the lifter
+            // already warm, so two bridging sets are enough. A complementary
+            // slot ordered first in the day still ramps fully — nothing has
+            // warmed the lifter yet. An explicit per-slot policy always wins.
             let resolvedWarmup: WarmupPolicy = {
                 guard lift.warmupPolicy == .automatic else { return lift.warmupPolicy }
+                if lift.role == .complementary && liftIndex > 0 { return .short }
                 return preparedMovementGroups.contains(exercise.movementGroup) ? .short : .full
             }()
             let blockLoads = prescription.blocks.map {
@@ -278,9 +283,11 @@ enum ProgramSession {
         (!isMain && isBarbell) ? Weight.barLoadable(weightLb, barLb: barLb, stepLb: stepLb) : weightLb
     }
 
-    /// Resolve the prescription to equipment that exists at this gym. The
-    /// achieved total is what the logger stores, so the plate picture, logged
-    /// set, history, and next progression all describe the same load.
+    /// Resolve the prescription to equipment that exists at this gym. When
+    /// the rack lands within the good-enough band the neat programmed number
+    /// is what gets stored and the plate hint explains the actual stack; only
+    /// a genuinely unreachable target stores the achieved total, so sparse
+    /// racks keep the logged set, history, and progression honest.
     static func achievableWeight(_ weightLb: Double, exercise: Exercise?, isMain: Bool,
                                  gym: Gym?, bar: Bar, stepLb: Double,
                                  phase: CyclePhase? = nil) -> Double {
@@ -294,7 +301,11 @@ enum ProgramSession {
             policy: gym?.loadingPolicy ?? .closest,
             preferOverOnTie: phase == .volume
         )
-        return options.selected.loadout.totalLb
+        // A near-miss clean stack (e.g. kg plates on a lb prescription) stays
+        // loading guidance — the neat programmed number is what gets stored.
+        return PlateMath.storedPrescription(
+            targetLb: rounded, achievedLb: options.selected.loadout.totalLb
+        )
     }
 
     /// Resolve every theoretical warmup against the same rack, collars, and
@@ -311,9 +322,11 @@ enum ProgramSession {
                 collarLb: gym?.collarWeightLb ?? 0,
                 policy: gym?.loadingPolicy ?? .closest
             )
-            let achieved = solution.loadout.totalLb
-            guard achieved < workingLb - 1e-9, seen.insert(achieved).inserted else { return nil }
-            return WarmupSet(weightLb: achieved, reps: warmup.reps)
+            let stored = PlateMath.storedPrescription(
+                targetLb: warmup.weightLb, achievedLb: solution.loadout.totalLb
+            )
+            guard stored < workingLb - 1e-9, seen.insert(stored).inserted else { return nil }
+            return WarmupSet(weightLb: stored, reps: warmup.reps)
         }
     }
 
@@ -332,12 +345,13 @@ enum ProgramSession {
             dropIncrementLb: dropIncrementLb
         )
         guard exercise?.type == .barbell else { return target }
-        return PlateMath.solve(
+        let achieved = PlateMath.solve(
             targetLb: target, bar: bar,
             plates: gym?.availablePlates ?? Plate.allStandard,
             collarLb: gym?.collarWeightLb ?? 0,
             policy: .under
         ).loadout.totalLb
+        return PlateMath.storedPrescription(targetLb: target, achievedLb: achieved)
     }
 
     private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool,

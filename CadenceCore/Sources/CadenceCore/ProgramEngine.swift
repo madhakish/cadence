@@ -80,7 +80,7 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
         case .automatic: return "Automatic"
         case .wave: return "Strength wave"
         case .offsetWave: return "Strength wave — offsets"
-        case .secondary: return "Secondary strength"
+        case .secondary: return "Secondary volume"
         case .hypertrophy: return "Hypertrophy"
         case .technique: return "Technique"
         case .doubleProgression: return "Double progression"
@@ -386,11 +386,15 @@ public enum ProgramEngine {
                 sets: phase.sets, reps: phase.reps, phase: phase, cycleNumber: state.cycleNumber
             )
         case .secondary:
+            // Complementary work is volume after the day's heavy main — never
+            // a second miniature of the main wave. Sets stay at 5+ reps and at
+            // or below the slot's base so the heavy stimulus stays with the
+            // main lift (the base is a 5-rep-calibrated weight; 8s sit ~90%).
             switch phase {
-            case .volume: prescription = (3, 5, 1.0)
-            case .load: prescription = (3, 4, 1.05)
-            case .peak: prescription = (3, 3, 1.10)
-            case .deload: prescription = (2, 5, 0.80)
+            case .volume: prescription = (3, 8, 0.90)
+            case .load: prescription = (3, 8, 0.95)
+            case .peak: prescription = (3, 6, 1.0)
+            case .deload: prescription = (2, 8, 0.75)
             }
         case .hypertrophy:
             switch phase {

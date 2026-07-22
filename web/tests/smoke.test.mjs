@@ -138,9 +138,15 @@ for (const track of [
     C.warmupRamp(135, 45, 5), 135, C.BARS.bar45lb, rack);
   ok(achieved.length > 0 && achieved[0].weightLb === 50,
     "warmup opener includes configured collars");
-  ok(achieved.every((set) => C.solve(set.weightLb, C.BARS.bar45lb,
-    rack.plateToggles.filter((toggle) => toggle.enabled), 10, 5, "closest").totalLb === set.weightLb),
-    "every generated warmup is achievable on the configured rack");
+  // Stored warmups keep the neat programmed number whenever the rack lands
+  // within the good-enough band (a kg clean stack is loading guidance, not a
+  // new prescription); only unreachable targets store the achieved load.
+  ok(achieved.every((set) => Math.abs(C.solve(set.weightLb, C.BARS.bar45lb,
+    rack.plateToggles.filter((toggle) => toggle.enabled), 10, 5, "closest").totalLb - set.weightLb)
+    <= C.TOLERANCE_LB + 1e-9),
+    "every generated warmup is loadable within the good-enough band");
+  ok(session.neatProgramWeight(220, squat, true, 45, 5, { ...gym, collarWeightLb: 0 }) === 220,
+    "a near-miss kg clean stack never rewrites the neat programmed weight");
 }
 
 // Program changes and their audit records are one transaction. The adapter
@@ -762,6 +768,29 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.Programs.del(program.id);
 }
 
+// ---- complementary ordered first still ramps fully (nothing warmed the lifter) ----
+{
+  const name = "Fixture Cold Complementary";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0,
+      lifts: [
+        { ...cyc("Deadlift", "complementary", 185, 255), order: 0 },
+        { ...cyc("Back Squat", "main", 175, 204), order: 1 },
+      ],
+      accessories: [] }],
+  });
+  const prog = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const sId = await session.createSessionFromProgramDay(prog, prog.days[0]);
+  const built = await db.Sessions.get(sId);
+  const cold = built.exercises.find((entry) => entry.programRole === "complementary");
+  ok(cold.sets.filter((set) => set.isWarmup).length > 2,
+    "a complementary lift with no earlier work keeps its full warmup ramp");
+  await db.Sessions.del(sId);
+  await db.Programs.del(prog.id);
+}
+
 // ---- program: bank a full 4-week cycle, assert adaptive progression ----
 {
   const sqTrackBase = (await db.Tracks.byName("Back Squat")).baseWeightLb; // standalone, must not move
@@ -776,6 +805,13 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(built.programTag && built.programTag.week === 1, "program session is tagged");
   const roles = built.exercises.map((e) => e.programRole);
   ok(roles.includes("main") && roles.includes("complementary") && roles.includes("accessory"), "day has main+complementary+accessories");
+  // The lifter is already warm from the main lift: a complementary barbell
+  // slot bridges with exactly two warmups, then goes straight to volume work.
+  const builtComp = built.exercises.find((e) => e.programRole === "complementary");
+  ok(builtComp.sets.filter((set) => set.isWarmup).length === 2,
+    "complementary lift gets two bridging warmups, not a full ramp");
+  ok(builtComp.plannedReps >= 5 && builtComp.plannedWeightLb <= 185,
+    "complementary work is volume at/below its base, not a heavy mirror of the main wave");
   await completeAll(built); // i=0 banked (Lower A, week 1)
 
   for (let i = 1; i < 16; i++) {        // remaining of 4 weeks × 4 days

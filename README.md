@@ -26,7 +26,8 @@ no quotes.
   separate. Mid-session "Dropping load" uses a pre-computed fallback and logs
   why (bar speed / wobble / joint / heat / fatigue / not there).
 - **Session logging** — pre-filled warmup ramps (loaded steps for back squats/deadlifts; bar×10 +
-  ~40/55/70/85%; main dumbbell ~40/60/80% per hand), add/remove individual
+  ~40/55/70/85%; two bridging steps for complementary lifts after the day's
+  main; main dumbbell ~40/60/80% per hand), add/remove individual
   sets, propagate weight/reps edits across the remaining planned work,
   explicit planned/completed/skipped sets, optional exclusive quality
   (clean/grindy/wobble), independent stopped-early notes, kg or lb entry

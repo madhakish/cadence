@@ -260,4 +260,17 @@ final class PlateMathTests: XCTestCase {
                              Plate(value: 10, unit: .lb).sizeFactor,
                              "bigger plate draws taller")
     }
+
+    func testStoredPrescriptionKeepsTheProgrammedNumberInsideTheBand() {
+        // A 10 kg pair on a 90 lb warmup loads 89.1 — guidance, not a new
+        // prescription. The card keeps saying 90.
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 90, achievedLb: 89.1), 90)
+        // The kg "clean stack" for 220 loads 221.4 — the card keeps 220.
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 220, achievedLb: 221.37), 220)
+        // Exactly loadable targets pass straight through.
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 155, achievedLb: 155), 155)
+        // A genuinely unreachable target stores the honest achieved load.
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 90, achievedLb: 85), 85)
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 50, achievedLb: 65), 65)
+    }
 }

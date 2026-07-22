@@ -567,6 +567,62 @@ private struct ExerciseSection: View {
                                     config: settings?.restConfig ?? .standard) == 0 ? 0 : 15
     }
 
+    @ViewBuilder
+    private func actionLabel(_ title: String, systemImage: String, iconOnly: Bool) -> some View {
+        if iconOnly {
+            Label(title, systemImage: systemImage).labelStyle(.iconOnly)
+        } else {
+            // fixedSize keeps ViewThatFits honest: a row that would have to
+            // wrap its titles mid-word reports "doesn't fit" instead.
+            Label(title, systemImage: systemImage).lineLimit(1).fixedSize()
+        }
+    }
+
+    private func setActionButtons(iconOnly: Bool) -> some View {
+        HStack {
+            Button {
+                onWork(entry)
+                addSet()
+            } label: {
+                actionLabel("Set", systemImage: "plus", iconOnly: iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Add set")
+
+            Button {
+                onWork(entry)
+                if let last = entry.orderedSets.last(where: { !$0.isWarmup }) ?? entry.orderedSets.last {
+                    removeSet(last)
+                }
+            } label: {
+                actionLabel("Set", systemImage: "minus", iconOnly: iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .disabled(entry.sets.isEmpty)
+            .accessibilityLabel("Remove set")
+
+            Button {
+                onWork(entry)
+                restTimer.start(seconds: restSeconds, exerciseName: entry.exercise?.name ?? "")
+            } label: {
+                actionLabel("Rest", systemImage: "timer", iconOnly: iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Start rest timer")
+
+            Spacer()
+
+            Button {
+                onDropLoad()
+            } label: {
+                actionLabel("Dropping load", systemImage: "arrow.down.right", iconOnly: iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.warn)
+            .accessibilityLabel("Dropping load")
+        }
+    }
+
     var body: some View {
         Section {
             ForEach(entry.orderedSets) { set in
@@ -602,43 +658,12 @@ private struct ExerciseSection: View {
                 PersistenceErrorCenter.shared.save(context, operation: "Deleting the set")
             }
 
-            HStack {
-                Button {
-                    onWork(entry)
-                    addSet()
-                } label: {
-                    Label("Set", systemImage: "plus")
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    onWork(entry)
-                    if let last = entry.orderedSets.last(where: { !$0.isWarmup }) ?? entry.orderedSets.last {
-                        removeSet(last)
-                    }
-                } label: {
-                    Label("Set", systemImage: "minus")
-                }
-                .buttonStyle(.bordered)
-                .disabled(entry.sets.isEmpty)
-
-                Button {
-                    onWork(entry)
-                    restTimer.start(seconds: restSeconds, exerciseName: entry.exercise?.name ?? "")
-                } label: {
-                    Label("Rest", systemImage: "timer")
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
-
-                Button {
-                    onDropLoad()
-                } label: {
-                    Label("Dropping load", systemImage: "arrow.down.right")
-                }
-                .buttonStyle(.bordered)
-                .tint(Theme.warn)
+            // The row must never solve a tight fit by wrapping label text
+            // character-by-character; when the full labels don't fit (larger
+            // Dynamic Type), fall back to icons with accessibility labels.
+            ViewThatFits(in: .horizontal) {
+                setActionButtons(iconOnly: false)
+                setActionButtons(iconOnly: true)
             }
 
             if entry.exercise?.type == .barbell {
@@ -769,7 +794,7 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
           let workingLb = overrideWorkingLb ?? entry.plannedWeightLb
             ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb,
           workingLb > 0 else { return }
-    let desired: [WarmupSet]
+    var desired: [WarmupSet]
     if exercise.type == .barbell {
         desired = ProgramSession.achievableWarmups(
             WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
@@ -785,6 +810,16 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
         return
     }
     let existing = entry.orderedSets.filter(\.isWarmup)
+    // A programmed entry was built under a resolved warmup policy — full
+    // ramp, two bridging sets for a complementary lift, or none — possibly
+    // refined by the user's own row edits. Resync refreshes the warmup
+    // WEIGHTS for the new bar/gym/working weight without changing how many
+    // warmups the plan owns (suffix keeps the steps nearest the working
+    // weight); it must never re-inflate a deliberately short or empty ramp.
+    // Manually added exercises still grow a full ramp as before.
+    if entry.programRole != nil {
+        desired = Array(desired.suffix(existing.count))
+    }
     var rebuilt: [SetEntry] = []
     for (index, target) in desired.enumerated() {
         if index < existing.count {

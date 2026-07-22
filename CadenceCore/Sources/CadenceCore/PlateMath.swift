@@ -213,6 +213,17 @@ public enum PlateMath {
                              targetLb: targetLb, policy: policy, satisfiesPolicy: policyBest != nil)
     }
 
+    /// What a session stores for a solved rack load. Inside the good-enough
+    /// band the clean stack is loading GUIDANCE, not a new prescription — the
+    /// programmed number stays on the card (90, not the 89.1 lb a 10 kg pair
+    /// happens to weigh), and the barbell hint explains the actual plates.
+    /// Only a genuinely unreachable target stores the achieved load, so the
+    /// log stays honest on sparse racks. Mirrored 1:1 in web/js/core.js
+    /// `storedPrescription`.
+    public static func storedPrescription(targetLb: Double, achievedLb: Double) -> Double {
+        abs(achievedLb - targetLb) <= toleranceLb + 1e-9 ? targetLb : achievedLb
+    }
+
     /// Resolve a programmed target against the active rack. An explicit gym
     /// policy wins. With the default closest policy, equal misses select the
     /// heavier option on a volume exposure and the lighter option otherwise

@@ -490,7 +490,7 @@ async function programDayEditor(p, day) {
             ui.h("div", { class: "row" }, ui.h("span", { text: "Prescription" }), (() => {
               const select = ui.h("select", {}, ...[
                 ["automatic", "Automatic"], ["wave", "Strength wave"], ["offsetWave", "Strength wave — offsets"],
-                ["secondary", "Secondary strength"], ["hypertrophy", "Hypertrophy"], ["technique", "Technique"],
+                ["secondary", "Secondary volume"], ["hypertrophy", "Hypertrophy"], ["technique", "Technique"],
                 ["doubleProgression", "Double progression"],
                 ["linearFives", "Linear fives"], ["texasVolume", "Texas — volume day"],
                 ["texasLight", "Texas — light day"], ["texasIntensity", "Texas — intensity day"],
