@@ -768,6 +768,29 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.Programs.del(program.id);
 }
 
+// ---- complementary ordered first still ramps fully (nothing warmed the lifter) ----
+{
+  const name = "Fixture Cold Complementary";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0,
+      lifts: [
+        { ...cyc("Deadlift", "complementary", 185, 255), order: 0 },
+        { ...cyc("Back Squat", "main", 175, 204), order: 1 },
+      ],
+      accessories: [] }],
+  });
+  const prog = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const sId = await session.createSessionFromProgramDay(prog, prog.days[0]);
+  const built = await db.Sessions.get(sId);
+  const cold = built.exercises.find((entry) => entry.programRole === "complementary");
+  ok(cold.sets.filter((set) => set.isWarmup).length > 2,
+    "a complementary lift with no earlier work keeps its full warmup ramp");
+  await db.Sessions.del(sId);
+  await db.Programs.del(prog.id);
+}
+
 // ---- program: bank a full 4-week cycle, assert adaptive progression ----
 {
   const sqTrackBase = (await db.Tracks.byName("Back Squat")).baseWeightLb; // standalone, must not move

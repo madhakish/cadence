@@ -61,10 +61,11 @@ reconstruct the program.
 Starting a program day pre-fills one session exercise per lift and
 accessory, tagged with the program, cycle, week, day, role, and exact slot ID.
 Main barbell lifts get a full warmup ramp; main dumbbell lifts get a short
-per-hand 40/60/80% ramp. A **complementary** lift assumes the lifter is
-already warm from the day's main work: with the automatic warmup policy it
+per-hand 40/60/80% ramp. A **complementary** lift that follows other work
+assumes the lifter is already warm: with the automatic warmup policy it
 bridges with the last **two** ramp steps only, then goes straight to its
-working sets (an explicit per-slot warmup policy still wins).
+working sets. A complementary slot ordered first in the day still ramps
+fully, and an explicit per-slot warmup policy always wins.
 
 Roles also shape the prescription itself. A main lift follows the phase wave
 (5×5 → 5×3 → 3×3 → deload). A complementary lift on the automatic style is

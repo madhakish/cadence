@@ -226,11 +226,17 @@ export async function openSession(id) {
       )
       : (ex.type === "dumbbell" && se.programRole === "main" ? C.dumbbellWarmupRamp(workingLb, 5) : null);
     if (!fullRamp) return;
-    // Complementary slots keep their two bridging warmups on resync — the
-    // main lift already warmed the lifter (mirrors createSessionFromProgramDay).
-    const desired = ex.type === "barbell" && se.programRole === "complementary"
-      ? fullRamp.slice(-2) : fullRamp;
     const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
+    // A programmed entry was built under a resolved warmup policy — full ramp,
+    // two bridging sets for a complementary lift, or none — possibly refined
+    // by the user's own row edits. Resync refreshes the warmup WEIGHTS for the
+    // new bar/gym/working weight without changing how many warmups the plan
+    // owns (the tail keeps the steps nearest the working weight); it must
+    // never re-inflate a deliberately short or empty ramp. Manually added
+    // exercises still grow a full ramp as before.
+    const desired = se.programRole != null
+      ? fullRamp.slice(Math.max(0, fullRamp.length - existing.length))
+      : fullRamp;
     const warmups = desired.map((target, index) => {
       const set = existing[index] || mkSet(index, target.weightLb, target.reps, { warm: true, unit: exUnit(se), ...loadOptions(ex) });
       set.weightLb = target.weightLb; set.reps = target.reps; set.isWarmup = true;
@@ -1239,7 +1245,7 @@ export async function createSessionFromProgramDay(program, day) {
   let order = 0;
   const lifts = sortedLifts;
   const preparedMovementGroups = new Set();
-  for (const lift of lifts) {
+  for (const [liftIndex, lift] of lifts.entries()) {
     const ex = exMap.get(lift.exerciseName);
     const loadStep = C.programLoadStep(program.roundingLb, ex?.type);
     const configuration = { ...lift, workingSets: lift.doubleProgressionSets ?? 3 };
@@ -1257,11 +1263,12 @@ export async function createSessionFromProgramDay(program, day) {
     const blockLoads = prescription.blocks.map((block) => neat(block.weightLb, ex, exactLoad, program.currentWeek));
     const sets = [];
     let so = 0;
-    // A complementary lift follows the day's heavy main — the lifter is
-    // already warm, so two bridging sets are enough. An explicit per-slot
-    // policy still wins.
+    // A complementary lift that FOLLOWS other work finds the lifter already
+    // warm, so two bridging sets are enough. A complementary slot ordered
+    // first in the day still ramps fully — nothing has warmed the lifter
+    // yet. An explicit per-slot policy always wins.
     const warmupPolicy = (lift.warmupPolicy || "automatic") === "automatic"
-      ? (lift.role === "complementary" || preparedMovementGroups.has(ex?.movementGroup) ? "short" : "full")
+      ? ((lift.role === "complementary" && liftIndex > 0) || preparedMovementGroups.has(ex?.movementGroup) ? "short" : "full")
       : lift.warmupPolicy;
     const topPreparationLoad = blockLoads.length ? Math.max(...blockLoads) : weightLb;
     if (ex && ex.type === "barbell" && warmupPolicy !== "none") {

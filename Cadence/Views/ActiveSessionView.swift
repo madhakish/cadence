@@ -794,17 +794,13 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
           let workingLb = overrideWorkingLb ?? entry.plannedWeightLb
             ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb,
           workingLb > 0 else { return }
-    let desired: [WarmupSet]
+    var desired: [WarmupSet]
     if exercise.type == .barbell {
-        let full = ProgramSession.achievableWarmups(
+        desired = ProgramSession.achievableWarmups(
             WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
                             roundingLb: ProgramEngine.defaultRoundingLb,
                             includeEmptyBar: ProgramSession.includesEmptyBarWarmup(for: exercise)),
             workingLb: workingLb, gym: gym, bar: bar)
-        // Complementary slots keep their two bridging warmups on resync — the
-        // main lift already warmed the lifter (mirrors the session builder).
-        desired = entry.programRole == LiftRole.complementary.rawValue
-            ? Array(full.suffix(2)) : full
     } else if exercise.type == .dumbbell && entry.programRole == LiftRole.main.rawValue {
         desired = WarmupRamp.dumbbellRamp(workingLb: workingLb,
                                           roundingLb: ProgramEngine.loadStep(
@@ -814,6 +810,16 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
         return
     }
     let existing = entry.orderedSets.filter(\.isWarmup)
+    // A programmed entry was built under a resolved warmup policy — full
+    // ramp, two bridging sets for a complementary lift, or none — possibly
+    // refined by the user's own row edits. Resync refreshes the warmup
+    // WEIGHTS for the new bar/gym/working weight without changing how many
+    // warmups the plan owns (suffix keeps the steps nearest the working
+    // weight); it must never re-inflate a deliberately short or empty ramp.
+    // Manually added exercises still grow a full ramp as before.
+    if entry.programRole != nil {
+        desired = Array(desired.suffix(existing.count))
+    }
     var rebuilt: [SetEntry] = []
     for (index, target) in desired.enumerated() {
         if index < existing.count {

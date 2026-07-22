@@ -76,7 +76,7 @@ enum ProgramSession {
         var order = 0
         var preparedMovementGroups: Set<String> = []
 
-        for lift in day.orderedLifts {
+        for (liftIndex, lift) in day.orderedLifts.enumerated() {
             let exercise = try findExercise(named: lift.exerciseName, context: context)
             let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
                                                   exerciseType: exercise.typeRaw)
@@ -117,12 +117,13 @@ enum ProgramSession {
             session.exercises.append(entry)
 
             var so = 0
-            // A complementary lift follows the day's heavy main — the lifter
-            // is already warm, so two bridging sets are enough. An explicit
-            // per-slot policy still wins.
+            // A complementary lift that FOLLOWS other work finds the lifter
+            // already warm, so two bridging sets are enough. A complementary
+            // slot ordered first in the day still ramps fully — nothing has
+            // warmed the lifter yet. An explicit per-slot policy always wins.
             let resolvedWarmup: WarmupPolicy = {
                 guard lift.warmupPolicy == .automatic else { return lift.warmupPolicy }
-                if lift.role == .complementary { return .short }
+                if lift.role == .complementary && liftIndex > 0 { return .short }
                 return preparedMovementGroups.contains(exercise.movementGroup) ? .short : .full
             }()
             let blockLoads = prescription.blocks.map {
@@ -282,9 +283,11 @@ enum ProgramSession {
         (!isMain && isBarbell) ? Weight.barLoadable(weightLb, barLb: barLb, stepLb: stepLb) : weightLb
     }
 
-    /// Resolve the prescription to equipment that exists at this gym. The
-    /// achieved total is what the logger stores, so the plate picture, logged
-    /// set, history, and next progression all describe the same load.
+    /// Resolve the prescription to equipment that exists at this gym. When
+    /// the rack lands within the good-enough band the neat programmed number
+    /// is what gets stored and the plate hint explains the actual stack; only
+    /// a genuinely unreachable target stores the achieved total, so sparse
+    /// racks keep the logged set, history, and progression honest.
     static func achievableWeight(_ weightLb: Double, exercise: Exercise?, isMain: Bool,
                                  gym: Gym?, bar: Bar, stepLb: Double,
                                  phase: CyclePhase? = nil) -> Double {
