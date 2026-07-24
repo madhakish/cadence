@@ -863,11 +863,18 @@ export function completionCommit(save, rollback) {
 // unrecognizable: the week stopped advancing, the cycle never rolled over,
 // every stashed Peak grade sat unapplied, and any day past the gap became
 // unreachable. Walking the sorted orders is correct for both the tidy and the
-// damaged case. An unknown bankedDayOrder (a stale tag, a deleted day) reports
-// the last day so a rotation can still close, and points at the first day.
+// damaged case.
+//
+// Duplicate orders are collapsed first: two DISTINCT days can share one order
+// (a damaged store, or an add that collided on days.length), and stepping
+// within a duplicate pair would advance an order to itself and strand the
+// schedule exactly like the gap this function exists to fix.
+//
+// An unknown bankedDayOrder (a stale tag, a deleted day) reports the last day
+// so a rotation can still close, and points at the first day.
 // Mirrored 1:1 in CadenceCore ProgramProgression.scheduleAdvance.
 export function scheduleAdvance(dayOrders, bankedDayOrder) {
-  const sorted = [...dayOrders].sort((a, b) => a - b);
+  const sorted = [...new Set(dayOrders)].sort((a, b) => a - b);
   const position = sorted.indexOf(bankedDayOrder);
   if (position < 0) return { nextDayOrder: sorted.length ? sorted[0] : 0, isLastDay: true };
   return { nextDayOrder: sorted[(position + 1) % sorted.length], isLastDay: position === sorted.length - 1 };

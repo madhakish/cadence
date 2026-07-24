@@ -339,6 +339,12 @@ eq(sa([2, 0, 1], 0), "1", "stored order is not assumed sorted");
 eq(sa([0], 0), "0!", "a one-day program banks its only day as the last day");
 eq(sa([0, 1], 9), "0!", "a stale tag closes the rotation instead of stranding it");
 eq(sa([], 0), "0!", "an empty program does not crash");
+// Two DISTINCT days can share one order (a damaged store, or an add that
+// collided on days.length). Stepping inside the duplicate pair would advance
+// an order to itself and strand the rotation the same way a gap did.
+eq(sa([0, 0, 1], 0), "1", "duplicate orders never advance a day to itself");
+eq(sa([0, 1, 1], 1), "0!", "a duplicated last order is still the last day");
+eq(sa([0, 0], 0), "0!", "an all-duplicate program still closes its rotation");
 
 // The top scheme must describe work that was actually performed. Reporting the
 // group minimum across every top-weight set invented schemes nobody did — and

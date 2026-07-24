@@ -230,13 +230,18 @@ public enum ProgramProgression {
     /// day past the gap became unreachable. Walking the sorted orders is
     /// correct for both the tidy and the damaged case.
     ///
+    /// Duplicate orders are collapsed first: two DISTINCT days can share one
+    /// order (a damaged store, or an add that collided on `days.count`), and
+    /// stepping within a duplicate pair would advance an order to itself and
+    /// strand the schedule exactly like the gap this function exists to fix.
+    ///
     /// An unknown `bankedDayOrder` (a stale tag, a deleted day) reports the
     /// last day so a rotation can still close, and points at the first day.
     /// Mirrored 1:1 in web/js/core.js `scheduleAdvance`.
     public static func scheduleAdvance(
         dayOrders: [Int], bankedDayOrder: Int
     ) -> (nextDayOrder: Int, isLastDay: Bool) {
-        let sorted = dayOrders.sorted()
+        let sorted = Array(Set(dayOrders)).sorted()
         guard let position = sorted.firstIndex(of: bankedDayOrder) else {
             return (sorted.first ?? 0, true)
         }

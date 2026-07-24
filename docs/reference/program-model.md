@@ -26,11 +26,18 @@ hypertrophy to 78% with 1.5%, maintain never increments.
 
 ## Lift (per day)
 
-Day `order` values address the rotation. Banking a day advances to the next
-day *by order*, and banking the last one advances the week — so the editors
-and the importer keep orders renumbered to a contiguous `0..n-1`. A gap
-(possible in a hand-edited or older backup: import validates orders as unique
-but not as contiguous) is repaired on import rather than rejected.
+Day `order` values address the rotation: banking a day advances to the next
+day *by order*, and banking the highest-ordered day advances the week. The
+editors keep orders tidy at `0..n-1`, but nothing else depends on that — a
+gap or a duplicate (possible in a hand-edited or older backup, since orders
+are validated as unique but never as contiguous) still walks correctly.
+
+Orders are never renumbered behind the user's back, including on import. A
+day's order is the identity every banked session's `programTag.dayIndex`
+refers to, so quietly renumbering days would leave those sessions unable to
+resume and would misattribute their work to the wrong day in history and
+coaching. `nextDayIndex` is likewise validated as *a member of* the day
+orders, not as an array index.
 
 The ordered day matrix is the prescription source of truth. For example,
 `Lower A: Back Squat/main + Deadlift/complementary` and

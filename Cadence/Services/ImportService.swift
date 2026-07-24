@@ -393,7 +393,13 @@ enum ImportService {
                 (day.lifts ?? []).compactMap(\.id) + (day.accessories ?? []).compactMap(\.id)
             }
             try unique(slotIDs, "\(path).slotIds")
-            if let next = program.nextDayIndex, let count = program.days?.count, count > 0, next >= count {
+            // nextDayIndex names a day's ORDER, not its position, and orders
+            // are validated as unique but never as contiguous. Range-checking
+            // it against the day COUNT rejected legitimate bundles — orders
+            // [0, 1, 5] pointing at day 5 is the exact sparse case the
+            // schedule now handles. Check membership instead.
+            let dayOrders = Set((program.days ?? []).compactMap(\.order))
+            if let next = program.nextDayIndex, !dayOrders.isEmpty, !dayOrders.contains(next) {
                 throw ImportError.invalidData("\(path).nextDayIndex: outside the program's day list")
             }
         }
@@ -777,24 +783,15 @@ enum ImportService {
                 day.accessories.append(acc)
             }
         }
-        normalizeDayOrders(prog)
+        // Day orders are imported VERBATIM. Renumbering them to 0..n-1 would
+        // be tidier, but a day's order is the identity that every session's
+        // `programTag.dayIndex` refers to — renumbering the days without
+        // rewriting the tags of sessions in the same bundle would leave those
+        // sessions unable to resume or bank, and would misattribute their
+        // banked work to the wrong day in history and coaching. Gaps are
+        // handled where they matter instead, by ProgramProgression
+        // .scheduleAdvance walking real order values.
         return prog
-    }
-
-    /// Day `order` values address the schedule, and a gap in them (validation
-    /// requires uniqueness, never contiguity) leaves days the rotation can
-    /// never reach. Renumber to 0..n-1 at the import boundary, preserving the
-    /// bundle's relative order and re-pointing `nextDayIndex` at the same day.
-    private static func normalizeDayOrders(_ prog: Program) {
-        let ordered = prog.days.sorted { $0.order < $1.order }
-        guard ordered.enumerated().contains(where: { $0.element.order != $0.offset }) else { return }
-        let previousNext = prog.nextDayIndex
-        var remapped: Int?
-        for (index, day) in ordered.enumerated() {
-            if day.order == previousNext { remapped = index }
-            day.order = index
-        }
-        prog.nextDayIndex = remapped ?? 0
     }
 
     private static func makeSession(_ s: Session, schemaVersion: Int, exByName: [String: Exercise],

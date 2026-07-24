@@ -352,4 +352,20 @@ final class ProgramProgressionTests: XCTestCase {
         // An empty program must not crash.
         XCTAssertEqual(ProgramProgression.scheduleAdvance(dayOrders: [], bankedDayOrder: 0).nextDayOrder, 0)
     }
+
+    func testScheduleAdvanceCollapsesDuplicateDayOrders() {
+        // Two DISTINCT days can share one order (a damaged store, or an add
+        // that collided on days.count). Stepping inside the duplicate pair
+        // would advance an order to itself and strand the rotation the same
+        // way a gap did.
+        let dup = ProgramProgression.scheduleAdvance(dayOrders: [0, 0, 1], bankedDayOrder: 0)
+        XCTAssertEqual(dup.nextDayOrder, 1, "a duplicated order must not advance to itself")
+        XCTAssertFalse(dup.isLastDay)
+        let dupLast = ProgramProgression.scheduleAdvance(dayOrders: [0, 1, 1], bankedDayOrder: 1)
+        XCTAssertTrue(dupLast.isLastDay, "a duplicated last order is still the last day")
+        XCTAssertEqual(dupLast.nextDayOrder, 0)
+        let allDup = ProgramProgression.scheduleAdvance(dayOrders: [0, 0], bankedDayOrder: 0)
+        XCTAssertEqual(allDup.nextDayOrder, 0)
+        XCTAssertTrue(allDup.isLastDay, "an all-duplicate program still closes its rotation")
+    }
 }
