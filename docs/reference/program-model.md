@@ -13,7 +13,7 @@ the standalone "Next up" tracks.
 | `focus` | `strength` / `hypertrophy` / `maintain` — see table below |
 | `cycleNumber` | Which 4-week cycle you're on (increments at rollover) |
 | `currentWeek` | 1 volume · 2 load · 3 peak · 4 rest (deload) |
-| `nextDayIndex` | The day the Today screen offers next |
+| `nextDayIndex` | The `order` of the day the Today screen offers next — a day's order value, not its position in the array |
 | `roundingLb` | Default load granularity. Dumbbells use at most 5 lb per-hand steps, and above-base wave rotations stay within one 5 lb rack jump |
 | `isActive` | Drives the Today screen |
 
@@ -25,6 +25,19 @@ Ceiling and increment values live in
 hypertrophy to 78% with 1.5%, maintain never increments.
 
 ## Lift (per day)
+
+Day `order` values address the rotation: banking a day advances to the next
+day *by order*, and banking the highest-ordered day advances the week. The
+editors keep orders tidy at `0..n-1`, but nothing else depends on that — a
+gap or a duplicate (possible in a hand-edited or older backup, since orders
+are validated as unique but never as contiguous) still walks correctly.
+
+Orders are never renumbered behind the user's back, including on import. A
+day's order is the identity every banked session's `programTag.dayIndex`
+refers to, so quietly renumbering days would leave those sessions unable to
+resume and would misattribute their work to the wrong day in history and
+coaching. `nextDayIndex` is likewise validated as *a member of* the day
+orders, not as an array index.
 
 The ordered day matrix is the prescription source of truth. For example,
 `Lower A: Back Squat/main + Deadlift/complementary` and
