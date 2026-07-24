@@ -322,6 +322,44 @@ ok(ev.some((e) => e.kind === "heaviestSet"), "first session heaviest");
 ok(ev.some((e) => e.kind === "firstScheme"), "first session scheme");
 ok(!ev.some((e) => e.kind === "volumePR"), "first session not volume PR");
 
+// Schedule advance walks day ORDER values, not array positions. Import
+// validates day orders as unique but never as contiguous, so a bundle can
+// carry [0, 1, 5]; index-space arithmetic then never recognized the last day
+// (the week stopped advancing, the cycle never rolled over) and stranded the
+// day past the gap.
+const sa = (orders, banked) => {
+  const r = C.scheduleAdvance(orders, banked);
+  return `${r.nextDayOrder}${r.isLastDay ? "!" : ""}`;
+};
+eq(sa([0, 1, 2, 3], 0), "1", "contiguous orders step forward");
+eq(sa([0, 1, 2, 3], 3), "0!", "the highest order is the last day and wraps");
+eq(sa([0, 1, 5], 1), "5", "the day past a gap is reachable");
+eq(sa([0, 1, 5], 5), "0!", "the highest order is the last day whatever its value");
+eq(sa([2, 0, 1], 0), "1", "stored order is not assumed sorted");
+eq(sa([0], 0), "0!", "a one-day program banks its only day as the last day");
+eq(sa([0, 1], 9), "0!", "a stale tag closes the rotation instead of stranding it");
+eq(sa([], 0), "0!", "an empty program does not crash");
+
+// The top scheme must describe work that was actually performed. Reporting the
+// group minimum across every top-weight set invented schemes nobody did — and
+// those strings are banked as the history baseline.
+let ts = C.prTopScheme([{ weightLb: 225, reps: 5 }, { weightLb: 225, reps: 2 }]);
+eq(`${ts.sets}×${ts.reps}`, "1×5", "a top set plus a fatigue set is one five, not two doubles");
+ts = C.prTopScheme([...Array(4).fill({ weightLb: 225, reps: 5 }), { weightLb: 225, reps: 3 }]);
+eq(`${ts.sets}×${ts.reps}`, "4×5", "four fives and a dropped triple is 4×5, never 5×3");
+ts = C.prTopScheme([{ weightLb: 185, reps: 8 }, { weightLb: 185, reps: 6 }]);
+eq(`${ts.sets}×${ts.reps}`, "1×8", "an even split takes the harder group");
+ts = C.prTopScheme([...Array(5).fill({ weightLb: 175, reps: 5 }), { weightLb: 155, reps: 8 }]);
+eq(`${ts.weightLb}:${ts.sets}×${ts.reps}`, "175:5×5", "back-off sets never shape the top scheme");
+
+// Bodyweight/assisted work has no meaningful load to name.
+ev = C.prEvaluate({
+  exercise: "Push-ups", sessionSets: Array(3).fill({ weightLb: 0, reps: 12, loadBasis: "bodyweight" }),
+  historySets: [], historyVolumes: [], historySchemes: [],
+});
+eq(ev.find((e) => e.kind === "firstScheme")?.label, "First 3×12 push-ups",
+  "bodyweight scheme milestone omits a meaningless 0 load");
+
 ev = C.prEvaluate({
   exercise: "Deadlift", sessionSets: [{ weightLb: 220.462, reps: 1 }],
   historySets: [], historyVolumes: [], historySchemes: [],

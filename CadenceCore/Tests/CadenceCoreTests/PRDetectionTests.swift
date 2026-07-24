@@ -87,6 +87,36 @@ final class PRDetectionTests: XCTestCase {
         XCTAssertEqual(top?.reps, 5)
     }
 
+    func testTopSchemeReportsWorkThatWasActuallyPerformed() {
+        // A top set plus a fatigue set is ONE five, not two doubles. Reporting
+        // the group minimum across every top-weight set invented "2×2".
+        let fatigued = [SetSample(weightLb: 225, reps: 5), SetSample(weightLb: 225, reps: 2)]
+        XCTAssertEqual(PRDetection.topScheme(fatigued)?.sets, 1)
+        XCTAssertEqual(PRDetection.topScheme(fatigued)?.reps, 5)
+
+        // Four clean fives and a dropped triple is 4×5, never "5×3".
+        let dropped = Array(repeating: SetSample(weightLb: 225, reps: 5), count: 4)
+            + [SetSample(weightLb: 225, reps: 3)]
+        XCTAssertEqual(PRDetection.topScheme(dropped)?.sets, 4)
+        XCTAssertEqual(PRDetection.topScheme(dropped)?.reps, 5)
+
+        // An even split takes the harder group so the scheme is never flattered.
+        let split = [SetSample(weightLb: 185, reps: 8), SetSample(weightLb: 185, reps: 6)]
+        XCTAssertEqual(PRDetection.topScheme(split)?.sets, 1)
+        XCTAssertEqual(PRDetection.topScheme(split)?.reps, 8)
+    }
+
+    func testBodyweightSchemeMilestoneOmitsAMeaninglessLoad() {
+        let pushups = Array(repeating: SetSample(weightLb: 0, reps: 12, loadBasis: .bodyweight), count: 3)
+        let events = PRDetection.evaluate(
+            exercise: "Push-ups", sessionSets: pushups,
+            historySets: [], historyVolumes: [], historySchemes: []
+        )
+        let scheme = events.first { $0.kind == .firstScheme }
+        XCTAssertEqual(scheme?.label, "First 3×12 push-ups")
+        XCTAssertFalse(scheme?.label.contains("0 lb") ?? true)
+    }
+
     func testMilestoneLabelsAcceptThePresentationUnitFormatter() {
         let events = PRDetection.evaluate(
             exercise: "Deadlift",

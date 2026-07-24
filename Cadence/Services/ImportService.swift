@@ -777,7 +777,24 @@ enum ImportService {
                 day.accessories.append(acc)
             }
         }
+        normalizeDayOrders(prog)
         return prog
+    }
+
+    /// Day `order` values address the schedule, and a gap in them (validation
+    /// requires uniqueness, never contiguity) leaves days the rotation can
+    /// never reach. Renumber to 0..n-1 at the import boundary, preserving the
+    /// bundle's relative order and re-pointing `nextDayIndex` at the same day.
+    private static func normalizeDayOrders(_ prog: Program) {
+        let ordered = prog.days.sorted { $0.order < $1.order }
+        guard ordered.enumerated().contains(where: { $0.element.order != $0.offset }) else { return }
+        let previousNext = prog.nextDayIndex
+        var remapped: Int?
+        for (index, day) in ordered.enumerated() {
+            if day.order == previousNext { remapped = index }
+            day.order = index
+        }
+        prog.nextDayIndex = remapped ?? 0
     }
 
     private static func makeSession(_ s: Session, schemaVersion: Int, exByName: [String: Exercise],

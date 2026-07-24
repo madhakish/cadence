@@ -673,13 +673,28 @@ export const linearPlan = (baseWeightLb) => ({ weightLb: baseWeightLb, sets: 3, 
 // sets: [{ weightLb, reps }]
 export const prVolume = (sets) => sets.reduce((sum, set) => sum + (loadVolume(set) ?? 0), 0);
 
+// The scheme the athlete ACTUALLY performed at the session's top weight: the
+// largest group of top-weight sets sharing one rep count, breaking a tie toward
+// the harder (higher-rep) group.
+//
+// Counting every top-weight set while reporting the group's MINIMUM reps
+// describes work nobody did — 225×5 followed by a fatigue set of 225×2 reads as
+// "2×2", and 4×5 plus a dropped 3 reads as "5×3" (five triples for four fives
+// and a three). Those strings are also banked as history schemes, so a
+// fabricated scheme silently becomes the baseline every later session is
+// measured against. Mirrored 1:1 in CadenceCore PRDetection.topScheme.
 export function prTopScheme(sets) {
   if (!sets.length) return null;
   const top = Math.max(...sets.map((s) => s.weightLb));
   const topSets = sets.filter((s) => Math.abs(s.weightLb - top) < 1e-9);
   if (!topSets.length) return null;
-  const reps = Math.min(...topSets.map((s) => s.reps));
-  return { weightLb: top, sets: topSets.length, reps };
+  const byReps = new Map();
+  for (const set of topSets) byReps.set(set.reps, (byReps.get(set.reps) || 0) + 1);
+  let best = null;
+  for (const [reps, count] of byReps) {
+    if (!best || count > best.count || (count === best.count && reps > best.reps)) best = { reps, count };
+  }
+  return { weightLb: top, sets: best.count, reps: best.reps };
 }
 
 // Returns [{ kind, exercise, label }], kind ∈ heaviestSet|firstScheme|volumePR
@@ -703,7 +718,13 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
     }
     const schemeKey = `${top.sets}×${top.reps}`;
     if (!schemes.has(schemeKey)) {
-      events.push({ kind: "firstScheme", exercise, label: `First ${schemeKey} — ${weightLabel(top.weightLb)} ${exercise.toLowerCase()}` });
+      // Bodyweight and assisted work carry no meaningful load, so naming one
+      // reads as "First 3×10 — 0 push-ups". Reps are the whole story there;
+      // only external resistance is quoted.
+      const label = supportsLoadPR(basis)
+        ? `First ${schemeKey} — ${weightLabel(top.weightLb)} ${exercise.toLowerCase()}`
+        : `First ${schemeKey} ${exercise.toLowerCase()}`;
+      events.push({ kind: "firstScheme", exercise, label });
     }
   }
 
@@ -831,6 +852,25 @@ export function completionCommit(save, rollback) {
     try { rollback(); } catch { /* keep the save failure */ }
     throw e;
   }
+}
+
+// Where the schedule goes after banking the day with `bankedDayOrder`.
+//
+// Day `order` values ADDRESS the rotation — nextDayIndex holds an order, not a
+// position — but they are not guaranteed to be the contiguous 0..n-1 that
+// index-space arithmetic ((index + 1) % count) assumes. Import validates day
+// orders as unique and never as contiguous. A gap made the last day
+// unrecognizable: the week stopped advancing, the cycle never rolled over,
+// every stashed Peak grade sat unapplied, and any day past the gap became
+// unreachable. Walking the sorted orders is correct for both the tidy and the
+// damaged case. An unknown bankedDayOrder (a stale tag, a deleted day) reports
+// the last day so a rotation can still close, and points at the first day.
+// Mirrored 1:1 in CadenceCore ProgramProgression.scheduleAdvance.
+export function scheduleAdvance(dayOrders, bankedDayOrder) {
+  const sorted = [...dayOrders].sort((a, b) => a - b);
+  const position = sorted.indexOf(bankedDayOrder);
+  if (position < 0) return { nextDayOrder: sorted.length ? sorted[0] : 0, isLastDay: true };
+  return { nextDayOrder: sorted[(position + 1) % sorted.length], isLastDay: position === sorted.length - 1 };
 }
 
 // Increment = fraction of base × headroom-to-ceiling, floored at plate granularity,

@@ -791,6 +791,41 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.Programs.del(prog.id);
 }
 
+// ---- a gap in day orders must not strand the schedule ----
+// Day `order` addresses the rotation, but validation only requires uniqueness,
+// so an imported bundle can carry [0, 1, 5]. Index-space arithmetic then never
+// recognized the last day: the week stopped advancing, the cycle never rolled
+// over, and the day past the gap became unreachable.
+{
+  const name = "Fixture Sparse Day Orders";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [
+      { name: "A", order: 0, lifts: [cyc("Back Squat", "main", 175, 204)], accessories: [] },
+      { name: "B", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "C", order: 5, lifts: [cyc("Deadlift", "main", 205, 275)], accessories: [] },
+    ],
+  });
+  let prog = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(prog.days.map((d) => d.order).sort((a, b) => a - b).join(",") === "0,1,2",
+    "sparse day orders are renumbered to a reachable 0..n-1 on save");
+
+  const banked = [];
+  for (let i = 0; i < 3; i += 1) {
+    prog = (await db.Programs.all()).find((candidate) => candidate.name === name);
+    const day = prog.days.find((d) => d.order === prog.nextDayIndex);
+    banked.push(day.name);
+    const id = await session.createSessionFromProgramDay(prog, day);
+    await completeAll(await db.Sessions.get(id));
+  }
+  ok(banked.join(",") === "A,B,C", "every day is reachable, including the one past the gap");
+  prog = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(prog.currentWeek === 2, `banking the last day advances the rotation (wk=${prog.currentWeek})`);
+  ok(prog.nextDayIndex === 0, `the schedule wraps back to the first day (next=${prog.nextDayIndex})`);
+  await db.Programs.del(prog.id);
+}
+
 // ---- program: bank a full 4-week cycle, assert adaptive progression ----
 {
   const sqTrackBase = (await db.Tracks.byName("Back Squat")).baseWeightLb; // standalone, must not move

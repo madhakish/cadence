@@ -13,7 +13,7 @@ the standalone "Next up" tracks.
 | `focus` | `strength` / `hypertrophy` / `maintain` — see table below |
 | `cycleNumber` | Which 4-week cycle you're on (increments at rollover) |
 | `currentWeek` | 1 volume · 2 load · 3 peak · 4 rest (deload) |
-| `nextDayIndex` | The day the Today screen offers next |
+| `nextDayIndex` | The `order` of the day the Today screen offers next — a day's order value, not its position in the array |
 | `roundingLb` | Default load granularity. Dumbbells use at most 5 lb per-hand steps, and above-base wave rotations stay within one 5 lb rack jump |
 | `isActive` | Drives the Today screen |
 
@@ -25,6 +25,12 @@ Ceiling and increment values live in
 hypertrophy to 78% with 1.5%, maintain never increments.
 
 ## Lift (per day)
+
+Day `order` values address the rotation. Banking a day advances to the next
+day *by order*, and banking the last one advances the week — so the editors
+and the importer keep orders renumbered to a contiguous `0..n-1`. A gap
+(possible in a hand-edited or older backup: import validates orders as unique
+but not as contiguous) is repaired on import rather than rejected.
 
 The ordered day matrix is the prescription source of truth. For example,
 `Lower A: Back Squat/main + Deadlift/complementary` and

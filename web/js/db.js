@@ -138,15 +138,28 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const isPortableUUID = (value) => typeof value === "string" && UUID_RE.test(value);
 const normalizeProgram = (p) => {
   const uuid = isPortableUUID(p.uuid) ? p.uuid : (isPortableUUID(p.id) ? p.id : stableID(`program:${p.name}`));
+  // Day `order` values address the schedule, and a gap in them (validation
+  // requires uniqueness, never contiguity) leaves days the rotation can never
+  // reach. Renumber to 0..n-1 while preserving relative order, and re-point
+  // nextDayIndex at the same day. Slot IDs keep deriving from the ORIGINAL
+  // order so a renumber never churns slot identity or its progression record.
+  const dayOrder = new Map();
+  [...(p.days || [])]
+    .map((day, dayIndex) => ({ day, key: Number.isInteger(day.order) ? day.order : dayIndex }))
+    .sort((a, b) => a.key - b.key)
+    .forEach((entry, index) => dayOrder.set(entry.day, index));
+  const remappedNext = (p.days || []).find((day) => day.order === p.nextDayIndex);
   return {
     ...p,
     uuid,
+    nextDayIndex: remappedNext ? dayOrder.get(remappedNext) : (p.days?.length ? 0 : p.nextDayIndex),
     coachEnabled: p.coachEnabled !== false,
     reliableHistoryStart: p.reliableHistoryStart || null,
     preferredSessionSpacingDays: Number.isInteger(p.preferredSessionSpacingDays) ? p.preferredSessionSpacingDays : 3,
     maximumAddedSetsPerRotation: Number.isInteger(p.maximumAddedSetsPerRotation) ? p.maximumAddedSetsPerRotation : 6,
     days: (p.days || []).map((day, dayIndex) => ({
       ...day,
+      order: dayOrder.get(day) ?? dayIndex,
       lifts: (day.lifts || []).map((lift, slotIndex) => ({
         ...lift,
         id: isPortableUUID(lift.id) ? lift.id : stableID(`slot:${uuid}:day:${day.order ?? dayIndex}:lift:${slotIndex}`),

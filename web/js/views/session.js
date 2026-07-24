@@ -1096,8 +1096,10 @@ async function advanceProgram(session, milestones) {
     }
   }
 
-  const lastDay = tag.dayIndex === program.days.length - 1;
-  program.nextDayIndex = (tag.dayIndex + 1) % program.days.length;
+  // Walk day ORDER values, not array positions (see core scheduleAdvance).
+  const advance = C.scheduleAdvance(program.days.map((d) => d.order ?? 0), tag.dayIndex);
+  const lastDay = advance.isLastDay;
+  program.nextDayIndex = advance.nextDayOrder;
   if (lastDay) {
     if (program.currentWeek < 4) {
       program.currentWeek += 1;
