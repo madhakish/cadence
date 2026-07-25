@@ -2,9 +2,9 @@
   "name": "cadence-release-toolchain",
   "version": "0.0.0",
   "private": true,
-  "description": "Pinned semantic-release toolchain for the release job in ci.yml. The lockfile is the supply-chain pin: CI installs exactly these bytes via `npm ci` instead of resolving packages from the registry at release time. Update via Dependabot PRs only.",
+  "description": "Pinned semantic-release toolchain for the release job in ci.yml. The lockfile is the supply-chain pin: CI installs exactly these bytes via `npm ci` instead of resolving packages from the registry at release time. Update via Dependabot PRs only. NOTE: conventional-changelog-conventionalcommits is coupled to the conventional-changelog-writer that semantic-release bundles — v10 renamed writerOpts.mainTemplate to .template, which the bundled writer v8 does not read, so notes silently render as a bare header. Hold at 9.x until semantic-release ships writer v9; .github/scripts/test-release-parser.mjs fails if a bump breaks rendering.",
   "devDependencies": {
-    "conventional-changelog-conventionalcommits": "10.2.1",
+    "conventional-changelog-conventionalcommits": "9.3.1",
     "semantic-release": "25.0.6"
   }
 }
