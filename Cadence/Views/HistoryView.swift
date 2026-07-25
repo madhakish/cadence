@@ -227,13 +227,38 @@ struct HistoryView: View {
 
 struct SessionDetailView: View {
     let session: WorkoutSession
+    @Environment(\.modelContext) private var context
     @Query private var settingsList: [AppSettings]
+    @AppStorage("healthReadEnabled") private var healthReadEnabled = false
+    @State private var healthMiles: Double?
+    @State private var didCheckHealth = false
+
+    /// Everything this session logged as conditioning distance.
+    private var loggedMiles: Double? {
+        let total = session.orderedExercises
+            .filter { $0.exercise?.type == .conditioning }
+            .flatMap(\.orderedSets)
+            .compactMap(\.distanceMiles)
+            .reduce(0, +)
+        return total > 0 ? total : nil
+    }
+
+    private var healthVerdict: HealthComparison.Verdict {
+        HealthComparison.compare(loggedMiles: loggedMiles, healthMiles: healthMiles)
+    }
+
+    /// Only completed sessions have both ends of a window to look up.
+    private var healthWindow: (start: Date, end: Date)? {
+        guard let end = session.completedAt, end > session.date else { return nil }
+        return (session.date, end)
+    }
 
     var body: some View {
         List {
             if !session.notes.isEmpty {
                 Section("Notes") { Text(session.notes) }
             }
+            healthSection
             ForEach(session.orderedExercises) { entry in
                 Section {
                     ForEach(entry.orderedSets) { set in
@@ -282,6 +307,68 @@ struct SessionDetailView: View {
             }
         }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
+        .task {
+            // One lookup per open, and only when there is something to compare
+            // and a window to compare it over.
+            guard !didCheckHealth, healthReadEnabled, let window = healthWindow else { return }
+            didCheckHealth = true
+            healthMiles = await HealthKitService.shared
+                .conditioningDistanceMiles(start: window.start, end: window.end)
+        }
+    }
+
+    /// [INV-HEALTH-IS-A-SECOND-OPINION] Both numbers, side by side, and an
+    /// explicit tap to take Health's. Nothing here writes on its own, and a
+    /// session with nothing in Health is silent rather than alarming.
+    @ViewBuilder
+    private var healthSection: some View {
+        if healthReadEnabled, healthWindow != nil, showsHealthRow {
+            Section {
+                Text(HealthComparison.label(healthVerdict))
+                    .font(.callout)
+                    .foregroundStyle(healthVerdict.isDiscrepancy ? Theme.warn : .secondary)
+                if let miles = healthVerdict.adoptableMiles {
+                    Button("Use Health's \(Weight.trim(miles, decimals: 2)) mi") {
+                        adoptHealthDistance(miles)
+                    }
+                    .font(.callout)
+                }
+            } header: {
+                Text("Health")
+            } footer: {
+                Text("Your log stays the record. Adopting rewrites only this session's conditioning distance.")
+            }
+        }
+    }
+
+    /// Nothing to say, and an unworn watch, are both silence rather than a
+    /// finding worth its own row.
+    private var showsHealthRow: Bool {
+        switch healthVerdict {
+        case .neither, .onlyLogged: return false
+        case .agree, .healthHigher, .loggedHigher, .onlyHealth: return true
+        }
+    }
+
+    /// Write Health's number onto the single conditioning set, or spread it
+    /// across several in proportion to what they already hold, so a two-leg
+    /// walk keeps its shape instead of collapsing into the first set.
+    private func adoptHealthDistance(_ miles: Double) {
+        let sets = session.orderedExercises
+            .filter { $0.exercise?.type == .conditioning }
+            .flatMap(\.orderedSets)
+        guard !sets.isEmpty else { return }
+        let existing = sets.compactMap(\.distanceMiles).reduce(0, +)
+        if existing > 0 {
+            for set in sets {
+                guard let current = set.distanceMiles, current > 0 else { continue }
+                set.distanceMiles = ((miles * (current / existing)) * 100).rounded() / 100
+            }
+        } else {
+            sets.first?.distanceMiles = miles
+        }
+        _ = PersistenceErrorCenter.shared.save(context, operation: "Adopting Health's distance")
+        healthMiles = miles
     }
 
     /// Lead label for a set line: cardio → the shared distance/time/incline
@@ -290,7 +377,8 @@ struct SessionDetailView: View {
         if type == .conditioning {
             return CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                          durationSeconds: set.durationSeconds,
-                                         inclinePercent: set.inclinePercent)
+                                         inclinePercent: set.inclinePercent,
+                                         loadLb: set.weightLb)
         }
         if type == .timed { return CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) }
         return set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)

@@ -53,6 +53,37 @@ final class CardioFormatTests: XCTestCase {
         }
     }
 
+    // [INV-RUCK-CARRIES-ITS-LOAD]
+    func testLoadedCarries() {
+        XCTAssertTrue(CardioFormat.carriesLoad(exerciseName: "Ruck"))
+        XCTAssertTrue(CardioFormat.carriesLoad(exerciseName: "Sled Push"))
+        XCTAssertFalse(CardioFormat.carriesLoad(exerciseName: "Walk"), "a walk carries nothing")
+        XCTAssertFalse(CardioFormat.carriesLoad(exerciseName: "Bike"))
+
+        XCTAssertEqual(CardioFormat.defaultLoadLb(exerciseName: "Ruck"), 20,
+                       "a ruck starts at a 20 lb pack, not empty")
+        XCTAssertNil(CardioFormat.defaultLoadLb(exerciseName: "Sled Push"),
+                     "sleds vary too much by surface to have an honest default")
+        XCTAssertNil(CardioFormat.defaultLoadLb(exerciseName: "Walk"))
+        XCTAssertEqual(CardioFormat.loadIncrementLb, 10, "packs move in 10 lb steps, not barbell steps")
+    }
+
+    // [INV-RUCK-CARRIES-ITS-LOAD]
+    func testLoadedCarryLabelKeepsItsWeight() {
+        XCTAssertEqual(
+            CardioFormat.setLabel(distanceMiles: 3, durationSeconds: 2700, inclinePercent: nil, loadLb: 20),
+            "20 lb · 3 mi · 45:00 · 4 mph",
+            "the pack weight leads — it is what separates a ruck from a walk")
+        XCTAssertEqual(
+            CardioFormat.setLabel(distanceMiles: 3, durationSeconds: 2700, inclinePercent: nil, loadLb: 0),
+            "3 mi · 45:00 · 4 mph",
+            "unloaded work shows no load at all")
+        XCTAssertEqual(
+            CardioFormat.setLabel(distanceMiles: 3, durationSeconds: 2700, inclinePercent: nil),
+            "3 mi · 45:00 · 4 mph",
+            "the load argument is optional so existing callers are unchanged")
+    }
+
     func testDurationLabel() {
         XCTAssertEqual(CardioFormat.durationLabel(seconds: 1350), "22:30")
         XCTAssertEqual(CardioFormat.durationLabel(seconds: 65), "1:05")

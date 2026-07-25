@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var importAlert: String?
     @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
     @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
+    /// Device-local on purpose — a Health read grant must not ride in a backup.
+    @AppStorage("healthReadEnabled") private var healthReadEnabled = false
 
     var body: some View {
         NavigationStack {
@@ -103,10 +105,21 @@ struct SettingsView: View {
                                 }
                             }
                         ))
+                        Toggle("Compare conditioning with Health", isOn: Binding(
+                            get: { healthReadEnabled },
+                            set: { on in
+                                healthReadEnabled = on
+                                HealthKitService.shared.isReadEnabled = on
+                                if on {
+                                    Task { _ = await HealthKitService.shared.requestReadAuthorization() }
+                                }
+                            }
+                        ))
                     } header: {
                         Text("HealthKit")
                     } footer: {
-                        Text("Write-only. This app reads nothing from Health.")
+                        // [INV-HEALTH-IS-A-SECOND-OPINION]
+                        Text("Two separate permissions. Comparing reads walking, running, and cycling distance for sessions you have already logged, and shows it beside your own numbers — it never changes a logged workout on its own.")
                     }
                 }
 

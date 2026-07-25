@@ -997,7 +997,7 @@ private struct SetRow: View {
         }
         .sheet(isPresented: $showDetail) {
             if isCardio {
-                CardioSetSheet(set: set, onDelete: onRemove)
+                CardioSetSheet(set: set, exerciseName: exercise?.name ?? "", onDelete: onRemove)
                     .presentationDetents([.medium, .large])
             } else if isTimed {
                 TimedSetSheet(set: set, onDelete: onRemove)
@@ -1037,12 +1037,16 @@ private struct CardioSetSheet: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
+    let exerciseName: String
     let onDelete: () -> Void
 
     /// Distance is what gets stored, so it starts as the entered value and
     /// speed is the readout — the same way the sheet behaved before speed
     /// became editable.
     @State private var derived: Derived = .speed
+
+    private var carriesLoad: Bool { CardioFormat.carriesLoad(exerciseName: exerciseName) }
+    private var carryLb: Double { self.set.weightLb }
 
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
@@ -1094,8 +1098,9 @@ private struct CardioSetSheet: View {
                     Stepper("Incline: \(incline > 0 ? "\(Weight.trim(incline))%" : "—")",
                             value: Binding(get: { incline }, set: { set.inclinePercent = $0 > 0 ? $0 : nil }),
                             in: 0...30, step: 0.5)
+                    carryLoadRow
                 } header: {
-                    Text("Distance · time · speed · incline")
+                    Text(carriesLoad ? "Load · distance · time · speed" : "Distance · time · speed · incline")
                 } footer: {
                     Text(derived == .distance
                          ? "Distance is calculated from speed and time."
@@ -1110,6 +1115,16 @@ private struct CardioSetSheet: View {
             }
             .navigationTitle("Log conditioning")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                // [INV-RUCK-CARRIES-ITS-LOAD] A ruck opens with a pack on.
+                // Only when nothing has been logged yet — a load the lifter
+                // already set, including a deliberate zero they then changed,
+                // is theirs.
+                if carriesLoad, set.weightLb == 0,
+                   let start = CardioFormat.defaultLoadLb(exerciseName: exerciseName) {
+                    set.weightLb = start
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
@@ -1117,6 +1132,18 @@ private struct CardioSetSheet: View {
                     }
                 }
             }
+        }
+    }
+
+    /// [INV-RUCK-CARRIES-ITS-LOAD] A ruck is a walk with a pack on. Unloaded
+    /// cardio gets no load row at all. Hoisted out of the Form body to keep the
+    /// section inside the type-checker's budget (see CompileRegressionTests).
+    @ViewBuilder
+    private var carryLoadRow: some View {
+        if carriesLoad {
+            Stepper("Load: \(carryLb > 0 ? "\(Weight.trim(carryLb)) lb" : "—")",
+                    value: Binding(get: { carryLb }, set: { set.weightLb = max(0, $0) }),
+                    in: 0...200, step: CardioFormat.loadIncrementLb)
         }
     }
 

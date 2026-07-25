@@ -42,8 +42,9 @@ no quotes.
   shows full-screen at max brightness so the phone is the second tag the
   gym's software can't issue.
 - **Settings & export** — units display, multiple gyms with per-gym plate
-  inventories, per-lift increments, rest defaults, optional write-only
-  HealthKit, full JSON + CSV export.
+  inventories, per-lift increments, rest defaults, optional HealthKit (write
+  workouts/bodyweight, and separately compare conditioning distance against
+  Health), full JSON + CSV export.
 
 Fresh installs contain a searchable, categorized library of 141 generic
 strength, accessory, bodyweight, Olympic, and conditioning exercises plus a
@@ -72,7 +73,7 @@ starting points and remain editable before the first session.
 │   ├── Models/              # @Model classes (canonical lb everywhere)
 │   ├── Seed/                # generic exercise seed + program style templates
 │   ├── Services/            # notifications, rest timer, completion/PRs,
-│   │                        # export, optional HealthKit (write-only)
+│   │                        # export, optional HealthKit (write + compare)
 │   └── Views/               # dark, big targets, terse copy
 ├── web/                     # Web PWA: core.js mirrors CadenceCore 1:1,
 │                            # IndexedDB, no build step, deployed via Pages
@@ -109,8 +110,10 @@ Notes:
   persistence changes. Semantic-release cuts versioned releases with
   installable artifacts; see `CLAUDE.md` for the safety contracts and
   `docs/TESTFLIGHT.md` for TestFlight distribution and recovery.
-- HealthKit is optional: the capability is declared, the toggle lives in
-  Settings, and the app only ever writes (workouts + bodyweight).
+- HealthKit is optional and in two separately granted halves, both off by
+  default: writing (workouts + bodyweight), and reading walking/running/cycling
+  distance to show beside a logged session. Reading never overwrites a log —
+  it shows both numbers and you choose.
 - All weights are stored in lb (`Double`). kg exists only at entry/display.
 
 ## Contributing

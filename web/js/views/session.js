@@ -438,8 +438,8 @@ export async function openSession(id) {
     const isTimed = ex && ex.type === "timed";
     const wt = isCardio
       ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editCardioSet(se, s, body) },
-          ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent) }),
-          ui.h("span", { class: "sub", text: " distance · time · incline" }))
+          ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent, s.weightLb) }),
+          ui.h("span", { class: "sub", text: isCardio && C.cardioCarriesLoad(se.exerciseName) ? " load · distance · time" : " distance · time · incline" }))
       : isTimed
         ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editTimedSet(se, s, body) },
           ui.h("span", { class: "wt mono", text: C.cardioDurationLabel(s.durationSeconds || 0) }),
@@ -699,6 +699,20 @@ export async function openSession(id) {
           ui.h("span", {}, ui.h("span", { text: "Speed (mph) " }), speedNote), speedInput));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Incline" }),
           ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
+        // A ruck is a walk with a pack on — the pack weight is the training
+        // variable, so loaded carries keep a load where plain cardio zeroes it.
+        const carries = C.cardioCarriesLoad(se.exerciseName);
+        let carryLb = carries
+          ? (s.weightLb > 0 ? s.weightLb : (C.cardioDefaultLoadLb(se.exerciseName) ?? 0))
+          : 0;
+        if (carries) {
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Load" }),
+            ui.stepper(carryLb, {
+              min: 0, max: 200, step: C.CARDIO_LOAD_INCREMENT_LB,
+              format: (v) => (v > 0 ? `${C.trim(v)} lb` : "—"),
+              onChange: (v) => { carryLb = v; },
+            })));
+        }
         recompute();
         c.append(ui.h("button", {
           class: "btn primary wide", style: { marginTop: "10px" }, text: "Done",
@@ -710,7 +724,9 @@ export async function openSession(id) {
             s.distanceMiles = miles > 0 ? miles : null;
             s.durationSeconds = secs > 0 ? secs : null;
             s.inclinePercent = incline > 0 ? incline : null;
-            s.weightLb = 0; s.reps = Math.max(1, s.reps || 1); // cardio carries no load
+            // Unloaded cardio carries no load; a ruck or a sled does.
+            s.weightLb = carries ? carryLb : 0;
+            s.reps = Math.max(1, s.reps || 1);
             api.close(); save(); renderBody(body);
           },
         }));

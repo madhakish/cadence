@@ -117,7 +117,7 @@ function openDetail(s) {
         for (const x of e.sets || []) {
           card.append(ui.h("div", { class: "setrow" },
             ui.h("span", { class: "wt mono" + (x.isWarmup ? " muted" : ""),
-              text: isCardioSet(x) ? C.cardioSetLabel(x.distanceMiles, x.durationSeconds, x.inclinePercent) : setLabel(x) }),
+              text: isCardioSet(x) ? C.cardioSetLabel(x.distanceMiles, x.durationSeconds, x.inclinePercent, x.weightLb) : setLabel(x) }),
             isCardioSet(x) ? null : ui.h("span", { class: "sub mono", text: `× ${x.reps}${x.isPerSide ? "/side" : ""}` }),
             x.isWarmup ? ui.h("span", { class: "pill", text: "warmup" }) : null,
             (x.flags || []).length ? ui.h("span", { class: "pill warn", text: x.flags.join(", ") }) : null,

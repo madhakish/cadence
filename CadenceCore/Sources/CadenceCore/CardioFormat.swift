@@ -41,6 +41,31 @@ public enum CardioFormat {
         return Int((miles / mph * 3600).rounded())
     }
 
+    // MARK: - Loaded carries
+
+    /// Conditioning that carries external load. A ruck is a walk with a pack
+    /// on, and the pack weight is the training variable — progressing it is the
+    /// whole point of rucking. Zeroing the load the way unloaded cardio does
+    /// throws that away and makes a 60 lb ruck indistinguishable from a stroll.
+    public static let loadedCarries: Set<String> = ["Ruck", "Sled Push", "Sled Pull"]
+
+    /// Whether this conditioning movement carries a load worth logging.
+    public static func carriesLoad(exerciseName: String) -> Bool {
+        loadedCarries.contains(exerciseName)
+    }
+
+    /// Where a loaded carry starts when nothing has been logged yet. A 20 lb
+    /// pack is the conventional entry point — heavy enough to train, light
+    /// enough that form and feet survive the first few outings. Sleds vary far
+    /// too much by surface and implement to have an honest default.
+    public static func defaultLoadLb(exerciseName: String) -> Double? {
+        exerciseName == "Ruck" ? 20 : nil
+    }
+
+    /// Loaded carries move in plates and full pack increments, not the 2.5 lb
+    /// steps a barbell lift wants.
+    public static let loadIncrementLb: Double = 10
+
     /// Formats a duration as minutes and seconds, including hours when needed.
     public static func durationLabel(seconds: Int) -> String {
         let s = max(0, seconds)
@@ -52,8 +77,13 @@ public enum CardioFormat {
 
     /// Builds one compact line from whichever cardio fields were logged.
     /// Missing halves simply drop out; nothing logged → "—".
-    public static func setLabel(distanceMiles: Double?, durationSeconds: Int?, inclinePercent: Double?) -> String {
+    /// `loadLb` is the carried weight for a ruck or sled — omitted entirely for
+    /// unloaded work, which has none.
+    public static func setLabel(
+        distanceMiles: Double?, durationSeconds: Int?, inclinePercent: Double?, loadLb: Double? = nil
+    ) -> String {
         var parts: [String] = []
+        if let lb = loadLb, lb > 0 { parts.append("\(Weight.trim(lb)) lb") }
         if let miles = distanceMiles, miles > 0 { parts.append("\(Weight.trim(miles, decimals: 2)) mi") }
         if let secs = durationSeconds, secs > 0 { parts.append(durationLabel(seconds: secs)) }
         if let mph = speedMph(distanceMiles: distanceMiles, durationSeconds: durationSeconds) {
