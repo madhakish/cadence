@@ -70,6 +70,19 @@ Re-syncing warmups after a bar, gym, or working-weight change refreshes their
 equipment-changing swap is the exception: it rebuilds the ramp, because the old
 one described a different implement.
 
+### INV-ANATOMY-EXPLICIT
+*platforms: web*
+
+Every seeded exercise carries an explicit primary/secondary muscle profile,
+every muscle it cites is a named muscle, and every named muscle has a region on
+the figure to highlight. The movement-group fallback is for user-created
+exercises only.
+
+> 84 of 141 seeded exercises inherited a coarse group default — vague for most
+> and wrong for several. A leg curl inherited "hinge" and so claimed glutes;
+> hip adduction inherited "squat" and claimed quads. Adductors and rear delts
+> had no region at all, so that work could not be drawn truthfully.
+
 ---
 
 ## Milestones

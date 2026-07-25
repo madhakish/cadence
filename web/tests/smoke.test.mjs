@@ -1354,6 +1354,26 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     "[INV-SESSION-ALWAYS-ESCAPABLE] banked history survives a discard");
 }
 
+// The figure is only honest if every shipped exercise says what it trains.
+// The movement-group fallback exists for user-created exercises; for seeded
+// ones it was merely vague at best and wrong at worst — a leg curl inherited
+// "hinge" and so claimed glutes, hip adduction inherited "squat".
+{
+  const anatomy = await import("../js/anatomy.js");
+  const seeded = seededExercises.map((e) => e.name);
+  const missing = seeded.filter((n) => !anatomy.MUSCLE_MAP[n]);
+  ok(missing.length === 0,
+    `[INV-ANATOMY-EXPLICIT] every seeded exercise has an explicit muscle profile (missing: ${missing.join(", ") || "none"})`);
+  const named = new Set(Object.keys(anatomy.MUSCLE_NAMES));
+  const unknown = Object.entries(anatomy.MUSCLE_MAP)
+    .flatMap(([n, p]) => [...p.primary, ...p.secondary].filter((m) => !named.has(m)).map((m) => `${n}:${m}`));
+  ok(unknown.length === 0, `[INV-ANATOMY-EXPLICIT] every cited muscle is a named muscle (${unknown.join(", ") || "none"})`);
+  const drawn = new Set(anatomy.ANATOMY_REGIONS.map((r) => r.id));
+  const undrawable = [...named].filter((m) => !drawn.has(m));
+  ok(undrawable.length === 0,
+    `[INV-ANATOMY-EXPLICIT] every named muscle has a region to highlight (${undrawable.join(", ") || "none"})`);
+}
+
 // ---- progression chart: role split + combined metric ----
 // A lift can be MAIN on one day and COMPLEMENTARY on another at a much lighter
 // base. Drawing both as one line produced a sawtooth between two unrelated
