@@ -55,7 +55,7 @@ prescribes **5 or more reps at or below the slot's base weight**. It never
 mirrors the main lift's 5×5 → 5×3 → 3×3 wave.
 
 ### INV-COMP-WARMUP-BRIDGE
-*platforms: core, web*
+*platforms: web*
 
 A complementary lift that **follows other work** bridges with the last two
 ramp steps only. A complementary slot ordered **first** in its day still ramps
@@ -69,6 +69,19 @@ Re-syncing warmups after a bar, gym, or working-weight change refreshes their
 **weights** without changing **how many** a programmed entry owns. An
 equipment-changing swap is the exception: it rebuilds the ramp, because the old
 one described a different implement.
+
+### INV-ANATOMY-EXPLICIT
+*platforms: web*
+
+Every seeded exercise carries an explicit primary/secondary muscle profile,
+every muscle it cites is a named muscle, and every named muscle has a region on
+the figure to highlight. The movement-group fallback is for user-created
+exercises only.
+
+> 84 of 141 seeded exercises inherited a coarse group default — vague for most
+> and wrong for several. A leg curl inherited "hinge" and so claimed glutes;
+> hip adduction inherited "squat" and claimed quads. Adductors and rear delts
+> had no region at all, so that work could not be drawn truthfully.
 
 ---
 
@@ -106,6 +119,20 @@ duplicate — still reach every day.
 > Index-space arithmetic over the raw relationship array meant a gap made the
 > last day unrecognisable: the week stopped advancing, the cycle never rolled
 > over, stashed grades sat unapplied, and days past the gap became unreachable.
+
+### INV-ROTATION-JUDGED-AS-RUN
+*platforms: core*
+
+Only the **current** rotation is measured against the program's live day set. A
+rotation the schedule has already moved past is closed and is judged by the
+days it actually ran.
+
+> A program that gains days — adding a complementary lift, moving from a 2-day
+> to a 4-day split — had today's day list read back over every earlier
+> rotation, so finished work reported "1/4 days banked" forever. The shape a
+> closed rotation ran under is not recoverable from a program that has since
+> changed, and inventing one it was never held to is worse than reporting what
+> it ran.
 
 ### INV-DAY-ORDERS-PRESERVED
 *platforms: web*
@@ -178,6 +205,17 @@ Main shows by default; complementary is opt-in and visually recessive.
 > The same lift can hold a main slot on one day and a complementary slot on
 > another at a lighter base. One line across both is a sawtooth between two
 > unrelated progressions.
+
+### INV-CHART-ROLE-EXCLUDES-EXTRA
+*platforms: web*
+
+Only a lift's **main** slots feed the main series. Unprogrammed work inside a
+program session — and accessory work — is extra volume, not a main effort. An
+entry with no role in a session with no program at all IS that lift's record
+and stays main.
+
+> A few light squats added to an upper day were charted as main and pulled the
+> squat progression down to a weight never worked as a main lift.
 
 ### INV-VOLUME-KEEPS-ITS-OWN-SCALE
 *platforms: web*
