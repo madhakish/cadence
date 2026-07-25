@@ -52,10 +52,14 @@ lifts appear under "Next up" with their own suggestions.
 - **Add or remove individual sets** with the + Set / − Set controls, row swipe
   (iOS), or Delete set action. Extra back-off volume beyond the prescription
   never hurts your grade.
-- **Adjust a work set without retyping the others.** Weight and reps are edited
-  as one draft, and “Apply weight and reps to remaining planned sets” is on by
-  default. That accepted adjustment becomes the session target used for
-  progression; completed or skipped sets are never rewritten.
+- **Adjust a work set without retyping the others.** The set sheet offers
+  *Apply reps to remaining planned sets* and *Apply weight to remaining planned
+  sets* as two independent opt-ins, both **off** by default — so editing reps
+  can't reset a weight you deliberately chose, and opening a set just to add a
+  body flag changes nothing else. Completed or skipped sets are never rewritten.
+  Note that propagating an edit changes the work you're about to do, not the
+  target you're graded against: a lighter session is saved as performed work
+  but still grades as below plan.
 - **Subtract** as well as add rest time with the −1:00 / +1:00 controls while a
   rest runs.
 - **Wrong exercise available?** [Swap it](swap-an-exercise.md), or

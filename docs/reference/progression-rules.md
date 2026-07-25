@@ -20,9 +20,12 @@ owner table for docs; other pages link here rather than restating).
 | 3 | **Peak** | Top work — **this is what gets graded** |
 | 4 | Rest | Deload prescriptions; at its last day the cycle **rolls over** |
 
-Banking the last day of a week advances the week; banking the last day
-of week 4 applies all stashed grades and starts the next cycle at week 1.
-The next prescription is always `nextDayIndex` → that exact day's stable
+Banking the **highest-ordered** day of a week advances the week; banking
+that day in week 4 applies all stashed grades and starts the next cycle at
+week 1. The schedule steps between days by `order` value, not by position
+in the list, so a program whose orders are not a contiguous `0..n-1` — a
+gap or a duplicate from an older backup — still reaches every day. The
+next prescription is always `nextDayIndex` → that exact day's stable
 slots → the current phase formula. Main, complementary, and unprogrammed extra
 work are separate records; recent same-name history never substitutes for a
 program slot.
@@ -58,10 +61,15 @@ smoothed 70% old / 30% new.
 
 ## Accessories (every bank, not just peaks)
 
-Double progression: all sets at the current rep target and none stopped
-early → target +1 rep. At the top of the range with a load step → add
+Double progression: all sets at the current rep target, at the planned
+load, none stopped early, at most **1** grindy/wobble set, and **no body
+signal** → target +1 rep. At the top of the range with a load step → add
 the step, reset to the range bottom. Load step 0 (bodyweight) keeps
 adding reps; the range top is advisory.
+
+Anything short of that holds the target and counts a stall. A rotation
+deliberately cut by an accepted red-readiness proposal is a hold, not a
+missed exposure — it never counts against the accessory.
 
 ## Methodology styles
 

@@ -528,6 +528,7 @@ private struct ExerciseSection: View {
             for (i, set) in entry.orderedSets.enumerated() { set.order = i }
         } else {
             synchronizeWarmups(entry, bar: effectiveBar, gym: gym,
+                               rebuildingForNewEquipment: true,
                                enteredUnit: settings?.unitDisplay.primaryUnit ?? .lb,
                                context: context)
         }
@@ -788,7 +789,7 @@ private struct ExerciseSection: View {
 /// bar context without discarding status/quality already logged on matching
 /// warmup rows.
 private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWorkingLb: Double? = nil,
-                                bar: Bar, gym: Gym?,
+                                bar: Bar, gym: Gym?, rebuildingForNewEquipment: Bool = false,
                                 enteredUnit: WeightUnit, context: ModelContext) {
     guard let exercise = entry.exercise,
           let workingLb = overrideWorkingLb ?? entry.plannedWeightLb
@@ -815,9 +816,14 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
     // refined by the user's own row edits. Resync refreshes the warmup
     // WEIGHTS for the new bar/gym/working weight without changing how many
     // warmups the plan owns (suffix keeps the steps nearest the working
-    // weight); it must never re-inflate a deliberately short or empty ramp.
+    // weight); it must never re-inflate a deliberately short ramp.
     // Manually added exercises still grow a full ramp as before.
-    if entry.programRole != nil {
+    //
+    // An EQUIPMENT-changing swap is the exception: the old ramp described a
+    // different implement, so its length carries no intent about the new one,
+    // and a lift that had no ramp at all (a machine or band slot) must be able
+    // to gain one when it becomes a barbell.
+    if entry.programRole != nil, !rebuildingForNewEquipment, !existing.isEmpty {
         desired = Array(desired.suffix(existing.count))
     }
     var rebuilt: [SetEntry] = []

@@ -96,11 +96,19 @@ the achieved load. The program tag validates the schedule position and the
 slot ID selects the progression record to advance — see
 [Progression rules](progression-rules.md#stale-sessions).
 
-Edits made in the logger belong to that session. Applying a weight/reps change
-to the remaining planned sets also updates the session prescription, while
-completed and skipped rows remain untouched. Completion therefore compares
-performed work with the accepted, adjusted target rather than the originally
-generated number.
+Edits made in the logger belong to that session. Reps and weight propagate
+independently — each has its own opt-in toggle, both off by default, so
+changing one never resets the other and opening a set to add a body flag
+rewrites nothing. Completed and skipped rows are never touched.
+
+Propagating an edit changes the work you are about to do; it does **not**
+move the bar the session is graded against. The prescription snapshot stays
+put, so dropping the load and applying it to the remaining sets is recorded
+as performed work but still grades as below plan. That is deliberate: a
+target that follows the weight down would let the base weight climb on work
+that was never done — see
+[Progression rules](progression-rules.md#grading-a-lifts-peak-week-3) and
+[How progression decides](../explanation/how-progression-decides.md).
 
 Startup integrity repair is deliberately separate from prescription math. If
 an older relationship-aliasing bug made one two-lift day an exact role-for-role
