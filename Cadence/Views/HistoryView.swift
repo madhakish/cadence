@@ -325,14 +325,25 @@ struct ProgressionChartsView: View {
 
     /// A lift can hold a MAIN slot on one day and a COMPLEMENTARY slot on
     /// another at a much lighter base. Charting both as one line produced a
-    /// sawtooth between two unrelated progressions, which is what made main
-    /// progress unreadable. Anything not explicitly complementary counts as
-    /// the primary record, so standalone and blank-session work charts as it
-    /// always did. Mirrors web `chartRoleOf`.
+    /// sawtooth between two unrelated progressions.
+    ///
+    /// The third case is unprogrammed work. Inside a PROGRAM session, an entry
+    /// with no role is extra work the lifter added — a few light squats on an
+    /// upper day — and charting it as main dragged the progression line down to
+    /// weights that were never a main effort. In a session with no program at
+    /// all, an entry with no role IS the record for that lift, so it stays
+    /// main. Mirrors web `chartRoleOf`.
     private enum ChartRole: String, CaseIterable {
-        case main, complementary
-        static func of(_ entry: SessionExercise) -> ChartRole {
-            entry.programRole == LiftRole.complementary.rawValue ? .complementary : .main
+        case main, complementary, extra
+        static func of(_ entry: SessionExercise, in session: WorkoutSession) -> ChartRole {
+            switch entry.programRole {
+            case LiftRole.complementary.rawValue: return .complementary
+            case LiftRole.main.rawValue: return .main
+            case .some: return .extra          // accessory, and anything added later
+            case nil:
+                let programmed = session.programID != nil || session.programName != nil
+                return programmed ? .extra : .main
+            }
         }
     }
 
@@ -369,7 +380,7 @@ struct ProgressionChartsView: View {
             let matching = session.exercises.filter { $0.exercise?.name == selectedLift }
             guard !matching.isEmpty else { continue }
             for role in visibleRoles {
-                let entries = matching.filter { ChartRole.of($0) == role }
+                let entries = matching.filter { ChartRole.of($0, in: session) == role }
                 guard !entries.isEmpty else { continue }
                 let phase = entries.compactMap(\.phase).first
                 let rotation = phase.map { "R\($0.rawValue) \($0.name)" } ?? "Untracked"
@@ -406,7 +417,7 @@ struct ProgressionChartsView: View {
         let display = settingsList.first?.unitDisplay ?? .lbPrimary
         return sessions.compactMap { session -> Point? in
             let entries = session.exercises.filter {
-                $0.exercise?.name == selectedLift && ChartRole.of($0) == .main
+                $0.exercise?.name == selectedLift && ChartRole.of($0, in: session) == .main
             }
             let volume = entries.reduce(0) { $0 + $1.workingVolumeLb }
             guard volume > 0 else { return nil }

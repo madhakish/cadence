@@ -334,6 +334,33 @@ ok(!C.belowPlanWork([225, 225, 225, 185], 225, 3),
 ok(!C.belowPlanWork([223.5, 225, 225], 225, 3),
   "[INV-BELOW-PLAN-IS-BELOW-PLAN] kg-entry noise inside half a rounding step still counts as at plan");
 
+// A rotation must be judged against the program as it stood WHEN IT WAS RUN.
+// Programs legitimately gain days — adding a complementary lift, moving from a
+// 2-day to a 4-day split — and reading today's day list back over old
+// rotations reported finished work as permanently "1/4 days banked".
+{
+  const mkSession = (cycle, rotation, dayIndex, date) => ({
+    id: `s${cycle}-${rotation}-${dayIndex}`, date, programID: "p1", cycleNumber: cycle,
+    rotation, dayIndex, completed: true, exercises: [],
+  });
+  const program = { id: "p1", expectedDayIndexes: [0, 1, 2, 3], slots: [], maximumAddedSetsPerRotation: 6 };
+  // Two closed rotations run under a smaller program, then the live one.
+  const report = C.evaluateCoaching(program, [
+    mkSession(1, 1, 0, "2026-05-09T12:00:00Z"), mkSession(1, 1, 1, "2026-05-12T12:00:00Z"),
+    mkSession(1, 2, 0, "2026-05-15T12:00:00Z"), mkSession(1, 2, 1, "2026-05-19T12:00:00Z"),
+    mkSession(2, 1, 0, "2026-07-15T12:00:00Z"),
+  ]);
+  const [first, second, current] = report.rotations;
+  ok(first.isComplete && first.judgedAsRun,
+    "[INV-ROTATION-JUDGED-AS-RUN] a closed rotation is complete against the days it ran");
+  ok(second.isComplete && second.judgedAsRun,
+    "[INV-ROTATION-JUDGED-AS-RUN] every closed rotation, not just the first");
+  ok(!current.isComplete && !current.judgedAsRun,
+    "[INV-ROTATION-JUDGED-AS-RUN] the live rotation is still measured against the current program");
+  eq(current.expectedDayIndexes.length, 4,
+    "[INV-ROTATION-JUDGED-AS-RUN] the live rotation expects today's full day set");
+}
+
 // Schedule advance walks day ORDER values, not array positions. Import
 // validates day orders as unique but never as contiguous, so a bundle can
 // carry [0, 1, 5]; index-space arithmetic then never recognized the last day

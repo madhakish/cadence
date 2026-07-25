@@ -1378,6 +1378,45 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     "[INV-SESSION-ALWAYS-ESCAPABLE] banked history survives a discard");
 }
 
+// The figure is only honest if every shipped exercise says what it trains.
+// The movement-group fallback exists for user-created exercises; for seeded
+// ones it was merely vague at best and wrong at worst — a leg curl inherited
+// "hinge" and so claimed glutes, hip adduction inherited "squat".
+{
+  const anatomy = await import("../app/js/anatomy.js");
+  const seeded = seededExercises.map((e) => e.name);
+  const missing = seeded.filter((n) => !anatomy.MUSCLE_MAP[n]);
+  ok(missing.length === 0,
+    `[INV-ANATOMY-EXPLICIT] every seeded exercise has an explicit muscle profile (missing: ${missing.join(", ") || "none"})`);
+  const named = new Set(Object.keys(anatomy.MUSCLE_NAMES));
+  const unknown = Object.entries(anatomy.MUSCLE_MAP)
+    .flatMap(([n, p]) => [...p.primary, ...p.secondary].filter((m) => !named.has(m)).map((m) => `${n}:${m}`));
+  ok(unknown.length === 0, `[INV-ANATOMY-EXPLICIT] every cited muscle is a named muscle (${unknown.join(", ") || "none"})`);
+  const drawn = new Set(anatomy.ANATOMY_REGIONS.map((r) => r.id));
+  const undrawable = [...named].filter((m) => !drawn.has(m));
+  ok(undrawable.length === 0,
+    `[INV-ANATOMY-EXPLICIT] every named muscle has a region to highlight (${undrawable.join(", ") || "none"})`);
+}
+
+// Unprogrammed work inside a PROGRAM session is extra volume, not the main
+// lift. A few light squats added to an upper day were being charted as main
+// and dragged the squat progression down to a weight never worked as a main.
+{
+  const hist = await import("../app/js/views/history.js");
+  const roleOf = hist.chartRoleOfForTest;
+  const tagged = { programTag: { cycleNumber: 2, week: 3, dayIndex: 1 } };
+  const untagged = {};
+  ok(roleOf({ programRole: "main" }, tagged) === "main", "[INV-CHART-ROLE-EXCLUDES-EXTRA] a main slot is main");
+  ok(roleOf({ programRole: "complementary" }, tagged) === "complementary",
+    "[INV-CHART-ROLE-EXCLUDES-EXTRA] a complementary slot is complementary");
+  ok(roleOf({ programRole: null }, tagged) === "extra",
+    "[INV-CHART-ROLE-EXCLUDES-EXTRA] unprogrammed work in a program session is not main");
+  ok(roleOf({ programRole: "accessory" }, tagged) === "extra",
+    "[INV-CHART-ROLE-EXCLUDES-EXTRA] accessory work is not main");
+  ok(roleOf({ programRole: null }, untagged) === "main",
+    "[INV-CHART-ROLE-EXCLUDES-EXTRA] standalone work with no program IS the record for that lift");
+}
+
 // ---- progression chart: role split + combined metric ----
 // A lift can be MAIN on one day and COMPLEMENTARY on another at a much lighter
 // base. Drawing both as one line produced a sawtooth between two unrelated
