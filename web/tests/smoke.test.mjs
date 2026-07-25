@@ -1323,5 +1323,47 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(canon(again) === canon(fixture), "fixture re-exports byte-for-byte (sans wall-clock stamps)");
 }
 
+// ---- progression chart: role split + combined metric ----
+// A lift can be MAIN on one day and COMPLEMENTARY on another at a much lighter
+// base. Drawing both as one line produced a sawtooth between two unrelated
+// progressions; main must stay legible on its own.
+{
+  const { progressionChart, ROLE_DASH } = await import("../js/charts.js");
+  const at = (day) => new Date(2026, 0, day).getTime();
+  const main = [{ t: at(1), y: 225 }, { t: at(8), y: 235 }, { t: at(15), y: 245 }];
+  const e1rm = [{ t: at(1), y: 253 }, { t: at(8), y: 264 }, { t: at(15), y: 260 }];
+  const comp = [{ t: at(1), y: 185 }, { t: at(8), y: 190 }, { t: at(15), y: 195 }];
+  const vol = [{ t: at(1), y: 5625 }, { t: at(8), y: 4700 }, { t: at(15), y: 2205 }];
+  const chart = progressionChart({
+    lines: [
+      { key: "w", label: "Working weight", color: "#ef4444", points: main },
+      { key: "e", label: "Est. 1RM", color: "#5BA06A", points: e1rm },
+      { key: "c", label: "Working weight (comp.)", color: "#ef4444", dash: ROLE_DASH.complementary, points: comp },
+    ],
+    bars: { label: "Volume", color: "#8B9196", points: vol },
+  });
+  const svg = chart.querySelector("svg");
+  const paths = [...svg.querySelectorAll("path.line")];
+  ok(paths.length === 3, "every requested load line is drawn");
+  ok(paths.filter((p) => (p.getAttribute("style") || "").includes("dasharray")).length === 1,
+    "the complementary line is dashed so main stays visually dominant");
+  const bars = [...svg.querySelectorAll("rect.vol-bar")].map((r) => +r.getAttribute("height"));
+  ok(bars.length === 3 && bars[0] > bars[1] && bars[1] > bars[2],
+    "volume bars track tonnage on their own scale");
+  // The point of the combined view: tonnage is orders of magnitude larger, so
+  // it must never stretch the load axis the two comparable lines share. The
+  // load axis is the LEFT gutter; volume labels its own right-hand scale.
+  const labelsAt = (keep) => [...svg.querySelectorAll("text.lbl")]
+    .filter((t) => keep(+t.getAttribute("x"))).map((t) => Number(t.textContent))
+    .filter(Number.isFinite);
+  const loadAxis = labelsAt((x) => x < 20);
+  ok(loadAxis.length > 0 && loadAxis.every((v) => v > 150 && v < 300),
+    `the load axis is scaled to the load lines, not to tonnage (${loadAxis.join()})`);
+  ok(labelsAt((x) => x > 300).includes(5625), "volume keeps its own right-hand scale");
+  ok([...chart.querySelectorAll(".chart-legend span")].length === 4, "every series is named in the legend");
+  const empty = progressionChart({ lines: [{ key: "x", points: [] }], bars: null });
+  ok(empty.querySelectorAll("path.line").length === 0, "an empty series renders nothing rather than throwing");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -1,7 +1,7 @@
 // History — session log (grouped by month), progression charts, milestones.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { lineChart, multiLineChart } from "../charts.js";
+import { lineChart, multiLineChart, progressionChart, ROTATION_COLORS, ROLE_DASH } from "../charts.js";
 import { Sessions, Milestones, Exercises, Programs, Checkins, topSet, workingVolume } from "../db.js";
 import { coachingReport } from "../coaching-adapter.js";
 
@@ -130,14 +130,28 @@ function openDetail(s) {
   });
 }
 
-let chartEx = null, chartMetric = "weight", chartSplit = false;
+// A lift can hold a MAIN slot on one day and a COMPLEMENTARY slot on another
+// at a much lighter base. Charting both as one line produced a sawtooth
+// between two unrelated progressions, which is what made main-lift progress
+// unreadable. Everything that is not explicitly complementary counts as the
+// primary record, so standalone and blank-session work keeps charting as it
+// always did.
+const chartRoleOf = (entry) => (entry.programRole === "complementary" ? "complementary" : "main");
+
+let chartEx = null, chartMetric = "weight", chartSplit = false, chartComplementary = false;
 function renderCharts(panel, sessions, exercises, program) {
   const mains = exercises.filter((e) => e.category === "Main").map((e) => e.name).sort();
   if (!mains.length) { panel.append(ui.empty("📈", COPY.emptyHistory)); return; }
   if (!chartEx || !mains.includes(chartEx)) chartEx = mains[0];
 
   panel.append(ui.field("Exercise", (() => { const sel = ui.h("select", {}, ...mains.map((n) => ui.h("option", { value: n, text: n, selected: n === chartEx }))); sel.addEventListener("change", () => { chartEx = sel.value; renderInner(); }); return sel; })()));
-  panel.append(ui.seg([{ value: "weight", label: "Working weight" }, { value: "e1rm", label: "Est. 1RM" }, { value: "volume", label: "Volume" }], chartMetric, (m) => { chartMetric = m; renderInner(); }));
+  panel.append(ui.seg([{ value: "weight", label: "Working weight" }, { value: "e1rm", label: "Est. 1RM" },
+    { value: "volume", label: "Volume" }, { value: "all", label: "All three" }],
+  chartMetric, (m) => { chartMetric = m; renderInner(); }));
+  // Main only by default — that alone removes the main/complementary sawtooth.
+  panel.append(ui.h("div", { class: "row", style: { padding: "8px 4px" } },
+    ui.h("span", { class: "sub", text: "Show complementary" }),
+    ui.toggle(chartComplementary, (v) => { chartComplementary = v; renderInner(); })));
   // One line per rotation: compare this cycle's R1 against last cycle's R1
   // instead of reading a sawtooth.
   panel.append(ui.h("div", { class: "row", style: { padding: "8px 4px" } },
@@ -148,46 +162,93 @@ function renderCharts(panel, sessions, exercises, program) {
   renderInner();
 
   function renderInner() {
-    const series = [];
     const displayValue = (lb) => C.primaryUnit(ui.prefs.unitDisplay) === "kg" ? C.kgFromLb(lb) : lb;
+    // Per (session, role): the top working weight, the best e1RM sample, and
+    // the tonnage. One pass keeps every metric describing the same set of
+    // performed sets, so switching metric can never re-slice the data.
+    const rows = [];
     for (const s of [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date))) {
-      const entries = (s.exercises || []).filter((x) => x.exerciseName === chartEx);
-      if (!entries.length) continue;
-      // The session point's rotation (R1–R4), for the split view. Sessions
-      // logged outside a cycle bucket as "Untracked".
-      const phase = entries.find((entry) => entry.phase)?.phase;
-      const rot = phase ? `R${phase} ${(C.PHASES[phase] || {}).name || ""}`.trim() : "Untracked";
-      if (chartMetric === "weight") {
-        const tops = entries.map(topSet).filter(Boolean);
-        const t = tops.sort((a, b) => b.weightLb - a.weightLb)[0];
-        if (t) series.push({ t: new Date(s.date).getTime(), y: displayValue(t.weightLb), rot });
-      } else if (chartMetric === "e1rm") {
-        const estimates = entries.flatMap((entry) => (entry.sets || [])
-          .filter((set) => !set.isWarmup && set.status === "completed")
-          .map((set) => C.epleyE1RM(set.weightLb, set.reps)));
-        if (estimates.length) series.push({ t: new Date(s.date).getTime(), y: displayValue(Math.max(...estimates)), rot });
-      } else {
-        const v = entries.reduce((sum, entry) => sum + workingVolume(entry), 0);
-        if (v > 0) series.push({ t: new Date(s.date).getTime(), y: displayValue(v), rot });
+      const matching = (s.exercises || []).filter((x) => x.exerciseName === chartEx);
+      if (!matching.length) continue;
+      for (const role of ["main", "complementary"]) {
+        const entries = matching.filter((entry) => chartRoleOf(entry) === role);
+        if (!entries.length) continue;
+        // The point's rotation (R1–R4) for the split view; sessions logged
+        // outside a cycle bucket read as "Untracked".
+        const phase = entries.find((entry) => entry.phase)?.phase;
+        const rot = phase ? `R${phase} ${(C.PHASES[phase] || {}).name || ""}`.trim() : "Untracked";
+        const performed = entries.flatMap((entry) => (entry.sets || [])
+          .filter((set) => !set.isWarmup && set.status === "completed"));
+        const top = entries.map(topSet).filter(Boolean).sort((a, b) => b.weightLb - a.weightLb)[0];
+        const estimates = performed.map((set) => C.epleyE1RM(set.weightLb, set.reps));
+        rows.push({
+          t: new Date(s.date).getTime(), role, rot,
+          weight: top ? displayValue(top.weightLb) : null,
+          e1rm: estimates.length ? displayValue(Math.max(...estimates)) : null,
+          volume: entries.reduce((sum, entry) => sum + workingVolume(entry), 0) || null,
+        });
       }
     }
+    const roles = chartComplementary ? ["main", "complementary"] : ["main"];
+    const visible = rows.filter((r) => roles.includes(r.role));
+    const pick = (metric, role) => visible
+      .filter((r) => r.role === role && Number.isFinite(r[metric]))
+      .map((r) => ({ t: r.t, y: r[metric], rot: r.rot }));
+    // "Volume" alone keeps a plain line; in the combined view it becomes the
+    // background bars so the two comparable load metrics own the axis.
+    const series = chartMetric === "all" ? pick("weight", "main") : pick(chartMetric === "volume" ? "volume" : chartMetric, "main");
+
     ui.clear(slot);
-    if (!series.length) { slot.append(ui.empty("📈", COPY.emptyHistory)); return; }
+    if (!visible.length) { slot.append(ui.empty("📈", COPY.emptyHistory)); return; }
     const lift = (program?.days || []).flatMap((day) => day.lifts || []).find((item) => item.exerciseName === chartEx);
     const rawTarget = lift?.peakSingleEnabled && lift.lastPeakSingleLb > 0
       ? lift.lastPeakSingleLb + (lift.peakSingleIncrementLb || 5) : null;
     const targetY = Number.isFinite(rawTarget) ? displayValue(rawTarget) : null;
     const chartOptions = { fmtY: (v) => C.trim(v), targetY, targetLabel: "Peak target" };
-    if (chartSplit) {
-      const byRot = {};
-      for (const p of series) (byRot[p.rot] = byRot[p.rot] || []).push(p);
-      slot.append(multiLineChart(byRot, chartOptions));
-    } else {
-      slot.append(lineChart(series, chartOptions));
-    }
+    const unit = C.primaryUnit(ui.prefs.unitDisplay);
     const metricLabel = chartMetric === "weight" ? "Top working weight"
-      : chartMetric === "e1rm" ? "Estimated 1RM" : "Working volume";
-    slot.append(ui.h("div", { class: "muted", style: { textAlign: "center", fontSize: "12px" }, text: `${metricLabel} per session (${C.primaryUnit(ui.prefs.unitDisplay)})` }));
+      : chartMetric === "e1rm" ? "Estimated 1RM"
+        : chartMetric === "volume" ? "Working volume" : "Working weight, est. 1RM, and volume";
+    const roleNote = chartComplementary ? " · solid = main, dashed = complementary" : " · main slots only";
+    if (chartSplit) {
+      // Colour carries the rotation; the dash carries the role, so the two
+      // splits compose instead of fighting over the same visual channel.
+      const lines = [];
+      for (const role of roles) {
+        const byRot = {};
+        for (const p of pick(chartMetric === "all" ? "weight" : chartMetric, role)) (byRot[p.rot] ||= []).push(p);
+        for (const [rot, points] of Object.entries(byRot)) {
+          lines.push({ key: `${rot}|${role}`, label: roles.length > 1 ? `${rot} · ${role}` : rot,
+            color: ROTATION_COLORS[rot] || "#888", dash: ROLE_DASH[role], points });
+        }
+      }
+      slot.append(progressionChart({ ...chartOptions, lines,
+        caption: `${metricLabel} per session (${unit})${roleNote}` }));
+    } else {
+      const lines = [];
+      for (const role of roles) {
+        const dash = ROLE_DASH[role];
+        const suffix = roles.length > 1 ? ` (${role === "main" ? "main" : "comp."})` : "";
+        if (chartMetric === "all" || chartMetric === "weight") {
+          lines.push({ key: `weight-${role}`, label: `Working weight${suffix}`,
+            color: "var(--accent)", dash, points: pick("weight", role) });
+        }
+        if (chartMetric === "all" || chartMetric === "e1rm") {
+          lines.push({ key: `e1rm-${role}`, label: `Est. 1RM${suffix}`,
+            color: "#5BA06A", dash, points: pick("e1rm", role) });
+        }
+        if (chartMetric === "volume") {
+          lines.push({ key: `volume-${role}`, label: `Volume${suffix}`,
+            color: "var(--accent)", dash, points: pick("volume", role) });
+        }
+      }
+      // Combined view: tonnage recedes to bars on its own right-hand scale so
+      // the two same-unit load lines keep the weight axis to themselves.
+      const bars = chartMetric === "all"
+        ? { label: "Volume", color: "#8B9196", points: pick("volume", "main") } : null;
+      slot.append(progressionChart({ ...chartOptions, lines, bars,
+        caption: `${metricLabel} per session (${unit})${roleNote}` }));
+    }
     const records = new Map();
     for (const session of sessions) for (const entry of session.exercises || []) if (entry.exerciseName === chartEx) {
       for (const set of entry.sets || []) if (!set.isWarmup && set.status === "completed" && set.reps > 0 && set.reps <= 12) {
