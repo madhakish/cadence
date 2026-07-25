@@ -65,6 +65,130 @@ export const ROTATION_COLORS = {
   "R4 Deload": "#8b9196", "Untracked": "#666b71",
 };
 
+// Role → line style. A lift can occupy a MAIN slot on one day and a
+// COMPLEMENTARY slot on another at a different base, so plotting both as one
+// line produced a sawtooth between two unrelated progressions. Main stays
+// solid and dominant; complementary is dashed and lighter, so the two read as
+// foreground and background rather than competing for the same eye.
+export const ROLE_DASH = { main: null, complementary: "5 4" };
+
+// The progression chart: optional volume BARS on their own right-hand scale,
+// with load lines drawn in front on the real weight axis.
+//
+// Weight and estimated 1RM share a unit, so they belong on one axis and the
+// gap between them is itself the signal — an e1RM climbing while the top set
+// stays flat means the reps are improving. Volume is a different quantity
+// entirely and two orders of magnitude larger, so it gets its own scale and a
+// recessive mark: bars behind, never a third line competing with the two that
+// are genuinely comparable.
+//
+// lines: [{ key, label, color, dash, points: [{ t, y }] }]
+// bars:  { label, points: [{ t, y }], color }   (optional)
+export function progressionChart({
+  lines = [], bars = null, height = 220, fmtY = (v) => String(Math.round(v)),
+  fmtBar = (v) => String(Math.round(v)), targetY = null, targetLabel = "Target",
+  caption = null,
+} = {}) {
+  const W = 340, H = height, padL = 40, padT = 16, padB = 26;
+  const padR = bars ? 42 : 14;
+  const wrap = document.createElement("div");
+  const svg = el("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img" });
+  wrap.append(svg);
+
+  const drawn = lines.filter((l) => l.points && l.points.length);
+  const barPoints = bars?.points?.filter((p) => Number.isFinite(p.y)) || [];
+  const everyPoint = [...drawn.flatMap((l) => l.points), ...barPoints];
+  if (!everyPoint.length) return wrap;
+
+  const tmin = Math.min(...everyPoint.map((p) => p.t));
+  const tmax = Math.max(...everyPoint.map((p) => p.t));
+  const xAt = (t) => padL + (W - padL - padR) * (tmax > tmin ? (t - tmin) / (tmax - tmin) : 0.5);
+
+  // Load axis spans only the load lines; volume must never stretch it.
+  const loadValues = drawn.flatMap((l) => l.points.map((p) => p.y));
+  if (Number.isFinite(targetY)) loadValues.push(targetY);
+  let ymin = loadValues.length ? Math.min(...loadValues) : 0;
+  let ymax = loadValues.length ? Math.max(...loadValues) : 1;
+  if (ymin === ymax) { ymin -= 1; ymax += 1; }
+  const padY = (ymax - ymin) * 0.12;
+  ymin -= padY; ymax += padY;
+  const yAt = (v) => padT + (H - padT - padB) * (1 - (v - ymin) / (ymax - ymin));
+
+  // Volume bars sit on their own floor-at-zero scale — tonnage is a magnitude,
+  // so a non-zero baseline would exaggerate small differences.
+  const barMax = barPoints.length ? Math.max(...barPoints.map((p) => p.y)) : 0;
+  const baseline = H - padB;
+  if (barPoints.length && barMax > 0) {
+    const span = Math.max(6, (W - padL - padR) / Math.max(barPoints.length, 1) * 0.55);
+    for (const p of barPoints) {
+      const h = (H - padT - padB) * (p.y / barMax) * 0.82;
+      svg.append(el("rect", {
+        class: "vol-bar", x: (xAt(p.t) - span / 2).toFixed(1), y: (baseline - h).toFixed(1),
+        width: span.toFixed(1), height: Math.max(0, h).toFixed(1), rx: 1.5,
+        style: `fill:${bars.color || "var(--accent)"}`,
+      }));
+    }
+    for (const [frac, v] of [[0, 0], [1, barMax]]) {
+      svg.append(el("text", { class: "lbl", x: W - padR + 4, y: baseline - (H - padT - padB) * frac * 0.82 + 3 },
+        fmtBar(v)));
+    }
+  }
+
+  for (const v of [ymin + padY, (ymin + ymax) / 2, ymax - padY]) {
+    const y = yAt(v);
+    svg.append(el("line", { class: "axis", x1: padL, y1: y, x2: W - padR, y2: y, opacity: 0.45 }));
+    svg.append(el("text", { class: "lbl", x: 4, y: y + 3 }, fmtY(v)));
+  }
+  if (Number.isFinite(targetY)) {
+    const y = yAt(targetY);
+    svg.append(el("line", { class: "target-line", x1: padL, y1: y, x2: W - padR, y2: y,
+      style: "stroke:var(--accent);stroke-dasharray:5 4;opacity:.8" }));
+    svg.append(el("text", { class: "ann", x: W - padR, y: y - 5, "text-anchor": "end" }, `${targetLabel} ${fmtY(targetY)}`));
+  }
+
+  for (const line of drawn) {
+    const pts = [...line.points].sort((a, b) => a.t - b.t);
+    const d = pts.map((p, i) => `${i ? "L" : "M"}${xAt(p.t).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ");
+    const stroke = line.color || "var(--accent)";
+    svg.append(el("path", {
+      class: "line", d,
+      style: `stroke:${stroke}${line.dash ? `;stroke-dasharray:${line.dash}` : ""}`,
+    }));
+    for (const p of pts) {
+      svg.append(el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y), r: pts.length > 30 ? 1.6 : 2.6, style: `fill:${stroke}` }));
+    }
+  }
+
+  svg.append(el("text", { class: "lbl", x: padL, y: H - 6 }, tick(tmin)));
+  if (tmax > tmin) svg.append(el("text", { class: "lbl", x: W - padR, y: H - 6, "text-anchor": "end" }, tick(tmax)));
+
+  const legendItems = [...drawn.map((l) => ({ label: l.label || l.key, color: l.color, dash: l.dash })),
+    ...(barPoints.length ? [{ label: bars.label || "Volume", color: bars.color, bar: true }] : [])];
+  if (legendItems.length > 1) {
+    const legend = document.createElement("div");
+    legend.className = "chart-legend";
+    for (const item of legendItems) {
+      const span = document.createElement("span");
+      const swatch = document.createElement("i");
+      swatch.style.background = item.color || "var(--accent)";
+      if (item.bar) { swatch.style.height = "8px"; swatch.style.width = "6px"; swatch.style.opacity = ".55"; }
+      else if (item.dash) { swatch.style.background = "none"; swatch.style.borderTop = `3px dashed ${item.color}`; }
+      span.append(swatch, document.createTextNode(item.label));
+      legend.append(span);
+    }
+    wrap.append(legend);
+  }
+  if (caption) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.style.textAlign = "center";
+    note.style.fontSize = "12px";
+    note.textContent = caption;
+    wrap.append(note);
+  }
+  return wrap;
+}
+
 // Tiny trend line — no axes, just the shape of the last few sessions.
 // Mirrors the native Sparkline (Cadence/Views/Glyphs.swift).
 export function sparkline(values, { width = 64, height = 20 } = {}) {

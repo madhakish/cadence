@@ -55,9 +55,16 @@ again.
 The engine keeps three separate values:
 
 1. the theoretical strategy target;
-2. the nearest load achievable with the active gym's bar, collars, plates, and
-   loading policy; and
+2. the load the session prescribes after resolving that target against the
+   active gym's bar, collars, plates, and loading policy; and
 3. the final performed load entered during the session.
+
+Resolving is **loading guidance, not a new prescription**. When the closest
+clean stack lands within 2 lb of the target — routine when kg plates serve a
+lb prescription — the session keeps the neat programmed number and the bar
+graphic explains the actual plates, so a 220 lb prescription never becomes a
+221.4 lb one that then compounds through the stepper and progression. Only a
+genuinely unreachable target stores the achieved load.
 
 With the default Closest policy, equal-distance ties choose the heavier load on
 a Volume exposure and the lighter load on Peak/other exposures. Explicit gym

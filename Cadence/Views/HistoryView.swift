@@ -312,11 +312,28 @@ struct ProgressionChartsView: View {
     @State private var selectedLift = ""
     @State private var metric: Metric = .topSet
     @State private var splitByRotation = false
+    /// Main only by default — that alone removes the main/complementary
+    /// sawtooth that made a main lift's progression unreadable.
+    @State private var showComplementary = false
 
     enum Metric: String, CaseIterable {
         case topSet = "Working weight"
         case estimatedMax = "Est. 1RM"
         case volume = "Volume"
+        case all = "All three"
+    }
+
+    /// A lift can hold a MAIN slot on one day and a COMPLEMENTARY slot on
+    /// another at a much lighter base. Charting both as one line produced a
+    /// sawtooth between two unrelated progressions, which is what made main
+    /// progress unreadable. Anything not explicitly complementary counts as
+    /// the primary record, so standalone and blank-session work charts as it
+    /// always did. Mirrors web `chartRoleOf`.
+    private enum ChartRole: String, CaseIterable {
+        case main, complementary
+        static func of(_ entry: SessionExercise) -> ChartRole {
+            entry.programRole == LiftRole.complementary.rawValue ? .complementary : .main
+        }
     }
 
     private struct Point: Identifiable {
@@ -326,6 +343,10 @@ struct ProgressionChartsView: View {
         /// "R1 Volume" … "R4 Deload", or "Untracked" for sessions without a
         /// cycle phase — the rotation-split series key.
         let rotation: String
+        let role: ChartRole
+        /// The line this point belongs to: metric and role together, so the
+        /// combined view can draw weight and e1RM without them joining up.
+        let series: String
     }
 
     private struct RepRecord: Identifiable {
@@ -334,30 +355,64 @@ struct ProgressionChartsView: View {
         var id: Int { reps }
     }
 
+    private var visibleRoles: [ChartRole] { showComplementary ? [.main, .complementary] : [.main] }
+
+    /// Load points (working weight and/or est. 1RM) for the visible roles.
+    /// Volume is deliberately NOT here — in the combined view it becomes
+    /// background bars on its own scale rather than a third line competing
+    /// with two metrics that genuinely share a unit.
     private var points: [Point] {
         let display = settingsList.first?.unitDisplay ?? .lbPrimary
-        return sessions.compactMap { session -> Point? in
-            let entries = session.exercises.filter { $0.exercise?.name == selectedLift }
-            guard !entries.isEmpty else { return nil }
-            let phase = entries.compactMap(\.phase).first
-            let rotation = phase.map { "R\($0.rawValue) \($0.name)" } ?? "Untracked"
-            switch metric {
-            case .topSet:
-                guard let top = entries.compactMap(\.topSet?.weightLb).max() else { return nil }
-                return Point(date: session.date, value: display.primaryUnit == .kg ? Weight.kg(fromLb: top) : top, rotation: rotation)
-            case .estimatedMax:
-                let samples = entries.flatMap(\.workingSets).map {
-                    ProgramProgression.epleyE1RM(weightLb: $0.weightLb, reps: $0.reps)
+        let shown = { (lb: Double) in display.primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb }
+        var result: [Point] = []
+        for session in sessions {
+            let matching = session.exercises.filter { $0.exercise?.name == selectedLift }
+            guard !matching.isEmpty else { continue }
+            for role in visibleRoles {
+                let entries = matching.filter { ChartRole.of($0) == role }
+                guard !entries.isEmpty else { continue }
+                let phase = entries.compactMap(\.phase).first
+                let rotation = phase.map { "R\($0.rawValue) \($0.name)" } ?? "Untracked"
+                let suffix = showComplementary ? " (\(role == .main ? "main" : "comp."))" : ""
+                if metric == .topSet || metric == .all, let top = entries.compactMap(\.topSet?.weightLb).max() {
+                    result.append(Point(date: session.date, value: shown(top), rotation: rotation,
+                                        role: role, series: "Working weight\(suffix)"))
                 }
-                guard let estimate = samples.max(), estimate > 0 else { return nil }
-                return Point(date: session.date,
-                             value: display.primaryUnit == .kg ? Weight.kg(fromLb: estimate) : estimate,
-                             rotation: rotation)
-            case .volume:
-                let volume = entries.reduce(0) { $0 + $1.workingVolumeLb }
-                let shown = display.primaryUnit == .kg ? Weight.kg(fromLb: volume) : volume
-                return volume > 0 ? Point(date: session.date, value: shown, rotation: rotation) : nil
+                if metric == .estimatedMax || metric == .all {
+                    let samples = entries.flatMap(\.workingSets).map {
+                        ProgramProgression.epleyE1RM(weightLb: $0.weightLb, reps: $0.reps)
+                    }
+                    if let estimate = samples.max(), estimate > 0 {
+                        result.append(Point(date: session.date, value: shown(estimate), rotation: rotation,
+                                            role: role, series: "Est. 1RM\(suffix)"))
+                    }
+                }
+                if metric == .volume {
+                    let volume = entries.reduce(0) { $0 + $1.workingVolumeLb }
+                    if volume > 0 {
+                        result.append(Point(date: session.date, value: shown(volume), rotation: rotation,
+                                            role: role, series: "Volume\(suffix)"))
+                    }
+                }
             }
+        }
+        return result
+    }
+
+    /// Tonnage for the combined view. It keeps its own zero-based scale — a
+    /// magnitude, not a load — so it can never stretch the weight axis.
+    private var volumeBars: [Point] {
+        guard metric == .all else { return [] }
+        let display = settingsList.first?.unitDisplay ?? .lbPrimary
+        return sessions.compactMap { session -> Point? in
+            let entries = session.exercises.filter {
+                $0.exercise?.name == selectedLift && ChartRole.of($0) == .main
+            }
+            let volume = entries.reduce(0) { $0 + $1.workingVolumeLb }
+            guard volume > 0 else { return nil }
+            return Point(date: session.date,
+                         value: display.primaryUnit == .kg ? Weight.kg(fromLb: volume) : volume,
+                         rotation: "", role: .main, series: "Volume")
         }
     }
     private var chartUnitLabel: String { (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue }
@@ -385,11 +440,45 @@ struct ProgressionChartsView: View {
     }
 
     /// Rotation → line colour: escalating heat to Peak, muted Deload.
-    private static let rotationColors: KeyValuePairs<String, Color> = [
-        "R1 Volume": Color(hex: 0x5BA06A), "R2 Load": Color(hex: 0xE8B008),
-        "R3 Peak": Color(hex: 0xEF4444), "R4 Deload": Color(hex: 0x8B9196),
-        "Untracked": Color(hex: 0x666B71),
+    /// Mirrors web `ROTATION_COLORS`.
+    private static let rotationPalette: [Color] = [
+        Color(hex: 0x5BA06A), Color(hex: 0xE8B008), Color(hex: 0xEF4444),
+        Color(hex: 0x8B9196), Color(hex: 0x666B71),
     ]
+    /// Metric → line colour when not split by rotation. Working weight takes
+    /// the accent; est. 1RM the green it also carries on web.
+    private static let seriesPalette: [Color] = [
+        Theme.accent, Color(hex: 0x5BA06A), Theme.accent.opacity(0.75), Color(hex: 0x5BA06A).opacity(0.75),
+    ]
+
+    /// Distinct line identity. Rotation split still needs the role in the key
+    /// or a main and a complementary point in the same rotation would join.
+    private func seriesKey(_ point: Point) -> String {
+        splitByRotation ? "\(point.rotation)|\(point.role.rawValue)" : point.series
+    }
+
+    /// Map tonnage onto the load axis so the bars fill the plot without
+    /// touching the y-domain the load lines define.
+    private func scaledVolume(_ value: Double) -> Double {
+        let loads = points.map(\.value)
+        guard let ceiling = loads.max(), let floor = loads.min(),
+              let maxVolume = volumeBars.map(\.value).max(), maxVolume > 0 else { return 0 }
+        let headroom = ceiling - min(floor, ceiling)
+        let base = max(0, floor - headroom * 0.35)
+        return base + (ceiling - base) * 0.82 * (value / maxVolume)
+    }
+
+    private var chartCaption: String {
+        let metricLabel: String
+        switch metric {
+        case .topSet: metricLabel = "Top working weight"
+        case .estimatedMax: metricLabel = "Estimated 1RM"
+        case .volume: metricLabel = "Working volume"
+        case .all: metricLabel = "Working weight, est. 1RM, and volume"
+        }
+        let role = showComplementary ? " · solid = main, dashed = complementary" : " · main slots only"
+        return "\(metricLabel) per session (\(chartUnitLabel))\(role)"
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -403,41 +492,32 @@ struct ProgressionChartsView: View {
             .pickerStyle(.segmented)
             // One line per rotation: compare this cycle's R1 against last
             // cycle's R1 instead of reading a sawtooth.
+            Toggle("Show complementary", isOn: $showComplementary)
+                .font(.callout)
             Toggle("Split by rotation", isOn: $splitByRotation)
                 .font(.callout)
 
             if points.isEmpty {
                 ContentUnavailableView(Copy.emptyHistory, systemImage: "chart.xyaxis.line")
-            } else if splitByRotation {
-                Chart {
-                    ForEach(points) { point in
-                        LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value),
-                                 series: .value("Rotation", point.rotation))
-                            .foregroundStyle(by: .value("Rotation", point.rotation))
-                        PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
-                            .foregroundStyle(by: .value("Rotation", point.rotation))
-                    }
-                    if let peakTarget {
-                        RuleMark(y: .value("Peak target", peakTarget))
-                            .foregroundStyle(Theme.accent.opacity(0.8))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                            .annotation(position: .top, alignment: .trailing) {
-                                Text("Peak target \(Weight.trim(peakTarget))")
-                                    .font(.caption2).foregroundStyle(Theme.accent)
-                            }
-                    }
-                }
-                .chartForegroundStyleScale(Self.rotationColors)
-                .chartYScale(domain: .automatic(includesZero: false))
-                .frame(maxHeight: 280)
-                .padding(.horizontal)
             } else {
                 Chart {
+                    // Tonnage recedes to bars scaled against their own maximum,
+                    // so the two same-unit load lines keep the weight axis to
+                    // themselves and stay comparable.
+                    ForEach(volumeBars) { bar in
+                        BarMark(x: .value("Date", bar.date),
+                                y: .value(chartUnitLabel, scaledVolume(bar.value)))
+                            .foregroundStyle(Color(hex: 0x8B9196).opacity(0.28))
+                    }
                     ForEach(points) { point in
-                        LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
-                            .foregroundStyle(Theme.accent)
+                        LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value),
+                                 series: .value("Series", seriesKey(point)))
+                            .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
+                            .lineStyle(StrokeStyle(lineWidth: 2,
+                                                   dash: point.role == .complementary ? [5, 4] : []))
                         PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
+                            .symbolSize(point.role == .complementary ? 28 : 44)
                     }
                     if let peakTarget {
                         RuleMark(y: .value("Peak target", peakTarget))
@@ -449,9 +529,15 @@ struct ProgressionChartsView: View {
                             }
                     }
                 }
+                .chartForegroundStyleScale(range: splitByRotation ? Self.rotationPalette : Self.seriesPalette)
                 .chartYScale(domain: .automatic(includesZero: false))
+                .chartLegend(Set(points.map(\.series)).count > 1 ? .visible : .hidden)
                 .frame(maxHeight: 280)
                 .padding(.horizontal)
+                Text(chartCaption)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
             if !repRecords.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {

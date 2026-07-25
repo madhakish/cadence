@@ -43,10 +43,14 @@ Press. Each lift has three things to set:
 
 - **Role** — one lift per day should be **Main** (the day is built around
   it, it rests longest); the rest are **Comp.** (complementary).
-- **Rotation-1 base** — the weight week 1 is prescribed at. Week 1 asks
-  for **5×5** at this weight, so pick something you can confidently do
-  for five sets of five today. Honest and light beats ambitious: the
-  program adds weight every clean cycle, so it will catch up to you fast.
+- **Rotation-1 base** — the weight week 1 is prescribed from. A **Main**
+  lift asks for **5×5** at this weight, so pick something you can
+  confidently do for five sets of five today. A **Comp.** lift is volume
+  work rather than a second heavy lift, so week 1 asks for **3×8 at 90%**
+  of its base — set the base as the weight you could do for a hard five,
+  same as a main, and the lighter prescription follows automatically.
+  Honest and light beats ambitious either way: the program adds weight
+  every clean cycle, so it will catch up to you fast.
 - **Est. 1RM** — your rough one-rep max. Don't overthink it; the engine
   re-estimates it from every peak week you bank. It exists so the
   program knows how much headroom you have.

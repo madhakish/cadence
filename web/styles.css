@@ -173,6 +173,8 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .chart .dot { fill: var(--accent); }
 .chart .lbl { fill: var(--muted); font-size: 10px; }
 .chart .ann { fill: var(--text); font-size: 9px; }
+/* Volume bars sit behind the load lines on their own right-hand scale. */
+.chart .vol-bar { opacity: .28; }
 
 /* rest timer bar */
 .rest-bar { background: var(--card); border-radius: 14px; padding: 12px 16px; margin: 8px 0; position: sticky; top: calc(var(--safe-top) + 52px); z-index: 8; }

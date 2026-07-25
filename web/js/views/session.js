@@ -259,7 +259,12 @@ export async function openSession(id) {
     return C.restDefaultSeconds(ex.category, ex.movementGroup, role, restCfg, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : 0);
   }
 
-  const sessionStart = Date.now();            // session stopwatch origin (ephemeral)
+  // Session stopwatch origin (ephemeral). NULL until the workout is started:
+  // opening the logger to read the plan is not the same act as training, and a
+  // clock that starts itself on open reports elapsed time nobody trained.
+  let sessionStart = null;
+  function startWorkout() { sessionStart = Date.now(); paintBar(); }
+  function resetToNotStarted() { sessionStart = null; rest.stop(); paintBar(); }
   let currentSE = null;                       // the exercise you're actively working
   // Exercise AND role must come from the same session entry — pairing
   // exercises[0] with currentSE's (null) role resolved the first lift's rest
@@ -275,7 +280,10 @@ export async function openSession(id) {
 
   function paintBar() {
     if (!barEls) return;
-    barEls.clock.textContent = `${ui.mmss((Date.now() - sessionStart) / 1000)} session`;
+    barEls.clock.textContent = sessionStart == null
+      ? "not started" : `${ui.mmss((Date.now() - sessionStart) / 1000)} session`;
+    barEls.startBtn.style.display = sessionStart == null ? "" : "none";
+    barEls.resetBtn.style.display = sessionStart == null ? "none" : "";
     if (rest.running) {
       barEls.restTime.textContent = ui.mmss(rest.remaining);
       barEls.restTime.style.display = "";
@@ -302,10 +310,16 @@ export async function openSession(id) {
     const subBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "−1:00", onClick: () => { rest.add(-60); paintBar(); } });
     const addBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "+1:00", onClick: () => { rest.add(60); paintBar(); } });
     const skipBtn = ui.h("button", { class: "btn sm ghost", style: { display: "none" }, text: "Skip", onClick: () => { rest.stop(); paintBar(); } });
+    const startBtn = ui.h("button", { class: "btn sm primary", text: "Start workout",
+      "aria-label": "Start the workout clock for this session", onClick: () => startWorkout() });
+    // The undo for starting by accident: back to not started, plan and any
+    // logged work intact.
+    const resetBtn = ui.h("button", { class: "btn sm ghost", style: { display: "none" }, text: "Reset",
+      "aria-label": "Reset this session to not started", onClick: () => resetToNotStarted() });
     const prog = ui.h("i");
-    barEls = { clock, restTime, restBtn, subBtn, addBtn, skipBtn, prog };
+    barEls = { clock, restTime, restBtn, subBtn, addBtn, skipBtn, prog, startBtn, resetBtn };
     return ui.h("div", { id: "session-bar" },
-      ui.h("div", { class: "session-bar-row" }, clock, ui.h("div", { class: "btn-row", style: { alignItems: "center" } }, restTime, restBtn, subBtn, addBtn, skipBtn)),
+      ui.h("div", { class: "session-bar-row" }, clock, ui.h("div", { class: "btn-row", style: { alignItems: "center" } }, startBtn, resetBtn, restTime, restBtn, subBtn, addBtn, skipBtn)),
       ui.h("div", { class: "progress" }, prog));
   }
 
@@ -331,6 +345,9 @@ export async function openSession(id) {
     body.append(ui.h("div", { class: "section-title", text: "Session notes" }), notes);
 
     body.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "16px", minHeight: "52px", fontSize: "18px" }, text: COPY.sessionDone, onClick: () => finish() }));
+    body.append(ui.h("button", { class: "btn ghost danger wide", style: { marginTop: "8px" },
+      text: "Discard this session", "aria-label": "Discard this session without banking it",
+      onClick: () => discard() }));
   }
 
   function exerciseCard(se, body) {
@@ -725,6 +742,28 @@ export async function openSession(id) {
         paint();
       },
     });
+  }
+
+  // The way OUT of a session you never want to keep. Banking it is not the
+  // answer for a session started by mistake, and closing the screen just
+  // leaves it open — so without this the only discard was back on Today.
+  function discard() {
+    const performed = session.exercises.flatMap((se) => se.sets || [])
+      .filter((set) => !set.isWarmup && set.status === "completed").length;
+    ui.actionSheet(
+      performed === 0
+        ? "Discard this session? Nothing has been logged."
+        : `Discard this session and lose ${performed} logged set${performed === 1 ? "" : "s"}?`,
+      [
+        { label: "Discard session", role: "destructive", onClick: async () => {
+          await Sessions.del(session.id);
+          rest.stop();
+          screen.close();
+          ui.nav.refresh();
+        } },
+        { label: "Keep session", role: "cancel", onClick: () => {} },
+      ],
+    );
   }
 
   let finishing = false; // double-tap on Bank it would run completion twice (dup milestones, racy advances)
