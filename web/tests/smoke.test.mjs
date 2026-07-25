@@ -615,6 +615,56 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
       "the conditioning set stores distance and duration only");
     ok(!("speedMph" in saved), "speed is never persisted as a third field");
   }
+
+  // [INV-RUCK-CARRIES-ITS-LOAD] A ruck is born wearing its pack, and the next
+  // leg inherits what the last one carried. This is asserted through the real
+  // "+ Set" path rather than a hand-built record: the default previously lived
+  // in the edit sheet behind a "nothing logged yet" guard that a conditioning
+  // set — always created with a planned duration — could never satisfy, so the
+  // 20 lb default was unreachable in every actual flow and no test noticed.
+  {
+    const rid = await session.createBlankSession();
+    const r = await db.Sessions.get(rid);
+    r.exercises.push({ order: 0, exerciseName: "Ruck", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+    await db.Sessions.save(r);
+    await session.openSession(rid); await tick();
+
+    const overlay = [...document.querySelectorAll("#overlays .overlay")].pop();
+    const addBtn = [...overlay.querySelectorAll("button")].find((b) => b.textContent === "+ Set");
+    ok(addBtn, "the conditioning entry offers a + Set button");
+    addBtn.click(); await tick();
+    let ruck = (await db.Sessions.get(rid)).exercises[0].sets;
+    ok(ruck.length === 1 && ruck[0].weightLb === 20,
+      `[INV-RUCK-CARRIES-ITS-LOAD] a new ruck set is born at 20 lb (got ${ruck[0]?.weightLb})`);
+
+    // A second leg inherits the load actually carried, not the default again.
+    const stored = await db.Sessions.get(rid);
+    stored.exercises[0].sets[0].weightLb = 40;
+    await db.Sessions.save(stored);
+    await session.openSession(rid); await tick();
+    const overlay2 = [...document.querySelectorAll("#overlays .overlay")].pop();
+    [...overlay2.querySelectorAll("button")].find((b) => b.textContent === "+ Set").click(); await tick();
+    ruck = (await db.Sessions.get(rid)).exercises[0].sets;
+    ok(ruck.length === 2 && ruck[1].weightLb === 40,
+      `[INV-RUCK-CARRIES-ITS-LOAD] the next leg carries the same 40 lb (got ${ruck[1]?.weightLb})`);
+  }
+
+  // Unloaded conditioning stays unloaded — the load row is for carries only.
+  // Uses Bike rather than Walk so the export assertion below still finds the
+  // fixture Walk by name rather than this one.
+  {
+    const wid = await session.createBlankSession();
+    const w = await db.Sessions.get(wid);
+    w.exercises.push({ order: 0, exerciseName: "Bike", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+    await db.Sessions.save(w);
+    await session.openSession(wid); await tick();
+    const ov = [...document.querySelectorAll("#overlays .overlay")].pop();
+    [...ov.querySelectorAll("button")].find((b) => b.textContent === "+ Set").click(); await tick();
+    const walk = (await db.Sessions.get(wid)).exercises[0].sets;
+    ok(walk[0].weightLb === 0, "[INV-RUCK-CARRIES-ITS-LOAD] a bike carries nothing");
+  }
   const overlays = document.querySelectorAll("#overlays .overlay");
   overlays[overlays.length - 1].querySelector(".overlay-head button").click(); await tick();
 

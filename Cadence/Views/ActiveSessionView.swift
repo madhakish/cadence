@@ -811,12 +811,31 @@ private struct ExerciseSection: View {
         }
     }
 
+    /// [INV-RUCK-CARRIES-ITS-LOAD] What a new duration-based set starts loaded
+    /// with. Unloaded conditioning and timed holds carry nothing; a ruck or
+    /// sled inherits the previous leg's load, or opens at the movement's
+    /// default. A previous leg deliberately set to zero stays zero.
+    private static func startingCarryLoadLb(entry: SessionExercise, last: SetEntry?) -> Double {
+        guard entry.exercise?.type == .conditioning,
+              let name = entry.exercise?.name,
+              CardioFormat.carriesLoad(exerciseName: name) else { return 0 }
+        if let last { return last.weightLb }
+        return CardioFormat.defaultLoadLb(exerciseName: name) ?? 0
+    }
+
     private func addSet() {
         let last = entry.orderedSets.last
         let isTimed = entry.exercise?.type == .timed || entry.exercise?.type == .conditioning
+        // [INV-RUCK-CARRIES-ITS-LOAD] Duration-based work is unloaded EXCEPT a
+        // loaded carry, which is born wearing its pack and carries that weight
+        // to the next leg. Defaulting later — on first edit — cannot work: a
+        // conditioning set is created with a planned duration, so there is no
+        // moment afterwards when it is distinguishable from one the lifter
+        // deliberately set to zero.
+        let carryLb = Self.startingCarryLoadLb(entry: entry, last: last)
         let set = SetEntry(
             order: entry.sets.count,
-            weightLb: isTimed ? 0 : (last?.weightLb ?? entry.plannedWeightLb ?? 45),
+            weightLb: isTimed ? carryLb : (last?.weightLb ?? entry.plannedWeightLb ?? 45),
             reps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             isPerSide: entry.exercise?.isUnilateral ?? false,
             enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
@@ -1049,14 +1068,6 @@ private struct CardioSetSheet: View {
     private var carriesLoad: Bool { CardioFormat.carriesLoad(exerciseName: exerciseName) }
     private var carryLb: Double { self.set.weightLb }
 
-    /// Nothing logged at all. Re-opening an old ruck to fix its distance must
-    /// not stamp the default over a load that was deliberately something else —
-    /// including a deliberate zero.
-    private var isBlankSet: Bool {
-        self.set.weightLb == 0 && self.set.distanceMiles == nil
-            && self.set.durationSeconds == nil && self.set.inclinePercent == nil
-    }
-
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
     private var miles: Double { self.set.distanceMiles ?? 0 }
@@ -1076,7 +1087,11 @@ private struct CardioSetSheet: View {
     /// the treadmill case, where the belt reports no distance until it stops.
     private func applySpeed(_ value: Double) {
         derived = .distance
-        set.distanceMiles = CardioFormat.distanceMiles(speedMph: value, durationSeconds: set.durationSeconds)
+        // With no time logged there is nothing to solve against. Assigning the
+        // nil would delete a distance the lifter already has, so leave it.
+        guard let solved = CardioFormat.distanceMiles(speedMph: value, durationSeconds: set.durationSeconds)
+        else { return }
+        set.distanceMiles = solved
     }
 
     /// Changing the time holds whichever side the lifter last set. If they
@@ -1085,8 +1100,9 @@ private struct CardioSetSheet: View {
     private func applyDuration(_ value: Int) {
         let keptSpeed = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds)
         set.durationSeconds = value > 0 ? value : nil
-        if derived == .distance, let keptSpeed {
-            set.distanceMiles = CardioFormat.distanceMiles(speedMph: keptSpeed, durationSeconds: set.durationSeconds)
+        if derived == .distance, let keptSpeed,
+           let solved = CardioFormat.distanceMiles(speedMph: keptSpeed, durationSeconds: set.durationSeconds) {
+            set.distanceMiles = solved
         }
     }
 
@@ -1124,16 +1140,6 @@ private struct CardioSetSheet: View {
             }
             .navigationTitle("Log conditioning")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                // [INV-RUCK-CARRIES-ITS-LOAD] A ruck opens with a pack on.
-                // Only when nothing has been logged yet — a load the lifter
-                // already set, including a deliberate zero they then changed,
-                // is theirs.
-                if carriesLoad, isBlankSet,
-                   let start = CardioFormat.defaultLoadLb(exerciseName: exerciseName) {
-                    set.weightLb = start
-                }
-            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {

@@ -38,8 +38,10 @@ two, so there is no third number stored that can drift out of agreement
 with them. Your backup and your history carry the same two values they
 always have — nothing about this changed the file format.
 
-Distance is rounded to two decimals, which is the granularity treadmills and
-watches report.
+Distance is *shown* to two decimals, the granularity treadmills and watches
+report, but stored more precisely than that. At two decimals a one-minute
+interval cannot tell 3.0 mph from 3.1 — both work out to 0.05 mi — so a pace
+you entered would read back as a different one.
 
 ## Loaded carries
 
@@ -51,9 +53,11 @@ sled pulls keep a load** where plain cardio has none.
 - Load adjusts in **10 lb** steps, not the 2.5 lb steps a barbell wants.
 - The carried weight leads the set label: `20 lb · 3 mi · 45:00 · 4 mph`.
 
-The 20 lb default only applies when nothing has been logged yet. Once you
-set a load — including changing it to something else — that value is yours
-and never gets overwritten.
+The 20 lb default is applied when the set is **created**, so a ruck is
+already wearing its pack before you open it. Add a second leg and it carries
+whatever the previous one did — set 40 lb on leg one and leg two starts at
+40, not back at 20. Nothing re-defaults afterwards, so a load you chose,
+including a deliberate zero, is never overwritten.
 
 Sleds carry load but have no default: what a sled weighs depends on the
 implement and the surface, and guessing would be worse than asking.
@@ -105,7 +109,13 @@ The Health row stays hidden — deliberately — when:
   to define a window to look up.
 - Health has nothing for that window. An unworn watch is not a finding, and
   showing "you logged too much" would be wrong.
-- Both sources agree within tolerance, and there is nothing to decide.
+- The session was created on one day and completed on another. A window that
+  spans days would sweep in every unrelated walk or ride between the two, so
+  no comparison is offered rather than a misleading one.
+
+When both sources agree within tolerance the row still appears, reading
+`Health agrees: 3.02 mi` — confirmation that two instruments matched is worth
+seeing, and there is no adopt button because there is nothing to decide.
 
 ### How a Health workout is matched to a session
 

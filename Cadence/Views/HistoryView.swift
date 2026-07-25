@@ -253,9 +253,18 @@ struct SessionDetailView: View {
         HealthComparison.compare(loggedMiles: loggedMiles, healthMiles: healthMiles)
     }
 
-    /// Only completed sessions have both ends of a window to look up.
+    /// The window to ask Health about: session creation to completion.
+    ///
+    /// Bounded to a single day, mirroring the guard the Health *write* path
+    /// already applies in `SessionCompletion`. A session opened Monday and
+    /// banked Thursday spans three days, and every unrelated walk or ride in
+    /// that stretch would be fully contained in it — so it would pass the
+    /// majority-overlap test, inflate the verdict, and be written into the log
+    /// by the adopt button. When the window is not trustworthy there is no
+    /// second opinion to offer.
     private var healthWindow: (start: Date, end: Date)? {
-        guard let end = session.completedAt, end > session.date else { return nil }
+        guard let end = session.completedAt, end > session.date,
+              Calendar.current.isDate(end, inSameDayAs: session.date) else { return nil }
         return (session.date, end)
     }
 

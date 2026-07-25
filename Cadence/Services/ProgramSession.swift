@@ -180,6 +180,13 @@ enum ProgramSession {
             let exercise = try findExercise(named: acc.exerciseName, context: context)
             let weightLb = neat(acc.weightLb, exercise, isMain: false)
             let isTimed = exercise.type == .timed || exercise.type == .conditioning
+            // [INV-RUCK-CARRIES-ITS-LOAD] A programmed ruck or sled is built
+            // wearing its load. The slot's own weight wins when the program
+            // carries one; otherwise the movement's default pack.
+            let carryLb: Double = exercise.type == .conditioning
+                && CardioFormat.carriesLoad(exerciseName: exercise.name)
+                ? (weightLb > 0 ? weightLb : (CardioFormat.defaultLoadLb(exerciseName: exercise.name) ?? 0))
+                : 0
             let entry = SessionExercise(order: order, exercise: exercise)
             entry.programRole = "accessory"
             entry.programSlotID = acc.id
@@ -194,7 +201,7 @@ enum ProgramSession {
             context.insert(entry)
             session.exercises.append(entry)
             for i in 0..<effectiveSets {
-                insertSet(entry, order: i, weight: isTimed ? 0 : weightLb, reps: isTimed ? 1 : acc.currentReps,
+                insertSet(entry, order: i, weight: isTimed ? carryLb : weightLb, reps: isTimed ? 1 : acc.currentReps,
                           warmup: false, perSide: exercise.isUnilateral, enteredUnit: entryUnit,
                           durationSeconds: isTimed ? acc.targetSeconds : nil,
                           targetWeight: isTimed ? 0 : acc.weightLb, plannedWeight: isTimed ? 0 : weightLb,

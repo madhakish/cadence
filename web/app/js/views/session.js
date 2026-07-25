@@ -530,7 +530,15 @@ export async function openSession(id) {
     const last = se.sets[se.sets.length - 1];
     const ex = exMap.get(se.exerciseName);
     const durationBased = ex && (ex.type === "timed" || ex.type === "conditioning");
-    const w = durationBased ? 0 : (last ? last.weightLb : (se.plannedWeightLb ?? 45));
+    // [INV-RUCK-CARRIES-ITS-LOAD] Duration-based work is unloaded EXCEPT a
+    // loaded carry, which is born wearing its pack and carries that weight to
+    // the next leg. Defaulting on first edit cannot work: a conditioning set is
+    // created with a planned duration, so afterwards it is indistinguishable
+    // from one the lifter deliberately set to zero.
+    const carryLb = ex && ex.type === "conditioning" && C.cardioCarriesLoad(se.exerciseName)
+      ? (last ? last.weightLb : (C.cardioDefaultLoadLb(se.exerciseName) ?? 0))
+      : 0;
+    const w = durationBased ? carryLb : (last ? last.weightLb : (se.plannedWeightLb ?? 45));
     const r = durationBased ? 1 : (last ? last.reps : (se.plannedReps ?? 5));
     const inheritedLoad = last && C.LOAD_BASES.includes(last.loadBasis)
       ? { loadBasis: last.loadBasis, implementCount: last.implementCount }
@@ -683,8 +691,12 @@ export async function openSession(id) {
           const secs = readSecs();
           if (derived === "distance") {
             const miles = C.cardioDistanceMiles(parseFloat(speedInput.value) || 0, secs);
-            computedMiles = miles;
-            distInput.value = miles !== null ? C.trim(miles, 2) : "";
+            // With no time there is nothing to solve against; leave whatever
+            // distance is already in the field rather than blanking it.
+            if (miles !== null) {
+              computedMiles = miles;
+              distInput.value = C.trim(miles, 2);
+            }
           } else {
             computedMiles = null;
             const mph = C.cardioSpeedMph(parseFloat(distInput.value) || 0, secs);
@@ -707,15 +719,10 @@ export async function openSession(id) {
           ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
         // A ruck is a walk with a pack on — the pack weight is the training
         // variable, so loaded carries keep a load where plain cardio zeroes it.
+        // The load is established when the set is created, so the sheet only
+        // ever edits what is already there — it never re-defaults.
         const carries = C.cardioCarriesLoad(se.exerciseName);
-        // Default only a genuinely blank set. Re-opening an old ruck to fix its
-        // distance must not silently stamp 20 lb over a load that was
-        // deliberately something else — including a deliberate zero.
-        const isBlank = !(s.distanceMiles > 0) && !(s.durationSeconds > 0)
-          && !(s.inclinePercent > 0) && !(s.weightLb > 0);
-        let carryLb = carries
-          ? (s.weightLb > 0 ? s.weightLb : (isBlank ? (C.cardioDefaultLoadLb(se.exerciseName) ?? 0) : 0))
-          : 0;
+        let carryLb = carries ? (s.weightLb || 0) : 0;
         if (carries) {
           c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Load" }),
             ui.stepper(carryLb, {
@@ -731,8 +738,8 @@ export async function openSession(id) {
             const secs = readSecs();
             // A derived distance is stored at full precision; a typed one is
             // taken from the field as entered.
-            const miles = derived === "distance"
-              ? (computedMiles || 0)
+            const miles = derived === "distance" && computedMiles !== null
+              ? computedMiles
               : (parseFloat(distInput.value) || 0);
             s.distanceMiles = miles > 0 ? miles : null;
             s.durationSeconds = secs > 0 ? secs : null;

@@ -387,6 +387,12 @@ export function topSet(sessionExercise) {
 }
 export function workingVolume(sessionExercise) {
   return sessionExercise.sets.filter((s) => !s.isWarmup && s.status === "completed")
+    // A carried pack is not tonnage: 20 lb for three miles is not 20 lb of
+    // volume. Conditioning never reached this number until loaded carries
+    // began storing a weight instead of a forced zero. Keyed on the DATA, like
+    // isCardioSet in the history view, so restored history still behaves when
+    // the library entry is gone.
+    .filter((s) => !(s.distanceMiles > 0 || s.durationSeconds > 0))
     .reduce((sum, set) => sum + (C.loadVolume(set) ?? 0), 0);
 }
 // ---- Seeding ----
