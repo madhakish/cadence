@@ -1278,7 +1278,7 @@ function programmedCoachingSession(session, slots) {
   };
 }
 
-function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerformance, priorReadiness) {
+function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerformance, priorReadiness, judgedAsRun = false) {
   const completedDayIndexes = [...new Set(sessions.map((session) => session.dayIndex))];
   const complete = expectedDayIndexes.every((day) => completedDayIndexes.includes(day));
   const exercises = sessions.flatMap((session) => session.exercises || []);
@@ -1339,6 +1339,9 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
     reasons.push("At least 90% of prescribed work was completed at plan without a body stop.");
     if (performanceDelta !== null) reasons.push(`Repeated-lift output changed ${performanceDelta >= 0 ? "+" : ""}${Math.round(performanceDelta * 100)}%.`);
   }
+  if (judgedAsRun) {
+    reasons.push(`Closed rotation — measured against the ${completedDayIndexes.length} day${completedDayIndexes.length === 1 ? "" : "s"} it ran, since the program has changed shape since.`);
+  }
   if (!complete) {
     const progress = `Rotation is still in progress (${completedDayIndexes.length}/${expectedDayIndexes.length} days banked).`;
     if (readiness === "green") reasons[0] = `${progress} Completed programmed slots are tracking at plan.`;
@@ -1348,7 +1351,7 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
   return {
     key, startedAt: Math.min(...sessions.map((session) => epoch(session.date))),
     completedAt: complete ? Math.max(...sessions.map((session) => epoch(session.date))) : null,
-    completedDayIndexes, expectedDayIndexes, isComplete: complete, plannedWorkingSets,
+    completedDayIndexes, expectedDayIndexes, isComplete: complete, judgedAsRun, plannedWorkingSets,
     completedWorkingSets: completedWorking.length, atPlanWorkingSets,
     conditioningMinutes: conditioningSeconds / 60, patternSets, readiness, reasons,
     performanceDelta, completionRate,
@@ -1456,7 +1459,17 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null)
   const rotations = [];
   let priorPerformance = {}, priorReadiness = "unknown";
   for (const group of ordered) {
-    const assessment = assessCoachingRotation(group.key, group.sessions, [...program.expectedDayIndexes], priorPerformance, priorReadiness);
+    // A rotation must be judged against the program as it stood WHEN IT WAS
+    // RUN, not as it stands today. Programs legitimately gain and lose days, and
+    // reading today's day list back over old rotations made every one of them
+    // permanently "in progress" for work that was actually finished. Only the
+    // CURRENT rotation is measured against the live program; a rotation the
+    // schedule has moved past ran the days it ran.
+    const isCurrent = group === ordered[ordered.length - 1];
+    const expected = isCurrent
+      ? [...program.expectedDayIndexes]
+      : [...new Set(group.sessions.map((s) => s.dayIndex))];
+    const assessment = assessCoachingRotation(group.key, group.sessions, expected, priorPerformance, priorReadiness, !isCurrent);
     rotations.push(assessment);
     if (assessment.isComplete) {
       priorPerformance = performanceBySlot(group.sessions);

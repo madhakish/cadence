@@ -322,6 +322,9 @@ public struct RotationAssessment: Hashable, Sendable {
     public let completedAt: Date?
     public let completedDayIndexes: Set<Int>
     public let expectedDayIndexes: Set<Int>
+    /// True when this rotation is closed and was measured by the days it
+    /// actually ran, because the program has since changed shape.
+    public let judgedAsRun: Bool
     public let plannedWorkingSets: Int
     public let completedWorkingSets: Int
     public let atPlanWorkingSets: Int
@@ -417,11 +420,27 @@ public enum CoachingEngine {
         var rotations: [RotationAssessment] = []
         var previousPerformance: [String: Double] = [:]
         var previousReadiness: ReadinessState = .unknown
-        for (key, group) in orderedGroups {
+        // A rotation must be judged against the program as it stood WHEN IT WAS
+        // RUN, not as it stands today. Programs legitimately gain and lose days
+        // — adding a complementary lift, moving from a 2-day to a 4-day split —
+        // and reading today's day list back over old rotations made every one
+        // of them permanently "in progress, 1/4 days banked" for work that was
+        // actually finished.
+        //
+        // Only the CURRENT rotation is measured against the live program. A
+        // rotation the schedule has already moved past is closed: it ran the
+        // days it ran, and the shape it ran under is not recoverable from a
+        // program that has since changed. Judging it by its own days reports
+        // history instead of inventing a standard it was never held to.
+        for (index, entry) in orderedGroups.enumerated() {
+            let (key, group) = entry
+            let isCurrent = index == orderedGroups.count - 1
+            let expected = isCurrent ? program.expectedDayIndexes : Set(group.map(\.dayIndex))
             let assessment = assessRotation(
                 key: key,
                 sessions: group,
-                expectedDayIndexes: program.expectedDayIndexes,
+                expectedDayIndexes: expected,
+                judgedAsRun: !isCurrent,
                 priorPerformance: previousPerformance,
                 priorReadiness: previousReadiness
             )
@@ -460,6 +479,7 @@ public enum CoachingEngine {
         key: RotationKey,
         sessions: [CoachingSessionSnapshot],
         expectedDayIndexes: Set<Int>,
+        judgedAsRun: Bool = false,
         priorPerformance: [String: Double],
         priorReadiness: ReadinessState
     ) -> RotationAssessment {
@@ -538,6 +558,9 @@ public enum CoachingEngine {
             if let delta { reasons.append("Repeated-lift output changed \(signedPercent(delta)).") }
         }
 
+        if judgedAsRun {
+            reasons.append("Closed rotation — measured against the \(completedDays.count) day\(completedDays.count == 1 ? "" : "s") it ran, since the program has changed shape since.")
+        }
         if !isComplete {
             let progress = "Rotation is still in progress (\(completedDays.count)/\(expectedDayIndexes.count) days banked)."
             if readiness == .green {
@@ -555,6 +578,7 @@ public enum CoachingEngine {
             completedAt: isComplete ? sessions.map(\.date).max() : nil,
             completedDayIndexes: completedDays,
             expectedDayIndexes: expectedDayIndexes,
+            judgedAsRun: judgedAsRun,
             plannedWorkingSets: plannedCount,
             completedWorkingSets: completedWorking.count,
             atPlanWorkingSets: atPlan,

@@ -120,6 +120,20 @@ duplicate — still reach every day.
 > last day unrecognisable: the week stopped advancing, the cycle never rolled
 > over, stashed grades sat unapplied, and days past the gap became unreachable.
 
+### INV-ROTATION-JUDGED-AS-RUN
+*platforms: core*
+
+Only the **current** rotation is measured against the program's live day set. A
+rotation the schedule has already moved past is closed and is judged by the
+days it actually ran.
+
+> A program that gains days — adding a complementary lift, moving from a 2-day
+> to a 4-day split — had today's day list read back over every earlier
+> rotation, so finished work reported "1/4 days banked" forever. The shape a
+> closed rotation ran under is not recoverable from a program that has since
+> changed, and inventing one it was never held to is worse than reporting what
+> it ran.
+
 ### INV-DAY-ORDERS-PRESERVED
 *platforms: web*
 
