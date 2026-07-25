@@ -233,9 +233,14 @@ weight and estimated 1RM share.
 The PWA is served from its own `app/` directory, addresses its assets
 relatively, and keeps its manifest `start_url`/`scope` directory-relative so the
 whole app can be remounted without editing it. Its offline shell precaches every
-module under `app/js/`. The worker at the app's previous root scope keeps
-existing solely to retire itself: it unregisters, deletes the old caches, serves
-nothing, and sends any window still on the old entry point to `app/`.
+module under `app/js/`, and every path it precaches still exists — `addAll`
+rejects atomically, so one stale entry stops the worker installing at all and
+costs the app every bit of its offline support. The worker at the app's previous
+root scope keeps
+existing solely to retire itself: it unregisters, deletes only the legacy shells
+it owns, serves nothing, and redirects nobody. Moving a stranded install to
+`app/` is the job of the `display-mode: standalone` check in `web/index.html`,
+which is the only thing that can tell a real install from a browser tab.
 
 ### INV-WEB-CACHE-OWNERSHIP
 *platforms: web*

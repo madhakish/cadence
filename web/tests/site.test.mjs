@@ -101,6 +101,14 @@ for (const page of SITE_PAGES) {
 
 // ---- the offline shell precaches every module the app can import ----
 
+// Assertions about what a worker *does* must not be satisfiable — or broken — by
+// a comment explaining what it deliberately does not do.
+const codeOnly = (source) => source
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .split("\n")
+  .filter((line) => !/^\s*\/\//.test(line))
+  .join("\n");
+
 const walkJs = (dir) => readdirSync(dir).flatMap((name) => {
   const full = join(dir, name);
   return statSync(full).isDirectory() ? walkJs(full) : (name.endsWith(".js") ? [full] : []);
@@ -114,6 +122,20 @@ const walkJs = (dir) => readdirSync(dir).flatMap((name) => {
     ok(appWorker.includes(`"${module}"`),
       `[INV-WEB-APP-SCOPE] offline shell precaches ${module} — an unlisted module breaks the app with no signal`);
   }
+  // ...and the reverse direction, which fails harder. `cache.addAll` rejects
+  // atomically if any single entry 404s, so one stale path means the worker
+  // never installs and the app loses offline support entirely — not just the
+  // one asset. Nothing else catches a deleted or renamed precache entry.
+  const listed = (/const ASSETS = \[([\s\S]*?)\];/.exec(appWorker) || [, ""])[1];
+  const entries = [...listed.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  ok(entries.length > 20, `parsed the precache list (${entries.length} entries)`);
+  for (const entry of entries) {
+    // "./" is the directory itself, which Pages serves as index.html.
+    const target = entry === "./" ? "index.html" : entry;
+    ok(existsSync(join(APP, target)),
+      `[INV-WEB-APP-SCOPE] precached "${entry}" exists — a stale entry makes addAll reject and the worker never installs`);
+  }
+
   ok(appWorker.includes("__BUILD__"),
     "app/sw.js keeps the build token the Pages deploy stamps, so installs actually update");
   ok(appWorker.includes('"./"') && appWorker.includes('"index.html"'),
@@ -135,18 +157,19 @@ const walkJs = (dir) => readdirSync(dir).flatMap((name) => {
 // worker there. That registration outlives the move, so the root worker has to
 // keep existing purely to retire itself.
 {
-  const retired = read("sw.js");
+  const retired = codeOnly(read("sw.js"));
   ok(/registration\.unregister\(\)/.test(retired),
     "[INV-WEB-APP-SCOPE] the root worker unregisters itself");
   ok(/caches\.delete/.test(retired),
     "[INV-WEB-APP-SCOPE] the root worker drops the old app shell's caches");
   ok(!/addEventListener\(\s*["']fetch["']/.test(retired),
     "[INV-WEB-APP-SCOPE] the root worker serves nothing — no fetch handler");
-  ok(/new URL\(\s*["']app\/["']/.test(retired),
-    "[INV-WEB-APP-SCOPE] the root worker sends stranded windows to the app's new path");
+  // It must not redirect: it cannot tell an install from a browser tab, so doing
+  // so drags site readers into the logbook. The page below owns the hand-off.
+  ok(!/clients\.matchAll|client\.navigate/.test(retired),
+    "[INV-WEB-APP-SCOPE] the root worker redirects nobody — it cannot distinguish an install from a tab");
 
-  // Second safety net, on the page itself, for an install that reaches the site
-  // before its worker updates.
+  // Which makes the page-level check the only hand-off, so it has to be there.
   const index = read("index.html");
   ok(/display-mode: standalone/.test(index) && /replace\("\.\/app\/"\)/.test(index),
     "[INV-WEB-APP-SCOPE] a standalone launch of the site root redirects into the app");

@@ -19,9 +19,13 @@
   <link rel="stylesheet" href="site/site.css" />
   <script>
     // Anyone who added the PWA to their home screen before the app moved to
-    // /app/ still launches this page. Send those windows straight through so
-    // the marketing site never becomes their app shell. Browser tabs are
-    // untouched — only standalone launches redirect.
+    // /app/ still launches this page. Send those windows straight through so the
+    // marketing site never becomes their app shell.
+    //
+    // This is the ONLY hand-off: web/sw.js deliberately redirects nobody (see
+    // the comment there). Being display-mode based, it moves real installs and
+    // leaves ordinary browser tabs on the site, which is the distinction a
+    // service worker cannot make.
     (function () {
       try {
         var standalone = window.navigator.standalone === true ||
@@ -72,7 +76,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
             Open the web app
           </a>
-          <a class="btn ghost" href="ios.html">Join the iOS beta</a>
+          <a class="btn ghost" href="ios.html">Get it on iPhone</a>
         </div>
         <p class="hero-note">
           Free, and the source is public. The web app installs to your home screen and
@@ -278,7 +282,8 @@
             <p>
               Start from a pre-programmed style — novice linear progression, Texas
               Method, 5/3/1, conjugate — or lay out your own days and lifts. Templates
-              are starting points: everything stays editable until the first session.
+              are starting points, not commitments: everything stays editable at any
+              time, mid-cycle included.
             </p>
           </div>
         </div>
@@ -422,11 +427,12 @@
         <h2>Log your next session in about a minute.</h2>
         <p>
           Open the web app and pick a style — nothing to install and nothing to sign
-          up for. If you're on an iPhone and want the native build, the beta is open.
+          up for. If you're on an iPhone and want the native build, there are three
+          ways in.
         </p>
         <div class="btn-row">
           <a class="btn primary" href="app/">Open the web app</a>
-          <a class="btn ghost" href="ios.html">Join the iOS beta</a>
+          <a class="btn ghost" href="ios.html">Get it on iPhone</a>
         </div>
       </div>
     </div>

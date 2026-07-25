@@ -56,7 +56,7 @@ Platform APIs and persistence remain at the edges.
 | `CadenceMigrationTests/` | Hostless macOS tests that create and migrate real SwiftData SQLite stores |
 | `web/app/js/` | PWA domain mirror, IndexedDB, application orchestration, and views |
 | `web/*.html`, `web/site/` | Public product site served at the Pages root; marketing, onboarding, iOS/beta routes, privacy. Links the docs, never restates their rules |
-| `web/sw.js` | Retirement worker holding the app's former root scope; must keep unregistering itself, never cache, and evict only the legacy `cadence-<build>` shells it owns |
+| `web/sw.js` | Retirement worker holding the app's former root scope; must keep unregistering itself, never cache, never redirect, and evict only the legacy `cadence-<build>` shells it owns |
 | `web/tests/` | Core parity, runtime smoke tests, site/app-mount structure, and cross-platform fixtures |
 | `web/tools/` | Deterministic fixture generators |
 | `docs/` | Diátaxis user documentation and data-contract references |
@@ -196,11 +196,13 @@ PWA mounted at `web/app/`, served at `/cadence/app/`.
   excludes the app prefix. See `INV-WEB-CACHE-OWNERSHIP`.
 - `web/sw.js` retires the app's former root scope for installs that predate the
   move: it unregisters, deletes the legacy shells it owns, registers no `fetch`
-  handler, and redirects windows on the old entry point to `app/`. Do not delete
-  it while any
-  install could still hold that registration, and do not let a site page register
-  a worker that reclaims the scope. `web/index.html` redirects standalone
-  launches as a second net. See `INV-WEB-APP-SCOPE`.
+  handler, and redirects nobody. Do not delete it while any install could still
+  hold that registration, and do not let a site page register a worker that
+  reclaims the scope.
+- The hand-off to `app/` belongs to the `display-mode: standalone` check in
+  `web/index.html`, not to a worker. `Client` exposes no display mode, so a
+  worker cannot tell an installed launch from a browser tab and will drag site
+  readers into the logbook. See `INV-WEB-APP-SCOPE`.
 - The site links `docs/` rather than restating rules, so a behaviour change needs
   one docs edit, not two. Site copy that does state behaviour must be true of
   both clients.

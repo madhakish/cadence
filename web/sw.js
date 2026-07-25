@@ -35,28 +35,31 @@ const isRetiredShell = (key) => key.startsWith(LEGACY_PREFIX) && !key.startsWith
 
 self.addEventListener("install", () => self.skipWaiting());
 
+// This worker deliberately does NOT redirect anyone. An earlier version walked
+// `clients.matchAll()` and called `client.navigate("app/")` to move stranded
+// windows itself. Two problems, in order of importance:
+//
+//  1. It could not be shown to work. In a browser test it never fired — with or
+//     without `includeUncontrolled` — because `navigate()` requires the window
+//     to be controlled by *this* worker, and an activating replacement worker's
+//     relationship to the previous worker's clients is subtle enough that the
+//     behaviour was unverifiable rather than merely fiddly.
+//  2. `Client` exposes no display mode, so it could not tell an installed launch
+//     from an ordinary browser tab. Anyone who had ever opened the old web app
+//     in a tab got yanked off the product site into the logbook.
+//
+// So the hand-off lives in `web/index.html` instead, as a `display-mode:
+// standalone` check: plainly verifiable, and it redirects only real installs.
+// The cost is that an install launching the old URL sees its cached old shell
+// for that one session and lands in the app from the next launch, once the fresh
+// index.html is served. That is a strictly better failure mode than a redirect
+// that fires on the wrong windows and cannot be demonstrated to fire on the
+// right ones.
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    // Drop the old app shell's own caches, then stop controlling clients.
     const keys = await caches.keys();
     await Promise.all(keys.filter(isRetiredShell).map((key) => caches.delete(key)));
     await self.registration.unregister();
-
-    // Send any window still sitting on the old scope to the app's new home.
-    // Scope-relative so this works on Pages, on a custom domain, and locally.
-    const scope = new URL(self.registration.scope);
-    const target = new URL("app/", scope).href;
-    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const client of clients) {
-      const url = new URL(client.url);
-      // Only the old app entry point. A window reading the site's other pages
-      // is a browser tab that never wanted the app.
-      const atOldRoot = url.pathname === scope.pathname ||
-        url.pathname === `${scope.pathname}index.html`;
-      if (atOldRoot && "navigate" in client) {
-        try { await client.navigate(target); } catch (e) { /* the reload picks it up */ }
-      }
-    }
   })());
 });
 
