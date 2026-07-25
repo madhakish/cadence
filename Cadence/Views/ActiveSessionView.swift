@@ -1022,41 +1022,84 @@ private struct SetRow: View {
 
 // MARK: - Cardio set detail (distance / time / incline)
 
-/// Conditioning-type work logs distance, time, and incline; speed falls out.
+/// Conditioning-type work logs distance, time, speed, and incline.
+/// [INV-CARDIO-SOLVES-THE-THIRD] Distance and speed are two views of one
+/// relationship, so both are editable and whichever one the lifter is not
+/// adjusting is the one that recomputes. Time is never overwritten. Only
+/// distance and duration persist — speed stays derivable, so there is no third
+/// stored value that can disagree with the two it came from.
 /// Small deliberate steps for each field — content hoisted into plain
 /// rows to stay inside the type-checker's budget (see CompileRegressionTests).
 private struct CardioSetSheet: View {
+    /// Which side is currently computed from the other two.
+    private enum Derived { case speed, distance }
+
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
     let onDelete: () -> Void
+
+    /// Distance is what gets stored, so it starts as the entered value and
+    /// speed is the readout — the same way the sheet behaved before speed
+    /// became editable.
+    @State private var derived: Derived = .speed
 
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
     private var miles: Double { self.set.distanceMiles ?? 0 }
     private var secs: Int { self.set.durationSeconds ?? 0 }
     private var incline: Double { self.set.inclinePercent ?? 0 }
+    private var mph: Double {
+        CardioFormat.speedMph(distanceMiles: self.set.distanceMiles, durationSeconds: self.set.durationSeconds) ?? 0
+    }
+
+    /// Typing a distance makes speed the readout again.
+    private func applyDistance(_ value: Double) {
+        set.distanceMiles = value > 0 ? value : nil
+        derived = .speed
+    }
+
+    /// Setting a pace computes the distance it covers in the logged time —
+    /// the treadmill case, where the belt reports no distance until it stops.
+    private func applySpeed(_ value: Double) {
+        derived = .distance
+        set.distanceMiles = CardioFormat.distanceMiles(speedMph: value, durationSeconds: set.durationSeconds)
+    }
+
+    /// Changing the time holds whichever side the lifter last set. If they
+    /// entered a pace, a longer walk means more distance at that same pace;
+    /// if they entered a distance, it means a slower one.
+    private func applyDuration(_ value: Int) {
+        let keptSpeed = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds)
+        set.durationSeconds = value > 0 ? value : nil
+        if derived == .distance, let keptSpeed {
+            set.distanceMiles = CardioFormat.distanceMiles(speedMph: keptSpeed, durationSeconds: set.durationSeconds)
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Stepper("Distance: \(miles > 0 ? "\(Weight.trim(miles, decimals: 2)) mi" : "—")",
-                            value: Binding(get: { miles }, set: { set.distanceMiles = $0 > 0 ? $0 : nil }),
+                            value: Binding(get: { miles }, set: { applyDistance($0) }),
                             in: 0...100, step: 0.25)
                     distanceTypeRow
                     Stepper("Time: \(secs > 0 ? CardioFormat.durationLabel(seconds: secs) : "—")",
-                            value: Binding(get: { secs }, set: { set.durationSeconds = $0 > 0 ? $0 : nil }),
+                            value: Binding(get: { secs }, set: { applyDuration($0) }),
                             in: 0...36000, step: 60)
+                    Stepper("Speed: \(mph > 0 ? "\(Weight.trim(mph)) mph" : "—")",
+                            value: Binding(get: { mph }, set: { applySpeed($0) }),
+                            in: 0...20, step: 0.1)
                     Stepper("Incline: \(incline > 0 ? "\(Weight.trim(incline))%" : "—")",
                             value: Binding(get: { incline }, set: { set.inclinePercent = $0 > 0 ? $0 : nil }),
                             in: 0...30, step: 0.5)
                 } header: {
-                    Text("Distance · time · incline")
+                    Text("Distance · time · speed · incline")
                 } footer: {
-                    if let mph = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds) {
-                        Text("Speed: \(Weight.trim(mph)) mph")
-                    }
+                    Text(derived == .distance
+                         ? "Distance is calculated from speed and time."
+                         : "Speed is calculated from distance and time.")
                 }
                 Section {
                     Button("Delete set", role: .destructive) {
@@ -1085,8 +1128,8 @@ private struct CardioSetSheet: View {
             TextField("miles", text: Binding(
                 get: { miles == 0 ? "" : Weight.trim(miles, decimals: 2) },
                 set: {
-                    if let v = Double($0.replacingOccurrences(of: ",", with: ".")), v > 0 { set.distanceMiles = v }
-                    else if $0.isEmpty { set.distanceMiles = nil }
+                    if let v = Double($0.replacingOccurrences(of: ",", with: ".")), v > 0 { applyDistance(v) }
+                    else if $0.isEmpty { applyDistance(0) }
                 }
             ))
             .keyboardType(.decimalPad)

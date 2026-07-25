@@ -652,7 +652,12 @@ export async function openSession(id) {
     });
   }
 
-  // Cardio (type conditioning) sets: distance / time / incline, speed derived.
+  // Cardio (type conditioning) sets: distance / time / speed / incline.
+  // [INV-CARDIO-SOLVES-THE-THIRD] Distance and speed are two views of one
+  // relationship, so both are editable and whichever one the lifter is NOT
+  // typing into is the one that recomputes. Time is never overwritten — it is
+  // the one value a treadmill, a watch, and a ruck plan all agree on.
+  // Only distance + duration are stored; speed is always re-derivable.
   // Mirrors the native CardioSetSheet.
   function editCardioSet(se, s, body) {
     ui.sheet({
@@ -661,27 +666,47 @@ export async function openSession(id) {
         const distInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "0.05", min: "0", placeholder: "0", value: s.distanceMiles > 0 ? C.trim(s.distanceMiles, 2) : "" });
         const minInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", placeholder: "0", value: s.durationSeconds > 0 ? String(Math.floor(s.durationSeconds / 60)) : "" });
         const secInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", max: "59", placeholder: "0", value: s.durationSeconds > 0 ? String(s.durationSeconds % 60) : "" });
+        const startSpeed = C.cardioSpeedMph(s.distanceMiles, s.durationSeconds);
+        const speedInput = ui.h("input", { type: "number", inputmode: "decimal", step: "0.1", min: "0", placeholder: "0", value: startSpeed !== null ? C.trim(startSpeed) : "" });
         let incline = s.inclinePercent > 0 ? s.inclinePercent : 0;
-        const speedLine = ui.h("div", { class: "sub", style: { margin: "6px 4px" } });
+        // Which of distance/speed is currently computed from the other two.
+        // Distance is what gets stored, so it starts as the entered value.
+        let derived = "speed";
+        const distNote = ui.h("span", { class: "sub" });
+        const speedNote = ui.h("span", { class: "sub" });
         const readSecs = () => (parseInt(minInput.value, 10) || 0) * 60 + (parseInt(secInput.value, 10) || 0);
-        const paintSpeed = () => {
-          const mph = C.cardioSpeedMph(parseFloat(distInput.value) || 0, readSecs());
-          speedLine.textContent = mph !== null ? `Speed: ${C.trim(mph)} mph` : "";
+        const recompute = () => {
+          const secs = readSecs();
+          if (derived === "distance") {
+            const miles = C.cardioDistanceMiles(parseFloat(speedInput.value) || 0, secs);
+            distInput.value = miles !== null ? C.trim(miles, 2) : "";
+          } else {
+            const mph = C.cardioSpeedMph(parseFloat(distInput.value) || 0, secs);
+            speedInput.value = mph !== null ? C.trim(mph) : "";
+          }
+          distNote.textContent = derived === "distance" ? "calculated" : "";
+          speedNote.textContent = derived === "speed" ? "calculated" : "";
         };
-        [distInput, minInput, secInput].forEach((el) => el.addEventListener("input", paintSpeed));
-        c.append(ui.field("Distance (mi)", distInput));
+        distInput.addEventListener("input", () => { derived = "speed"; recompute(); });
+        speedInput.addEventListener("input", () => { derived = "distance"; recompute(); });
+        [minInput, secInput].forEach((el) => el.addEventListener("input", recompute));
+        c.append(ui.h("div", { class: "row" },
+          ui.h("span", {}, ui.h("span", { text: "Distance (mi) " }), distNote), distInput));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Time" }),
           ui.h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } },
             minInput, ui.h("span", { class: "sub", text: "min" }), secInput, ui.h("span", { class: "sub", text: "sec" }))));
+        c.append(ui.h("div", { class: "row" },
+          ui.h("span", {}, ui.h("span", { text: "Speed (mph) " }), speedNote), speedInput));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Incline" }),
           ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
-        c.append(speedLine);
-        paintSpeed();
+        recompute();
         c.append(ui.h("button", {
           class: "btn primary wide", style: { marginTop: "10px" }, text: "Done",
           onClick: () => {
-            const miles = parseFloat(distInput.value) || 0;
             const secs = readSecs();
+            // Whichever side was derived is already sitting in its input, so
+            // the stored pair is the same either way.
+            const miles = parseFloat(distInput.value) || 0;
             s.distanceMiles = miles > 0 ? miles : null;
             s.durationSeconds = secs > 0 ? secs : null;
             s.inclinePercent = incline > 0 ? incline : null;

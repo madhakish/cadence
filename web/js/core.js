@@ -1150,11 +1150,31 @@ export function restClockFractionRemaining(s, now) {
 // the shared label the logger and history rows render. Pure; mirrored 1:1 in
 // CadenceCore/CardioFormat.swift.
 
+// Distance, duration, and speed are one relationship seen from three sides:
+// distance = speed × time. Any two give the third, so the logger can accept
+// whichever two the lifter actually knows. Only distance and duration are
+// persisted — speed is always recoverable from them, so there is no third
+// field to store, disagree with itself, or migrate.
+
 // Miles per hour from distance + duration, rounded to one decimal; null when
 // either half is missing/zero (no speed without both).
 export function cardioSpeedMph(distanceMiles, durationSeconds) {
   if (!(distanceMiles > 0) || !(durationSeconds > 0)) return null;
   return Math.round((distanceMiles / (durationSeconds / 3600)) * 10) / 10;
+}
+
+// Miles from speed + duration — the treadmill case, where the lifter sets a
+// pace and a time and never sees a distance until the belt stops. Rounded to
+// two decimals, the granularity treadmills and watches report.
+export function cardioDistanceMiles(speedMph, durationSeconds) {
+  if (!(speedMph > 0) || !(durationSeconds > 0)) return null;
+  return Math.round(speedMph * (durationSeconds / 3600) * 100) / 100;
+}
+
+// Seconds from distance + speed — "four miles at 3.5 mph" as a plan.
+export function cardioDurationSeconds(distanceMiles, speedMph) {
+  if (!(distanceMiles > 0) || !(speedMph > 0)) return null;
+  return Math.round((distanceMiles / speedMph) * 3600);
 }
 
 // Format a duration as minutes and seconds, including hours when needed.

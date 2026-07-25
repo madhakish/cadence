@@ -559,6 +559,38 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     .find((r) => r.textContent.includes("45:00"));
   ok(walkRow && walkRow.textContent.includes("3 mi · 45:00 · 4 mph · 12%"), "cardio set row renders the shared conditioning label");
   ok(walkRow && walkRow.querySelectorAll(".flagbtn").length === 1, "cardio gets only the ✓ flag (no grindy/wobble)");
+
+  // [INV-CARDIO-SOLVES-THE-THIRD] A treadmill or ruck is set by pace and time;
+  // the distance has to fall out rather than be worked out mid-workout.
+  {
+    walkRow.querySelector("button.ghost").click(); await tick();
+    const sheetEl = [...document.querySelectorAll("#overlays .sheet")].pop();
+    const numbers = [...sheetEl.querySelectorAll("input[type=number]")];
+    const rowLabel = (input) => input.closest(".row")?.textContent || "";
+    const distField = numbers.find((i) => rowLabel(i).includes("Distance"));
+    const speedField = numbers.find((i) => rowLabel(i).includes("Speed"));
+    ok(distField && speedField, "the conditioning sheet offers both distance and speed");
+    ok(speedField.value === "4", "speed opens as the readout derived from 3 mi in 45:00");
+
+    // Typing a pace recomputes the distance, and leaves the time alone.
+    speedField.value = "3.5";
+    speedField.dispatchEvent(new window.Event("input", { bubbles: true }));
+    ok(distField.value === "2.63",
+      `[INV-CARDIO-SOLVES-THE-THIRD] 3.5 mph for 45:00 fills in 2.63 mi (got ${distField.value})`);
+
+    // Typing a distance flips the derived side back to speed.
+    distField.value = "3";
+    distField.dispatchEvent(new window.Event("input", { bubbles: true }));
+    ok(speedField.value === "4",
+      `[INV-CARDIO-SOLVES-THE-THIRD] 3 mi in 45:00 reads back as 4 mph (got ${speedField.value})`);
+
+    // Only distance and duration persist — there is no third stored value.
+    [...sheetEl.querySelectorAll("button")].find((b) => b.textContent === "Done").click(); await tick();
+    const saved = (await db.Sessions.get(sid)).exercises[0].sets[0];
+    ok(saved.distanceMiles === 3 && saved.durationSeconds === 2700,
+      "the conditioning set stores distance and duration only");
+    ok(!("speedMph" in saved), "speed is never persisted as a third field");
+  }
   const overlays = document.querySelectorAll("#overlays .overlay");
   overlays[overlays.length - 1].querySelector(".overlay-head button").click(); await tick();
 

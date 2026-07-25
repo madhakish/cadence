@@ -11,6 +11,48 @@ final class CardioFormatTests: XCTestCase {
         XCTAssertNil(CardioFormat.speedMph(distanceMiles: 0, durationSeconds: 0), "zeros → no speed")
     }
 
+    // [INV-CARDIO-SOLVES-THE-THIRD]
+    func testDistanceFromSpeedAndTime() {
+        // The treadmill case: 3.5 mph for half an hour is 1.75 miles, and the
+        // lifter should never have to work that out on the belt.
+        XCTAssertEqual(CardioFormat.distanceMiles(speedMph: 3.5, durationSeconds: 1800), 1.75)
+        XCTAssertEqual(CardioFormat.distanceMiles(speedMph: 4, durationSeconds: 1350), 1.5)
+        XCTAssertEqual(CardioFormat.distanceMiles(speedMph: 3.7, durationSeconds: 1020), 1.05,
+                       "rounded to the two decimals a treadmill reports")
+        XCTAssertNil(CardioFormat.distanceMiles(speedMph: nil, durationSeconds: 1800), "no speed → no distance")
+        XCTAssertNil(CardioFormat.distanceMiles(speedMph: 3.5, durationSeconds: nil), "no time → no distance")
+        XCTAssertNil(CardioFormat.distanceMiles(speedMph: 0, durationSeconds: 0), "zeros → no distance")
+    }
+
+    // [INV-CARDIO-SOLVES-THE-THIRD]
+    func testDurationFromDistanceAndSpeed() {
+        XCTAssertEqual(CardioFormat.durationSeconds(distanceMiles: 1.75, speedMph: 3.5), 1800)
+        XCTAssertEqual(CardioFormat.durationSeconds(distanceMiles: 1.5, speedMph: 4), 1350)
+        XCTAssertNil(CardioFormat.durationSeconds(distanceMiles: nil, speedMph: 3.5), "no distance → no time")
+        XCTAssertNil(CardioFormat.durationSeconds(distanceMiles: 2, speedMph: nil), "no speed → no time")
+        XCTAssertNil(CardioFormat.durationSeconds(distanceMiles: 0, speedMph: 0), "zeros → no time")
+    }
+
+    // [INV-CARDIO-SOLVES-THE-THIRD]
+    func testSolvingIsSelfConsistent() {
+        // Whichever two the logger was given, the third must agree with the
+        // pair it came from. Only distance and duration persist, so a distance
+        // computed from speed has to read back as that same speed or the
+        // history would quietly disagree with what the lifter set on the belt.
+        for mph in [2.5, 3.0, 3.5, 4.0, 5.5, 6.0, 7.5] {
+            for minutes in [10, 15, 20, 30, 45, 60] {
+                let secs = minutes * 60
+                guard let miles = CardioFormat.distanceMiles(speedMph: mph, durationSeconds: secs) else {
+                    return XCTFail("\(mph) mph for \(minutes)m should yield a distance")
+                }
+                XCTAssertEqual(CardioFormat.speedMph(distanceMiles: miles, durationSeconds: secs), mph,
+                               accuracy: 0.05, "\(mph) mph for \(minutes)m read back as a different pace")
+                XCTAssertEqual(CardioFormat.durationSeconds(distanceMiles: miles, speedMph: mph) ?? 0,
+                               secs, accuracy: 30, "\(mph) mph over \(miles) mi read back as a different time")
+            }
+        }
+    }
+
     func testDurationLabel() {
         XCTAssertEqual(CardioFormat.durationLabel(seconds: 1350), "22:30")
         XCTAssertEqual(CardioFormat.durationLabel(seconds: 65), "1:05")

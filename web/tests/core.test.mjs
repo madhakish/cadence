@@ -657,6 +657,31 @@ eq(C.cardioSpeedMph(5, 5400), 3.3, "rounded to one decimal");
 eq(C.cardioSpeedMph(null, 1800), null, "no distance → no speed");
 eq(C.cardioSpeedMph(2, null), null, "no time → no speed");
 eq(C.cardioSpeedMph(0, 0), null, "zeros → no speed");
+// [INV-CARDIO-SOLVES-THE-THIRD] the treadmill case: pace and time are what the
+// lifter sets, so the distance has to fall out rather than be worked out on the belt.
+eq(C.cardioDistanceMiles(3.5, 1800), 1.75, "distance from speed + time");
+eq(C.cardioDistanceMiles(4, 1350), 1.5, "distance from speed + time");
+eq(C.cardioDistanceMiles(3.7, 1020), 1.05, "rounded to the two decimals a treadmill reports");
+eq(C.cardioDistanceMiles(null, 1800), null, "no speed → no distance");
+eq(C.cardioDistanceMiles(3.5, null), null, "no time → no distance");
+eq(C.cardioDistanceMiles(0, 0), null, "zeros → no distance");
+eq(C.cardioDurationSeconds(1.75, 3.5), 1800, "time from distance + speed");
+eq(C.cardioDurationSeconds(1.5, 4), 1350, "time from distance + speed");
+eq(C.cardioDurationSeconds(null, 3.5), null, "no distance → no time");
+eq(C.cardioDurationSeconds(2, null), null, "no speed → no time");
+eq(C.cardioDurationSeconds(0, 0), null, "zeros → no time");
+// [INV-CARDIO-SOLVES-THE-THIRD] only distance and duration persist, so a
+// distance computed from speed must read back as that same speed.
+for (const mph of [2.5, 3.0, 3.5, 4.0, 5.5, 6.0, 7.5]) {
+  for (const minutes of [10, 15, 20, 30, 45, 60]) {
+    const secs = minutes * 60;
+    const miles = C.cardioDistanceMiles(mph, secs);
+    ok(Math.abs(C.cardioSpeedMph(miles, secs) - mph) <= 0.05,
+      `[INV-CARDIO-SOLVES-THE-THIRD] ${mph} mph for ${minutes}m reads back as that pace`);
+    ok(Math.abs(C.cardioDurationSeconds(miles, mph) - secs) <= 30,
+      `[INV-CARDIO-SOLVES-THE-THIRD] ${mph} mph over ${miles} mi reads back as that time`);
+  }
+}
 eq(C.cardioDurationLabel(1350), "22:30", "m:ss");
 eq(C.cardioDurationLabel(65), "1:05", "single-digit minutes");
 eq(C.cardioDurationLabel(5400), "1:30:00", "hour-plus gets h:mm:ss");
