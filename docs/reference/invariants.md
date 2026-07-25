@@ -192,6 +192,17 @@ Main shows by default; complementary is opt-in and visually recessive.
 > another at a lighter base. One line across both is a sawtooth between two
 > unrelated progressions.
 
+### INV-CHART-ROLE-EXCLUDES-EXTRA
+*platforms: web*
+
+Only a lift's **main** slots feed the main series. Unprogrammed work inside a
+program session — and accessory work — is extra volume, not a main effort. An
+entry with no role in a session with no program at all IS that lift's record
+and stays main.
+
+> A few light squats added to an upper day were charted as main and pulled the
+> squat progression down to a weight never worked as a main lift.
+
 ### INV-VOLUME-KEEPS-ITS-OWN-SCALE
 *platforms: web*
 

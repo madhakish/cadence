@@ -133,10 +133,22 @@ function openDetail(s) {
 // A lift can hold a MAIN slot on one day and a COMPLEMENTARY slot on another
 // at a much lighter base. Charting both as one line produced a sawtooth
 // between two unrelated progressions, which is what made main-lift progress
-// unreadable. Everything that is not explicitly complementary counts as the
-// primary record, so standalone and blank-session work keeps charting as it
-// always did.
-const chartRoleOf = (entry) => (entry.programRole === "complementary" ? "complementary" : "main");
+// unreadable.
+//
+// The third case is unprogrammed work. Inside a PROGRAM session, an entry with
+// no role is extra work the lifter added — a few light squats on an upper day —
+// and charting it as main dragged the progression line down to weights that
+// were never a main effort. In a session with no program at all, an entry with
+// no role IS the record for that lift, so it stays main.
+const chartRoleOf = (entry, session) => {
+  if (entry.programRole === "complementary") return "complementary";
+  if (entry.programRole === "main") return "main";
+  if (entry.programRole) return "extra";           // accessory and anything later
+  return session.programTag ? "extra" : "main";    // untagged work is the real record
+};
+
+// Exported for the invariant test; the chart itself uses it directly.
+export const chartRoleOfForTest = chartRoleOf;
 
 let chartEx = null, chartMetric = "weight", chartSplit = false, chartComplementary = false;
 function renderCharts(panel, sessions, exercises, program) {
@@ -171,7 +183,7 @@ function renderCharts(panel, sessions, exercises, program) {
       const matching = (s.exercises || []).filter((x) => x.exerciseName === chartEx);
       if (!matching.length) continue;
       for (const role of ["main", "complementary"]) {
-        const entries = matching.filter((entry) => chartRoleOf(entry) === role);
+        const entries = matching.filter((entry) => chartRoleOf(entry, s) === role);
         if (!entries.length) continue;
         // The point's rotation (R1–R4) for the split view; sessions logged
         // outside a cycle bucket read as "Untracked".

@@ -1374,6 +1374,25 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     `[INV-ANATOMY-EXPLICIT] every named muscle has a region to highlight (${undrawable.join(", ") || "none"})`);
 }
 
+// Unprogrammed work inside a PROGRAM session is extra volume, not the main
+// lift. A few light squats added to an upper day were being charted as main
+// and dragged the squat progression down to a weight never worked as a main.
+{
+  const hist = await import("../js/views/history.js");
+  const roleOf = hist.chartRoleOfForTest;
+  const tagged = { programTag: { cycleNumber: 2, week: 3, dayIndex: 1 } };
+  const untagged = {};
+  ok(roleOf({ programRole: "main" }, tagged) === "main", "[INV-CHART-ROLE-EXCLUDES-EXTRA] a main slot is main");
+  ok(roleOf({ programRole: "complementary" }, tagged) === "complementary",
+    "[INV-CHART-ROLE-EXCLUDES-EXTRA] a complementary slot is complementary");
+  ok(roleOf({ programRole: null }, tagged) === "extra",
+    "[INV-CHART-ROLE-EXCLUDES-EXTRA] unprogrammed work in a program session is not main");
+  ok(roleOf({ programRole: "accessory" }, tagged) === "extra",
+    "[INV-CHART-ROLE-EXCLUDES-EXTRA] accessory work is not main");
+  ok(roleOf({ programRole: null }, untagged) === "main",
+    "[INV-CHART-ROLE-EXCLUDES-EXTRA] standalone work with no program IS the record for that lift");
+}
+
 // ---- progression chart: role split + combined metric ----
 // A lift can be MAIN on one day and COMPLEMENTARY on another at a much lighter
 // base. Drawing both as one line produced a sawtooth between two unrelated
