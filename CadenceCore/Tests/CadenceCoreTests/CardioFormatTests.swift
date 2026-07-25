@@ -53,10 +53,14 @@ final class CardioFormatTests: XCTestCase {
                 guard let miles = CardioFormat.distanceMiles(speedMph: mph, durationSeconds: secs) else {
                     return XCTFail("\(mph) mph for \(minutes)m should yield a distance")
                 }
-                XCTAssertEqual(CardioFormat.speedMph(distanceMiles: miles, durationSeconds: secs), mph,
-                               accuracy: 0.001, "\(mph) mph for \(minutes)m read back as a different pace")
-                XCTAssertEqual(CardioFormat.durationSeconds(distanceMiles: miles, speedMph: mph) ?? 0,
-                               secs, accuracy: 30, "\(mph) mph over \(miles) mi read back as a different time")
+                guard let readBackMph = CardioFormat.speedMph(distanceMiles: miles, durationSeconds: secs),
+                      let readBackSecs = CardioFormat.durationSeconds(distanceMiles: miles, speedMph: mph) else {
+                    return XCTFail("\(mph) mph for \(minutes)m should solve in both directions")
+                }
+                XCTAssertEqual(readBackMph, mph, accuracy: 0.001,
+                               "\(mph) mph for \(minutes)m read back as a different pace")
+                XCTAssertEqual(readBackSecs, secs, accuracy: 30,
+                               "\(mph) mph over \(miles) mi read back as a different time")
             }
         }
     }
