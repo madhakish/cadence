@@ -256,11 +256,13 @@ final class CoachingEngineTests: XCTestCase {
         let closed = report.rotations.dropLast()
         XCTAssertTrue(closed.allSatisfy { $0.isComplete && $0.judgedAsRun },
                       "a closed rotation is complete against the days it ran")
-        let live = try? XCTUnwrap(report.rotations.last)
-        XCTAssertEqual(live??.expectedDayIndexes, [0, 1, 2, 3],
+        guard let live = report.rotations.last else {
+            return XCTFail("expected a live rotation")
+        }
+        XCTAssertEqual(live.expectedDayIndexes, [0, 1, 2, 3],
                        "the live rotation is still measured against the current program")
-        XCTAssertEqual(live??.judgedAsRun, false)
-        XCTAssertFalse(live??.isComplete ?? true)
+        XCTAssertFalse(live.judgedAsRun)
+        XCTAssertFalse(live.isComplete)
         // As-run rotations are complete by construction, so they must not seed
         // the green streak that unlocks capacity recommendations.
         XCTAssertEqual(report.greenRotationStreak, 0)
