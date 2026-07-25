@@ -17,11 +17,17 @@ const REGISTRY = join(ROOT, "docs/reference/invariants.md");
 const TOKEN = /\[(INV-[A-Z0-9-]+)\]/g;
 
 // Where each platform's assertions live.
+// `core` is a PARITY contract, so it must be asserted on BOTH sides. Mapping
+// it to either directory let a Swift path ship unverified behind a passing JS
+// mirror — the exact drift the parity rule exists to prevent.
 const SOURCES = {
-  core: ["CadenceCore/Tests/CadenceCoreTests", "web/tests"],
+  "core:swift": ["CadenceCore/Tests/CadenceCoreTests"],
+  "core:web": ["web/tests"],
   web: ["web/tests"],
   native: ["CadenceMigrationTests", "CadenceCore/Tests/CadenceCoreTests"],
 };
+const expand = (platforms) =>
+  platforms.flatMap((p) => (p === "core" ? ["core:swift", "core:web"] : [p]));
 
 const walk = (dir) => {
   let out = [];
@@ -88,7 +94,7 @@ for (const rule of rules) {
     skipped += 1;
     continue;
   }
-  for (const platform of rule.platforms) {
+  for (const platform of expand(rule.platforms)) {
     const files = filesByPlatform.get(platform) || [];
     const cited = citations.get(rule.id) || new Set();
     const hit = [...cited].some((f) => files.includes(f));

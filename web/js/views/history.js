@@ -201,7 +201,14 @@ function renderCharts(panel, sessions, exercises, program) {
         });
       }
     }
-    const roles = chartComplementary ? ["main", "complementary"] : ["main"];
+    let roles = chartComplementary ? ["main", "complementary"] : ["main"];
+    // A Main-category lift may exist ONLY as added work inside program
+    // sessions (a few squats on an upper day) or only as a programmed
+    // accessory. Charting nothing at all hides real history behind a role
+    // distinction the user never asked about, so fall back to what exists.
+    if (!rows.some((r) => roles.includes(r.role)) && rows.length) {
+      roles = [...new Set(rows.map((r) => r.role))];
+    }
     const visible = rows.filter((r) => roles.includes(r.role));
     const pick = (metric, role) => visible
       .filter((r) => r.role === role && Number.isFinite(r[metric]))

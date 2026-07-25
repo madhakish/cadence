@@ -1340,7 +1340,8 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
     if (performanceDelta !== null) reasons.push(`Repeated-lift output changed ${performanceDelta >= 0 ? "+" : ""}${Math.round(performanceDelta * 100)}%.`);
   }
   if (judgedAsRun) {
-    reasons.push(`Closed rotation — measured against the ${completedDayIndexes.length} day${completedDayIndexes.length === 1 ? "" : "s"} it ran, since the program has changed shape since.`);
+    // First, because both clients surface only the leading reason.
+    reasons.unshift(`Closed rotation — reported as run (${completedDayIndexes.length} day${completedDayIndexes.length === 1 ? "" : "s"}); the program's shape at the time is not recoverable.`);
   }
   if (!complete) {
     const progress = `Rotation is still in progress (${completedDayIndexes.length}/${expectedDayIndexes.length} days banked).`;
@@ -1466,17 +1467,26 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null)
     // CURRENT rotation is measured against the live program; a rotation the
     // schedule has moved past ran the days it ran.
     const isCurrent = group === ordered[ordered.length - 1];
-    const expected = isCurrent
-      ? [...program.expectedDayIndexes]
-      : [...new Set(group.sessions.map((s) => s.dayIndex))];
-    const assessment = assessCoachingRotation(group.key, group.sessions, expected, priorPerformance, priorReadiness, !isCurrent);
+    // A closed rotation that DID meet today's day set is genuinely complete and
+    // behaves normally. Only one that falls short is reported as-run — its
+    // shortfall may be a program that has since changed shape, which is
+    // unknowable from here, so it is shown as history but never trusted as a
+    // verified baseline.
+    const ran = [...new Set(group.sessions.map((s) => s.dayIndex))];
+    const shortfall = !program.expectedDayIndexes.every((d) => ran.includes(d));
+    const asRun = !isCurrent && shortfall;
+    const assessment = assessCoachingRotation(group.key, group.sessions,
+      asRun ? ran : [...program.expectedDayIndexes], priorPerformance, priorReadiness, asRun);
     rotations.push(assessment);
-    if (assessment.isComplete) {
+    // Only a rotation VERIFIED complete against a known day set may seed the
+    // next comparison. An as-run rotation is complete by construction.
+    if (assessment.isComplete && !assessment.judgedAsRun) {
       priorPerformance = performanceBySlot(group.sessions);
       priorReadiness = assessment.readiness;
     }
   }
-  const completed = rotations.filter((rotation) => rotation.isComplete);
+  // Streaks and capacity plans require verified rotations only.
+  const completed = rotations.filter((rotation) => rotation.isComplete && !rotation.judgedAsRun);
   // In-progress rotations can report provisional readiness after a complete
   // baseline; recommendations and green streaks still require completion.
   const currentReadiness = rotations.at(-1)?.readiness || "unknown";

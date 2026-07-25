@@ -57,7 +57,8 @@ public enum AnatomyData {
         Region("abs", "front", [[42, 56], [58, 56], [57, 88], [43, 88]]),
         Region("quads", "front", [[37, 106], [48, 106], [48, 142], [44, 148], [38, 140]]),
         Region("quads", "front", [[63, 106], [52, 106], [52, 142], [56, 148], [62, 140]]),
-        Region("adductors", "front", [[48, 106], [52, 106], [52, 136], [50, 140], [48, 136]]),
+        Region("adductors", "front", [[44, 108], [48, 108], [48, 138], [46, 143], [44, 136]]),
+        Region("adductors", "front", [[56, 108], [52, 108], [52, 138], [54, 143], [56, 136]]),
         // back
         Region("traps", "back", [[50, 24], [60, 30], [50, 46], [40, 30]]),
         Region("delts", "back", [[27, 32], [35, 35], [34, 44], [25, 42]]),
@@ -143,7 +144,7 @@ public enum AnatomyData {
         // inherited "squat" and claimed quads.
         "Copenhagen Plank": Profile(primary: ["adductors"], secondary: ["obliques", "abs"]),
         "Cable Hip Adduction": Profile(primary: ["adductors"], secondary: ["glutes"]),
-        "Monster Walk": Profile(primary: ["glutes"], secondary: ["quads", "adductors"]),
+        "Monster Walk": Profile(primary: ["glutes"], secondary: ["quads"]),
         "Seated Leg Curl": Profile(primary: ["hamstrings"], secondary: ["calves"]),
         "Lying Leg Curl": Profile(primary: ["hamstrings"], secondary: ["calves"]),
         "Nordic Hamstring Curl": Profile(primary: ["hamstrings"], secondary: ["glutes", "calves"]),

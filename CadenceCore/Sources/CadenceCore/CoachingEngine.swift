@@ -435,23 +435,34 @@ public enum CoachingEngine {
         for (index, entry) in orderedGroups.enumerated() {
             let (key, group) = entry
             let isCurrent = index == orderedGroups.count - 1
-            let expected = isCurrent ? program.expectedDayIndexes : Set(group.map(\.dayIndex))
+            // A closed rotation that DID meet today's day set is genuinely
+            // complete and behaves normally. Only one that falls short is
+            // reported as-run — its shortfall may be a program that has since
+            // changed shape, which is unknowable from here, so it is shown as
+            // history but never trusted as a verified baseline.
+            let shortfall = !Set(group.map(\.dayIndex)).isSuperset(of: program.expectedDayIndexes)
+            let asRun = !isCurrent && shortfall
             let assessment = assessRotation(
                 key: key,
                 sessions: group,
-                expectedDayIndexes: expected,
-                judgedAsRun: !isCurrent,
+                expectedDayIndexes: asRun ? Set(group.map(\.dayIndex)) : program.expectedDayIndexes,
+                judgedAsRun: asRun,
                 priorPerformance: previousPerformance,
                 priorReadiness: previousReadiness
             )
             rotations.append(assessment)
-            if assessment.isComplete {
+            // Only a rotation VERIFIED complete against a known day set may
+            // seed the next comparison. An as-run rotation is complete by
+            // construction, so trusting it would launder an unknown into a
+            // baseline.
+            if assessment.isComplete, !assessment.judgedAsRun {
                 previousPerformance = performanceBySlot(group)
                 previousReadiness = assessment.readiness
             }
         }
 
-        let completed = rotations.filter(\.isComplete)
+        // Streaks and capacity plans require verified rotations only.
+        let completed = rotations.filter { $0.isComplete && !$0.judgedAsRun }
         // Once a complete baseline exists, an in-progress rotation can report
         // provisional readiness from the programmed slots already banked.
         // Program changes still use complete rotations only.
@@ -559,7 +570,8 @@ public enum CoachingEngine {
         }
 
         if judgedAsRun {
-            reasons.append("Closed rotation — measured against the \(completedDays.count) day\(completedDays.count == 1 ? "" : "s") it ran, since the program has changed shape since.")
+            // First, because both clients surface only the leading reason.
+            reasons.insert("Closed rotation — reported as run (\(completedDays.count) day\(completedDays.count == 1 ? "" : "s")); the program's shape at the time is not recoverable.", at: 0)
         }
         if !isComplete {
             let progress = "Rotation is still in progress (\(completedDays.count)/\(expectedDayIndexes.count) days banked)."

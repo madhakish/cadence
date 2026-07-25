@@ -370,4 +370,20 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(allDup.nextDayOrder, 0)
         XCTAssertTrue(allDup.isLastDay, "an all-duplicate program still closes its rotation")
     }
+    // [INV-BELOW-PLAN-IS-BELOW-PLAN]
+    func testLighterWorkStillGradesBelowPlan() {
+        // Propagating an edit changes the work about to be done, not the bar
+        // the session is graded against — otherwise the base weight could climb
+        // on work that was never done.
+        XCTAssertTrue(ProgramProgression.belowPlanWork(
+            weightsLb: [205, 205, 205], plannedLb: 225, prescribedSets: 3))
+        XCTAssertFalse(ProgramProgression.belowPlanWork(
+            weightsLb: [225, 225, 225], plannedLb: 225, prescribedSets: 3))
+        // Extra back-off volume beyond the prescription never fails the grade.
+        XCTAssertFalse(ProgramProgression.belowPlanWork(
+            weightsLb: [225, 225, 225, 185], plannedLb: 225, prescribedSets: 3))
+        // kg-entry noise inside half a rounding step still counts as at plan.
+        XCTAssertFalse(ProgramProgression.belowPlanWork(
+            weightsLb: [223.5, 225, 225], plannedLb: 225, prescribedSets: 3))
+    }
 }

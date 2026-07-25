@@ -234,4 +234,35 @@ final class CoachingEngineTests: XCTestCase {
             )]
         )
     }
+    // [INV-ROTATION-JUDGED-AS-RUN]
+    func testClosedRotationsAreJudgedByTheDaysTheyRan() {
+        // A program that gains days had today's day list read back over every
+        // earlier rotation, so finished work reported "1/4 days banked" forever.
+        func session(_ cycle: Int, _ rotation: Int, _ day: Int, _ dayOffset: Int) -> CoachingSessionSnapshot {
+            CoachingSessionSnapshot(
+                id: "s\(cycle)-\(rotation)-\(day)",
+                date: Date(timeIntervalSince1970: 1_780_000_000 + Double(dayOffset) * 86_400),
+                programID: "p1", cycleNumber: cycle, rotation: rotation, dayIndex: day,
+                exercises: []
+            )
+        }
+        let program = CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0, 1, 2, 3], slots: [])
+        let report = CoachingEngine.evaluate(program: program, sessions: [
+            session(1, 1, 0, 0), session(1, 1, 1, 3),
+            session(1, 2, 0, 6), session(1, 2, 1, 9),
+            session(2, 1, 0, 40),
+        ])
+        XCTAssertEqual(report.rotations.count, 3)
+        let closed = report.rotations.dropLast()
+        XCTAssertTrue(closed.allSatisfy { $0.isComplete && $0.judgedAsRun },
+                      "a closed rotation is complete against the days it ran")
+        let live = try? XCTUnwrap(report.rotations.last)
+        XCTAssertEqual(live??.expectedDayIndexes, [0, 1, 2, 3],
+                       "the live rotation is still measured against the current program")
+        XCTAssertEqual(live??.judgedAsRun, false)
+        XCTAssertFalse(live??.isComplete ?? true)
+        // As-run rotations are complete by construction, so they must not seed
+        // the green streak that unlocks capacity recommendations.
+        XCTAssertEqual(report.greenRotationStreak, 0)
+    }
 }

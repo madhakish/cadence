@@ -55,7 +55,7 @@ prescribes **5 or more reps at or below the slot's base weight**. It never
 mirrors the main lift's 5×5 → 5×3 → 3×3 wave.
 
 ### INV-COMP-WARMUP-BRIDGE
-*platforms: core, web*
+*platforms: web*
 
 A complementary lift that **follows other work** bridges with the last two
 ramp steps only. A complementary slot ordered **first** in its day still ramps

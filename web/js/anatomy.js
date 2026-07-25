@@ -47,7 +47,8 @@ export const ANATOMY_REGIONS = [
   { id: "abs", view: "front", points: [[42, 56], [58, 56], [57, 88], [43, 88]] },
   { id: "quads", view: "front", points: [[37, 106], [48, 106], [48, 142], [44, 148], [38, 140]] },
   { id: "quads", view: "front", points: [[63, 106], [52, 106], [52, 142], [56, 148], [62, 140]] },
-  { id: "adductors", view: "front", points: [[48, 106], [52, 106], [52, 136], [50, 140], [48, 136]] },
+  { id: "adductors", view: "front", points: [[44, 108], [48, 108], [48, 138], [46, 143], [44, 136]] },
+  { id: "adductors", view: "front", points: [[56, 108], [52, 108], [52, 138], [54, 143], [56, 136]] },
   // ---- back view ----
   { id: "traps", view: "back", points: [[50, 24], [60, 30], [50, 46], [40, 30]] },
   { id: "delts", view: "back", points: [[27, 32], [35, 35], [34, 44], [25, 42]] },
@@ -134,7 +135,7 @@ export const MUSCLE_MAP = {
   // "squat" and claimed quads.
   "Copenhagen Plank": { primary: ["adductors"], secondary: ["obliques", "abs"] },
   "Cable Hip Adduction": { primary: ["adductors"], secondary: ["glutes"] },
-  "Monster Walk": { primary: ["glutes"], secondary: ["quads", "adductors"] },
+  "Monster Walk": { primary: ["glutes"], secondary: ["quads"] },
   "Seated Leg Curl": { primary: ["hamstrings"], secondary: ["calves"] },
   "Lying Leg Curl": { primary: ["hamstrings"], secondary: ["calves"] },
   "Nordic Hamstring Curl": { primary: ["hamstrings"], secondary: ["glutes", "calves"] },
