@@ -3,7 +3,7 @@ import Foundation
 /// Cross-cycle, performance-gated progression for program lifts. It tapers
 /// toward an estimated ceiling and auto-deloads on repeated stalls, so weight
 /// is never added blindly. Pure & deterministic — consumes a performance
-/// SUMMARY (never a session), no clock/random. Mirrored 1:1 in web/js/core.js.
+/// SUMMARY (never a session), no clock/random. Mirrored 1:1 in web/app/js/core.js.
 
 public enum CycleGrade: String, Codable, Sendable { case success, hold, fail }
 
@@ -237,7 +237,7 @@ public enum ProgramProgression {
     ///
     /// An unknown `bankedDayOrder` (a stale tag, a deleted day) reports the
     /// last day so a rotation can still close, and points at the first day.
-    /// Mirrored 1:1 in web/js/core.js `scheduleAdvance`.
+    /// Mirrored 1:1 in web/app/js/core.js `scheduleAdvance`.
     public static func scheduleAdvance(
         dayOrders: [Int], bankedDayOrder: Int
     ) -> (nextDayOrder: Int, isLastDay: Bool) {

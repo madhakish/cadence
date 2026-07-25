@@ -18,7 +18,9 @@ In scope, in rough order of impact:
   the only untrusted input the apps parse) execute script, exfiltrate data, or
   trigger network requests.
 - Cross-site scripting or cache poisoning in the deployed PWA
-  (`web/`, served at `madhakish.github.io/cadence/`) or its service worker.
+  (`web/app/`, served at `madhakish.github.io/cadence/app/`) or its service
+  worker — including the retirement worker at `web/sw.js`, which still holds the
+  app's former scope.
 - Supply-chain issues in the CI/release pipeline
   (`.github/workflows/`, `fastlane/`).
 

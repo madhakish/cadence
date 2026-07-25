@@ -3,7 +3,7 @@ import Foundation
 /// Muscle anatomy for the exercise detail view: the stylized two-view figure
 /// geometry (front + back polygon regions) and the exercise → muscles map
 /// (primary movers red, supporting blue — colors are applied app-side).
-/// Ported 1:1 from web/js/anatomy.js; parity is ENFORCED against
+/// Ported 1:1 from web/app/js/anatomy.js; parity is ENFORCED against
 /// web/tests/fixtures/anatomy.json by both test suites — regenerate with
 /// web/tools/generate-anatomy-fixture.mjs after edits.
 public enum AnatomyData {

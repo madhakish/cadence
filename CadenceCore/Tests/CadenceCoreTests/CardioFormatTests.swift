@@ -17,8 +17,16 @@ final class CardioFormatTests: XCTestCase {
         // lifter should never have to work that out on the belt.
         XCTAssertEqual(CardioFormat.distanceMiles(speedMph: 3.5, durationSeconds: 1800), 1.75)
         XCTAssertEqual(CardioFormat.distanceMiles(speedMph: 4, durationSeconds: 1350), 1.5)
-        XCTAssertEqual(CardioFormat.distanceMiles(speedMph: 3.7, durationSeconds: 1020), 1.05,
-                       "rounded to the two decimals a treadmill reports")
+        XCTAssertEqual(CardioFormat.distanceMiles(speedMph: 3.7, durationSeconds: 1020), 1.0483,
+                       "stored finer than a treadmill displays; the label trims it")
+        // A one-minute interval at two decimals put 3.0 and 3.1 mph on the same
+        // 0.05 mi, so the stepper could not advance and a pace read back wrong.
+        XCTAssertNotEqual(CardioFormat.distanceMiles(speedMph: 3.0, durationSeconds: 60),
+                          CardioFormat.distanceMiles(speedMph: 3.1, durationSeconds: 60),
+                          "a 0.1 mph step must survive a one-minute interval")
+        XCTAssertEqual(CardioFormat.speedMph(
+            distanceMiles: CardioFormat.distanceMiles(speedMph: 3.1, durationSeconds: 60),
+            durationSeconds: 60), 3.1, "and read back as the pace that was set")
         XCTAssertNil(CardioFormat.distanceMiles(speedMph: nil, durationSeconds: 1800), "no speed → no distance")
         XCTAssertNil(CardioFormat.distanceMiles(speedMph: 3.5, durationSeconds: nil), "no time → no distance")
         XCTAssertNil(CardioFormat.distanceMiles(speedMph: 0, durationSeconds: 0), "zeros → no distance")
@@ -39,14 +47,14 @@ final class CardioFormatTests: XCTestCase {
         // pair it came from. Only distance and duration persist, so a distance
         // computed from speed has to read back as that same speed or the
         // history would quietly disagree with what the lifter set on the belt.
-        for mph in [2.5, 3.0, 3.5, 4.0, 5.5, 6.0, 7.5] {
-            for minutes in [10, 15, 20, 30, 45, 60] {
+        for mph in [2.5, 3.0, 3.1, 3.5, 4.0, 5.5, 6.0, 7.5] {
+            for minutes in [1, 2, 5, 10, 15, 20, 30, 45, 60] {
                 let secs = minutes * 60
                 guard let miles = CardioFormat.distanceMiles(speedMph: mph, durationSeconds: secs) else {
                     return XCTFail("\(mph) mph for \(minutes)m should yield a distance")
                 }
                 XCTAssertEqual(CardioFormat.speedMph(distanceMiles: miles, durationSeconds: secs), mph,
-                               accuracy: 0.05, "\(mph) mph for \(minutes)m read back as a different pace")
+                               accuracy: 0.001, "\(mph) mph for \(minutes)m read back as a different pace")
                 XCTAssertEqual(CardioFormat.durationSeconds(distanceMiles: miles, speedMph: mph) ?? 0,
                                secs, accuracy: 30, "\(mph) mph over \(miles) mi read back as a different time")
             }

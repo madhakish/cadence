@@ -1,6 +1,6 @@
 // Port of the CadenceCore XCTest suite. Run: node tests/core.test.mjs
 // Keeps the JS math in lockstep with the Swift source of truth.
-import * as C from "../js/core.js";
+import * as C from "../app/js/core.js";
 
 let pass = 0, fail = 0;
 const approx = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
@@ -661,7 +661,11 @@ eq(C.cardioSpeedMph(0, 0), null, "zeros → no speed");
 // lifter sets, so the distance has to fall out rather than be worked out on the belt.
 eq(C.cardioDistanceMiles(3.5, 1800), 1.75, "distance from speed + time");
 eq(C.cardioDistanceMiles(4, 1350), 1.5, "distance from speed + time");
-eq(C.cardioDistanceMiles(3.7, 1020), 1.05, "rounded to the two decimals a treadmill reports");
+eq(C.cardioDistanceMiles(3.7, 1020), 1.0483, "stored finer than a treadmill displays; the label trims it");
+// A one-minute interval at two decimals put 3.0 and 3.1 mph on the same 0.05 mi.
+ok(C.cardioDistanceMiles(3.0, 60) !== C.cardioDistanceMiles(3.1, 60),
+  "[INV-CARDIO-SOLVES-THE-THIRD] a 0.1 mph step survives a one-minute interval");
+eq(C.cardioSpeedMph(C.cardioDistanceMiles(3.1, 60), 60), 3.1, "and reads back as the pace that was set");
 eq(C.cardioDistanceMiles(null, 1800), null, "no speed → no distance");
 eq(C.cardioDistanceMiles(3.5, null), null, "no time → no distance");
 eq(C.cardioDistanceMiles(0, 0), null, "zeros → no distance");
@@ -672,11 +676,11 @@ eq(C.cardioDurationSeconds(2, null), null, "no speed → no time");
 eq(C.cardioDurationSeconds(0, 0), null, "zeros → no time");
 // [INV-CARDIO-SOLVES-THE-THIRD] only distance and duration persist, so a
 // distance computed from speed must read back as that same speed.
-for (const mph of [2.5, 3.0, 3.5, 4.0, 5.5, 6.0, 7.5]) {
-  for (const minutes of [10, 15, 20, 30, 45, 60]) {
+for (const mph of [2.5, 3.0, 3.1, 3.5, 4.0, 5.5, 6.0, 7.5]) {
+  for (const minutes of [1, 2, 5, 10, 15, 20, 30, 45, 60]) {
     const secs = minutes * 60;
     const miles = C.cardioDistanceMiles(mph, secs);
-    ok(Math.abs(C.cardioSpeedMph(miles, secs) - mph) <= 0.05,
+    ok(Math.abs(C.cardioSpeedMph(miles, secs) - mph) <= 0.001,
       `[INV-CARDIO-SOLVES-THE-THIRD] ${mph} mph for ${minutes}m reads back as that pace`);
     ok(Math.abs(C.cardioDurationSeconds(miles, mph) - secs) <= 30,
       `[INV-CARDIO-SOLVES-THE-THIRD] ${mph} mph over ${miles} mi reads back as that time`);

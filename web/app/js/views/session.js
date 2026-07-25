@@ -672,6 +672,10 @@ export async function openSession(id) {
         // Which of distance/speed is currently computed from the other two.
         // Distance is what gets stored, so it starts as the entered value.
         let derived = "speed";
+        // The distance input displays a 2-decimal value, but a pace entered
+        // for a short interval needs more than that to survive a round trip.
+        // Keep what was actually computed and store THAT, not the display text.
+        let computedMiles = null;
         const distNote = ui.h("span", { class: "sub" });
         const speedNote = ui.h("span", { class: "sub" });
         const readSecs = () => (parseInt(minInput.value, 10) || 0) * 60 + (parseInt(secInput.value, 10) || 0);
@@ -679,8 +683,10 @@ export async function openSession(id) {
           const secs = readSecs();
           if (derived === "distance") {
             const miles = C.cardioDistanceMiles(parseFloat(speedInput.value) || 0, secs);
+            computedMiles = miles;
             distInput.value = miles !== null ? C.trim(miles, 2) : "";
           } else {
+            computedMiles = null;
             const mph = C.cardioSpeedMph(parseFloat(distInput.value) || 0, secs);
             speedInput.value = mph !== null ? C.trim(mph) : "";
           }
@@ -702,8 +708,13 @@ export async function openSession(id) {
         // A ruck is a walk with a pack on — the pack weight is the training
         // variable, so loaded carries keep a load where plain cardio zeroes it.
         const carries = C.cardioCarriesLoad(se.exerciseName);
+        // Default only a genuinely blank set. Re-opening an old ruck to fix its
+        // distance must not silently stamp 20 lb over a load that was
+        // deliberately something else — including a deliberate zero.
+        const isBlank = !(s.distanceMiles > 0) && !(s.durationSeconds > 0)
+          && !(s.inclinePercent > 0) && !(s.weightLb > 0);
         let carryLb = carries
-          ? (s.weightLb > 0 ? s.weightLb : (C.cardioDefaultLoadLb(se.exerciseName) ?? 0))
+          ? (s.weightLb > 0 ? s.weightLb : (isBlank ? (C.cardioDefaultLoadLb(se.exerciseName) ?? 0) : 0))
           : 0;
         if (carries) {
           c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Load" }),
@@ -718,9 +729,11 @@ export async function openSession(id) {
           class: "btn primary wide", style: { marginTop: "10px" }, text: "Done",
           onClick: () => {
             const secs = readSecs();
-            // Whichever side was derived is already sitting in its input, so
-            // the stored pair is the same either way.
-            const miles = parseFloat(distInput.value) || 0;
+            // A derived distance is stored at full precision; a typed one is
+            // taken from the field as entered.
+            const miles = derived === "distance"
+              ? (computedMiles || 0)
+              : (parseFloat(distInput.value) || 0);
             s.distanceMiles = miles > 0 ? miles : null;
             s.durationSeconds = secs > 0 ? secs : null;
             s.inclinePercent = incline > 0 ? incline : null;

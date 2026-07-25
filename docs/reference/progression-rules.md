@@ -3,7 +3,7 @@
 <!-- MUST MATCH the constants in
      CadenceCore/Sources/CadenceCore/ProgramProgression.swift (tmFraction,
      incrementFraction, qualityFlagTolerance, stallLimit,
-     deloadRebuildFraction, belowPlanLoad) ≡ web/js/core.js. Update this page
+     deloadRebuildFraction, belowPlanLoad) ≡ web/app/js/core.js. Update this page
      when tuning them. -->
 
 The engine is deterministic: same performance in, same decision out.

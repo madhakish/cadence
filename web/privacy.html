@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Privacy — Cadence</title>
+  <meta name="description" content="Cadence has no backend, no accounts and no analytics. What it stores, where it stores it, what leaves your device (almost nothing), and how to delete it all." />
+  <meta name="theme-color" content="#0a0908" />
+  <link rel="canonical" href="https://madhakish.github.io/cadence/privacy.html" />
+  <link rel="icon" href="app/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="app/icons/apple-touch-icon.png" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cadence" />
+  <meta property="og:title" content="Privacy — Cadence" />
+  <meta property="og:description" content="No backend, no accounts, no analytics. Here's exactly what is stored and where." />
+  <meta property="og:url" content="https://madhakish.github.io/cadence/privacy.html" />
+  <meta property="og:image" content="https://madhakish.github.io/cadence/app/icons/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="site/site.css" />
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <span class="glyph" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="1" y="8.5" width="2.6" height="7" rx="1"/><rect x="5" y="6" width="2.8" height="12" rx="1"/><rect x="8.6" y="11" width="6.8" height="2"/><rect x="16.2" y="6" width="2.8" height="12" rx="1"/><rect x="20.4" y="8.5" width="2.6" height="7" rx="1"/></svg>
+      </span>
+      Cadence
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="./">Overview</a>
+      <a href="guide.html">How to use it</a>
+      <a href="ios.html">iOS &amp; beta</a>
+      <a href="privacy.html" aria-current="page">Privacy</a>
+      <a href="https://github.com/madhakish/cadence">Source</a>
+    </nav>
+    <a class="btn primary sm cta" href="app/">Open the app</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-head wrap">
+    <p class="eyebrow">Privacy</p>
+    <h1>There is no server to leak.</h1>
+    <p>
+      Cadence has no backend, no user accounts, no analytics and no third-party
+      services. This isn't a policy promise on top of a data pipeline — there is no
+      pipeline. Everything below can be checked against the source.
+    </p>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="grid three">
+        <div class="card">
+          <h3>No account</h3>
+          <p>Nothing to sign up for, nothing to sign in to, no email address collected,
+            no password to lose.</p>
+        </div>
+        <div class="card">
+          <h3>No analytics</h3>
+          <p>No telemetry, crash reporting, ad SDK, tag manager or fingerprinting — in
+            either app or on this website.</p>
+        </div>
+        <div class="card">
+          <h3>No sync</h3>
+          <p>Your log is never uploaded anywhere. Moving it between devices is something
+            you do deliberately, with a file.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap prose">
+      <h2>Where your data actually lives</h2>
+      <p>
+        One place: the device you typed it on.
+      </p>
+      <ul>
+        <li><strong>Web app</strong> — your browser's IndexedDB storage for this origin,
+          plus a small amount of local settings state. It is scoped to the browser
+          profile, so a different browser or a private window is a different, empty
+          logbook.</li>
+        <li><strong>iOS app</strong> — the app's own on-device SwiftData store, inside the
+          app's sandbox and covered by the device's own encryption.</li>
+      </ul>
+      <p>
+        That store holds what you'd expect: sessions and their sets, programs and their
+        mid-cycle state, tracked lifts, your exercise library and edits to it, gyms and
+        their plate inventories, bodyweight and protein entries, body-signal flags and
+        check-ins, milestones, and your settings.
+      </p>
+
+      <h2>What leaves your device</h2>
+      <p>Almost nothing, and nothing about your training. To be precise:</p>
+
+      <div class="table-scroll" style="margin-top:18px">
+        <table>
+          <thead>
+            <tr><th>Thing</th><th>What happens</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Your training data</td>
+              <td>Never transmitted. There is no endpoint to transmit it to.</td>
+            </tr>
+            <tr>
+              <td>Web app files</td>
+              <td>Downloaded from GitHub Pages the first time, then cached by a service
+                worker so the app opens with no signal. The app makes no other network
+                requests — no fonts, no CDNs, no APIs.</td>
+            </tr>
+            <tr>
+              <td>Your IP address</td>
+              <td>Like any website, fetching these files means GitHub's servers see the
+                request. That's between you and GitHub, and it's the only reason this
+                site touches a network at all. Once the app is cached, it stops needing
+                to.</td>
+            </tr>
+            <tr>
+              <td>Apple Health (iOS, optional)</td>
+              <td>Off by default. When enabled, Cadence <strong>writes</strong> workouts
+                and bodyweight to Health and never reads anything back. Health data stays
+                on your device under Apple's control, not Cadence's.</td>
+            </tr>
+            <tr>
+              <td>Notifications</td>
+              <td>Scheduled locally on the device. No push server, so no server knows
+                when you train.</td>
+            </tr>
+            <tr>
+              <td>Backups you export</td>
+              <td>A file you save wherever you choose. If you put it in a cloud drive,
+                it's in a cloud drive — that's your call, and worth making consciously.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Cookies</h2>
+      <p>
+        None. This site sets no cookies and the app sets no cookies. The app does use
+        on-device storage (IndexedDB and the service-worker cache) to be your logbook and
+        to work offline — that's local storage, not tracking, and it never leaves the
+        device.
+      </p>
+
+      <h2>Your gym membership barcode</h2>
+      <p>
+        If you photograph a membership barcode, that image is stored in the same local
+        store as everything else and displayed only by you, on your screen. One
+        deliberate safety rule: on import, barcode images are accepted
+        <strong>only</strong> as inline image data and never as a remote URL — so a
+        tampered backup file can't turn the app into something that phones home.
+      </p>
+
+      <h2>The repository contains none of this</h2>
+      <p>
+        The exercise library, program templates and anatomy data that ship with Cadence
+        are generic reference material. No workout history, bodyweight, health signal,
+        program state, gym membership detail or personal starting weight exists anywhere
+        in the source. That's enforced by the project's own contribution rules, not just
+        good intentions.
+      </p>
+
+      <h2>Deleting everything</h2>
+      <ul>
+        <li><strong>In the app:</strong> <em>Settings → Reset all data</em> wipes the
+          device's copy. The generic exercise library and a default gym come back on next
+          launch; your history does not.</li>
+        <li><strong>Web app:</strong> clearing site data for this origin, or removing the
+          installed app, removes the store and the offline cache with it.</li>
+        <li><strong>iOS app:</strong> deleting the app removes its sandbox, store and
+          all. Anything already written to Apple Health is managed in the Health app, not
+          by Cadence.</li>
+      </ul>
+      <p>
+        There's no "delete my account" request to file, because there's no account and no
+        copy of your data anywhere else. The corollary is the important part:
+        <strong>if you delete it and have no exported backup, it's gone.</strong>
+        <a href="guide.html#main">Keep a backup.</a>
+      </p>
+
+      <h2>Security reports</h2>
+      <p>
+        Found something? The project's
+        <a href="https://github.com/madhakish/cadence/blob/main/SECURITY.md">security
+        policy</a> explains how to report it. Please don't include real training or health
+        data in a report.
+      </p>
+
+      <div class="callout" style="margin-top:34px">
+        <strong>How to verify any of this.</strong> The web app is unminified, unbundled
+        JavaScript — open your browser's network tab and watch it make no requests. The
+        iOS app's source, its capabilities and its entitlements are all in the
+        <a href="https://github.com/madhakish/cadence">repository</a>.
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-grid">
+    <div class="fine">
+      <strong>Cadence</strong>
+      A single-user, local-first strength logbook for iOS and the web. Source published on GitHub.
+      No accounts, no backend, no streaks, no badges, no motivational quotes.
+    </div>
+    <nav aria-label="Footer">
+      <a href="./">Overview</a>
+      <a href="guide.html">How to use it</a>
+      <a href="ios.html">iOS &amp; beta</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="app/">Web app</a>
+      <a href="https://github.com/madhakish/cadence">GitHub</a>
+      <a href="https://github.com/madhakish/cadence/tree/main/docs">Documentation</a>
+      <a href="https://github.com/madhakish/cadence/blob/main/SECURITY.md">Security</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

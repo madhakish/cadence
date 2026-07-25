@@ -6,7 +6,7 @@ import CadenceCore
 /// Autoregulation is one tap. Rest is manual by default — armed from the Rest
 /// buttons or the sticky bottom bar (session clock + countdown); it only
 /// auto-arms after a set when the auto-start setting is on. Mirrors the web
-/// logger (web/js/views/session.js).
+/// logger (web/app/js/views/session.js).
 struct ActiveSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -950,7 +950,8 @@ private struct SetRow: View {
                     Text(isCardio
                          ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                                  durationSeconds: set.durationSeconds,
-                                                 inclinePercent: set.inclinePercent)
+                                                 inclinePercent: set.inclinePercent,
+                                                 loadLb: set.weightLb)
                          : (isTimed ? CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) : weightLabel))
                         .font(.title3.bold().monospacedDigit())
                         .foregroundStyle(set.isWarmup ? .secondary : .primary)
@@ -1048,6 +1049,14 @@ private struct CardioSetSheet: View {
     private var carriesLoad: Bool { CardioFormat.carriesLoad(exerciseName: exerciseName) }
     private var carryLb: Double { self.set.weightLb }
 
+    /// Nothing logged at all. Re-opening an old ruck to fix its distance must
+    /// not stamp the default over a load that was deliberately something else —
+    /// including a deliberate zero.
+    private var isBlankSet: Bool {
+        self.set.weightLb == 0 && self.set.distanceMiles == nil
+            && self.set.durationSeconds == nil && self.set.inclinePercent == nil
+    }
+
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
     private var miles: Double { self.set.distanceMiles ?? 0 }
@@ -1120,7 +1129,7 @@ private struct CardioSetSheet: View {
                 // Only when nothing has been logged yet — a load the lifter
                 // already set, including a deliberate zero they then changed,
                 // is theirs.
-                if carriesLoad, set.weightLb == 0,
+                if carriesLoad, isBlankSet,
                    let start = CardioFormat.defaultLoadLb(exerciseName: exerciseName) {
                     set.weightLb = start
                 }

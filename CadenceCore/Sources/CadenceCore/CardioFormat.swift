@@ -2,7 +2,7 @@ import Foundation
 
 /// Formatting and arithmetic for conditioning ("cardio") sets — distance,
 /// time, speed, incline — shared by the logger and history rows so every view
-/// renders the same label. Pure; mirrored 1:1 in web/js/core.js
+/// renders the same label. Pure; mirrored 1:1 in web/app/js/core.js
 /// (`cardioSpeedMph`, `cardioDistanceMiles`, `cardioDurationSeconds`,
 /// `cardioDurationLabel`, `cardioSetLabel`).
 ///
@@ -25,12 +25,16 @@ public enum CardioFormat {
 
     /// Miles from speed + duration — the treadmill case, where the lifter sets
     /// a pace and a time and never sees a distance until the belt stops.
-    /// Rounded to two decimals, the granularity treadmills and watches report.
     /// nil when either half is missing/zero.
+    ///
+    /// Kept to four decimals rather than the two a treadmill displays: at two,
+    /// a one-minute interval cannot tell 3.0 mph from 3.1 (both land on
+    /// 0.05 mi), so the stepper would refuse to advance and a logged pace would
+    /// read back as a different one. Display trims; storage does not.
     public static func distanceMiles(speedMph: Double?, durationSeconds: Int?) -> Double? {
         guard let mph = speedMph, mph > 0,
               let secs = durationSeconds, secs > 0 else { return nil }
-        return (mph * (Double(secs) / 3600) * 100).rounded() / 100
+        return (mph * (Double(secs) / 3600) * 10_000).rounded() / 10_000
     }
 
     /// Seconds from distance + speed — "four miles at 3.5 mph" as a plan.

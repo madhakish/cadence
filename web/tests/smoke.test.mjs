@@ -18,17 +18,17 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error("FAIL:", m); 
 const tick = () => new Promise((r) => setTimeout(r, 60));
 const host = () => document.getElementById("view");
 
-const db = await import("../js/db.js");
-const home = await import("../js/views/home.js");
-const history = await import("../js/views/history.js");
-const body = await import("../js/views/body.js");
-const signals = await import("../js/views/signals.js");
-const settings = await import("../js/views/settings.js");
-const session = await import("../js/views/session.js");
-const plates = await import("../js/views/plates.js");
-const barbell = await import("../js/barbell.js");
-const C = await import("../js/core.js");
-const coach = await import("../js/coaching-adapter.js");
+const db = await import("../app/js/db.js");
+const home = await import("../app/js/views/home.js");
+const history = await import("../app/js/views/history.js");
+const body = await import("../app/js/views/body.js");
+const signals = await import("../app/js/views/signals.js");
+const settings = await import("../app/js/views/settings.js");
+const session = await import("../app/js/views/session.js");
+const plates = await import("../app/js/views/plates.js");
+const barbell = await import("../app/js/barbell.js");
+const C = await import("../app/js/core.js");
+const coach = await import("../app/js/coaching-adapter.js");
 const completeAll = async (workout) => {
   for (const exercise of workout.exercises || []) for (const set of exercise.sets || []) if (!set.isWarmup) set.status = "completed";
   return session.completeSession(workout);
@@ -175,7 +175,7 @@ for (const track of [
 }
 
 const serviceWorkerSource = await (await import("node:fs/promises")).readFile(
-  new URL("../sw.js", import.meta.url), "utf8");
+  new URL("../app/sw.js", import.meta.url), "utf8");
 ok(serviceWorkerSource.includes('"js/coaching-adapter.js"'),
   "offline shell precaches the eagerly imported coaching adapter");
 
@@ -285,6 +285,30 @@ for (let i = 0; i < 10; i++) {
 for (const [name, view] of [["home", home], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
   try { await view.render(host()); ok(host().childElementCount > 0, `${name} rendered`); }
   catch (e) { ok(false, `${name} threw: ${e.message}`); }
+}
+
+// Today with no active program is the very first screen a new install shows.
+// The coach section used to run on a null program and throw, leaving the tab
+// blank — which is only reachable before any program exists, so every other
+// case here missed it.
+// `Programs.active()` falls back to the first stored program, so the only way
+// to reach the genuine no-program state is an empty store.
+{
+  const stored = await db.Programs.all();
+  for (const program of stored) await db.Programs.del(program.id);
+  try {
+    ok((await db.Programs.active()) === null, "the program store is empty for this case");
+    await home.render(host());
+    ok(host().childElementCount > 0, "Today renders on a fresh install with no active program");
+    ok(!host().textContent.includes("Coach · per rotation"),
+      "no program means no coach section rather than a crash");
+  } catch (e) {
+    ok(false, `home threw with no active program: ${e.message}`);
+  } finally {
+    for (const program of stored) await db.Programs.save(program);
+  }
+  const restored = await db.Programs.all();
+  ok(restored.length === stored.length, "programs restored after the no-program render");
 }
 
 // exercise history charts mode (lineChart path)
@@ -1066,7 +1090,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 
 // ---- program templates: every style instantiates and banks cleanly ----
 {
-  const { PROGRAM_TEMPLATES, createProgramFromTemplate } = await import("../js/templates.js");
+  const { PROGRAM_TEMPLATES, createProgramFromTemplate } = await import("../app/js/templates.js");
   ok(PROGRAM_TEMPLATES.length >= 3, "styles on offer: strength, oly, metcon");
 
   // Cross-language parity anchor: the JS templates must equal the shared
@@ -1149,7 +1173,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 
 // ---- anatomy: muscle-map parity, coverage, and figure rendering ----
 {
-  const A = await import("../js/anatomy.js");
+  const A = await import("../app/js/anatomy.js");
   const { normalizedAnatomy } = await import("./anatomy-fixture.mjs");
   const { readFile } = await import("node:fs/promises");
   const fx = JSON.parse(await readFile(new URL("./fixtures/anatomy.json", import.meta.url), "utf8"));
@@ -1391,7 +1415,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 // ones it was merely vague at best and wrong at worst — a leg curl inherited
 // "hinge" and so claimed glutes, hip adduction inherited "squat".
 {
-  const anatomy = await import("../js/anatomy.js");
+  const anatomy = await import("../app/js/anatomy.js");
   const seeded = seededExercises.map((e) => e.name);
   const missing = seeded.filter((n) => !anatomy.MUSCLE_MAP[n]);
   ok(missing.length === 0,
@@ -1410,7 +1434,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 // lift. A few light squats added to an upper day were being charted as main
 // and dragged the squat progression down to a weight never worked as a main.
 {
-  const hist = await import("../js/views/history.js");
+  const hist = await import("../app/js/views/history.js");
   const roleOf = hist.chartRoleOfForTest;
   const tagged = { programTag: { cycleNumber: 2, week: 3, dayIndex: 1 } };
   const untagged = {};
@@ -1430,7 +1454,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 // base. Drawing both as one line produced a sawtooth between two unrelated
 // progressions; main must stay legible on its own.
 {
-  const { progressionChart, ROLE_DASH } = await import("../js/charts.js");
+  const { progressionChart, ROLE_DASH } = await import("../app/js/charts.js");
   const at = (day) => new Date(2026, 0, day).getTime();
   const main = [{ t: at(1), y: 225 }, { t: at(8), y: 235 }, { t: at(15), y: 245 }];
   const e1rm = [{ t: at(1), y: 253 }, { t: at(8), y: 264 }, { t: at(15), y: 260 }];

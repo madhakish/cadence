@@ -3,31 +3,461 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Cadence</title>
-  <meta name="description" content="Cadence — workout tracker" />
-  <meta name="theme-color" content="#0c0d0e" />
-  <link rel="manifest" href="manifest.webmanifest" />
-  <!-- iOS add-to-home-screen -->
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Cadence" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <title>Cadence — a strength logbook that keeps the plan honest</title>
+  <meta name="description" content="Cadence is a local-first strength training logbook for iOS and the web: 4-week waves that advance on what you actually lifted, plate math from your gym's real inventory, and no account or backend anywhere." />
+  <meta name="theme-color" content="#0a0908" />
+  <link rel="canonical" href="https://madhakish.github.io/cadence/" />
+  <link rel="icon" href="app/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="app/icons/apple-touch-icon.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cadence" />
+  <meta property="og:title" content="Cadence — a strength logbook that keeps the plan honest" />
+  <meta property="og:description" content="4-week waves that advance on what you actually lifted, plate math from your gym's real inventory, and no account or backend anywhere. iOS and web." />
+  <meta property="og:url" content="https://madhakish.github.io/cadence/" />
+  <meta property="og:image" content="https://madhakish.github.io/cadence/app/icons/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="site/site.css" />
+  <script>
+    // Anyone who added the PWA to their home screen before the app moved to
+    // /app/ still launches this page. Send those windows straight through so the
+    // marketing site never becomes their app shell.
+    //
+    // This is the ONLY hand-off: web/sw.js deliberately redirects nobody (see
+    // the comment there). Being display-mode based, it moves real installs and
+    // leaves ordinary browser tabs on the site, which is the distinction a
+    // service worker cannot make.
+    (function () {
+      try {
+        var standalone = window.navigator.standalone === true ||
+          (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+        if (standalone) location.replace("./app/");
+      } catch (e) { /* no redirect is the safe failure */ }
+    })();
+  </script>
 </head>
 <body>
-  <div id="app">
-    <header id="topbar">
-      <h1 id="screen-title">Today</h1>
-      <div id="topbar-actions"></div>
-    </header>
-    <main id="view"></main>
-    <button id="fab" aria-label="Plate calculator" title="Plate calculator"></button>
-    <nav id="tabbar"></nav>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <span class="glyph" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="1" y="8.5" width="2.6" height="7" rx="1"/><rect x="5" y="6" width="2.8" height="12" rx="1"/><rect x="8.6" y="11" width="6.8" height="2"/><rect x="16.2" y="6" width="2.8" height="12" rx="1"/><rect x="20.4" y="8.5" width="2.6" height="7" rx="1"/></svg>
+      </span>
+      Cadence
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="./" aria-current="page">Overview</a>
+      <a href="guide.html">How to use it</a>
+      <a href="ios.html">iOS &amp; beta</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/madhakish/cadence">Source</a>
+    </nav>
+    <a class="btn primary sm cta" href="app/">Open the app</a>
   </div>
-  <div id="overlays"></div>
-  <div id="toast"></div>
-  <script type="module" src="js/app.js"></script>
+</header>
+
+<main id="main">
+
+  <!-- ---------- hero ---------- -->
+  <section class="hero wrap">
+    <div class="hero-grid">
+      <div>
+        <p class="eyebrow">iOS · Web · Local-first</p>
+        <h1>A strength logbook that keeps the plan honest.</h1>
+        <p class="lede">
+          Cadence programs a <strong>4-week wave per lift</strong> and advances it on the
+          work you actually completed — never on the calendar. It does the plate
+          math for the bars and plates your gym really owns, and it keeps every
+          rep <strong>on your device</strong>. No account, no backend, no streaks.
+        </p>
+        <div class="btn-row">
+          <a class="btn primary" href="app/">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            Open the web app
+          </a>
+          <a class="btn ghost" href="ios.html">Get it on iPhone</a>
+        </div>
+        <p class="hero-note">
+          Free, and the source is public. The web app installs to your home screen and
+          works with no signal.
+        </p>
+      </div>
+
+      <!-- An honest mock: same tokens, cards and rows the app actually renders. -->
+      <div class="phone" role="img" aria-label="Cadence on a phone, showing today's Upper A session: Bench Press 185 pounds for 5 sets of 3 in the Load week, Barbell Row 155 pounds for 5 sets of 5, and Overhead Press 95 pounds for 5 sets of 5.">
+        <div class="phone-screen" aria-hidden="true">
+          <div class="phone-title">Today</div>
+          <div class="phone-sub">Upper A · cycle 3 · week 2</div>
+
+          <div class="mock-card">
+            <div class="mock-row">
+              <div class="lead">
+                <div class="name">Bench Press</div>
+                <div class="meta">5×3 · <span class="pill accent">Load</span></div>
+              </div>
+              <div class="load mono">185 <span class="muted" style="color:var(--muted);font-weight:600">lb</span></div>
+            </div>
+            <div class="mock-row">
+              <div class="lead">
+                <div class="name">Barbell Row</div>
+                <div class="meta">5×5 · complementary</div>
+              </div>
+              <div class="load mono">155 <span style="color:var(--muted);font-weight:600">lb</span></div>
+            </div>
+            <div class="mock-row">
+              <div class="lead">
+                <div class="name">Overhead Press</div>
+                <div class="meta">5×5 · <span class="pill good">clean</span></div>
+              </div>
+              <div class="load mono">95 <span style="color:var(--muted);font-weight:600">lb</span></div>
+            </div>
+          </div>
+
+          <div class="mock-card">
+            <div class="mock-row">
+              <div class="lead">
+                <div class="name">Per side, 185 lb</div>
+                <div class="meta">45 lb bar · Iron Works</div>
+              </div>
+              <div class="load mono">45 · 20 · 5</div>
+            </div>
+          </div>
+
+          <div class="mock-tabs">
+            <span>Today</span><span>History</span><span>Body</span><span>Signals</span><span>Settings</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- plate math ---------- -->
+  <section class="section">
+    <div class="wrap split">
+      <div>
+        <p class="eyebrow">One tap from every screen</p>
+        <h2 style="font-size:clamp(27px,4.2vw,38px)">Plate math for the gym you're standing in.</h2>
+        <p style="color:var(--muted);margin-top:16px">
+          Type a target in <strong>lb or kg</strong>. Cadence solves the loading from
+          that gym's actual inventory — including a kg plate and an lb plate on the
+          same side — shows the achieved total in both units, and warns you when the
+          rack can't get within 2 lb of the number.
+        </p>
+        <p style="color:var(--muted);margin-top:14px">
+          Reverse mode works the other way: tap in what somebody left on the bar and
+          get the total. Every gym you add keeps its own bars and plate counts, so the
+          answer changes when you travel.
+        </p>
+        <div class="btn-row" style="margin-top:26px">
+          <a class="btn ghost" href="app/">Try the calculator</a>
+        </div>
+      </div>
+
+      <figure class="bar-figure" style="margin:0">
+        <svg viewBox="0 0 440 150" role="img" aria-label="A 45 pound bar loaded with two 45 pound plates and one 10 pound plate per side, totalling 245 pounds.">
+          <g id="cadence-bar">
+            <!-- shaft + sleeve -->
+            <rect x="20" y="70" width="400" height="10" rx="4" fill="#8b8e95" />
+            <rect x="20" y="70" width="400" height="4" rx="2" fill="#a9acb3" />
+          </g>
+          <!-- One side, mirrored below. Plate heights follow the app's own
+               plateSizeFactor: a 45 is full diameter, a 10 is 0.62 of it. -->
+          <g id="cadence-side">
+            <!-- inner collar -->
+            <rect x="316" y="58" width="8" height="34" rx="3" fill="#5f6268" />
+            <!-- 45 lb -->
+            <rect x="326" y="16" width="21" height="118" rx="4" fill="var(--plate-blue)" stroke="var(--plate-blue-edge)" stroke-width="2" />
+            <!-- 45 lb -->
+            <rect x="350" y="16" width="21" height="118" rx="4" fill="var(--plate-blue)" stroke="var(--plate-blue-edge)" stroke-width="2" />
+            <!-- 10 lb -->
+            <rect x="374" y="38" width="14" height="74" rx="3" fill="#ededed" stroke="#9a9a9a" stroke-width="2" />
+            <!-- outer collar -->
+            <rect x="392" y="60" width="9" height="30" rx="3" fill="#5f6268" />
+          </g>
+          <use href="#cadence-side" transform="translate(440,0) scale(-1,1)" />
+        </svg>
+        <figcaption class="bar-readout">
+          <span class="total mono">245 lb</span>
+          <span class="alt mono">111.1 kg</span>
+          <span class="side mono">per side: 45 · 45 · 10</span>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ---------- features ---------- -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">What's in it</p>
+        <h2>Built for the twenty seconds between sets.</h2>
+        <p>
+          Everything below is on-device and works offline. Nothing here needs a
+          subscription, an account, or a network round trip.
+        </p>
+      </div>
+
+      <div class="grid three">
+        <div class="card feature">
+          <div class="icon"><svg viewBox="0 0 24 24" data-stroke aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/></svg></div>
+          <h3>Plate math, mixed units</h3>
+          <p>
+            Per-side loading from your gym's real plate inventory, kg and lb on the
+            same side, achieved total in both units, and a warning when the rack
+            can't reach the target.
+          </p>
+        </div>
+
+        <div class="card feature">
+          <div class="icon"><svg viewBox="0 0 24 24" data-stroke aria-hidden="true"><path d="M3 17.5 8 9l4.5 5L18 4.5"/><path d="M3 21h18"/></svg></div>
+          <h3>Programs that wait for you</h3>
+          <p>
+            A 4-week microcycle per lift — Volume 5×5, Load 5×3, Peak 3×3, Deload
+            3×5 — with double progression and strength waves offset per lift. Each
+            lift advances off completed work, so a missed week doesn't desync the plan.
+          </p>
+        </div>
+
+        <div class="card feature">
+          <div class="icon"><svg viewBox="0 0 24 24" data-stroke aria-hidden="true"><path d="M4 7h9M4 12h9M4 17h6"/><path d="M15.5 16.5 18 19l3.5-5"/></svg></div>
+          <h3>Logging that survives edits</h3>
+          <p>
+            Pre-filled warmup ramps, add or remove single sets, propagate a weight
+            change across the remaining planned work, and keep planned, completed and
+            skipped visibly distinct. Editing reps never resets the weight.
+          </p>
+        </div>
+
+        <div class="card feature">
+          <div class="icon"><svg viewBox="0 0 24 24" data-stroke aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 2M9 3h6"/></svg></div>
+          <h3>Rest timer that follows the lift</h3>
+          <p>
+            5:00 after main work, 1:30 after accessories, overridable per exercise.
+            On iOS it runs as a Live Activity on the Lock Screen, with a local
+            notification when it's time to go again.
+          </p>
+        </div>
+
+        <div class="card feature">
+          <div class="icon"><svg viewBox="0 0 24 24" data-stroke aria-hidden="true"><path d="M2.5 12h3.8l2-5.5L12 18l2.2-6h7.3"/></svg></div>
+          <h3>Body signals, not vibes</h3>
+          <p>
+            Optional shoulder, hip and knee flags on any set, a per-site timeline you
+            can read months later, and an optional next-morning knee check-in after
+            you run.
+          </p>
+        </div>
+
+        <div class="card feature">
+          <div class="icon"><svg viewBox="0 0 24 24" data-stroke aria-hidden="true"><path d="M4 5v14M7.5 5v14M11 5v14M14.5 5v14M18 5v14M21 5v14"/></svg></div>
+          <h3>Your gym tag, at the front desk</h3>
+          <p>
+            Store a photo of the membership barcode per gym and show it full-screen
+            from the launch screen — the iOS app takes the display to full brightness
+            for you. Your phone becomes the second keychain tag the gym's software
+            refuses to issue.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- how a day goes ---------- -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">A training day</p>
+        <h2>Open it in the doorway, close it in the car park.</h2>
+        <p>
+          The full walkthrough — including building a program from scratch — is in
+          <a href="guide.html">How to use it</a>.
+        </p>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div>
+            <h3>Pick a style, or build your own</h3>
+            <p>
+              Start from a pre-programmed style — novice linear progression, Texas
+              Method, 5/3/1, conjugate — or lay out your own days and lifts. Templates
+              are starting points, not commitments: everything stays editable at any
+              time, mid-cycle included.
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h3>Open the day, then start it</h3>
+            <p>
+              Opening a session shows the prescription and lets you change it. The
+              clock only starts when you say you've started, so browsing the plan in
+              the changing room never invents a two-hour workout.
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h3>Log the sets you did</h3>
+            <p>
+              Warmups arrive pre-filled. Enter in kg or lb — it's stored canonically
+              in pounds either way. Mark sets clean, grindy or wobbly if you want the
+              engine to notice, and hit "Dropping load" when it isn't there today:
+              Cadence uses a pre-computed fallback and records why.
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h3>Read the summary, then forget about it</h3>
+            <p>
+              Volume, top sets and auto-detected PRs — heaviest set, first time at a
+              rep scheme, volume record. The next rotation is computed from what you
+              performed, so there's nothing to reconcile before next time.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- platforms ---------- -->
+  <section class="section" id="platforms">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Where it runs</p>
+        <h2>Two apps, one brain.</h2>
+        <p>
+          The training math lives in a shared, platform-free core that both clients
+          mirror one-to-one, with test suites on each side that fail if the two ever
+          disagree. Same programs, same numbers, platform-appropriate UI.
+        </p>
+      </div>
+
+      <div class="grid three">
+        <div class="card platform">
+          <span class="status beta"><span class="dot" aria-hidden="true"></span>Beta</span>
+          <h3>iOS 17+</h3>
+          <p>
+            The native app: SwiftUI and SwiftData, a Lock Screen Live Activity for the
+            rest timer, Control Center controls for rest and your gym tag, and optional
+            write-only HealthKit. Not on the App Store yet — TestFlight, or build it
+            yourself.
+          </p>
+          <div class="btn-row">
+            <a class="btn primary sm" href="ios.html">How to get it</a>
+          </div>
+        </div>
+
+        <div class="card platform">
+          <span class="status live"><span class="dot" aria-hidden="true"></span>Available now</span>
+          <h3>Web app</h3>
+          <p>
+            The whole product in a browser, stored in IndexedDB on your device. Add it
+            to your home screen and it launches full-screen and works with no signal —
+            no install, no App Store, nothing to sign up for.
+          </p>
+          <div class="btn-row">
+            <a class="btn primary sm" href="app/">Open the app</a>
+          </div>
+        </div>
+
+        <div class="card platform">
+          <span class="status planned"><span class="dot" aria-hidden="true"></span>Planned</span>
+          <h3>Android</h3>
+          <p>
+            A native Android client is on the roadmap and will share the same core
+            logic and the same portable backup file. Until it lands, the web app is a
+            first-class Android experience — install it from Chrome's menu.
+          </p>
+          <div class="btn-row">
+            <a class="btn ghost sm" href="app/">Use the web app</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- privacy + source ---------- -->
+  <section class="section">
+    <div class="wrap grid two">
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" data-stroke aria-hidden="true"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M7.5 10.5V7.2a4.5 4.5 0 0 1 9 0v3.3"/></svg></div>
+        <h3>There is no server to leak</h3>
+        <p>
+          Cadence has no backend, no accounts and no analytics. Your log lives in the
+          app's own on-device store; the web app never sends a request anywhere except
+          to fetch its own files. Health data, when you enable it, is written to Apple
+          Health and never read back.
+        </p>
+        <p>
+          Because there's no cloud copy, backups matter: Cadence exports one portable
+          JSON file (plus CSV) that restores on either platform.
+        </p>
+        <div class="btn-row" style="margin-top:20px">
+          <a class="btn ghost sm" href="privacy.html">What's stored, exactly</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" data-stroke aria-hidden="true"><path d="M9 18c-4.5 1.4-4.5-2.2-6.4-2.7M15 21v-3.5a3 3 0 0 0-.8-2.3c2.8-.3 4.6-1.4 4.6-5.6a4.4 4.4 0 0 0-1.2-3 4.1 4.1 0 0 0-.1-3.1s-1.3-.4-4.3 1.6a10.4 10.4 0 0 0-5.4 0C4.8 3.1 3.5 3.5 3.5 3.5a4.1 4.1 0 0 0-.1 3.1 4.4 4.4 0 0 0-1.2 3c0 4.2 1.8 5.3 4.6 5.6a3 3 0 0 0-.8 2.3V21"/></svg></div>
+        <h3>Open source, and readable</h3>
+        <p>
+          The whole thing is on GitHub: the iOS app, the web app, the shared
+          training core, the documented backup format, and the machine-checked registry
+          of behavioural rules that aren't allowed to change silently.
+        </p>
+        <p>
+          Issues and pull requests are welcome. So is forking it and pointing it at
+          your own training opinions.
+        </p>
+        <div class="btn-row" style="margin-top:20px">
+          <a class="btn ghost sm" href="https://github.com/madhakish/cadence">Read the source</a>
+          <a class="btn ghost sm" href="https://github.com/madhakish/cadence/tree/main/docs">Docs</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- CTA ---------- -->
+  <section class="section">
+    <div class="wrap">
+      <div class="banner">
+        <h2>Log your next session in about a minute.</h2>
+        <p>
+          Open the web app and pick a style — nothing to install and nothing to sign
+          up for. If you're on an iPhone and want the native build, there are three
+          ways in.
+        </p>
+        <div class="btn-row">
+          <a class="btn primary" href="app/">Open the web app</a>
+          <a class="btn ghost" href="ios.html">Get it on iPhone</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-grid">
+    <div class="fine">
+      <strong>Cadence</strong>
+      A single-user, local-first strength logbook for iOS and the web. Source published on GitHub.
+      No accounts, no backend, no streaks, no badges, no motivational quotes.
+    </div>
+    <nav aria-label="Footer">
+      <a href="./">Overview</a>
+      <a href="guide.html">How to use it</a>
+      <a href="ios.html">iOS &amp; beta</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="app/">Web app</a>
+      <a href="https://github.com/madhakish/cadence">GitHub</a>
+      <a href="https://github.com/madhakish/cadence/tree/main/docs">Documentation</a>
+      <a href="https://github.com/madhakish/cadence/blob/main/SECURITY.md">Security</a>
+    </nav>
+  </div>
+</footer>
 </body>
 </html>

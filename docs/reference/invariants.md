@@ -26,7 +26,7 @@ Adding a rule means adding tests on every platform in its `platforms` list.
 Deleting a rule is a deliberate act: say in the commit why the behaviour is no
 longer required.
 
-`platforms` values are `core` (CadenceCore + `web/js/core.js` parity),
+`platforms` values are `core` (CadenceCore + `web/app/js/core.js` parity),
 `web` (JS runtime/UI), and `native` (SwiftUI). Native UI rules cannot be
 asserted in this workspace and are marked `unverifiable` — they are documented
 here so a reviewer can check them by hand, and are excluded from the coverage
@@ -270,3 +270,47 @@ and stays main.
 
 In the combined chart, tonnage never stretches the load axis that working
 weight and estimated 1RM share.
+
+---
+
+## Delivery
+
+### INV-WEB-APP-SCOPE
+*platforms: web*
+
+The PWA is served from its own `app/` directory, addresses its assets
+relatively, and keeps its manifest `start_url`/`scope` directory-relative so the
+whole app can be remounted without editing it. Its offline shell precaches every
+module under `app/js/`, and every path it precaches still exists — `addAll`
+rejects atomically, so one stale entry stops the worker installing at all and
+costs the app every bit of its offline support. The worker at the app's previous
+root scope keeps
+existing solely to retire itself: it unregisters, deletes only the legacy shells
+it owns, serves nothing, and redirects nobody. Moving a stranded install to
+`app/` is the job of the `display-mode: standalone` check in `web/index.html`,
+which is the only thing that can tell a real install from a browser tab.
+
+### INV-WEB-CACHE-OWNERSHIP
+*platforms: web*
+
+Every service worker deletes only the caches it owns, matched by name prefix.
+`web/app/sw.js` owns `cadence-app-`; `web/sw.js` retires the legacy
+`cadence-<build>` shells and explicitly excludes the app's prefix. Neither may
+sweep `caches.keys()` unfiltered.
+
+> Cache Storage is keyed by ORIGIN, not by scope, so `caches.keys()` returns
+> every cache on the whole github.io account — including other projects
+> published under it. The self-inflicted case is worse: `/cadence/app/` sits
+> inside the retirement worker's `/cadence/` scope, so the first visit to the
+> relocated app is itself a navigation that can activate the retiree *after* the
+> app worker has populated its precache. An unfiltered delete wipes the new
+> offline shell, and the installed worker will not re-run `install` to rebuild
+> it — leaving the app with no guaranteed offline shell until the assets happen
+> to be re-fetched online.
+
+> The app was served from the Pages root before the product site existed. A
+> home-screen install keeps that registration and its cache-first handler
+> forever, so deleting the old worker would strand those installs on a stale
+> shell, and replacing it with the site's own worker would hand them the
+> marketing page as their app. An unlisted module is worse: the app deploys
+> green and then fails in a gym with no signal.

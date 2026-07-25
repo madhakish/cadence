@@ -8,7 +8,7 @@ import Foundation
 /// notification scheduling) belong strictly AFTER a successful commit — never
 /// before it, and never when it throws — so a failed save can't leave phantom
 /// workouts or check-ins behind. Mirrored as `completionCommit` in
-/// web/js/core.js (where IndexedDB gives the web app this atomicity natively).
+/// web/app/js/core.js (where IndexedDB gives the web app this atomicity natively).
 public enum CompletionPersistence {
 
     /// Make staged completion changes durable, or undo them and rethrow.

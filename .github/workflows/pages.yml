@@ -1,4 +1,4 @@
-name: Deploy web app (Pages)
+name: Deploy site and web app (Pages)
 
 on:
   workflow_dispatch:
@@ -37,6 +37,9 @@ jobs:
       - name: Runtime smoke test (jsdom + fake-indexeddb)
         working-directory: web
         run: node tests/smoke.test.mjs
+      - name: Site and app-mount structure
+        working-directory: web
+        run: node tests/site.test.mjs
 
   deploy:
     name: Deploy to GitHub Pages
@@ -53,7 +56,7 @@ jobs:
       - name: Stamp build version into the service worker
         # Changes sw.js every deploy → browsers install the new worker and
         # refresh the cached app. Without this, installed phones never update.
-        run: sed -i "s/__BUILD__/${GITHUB_SHA::12}/" web/sw.js
+        run: sed -i "s/__BUILD__/${GITHUB_SHA::12}/" web/app/sw.js
       - name: Upload web/ as Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

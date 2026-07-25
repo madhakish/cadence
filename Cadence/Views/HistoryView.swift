@@ -233,13 +233,19 @@ struct SessionDetailView: View {
     @State private var healthMiles: Double?
     @State private var didCheckHealth = false
 
+    /// The conditioning sets this session actually performed. `workingSets` is
+    /// already completed-and-non-warmup: a set left planned, or skipped after
+    /// being edited, was not trained and must neither inflate the comparison
+    /// nor be rewritten by adopting Health's number.
+    private var conditioningSets: [SetEntry] {
+        session.orderedExercises
+            .filter { $0.exercise?.type == .conditioning }
+            .flatMap(\.workingSets)
+    }
+
     /// Everything this session logged as conditioning distance.
     private var loggedMiles: Double? {
-        let total = session.orderedExercises
-            .filter { $0.exercise?.type == .conditioning }
-            .flatMap(\.orderedSets)
-            .compactMap(\.distanceMiles)
-            .reduce(0, +)
+        let total = conditioningSets.compactMap(\.distanceMiles).reduce(0, +)
         return total > 0 ? total : nil
     }
 
@@ -327,7 +333,7 @@ struct SessionDetailView: View {
                 Text(HealthComparison.label(healthVerdict))
                     .font(.callout)
                     .foregroundStyle(healthVerdict.isDiscrepancy ? Theme.warn : .secondary)
-                if let miles = healthVerdict.adoptableMiles {
+                if let miles = adoptableMiles {
                     Button("Use Health's \(Weight.trim(miles, decimals: 2)) mi") {
                         adoptHealthDistance(miles)
                     }
@@ -341,6 +347,14 @@ struct SessionDetailView: View {
         }
     }
 
+    /// Health's number is only offerable when there is a performed conditioning
+    /// set to write it onto. Health finding a run for a session that logged no
+    /// conditioning at all is worth reporting, but the button would be a no-op.
+    private var adoptableMiles: Double? {
+        guard !conditioningSets.isEmpty else { return nil }
+        return healthVerdict.adoptableMiles
+    }
+
     /// Nothing to say, and an unworn watch, are both silence rather than a
     /// finding worth its own row.
     private var showsHealthRow: Bool {
@@ -350,24 +364,29 @@ struct SessionDetailView: View {
         }
     }
 
+    /// Both adoption paths round the same way, so a single-set session and a
+    /// split one store comparably clean values.
+    private static func roundedMiles(_ value: Double) -> Double {
+        (value * 100).rounded() / 100
+    }
+
     /// Write Health's number onto the single conditioning set, or spread it
     /// across several in proportion to what they already hold, so a two-leg
     /// walk keeps its shape instead of collapsing into the first set.
     private func adoptHealthDistance(_ miles: Double) {
-        let sets = session.orderedExercises
-            .filter { $0.exercise?.type == .conditioning }
-            .flatMap(\.orderedSets)
+        let sets = conditioningSets
         guard !sets.isEmpty else { return }
         let existing = sets.compactMap(\.distanceMiles).reduce(0, +)
         if existing > 0 {
             for set in sets {
                 guard let current = set.distanceMiles, current > 0 else { continue }
-                set.distanceMiles = ((miles * (current / existing)) * 100).rounded() / 100
+                set.distanceMiles = Self.roundedMiles(miles * (current / existing))
             }
         } else {
-            sets.first?.distanceMiles = miles
+            sets.first?.distanceMiles = Self.roundedMiles(miles)
         }
         _ = PersistenceErrorCenter.shared.save(context, operation: "Adopting Health's distance")
+
         healthMiles = miles
     }
 

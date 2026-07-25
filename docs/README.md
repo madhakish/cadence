@@ -2,9 +2,13 @@
 
 Cadence is a local-first workout tracker with an opinionated adaptive
 program engine. It runs as an iOS app and as a web app
-([madhakish.github.io/cadence](https://madhakish.github.io/cadence/)) that
-share one brain — everything documented here behaves identically in both
+([madhakish.github.io/cadence/app/](https://madhakish.github.io/cadence/app/))
+that share one brain — everything documented here behaves identically in both
 unless a page says otherwise.
+
+The [product site](https://madhakish.github.io/cadence/) is the front door:
+overview, a condensed getting-started guide, how to get the iOS build, and what
+Cadence stores. These docs are the depth behind it.
 
 The docs follow the [Diátaxis](https://diataxis.fr/) structure: pick the
 section that matches what you're trying to do.

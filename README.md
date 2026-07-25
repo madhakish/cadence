@@ -1,10 +1,15 @@
 # Cadence
 
 A local-first logbook for structured strength training. Two apps sharing one
-brain: native iOS (SwiftUI + SwiftData, iOS 17+) and a web PWA
-([madhakish.github.io/cadence](https://madhakish.github.io/cadence/)).
+brain: native iOS (SwiftUI + SwiftData, iOS 17+) and a web PWA.
 Single user, local-first. No backend, no accounts, no streaks, no badges,
 no quotes.
+
+- **Product site** — [madhakish.github.io/cadence](https://madhakish.github.io/cadence/)
+- **Web app** — [madhakish.github.io/cadence/app/](https://madhakish.github.io/cadence/app/)
+- **iOS** — TestFlight beta or build it yourself; see
+  [the iOS page](https://madhakish.github.io/cadence/ios.html) and
+  [docs/TESTFLIGHT.md](docs/TESTFLIGHT.md)
 
 **User documentation** (tutorials, how-to guides, reference) lives in
 [docs/](docs/README.md) — start with
@@ -75,8 +80,16 @@ starting points and remain editable before the first session.
 │   ├── Services/            # notifications, rest timer, completion/PRs,
 │   │                        # export, optional HealthKit (write + compare)
 │   └── Views/               # dark, big targets, terse copy
-├── web/                     # Web PWA: core.js mirrors CadenceCore 1:1,
-│                            # IndexedDB, no build step, deployed via Pages
+├── web/                     # Everything GitHub Pages serves (no build step)
+│   ├── index.html           # Product site: overview, guide, iOS/beta, privacy
+│   ├── site/site.css        # Site styling (the app's Memento tokens)
+│   ├── sw.js                # Retirement worker for the app's former root scope
+│   ├── app/                 # The PWA itself, served at /cadence/app/
+│   │   ├── js/core.js       # Mirrors CadenceCore 1:1
+│   │   ├── js/db.js         # IndexedDB + backup contract
+│   │   └── sw.js            # Offline app shell
+│   ├── tests/               # Parity, migration, smoke, and site-structure suites
+│   └── tools/               # Fixture generators
 └── docs/                    # User documentation (Diátaxis) + TestFlight guide
 ```
 
@@ -97,7 +110,7 @@ cd CadenceCore && swift test
 # or run the CadenceCore test plan inside Xcode (⌘U)
 ```
 
-Web tests (the parity + smoke suites that keep `web/js/core.js` in
+Web tests (the parity + smoke suites that keep `web/app/js/core.js` in
 lockstep with CadenceCore):
 
 ```bash

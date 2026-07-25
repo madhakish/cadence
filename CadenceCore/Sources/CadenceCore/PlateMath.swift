@@ -218,7 +218,7 @@ public enum PlateMath {
     /// programmed number stays on the card (90, not the 89.1 lb a 10 kg pair
     /// happens to weigh), and the barbell hint explains the actual plates.
     /// Only a genuinely unreachable target stores the achieved load, so the
-    /// log stays honest on sparse racks. Mirrored 1:1 in web/js/core.js
+    /// log stays honest on sparse racks. Mirrored 1:1 in web/app/js/core.js
     /// `storedPrescription`.
     public static func storedPrescription(targetLb: Double, achievedLb: Double) -> Double {
         abs(achievedLb - targetLb) <= toleranceLb + 1e-9 ? targetLb : achievedLb

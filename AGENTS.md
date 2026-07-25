@@ -18,7 +18,7 @@ must survive every update. The owner is the primary user, so optimize for a
 fast, trustworthy training workflow rather than speculative abstraction.
 
 `CadenceCore` is the pure, deterministic domain layer. Equivalent behavior is
-mirrored in `web/js/core.js`; the Swift and JavaScript suites enforce parity.
+mirrored in `web/app/js/core.js`; the Swift and JavaScript suites enforce parity.
 Platform APIs and persistence remain at the edges.
 
 ## Non-negotiable rules
@@ -33,7 +33,7 @@ Platform APIs and persistence remain at the edges.
 4. A schema-changing PR is incomplete without an on-disk old-to-new migration
    test using the production schema and migration plan.
 5. Put deterministic training math in `CadenceCore`, add Swift tests, mirror it
-   in `web/js/core.js`, and add equivalent JavaScript assertions.
+   in `web/app/js/core.js`, and add equivalent JavaScript assertions.
 6. Store weights canonically in pounds as `Double`. Convert kilograms only at
    input and display boundaries.
 7. Never commit personal workouts, body metrics, health signals, gym barcodes,
@@ -54,8 +54,10 @@ Platform APIs and persistence remain at the edges.
 | `Cadence/LiveActivity/` | Shared ActivityKit attributes, controller, and intents compiled into app and widget targets |
 | `CadenceWidgets/` | Live Activity and Control Center/widget extension surfaces |
 | `CadenceMigrationTests/` | Hostless macOS tests that create and migrate real SwiftData SQLite stores |
-| `web/js/` | PWA domain mirror, IndexedDB, application orchestration, and views |
-| `web/tests/` | Core parity, runtime smoke tests, and cross-platform fixtures |
+| `web/app/js/` | PWA domain mirror, IndexedDB, application orchestration, and views |
+| `web/*.html`, `web/site/` | Public product site served at the Pages root; marketing, onboarding, iOS/beta routes, privacy. Links the docs, never restates their rules |
+| `web/sw.js` | Retirement worker holding the app's former root scope; must keep unregistering itself, never cache, never redirect, and evict only the legacy `cadence-<build>` shells it owns |
+| `web/tests/` | Core parity, runtime smoke tests, site/app-mount structure, and cross-platform fixtures |
 | `web/tools/` | Deterministic fixture generators |
 | `docs/` | Diátaxis user documentation and data-contract references |
 | `project.yml` | XcodeGen source of truth for targets, schemes, settings, entitlements, and Info.plist values |
@@ -165,7 +167,7 @@ must remain in `project.yml` and the macOS CI job.
 
 ### IndexedDB upgrades
 
-`web/js/db.js` owns `DB_VERSION` and `onupgradeneeded`.
+`web/app/js/db.js` owns `DB_VERSION` and `onupgradeneeded`.
 
 - Bump `DB_VERSION` for an IndexedDB schema or persisted-shape upgrade.
 - Migrate old records during the upgrade transaction; seeding fresh defaults
@@ -177,12 +179,42 @@ must remain in `project.yml` and the macOS CI job.
 - Coordinate service-worker cache changes when deployed assets or startup
   assumptions change.
 
+### Pages layout and app scope
+
+`web/` is the whole Pages artifact: the public product site at the root and the
+PWA mounted at `web/app/`, served at `/cadence/app/`.
+
+- Keep the app self-relative. Its HTML, manifest `start_url`/`scope`, and worker
+  registration are all directory-relative so the app can be remounted without
+  edits. Never hard-code `/cadence/`.
+- Add every new `web/app/js/` module to the `ASSETS` precache list in
+  `web/app/sw.js`. An unlisted module deploys green and then fails offline.
+- Each worker deletes only caches carrying its own name prefix. Cache Storage is
+  per-ORIGIN, so an unfiltered `caches.keys()` sweep reaches every project
+  published under the same github.io account. `web/app/sw.js` owns
+  `cadence-app-`; `web/sw.js` retires legacy `cadence-<build>` shells and
+  excludes the app prefix. See `INV-WEB-CACHE-OWNERSHIP`.
+- `web/sw.js` retires the app's former root scope for installs that predate the
+  move: it unregisters, deletes the legacy shells it owns, registers no `fetch`
+  handler, and redirects nobody. Do not delete it while any install could still
+  hold that registration, and do not let a site page register a worker that
+  reclaims the scope.
+- The hand-off to `app/` belongs to the `display-mode: standalone` check in
+  `web/index.html`, not to a worker. `Client` exposes no display mode, so a
+  worker cannot tell an installed launch from a browser tab and will drag site
+  readers into the logbook. See `INV-WEB-APP-SCOPE`.
+- The site links `docs/` rather than restating rules, so a behaviour change needs
+  one docs edit, not two. Site copy that does state behaviour must be true of
+  both clients.
+- `web/tests/site.test.mjs` holds the above: link resolution, app-mount
+  integrity, precache completeness, and the retirement worker's contract.
+
 ### Portable backup contract
 
 The JSON backup is the cross-platform recovery and interchange format.
 
 - Keep `CadenceCore/BackupContract.currentSchemaVersion` and
-  `web/js/db.js` `BACKUP_SCHEMA_VERSION` equal.
+  `web/app/js/db.js` `BACKUP_SCHEMA_VERSION` equal.
 - Importers must continue to accept every documented older version and reject
   unsupported newer versions before destructive writes.
 - A backup-schema change requires native and web import/export updates,
@@ -216,10 +248,10 @@ release-note generator can misread them as issue references.
 
 The following pairs are lockstep contracts:
 
-- `CadenceCore` domain math ↔ `web/js/core.js`
-- `ProgramTemplateData.swift` ↔ `web/js/templates.js` ↔
+- `CadenceCore` domain math ↔ `web/app/js/core.js`
+- `ProgramTemplateData.swift` ↔ `web/app/js/templates.js` ↔
   `web/tests/fixtures/program-templates.json`
-- `AnatomyData.swift` ↔ `web/js/anatomy.js` ↔
+- `AnatomyData.swift` ↔ `web/app/js/anatomy.js` ↔
   `web/tests/fixtures/anatomy.json`
 - `BackupContract.currentSchemaVersion` ↔ `BACKUP_SCHEMA_VERSION`
 - Native seed names ↔ template exercise names and web seed names

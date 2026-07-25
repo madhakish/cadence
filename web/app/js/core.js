@@ -1164,11 +1164,14 @@ export function cardioSpeedMph(distanceMiles, durationSeconds) {
 }
 
 // Miles from speed + duration — the treadmill case, where the lifter sets a
-// pace and a time and never sees a distance until the belt stops. Rounded to
-// two decimals, the granularity treadmills and watches report.
+// pace and a time and never sees a distance until the belt stops.
+//
+// Kept to four decimals rather than the two a treadmill displays: at two, a
+// one-minute interval cannot tell 3.0 mph from 3.1 (both land on 0.05 mi), so
+// a logged pace would read back as a different one. Display trims; storage does not.
 export function cardioDistanceMiles(speedMph, durationSeconds) {
   if (!(speedMph > 0) || !(durationSeconds > 0)) return null;
-  return Math.round(speedMph * (durationSeconds / 3600) * 100) / 100;
+  return Math.round(speedMph * (durationSeconds / 3600) * 10000) / 10000;
 }
 
 // Seconds from distance + speed — "four miles at 3.5 mph" as a plan.
