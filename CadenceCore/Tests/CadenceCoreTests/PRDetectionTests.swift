@@ -87,6 +87,7 @@ final class PRDetectionTests: XCTestCase {
         XCTAssertEqual(top?.reps, 5)
     }
 
+    // [INV-SCHEME-PERFORMED]
     func testTopSchemeReportsWorkThatWasActuallyPerformed() {
         // A top set plus a fatigue set is ONE five, not two doubles. Reporting
         // the group minimum across every top-weight set invented "2×2".
@@ -106,6 +107,7 @@ final class PRDetectionTests: XCTestCase {
         XCTAssertEqual(PRDetection.topScheme(split)?.reps, 8)
     }
 
+    // [INV-NO-LOAD-WITHOUT-RESISTANCE]
     func testBodyweightSchemeMilestoneOmitsAMeaninglessLoad() {
         let pushups = Array(repeating: SetSample(weightLb: 0, reps: 12, loadBasis: .bodyweight), count: 3)
         let events = PRDetection.evaluate(

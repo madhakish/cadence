@@ -346,7 +346,7 @@ export async function openSession(id) {
 
     body.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "16px", minHeight: "52px", fontSize: "18px" }, text: COPY.sessionDone, onClick: () => finish() }));
     body.append(ui.h("button", { class: "btn ghost danger wide", style: { marginTop: "8px" },
-      text: "Discard session", "aria-label": "Discard this session without banking it",
+      text: "Discard this session", "aria-label": "Discard this session without banking it",
       onClick: () => discard() }));
   }
 

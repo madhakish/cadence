@@ -342,14 +342,14 @@ ok(withBarOverride.exercises[0].sets.filter((s) => s.isWarmup).every((set) => se
 // there was a way to reset it that time could not be taken back.
 const clockEl = document.querySelector("#session-bar .clock");
 const startBtn = document.querySelector("#session-bar button[aria-label^='Start the workout clock']");
-ok(clockEl.textContent.includes("not started"), "opening a session does not start its clock");
+ok(clockEl.textContent.includes("not started"), "[INV-OPEN-IS-NOT-START] opening a session does not start its clock");
 ok(startBtn && startBtn.style.display !== "none", "an explicit Start workout control is offered");
 startBtn.click(); await tick();
 ok(clockEl.textContent.includes("session"), "starting explicitly runs the session clock");
 const resetBtn = document.querySelector("#session-bar button[aria-label^='Reset this session']");
 ok(resetBtn && resetBtn.style.display !== "none", "a reset control appears once started");
 resetBtn.click(); await tick();
-ok(clockEl.textContent.includes("not started"), "reset returns an accidentally started session to not started");
+ok(clockEl.textContent.includes("not started"), "[INV-OPEN-IS-NOT-START] reset returns an accidentally started session to not started");
 startBtn.click(); await tick();
 ok([...document.querySelectorAll("#session-bar button")].some((b) => b.textContent.startsWith("Rest ")), "bottom-bar Rest button shows the current lift's rest");
 const bank = overlayButtons().find((b) => b.textContent === "Bank it.");
@@ -519,10 +519,10 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     sparse.programs[0].nextDayIndex = highest;
     let message = "";
     try { await db.importBundle(sparse); } catch (error) { message = error.message; }
-    ok(!message, `a sparse day-order backup restores instead of being rejected (${message})`);
+    ok(!message, `[INV-NEXTDAY-IS-AN-ORDER] a sparse day-order backup restores instead of being rejected (${message})`);
     const restored = (await db.Programs.all()).find((p) => p.name === sparse.programs[0].name);
     ok(restored.days.some((d) => d.order === highest), "the sparse day survives the round trip");
-    ok(restored.nextDayIndex === highest, "nextDayIndex still names the same day after import");
+    ok(restored.nextDayIndex === highest, "[INV-NEXTDAY-IS-AN-ORDER] nextDayIndex still names the same day after import");
   }
 }
 
@@ -817,7 +817,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   const built = await db.Sessions.get(sId);
   const cold = built.exercises.find((entry) => entry.programRole === "complementary");
   ok(cold.sets.filter((set) => set.isWarmup).length > 2,
-    "a complementary lift with no earlier work keeps its full warmup ramp");
+    "[INV-COMP-WARMUP-BRIDGE] a complementary lift with no earlier work keeps its full warmup ramp");
   await db.Sessions.del(sId);
   await db.Programs.del(prog.id);
 }
@@ -843,7 +843,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   // banked session's programTag.dayIndex refers to, so quietly renumbering
   // would strand those sessions. Reachability is solved in scheduleAdvance.
   ok(prog.days.map((d) => d.order).sort((a, b) => a - b).join(",") === "0,1,5",
-    "sparse day orders survive a save — tags stay valid");
+    "[INV-DAY-ORDERS-PRESERVED] sparse day orders survive a save — tags stay valid");
 
   const banked = [];
   for (let i = 0; i < 3; i += 1) {
@@ -878,7 +878,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   // slot bridges with exactly two warmups, then goes straight to volume work.
   const builtComp = built.exercises.find((e) => e.programRole === "complementary");
   ok(builtComp.sets.filter((set) => set.isWarmup).length === 2,
-    "complementary lift gets two bridging warmups, not a full ramp");
+    "[INV-COMP-WARMUP-BRIDGE] complementary lift gets two bridging warmups, not a full ramp");
   ok(builtComp.plannedReps >= 5 && builtComp.plannedWeightLb <= 185,
     "complementary work is volume at/below its base, not a heavy mirror of the main wave");
   await completeAll(built); // i=0 banked (Lower A, week 1)
@@ -1336,6 +1336,24 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(canon(again) === canon(fixture), "fixture re-exports byte-for-byte (sans wall-clock stamps)");
 }
 
+// A session started by mistake must be removable from inside itself, not only
+// from Today — the original trap was that neither Later, nor stopping the
+// clock, nor banking got rid of it.
+{
+  const openId = await session.createBlankSession();
+  await session.openSession(openId);
+  await tick();
+  const discardBtn = [...document.querySelectorAll("button")]
+    .find((b) => (b.getAttribute("aria-label") || "").startsWith("Discard this session"));
+  ok(discardBtn, "[INV-SESSION-ALWAYS-ESCAPABLE] a discard control is offered inside the session");
+  ok(await db.Sessions.get(openId), "the session exists before discarding");
+  await db.Sessions.del(openId);
+  ok(!(await db.Sessions.get(openId)),
+    "[INV-SESSION-ALWAYS-ESCAPABLE] discarding removes the session and nothing else");
+  ok((await db.Sessions.completed()).length > 0,
+    "[INV-SESSION-ALWAYS-ESCAPABLE] banked history survives a discard");
+}
+
 // ---- progression chart: role split + combined metric ----
 // A lift can be MAIN on one day and COMPLEMENTARY on another at a much lighter
 // base. Drawing both as one line produced a sawtooth between two unrelated
@@ -1359,7 +1377,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   const paths = [...svg.querySelectorAll("path.line")];
   ok(paths.length === 3, "every requested load line is drawn");
   ok(paths.filter((p) => (p.getAttribute("style") || "").includes("dasharray")).length === 1,
-    "the complementary line is dashed so main stays visually dominant");
+    "[INV-CHART-SPLITS-BY-ROLE] the complementary line is dashed so main stays visually dominant");
   const bars = [...svg.querySelectorAll("rect.vol-bar")].map((r) => +r.getAttribute("height"));
   ok(bars.length === 3 && bars[0] > bars[1] && bars[1] > bars[2],
     "volume bars track tonnage on their own scale");
@@ -1371,8 +1389,8 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     .filter(Number.isFinite);
   const loadAxis = labelsAt((x) => x < 20);
   ok(loadAxis.length > 0 && loadAxis.every((v) => v > 150 && v < 300),
-    `the load axis is scaled to the load lines, not to tonnage (${loadAxis.join()})`);
-  ok(labelsAt((x) => x > 300).includes(5625), "volume keeps its own right-hand scale");
+    `[INV-VOLUME-KEEPS-ITS-OWN-SCALE] the load axis is scaled to the load lines, not to tonnage (${loadAxis.join()})`);
+  ok(labelsAt((x) => x > 300).includes(5625), "[INV-VOLUME-KEEPS-ITS-OWN-SCALE] volume keeps its own right-hand scale");
   ok([...chart.querySelectorAll(".chart-legend span")].length === 4, "every series is named in the legend");
   const empty = progressionChart({ lines: [{ key: "x", points: [] }], bars: null });
   ok(empty.querySelectorAll("path.line").length === 0, "an empty series renders nothing rather than throwing");

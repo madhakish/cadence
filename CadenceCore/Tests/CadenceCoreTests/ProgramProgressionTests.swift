@@ -323,6 +323,7 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertTrue(ProgramProgression.scheduleAdvance(dayOrders: orders, bankedDayOrder: 3).isLastDay)
     }
 
+    // [INV-SCHEDULE-WALKS-ORDERS]
     func testScheduleAdvanceReachesEveryDayDespiteAGapInOrders() {
         // Import validates day orders as unique but never as contiguous, so a
         // bundle can carry [0, 1, 5]. Index-space arithmetic then never
@@ -353,6 +354,7 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(ProgramProgression.scheduleAdvance(dayOrders: [], bankedDayOrder: 0).nextDayOrder, 0)
     }
 
+    // [INV-SCHEDULE-WALKS-ORDERS]
     func testScheduleAdvanceCollapsesDuplicateDayOrders() {
         // Two DISTINCT days can share one order (a damaged store, or an add
         // that collided on days.count). Stepping inside the duplicate pair

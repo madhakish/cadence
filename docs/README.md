@@ -32,6 +32,8 @@ section that matches what you're trying to do.
   grading, increments, stalls, deloads
 - [Deterministic coaching rules](reference/coaching-rules.md) — rotation
   boundaries, readiness lights, capacity budgets, and temporary reductions
+- [Behavioural invariants](reference/invariants.md) — the rules that must
+  not silently change, and the tests that hold each one
 - [History charts](reference/history-charts.md) — how the progression
   chart splits main from complementary, and what the combined view shows
 - [Milestones](reference/milestones.md) — how heaviest-set, first-scheme,

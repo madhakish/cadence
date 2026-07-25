@@ -158,6 +158,7 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(plan.weightLb, 180)
     }
 
+    // [INV-COMP-IS-VOLUME]
     func testComplementaryStaysVolumeOrientedAcrossTheWholeRotation() {
         // Complementary work never mirrors the main 5×5→5×3→3×3 wave: every
         // phase prescribes 5+ reps at or below the slot's base weight.

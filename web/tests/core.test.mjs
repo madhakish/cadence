@@ -107,10 +107,10 @@ eq(new Set(s.perSide.map((pc) => pc.plate.unit)).size, 1, "220 no unit mix");
 // The clean stack is loading guidance, not a new prescription: within the
 // band the programmed number is what gets stored; only genuinely unreachable
 // targets store the achieved load.
-eq(C.storedPrescription(90, 89.1), 90, "in-band kg stack keeps the neat 90");
+eq(C.storedPrescription(90, 89.1), 90, "[INV-LOAD-STORED-NEAT] in-band kg stack keeps the neat 90");
 eq(C.storedPrescription(220, s.totalLb), 220, "220 card stays 220 despite the kg stack");
 eq(C.storedPrescription(155, 155), 155, "exact load passes through");
-eq(C.storedPrescription(90, 85), 85, "unreachable target stores the honest load");
+eq(C.storedPrescription(90, 85), 85, "[INV-LOAD-STORED-NEAT] unreachable target stores the honest load");
 eq(C.storedPrescription(50, 65), 65, "sparse-rack overshoot stays honest");
 
 // Heaviest-first beats fewest-plates: 255 is 45+45+10+5 per side, never 35×3
@@ -203,7 +203,7 @@ for (const [phase, expected] of [[1, "3x8@180"], [2, "3x8@190"], [3, "3x6@200"],
   const p = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: phase, incrementLb: 0 }, 5,
     "barbell", "hinge", "complementary", "strength", "automatic");
   eq(`${p.sets}x${p.reps}@${p.weightLb}`, expected, `complementary phase ${phase} stays volume-oriented`);
-  ok(p.reps >= 5 && p.weightLb <= 200, `complementary phase ${phase} is 5+ reps at/below base`);
+  ok(p.reps >= 5 && p.weightLb <= 200, `[INV-COMP-IS-VOLUME] complementary phase ${phase} is 5+ reps at/below base`);
 }
 let techniquePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 100, nextPhase: 3, incrementLb: 0 }, 5,
   "barbell", "olympic", "main", "strength", "automatic");
@@ -322,6 +322,18 @@ ok(ev.some((e) => e.kind === "heaviestSet"), "first session heaviest");
 ok(ev.some((e) => e.kind === "firstScheme"), "first session scheme");
 ok(!ev.some((e) => e.kind === "volumePR"), "first session not volume PR");
 
+// Propagating an edit changes the work about to be done, not the target the
+// session is graded against — otherwise the base weight could climb on work
+// that was never done.
+ok(C.belowPlanWork([205, 205, 205], 225, 3),
+  "[INV-BELOW-PLAN-IS-BELOW-PLAN] a lighter session still grades as below plan");
+ok(!C.belowPlanWork([225, 225, 225], 225, 3),
+  "[INV-BELOW-PLAN-IS-BELOW-PLAN] work at plan is not below plan");
+ok(!C.belowPlanWork([225, 225, 225, 185], 225, 3),
+  "[INV-BELOW-PLAN-IS-BELOW-PLAN] a back-off set beyond the prescription never fails the grade");
+ok(!C.belowPlanWork([223.5, 225, 225], 225, 3),
+  "[INV-BELOW-PLAN-IS-BELOW-PLAN] kg-entry noise inside half a rounding step still counts as at plan");
+
 // Schedule advance walks day ORDER values, not array positions. Import
 // validates day orders as unique but never as contiguous, so a bundle can
 // carry [0, 1, 5]; index-space arithmetic then never recognized the last day
@@ -333,7 +345,7 @@ const sa = (orders, banked) => {
 };
 eq(sa([0, 1, 2, 3], 0), "1", "contiguous orders step forward");
 eq(sa([0, 1, 2, 3], 3), "0!", "the highest order is the last day and wraps");
-eq(sa([0, 1, 5], 1), "5", "the day past a gap is reachable");
+eq(sa([0, 1, 5], 1), "5", "[INV-SCHEDULE-WALKS-ORDERS] the day past a gap is reachable");
 eq(sa([0, 1, 5], 5), "0!", "the highest order is the last day whatever its value");
 eq(sa([2, 0, 1], 0), "1", "stored order is not assumed sorted");
 eq(sa([0], 0), "0!", "a one-day program banks its only day as the last day");
@@ -342,7 +354,7 @@ eq(sa([], 0), "0!", "an empty program does not crash");
 // Two DISTINCT days can share one order (a damaged store, or an add that
 // collided on days.length). Stepping inside the duplicate pair would advance
 // an order to itself and strand the rotation the same way a gap did.
-eq(sa([0, 0, 1], 0), "1", "duplicate orders never advance a day to itself");
+eq(sa([0, 0, 1], 0), "1", "[INV-SCHEDULE-WALKS-ORDERS] duplicate orders never advance a day to itself");
 eq(sa([0, 1, 1], 1), "0!", "a duplicated last order is still the last day");
 eq(sa([0, 0], 0), "0!", "an all-duplicate program still closes its rotation");
 
@@ -350,9 +362,9 @@ eq(sa([0, 0], 0), "0!", "an all-duplicate program still closes its rotation");
 // group minimum across every top-weight set invented schemes nobody did — and
 // those strings are banked as the history baseline.
 let ts = C.prTopScheme([{ weightLb: 225, reps: 5 }, { weightLb: 225, reps: 2 }]);
-eq(`${ts.sets}×${ts.reps}`, "1×5", "a top set plus a fatigue set is one five, not two doubles");
+eq(`${ts.sets}×${ts.reps}`, "1×5", "[INV-SCHEME-PERFORMED] a top set plus a fatigue set is one five, not two doubles");
 ts = C.prTopScheme([...Array(4).fill({ weightLb: 225, reps: 5 }), { weightLb: 225, reps: 3 }]);
-eq(`${ts.sets}×${ts.reps}`, "4×5", "four fives and a dropped triple is 4×5, never 5×3");
+eq(`${ts.sets}×${ts.reps}`, "4×5", "[INV-SCHEME-PERFORMED] four fives and a dropped triple is 4×5, never 5×3");
 ts = C.prTopScheme([{ weightLb: 185, reps: 8 }, { weightLb: 185, reps: 6 }]);
 eq(`${ts.sets}×${ts.reps}`, "1×8", "an even split takes the harder group");
 ts = C.prTopScheme([...Array(5).fill({ weightLb: 175, reps: 5 }), { weightLb: 155, reps: 8 }]);
@@ -364,7 +376,7 @@ ev = C.prEvaluate({
   historySets: [], historyVolumes: [], historySchemes: [],
 });
 eq(ev.find((e) => e.kind === "firstScheme")?.label, "First 3×12 push-ups",
-  "bodyweight scheme milestone omits a meaningless 0 load");
+  "[INV-NO-LOAD-WITHOUT-RESISTANCE] bodyweight scheme milestone omits a meaningless 0 load");
 
 ev = C.prEvaluate({
   exercise: "Deadlift", sessionSets: [{ weightLb: 220.462, reps: 1 }],

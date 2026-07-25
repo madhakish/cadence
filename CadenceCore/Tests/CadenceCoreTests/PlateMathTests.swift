@@ -261,6 +261,7 @@ final class PlateMathTests: XCTestCase {
                              "bigger plate draws taller")
     }
 
+    // [INV-LOAD-STORED-NEAT]
     func testStoredPrescriptionKeepsTheProgrammedNumberInsideTheBand() {
         // A 10 kg pair on a 90 lb warmup loads 89.1 — guidance, not a new
         // prescription. The card keeps saying 90.
