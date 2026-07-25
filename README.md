@@ -112,3 +112,27 @@ Notes:
 - HealthKit is optional: the capability is declared, the toggle lives in
   Settings, and the app only ever writes (workouts + bodyweight).
 - All weights are stored in lb (`Double`). kg exists only at entry/display.
+
+## Contributing
+
+Bug reports and feature ideas are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for what makes a useful one, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security issues go through
+[private reporting](https://github.com/madhakish/cadence/security/advisories/new),
+not the public tracker.
+
+Outside pull requests are not accepted; the license grants no right to publish
+derivative works. A good report is worth more here than a patch.
+
+Anyone working inside the repository — including coding agents — should start
+with [AGENTS.md](AGENTS.md), the canonical guide to the migration protocol, the
+native/web parity contract, and the definition of done.
+
+## License
+
+Copyright (c) 2026 madhakish. All rights reserved — see [LICENSE](LICENSE).
+The source is published for reference and review; it is **not** open source.
+You may read it and build it for your own personal use. You may not
+redistribute it or publish a derivative work.
+
+Cadence is a training logbook, not a medical device and not a coach.

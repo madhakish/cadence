@@ -1,0 +1,103 @@
+name: Data problem
+description: Lost history, a stuck session, or a program that advanced wrongly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before anything else: export a backup
+
+        **Settings → Export.** Do it now, before trying fixes, reinstalling, or
+        clearing anything. Cadence has no server — your device and that file are
+        the only copies of your log.
+
+        Never reinstall the app or clear the browser's site data to "reset" a
+        data problem. That is not a fix, and without an export it is
+        unrecoverable.
+
+        ⚠️ **Do not attach the backup to this issue.** It contains your whole
+        training history and possibly bodyweight and gym data. Describe the
+        problem here; if a file turns out to be needed, you will be asked to
+        send it privately.
+
+  - type: checkboxes
+    id: exported
+    attributes:
+      label: Backup
+      options:
+        - label: I have exported a backup and saved it somewhere safe
+          required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where
+      options:
+        - iOS app
+        - Web app (PWA)
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "1.4.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem
+      options:
+        - A session is stuck — I cannot end, delete, or leave it
+        - History is missing or shows the wrong numbers
+        - The program advanced to the wrong day, week, or cycle
+        - Rotations or cycles look wrong
+        - A PR or milestone was recorded that I did not hit
+        - Import or export failed or lost something
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What you are seeing
+      description: |
+        Be specific about dates, lifts, and numbers — those are what make it
+        findable. You can change the weights if you would rather not post them,
+        just say that you did.
+      placeholder: |
+        The session from 19 July shows Back Squat at 175 as a main lift. I did
+        squat that day, but not as a main. I cannot end or delete the session.
+    validations:
+      required: true
+
+  - type: textarea
+    id: should-be
+    attributes:
+      label: What it should say
+    validations:
+      required: true
+
+  - type: textarea
+    id: when
+    attributes:
+      label: When did it start?
+      description: |
+        Anything that changed around then helps a lot — an app update, a program
+        edit, an import, a new gym or plate inventory, switching between the iOS
+        and web app, or a break in training.
+    validations:
+      required: false
+
+  - type: input
+    id: last-good
+    attributes:
+      label: Last version that was correct, if you know
+      placeholder: "1.3.0, or 'it has always been like this'"
+    validations:
+      required: false

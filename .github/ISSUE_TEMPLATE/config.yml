@@ -1,0 +1,9 @@
+# Left enabled so the maintainer keeps the one-tap path from a phone.
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/madhakish/cadence/security/advisories/new
+    about: Report privately, not as a public issue. Crafted backup files, PWA XSS, and CI/release supply chain are all in scope.
+  - name: How do I use this?
+    url: https://github.com/madhakish/cadence/tree/main/docs
+    about: Tutorials, how-to guides, and reference — including the plate math, program engine, and backup schema.
