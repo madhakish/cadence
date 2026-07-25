@@ -51,6 +51,31 @@ final class WorkoutClock {
         }
     }
 
+    /// Re-entering a session that is ALREADY being timed: refresh the Live
+    /// Activity context, or re-adopt a clock still running from before a cold
+    /// start. Never starts a fresh stopwatch.
+    ///
+    /// Opening a session is not the same act as starting one — a lifter
+    /// reviewing what is coming, or reopening a logger to read the plan, has
+    /// not begun training, and a clock that started itself on appear reported
+    /// elapsed time nobody trained and could not be undone without discarding
+    /// the session.
+    @discardableResult
+    func resumeIfTracking(for session: WorkoutSession, currentLift: String, defaultRestSeconds: Int) -> Bool {
+        if sessionID == session.id, startDate != nil {
+            WorkoutActivityController.updateContextDetached(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
+            return true
+        }
+        // Cold start with this session's activity still live: adopt it rather
+        // than stranding a workout that is genuinely still running.
+        if sessionID == nil, let snap = WorkoutActivityController.snapshot, !snap.isAdHoc,
+           snap.state.sessionID == session.id {
+            begin(for: session, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
+            return true
+        }
+        return false
+    }
+
     /// Freeze the elapsed clock (rest timers are unaffected).
     func pause() {
         guard let start = startDate, pausedAt == nil else { return }

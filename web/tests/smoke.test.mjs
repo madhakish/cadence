@@ -337,7 +337,20 @@ const withBarOverride = await db.Sessions.get(id);
 ok(withBarOverride.exercises[0].barId === "35-lb", "per-exercise bar override persists on the session");
 ok(withBarOverride.exercises[0].sets.filter((s) => s.isWarmup).every((set) => set.weightLb !== 35),
   "deadlift bar override still omits the empty bar");
-ok(document.querySelector("#session-bar .clock").textContent.includes("session"), "session clock shows in the sticky bottom bar");
+// Opening the logger is not the same act as starting the workout: a clock
+// that starts itself on open reports elapsed time nobody trained, and until
+// there was a way to reset it that time could not be taken back.
+const clockEl = document.querySelector("#session-bar .clock");
+const startBtn = document.querySelector("#session-bar button[aria-label^='Start the workout clock']");
+ok(clockEl.textContent.includes("not started"), "opening a session does not start its clock");
+ok(startBtn && startBtn.style.display !== "none", "an explicit Start workout control is offered");
+startBtn.click(); await tick();
+ok(clockEl.textContent.includes("session"), "starting explicitly runs the session clock");
+const resetBtn = document.querySelector("#session-bar button[aria-label^='Reset this session']");
+ok(resetBtn && resetBtn.style.display !== "none", "a reset control appears once started");
+resetBtn.click(); await tick();
+ok(clockEl.textContent.includes("not started"), "reset returns an accidentally started session to not started");
+startBtn.click(); await tick();
 ok([...document.querySelectorAll("#session-bar button")].some((b) => b.textContent.startsWith("Rest ")), "bottom-bar Rest button shows the current lift's rest");
 const bank = overlayButtons().find((b) => b.textContent === "Bank it.");
 ok(!!bank, "Bank it. button present");

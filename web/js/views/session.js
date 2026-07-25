@@ -259,7 +259,12 @@ export async function openSession(id) {
     return C.restDefaultSeconds(ex.category, ex.movementGroup, role, restCfg, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : 0);
   }
 
-  const sessionStart = Date.now();            // session stopwatch origin (ephemeral)
+  // Session stopwatch origin (ephemeral). NULL until the workout is started:
+  // opening the logger to read the plan is not the same act as training, and a
+  // clock that starts itself on open reports elapsed time nobody trained.
+  let sessionStart = null;
+  function startWorkout() { sessionStart = Date.now(); paintBar(); }
+  function resetToNotStarted() { sessionStart = null; rest.stop(); paintBar(); }
   let currentSE = null;                       // the exercise you're actively working
   // Exercise AND role must come from the same session entry — pairing
   // exercises[0] with currentSE's (null) role resolved the first lift's rest
@@ -275,7 +280,10 @@ export async function openSession(id) {
 
   function paintBar() {
     if (!barEls) return;
-    barEls.clock.textContent = `${ui.mmss((Date.now() - sessionStart) / 1000)} session`;
+    barEls.clock.textContent = sessionStart == null
+      ? "not started" : `${ui.mmss((Date.now() - sessionStart) / 1000)} session`;
+    barEls.startBtn.style.display = sessionStart == null ? "" : "none";
+    barEls.resetBtn.style.display = sessionStart == null ? "none" : "";
     if (rest.running) {
       barEls.restTime.textContent = ui.mmss(rest.remaining);
       barEls.restTime.style.display = "";
@@ -302,10 +310,16 @@ export async function openSession(id) {
     const subBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "−1:00", onClick: () => { rest.add(-60); paintBar(); } });
     const addBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "+1:00", onClick: () => { rest.add(60); paintBar(); } });
     const skipBtn = ui.h("button", { class: "btn sm ghost", style: { display: "none" }, text: "Skip", onClick: () => { rest.stop(); paintBar(); } });
+    const startBtn = ui.h("button", { class: "btn sm primary", text: "Start workout",
+      "aria-label": "Start the workout clock for this session", onClick: () => startWorkout() });
+    // The undo for starting by accident: back to not started, plan and any
+    // logged work intact.
+    const resetBtn = ui.h("button", { class: "btn sm ghost", style: { display: "none" }, text: "Reset",
+      "aria-label": "Reset this session to not started", onClick: () => resetToNotStarted() });
     const prog = ui.h("i");
-    barEls = { clock, restTime, restBtn, subBtn, addBtn, skipBtn, prog };
+    barEls = { clock, restTime, restBtn, subBtn, addBtn, skipBtn, prog, startBtn, resetBtn };
     return ui.h("div", { id: "session-bar" },
-      ui.h("div", { class: "session-bar-row" }, clock, ui.h("div", { class: "btn-row", style: { alignItems: "center" } }, restTime, restBtn, subBtn, addBtn, skipBtn)),
+      ui.h("div", { class: "session-bar-row" }, clock, ui.h("div", { class: "btn-row", style: { alignItems: "center" } }, startBtn, resetBtn, restTime, restBtn, subBtn, addBtn, skipBtn)),
       ui.h("div", { class: "progress" }, prog));
   }
 

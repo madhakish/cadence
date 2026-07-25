@@ -45,7 +45,20 @@ struct ActiveSessionView: View {
     }
     /// The stopwatch origin lives in WorkoutClock (root-scoped), so it survives
     /// leaving this screen — and, via the Live Activity, app relaunch.
-    private var sessionStart: Date { workoutClock.startDate ?? .now }
+    /// The real start, or nil when this session was opened but never started.
+    private var sessionStart: Date? { isTimingThisSession ? workoutClock.startDate : nil }
+    /// Whether the root stopwatch is timing THIS session. Another workout's
+    /// clock must never be reported — or stopped — from here.
+    private var isTimingThisSession: Bool { workoutClock.isTracking(sessionID: session.id) }
+
+    /// Begin timing. The one place a workout starts, so opening the logger to
+    /// read the plan never logs elapsed time nobody trained.
+    private func startWorkout() {
+        workoutClock.begin(for: session,
+                           currentLift: currentOrFirst?.exercise?.name ?? "",
+                           defaultRestSeconds: currentRestSeconds)
+    }
+
     /// Names the cost of discarding. A session started by mistake has nothing
     /// logged and can go without ceremony; one with real work says so.
     private var discardPrompt: String {
@@ -93,10 +106,11 @@ struct ActiveSessionView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SessionBottomBar(
-                sessionStart: sessionStart,
+                sessionStart: isTimingThisSession ? workoutClock.startDate : nil,
                 pausedAt: workoutClock.pausedAt,
                 restLabel: currentOrFirst?.exercise?.name ?? "",
-                restSeconds: currentRestSeconds
+                restSeconds: currentRestSeconds,
+                onStart: startWorkout
             )
         }
         // The logger has its own persistent bottom bar. Keyboard safe-area
@@ -105,10 +119,12 @@ struct ActiveSessionView: View {
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .onChange(of: settingsList.first?.haptics, initial: true) { _, on in restTimer.hapticsEnabled = on ?? true }
         .onAppear {
-            // Start (or continue) the workout stopwatch + Live Activity.
-            workoutClock.begin(for: session,
-                               currentLift: currentOrFirst?.exercise?.name ?? "",
-                               defaultRestSeconds: currentRestSeconds)
+            // Opening the logger is NOT starting the workout. Only continue a
+            // clock already running for this session (including one adopted
+            // after a cold start); starting is an explicit act.
+            workoutClock.resumeIfTracking(for: session,
+                                          currentLift: currentOrFirst?.exercise?.name ?? "",
+                                          defaultRestSeconds: currentRestSeconds)
         }
         // Keep the activity's elapsed face and its quick-rest default honest.
         // Watch the derived VALUES, not the entry's identity: swapping the
@@ -144,17 +160,24 @@ struct ActiveSessionView: View {
             // previously the only way to stop the clock was Bank it.
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    if workoutClock.isPaused {
-                        Button { workoutClock.resume() } label: { Label("Resume clock", systemImage: "play") }
+                    if isTimingThisSession {
+                        if workoutClock.isPaused {
+                            Button { workoutClock.resume() } label: { Label("Resume clock", systemImage: "play") }
+                        } else {
+                            Button { workoutClock.pause() } label: { Label("Pause clock", systemImage: "pause") }
+                        }
+                        Button { workoutClock.reset() } label: { Label("Restart clock at 0:00", systemImage: "arrow.counterclockwise") }
+                        Divider()
+                        // The undo for starting by accident: back to not
+                        // started, with the plan and any logged work intact.
+                        Button(role: .destructive) {
+                            restTimer.stop()
+                            workoutClock.end()
+                        } label: { Label("Reset to not started", systemImage: "stop.circle") }
                     } else {
-                        Button { workoutClock.pause() } label: { Label("Pause clock", systemImage: "pause") }
+                        Button { startWorkout() } label: { Label("Start workout", systemImage: "play.fill") }
                     }
-                    Button { workoutClock.reset() } label: { Label("Reset clock", systemImage: "arrow.counterclockwise") }
                     Divider()
-                    Button(role: .destructive) {
-                        restTimer.stop()
-                        workoutClock.end()
-                    } label: { Label("Stop workout clock", systemImage: "stop.circle") }
                     Divider()
                     // The way OUT of a session you never want to keep. Without
                     // this the only exits were Later (leaves it open), Stop
@@ -166,7 +189,8 @@ struct ActiveSessionView: View {
                         confirmDiscard = true
                     } label: { Label("Discard session", systemImage: "trash") }
                 } label: {
-                    Image(systemName: workoutClock.isPaused ? "pause.circle" : "stopwatch")
+                    Image(systemName: !isTimingThisSession ? "play.circle"
+                          : (workoutClock.isPaused ? "pause.circle" : "stopwatch"))
                 }
                 .accessibilityLabel("Workout and session controls")
             }
@@ -1424,10 +1448,13 @@ private struct SetDetailSheet: View {
 /// Rest button for the lift you're working.
 private struct SessionBottomBar: View {
     @Environment(RestTimer.self) private var restTimer
-    let sessionStart: Date
+    /// nil until the workout is explicitly started — opening the logger to
+    /// read the plan must not display a running clock.
+    let sessionStart: Date?
     let pausedAt: Date?
     let restLabel: String
     let restSeconds: Int
+    let onStart: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1444,13 +1471,24 @@ private struct SessionBottomBar: View {
             HStack(spacing: 10) {
                 // Session stopwatch — always visible, with an icon so it reads
                 // as a running clock.
-                TimelineView(.periodic(from: sessionStart, by: 1)) { timeline in
-                    Label(elapsedLabel(at: pausedAt ?? timeline.date),
-                          systemImage: pausedAt == nil ? "stopwatch" : "pause.fill")
-                        .font(.callout.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                if let sessionStart {
+                    TimelineView(.periodic(from: sessionStart, by: 1)) { timeline in
+                        Label(elapsedLabel(at: pausedAt ?? timeline.date),
+                              systemImage: pausedAt == nil ? "stopwatch" : "pause.fill")
+                            .font(.callout.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                } else {
+                    Button(action: onStart) {
+                        Label("Start workout", systemImage: "play.fill")
+                            .font(.callout.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityHint("Begins the workout clock for this session")
                 }
 
                 Spacer(minLength: 4)
@@ -1503,7 +1541,7 @@ private struct SessionBottomBar: View {
     }
 
     private func elapsedLabel(at date: Date) -> String {
-        mmss(max(0, Int(date.timeIntervalSince(sessionStart))))
+        mmss(max(0, Int(date.timeIntervalSince(sessionStart ?? date))))
     }
 }
 
