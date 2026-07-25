@@ -138,6 +138,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const isPortableUUID = (value) => typeof value === "string" && UUID_RE.test(value);
 const normalizeProgram = (p) => {
   const uuid = isPortableUUID(p.uuid) ? p.uuid : (isPortableUUID(p.id) ? p.id : stableID(`program:${p.name}`));
+  // Day orders are preserved VERBATIM. Renumbering them to a contiguous
+  // 0..n-1 would be tidier, but a day's order is the identity that every
+  // session's programTag.dayIndex refers to, and this runs on every save with
+  // no access to those sessions — renumbering here would leave already-banked
+  // sessions unable to resume and would misattribute their work to the wrong
+  // day in history and coaching. Gaps are handled where they matter instead,
+  // by core scheduleAdvance walking real order values.
   return {
     ...p,
     uuid,
@@ -940,7 +947,15 @@ export function validateBackup(bundle) {
         for (const key of ["weightLb", "incrementLb"]) numberValue(accessory[key], `${accessoryPath}.${key}`, { min: 0 });
       });
     });
-    if (days?.length && program.nextDayIndex != null && program.nextDayIndex >= days.length) invalid(`${path}.nextDayIndex`, "outside the program's day list");
+    // nextDayIndex names a day's ORDER, not its position, and orders are
+    // validated as unique but never as contiguous. Range-checking it against
+    // the day COUNT rejected legitimate bundles — orders [0, 1, 5] pointing at
+    // day 5 is the exact sparse case the schedule now handles. Check
+    // membership instead.
+    if (days?.length && program.nextDayIndex != null
+      && !days.some((day) => day.order === program.nextDayIndex)) {
+      invalid(`${path}.nextDayIndex`, "outside the program's day list");
+    }
     if (days) unique(days, (day) => day.order, `${path}.days`);
     const slots = (days || []).flatMap((day) => [...(day.lifts || []), ...(day.accessories || [])]).filter((slot) => slot.id != null);
     unique(slots, (slot) => slot.id, `${path}.slotIds`);

@@ -531,9 +531,13 @@ enum SessionCompletion {
             }
         }
 
-        let lastDay = dayIndex == program.days.count - 1
-        program.nextDayIndex = (dayIndex + 1) % Swift.max(1, program.days.count)
-        guard lastDay else { return }
+        // Walk day ORDER values, not array positions — `orderedDays` also
+        // drops the relationship aliases that a raw `days.count` would inflate.
+        let advance = ProgramProgression.scheduleAdvance(
+            dayOrders: program.orderedDays.map(\.order), bankedDayOrder: dayIndex
+        )
+        program.nextDayIndex = advance.nextDayOrder
+        guard advance.isLastDay else { return }
 
         if program.currentWeek < 4 {
             program.currentWeek += 1

@@ -313,4 +313,59 @@ final class ProgramProgressionTests: XCTestCase {
                                                            style: .wave, movementGroup: "squat", roundingLb: 5)
         XCTAssertGreaterThanOrEqual(result.state.baseWeightLb, 300)
     }
+    // MARK: - Schedule advance
+
+    func testScheduleAdvanceWalksContiguousDayOrders() {
+        let orders = [0, 1, 2, 3]
+        XCTAssertEqual(ProgramProgression.scheduleAdvance(dayOrders: orders, bankedDayOrder: 0).nextDayOrder, 1)
+        XCTAssertFalse(ProgramProgression.scheduleAdvance(dayOrders: orders, bankedDayOrder: 0).isLastDay)
+        XCTAssertEqual(ProgramProgression.scheduleAdvance(dayOrders: orders, bankedDayOrder: 3).nextDayOrder, 0)
+        XCTAssertTrue(ProgramProgression.scheduleAdvance(dayOrders: orders, bankedDayOrder: 3).isLastDay)
+    }
+
+    func testScheduleAdvanceReachesEveryDayDespiteAGapInOrders() {
+        // Import validates day orders as unique but never as contiguous, so a
+        // bundle can carry [0, 1, 5]. Index-space arithmetic then never
+        // recognized the last day: the week stopped advancing, the cycle never
+        // rolled over, and the day past the gap became unreachable.
+        let sparse = [0, 1, 5]
+        XCTAssertEqual(ProgramProgression.scheduleAdvance(dayOrders: sparse, bankedDayOrder: 1).nextDayOrder, 5,
+                       "the day past the gap must be reachable")
+        XCTAssertFalse(ProgramProgression.scheduleAdvance(dayOrders: sparse, bankedDayOrder: 1).isLastDay)
+        XCTAssertTrue(ProgramProgression.scheduleAdvance(dayOrders: sparse, bankedDayOrder: 5).isLastDay,
+                      "the highest order is the last day whatever its value")
+        XCTAssertEqual(ProgramProgression.scheduleAdvance(dayOrders: sparse, bankedDayOrder: 5).nextDayOrder, 0)
+    }
+
+    func testScheduleAdvanceHandlesUnsortedAndUnknownAndSingleDayPrograms() {
+        // Stored order is not guaranteed sorted.
+        XCTAssertEqual(ProgramProgression.scheduleAdvance(dayOrders: [2, 0, 1], bankedDayOrder: 0).nextDayOrder, 1)
+        // A one-day program banks its only day as the last day, every time.
+        let single = ProgramProgression.scheduleAdvance(dayOrders: [0], bankedDayOrder: 0)
+        XCTAssertEqual(single.nextDayOrder, 0)
+        XCTAssertTrue(single.isLastDay)
+        // A stale tag or deleted day still closes the rotation rather than
+        // stranding it, and restarts at the first day.
+        let unknown = ProgramProgression.scheduleAdvance(dayOrders: [0, 1], bankedDayOrder: 9)
+        XCTAssertEqual(unknown.nextDayOrder, 0)
+        XCTAssertTrue(unknown.isLastDay)
+        // An empty program must not crash.
+        XCTAssertEqual(ProgramProgression.scheduleAdvance(dayOrders: [], bankedDayOrder: 0).nextDayOrder, 0)
+    }
+
+    func testScheduleAdvanceCollapsesDuplicateDayOrders() {
+        // Two DISTINCT days can share one order (a damaged store, or an add
+        // that collided on days.count). Stepping inside the duplicate pair
+        // would advance an order to itself and strand the rotation the same
+        // way a gap did.
+        let dup = ProgramProgression.scheduleAdvance(dayOrders: [0, 0, 1], bankedDayOrder: 0)
+        XCTAssertEqual(dup.nextDayOrder, 1, "a duplicated order must not advance to itself")
+        XCTAssertFalse(dup.isLastDay)
+        let dupLast = ProgramProgression.scheduleAdvance(dayOrders: [0, 1, 1], bankedDayOrder: 1)
+        XCTAssertTrue(dupLast.isLastDay, "a duplicated last order is still the last day")
+        XCTAssertEqual(dupLast.nextDayOrder, 0)
+        let allDup = ProgramProgression.scheduleAdvance(dayOrders: [0, 0], bankedDayOrder: 0)
+        XCTAssertEqual(allDup.nextDayOrder, 0)
+        XCTAssertTrue(allDup.isLastDay, "an all-duplicate program still closes its rotation")
+    }
 }

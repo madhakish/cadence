@@ -393,7 +393,13 @@ enum ImportService {
                 (day.lifts ?? []).compactMap(\.id) + (day.accessories ?? []).compactMap(\.id)
             }
             try unique(slotIDs, "\(path).slotIds")
-            if let next = program.nextDayIndex, let count = program.days?.count, count > 0, next >= count {
+            // nextDayIndex names a day's ORDER, not its position, and orders
+            // are validated as unique but never as contiguous. Range-checking
+            // it against the day COUNT rejected legitimate bundles — orders
+            // [0, 1, 5] pointing at day 5 is the exact sparse case the
+            // schedule now handles. Check membership instead.
+            let dayOrders = Set((program.days ?? []).compactMap(\.order))
+            if let next = program.nextDayIndex, !dayOrders.isEmpty, !dayOrders.contains(next) {
                 throw ImportError.invalidData("\(path).nextDayIndex: outside the program's day list")
             }
         }
@@ -777,6 +783,14 @@ enum ImportService {
                 day.accessories.append(acc)
             }
         }
+        // Day orders are imported VERBATIM. Renumbering them to 0..n-1 would
+        // be tidier, but a day's order is the identity that every session's
+        // `programTag.dayIndex` refers to — renumbering the days without
+        // rewriting the tags of sessions in the same bundle would leave those
+        // sessions unable to resume or bank, and would misattribute their
+        // banked work to the wrong day in history and coaching. Gaps are
+        // handled where they matter instead, by ProgramProgression
+        // .scheduleAdvance walking real order values.
         return prog
     }
 

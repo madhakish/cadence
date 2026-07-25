@@ -493,6 +493,24 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await rejectBeforeMutation((b) => { b.gyms.push(structuredClone(b.gyms[0])); }, "duplicate gym identifier");
   await rejectBeforeMutation((b) => { b.programs[0].nextDayIndex = b.programs[0].days.length; }, "out-of-range program day");
   await rejectBeforeMutation((b) => { b.sessions = { absolutely: "not an array" }; }, "wrong section shape");
+
+  // nextDayIndex names a day's ORDER, not its position. Range-checking it
+  // against the day COUNT rejected legitimate bundles: orders [0, 1, 5]
+  // pointing at day 5 is exactly the sparse shape the schedule now handles,
+  // and rejecting it left the user with no way to restore the backup at all.
+  {
+    const sparse = structuredClone(parsed);
+    const days = sparse.programs[0].days;
+    const highest = Math.max(...days.map((d) => d.order)) + 4;
+    days[days.length - 1].order = highest;
+    sparse.programs[0].nextDayIndex = highest;
+    let message = "";
+    try { await db.importBundle(sparse); } catch (error) { message = error.message; }
+    ok(!message, `a sparse day-order backup restores instead of being rejected (${message})`);
+    const restored = (await db.Programs.all()).find((p) => p.name === sparse.programs[0].name);
+    ok(restored.days.some((d) => d.order === highest), "the sparse day survives the round trip");
+    ok(restored.nextDayIndex === highest, "nextDayIndex still names the same day after import");
+  }
 }
 
 // ---- rotating local recovery checkpoints ----
@@ -788,6 +806,44 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(cold.sets.filter((set) => set.isWarmup).length > 2,
     "a complementary lift with no earlier work keeps its full warmup ramp");
   await db.Sessions.del(sId);
+  await db.Programs.del(prog.id);
+}
+
+// ---- a gap in day orders must not strand the schedule ----
+// Day `order` addresses the rotation, but validation only requires uniqueness,
+// so an imported bundle can carry [0, 1, 5]. Index-space arithmetic then never
+// recognized the last day: the week stopped advancing, the cycle never rolled
+// over, and the day past the gap became unreachable.
+{
+  const name = "Fixture Sparse Day Orders";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [
+      { name: "A", order: 0, lifts: [cyc("Back Squat", "main", 175, 204)], accessories: [] },
+      { name: "B", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "C", order: 5, lifts: [cyc("Deadlift", "main", 205, 275)], accessories: [] },
+    ],
+  });
+  let prog = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  // Orders are preserved, NOT renumbered: a day's order is the identity every
+  // banked session's programTag.dayIndex refers to, so quietly renumbering
+  // would strand those sessions. Reachability is solved in scheduleAdvance.
+  ok(prog.days.map((d) => d.order).sort((a, b) => a - b).join(",") === "0,1,5",
+    "sparse day orders survive a save — tags stay valid");
+
+  const banked = [];
+  for (let i = 0; i < 3; i += 1) {
+    prog = (await db.Programs.all()).find((candidate) => candidate.name === name);
+    const day = prog.days.find((d) => d.order === prog.nextDayIndex);
+    banked.push(day.name);
+    const id = await session.createSessionFromProgramDay(prog, day);
+    await completeAll(await db.Sessions.get(id));
+  }
+  ok(banked.join(",") === "A,B,C", "every day is reachable, including the one past the gap");
+  prog = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(prog.currentWeek === 2, `banking the last day advances the rotation (wk=${prog.currentWeek})`);
+  ok(prog.nextDayIndex === 0, `the schedule wraps back to the first day (next=${prog.nextDayIndex})`);
   await db.Programs.del(prog.id);
 }
 

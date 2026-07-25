@@ -1302,7 +1302,11 @@ private struct SetDetailSheet: View {
                 stoppedEarly = set.flags.contains(.stoppedEarly)
                 bodySite = set.bodyFlagSite
                 bodyNote = set.bodyFlagNote ?? ""
-                applyRepsToRemaining = !set.isWarmup && set.status == .planned
+                // Both propagations start OFF. Opening a set to add a body
+                // flag or fix a typo must not silently rewrite every later
+                // set — per-set rep targets are deliberate work, and there is
+                // no undo once they are gone.
+                applyRepsToRemaining = false
                 applyWeightToRemaining = false
             }
             .alert("Confirm the loaded weight", isPresented: $confirmMisload) {

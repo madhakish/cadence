@@ -218,6 +218,36 @@ public enum ProgramProgression {
             && !sessionPlanNames.isEmpty && sessionPlanNames == dayPlanNames
     }
 
+    /// Where the schedule goes after banking the day with `bankedDayOrder`.
+    ///
+    /// Day `order` values ADDRESS the rotation — `nextDayIndex` holds an order,
+    /// not a position — but they are not guaranteed to be the contiguous
+    /// 0..n-1 that index-space arithmetic (`(index + 1) % count`) assumes.
+    /// Import validates day orders as unique and never as contiguous, and the
+    /// native `days` relationship can still carry aliases in shipped stores. A
+    /// gap made the last day unrecognizable: the week stopped advancing, the
+    /// cycle never rolled over, every stashed Peak grade sat unapplied, and any
+    /// day past the gap became unreachable. Walking the sorted orders is
+    /// correct for both the tidy and the damaged case.
+    ///
+    /// Duplicate orders are collapsed first: two DISTINCT days can share one
+    /// order (a damaged store, or an add that collided on `days.count`), and
+    /// stepping within a duplicate pair would advance an order to itself and
+    /// strand the schedule exactly like the gap this function exists to fix.
+    ///
+    /// An unknown `bankedDayOrder` (a stale tag, a deleted day) reports the
+    /// last day so a rotation can still close, and points at the first day.
+    /// Mirrored 1:1 in web/js/core.js `scheduleAdvance`.
+    public static func scheduleAdvance(
+        dayOrders: [Int], bankedDayOrder: Int
+    ) -> (nextDayOrder: Int, isLastDay: Bool) {
+        let sorted = Array(Set(dayOrders)).sorted()
+        guard let position = sorted.firstIndex(of: bankedDayOrder) else {
+            return (sorted.first ?? 0, true)
+        }
+        return (sorted[(position + 1) % sorted.count], position == sorted.count - 1)
+    }
+
     /// Increment = fraction of base × headroom-to-ceiling, floored at plate
     /// granularity, 0 at/over the focus-dependent training-max ceiling.
     public static func taperedIncrement(

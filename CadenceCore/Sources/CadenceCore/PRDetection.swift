@@ -47,12 +47,25 @@ public enum PRDetection {
         }.reduce(0, +)
     }
 
-    /// "5×3" scheme string for the top-weight group of a session.
+    /// The scheme the athlete ACTUALLY performed at the session's top weight:
+    /// the largest group of top-weight sets sharing one rep count, breaking a
+    /// tie toward the harder (higher-rep) group.
+    ///
+    /// Counting every top-weight set while reporting the group's MINIMUM reps
+    /// describes work nobody did — 225×5 followed by a fatigue set of 225×2
+    /// reads as "2×2", and 4×5 plus a dropped 3 reads as "5×3" (five triples
+    /// for four fives and a three). Those strings are also banked as history
+    /// schemes, so a fabricated scheme silently becomes the baseline every
+    /// later session is measured against. Mirrored 1:1 in web/js/core.js.
     public static func topScheme(_ sets: [SetSample]) -> (weightLb: Double, sets: Int, reps: Int)? {
         guard let top = sets.map(\.weightLb).max() else { return nil }
         let topSets = sets.filter { abs($0.weightLb - top) < 1e-9 }
-        guard let reps = topSets.map(\.reps).min(), !topSets.isEmpty else { return nil }
-        return (top, topSets.count, reps)
+        guard !topSets.isEmpty else { return nil }
+        let byReps = Dictionary(grouping: topSets, by: \.reps)
+        guard let best = byReps.max(by: { lhs, rhs in
+            lhs.value.count != rhs.value.count ? lhs.value.count < rhs.value.count : lhs.key < rhs.key
+        }) else { return nil }
+        return (top, best.value.count, best.key)
     }
 
     /// Evaluate one exercise's session against its history.
@@ -92,11 +105,13 @@ public enum PRDetection {
 
             let schemeKey = "\(top.sets)×\(top.reps)"
             if !historySchemes.contains(schemeKey) {
-                events.append(PREvent(
-                    kind: .firstScheme,
-                    exercise: exercise,
-                    label: "First \(schemeKey) — \(weightLabel(top.weightLb)) \(exercise.lowercased())"
-                ))
+                // Bodyweight and assisted work carry no meaningful load, so
+                // naming one reads as "First 3×10 — 0 lb push-ups". Reps are
+                // the whole story there; only external resistance is quoted.
+                let label = basis.supportsLoadPR
+                    ? "First \(schemeKey) — \(weightLabel(top.weightLb)) \(exercise.lowercased())"
+                    : "First \(schemeKey) \(exercise.lowercased())"
+                events.append(PREvent(kind: .firstScheme, exercise: exercise, label: label))
             }
         }
 
