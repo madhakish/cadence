@@ -118,6 +118,15 @@ const walkJs = (dir) => readdirSync(dir).flatMap((name) => {
     "app/sw.js keeps the build token the Pages deploy stamps, so installs actually update");
   ok(appWorker.includes('"./"') && appWorker.includes('"index.html"'),
     "app/sw.js precaches its own entry point");
+
+  // [INV-WEB-CACHE-OWNERSHIP] Cache Storage is per-origin, so an unfiltered
+  // sweep reaches other projects published under the same github.io account.
+  ok(/cadence-app-/.test(appWorker),
+    "[INV-WEB-CACHE-OWNERSHIP] the app worker names its caches with a prefix it owns");
+  ok(!/keys\.filter\(\s*\(k\w*\)\s*=>\s*k\w*\s*!==\s*CACHE\s*\)/.test(appWorker),
+    "[INV-WEB-CACHE-OWNERSHIP] the app worker does not delete every cache that is merely not its own");
+  ok(/ownedByThisWorker/.test(appWorker),
+    "[INV-WEB-CACHE-OWNERSHIP] the app worker's eviction is guarded by a prefix check");
 }
 
 // ---- the app's old scope stands down instead of serving a stale shell ----

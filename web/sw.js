@@ -18,13 +18,28 @@
 // Do not turn this back into a caching worker, and do not delete it while any
 // install might still be pointing at it: deleting it leaves the old worker in
 // place forever, because there is nothing left to update it with.
+// Cache Storage is keyed by ORIGIN, not by scope. `caches.keys()` therefore
+// returns every cache on github.io/<account> — including the relocated app's and
+// any other project published under the same account. So this worker deletes
+// only the legacy root shells it is retiring: `cadence-<build>`, explicitly
+// excluding the `cadence-app-` prefix that web/app/sw.js owns.
+//
+// The exclusion is not theoretical. `/cadence/app/` sits inside this worker's
+// `/cadence/` scope, so the first visit to the relocated app is itself a
+// navigation that can trigger this worker's update check — activating it after
+// the app worker has already populated its cache. Deleting indiscriminately
+// there would wipe the new offline shell on the way out.
+const LEGACY_PREFIX = "cadence-";
+const APP_PREFIX = "cadence-app-";
+const isRetiredShell = (key) => key.startsWith(LEGACY_PREFIX) && !key.startsWith(APP_PREFIX);
+
 self.addEventListener("install", () => self.skipWaiting());
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    // Drop everything the old app shell cached, then stop controlling clients.
+    // Drop the old app shell's own caches, then stop controlling clients.
     const keys = await caches.keys();
-    await Promise.all(keys.map((key) => caches.delete(key)));
+    await Promise.all(keys.filter(isRetiredShell).map((key) => caches.delete(key)));
     await self.registration.unregister();
 
     // Send any window still sitting on the old scope to the app's new home.

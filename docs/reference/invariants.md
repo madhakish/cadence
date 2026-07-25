@@ -237,6 +237,24 @@ module under `app/js/`. The worker at the app's previous root scope keeps
 existing solely to retire itself: it unregisters, deletes the old caches, serves
 nothing, and sends any window still on the old entry point to `app/`.
 
+### INV-WEB-CACHE-OWNERSHIP
+*platforms: web*
+
+Every service worker deletes only the caches it owns, matched by name prefix.
+`web/app/sw.js` owns `cadence-app-`; `web/sw.js` retires the legacy
+`cadence-<build>` shells and explicitly excludes the app's prefix. Neither may
+sweep `caches.keys()` unfiltered.
+
+> Cache Storage is keyed by ORIGIN, not by scope, so `caches.keys()` returns
+> every cache on the whole github.io account — including other projects
+> published under it. The self-inflicted case is worse: `/cadence/app/` sits
+> inside the retirement worker's `/cadence/` scope, so the first visit to the
+> relocated app is itself a navigation that can activate the retiree *after* the
+> app worker has populated its precache. An unfiltered delete wipes the new
+> offline shell, and the installed worker will not re-run `install` to rebuild
+> it — leaving the app with no guaranteed offline shell until the assets happen
+> to be re-fetched online.
+
 > The app was served from the Pages root before the product site existed. A
 > home-screen install keeps that registration and its cache-first handler
 > forever, so deleting the old worker would strand those installs on a stale

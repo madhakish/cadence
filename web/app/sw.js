@@ -6,7 +6,14 @@
 // release, which is what causes the browser to install the new worker, refresh
 // the cached assets, and drop the old cache — i.e. how updates actually reach
 // an installed phone.
-const CACHE = "cadence-__BUILD__";
+// Cache Storage is keyed by ORIGIN, not by scope: every project published under
+// this github.io account shares one namespace. So this worker owns exactly the
+// `cadence-app-` prefix and never deletes a key outside it. The legacy
+// `cadence-<build>` shells from when the app was served at the Pages root belong
+// to web/sw.js, which retires them.
+const CACHE_PREFIX = "cadence-app-";
+const CACHE = `${CACHE_PREFIX}__BUILD__`;
+const ownedByThisWorker = (key) => key.startsWith(CACHE_PREFIX);
 const ASSETS = [
   "./", "index.html", "styles.css", "manifest.webmanifest",
   "js/app.js", "js/core.js", "js/db.js", "js/seed.js", "js/templates.js", "js/anatomy.js", "js/ui.js", "js/charts.js", "js/constants.js", "js/barbell.js", "js/coaching-adapter.js",
@@ -24,7 +31,10 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    caches.keys()
+      .then((keys) => Promise.all(keys
+        .filter((k) => ownedByThisWorker(k) && k !== CACHE)
+        .map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
