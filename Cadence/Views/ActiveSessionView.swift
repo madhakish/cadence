@@ -6,7 +6,7 @@ import CadenceCore
 /// Autoregulation is one tap. Rest is manual by default — armed from the Rest
 /// buttons or the sticky bottom bar (session clock + countdown); it only
 /// auto-arms after a set when the auto-start setting is on. Mirrors the web
-/// logger (web/js/views/session.js).
+/// logger (web/app/js/views/session.js).
 struct ActiveSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss

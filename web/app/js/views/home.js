@@ -82,7 +82,10 @@ export async function render(host) {
     root.append(openCard);
   }
 
-  if (program?.coachEnabled !== false) {
+  // `program &&` first: with no active program there is nothing to coach, and
+  // the block below dereferences it unconditionally. An optional chain here
+  // reads as a presence check but isn't one — `undefined !== false` is true.
+  if (program && program.coachEnabled !== false) {
     const report = coachingReport(program, completed, exMap, checkins);
     const handled = new Set(decisions.filter((decision) => (decision.programId || decision.programID) === (program.uuid || program.id))
       .map((decision) => decision.recommendationId || decision.recommendationID));

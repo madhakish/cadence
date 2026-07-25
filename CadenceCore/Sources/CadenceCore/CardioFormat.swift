@@ -2,7 +2,7 @@ import Foundation
 
 /// Formatting for conditioning ("cardio") sets — distance, time, derived
 /// speed, incline — shared by the logger and history rows so every view
-/// renders the same label. Pure; mirrored 1:1 in web/js/core.js
+/// renders the same label. Pure; mirrored 1:1 in web/app/js/core.js
 /// (`cardioSpeedMph`, `cardioDurationLabel`, `cardioSetLabel`).
 public enum CardioFormat {
 

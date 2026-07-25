@@ -3,7 +3,7 @@ import Foundation
 /// Which lifts a session exercise may be swapped for, and how a swap ends
 /// (issue 20). String-typed so the core stays app-model-agnostic — both apps
 /// pass their exercise record's raw fields. Mirrored as `swapCompatible` /
-/// `UNLOADABLE_TYPES` in web/js/core.js.
+/// `UNLOADABLE_TYPES` in web/app/js/core.js.
 ///
 /// Swap semantics (the UI lives in the native app; the web PWA documents
 /// native-only scope for the gesture but honors the resulting state):

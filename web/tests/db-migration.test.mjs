@@ -44,7 +44,7 @@ await new Promise((resolve, reject) => {
 });
 old.close();
 
-const db = await import("../js/db.js");
+const db = await import("../app/js/db.js");
 const [exercise, program, session] = await Promise.all([
   db.Exercises.byName("Back Squat"), db.Programs.get(1), db.Sessions.get(1),
 ]);

@@ -3,7 +3,7 @@ import XCTest
 
 /// Parity + sanity for the anatomy data. The Swift copy must equal
 /// web/tests/fixtures/anatomy.json (the same fixture the node smoke suite
-/// holds web/js/anatomy.js to), so either mirror drifting fails its own CI
+/// holds web/app/js/anatomy.js to), so either mirror drifting fails its own CI
 /// job. Regenerate with web/tools/generate-anatomy-fixture.mjs.
 final class AnatomyDataTests: XCTestCase {
 

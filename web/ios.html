@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Cadence for iPhone — TestFlight beta and building from source</title>
+  <meta name="description" content="Cadence isn't on the App Store yet. Three ways to run the native iOS app today: the TestFlight beta, building it yourself with Xcode, or the unsigned build attached to each release." />
+  <meta name="theme-color" content="#0a0908" />
+  <link rel="canonical" href="https://madhakish.github.io/cadence/ios.html" />
+  <link rel="icon" href="app/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="app/icons/apple-touch-icon.png" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cadence" />
+  <meta property="og:title" content="Cadence for iPhone — TestFlight beta" />
+  <meta property="og:description" content="Not on the App Store yet. Join the TestFlight beta, build it yourself, or grab the unsigned build from a release." />
+  <meta property="og:url" content="https://madhakish.github.io/cadence/ios.html" />
+  <meta property="og:image" content="https://madhakish.github.io/cadence/app/icons/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="site/site.css" />
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <span class="glyph" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="1" y="8.5" width="2.6" height="7" rx="1"/><rect x="5" y="6" width="2.8" height="12" rx="1"/><rect x="8.6" y="11" width="6.8" height="2"/><rect x="16.2" y="6" width="2.8" height="12" rx="1"/><rect x="20.4" y="8.5" width="2.6" height="7" rx="1"/></svg>
+      </span>
+      Cadence
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="./">Overview</a>
+      <a href="guide.html">How to use it</a>
+      <a href="ios.html" aria-current="page">iOS &amp; beta</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/madhakish/cadence">Source</a>
+    </nav>
+    <a class="btn primary sm cta" href="app/">Open the app</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-head wrap">
+    <p class="eyebrow">iOS 17 or later · iPhone and iPad</p>
+    <h1>Cadence on iPhone</h1>
+    <p>
+      The native app is real, builds on every commit, and ships to TestFlight
+      automatically — but it isn't on the App Store yet. There are three honest ways
+      to run it today, and one of them takes about two minutes.
+    </p>
+    <div class="btn-row" style="margin-top:26px">
+      <a class="btn primary" href="#testflight">Join the beta</a>
+      <a class="btn ghost" href="#build">Build it yourself</a>
+      <a class="btn ghost" href="app/">Or just use the web app</a>
+    </div>
+  </section>
+
+  <!-- ---------- routes ---------- -->
+  <section class="section" id="testflight">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Route 1 — recommended</p>
+        <h2>The TestFlight beta</h2>
+        <p>
+          TestFlight is Apple's own beta distribution system. Nothing is sideloaded,
+          nothing is jailbroken, and updates arrive like normal App Store updates.
+          Every release Cadence tags is uploaded to TestFlight by CI.
+        </p>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <h3>What you need</h3>
+          <ul>
+            <li>An iPhone or iPad on <strong>iOS 17 or later</strong>.</li>
+            <li>Apple's free <strong>TestFlight</strong> app from the App Store.</li>
+            <li>An Apple ID. No payment details, no developer account.</li>
+          </ul>
+          <p style="margin-top:14px">
+            TestFlight builds expire <strong>90 days</strong> after upload, so during an
+            active beta you'll be updating every so often. TestFlight tells you when.
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>How to get in</h3>
+          <p>
+            Public beta enrolment isn't open yet — the first build has to clear Apple's
+            beta review before a link can be handed out. Ask to be included and you'll
+            get the link as soon as it exists.
+          </p>
+          <!-- When the public TestFlight link exists (App Store Connect →
+               TestFlight → your external group → Enable Public Link), replace the
+               href below with https://testflight.apple.com/join/XXXXXXXX and change
+               the label to "Join the TestFlight beta". See docs/TESTFLIGHT.md. -->
+          <div class="btn-row" style="margin-top:18px">
+            <a class="btn primary" href="https://github.com/madhakish/cadence/issues/new?title=TestFlight%20beta%20request&amp;body=I%27d%20like%20to%20test%20the%20Cadence%20iOS%20beta.%0A%0A-%20Device%3A%20%0A-%20iOS%20version%3A%20%0A%0A%28Please%20don%27t%20post%20an%20email%20address%20in%20a%20public%20issue%20%E2%80%94%20a%20public%20TestFlight%20link%20doesn%27t%20need%20one.%29">Ask for beta access</a>
+          </div>
+          <p style="margin-top:16px;font-size:14.5px">
+            That opens a pre-filled GitHub issue. Don't put your email address in it —
+            a public TestFlight link doesn't need one, and a public issue is a bad
+            place for personal data.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="build">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Route 2 — for anyone with a Mac</p>
+        <h2>Build it yourself</h2>
+        <p>
+          It's open source, so you don't have to wait for me. A free Apple ID is enough
+          to run it on your own device.
+        </p>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <h3>Steps</h3>
+          <p>Requires macOS with Xcode 15 or later. The Xcode project is generated
+            rather than committed, so generate it first:</p>
+          <pre style="margin:14px 0 0;overflow-x:auto;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:13.5px"><code style="background:none;border:0;padding:0">git clone https://github.com/madhakish/cadence.git
+cd cadence
+brew install xcodegen
+xcodegen generate
+open Cadence.xcodeproj</code></pre>
+          <p style="margin-top:14px">
+            In Xcode, select the <strong>Cadence</strong> scheme, set your own signing
+            team on the app and widget targets, pick your iPhone, and run.
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>Worth knowing</h3>
+          <ul>
+            <li>With a <strong>free</strong> Apple ID the signature lasts
+              <strong>7 days</strong> — after that the app refuses to launch until you
+              rebuild. A paid developer account extends that to a year.</li>
+            <li>You'll need to trust the developer profile once, under
+              <strong>Settings → General → VPN &amp; Device Management</strong>.</li>
+            <li>Change the bundle identifier to something of your own if you also have
+              the TestFlight build installed.</li>
+            <li>The shared training logic has its own test suite:
+              <code>cd CadenceCore &amp;&amp; swift test</code>.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="downloads">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Route 3 — for the technically inclined</p>
+        <h2>Builds attached to every release</h2>
+        <p>
+          Each tagged release carries two artifacts built by CI. Neither is a
+          double-click install on an iPhone, so treat this as the route for people who
+          already know what they're doing.
+        </p>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Asset</th><th>What it's for</th><th>What it needs</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Cadence-&lt;version&gt;-simulator.app.zip</code></td>
+              <td>Running the app in Xcode's iOS Simulator on a Mac — the quickest way
+                to look at it without a device.</td>
+              <td>A Mac with Xcode. Drag the unzipped <code>.app</code> onto a booted
+                simulator.</td>
+            </tr>
+            <tr>
+              <td><code>Cadence-&lt;version&gt;-unsigned.ipa</code></td>
+              <td>Installing on your own device with your own signature.</td>
+              <td>Unsigned on purpose — you re-sign it with your own Apple ID before it
+                will install. Same 7-day limit as a free-account build.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="btn-row" style="margin-top:22px">
+        <a class="btn ghost" href="https://github.com/madhakish/cadence/releases">Browse releases</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- what's native ---------- -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>What the native app adds</h2>
+        <p>
+          The training logic is identical to the web app by design — the difference is
+          what iOS lets it do outside the app.
+        </p>
+      </div>
+      <div class="grid three">
+        <div class="card feature">
+          <h3>Live Activity</h3>
+          <p>
+            The rest countdown lives on the Lock Screen and in the Dynamic Island, with
+            pause, resume and skip controls on the workout face — so an abandoned
+            session's stopwatch can always be stopped without unlocking.
+          </p>
+        </div>
+        <div class="card feature">
+          <h3>Action Button &amp; Control Center</h3>
+          <p>
+            Start or skip rest without picking the phone up properly — via the Action
+            Button, or (on iOS 18) a Control Center and Lock Screen control. Useful when
+            your hands are chalked and the bar is loaded.
+          </p>
+        </div>
+        <div class="card feature">
+          <h3>Gym Tag control</h3>
+          <p>
+            On iOS 18, a second Control Center and Lock Screen button goes straight to
+            your membership barcode — one press between arriving at the door and being
+            scanned in.
+          </p>
+        </div>
+        <div class="card feature">
+          <h3>Apple Health, optionally</h3>
+          <p>
+            Off by default, and <strong>write-only</strong> when you turn it on: Cadence
+            writes workouts and bodyweight and never reads anything back out of Health.
+          </p>
+        </div>
+        <div class="card feature">
+          <h3>Local notifications</h3>
+          <p>
+            Rest-timer alerts and the optional next-morning knee check-in after you run.
+            No push server involved — they're scheduled on the device.
+          </p>
+        </div>
+        <div class="card feature">
+          <h3>Native storage</h3>
+          <p>
+            SwiftData on device, with tested migrations for every version that ever
+            shipped. An upgrade is never allowed to require reinstalling and losing your
+            log.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- beta expectations ---------- -->
+  <section class="section">
+    <div class="wrap split">
+      <div>
+        <p class="eyebrow">Being a beta tester</p>
+        <h2 style="font-size:clamp(27px,4.2vw,38px)">What I actually need from you</h2>
+        <p style="color:var(--muted);margin-top:16px">
+          Cadence is used mid-workout, one-handed, in bad light, by someone who wants to
+          get back under the bar. That's the thing I can't test alone: whether it stays
+          out of the way when you're tired.
+        </p>
+        <p style="color:var(--muted);margin-top:14px">
+          The most useful reports are the boring ones — a tap that needed two attempts,
+          a number that looked wrong, an edit that disappeared, a prescription you
+          didn't trust. Log a real session or two and tell me where it annoyed you.
+        </p>
+        <div class="btn-row" style="margin-top:26px">
+          <a class="btn primary" href="https://github.com/madhakish/cadence/issues/new">Report something</a>
+          <a class="btn ghost" href="https://github.com/madhakish/cadence/issues">Open issues</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>House rules</h3>
+        <ul>
+          <li><strong>Never paste your log into an issue.</strong> Workouts, bodyweight,
+            health signals and gym membership details are exactly the data this project
+            refuses to collect. Describe the shape of the problem instead.</li>
+          <li><strong>Export before you update.</strong>
+            <em>Settings → Data → Export JSON</em>. Betas are betas.</li>
+          <li><strong>Say which build.</strong> The version number is in Settings, and
+            TestFlight shows the build it installed.</li>
+          <li><strong>Data safety is the priority bug class.</strong> Anything that loses
+            or corrupts a logged set gets fixed before anything cosmetic.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- App Store + Android ---------- -->
+  <section class="section">
+    <div class="wrap grid two">
+      <div class="card">
+        <h3>Will it be on the App Store?</h3>
+        <p>
+          Maybe. It's a single-user logbook with no accounts and no server, which is a
+          slightly awkward shape for the App Store, and TestFlight already distributes
+          it properly. Until that changes, the beta plus the source is the honest answer.
+        </p>
+        <p>
+          What won't change: no subscription, no ads, no analytics, and no account. If it
+          ever ships to the App Store it ships the same way it works now.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Android</h3>
+        <p>
+          A native Android client is planned. It will share the same platform-free
+          training core and the same portable backup file, so a log started on the web
+          app or on iOS will move over intact.
+        </p>
+        <p>
+          Until then the installed web app is a genuinely good Android experience —
+          Chrome's <em>Install app</em> gives it a home-screen icon, full-screen launch
+          and offline use.
+        </p>
+        <div class="btn-row" style="margin-top:20px">
+          <a class="btn ghost sm" href="app/">Open the web app</a>
+          <a class="btn ghost sm" href="guide.html">Install instructions</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-grid">
+    <div class="fine">
+      <strong>Cadence</strong>
+      A single-user, local-first strength logbook for iOS and the web. Source published on GitHub.
+      No accounts, no backend, no streaks, no badges, no motivational quotes.
+    </div>
+    <nav aria-label="Footer">
+      <a href="./">Overview</a>
+      <a href="guide.html">How to use it</a>
+      <a href="ios.html">iOS &amp; beta</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="app/">Web app</a>
+      <a href="https://github.com/madhakish/cadence">GitHub</a>
+      <a href="https://github.com/madhakish/cadence/tree/main/docs">Documentation</a>
+      <a href="https://github.com/madhakish/cadence/blob/main/SECURITY.md">Security</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

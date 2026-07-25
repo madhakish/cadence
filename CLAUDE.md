@@ -12,7 +12,7 @@ Cadence is a single-user, local-first strength-training logbook delivered as:
 - a native iOS 17+ SwiftUI/SwiftData app with a widget/Live Activity extension;
 - a vanilla-JavaScript PWA backed by IndexedDB; and
 - a Foundation-only Swift package, `CadenceCore`, containing deterministic
-  training logic mirrored by `web/js/core.js`.
+  training logic mirrored by `web/app/js/core.js`.
 
 There is no server-side source of truth. The user's on-device store and portable
 backup are the source of truth, so persistence compatibility has higher priority
@@ -58,11 +58,13 @@ than implementation convenience.
 | --- | --- |
 | Training math and deterministic state transitions | `CadenceCore/Sources/CadenceCore/` |
 | Swift domain regression tests | `CadenceCore/Tests/CadenceCoreTests/` |
-| JavaScript domain mirror | `web/js/core.js` and `web/tests/core.test.mjs` |
+| JavaScript domain mirror | `web/app/js/core.js` and `web/tests/core.test.mjs` |
 | Native persistence | `Cadence/Models/`, `Cadence/Services/`, `Cadence/Seed/Seeder.swift` |
 | SwiftData compatibility | `PersistenceSchema*.swift`, `AppBootstrap`, `CadenceMigrationTests/` |
-| Web persistence | `web/js/db.js` and fake-indexeddb smoke coverage |
-| Portable backup contract | `BackupContract.swift`, `web/js/db.js`, import/export services, backup docs/fixtures |
+| Web persistence | `web/app/js/db.js` and fake-indexeddb smoke coverage |
+| Public product site | `web/*.html`, `web/site/`; structure held by `web/tests/site.test.mjs` |
+| Web app mount point and former scope | `web/app/` (served at `/cadence/app/`) and the retirement worker `web/sw.js` |
+| Portable backup contract | `BackupContract.swift`, `web/app/js/db.js`, import/export services, backup docs/fixtures |
 | Native UI | `Cadence/Views/` |
 | Live Activity and controls | `Cadence/LiveActivity/` and `CadenceWidgets/` |
 | Generic reference data | `Cadence/Seed/`, template/anatomy mirrored fixtures |
@@ -70,7 +72,7 @@ than implementation convenience.
 | Release and distribution | `.github/workflows/`, `.releaserc.json`, `fastlane/` |
 
 Keep views and persistence adapters thin. New testable logic belongs in
-`CadenceCore`; implement the equivalent function in `web/js/core.js` and give
+`CadenceCore`; implement the equivalent function in `web/app/js/core.js` and give
 both suites matching cases.
 
 ## Persistence and migration protocol
@@ -109,7 +111,7 @@ insufficient. CI's hostless macOS migration scheme is the required proof.
 
 ### IndexedDB
 
-Review `web/js/db.js` whenever persisted record shape or interpretation changes.
+Review `web/app/js/db.js` whenever persisted record shape or interpretation changes.
 Bump `DB_VERSION` when required, transform older data inside
 `onupgradeneeded`, and test opening a prior database version with current code.
 Do not mistake fresh seeding for migration coverage.

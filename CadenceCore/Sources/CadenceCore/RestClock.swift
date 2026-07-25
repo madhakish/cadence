@@ -3,7 +3,7 @@ import Foundation
 /// Pure state math for the between-sets rest countdown. One implementation of
 /// pause/resume/extend shared by the in-app `RestTimer`, the Live Activity
 /// controller (both processes render from the same `State`), and — mirrored
-/// 1:1 — the web logger (`restClock*` in web/js/core.js). Deterministic: every
+/// 1:1 — the web logger (`restClock*` in web/app/js/core.js). Deterministic: every
 /// transition takes `now` explicitly; nothing here reads a clock.
 ///
 /// Epoch seconds, not `Date`: the same numbers flow through the JS mirror and
