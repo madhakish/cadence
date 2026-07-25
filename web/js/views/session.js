@@ -331,6 +331,9 @@ export async function openSession(id) {
     body.append(ui.h("div", { class: "section-title", text: "Session notes" }), notes);
 
     body.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "16px", minHeight: "52px", fontSize: "18px" }, text: COPY.sessionDone, onClick: () => finish() }));
+    body.append(ui.h("button", { class: "btn ghost danger wide", style: { marginTop: "8px" },
+      text: "Discard session", "aria-label": "Discard this session without banking it",
+      onClick: () => discard() }));
   }
 
   function exerciseCard(se, body) {
@@ -725,6 +728,28 @@ export async function openSession(id) {
         paint();
       },
     });
+  }
+
+  // The way OUT of a session you never want to keep. Banking it is not the
+  // answer for a session started by mistake, and closing the screen just
+  // leaves it open — so without this the only discard was back on Today.
+  function discard() {
+    const performed = session.exercises.flatMap((se) => se.sets || [])
+      .filter((set) => !set.isWarmup && set.status === "completed").length;
+    ui.actionSheet(
+      performed === 0
+        ? "Discard this session? Nothing has been logged."
+        : `Discard this session and lose ${performed} logged set${performed === 1 ? "" : "s"}?`,
+      [
+        { label: "Discard session", role: "destructive", onClick: async () => {
+          await Sessions.del(session.id);
+          rest.stop();
+          screen.close();
+          ui.nav.refresh();
+        } },
+        { label: "Keep session", role: "cancel", onClick: () => {} },
+      ],
+    );
   }
 
   let finishing = false; // double-tap on Bank it would run completion twice (dup milestones, racy advances)

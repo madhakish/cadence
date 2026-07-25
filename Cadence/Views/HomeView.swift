@@ -153,6 +153,11 @@ struct HomeView: View {
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                             }
+                            // Swipe alone hid the only way to get rid of an
+                            // unwanted open session — an invisible gesture
+                            // VoiceOver users never meet either. The visible
+                            // button is the real affordance; the swipe stays
+                            // for people who already reach for it.
                             .swipeActions {
                                 Button(role: .destructive) {
                                     discardSession = open
@@ -160,6 +165,13 @@ struct HomeView: View {
                                     Label("Discard", systemImage: "trash")
                                 }
                             }
+                            Button(role: .destructive) {
+                                discardSession = open
+                            } label: {
+                                Label("Discard session", systemImage: "trash")
+                                    .font(.caption)
+                            }
+                            .accessibilityHint("Deletes this unfinished session without banking it")
                         }
                     }
                 }

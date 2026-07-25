@@ -21,6 +21,7 @@ struct ActiveSessionView: View {
 
     @Bindable var session: WorkoutSession
     @State private var showExercisePicker = false
+    @State private var confirmDiscard = false
     @State private var autoregEntry: SessionExercise?
     @State private var summary: SessionSummary?
     @State private var currentEntry: SessionExercise?   // the exercise you're actively working
@@ -45,6 +46,15 @@ struct ActiveSessionView: View {
     /// The stopwatch origin lives in WorkoutClock (root-scoped), so it survives
     /// leaving this screen — and, via the Live Activity, app relaunch.
     private var sessionStart: Date { workoutClock.startDate ?? .now }
+    /// Names the cost of discarding. A session started by mistake has nothing
+    /// logged and can go without ceremony; one with real work says so.
+    private var discardPrompt: String {
+        let performed = session.exercises.flatMap(\.workingSets).count
+        return performed == 0
+            ? "Discard this session? Nothing has been logged."
+            : "Discard this session and lose \(performed) logged set\(performed == 1 ? "" : "s")?"
+    }
+
     private var currentRestSeconds: Int {
         smartRestSeconds(for: currentOrFirst?.exercise, role: currentOrFirst?.programRole, settings: settingsList.first)
     }
@@ -144,17 +154,40 @@ struct ActiveSessionView: View {
                     Button(role: .destructive) {
                         restTimer.stop()
                         workoutClock.end()
-                    } label: { Label("End workout", systemImage: "stop.circle") }
+                    } label: { Label("Stop workout clock", systemImage: "stop.circle") }
+                    Divider()
+                    // The way OUT of a session you never want to keep. Without
+                    // this the only exits were Later (leaves it open), Stop
+                    // workout clock (stops the clock, leaves it open), and
+                    // Bank it (commits it) — so a session started by mistake
+                    // could not be got rid of from inside it at all, and the
+                    // only discard anywhere was an unlabelled swipe on Today.
+                    Button(role: .destructive) {
+                        confirmDiscard = true
+                    } label: { Label("Discard session", systemImage: "trash") }
                 } label: {
                     Image(systemName: workoutClock.isPaused ? "pause.circle" : "stopwatch")
                 }
-                .accessibilityLabel("Workout clock controls")
+                .accessibilityLabel("Workout and session controls")
             }
         }
         .sheet(isPresented: $showExercisePicker) {
             ExercisePickerSheet { exercise in
                 addExercise(exercise)
             }
+        }
+        // Deleting logged work is not something to do on a mis-tap, so the
+        // confirmation says exactly how much would be lost.
+        .confirmationDialog(discardPrompt, isPresented: $confirmDiscard, titleVisibility: .visible) {
+            Button("Discard session", role: .destructive) {
+                restTimer.stop()
+                workoutClock.end()
+                context.delete(session)
+                if PersistenceErrorCenter.shared.save(context, operation: "Discarding the session") { dismiss() }
+            }
+            Button("Keep session", role: .cancel) {}
+        } message: {
+            Text("The program schedule and your completed history are unchanged.")
         }
         .confirmationDialog("Dropping load — why?", isPresented: Binding(
             get: { autoregEntry != nil },
