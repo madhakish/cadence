@@ -27,9 +27,9 @@ global.window = dom.window;
 global.document = dom.window.document;
 global.Node = dom.window.Node;
 
-const db = await import("../js/db.js");
-const C = await import("../js/core.js");
-const session = await import("../js/views/session.js");
+const db = await import("../app/js/db.js");
+const C = await import("../app/js/core.js");
+const session = await import("../app/js/views/session.js");
 const completeAll = async (workout) => {
   for (const exercise of workout.exercises || []) for (const set of exercise.sets || []) if (!set.isWarmup) set.status = "completed";
   const result = await session.completeSession(workout);

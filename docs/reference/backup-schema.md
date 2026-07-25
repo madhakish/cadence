@@ -15,7 +15,7 @@ transaction. Updating Cadence is the recovery path for a newer backup.
 The source-of-truth constants are:
 
 - Native: `BackupContract.currentSchemaVersion` in `CadenceCore`
-- Web: `BACKUP_SCHEMA_VERSION` in `web/js/db.js`
+- Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
 

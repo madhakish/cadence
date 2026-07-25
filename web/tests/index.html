@@ -16,7 +16,7 @@
   <script type="module">
     // Mirrors tests/core.test.mjs but in-browser; useful as a sanity check
     // on a real device. The Node suite is the authoritative one in CI.
-    import * as C from "../js/core.js";
+    import * as C from "../app/js/core.js";
     const out = document.getElementById("out");
     let pass = 0, fail = 0; const log = [];
     const near = (a, b, e = 1e-9) => Math.abs(a - b) <= e;

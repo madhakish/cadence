@@ -1,6 +1,6 @@
 # Program templates reference
 
-<!-- MUST MATCH web/js/templates.js ≡ CadenceCore ProgramTemplateData.swift,
+<!-- MUST MATCH web/app/js/templates.js ≡ CadenceCore ProgramTemplateData.swift,
      which are fixture-locked to web/tests/fixtures/program-templates.json.
      Edit templates → regenerate the fixture → update these tables. -->
 

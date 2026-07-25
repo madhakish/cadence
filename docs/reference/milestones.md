@@ -2,7 +2,7 @@
 
 Automatic, terse achievement detection. Milestones are derived at bank time
 from performed work only, never from the plan
-(`PRDetection` ≡ `prEvaluate` in `web/js/core.js`), and are stored so the
+(`PRDetection` ≡ `prEvaluate` in `web/app/js/core.js`), and are stored so the
 History tab can list them.
 
 ## The three kinds

@@ -3,7 +3,7 @@ import CadenceCore
 
 /// Compact one-side barbell graphic: the actual loaded plates for a weight at
 /// a station, coloured to the plate scheme — heaviest plate inboard. Mirrors
-/// web/js/barbell.js (same geometry and hex palette). `unit` picks the plate
+/// web/app/js/barbell.js (same geometry and hex palette). `unit` picks the plate
 /// denominations; the bar is chosen separately (most bars are 45 lb whichever
 /// plates you load).
 struct BarbellView: View {

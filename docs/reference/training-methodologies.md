@@ -1,7 +1,7 @@
 # Training methodologies
 
 Cadence ships four published barbell methodologies as program styles. Each is
-implemented deterministically in the shared core (CadenceCore ↔ `web/js/core.js`)
+implemented deterministically in the shared core (CadenceCore ↔ `web/app/js/core.js`)
 and initializes itself from your recorded history: when a slot's exercise has
 logged working sets, the program derives its starting weights from your best
 estimated 1RM (Epley: `weight × (1 + reps/30)`), rounding **down** to the plate

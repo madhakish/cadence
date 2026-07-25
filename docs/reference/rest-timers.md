@@ -2,7 +2,7 @@
 
 How Cadence decides how long the rest countdown runs after a set. The
 logic is identical in both apps (`RestDefaults` in CadenceCore ≡
-`restDefaultSeconds` in `web/js/core.js`).
+`restDefaultSeconds` in `web/app/js/core.js`).
 
 ## Resolution order
 

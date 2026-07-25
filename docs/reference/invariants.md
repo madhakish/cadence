@@ -26,7 +26,7 @@ Adding a rule means adding tests on every platform in its `platforms` list.
 Deleting a rule is a deliberate act: say in the commit why the behaviour is no
 longer required.
 
-`platforms` values are `core` (CadenceCore + `web/js/core.js` parity),
+`platforms` values are `core` (CadenceCore + `web/app/js/core.js` parity),
 `web` (JS runtime/UI), and `native` (SwiftUI). Native UI rules cannot be
 asserted in this workspace and are marked `unverifiable` — they are documented
 here so a reviewer can check them by hand, and are excluded from the coverage
@@ -184,3 +184,24 @@ Main shows by default; complementary is opt-in and visually recessive.
 
 In the combined chart, tonnage never stretches the load axis that working
 weight and estimated 1RM share.
+
+---
+
+## Delivery
+
+### INV-WEB-APP-SCOPE
+*platforms: web*
+
+The PWA is served from its own `app/` directory, addresses its assets
+relatively, and keeps its manifest `start_url`/`scope` directory-relative so the
+whole app can be remounted without editing it. Its offline shell precaches every
+module under `app/js/`. The worker at the app's previous root scope keeps
+existing solely to retire itself: it unregisters, deletes the old caches, serves
+nothing, and sends any window still on the old entry point to `app/`.
+
+> The app was served from the Pages root before the product site existed. A
+> home-screen install keeps that registration and its cache-first handler
+> forever, so deleting the old worker would strand those installs on a stale
+> shell, and replacing it with the site's own worker would hand them the
+> marketing page as their app. An unlisted module is worse: the app deploys
+> green and then fails in a gym with no signal.

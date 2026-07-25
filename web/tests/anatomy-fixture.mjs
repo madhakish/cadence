@@ -2,7 +2,7 @@
 // the anatomy data into the language-neutral fixture shape that Swift's
 // AnatomyData decodes to (see AnatomyDataTests).
 export async function normalizedAnatomy() {
-  const A = await import("../js/anatomy.js");
+  const A = await import("../app/js/anatomy.js");
   return {
     names: A.MUSCLE_NAMES,
     body: A.ANATOMY_BODY,

@@ -2,7 +2,7 @@
 
 The **Charts** tab plots one lift over time. Native and web draw the same
 series from the same rules (`ProgressionChartsView` ≡ `renderCharts` +
-`progressionChart` in `web/js/charts.js`).
+`progressionChart` in `web/app/js/charts.js`).
 
 ## Role: why a lift can be two lines
 

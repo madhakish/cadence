@@ -56,7 +56,7 @@ public enum PRDetection {
     /// reads as "2×2", and 4×5 plus a dropped 3 reads as "5×3" (five triples
     /// for four fives and a three). Those strings are also banked as history
     /// schemes, so a fabricated scheme silently becomes the baseline every
-    /// later session is measured against. Mirrored 1:1 in web/js/core.js.
+    /// later session is measured against. Mirrored 1:1 in web/app/js/core.js.
     public static func topScheme(_ sets: [SetSample]) -> (weightLb: Double, sets: Int, reps: Int)? {
         guard let top = sets.map(\.weightLb).max() else { return nil }
         let topSets = sets.filter { abs($0.weightLb - top) < 1e-9 }

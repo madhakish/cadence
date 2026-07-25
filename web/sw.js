@@ -1,47 +1,49 @@
-// Offline app shell. Cache-first for same-origin GET; network falls back to
-// cache so the app opens with no signal (gym basements).
+// Retirement worker for the app's OLD scope.
 //
-// CACHE includes a build token that the Pages deploy stamps with the commit
-// SHA (see .github/workflows/pages.yml). That makes THIS file change on every
-// release, which is what causes the browser to install the new worker, refresh
-// the cached assets, and drop the old cache — i.e. how updates actually reach
-// an installed phone.
-const CACHE = "cadence-__BUILD__";
-const ASSETS = [
-  "./", "index.html", "styles.css", "manifest.webmanifest",
-  "js/app.js", "js/core.js", "js/db.js", "js/seed.js", "js/templates.js", "js/anatomy.js", "js/ui.js", "js/charts.js", "js/constants.js", "js/barbell.js", "js/coaching-adapter.js",
-  "js/views/home.js", "js/views/history.js", "js/views/body.js",
-  "js/views/signals.js", "js/views/settings.js", "js/views/session.js", "js/views/plates.js",
-  "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png",
-];
+// Until the product site landed, the PWA was served from the Pages root and
+// registered a service worker here, at `/cadence/sw.js`, with scope
+// `/cadence/`. The app now lives at `/cadence/app/` and registers
+// `/cadence/app/sw.js` instead. Anyone who added the old app to their home
+// screen still has the root registration, and its cache-first handler would
+// keep serving them a stale app shell — or, once the cache refreshed, the
+// marketing page as their app.
+//
+// So this file must keep existing, and must do exactly one thing: stand down.
+// Browsers re-fetch a registered worker's script (bypassing the HTTP cache) on
+// navigation and at least daily, so an old install picks this up on its next
+// launch with signal, drops its caches, unregisters, and gets sent to the new
+// URL. `web/index.html` also redirects standalone launches to `./app/` as a
+// second, JS-side safety net.
+//
+// Do not turn this back into a caching worker, and do not delete it while any
+// install might still be pointing at it: deleting it leaves the old worker in
+// place forever, because there is nothing left to update it with.
+self.addEventListener("install", () => self.skipWaiting());
 
-self.addEventListener("install", (e) => {
-  // Don't skipWaiting automatically — the new worker waits so the app can offer
-  // a "refresh to update" prompt. It still activates on the next cold launch
-  // once the old clients are gone.
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    // Drop everything the old app shell cached, then stop controlling clients.
+    const keys = await caches.keys();
+    await Promise.all(keys.map((key) => caches.delete(key)));
+    await self.registration.unregister();
+
+    // Send any window still sitting on the old scope to the app's new home.
+    // Scope-relative so this works on Pages, on a custom domain, and locally.
+    const scope = new URL(self.registration.scope);
+    const target = new URL("app/", scope).href;
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of clients) {
+      const url = new URL(client.url);
+      // Only the old app entry point. A window reading the site's other pages
+      // is a browser tab that never wanted the app.
+      const atOldRoot = url.pathname === scope.pathname ||
+        url.pathname === `${scope.pathname}index.html`;
+      if (atOldRoot && "navigate" in client) {
+        try { await client.navigate(target); } catch (e) { /* the reload picks it up */ }
+      }
+    }
+  })());
 });
 
-self.addEventListener("activate", (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
-});
-
-// The app posts this when the user taps "Refresh" on the update prompt.
-self.addEventListener("message", (e) => {
-  if (e.data && e.data.type === "SKIP_WAITING") self.skipWaiting();
-});
-
-self.addEventListener("fetch", (e) => {
-  const req = e.request;
-  if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
-  e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-      return res;
-    }).catch(() => caches.match("index.html")))
-  );
-});
+// No fetch handler on purpose: with none registered, the browser goes straight
+// to the network and this worker cannot serve a stale response on its way out.

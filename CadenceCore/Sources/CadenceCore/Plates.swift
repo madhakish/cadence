@@ -25,7 +25,7 @@ public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
     /// kg is IWF: 25 red · 20 blue · 15 yellow · 10 green · 5 white · 2.5 red change plate.
     /// lb (colour bumpers): 55 red · 45 blue · 35 yellow · 25 green · 10 white ·
     /// 5 and under (and fractional) black iron.
-    /// Mirrored 1:1 in web/js/core.js `plateColorToken`.
+    /// Mirrored 1:1 in web/app/js/core.js `plateColorToken`.
     public var colorToken: String {
         if unit == .lb {
             if value >= 55 { return "red" }
@@ -46,7 +46,7 @@ public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
 
     /// Relative drawn diameter (0.4–1.0) by canonical pounds, so a barbell
     /// graphic looks physically right regardless of unit. Mirrored 1:1 in
-    /// web/js/core.js `plateSizeFactor`.
+    /// web/app/js/core.js `plateSizeFactor`.
     public var sizeFactor: Double {
         if lb >= 44 { return 1.0 }  // 45/55 lb, 20/25 kg
         if lb >= 33 { return 0.9 }  // 35 lb, 15 kg

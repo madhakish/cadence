@@ -561,7 +561,7 @@ public enum ProgramEngine {
     /// Only sets not yet performed (unflagged working sets) are touched — a
     /// flagged set is history — and each is dropped from ITS OWN weight, so a
     /// lighter back-off set is never raised toward the top set's drop.
-    /// Mirrored 1:1 in web/js/core.js `dropLoadPlan`.
+    /// Mirrored 1:1 in web/app/js/core.js `dropLoadPlan`.
     public static func dropLoadPlan(
         sets: [(weightLb: Double, isWarmup: Bool, isFlagged: Bool)],
         roundingLb: Double = defaultRoundingLb,

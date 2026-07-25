@@ -443,7 +443,7 @@ jobs:
   # Deploy Pages from the already-passing web test job instead of launching a
   # second workflow that repeats npm install and the entire test suite.
   deploy-web:
-    name: Deploy web app (Pages)
+    name: Deploy site + web app (Pages)
     needs: [changes, web-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
@@ -463,7 +463,7 @@ jobs:
           persist-credentials: false
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Stamp build version into the service worker
-        run: sed -i "s/__BUILD__/${GITHUB_SHA::12}/" web/sw.js
+        run: sed -i "s/__BUILD__/${GITHUB_SHA::12}/" web/app/sw.js
       - name: Upload web/ as Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

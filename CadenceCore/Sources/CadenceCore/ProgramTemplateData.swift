@@ -2,7 +2,7 @@ import Foundation
 
 /// Pre-programmed program styles (the "+ Add program" picker), as pure data.
 /// String-typed so the core stays app-model-agnostic. Ported 1:1 from
-/// web/js/templates.js; parity is ENFORCED against the shared fixture
+/// web/app/js/templates.js; parity is ENFORCED against the shared fixture
 /// web/tests/fixtures/program-templates.json — the node smoke suite asserts
 /// the JS copy matches it and ProgramTemplateDataTests asserts this copy
 /// matches it, so either side drifting fails CI. Regenerate the fixture with

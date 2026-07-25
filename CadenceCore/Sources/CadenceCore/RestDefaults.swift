@@ -35,7 +35,7 @@ public struct RestConfig: Codable, Hashable, Sendable {
 ///    main squat/hinge → mainCompound, main olympic → olympic, any other
 ///    main → mainUpper, everything else → accessory.
 ///
-/// Pure; mirrored 1:1 in web/js/core.js `restDefaultSeconds`.
+/// Pure; mirrored 1:1 in web/app/js/core.js `restDefaultSeconds`.
 public enum RestDefaults {
     public static func seconds(category: String, movementGroup: String, role: String? = nil,
                                config: RestConfig = .standard, exerciseDefaultRest: Int = 0) -> Int {

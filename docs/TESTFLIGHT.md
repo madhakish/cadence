@@ -109,6 +109,34 @@ The build then appears in **App Store Connect → TestFlight** and the
 **TestFlight app** on your phone (install TestFlight from the App Store and sign
 in with the same Apple ID). Builds last **90 days**.
 
+## Recruiting testers
+
+Uploading a build is not the same as letting anyone else install it. Two
+audiences, and only one of them needs Apple's review:
+
+- **Internal testers** — people on your App Store Connect team (currently up to
+  100). They get every build immediately, with no review step. This is the right
+  setting for you and anyone you'd add to the account.
+- **External testers** — everyone else (currently up to 10,000). The *first build
+  of each version* needs to pass **Beta App Review**, which is lighter than App
+  Store review but not instant. Submit it from the build's page in TestFlight.
+
+For external testing, prefer a **public link** over emailing invitations:
+**TestFlight → your external group → Enable Public Link**. Apple hosts the
+`https://testflight.apple.com/join/XXXXXXXX` page, so you never collect a
+tester's email address — which matters for a project whose whole pitch is that it
+doesn't collect anything. You can cap how many people the link admits.
+
+Beta App Review will ask for a beta description, what to test, and a contact
+email. Because the app declares HealthKit, say plainly that the toggle is
+off by default and that Cadence only ever *writes* workouts and bodyweight.
+
+**Then put the link on the site.** `web/ios.html` has a marked comment above the
+"Ask for beta access" button in the *How to get in* card. Replace that button's
+`href` with the public link and change its label to "Join the TestFlight beta".
+Merging that to `main` redeploys Pages. Until the link exists the button opens a
+pre-filled GitHub issue instead, so the page is never a dead end.
+
 ## Notes / first-run gotchas
 - First run with `match` must be able to **create** the cert: set the repo
   variable `MATCH_READONLY=false` and use a read/write PAT for that run, then

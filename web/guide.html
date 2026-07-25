@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>How to use Cadence — install, program, log, back up</title>
+  <meta name="description" content="Get Cadence running in a few minutes: install the web app or the iOS beta, set up your gym's plates, create a program, run a training day, and keep a backup." />
+  <meta name="theme-color" content="#0a0908" />
+  <link rel="canonical" href="https://madhakish.github.io/cadence/guide.html" />
+  <link rel="icon" href="app/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="app/icons/apple-touch-icon.png" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cadence" />
+  <meta property="og:title" content="How to use Cadence" />
+  <meta property="og:description" content="Install, set up your gym's plates, create a program, run a training day, and keep a backup." />
+  <meta property="og:url" content="https://madhakish.github.io/cadence/guide.html" />
+  <meta property="og:image" content="https://madhakish.github.io/cadence/app/icons/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="site/site.css" />
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <span class="glyph" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="1" y="8.5" width="2.6" height="7" rx="1"/><rect x="5" y="6" width="2.8" height="12" rx="1"/><rect x="8.6" y="11" width="6.8" height="2"/><rect x="16.2" y="6" width="2.8" height="12" rx="1"/><rect x="20.4" y="8.5" width="2.6" height="7" rx="1"/></svg>
+      </span>
+      Cadence
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="./">Overview</a>
+      <a href="guide.html" aria-current="page">How to use it</a>
+      <a href="ios.html">iOS &amp; beta</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/madhakish/cadence">Source</a>
+    </nav>
+    <a class="btn primary sm cta" href="app/">Open the app</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-head wrap">
+    <p class="eyebrow">Getting started</p>
+    <h1>How to use Cadence</h1>
+    <p>
+      About ten minutes end to end, and most of that is entering honest starting
+      weights. Everything below works the same in the iOS app and the web app unless
+      it says otherwise.
+    </p>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>1. Get it on your phone</h2>
+        <p>
+          The web app needs no install and no account — but adding it to your home
+          screen is worth doing, because that's what makes it open full-screen and
+          work in a basement with no signal.
+        </p>
+      </div>
+
+      <div class="grid three">
+        <div class="card">
+          <h3>iPhone or iPad (Safari)</h3>
+          <ol>
+            <li>Open <a href="app/">the web app</a> in <strong>Safari</strong> — not
+              Chrome, which can't install web apps on iOS.</li>
+            <li>Tap the <strong>Share</strong> button.</li>
+            <li>Choose <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>
+          </ol>
+          <p style="margin-top:12px">
+            Prefer the native app? See <a href="ios.html">iOS &amp; beta</a>.
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>Android (Chrome)</h3>
+          <ol>
+            <li>Open <a href="app/">the web app</a> in Chrome.</li>
+            <li>Open the <strong>⋮</strong> menu.</li>
+            <li>Tap <strong>Add to Home screen</strong> or <strong>Install app</strong>.</li>
+          </ol>
+          <p style="margin-top:12px">
+            A native Android client is planned; the installed web app is the
+            recommended way to train on Android today.
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>Desktop</h3>
+          <ol>
+            <li>Just open <a href="app/">the web app</a> — it works in any modern
+              browser.</li>
+            <li>Chrome and Edge offer an <strong>Install</strong> button in the address
+              bar if you want it in its own window.</li>
+          </ol>
+          <p style="margin-top:12px">
+            Handy for building programs with a keyboard before you take them to the gym.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout" style="margin-top:24px">
+        <strong>Each install is its own logbook.</strong> There's no sync service, so the
+        web app on your laptop and the app on your phone are separate stores. Moving
+        between them is a deliberate act: export a backup on one, import it on the
+        other. Same file format on every platform.
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>2. Tell it what your gym owns</h2>
+        <p>
+          This is the step people skip, and it's the one that makes the plate math
+          trustworthy.
+        </p>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div>
+            <h3>Open Settings → Gyms</h3>
+            <p>
+              A default gym is already there. Edit it — or add the gyms you actually
+              train at — and set the <strong>bars</strong> available (45 lb, 35 lb, 20 kg,
+              15 kg) and <strong>how many of each plate</strong> the racks hold.
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h3>Be honest about pairs</h3>
+            <p>
+              If there are only two 25s in the building, say two. Cadence solves loading
+              against that inventory, so an honest count is the difference between a
+              prescription you can load and one you can't.
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h3>Set your display unit</h3>
+            <p>
+              <strong>Settings</strong> chooses whether you see pounds or kilograms.
+              Entry accepts either regardless — everything is stored canonically in
+              pounds and converted only for display, so switching units never rewrites
+              your history.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>3. Create a program</h2>
+        <p>
+          Open <strong>Settings → Programs</strong> and tap
+          <strong>+ Add program</strong>. Pick a ready-made style, a published
+          methodology, or a blank program you lay out yourself.
+        </p>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <caption class="muted" style="text-align:left;padding:12px 16px;font-size:14px">
+            What ships as a starting point. All of it stays editable.
+          </caption>
+          <thead>
+            <tr><th>Style</th><th>Days</th><th>What it is</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Strength — Upper/Lower</strong></td>
+              <td>4</td>
+              <td>Barbell strength A/B split. The upper days alternate the overhead and
+                incline presses; every day carries core work.</td>
+            </tr>
+            <tr>
+              <td><strong>Olympic Weightlifting</strong></td>
+              <td>3</td>
+              <td>Snatch day, clean &amp; jerk day, strength day, with pulls and a
+                squat base.</td>
+            </tr>
+            <tr>
+              <td><strong>Metabolic Conditioning</strong></td>
+              <td>3</td>
+              <td>Circuits and engine work. Loads hold steady and progression comes
+                from added reps, which is the right progression for conditioning.</td>
+            </tr>
+            <tr>
+              <td><strong>Published methodologies</strong></td>
+              <td>varies</td>
+              <td>Novice linear progression, Texas Method, 5/3/1 and conjugate,
+                automated deterministically and initialised from your recorded
+                history.</td>
+            </tr>
+            <tr>
+              <td><strong>Blank program</strong></td>
+              <td>—</td>
+              <td>Your days, your lifts, your accessories.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout" style="margin-top:24px">
+        <strong>Do this before day one:</strong> template baselines are deliberately
+        light, because the app can't know how strong you are. Open the program, then
+        each day, and set every lift's <strong>Rotation-1 base</strong> to a weight you
+        can confidently handle for the week-1 volume prescription, and
+        <strong>Est. 1RM</strong> to your rough max. Ten minutes here saves a wasted
+        first cycle.
+      </div>
+      <div class="callout">
+        The first program you create becomes <strong>Active</strong> automatically. Later
+        ones are created inactive so they can't hijack your Today screen — activate one
+        from its editor when you're ready to switch.
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>4. Run a training day</h2>
+        <p>
+          The <strong>Today</strong> screen shows the active program's next day, with
+          every prescription pre-filled.
+        </p>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div>
+            <h3>Preview it, then start it</h3>
+            <p>
+              Tap the day's name to read the whole workout — every lift, its
+              prescription and its bar loadout — without starting anything.
+              <strong>Start</strong> is what commits, and it begins the clock. If a
+              session is already open, Start resumes it rather than creating a duplicate.
+            </p>
+            <p>
+              Opening a session is deliberately <em>not</em> starting it, so reading the
+              plan in the changing room never invents a two-hour workout. Started one by
+              accident? <strong>Reset to not started</strong> puts it back and leaves
+              your logged sets alone.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div>
+            <h3>Confirm sets as you do them</h3>
+            <p>
+              Warmups arrive pre-filled: bar × 10 then roughly 40/55/70/85 % for barbell
+              work, per-hand steps for main dumbbell lifts, and two bridging steps for a
+              complementary lift that follows the day's main. Work sets stay
+              <strong>planned</strong> until you mark them completed; mark deliberately
+              omitted work <strong>skipped</strong>. Only completed work counts toward
+              history and progression.
+            </p>
+            <p>
+              Enter weights in kg or lb — whichever you typed is remembered, and the
+              value is stored in pounds underneath.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div>
+            <h3>Adjust without losing anything</h3>
+            <p>
+              Add or remove single sets with <strong>+ Set</strong> /
+              <strong>− Set</strong>. In the set sheet, <em>apply reps to remaining
+              planned sets</em> and <em>apply weight to remaining planned sets</em> are
+              two independent opt-ins, both off by default — so editing reps can't reset
+              a weight you chose on purpose, and opening a set just to add a body flag
+              changes nothing else. Completed and skipped sets are never rewritten.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div>
+            <h3>Grade it honestly</h3>
+            <p>
+              <strong>Clean</strong>, <strong>grindy</strong> and <strong>wobble</strong>
+              are one optional, mutually exclusive assessment; <em>stopped early</em> is
+              independent of it. These aren't judgements — they're the data the
+              autoregulation actually runs on.
+            </p>
+            <p>
+              If the weight isn't there today, use <strong>Dropping load</strong> rather
+              than quietly editing the number. Cadence loads a pre-computed fallback and
+              records the reason (bar speed, wobble, joint, heat, fatigue, not there).
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div>
+            <h3>Let the rest timer pick the rest</h3>
+            <p>
+              An exercise's own rest setting wins; then its role today (complementary
+              lifts and accessories rest less than a top main); then its movement type.
+              Roughly 5:00 after main work and 1:30 after accessories. Add or subtract a
+              minute mid-rest with <strong>+1:00</strong> / <strong>−1:00</strong>.
+            </p>
+            <p>
+              On iOS the countdown appears as a Live Activity on the Lock Screen and
+              Dynamic Island, and can be started or skipped from Control Center or the
+              Action Button.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div>
+            <h3>Finish and read the summary</h3>
+            <p>
+              Total volume, top sets, and auto-detected milestones: heaviest set, first
+              time at a rep scheme, and volume records. The next rotation is computed
+              from what you performed, so there is nothing to reconcile before next time.
+            </p>
+            <p>
+              Training something off-programme? <strong>Blank session</strong> logs
+              anything, and standalone tracked lifts get their own suggestions under
+              "Next up".
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>5. The plate calculator</h2>
+        <p>
+          The floating button sits over every tab, because you need it while standing at
+          a rack holding a phone in one hand.
+        </p>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <h3>Target → loading</h3>
+          <p>
+            Type the total you want in lb or kg. Cadence returns the per-side loading
+            from the current gym's inventory — mixing a kg plate and an lb plate on the
+            same side when that's genuinely the closest you can get — and shows the
+            achieved total in both units. If the rack can't get within 2 lb of the
+            target, it says so instead of pretending.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Loading → total</h3>
+          <p>
+            Reverse mode: tap in the plates already on the bar and get the total. Useful
+            for taking over a bar somebody else loaded, and for checking a gym's plates
+            are actually the weight they're painted.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>6. The rest of the tabs</h2>
+      </div>
+      <div class="grid three">
+        <div class="card">
+          <h3>History</h3>
+          <p>
+            Every banked session, plus a progression chart that keeps main and
+            complementary work on separate lines rather than averaging two different
+            jobs into one trend. Volume keeps its own scale.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Body</h3>
+          <p>
+            A private on-device bodyweight chart with optional annotations, and a protein
+            quick-log against a target you set. No targets are assumed for you.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Signals</h3>
+          <p>
+            Optional shoulder, hip and knee flags attached to individual sets, shown as a
+            per-site timeline you can still read months later — plus an optional
+            next-morning knee check-in after you run.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Gym tag</h3>
+          <p>
+            Store a photo of the membership barcode per gym. Cadence shows it full-screen
+            at maximum brightness from the launch screen, so it scans first time.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Exercise library</h3>
+          <p>
+            141 generic strength, accessory, bodyweight, Olympic and conditioning
+            movements, searchable and categorised, each showing what it works and where
+            it appears in your programs. Add your own freely.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Swaps</h3>
+          <p>
+            Substitute a lift when the rack is taken. Swaps are rule-checked so the
+            replacement does a comparable job, and can apply to today only or to the
+            rest of the cycle.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>7. Back it up — this one matters</h2>
+        <p>
+          Cadence has no cloud copy of your training. That's the point, and it means
+          backups are genuinely your responsibility.
+        </p>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <h3>Export</h3>
+          <p><strong>Settings → Data → Export JSON</strong> writes the full bundle:
+            sessions, programs and their mid-cycle state, tracked lifts, body log,
+            protein, check-ins, milestones, gyms, your exercise library and settings.</p>
+          <p><strong>Export CSV</strong> flattens sessions for a spreadsheet. It is not a
+            backup — it can't be imported again.</p>
+          <p>Do it after a PR day. The JSON is plain text; keep it wherever you keep
+            files you care about.</p>
+        </div>
+        <div class="card">
+          <h3>Restore</h3>
+          <p><strong>Settings → Data → Import</strong> and pick a backup JSON. The format
+            is identical on both platforms, so an iOS export restores into the web app
+            and vice versa — that's also how you move to a new device.</p>
+          <p>Restore is transactional and per-section: a malformed file aborts without
+            touching your data, and only the sections present in the bundle are replaced.
+            A backup from a newer version is refused rather than half-applied.</p>
+        </div>
+      </div>
+
+      <div class="callout" style="margin-top:24px">
+        <strong>Web app users, read this one.</strong> iOS Safari can evict local storage
+        for sites you haven't opened in a while. The app also keeps the last three local
+        recovery checkpoints, but those live in the same storage — clearing site data or
+        deleting the app takes them with it. An exported JSON file somewhere else is the
+        only real backup.
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Going deeper</h2>
+        <p>
+          The full documentation — tutorials, how-to guides, and reference for every rule
+          the engine follows — lives with the source.
+        </p>
+      </div>
+      <div class="grid three">
+        <div class="card quiet">
+          <h3>Tutorials</h3>
+          <ul>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/tutorials/first-program.md">Build your first program</a></li>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/how-to/start-from-a-style.md">Start from a pre-programmed style</a></li>
+          </ul>
+        </div>
+        <div class="card quiet">
+          <h3>How-to</h3>
+          <ul>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/how-to/run-a-training-day.md">Run a training day</a></li>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/how-to/edit-a-program-mid-cycle.md">Edit a program mid-cycle</a></li>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/how-to/swap-an-exercise.md">Swap an exercise</a></li>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/how-to/back-up-and-restore.md">Back up and restore</a></li>
+          </ul>
+        </div>
+        <div class="card quiet">
+          <h3>Reference</h3>
+          <ul>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/reference/progression-rules.md">Progression rules</a></li>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/reference/templates.md">What each template contains</a></li>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/reference/rest-timers.md">Rest timers</a></li>
+            <li><a href="https://github.com/madhakish/cadence/blob/main/docs/reference/backup-schema.md">Backup schema</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:26px">
+        <a class="btn ghost" href="https://github.com/madhakish/cadence/tree/main/docs">All documentation</a>
+        <a class="btn primary" href="app/">Open the app</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-grid">
+    <div class="fine">
+      <strong>Cadence</strong>
+      A single-user, local-first strength logbook for iOS and the web. Source published on GitHub.
+      No accounts, no backend, no streaks, no badges, no motivational quotes.
+    </div>
+    <nav aria-label="Footer">
+      <a href="./">Overview</a>
+      <a href="guide.html">How to use it</a>
+      <a href="ios.html">iOS &amp; beta</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="app/">Web app</a>
+      <a href="https://github.com/madhakish/cadence">GitHub</a>
+      <a href="https://github.com/madhakish/cadence/tree/main/docs">Documentation</a>
+      <a href="https://github.com/madhakish/cadence/blob/main/SECURITY.md">Security</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,6 +1,6 @@
 // Port of the CadenceCore XCTest suite. Run: node tests/core.test.mjs
 // Keeps the JS math in lockstep with the Swift source of truth.
-import * as C from "../js/core.js";
+import * as C from "../app/js/core.js";
 
 let pass = 0, fail = 0;
 const approx = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;

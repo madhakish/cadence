@@ -3,7 +3,7 @@ import XCTest
 
 /// Parity enforcement for the program style templates: the Swift copy must
 /// equal web/tests/fixtures/program-templates.json — the same fixture the
-/// node smoke suite holds web/js/templates.js to — so either mirror drifting
+/// node smoke suite holds web/app/js/templates.js to — so either mirror drifting
 /// fails its own CI job. Regenerate the fixture with
 /// web/tools/generate-template-fixture.mjs when templates change.
 final class ProgramTemplateDataTests: XCTestCase {

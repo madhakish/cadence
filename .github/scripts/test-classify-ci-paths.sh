@@ -44,7 +44,7 @@ assert_classification \
 assert_classification \
   "web-only changes" \
   $'native=false\nmigrations=false\nweb=true' \
-  'web/js/app.js'
+  'web/app/js/app.js'
 
 assert_classification \
   "CI workflow changes compile the current app without rebuilding historical stores" \

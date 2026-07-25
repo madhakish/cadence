@@ -4,7 +4,7 @@ import CadenceCore
 /// Compact dumbbell graphic for dumbbell lifts — the counterpart of
 /// BarbellView's plate loadout: heads on both ends, the dumbbell's size (in
 /// the entered unit) stamped on the handle, so a glance says which pair to
-/// grab off the rack. Mirrors web/js/barbell.js `dumbbellSVG` (same geometry
+/// grab off the rack. Mirrors web/app/js/barbell.js `dumbbellSVG` (same geometry
 /// and greys).
 struct DumbbellView: View {
     let weightLb: Double
