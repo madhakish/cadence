@@ -507,6 +507,24 @@ public enum ProgramProgression {
         return weightLb > 0 && incrementLb <= 0
     }
 
+    /// Whether the next session is landing sooner than the program's preferred
+    /// spacing, and by how much.
+    ///
+    /// `preferredSessionSpacingDays` was previously write-only: a stepper set
+    /// it, the coach's shorter-spacing trial wrote it, and nothing ever read it
+    /// back. A preference the app collects and then ignores is worse than not
+    /// asking. This is advisory only — it never blocks a session, because the
+    /// lifter's calendar beats the app's opinion.
+    ///
+    /// Returns nil when there is nothing useful to say: no prior session, no
+    /// preference recorded, or the gap is already met.
+    /// Mirrored 1:1 in web/app/js/core.js `sessionSpacingShortfall`.
+    public static func sessionSpacingShortfall(daysSinceLastSession: Int?, preferredDays: Int) -> Int? {
+        guard preferredDays > 0, let elapsed = daysSinceLastSession, elapsed >= 0 else { return nil }
+        let shortfall = preferredDays - elapsed
+        return shortfall > 0 ? shortfall : nil
+    }
+
     /// Accessory double progression: earn the top of the rep range across all
     /// sets, then add the smallest increment and reset reps. Never adds weight
     /// that wasn't earned.

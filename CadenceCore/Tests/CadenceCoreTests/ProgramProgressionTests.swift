@@ -233,6 +233,23 @@ final class ProgramProgressionTests: XCTestCase {
         ), "a band with no numeric load is not flagged")
     }
 
+    /// Session spacing is advisory and only speaks when it has something to
+    /// say. The preference was previously write-only.
+    func testSessionSpacingShortfallOnlySpeaksWhenEarly() {
+        XCTAssertEqual(P.sessionSpacingShortfall(daysSinceLastSession: 1, preferredDays: 3), 2)
+        XCTAssertEqual(P.sessionSpacingShortfall(daysSinceLastSession: 0, preferredDays: 3), 3)
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: 3, preferredDays: 3),
+                     "meeting the preference says nothing")
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: 9, preferredDays: 3),
+                     "being well past it says nothing")
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: nil, preferredDays: 3),
+                     "no prior session says nothing")
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: 1, preferredDays: 0),
+                     "no preference recorded says nothing")
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: -1, preferredDays: 3),
+                     "a negative gap is nonsense, not a warning")
+    }
+
     /// Fractional increments have to survive: a 5 lb step on a 10 lb load is a
     /// 50% jump, so small-load slots need 2.5 and it must not round away.
     func testAccessoryAcceptsAFractionalIncrement() {

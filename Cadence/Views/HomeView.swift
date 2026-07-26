@@ -17,6 +17,11 @@ struct HomeView: View {
     @Environment(\.modelContext) private var context
     @Environment(RestTimer.self) private var restTimer
     @Environment(WorkoutClock.self) private var workoutClock
+    /// Newest first, so `.first` is the last banked session — used for the
+    /// advisory spacing note on the next-session card.
+    @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted },
+           sort: \WorkoutSession.date, order: .reverse)
+    private var completedSessions: [WorkoutSession]
     @Query private var tracks: [LiftTrack]
     @Query private var programs: [Program]
     @Query private var exercises: [Exercise]
@@ -51,6 +56,20 @@ struct HomeView: View {
     private var ownedLiftNames: Set<String> {
         guard let p = activeProgram else { return [] }
         return Set(p.days.flatMap { $0.lifts.map(\.exerciseName) })
+    }
+
+    /// Advisory only — the preference used to be write-only, set by a stepper
+    /// and never read back. It never blocks a session: the lifter's calendar
+    /// beats the app's opinion.
+    private func spacingNote(_ program: Program) -> String? {
+        guard let last = completedSessions.first?.date else { return nil }
+        let elapsed = Calendar.current.dateComponents([.day], from: last, to: .now).day
+        guard let shortfall = ProgramProgression.sessionSpacingShortfall(
+            daysSinceLastSession: elapsed, preferredDays: program.preferredSessionSpacingDays
+        ), shortfall > 0, let elapsed else { return nil }
+        let since = elapsed == 0 ? "Trained today" : "\(elapsed) day\(elapsed == 1 ? "" : "s") since your last session"
+        return "\(since) · you prefer \(program.preferredSessionSpacingDays). "
+            + "Train anyway if today is the day that works."
     }
 
     private func nextDay(_ program: Program) -> ProgramDay? {
@@ -244,6 +263,11 @@ struct HomeView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        if let note = spacingNote(program) {
+                            Text(note)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         ForEach(day.orderedLifts) { lift in
                             let target = rawProgramPlan(program, day, lift)
                             let plan = programPlan(program, day, lift)

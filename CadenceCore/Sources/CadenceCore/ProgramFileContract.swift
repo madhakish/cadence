@@ -330,7 +330,9 @@ public enum ProgramFileContract {
         try text(program.name, "program.name")
         try known(program.focus, focuses, "program.focus", "focus")
         try number(program.roundingLb, "program.roundingLb", 0.5, 50)
-        try integer(program.preferredSessionSpacingDays, "program.preferredSessionSpacingDays", 0, 14)
+        // Matches the backup contract's range. Accepting 0 or 1 here would let
+        // a program file import cleanly and then fail its own backup.
+        try integer(program.preferredSessionSpacingDays, "program.preferredSessionSpacingDays", 2, 14)
         try integer(program.maximumAddedSetsPerRotation, "program.maximumAddedSetsPerRotation", 0, 60)
         if let id = program.id { try uuid(id, "program.id") }
 

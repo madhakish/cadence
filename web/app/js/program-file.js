@@ -103,7 +103,9 @@ const PROGRAM_PLAN_FIELDS = [
   ["focus", "focus"],
   ["roundingLb", "num:0.5:50"],
   ["coachEnabled", "bool"],
-  ["preferredSessionSpacingDays", "int:0:14"],
+  // Matches the backup contract's range. Accepting 0 or 1 here would let a
+  // program file import cleanly and then fail its own backup.
+  ["preferredSessionSpacingDays", "int:2:14"],
   ["maximumAddedSetsPerRotation", "int:0:60"],
 ];
 

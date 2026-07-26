@@ -613,6 +613,15 @@ eq(pres.state.stallCount, 0, "maintain success resets stall");
   ok(single(hyper) === 155, `hypertrophy seeds it at its own 0.78 ceiling (got ${single(hyper)})`);
 }
 
+// Session spacing is advisory and only speaks when it has something to say.
+ok(C.sessionSpacingShortfall(1, 3) === 2, "one day into a three-day preference is two short");
+ok(C.sessionSpacingShortfall(0, 3) === 3, "training the same day is the full shortfall");
+ok(C.sessionSpacingShortfall(3, 3) === null, "meeting the preference says nothing");
+ok(C.sessionSpacingShortfall(9, 3) === null, "being well past it says nothing");
+ok(C.sessionSpacingShortfall(null, 3) === null, "no prior session says nothing");
+ok(C.sessionSpacingShortfall(1, 0) === null, "no preference recorded says nothing");
+ok(C.sessionSpacingShortfall(-1, 3) === null, "a negative gap is nonsense, not a warning");
+
 // accessory double progression
 let acc = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 50, incrementLb: 5, stallCount: 0 };
 let ac = C.advanceAccessory(acc, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });

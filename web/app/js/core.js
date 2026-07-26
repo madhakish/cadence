@@ -1095,6 +1095,24 @@ export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, i
   return weightLb > 0 && !(incrementLb > 0);
 }
 
+// Whether the next session is landing sooner than the program's preferred
+// spacing, and by how much.
+//
+// preferredSessionSpacingDays was previously write-only: a stepper set it, the
+// coach's shorter-spacing trial wrote it, and nothing ever read it back. A
+// preference the app collects and then ignores is worse than not asking. This
+// is advisory only — it never blocks a session, because the lifter's calendar
+// beats the app's opinion.
+//
+// Returns null when there is nothing useful to say.
+// Mirrored 1:1 in CadenceCore ProgramProgression.sessionSpacingShortfall.
+export function sessionSpacingShortfall(daysSinceLastSession, preferredDays) {
+  if (!(preferredDays > 0)) return null;
+  if (!Number.isInteger(daysSinceLastSession) || daysSinceLastSession < 0) return null;
+  const shortfall = preferredDays - daysSinceLastSession;
+  return shortfall > 0 ? shortfall : null;
+}
+
 // Accessory double progression. state: { sets, minReps, maxReps, currentReps,
 // weightLb, incrementLb, stallCount }; perf: { completedSets, minRepsAchieved, anyStoppedEarly }
 export function advanceAccessory(state, perf) {
