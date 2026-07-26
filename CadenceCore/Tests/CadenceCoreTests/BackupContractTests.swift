@@ -3,7 +3,7 @@ import XCTest
 
 final class BackupContractTests: XCTestCase {
     func testCurrentVersionIsV4() {
-        XCTAssertEqual(BackupContract.currentSchemaVersion, 4)
+        XCTAssertEqual(BackupContract.currentSchemaVersion, 5)
     }
 
     func testCurrentAndLegacyVersionsAreSupported() {

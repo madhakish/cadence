@@ -257,10 +257,29 @@ final class ProgramEngineTests: XCTestCase {
             for: CycleState(baseWeightLb: 300, nextPhase: .peak),
             programRoundingLb: 5, exerciseType: "barbell", movementGroup: "squat",
             prescriptionStyle: .fiveThreeOne)
-        XCTAssertEqual(prescription.blocks.map(\.kind), [.ramp, .ramp, .work])
+        // The top set is the "+" set — the AMRAP is 5/3/1's progression engine,
+        // and shipping the percentages without it was the template's one real
+        // infidelity. Mirrors the block in web/tests/core.test.mjs.
+        XCTAssertEqual(prescription.blocks.map(\.kind), [.ramp, .ramp, .amrap])
         XCTAssertEqual(prescription.blocks.map(\.weightLb), [225, 255, 285])
         XCTAssertEqual(prescription.blocks.map(\.reps), [5, 3, 1])
         XCTAssertEqual(prescription.mainWork.weightLb, 285)
+
+        // Wendler's deload week has no "+" set.
+        let deload = ProgramEngine.sessionPrescription(
+            for: CycleState(baseWeightLb: 300, nextPhase: .deload),
+            programRoundingLb: 5, exerciseType: "barbell", movementGroup: "squat",
+            prescriptionStyle: .fiveThreeOne)
+        XCTAssertEqual(deload.blocks.map(\.kind), [.ramp, .ramp, .work])
+
+        // An AMRAP set is graded work. Filtering to `work` alone made it
+        // invisible: uncounted for completion, ineligible as the top set,
+        // unable to reach the e1RM sample — the entire point of the block.
+        XCTAssertTrue(PrescriptionBlockKind.amrap.countsAsPrescribedWork)
+        XCTAssertTrue(PrescriptionBlockKind.work.countsAsPrescribedWork)
+        for kind in [PrescriptionBlockKind.warmup, .primer, .ramp, .topSingle, .backoff] {
+            XCTAssertFalse(kind.countsAsPrescribedWork, "\(kind) is not the prescription being graded")
+        }
     }
 
     func testMaxEffortTopSingleWithBackoffTriplesAndDeload() {
