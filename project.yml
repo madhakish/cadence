@@ -47,14 +47,17 @@ targets:
         # (follow the OS) for System. A hard "Dark" here would override that and
         # keep System from ever going light.
         NSHealthUpdateUsageDescription: >-
-          Optionally writes completed workouts and bodyweight to Health.
-          Off by default; you choose what gets saved.
+          Optionally writes the workouts you complete — including any walking,
+          running, or cycling distance you logged — plus your bodyweight and
+          body fat percentage to Health. Off by default; you choose whether
+          anything gets saved.
         NSHealthShareUsageDescription: >-
-          Optionally reads walking, running, and cycling distance so Cadence
-          can show it beside the conditioning you logged. Off by default,
-          separate from writing, and only ever read for a session you have
-          already recorded. Cadence never changes a logged workout on its
-          own — it shows both numbers and you decide.
+          Optionally reads walking, running, and cycling distance, workout
+          energy, bodyweight, body fat percentage, heart rate variability,
+          resting heart rate, and sleep, so Cadence can show them beside what
+          you logged. Off by default and separate from writing. Cadence never
+          changes your log on its own — it shows both numbers and you decide,
+          and it ignores the data it wrote to Health itself.
         NSPhotoLibraryUsageDescription: >-
           Lets you store a photo of your gym membership barcode so your
           phone can stand in for the keychain tag.

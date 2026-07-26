@@ -70,6 +70,66 @@ final class HealthComparisonTests: XCTestCase {
             "a zero-length sample belongs to nothing")
     }
 
+    // [INV-HEALTH-IS-A-SECOND-OPINION] A read never counts Cadence's own
+    // writes. Comparing the log against a mirror of itself is not a second
+    // opinion — and once Cadence writes distance, bodyweight and protein into
+    // Health, every read would find them without this rule.
+    func testCadencesOwnSamplesAreNotASecondOpinion() {
+        let app = "com.example.cadence"
+        XCTAssertFalse(HealthComparison.sourceIsForeign(
+            bundleIdentifier: app, appBundleIdentifier: app),
+            "our own write is not a second opinion")
+        XCTAssertFalse(HealthComparison.sourceIsForeign(
+            bundleIdentifier: "COM.EXAMPLE.CADENCE", appBundleIdentifier: app),
+            "bundle identifiers are not case sensitive")
+        XCTAssertTrue(HealthComparison.sourceIsForeign(
+            bundleIdentifier: "com.apple.health", appBundleIdentifier: app))
+        XCTAssertTrue(HealthComparison.sourceIsForeign(
+            bundleIdentifier: "com.example.cadence.watch", appBundleIdentifier: app),
+            "a different bundle is a different source, prefix or not")
+
+        // Unattributable is foreign: dropping a sample we cannot prove is ours
+        // would silently discard a real second opinion, where the opposite
+        // choice fails visibly the first time it offers back our own number.
+        XCTAssertTrue(HealthComparison.sourceIsForeign(
+            bundleIdentifier: nil, appBundleIdentifier: app))
+        XCTAssertTrue(HealthComparison.sourceIsForeign(
+            bundleIdentifier: "  ", appBundleIdentifier: app))
+        XCTAssertTrue(HealthComparison.sourceIsForeign(
+            bundleIdentifier: app, appBundleIdentifier: nil),
+            "not knowing who we are cannot be read as owning everything")
+    }
+
+    // [INV-HEALTH-IS-A-SECOND-OPINION]
+    func testWeighInImportIsNotOfferedForAWeightAlreadyLogged() {
+        let morning = date(0)
+        XCTAssertTrue(HealthComparison.isSameWeighIn(
+            loggedLb: 197.2, loggedDate: morning, healthLb: 197.2, healthDate: morning))
+        XCTAssertTrue(HealthComparison.isSameWeighIn(
+            loggedLb: 197.2, loggedDate: morning, healthLb: 197.3, healthDate: morning),
+            "a kilogram round-trip is the same weigh-in")
+        XCTAssertFalse(HealthComparison.isSameWeighIn(
+            loggedLb: 197.2, loggedDate: morning, healthLb: 198.6, healthDate: morning),
+            "a genuinely different weight the same day stays offerable")
+
+        // Yesterday's weight is not a duplicate of today's, however close.
+        let yesterday = morning.addingTimeInterval(-60 * 60 * 30)
+        XCTAssertFalse(HealthComparison.isSameWeighIn(
+            loggedLb: 197.2, loggedDate: yesterday, healthLb: 197.2, healthDate: morning))
+    }
+
+    func testSleepCountsSleepAndNotTimeInBed() {
+        let night: [(stage: String, seconds: Int)] = [
+            ("inBed", 30 * 60), ("asleepCore", 3 * 3600), ("asleepDeep", 3600),
+            ("awake", 20 * 60), ("asleepREM", 90 * 60), ("inBed", 15 * 60),
+        ]
+        XCTAssertEqual(HealthComparison.asleepSeconds(stages: night), 3 * 3600 + 3600 + 90 * 60)
+        XCTAssertEqual(HealthComparison.asleepSeconds(stages: []), 0)
+        XCTAssertEqual(HealthComparison.asleepSeconds(stages: [("inBed", 8 * 3600)]), 0,
+                       "a night on the mattress with no staging is not eight hours of sleep")
+        XCTAssertEqual(HealthComparison.asleepSeconds(stages: [("asleepCore", -60)]), 0)
+    }
+
     func testLabels() {
         XCTAssertEqual(HealthComparison.label(.agree(miles: 3)), "Health agrees: 3 mi")
         XCTAssertEqual(HealthComparison.label(.healthHigher(loggedMiles: 2, healthMiles: 2.4)),

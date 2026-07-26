@@ -168,7 +168,22 @@ enum SessionCompletion {
                                              category: exercise.categoryRaw)
             }
             let modality = WorkoutClassification.classify(completedKinds)
-            Task { await HealthKitService.shared.saveWorkout(start: start, end: end, modality: modality) }
+            // Distance from the conditioning work actually performed. Without
+            // it the mirrored workout carries a duration and nothing else,
+            // which is all Health showed before. `workingSets` is already
+            // completed-and-non-warmup, so a set left planned or skipped is not
+            // claimed as ground covered.
+            let miles = session.exercises
+                .filter { $0.exercise?.type == .conditioning }
+                .flatMap(\.workingSets)
+                .compactMap(\.distanceMiles)
+                .reduce(0, +)
+            Task {
+                await HealthKitService.shared.saveWorkout(
+                    start: start, end: end, modality: modality,
+                    distanceMiles: miles > 0 ? miles : nil
+                )
+            }
         }
 
         let allPlannedWork = session.exercises.flatMap(\.plannedWorkingSets)

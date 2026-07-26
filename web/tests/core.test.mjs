@@ -846,6 +846,40 @@ for (const mph of [2.5, 3.0, 3.1, 3.5, 4.0, 5.5, 6.0, 7.5]) {
   eq(C.healthComparisonLabel(higher), "Health recorded 2.4 mi · you logged 2 mi", "disagreement names both sides");
   eq(C.healthComparisonLabel(C.healthCompare(2, null)), "Nothing in Health for this session", "one-sided label");
   eq(C.healthComparisonLabel(C.healthCompare(null, null)), "No conditioning distance", "empty label");
+
+  // [INV-HEALTH-IS-A-SECOND-OPINION] A read never counts Cadence's own writes.
+  // Once Cadence writes distance, bodyweight and protein into Health, every
+  // read would otherwise find them and "confirm" the log against itself.
+  const app = "com.example.cadence";
+  ok(!C.healthSourceIsForeign(app, app),
+    "[INV-HEALTH-IS-A-SECOND-OPINION] our own write is not a second opinion");
+  ok(!C.healthSourceIsForeign("COM.EXAMPLE.CADENCE", app), "bundle ids are not case sensitive");
+  ok(C.healthSourceIsForeign("com.apple.health", app), "another app is a real second opinion");
+  ok(C.healthSourceIsForeign("com.example.cadence.watch", app),
+    "a different bundle is a different source, prefix or not");
+  ok(C.healthSourceIsForeign(null, app), "unattributable counts as foreign");
+  ok(C.healthSourceIsForeign("  ", app), "blank counts as foreign");
+  ok(C.healthSourceIsForeign(app, null),
+    "[INV-HEALTH-IS-A-SECOND-OPINION] not knowing who we are cannot mean owning everything");
+
+  const morning = min(0);
+  const yesterday = new Date(morning.getTime() - 30 * 3600 * 1000);
+  ok(C.healthIsSameWeighIn(197.2, morning, 197.2, morning), "the same weigh-in");
+  ok(C.healthIsSameWeighIn(197.2, morning, 197.3, morning), "a kilogram round-trip is the same weigh-in");
+  ok(!C.healthIsSameWeighIn(197.2, morning, 198.6, morning),
+    "a genuinely different weight the same day stays offerable");
+  ok(!C.healthIsSameWeighIn(197.2, yesterday, 197.2, morning),
+    "yesterday's weight is not a duplicate of today's");
+
+  eq(C.healthAsleepSeconds([
+    { stage: "inBed", seconds: 1800 }, { stage: "asleepCore", seconds: 10800 },
+    { stage: "asleepDeep", seconds: 3600 }, { stage: "awake", seconds: 1200 },
+    { stage: "asleepREM", seconds: 5400 }, { stage: "inBed", seconds: 900 },
+  ]), 10800 + 3600 + 5400, "sleep is asleep stages only");
+  eq(C.healthAsleepSeconds([]), 0, "no stages is no sleep");
+  eq(C.healthAsleepSeconds([{ stage: "inBed", seconds: 28800 }]), 0,
+    "a night on the mattress with no staging is not eight hours of sleep");
+  eq(C.healthAsleepSeconds([{ stage: "asleepCore", seconds: -60 }]), 0, "negative durations are ignored");
 }
 
 eq(C.cardioDurationLabel(1350), "22:30", "m:ss");

@@ -10,8 +10,14 @@ struct BodyView: View {
     @Query(sort: \ProteinEntry.date, order: .reverse) private var protein: [ProteinEntry]
     @Query private var settingsList: [AppSettings]
 
+    @AppStorage("healthReadEnabled") private var healthReadEnabled = false
+
     @State private var showWeightEntry = false
     @State private var customProteinText = ""
+    @State private var healthWeighIn: HealthBodyweight?
+    @State private var recovery = HealthKitService.RecoverySnapshot()
+
+    typealias HealthBodyweight = (weightLb: Double, bodyFatPercent: Double?, date: Date)
 
     private var settings: AppSettings? { settingsList.first }
     private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
@@ -124,6 +130,8 @@ struct BodyView: View {
                     Text("Protein")
                 }
 
+                healthSection
+
                 if !todayProtein.isEmpty {
                     Section("Today's entries") {
                         ForEach(todayProtein) { entry in
@@ -145,13 +153,94 @@ struct BodyView: View {
                 BodyweightEntrySheet()
                     .presentationDetents([.medium])
             }
+            .task(id: healthReadEnabled) { await refreshHealth() }
         }
+    }
+
+    /// Sleep reads as hours and minutes. `CardioFormat.durationLabel` would
+    /// render seven hours as "7:24:00", which is a stopwatch, not a night.
+    private static func sleepLabel(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
 
     private func logProtein(_ grams: Double, _ label: String) {
         context.insert(ProteinEntry(grams: grams, label: label))
         PersistenceErrorCenter.shared.save(context, operation: "Logging protein")
-        if settings?.healthKitEnabled == true { /* protein not mirrored; weights only */ }
+    }
+
+    // MARK: - Health
+
+    /// [INV-HEALTH-IS-A-SECOND-OPINION] Health suggests; the lifter decides.
+    /// Nothing here writes on its own, and Cadence's own mirrored samples are
+    /// already excluded by the service, so a suggestion is always something the
+    /// log genuinely does not have.
+    @ViewBuilder
+    private var healthSection: some View {
+        if healthReadEnabled, healthWeighIn != nil || !recovery.isEmpty {
+            Section {
+                if let found = healthWeighIn {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Health has \(unitDisplay.format(lb: found.weightLb)) from \(found.date.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.callout)
+                        Button("Log it") { adoptWeighIn(found) }
+                            .font(.callout)
+                    }
+                }
+                if let hrv = recovery.hrvMilliseconds {
+                    LabeledContent("Heart rate variability", value: "\(Int(hrv.rounded())) ms")
+                }
+                if let rhr = recovery.restingHeartRate {
+                    LabeledContent("Resting heart rate", value: "\(Int(rhr.rounded())) bpm")
+                }
+                if let seconds = recovery.asleepSeconds {
+                    LabeledContent("Slept", value: Self.sleepLabel(seconds))
+                }
+            } header: {
+                Text("Health")
+            } footer: {
+                // Said plainly because it is the whole design: these numbers
+                // are shown, not applied. Training decisions come from the work
+                // logged, not from an overnight reading.
+                Text("Your log stays the record. Recovery figures are shown for context and never change your program.")
+            }
+        }
+    }
+
+    private func refreshHealth() async {
+        guard healthReadEnabled else { return }
+        let service = HealthKitService.shared
+        // A weigh-in older than a fortnight is history, not a prompt.
+        let since = Calendar.current.date(byAdding: .day, value: -14, to: .now) ?? .now
+        async let weighIn = service.latestBodyweight(since: since)
+        async let snapshot = service.recovery()
+
+        let found = await weighIn
+        healthWeighIn = found.flatMap { candidate in
+            // Already logged is not a suggestion. Compared against every
+            // recent entry rather than only the newest, because a weigh-in
+            // entered out of order would otherwise be offered straight back.
+            let alreadyLogged = bodyweight.contains {
+                HealthComparison.isSameWeighIn(
+                    loggedLb: $0.weightLb, loggedDate: $0.date,
+                    healthLb: candidate.weightLb, healthDate: candidate.date
+                )
+            }
+            return alreadyLogged ? nil : candidate
+        }
+        recovery = await snapshot
+    }
+
+    private func adoptWeighIn(_ found: HealthBodyweight) {
+        let entry = BodyweightEntry(
+            date: found.date, weightLb: found.weightLb, bodyFatPercent: found.bodyFatPercent
+        )
+        context.insert(entry)
+        guard PersistenceErrorCenter.shared.save(context, operation: "Logging bodyweight from Health")
+        else { return }
+        // Not mirrored back out: it came from Health, and writing it again
+        // would leave two records of one weigh-in.
+        healthWeighIn = nil
     }
 }
 
@@ -192,15 +281,20 @@ private struct BodyweightEntrySheet: View {
     private func save() {
         guard let enteredWeight = Double(weightText) else { return }
         let weight = Weight.toLb(enteredWeight, from: entryUnit)
+        let bodyFat = Double(bodyFatText)
         let entry = BodyweightEntry(
             weightLb: weight,
-            bodyFatPercent: Double(bodyFatText),
+            bodyFatPercent: bodyFat,
             milestoneLabel: milestoneLabel.isEmpty ? nil : milestoneLabel
         )
         context.insert(entry)
         guard PersistenceErrorCenter.shared.save(context, operation: "Logging bodyweight") else { return }
         if settingsList.first?.healthKitEnabled == true {
-            Task { await HealthKitService.shared.saveBodyweight(lb: weight, date: entry.date) }
+            Task {
+                await HealthKitService.shared.saveBodyweight(
+                    lb: weight, bodyFatPercent: bodyFat, date: entry.date
+                )
+            }
         }
         dismiss()
     }

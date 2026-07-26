@@ -1559,25 +1559,34 @@ export function healthSampleBelongsToSession(sampleStart, sampleEnd, sessionStar
   return healthOverlapSeconds(sampleStart, sampleEnd, sessionStart, sessionEnd) >= sampleSeconds / 2;
 }
 
+// Compare any two measurements of the same thing. Zero and null are both
+// absence — "Health has nothing to say" is never "Health says zero". Pass
+// toleranceFraction 0 where a flat band is the honest one (a weigh-in does not
+// get looser as the lifter gets heavier).
+export function healthVerdictKind(logged, health, toleranceAbsolute, toleranceFraction = 0) {
+  const l = logged > 0 ? logged : null;
+  const h = health > 0 ? health : null;
+  if (l === null && h === null) return "neither";
+  if (l === null) return "onlyHealth";
+  if (h === null) return "onlyLogged";
+  const allowed = Math.max(toleranceAbsolute, Math.max(l, h) * toleranceFraction);
+  if (Math.abs(h - l) <= allowed + 1e-9) return "agree";
+  return h > l ? "healthHigher" : "loggedHigher";
+}
+
 // Compare a logged conditioning distance against Health's for one session.
 // Returns { kind, loggedMiles, healthMiles, isDiscrepancy, adoptableMiles }.
 export function healthCompare(loggedMiles, healthMiles) {
   const logged = loggedMiles > 0 ? loggedMiles : null;
   const health = healthMiles > 0 ? healthMiles : null;
-  const verdict = (kind, extra) => ({
+  const kind = healthVerdictKind(logged, health, HEALTH_TOLERANCE_MILES, HEALTH_TOLERANCE_FRACTION);
+  return {
     kind,
     loggedMiles: logged,
     healthMiles: health,
     isDiscrepancy: kind === "healthHigher" || kind === "loggedHigher" || kind === "onlyHealth",
     adoptableMiles: kind === "onlyLogged" || kind === "agree" || kind === "neither" ? null : health,
-    ...extra,
-  });
-  if (logged === null && health === null) return verdict("neither");
-  if (logged === null) return verdict("onlyHealth");
-  if (health === null) return verdict("onlyLogged");
-  const allowed = Math.max(HEALTH_TOLERANCE_MILES, Math.max(logged, health) * HEALTH_TOLERANCE_FRACTION);
-  if (Math.abs(health - logged) <= allowed + 1e-9) return verdict("agree");
-  return verdict(health > logged ? "healthHigher" : "loggedHigher");
+  };
 }
 
 // One line stating what each source says. Never phrased as a correction.
@@ -1592,6 +1601,57 @@ export function healthComparisonLabel(verdict) {
     case "onlyLogged": return "Nothing in Health for this session";
     default: return "No conditioning distance";
   }
+}
+
+// [INV-HEALTH-IS-A-SECOND-OPINION] Whether a Health sample came from somewhere
+// other than Cadence itself.
+//
+// Load-bearing, and invisible when wrong. Cadence writes workouts, bodyweight
+// and protein into Health; without this every read would find those writes and
+// "confirm" the log against a mirror of itself. A cross-check that always
+// agrees is worse than no cross-check, because it looks like corroboration.
+//
+// An unattributable sample counts as foreign: discounting a sample we cannot
+// prove is ours would silently drop a real second opinion, and the other
+// choice fails visibly the first time it offers the lifter their own number.
+export function healthSourceIsForeign(bundleIdentifier, appBundleIdentifier) {
+  const app = (appBundleIdentifier || "").trim();
+  if (!app) return true;
+  const source = (bundleIdentifier || "").trim();
+  if (!source) return true;
+  return source.toLowerCase() !== app.toLowerCase();
+}
+
+// Two weigh-ins closer than this are the same weigh-in. A scale reports to a
+// tenth of a pound and Health round-trips through kilograms, so exact equality
+// would offer an "import" of a weight the lifter just typed.
+export const HEALTH_WEIGH_IN_TOLERANCE_LB = 0.2;
+
+// Whether a Health weigh-in is one Cadence already has: same calendar day and
+// same number. A genuine second weigh-in later the same day is a different
+// weight and stays offerable; yesterday's is a different day, not a duplicate.
+export function healthIsSameWeighIn(loggedLb, loggedDate, healthLb, healthDate) {
+  const a = loggedDate instanceof Date ? loggedDate : new Date(loggedDate);
+  const b = healthDate instanceof Date ? healthDate : new Date(healthDate);
+  if (a.getFullYear() !== b.getFullYear() || a.getMonth() !== b.getMonth()
+      || a.getDate() !== b.getDate()) return false;
+  return Math.abs(loggedLb - healthLb) <= HEALTH_WEIGH_IN_TOLERANCE_LB + 1e-9;
+}
+
+// The HKCategoryValueSleepAnalysis stages that count as sleep. `inBed` is time
+// on the mattress, not time asleep, and `awake` is explicitly not sleep;
+// counting either would inflate a night by hours.
+export const HEALTH_ASLEEP_STAGES = [
+  "asleepUnspecified", "asleepCore", "asleepDeep", "asleepREM",
+];
+
+// Total time actually asleep, from stage samples of { stage, seconds }.
+export function healthAsleepSeconds(stages) {
+  return (stages || []).reduce((total, entry) => (
+    HEALTH_ASLEEP_STAGES.includes(entry.stage) && entry.seconds > 0
+      ? total + entry.seconds
+      : total
+  ), 0);
 }
 
 // ---- Rotation-first coaching ----------------------------------------------
