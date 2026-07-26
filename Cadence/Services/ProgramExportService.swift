@@ -126,9 +126,16 @@ enum ProgramExportService {
     /// Deterministic bytes: sorted keys, no date encoding (the payload carries
     /// no timestamp at all), so the same program always produces the same file.
     static func jsonData(for program: Program, options: Options = .plan) throws -> Data {
+        // Validate what we are about to hand over. A blank name or a day with no
+        // slots writes a file every Cadence importer rejects, and the lifter
+        // finds out on the other device. Mirrors the web export button; the
+        // ShareLink already fails closed, so an unexportable program simply has
+        // no button rather than a broken file.
+        let payload = file(for: program, options: options)
+        try ProgramFileContract.validate(payload)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(file(for: program, options: options))
+        return try encoder.encode(payload)
     }
 
     static func filename(for program: Program) -> String {

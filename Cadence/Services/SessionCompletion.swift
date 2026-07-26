@@ -331,21 +331,32 @@ enum SessionCompletion {
         )
     }
 
-    /// Sessions banked for this program since its most recent deload rotation.
-    /// A program that has never deloaded returns its whole history, which is
-    /// exactly right — it has accumulated everything.
-    private static func sessionsSinceLastDeload(
+    /// Complete rotations banked for this program since its most recent deload
+    /// rotation. A program that has never deloaded returns every rotation it
+    /// has run, which is exactly right — it has accumulated all of them.
+    ///
+    /// Rotations, not sessions: a session count means something different on
+    /// every split, and the floor it feeds has to mean the same thing on all of
+    /// them. Ordered by `completedAt ?? date` to match the web mirror and
+    /// `CoachingService`, so a backdated session cannot make one client cut the
+    /// cycle short while the other does not.
+    private static func rotationsSinceLastDeload(
         _ sessions: [WorkoutSession], program: Program
     ) -> Int {
         let mine = sessions.filter {
             $0.isCompleted && ($0.programID == program.id || $0.programName == program.name)
-        }.sorted { $0.date < $1.date }
-        var lastDeload = -1
+        }.sorted { ($0.completedAt ?? $0.date) < ($1.completedAt ?? $1.date) }
+        var lastDeloadIndex = -1
         for (index, session) in mine.enumerated() where session.programWeek == ProgramProgression.deloadWeek {
-            lastDeload = index
+            lastDeloadIndex = index
         }
-        return mine.count - 1 - lastDeload
+        let after = mine.dropFirst(lastDeloadIndex + 1)
+        return Set(after.map { RotationKey(
+            cycleNumber: $0.programCycleNumber ?? 0, week: $0.programWeek ?? 0
+        ) }).count
     }
+
+    private struct RotationKey: Hashable { let cycleNumber: Int; let week: Int }
 
     /// Readiness-triggered deload. The schedule normally walks 1 → 2 → 3 → 4;
     /// a second consecutive red rotation means this cycle is not worth
@@ -377,7 +388,7 @@ enum SessionCompletion {
             currentWeek: program.currentWeek,
             readiness: verified.last?.readiness ?? .unknown,
             previousReadiness: verified.dropLast().last?.readiness ?? .unknown,
-            sessionsSinceLastDeload: sessionsSinceLastDeload(sessions, program: program)
+            rotationsSinceLastDeload: rotationsSinceLastDeload(sessions, program: program)
         )
         return decided ? program.currentWeek : nil
     }
@@ -561,8 +572,32 @@ enum SessionCompletion {
             }
         }
 
+        // Outside the graded rotation the cycle does not advance, but the work
+        // still happened, and a set taken past its prescription is the best
+        // estimate available. Observation only: it can raise the estimate,
+        // never lower it, because a submaximal prescription is not evidence of
+        // a smaller max. This is what a capped AMRAP on the load rotation feeds.
+        if week != ProgramProgression.gradedWeek {
+            for lift in day.lifts where !lift.prescription.advancesPerExposure {
+                guard let entry = programmedEntry(
+                    for: lift.id, exerciseName: lift.exerciseName,
+                    role: lift.role.rawValue, in: session
+                ) else { continue }
+                let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
+                                                      exerciseType: entry.exercise?.typeRaw)
+                let perf = cyclePerf(entry, roundingLb: loadStep)
+                guard perf.topSetWeightLb > 0, perf.topSetReps >= 1 else { continue }
+                lift.estimatedMaxLb = ProgramProgression.observedMax(
+                    prior: lift.estimatedMaxLb,
+                    sample: ProgramProgression.epleyE1RM(
+                        weightLb: perf.topSetWeightLb, reps: perf.topSetReps
+                    )
+                )
+            }
+        }
+
         // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
-        if week == 3 {
+        if week == ProgramProgression.gradedWeek {
             for lift in day.lifts where !lift.prescription.advancesPerExposure {
                 if let entry = programmedEntry(
                     for: lift.id, exerciseName: lift.exerciseName,

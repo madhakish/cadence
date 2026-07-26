@@ -174,7 +174,15 @@ export function exportProgramFile(program, { includeState = false, includeIdenti
           ...(includeIdentity && lift.id ? { id: lift.id } : {}),
           ...pick(lift, liftFields),
           // Emitted only when set, so a marker-free program stays byte-stable.
-          ...(includeState && lift.pending ? { pending: lift.pending } : {}),
+          // Narrowed to the contract's shape: the live web record is a whole
+          // ProgressionResult and carries `grade`, which Swift's PendingResult
+          // does not declare and would silently drop on re-encode.
+          ...(includeState && lift.pending
+            ? { pending: {
+              state: pick(lift.pending.state ?? {}, PENDING_STATE_FIELDS),
+              ...(lift.pending.note ? { note: lift.pending.note } : {}),
+            } }
+            : {}),
           ...(includeState && lift.revertToExerciseName
             ? { revertToExerciseName: lift.revertToExerciseName } : {}),
         })),
@@ -514,7 +522,15 @@ const buildSlot = (slot, resolved, fields, { keepIdentity, keepState, extraState
   }
   if (keepIdentity && slot.id) record.id = slot.id;
   for (const [key] of extraState) record[key] = keepState && slot[key] !== undefined ? slot[key] : 0;
-  if (keepState && slot.pending) record.pending = slot.pending;
+  // Narrowed to the contract's shape on the way in as well: whatever this
+  // writes becomes the next export, so an extra key here would leak straight
+  // back out and break cross-client parity a second time.
+  if (keepState && slot.pending) {
+    record.pending = {
+      state: pick(slot.pending.state ?? {}, PENDING_STATE_FIELDS),
+      ...(slot.pending.note ? { note: slot.pending.note } : {}),
+    };
+  }
   // Rewritten to the canonical name, like exerciseName — an alias stored here
   // would resolve to nothing at rollover.
   if (keepState && slot.revertToExerciseName) {

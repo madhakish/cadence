@@ -774,6 +774,68 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.importBundle(parsed);
 }
 
+// A capped AMRAP on the load rotation must reach the engine. Before the gate
+// fix only week 3 touched estimatedMaxLb, so the extra reps were history and
+// nothing else — and the ceiling that reads estimatedMaxLb stayed anchored to
+// a fixed multiple of the base it is meant to bound.
+{
+  const name = "Fixture Load-Week AMRAP";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 2, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0, accessories: [],
+      lifts: [{ exerciseName: "Back Squat", role: "main", prescription: "wave",
+        baseWeightLb: 190, estimatedMaxLb: 221.45, stallCount: 0, lastIncrementLb: 5 }] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const before = program.days[0].lifts[0];
+  const loadId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const load = await db.Sessions.get(loadId);
+  const entry = load.exercises[0];
+  const work = entry.sets.filter((set) => !set.isWarmup);
+  ok(work.length > 1 && work[0].weightLb === 210, `the load rotation prescribes 210 (got ${work[0].weightLb})`);
+  work.forEach((set, index) => {
+    set.status = "completed";
+    // Capped AMRAP: the last set is taken past the prescription, stopping well
+    // inside Epley's accurate band.
+    if (index === work.length - 1) set.reps = 6;
+  });
+  await session.completeSession(load);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const after = program.days[0].lifts[0];
+  ok(after.estimatedMaxLb > before.estimatedMaxLb,
+    `earned reps on the load rotation raise the estimate (${before.estimatedMaxLb} -> ${after.estimatedMaxLb})`);
+  ok(Math.abs(after.estimatedMaxLb - C.smoothE1RM(before.estimatedMaxLb, C.epleyE1RM(210, 6))) < 1e-9,
+    "and they raise it by exactly one smoothing step toward the sample");
+  ok(after.baseWeightLb === before.baseWeightLb && !after.pending,
+    "an observation is not a grade — the base does not move outside the peak");
+  ok(program.currentWeek === 3, "the load rotation still advances to the peak");
+
+  await db.importBundle(parsed);
+}
+
+// A deload rotation must never drag the estimate down.
+{
+  const name = "Fixture Deload Observation";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 4, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0, accessories: [],
+      lifts: [{ exerciseName: "Back Squat", role: "main", prescription: "wave",
+        baseWeightLb: 190, estimatedMaxLb: 221.45, stallCount: 0, lastIncrementLb: 5 }] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const deloadId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const deload = await db.Sessions.get(deloadId);
+  for (const set of deload.exercises[0].sets) set.status = "completed";
+  await session.completeSession(deload);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.days[0].lifts[0].estimatedMaxLb === 221.45,
+    `light deload work is not evidence the max fell (got ${program.days[0].lifts[0].estimatedMaxLb})`);
+
+  await db.importBundle(parsed);
+}
+
 // Rollover with no peak grade on record. The 10% rebuild belongs to the
 // wave family, whose peak is the graded week; the methodology styles carry
 // their own miss rules and must only hold. The two clients disagreed on which

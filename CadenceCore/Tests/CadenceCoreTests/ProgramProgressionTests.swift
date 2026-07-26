@@ -470,43 +470,59 @@ final class ProgramProgressionTests: XCTestCase {
     // Mirrors the "Readiness-triggered deload" block in web/tests/core.test.mjs.
 
     func testTwoRedRotationsCutTheCycleShort() {
-        let far = P.minimumSessionsBetweenDeloads
+        let far = P.minimumRotationsBetweenDeloads
         XCTAssertTrue(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
-                                          previousReadiness: .red, sessionsSinceLastDeload: far))
+                                          previousReadiness: .red, rotationsSinceLastDeload: far))
         XCTAssertTrue(P.shouldDeloadEarly(currentWeek: 1, readiness: .red,
-                                          previousReadiness: .red, sessionsSinceLastDeload: far),
+                                          previousReadiness: .red, rotationsSinceLastDeload: far),
                       "rotation 1 can deload early once the floor is clear")
+        // The floor is in rotations so it means the same thing on a 2-day split
+        // as on a 6-day one. A session floor of 8 was unreachable inside a cycle
+        // for any rotation of three days or fewer.
+        XCTAssertEqual(P.minimumRotationsBetweenDeloads, 2)
     }
 
     func testASingleRedRotationIsNoise() {
-        let far = P.minimumSessionsBetweenDeloads
+        let far = P.minimumRotationsBetweenDeloads
         XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
-                                           previousReadiness: .yellow, sessionsSinceLastDeload: far))
+                                           previousReadiness: .yellow, rotationsSinceLastDeload: far))
         XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
-                                           previousReadiness: .unknown, sessionsSinceLastDeload: far),
+                                           previousReadiness: .unknown, rotationsSinceLastDeload: far),
                        "a first-ever red has nothing to persist against")
         XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 2, readiness: .yellow,
-                                           previousReadiness: .red, sessionsSinceLastDeload: far),
+                                           previousReadiness: .red, rotationsSinceLastDeload: far),
                        "a recovered rotation finishes the cycle")
     }
 
     func testLateRotationsHaveNothingToSkip() {
-        let far = P.minimumSessionsBetweenDeloads
+        let far = P.minimumRotationsBetweenDeloads
         XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 3, readiness: .red,
-                                           previousReadiness: .red, sessionsSinceLastDeload: far),
+                                           previousReadiness: .red, rotationsSinceLastDeload: far),
                        "rotation 3 already advances into the deload")
         XCTAssertFalse(P.shouldDeloadEarly(currentWeek: P.deloadWeek, readiness: .red,
-                                           previousReadiness: .red, sessionsSinceLastDeload: far),
+                                           previousReadiness: .red, rotationsSinceLastDeload: far),
                        "the deload rotation cannot deload again")
     }
 
     func testTheFloorStopsRecoveryDeloadsBecomingTheSchedule() {
-        let far = P.minimumSessionsBetweenDeloads
+        let far = P.minimumRotationsBetweenDeloads
         XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
-                                           previousReadiness: .red, sessionsSinceLastDeload: far - 1))
+                                           previousReadiness: .red, rotationsSinceLastDeload: far - 1))
         XCTAssertTrue(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
-                                          previousReadiness: .red, sessionsSinceLastDeload: far + 40),
+                                          previousReadiness: .red, rotationsSinceLastDeload: far + 10),
                       "an old deload never blocks a new one")
+    }
+
+    func testAnObservationOutsideTheGradedRotationOnlyEverRaisesTheEstimate() {
+        // A capped AMRAP on the load rotation must be able to raise the
+        // estimate; a deload rotation must never lower it.
+        XCTAssertEqual(P.observedMax(prior: 221.45, sample: 236.5),
+                       P.smoothE1RM(prior: 221.45, sample: 236.5))
+        XCTAssertGreaterThan(P.observedMax(prior: 221.45, sample: 236.5), 221.45)
+        XCTAssertEqual(P.observedMax(prior: 221.45, sample: 169), 221.45,
+                       "a deload set is not evidence the max fell")
+        XCTAssertEqual(P.observedMax(prior: 221.45, sample: 221.45), 221.45)
+        XCTAssertEqual(P.gradedWeek, 3)
     }
 
     func testACutShortCycleHoldsRatherThanCountingAMissedPeak() throws {

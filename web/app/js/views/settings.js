@@ -5,7 +5,7 @@ import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
 import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate } from "../templates.js";
-import { exportProgramText, importProgramText, programFilename } from "../program-file.js";
+import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, muscleBlurb, figureSVG } from "../anatomy.js";
 import { Sessions } from "../db.js";
 
@@ -462,7 +462,13 @@ async function programEditor(p) {
         // no wave position, no slot ids. Those are this lifter's state, not
         // properties of the program.
         body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Export program", onClick: () => {
-          ui.download(programFilename(p), exportProgramText(p), "application/json");
+          // Validate what we are about to hand over. A blank name or a day with
+          // no slots writes a file every Cadence importer rejects, and the
+          // lifter finds out on the other device.
+          const text = exportProgramText(p);
+          const problems = validateProgramFile(JSON.parse(text));
+          if (problems.length) { ui.toast(`Not exported — ${problems[0]}`); return; }
+          ui.download(programFilename(p), text, "application/json");
         } }));
         body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Duplicate program", onClick: async () => {
           const all = await Programs.all();

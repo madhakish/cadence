@@ -1010,17 +1010,20 @@ function accPerf(se, roundingLb = 5) {
 // ---- Program day/week/cycle advancement on bank ----
 // Mutates the program in memory and returns { program, noteRecords } for the
 // caller's single completion transaction — no writes of its own.
-// Sessions banked for this program since its most recent deload rotation. A
-// program that has never deloaded returns its whole history, which is exactly
-// right — it has accumulated everything.
-function sessionsSinceLastDeload(completed, program) {
+// Complete rotations banked for this program since its most recent deload
+// rotation. A program that has never deloaded returns every rotation it has
+// run, which is exactly right — it has accumulated all of them.
+//
+// Rotations, not sessions: a session count means something different on every
+// split, and the floor it feeds has to mean the same thing on all of them.
+function rotationsSinceLastDeload(completed, program) {
   const id = program.uuid || program.id;
   const mine = completed
     .filter((s) => s.programTag && (s.programTag.programId === id || s.programTag.programName === program.name))
     .sort((a, b) => Date.parse(a.completedAt || a.date) - Date.parse(b.completedAt || b.date));
   let lastDeload = -1;
   mine.forEach((s, index) => { if (s.programTag.week === C.DELOAD_WEEK) lastDeload = index; });
-  return mine.length - 1 - lastDeload;
+  return new Set(mine.slice(lastDeload + 1).map((s) => `${s.programTag.cycleNumber}-${s.programTag.week}`)).size;
 }
 
 // Readiness-triggered deload. The schedule normally walks 1 -> 2 -> 3 -> 4; a
@@ -1044,7 +1047,7 @@ async function earlyDeloadDecision(program, session, exerciseByName) {
     program.currentWeek,
     verified.at(-1)?.readiness ?? "unknown",
     verified.at(-2)?.readiness ?? "unknown",
-    sessionsSinceLastDeload(completed, program),
+    rotationsSinceLastDeload(completed, program),
   );
   return decided ? { week: program.currentWeek } : null;
 }
@@ -1166,8 +1169,26 @@ async function advanceProgram(session, milestones) {
       && !(set.flags || []).some((flag) => flag === "grindy" || flag === "wobble"));
     if (single) lift.lastPeakSingleLb = Math.max(lift.lastPeakSingleLb || 0, single.weightLb);
   }
+  // Outside the graded rotation the cycle does not advance, but the work still
+  // happened, and a set taken past its prescription is the best estimate
+  // available. Observation only: it can raise the estimate, never lower it,
+  // because a submaximal prescription is not evidence of a smaller max. This is
+  // what a capped AMRAP on the load rotation feeds.
+  if (tag.week !== C.GRADED_WEEK) {
+    for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
+      const se = programmedEntry(session, lift);
+      if (!se || !prescribedWork(se).length) continue;
+      const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(se.exerciseName)?.type);
+      const perf = cyclePerf(se, loadStep);
+      if (!(perf.topSetWeightLb > 0 && perf.topSetReps >= 1)) continue;
+      lift.estimatedMaxLb = C.observedMax(
+        lift.estimatedMaxLb, C.epleyE1RM(perf.topSetWeightLb, perf.topSetReps),
+      );
+    }
+  }
+
   // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
-  if (tag.week === 3) {
+  if (tag.week === C.GRADED_WEEK) {
     for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
       const se = programmedEntry(session, lift);
       if (se && prescribedWork(se).length) {

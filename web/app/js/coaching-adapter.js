@@ -20,8 +20,9 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
         maximumSets: lift.maximumSets || 6,
         // A graded peak waits in `pending` until the deload ends. Reading only
         // the settled count would hide a stall for a whole cycle — exactly the
-        // cycle worth rotating out of.
-        stallCount: lift.pendingStallCount ?? lift.stallCount ?? 0,
+        // cycle worth rotating out of. Native splits pending across columns;
+        // web stashes the whole ProgressionResult under `pending`.
+        stallCount: lift.pending?.state?.stallCount ?? lift.stallCount ?? 0,
         exerciseIsShelved: exercise?.gateStatus === "shelved" || (!exercise?.gateStatus && !!exercise?.isShelved) };
     }),
     ...(day.accessories || []).map((accessory) => {
@@ -157,7 +158,10 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     slot.exerciseName = replacement.name;
     slot.revertToExerciseName = null;
     slot.stallCount = 0;
-    if (lift && lift.pendingStallCount != null) lift.pendingStallCount = 0;
+    // The stashed grade belongs to the exercise being rotated out. Carrying it
+    // over is the exact inheritance the comment above rules out — and the
+    // pending base is the old lift's weight, which must not land on the new one.
+    if (lift) delete lift.pending;
     message = `${change.exerciseName} → ${replacement.name} for this slot.`;
   } else if (change.type === "tryShorterSpacing") {
     const old = program.preferredSessionSpacingDays || 3;

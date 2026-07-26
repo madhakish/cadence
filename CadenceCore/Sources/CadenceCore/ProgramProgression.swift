@@ -132,11 +132,17 @@ public enum ProgramProgression {
 
     /// The wave's deload rotation. 1–3 are volume, load, and peak.
     public static let deloadWeek = 4
-    /// Sessions that must be banked since the last deload rotation before
-    /// another early one is allowed — roughly two rotations of a four-day
-    /// split. Without a floor a run of red rotations turns the recovery deload
-    /// into the schedule, which is the opposite of what it is for.
-    public static let minimumSessionsBetweenDeloads = 8
+    /// Complete rotations that must be banked since the last deload rotation
+    /// before another early one is allowed. Without a floor a run of red
+    /// rotations turns the recovery deload into the schedule, which is the
+    /// opposite of what it is for.
+    ///
+    /// Counted in ROTATIONS, not sessions. A session floor silently scales with
+    /// the split: eight sessions is two rotations of a four-day program but
+    /// four rotations of a two-day one, and is simply unreachable inside a
+    /// cycle for any rotation of three days or fewer — which disabled the
+    /// feature outright on half the shipped templates.
+    public static let minimumRotationsBetweenDeloads = 2
 
     /// Whether to cut this cycle short and go straight to the deload rotation.
     ///
@@ -154,11 +160,32 @@ public enum ProgramProgression {
         currentWeek: Int,
         readiness: ReadinessState,
         previousReadiness: ReadinessState,
-        sessionsSinceLastDeload: Int
+        rotationsSinceLastDeload: Int
     ) -> Bool {
         guard currentWeek >= 1, currentWeek < deloadWeek - 1 else { return false }
         guard readiness == .red, previousReadiness == .red else { return false }
-        return sessionsSinceLastDeload >= minimumSessionsBetweenDeloads
+        return rotationsSinceLastDeload >= minimumRotationsBetweenDeloads
+    }
+
+    /// The rotation whose top work decides the cycle's progression.
+    public static let gradedWeek = 3
+
+    /// An e1RM observation from a rotation that is NOT the graded one.
+    ///
+    /// The graded rotation is a test, so it moves the estimate in either
+    /// direction. Every other rotation prescribes deliberately submaximal work
+    /// — a light set is not evidence the max fell, it is evidence the program
+    /// asked for less. So only a sample that BEATS the standing estimate says
+    /// anything, and it still smooths rather than jumping.
+    ///
+    /// This is what lets a capped AMRAP on the load rotation feed the engine.
+    /// It also matters for the training-max ceiling: an estimate derived from
+    /// the peak set is a fixed multiple of the base it is meant to bound, and
+    /// therefore never binds. A load-rotation sample is earned reps at a weight
+    /// the peak did not set, which is the independent anchor it has lacked.
+    public static func observedMax(prior: Double, sample: Double) -> Double {
+        guard sample > prior else { return prior }
+        return smoothE1RM(prior: prior, sample: sample)
     }
 
     /// The state a cycle-graded slot carries out of a cycle the program cut

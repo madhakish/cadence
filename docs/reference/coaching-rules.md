@@ -49,9 +49,12 @@ rather than adding it.
   its answer (the reversible accessory cut) is already cheaper.
 - **Rotations 1 and 2 only.** From rotation 3 the schedule advances into the
   deload by itself, so there is nothing to skip.
-- **Floor:** at least eight sessions must have been banked since the last deload
-  rotation. Without it, a run of red rotations turns the recovery deload into
-  the schedule, which is the opposite of what it is for.
+- **Floor:** at least two complete rotations must have been banked since the
+  last deload rotation. Without it, a run of red rotations turns the recovery
+  deload into the schedule, which is the opposite of what it is for. Counted in
+  rotations rather than sessions so it means the same thing on every split — a
+  session floor is a different number of rotations on a two-day program than on
+  a six-day one, and can be unreachable inside a cycle on short ones.
 - **No ceiling rule.** The survey picture is "deload every 5–6 weeks or when
   performance stalls". Cadence's fixed four-rotation wave already deloads well
   inside that ceiling, so a ceiling rule could never fire and none is written.

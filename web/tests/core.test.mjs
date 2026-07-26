@@ -1131,9 +1131,12 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
 
 // ---- Readiness-triggered deload ----
 {
-  const far = C.MINIMUM_SESSIONS_BETWEEN_DELOADS;
+  const far = C.MINIMUM_ROTATIONS_BETWEEN_DELOADS;
   ok(C.shouldDeloadEarly(2, "red", "red", far), "two red rotations cut the cycle short");
   ok(C.shouldDeloadEarly(1, "red", "red", far), "rotation 1 can deload early once the floor is clear");
+  // The floor is in rotations so it means the same thing on a 2-day split as on
+  // a 6-day one. A session floor of 8 was unreachable inside a cycle below 4 days.
+  eq(far, 2, "two complete rotations, whatever the split");
 
   ok(!C.shouldDeloadEarly(2, "red", "yellow", far), "one red rotation is noise, not a deload");
   ok(!C.shouldDeloadEarly(2, "red", "unknown", far), "a first-ever red has nothing to persist against");
@@ -1147,7 +1150,16 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   // The floor is what stops a run of red rotations turning the recovery deload
   // into the schedule.
   ok(!C.shouldDeloadEarly(2, "red", "red", far - 1), "a deload too soon after the last one is blocked");
-  ok(C.shouldDeloadEarly(2, "red", "red", far + 40), "an old deload never blocks a new one");
+  ok(C.shouldDeloadEarly(2, "red", "red", far + 10), "an old deload never blocks a new one");
+
+  // e1RM observation outside the graded rotation: a capped AMRAP on the load
+  // week must be able to raise the estimate, and a deload week must never
+  // lower it.
+  eq(C.observedMax(221.45, 236.5), C.smoothE1RM(221.45, 236.5), "a better sample smooths the estimate up");
+  ok(C.observedMax(221.45, 236.5) > 221.45, "and it actually moves");
+  eq(C.observedMax(221.45, 169), 221.45, "a deload set is not evidence the max fell");
+  eq(C.observedMax(221.45, 221.45), 221.45, "an equal sample is no new information");
+  eq(C.GRADED_WEEK, 3, "the graded rotation is the peak");
 
   // The hold is what keeps the skipped peak from reading as a missed peak.
   const stuck = { baseWeightLb: 225, estimatedMaxLb: 290, stallCount: 1, lastIncrementLb: 10 };
