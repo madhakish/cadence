@@ -89,6 +89,9 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          # Full history so the breaking-note guard can read the commits under
+          # review, not just the tip.
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -113,6 +116,19 @@ jobs:
         run: node .github/scripts/test-release-parser.mjs
       - name: Verify release-state recovery
         run: bash .github/scripts/test-reconcile-release-state.sh
+      - name: Guard against accidental major releases
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # v4.0.0 was cut for a change that broke nothing: line wrapping put
+          # "breaking change is called out..." at the start of a line in a
+          # commit body, and the parser read it as a BREAKING CHANGE footer.
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "No base commit to diff against; skipping."
+            exit 0
+          fi
+          node .github/scripts/check-breaking-notes.mjs "$BASE_SHA..$HEAD_SHA"
 
   # Current app builds are independent and run in parallel. Workflow-only PRs
   # still exercise them; docs/web-only PRs do not spend macOS runner minutes.

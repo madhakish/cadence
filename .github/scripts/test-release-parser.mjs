@@ -74,6 +74,29 @@ for (const [label, body] of [
   );
 }
 
+// The parser reads its note keywords case-INSENSITIVELY at line start, so
+// ordinary prose can declare a breaking change by accident. v4.0.0 was cut
+// that way: a commit body wrapped "...that a\nbreaking change is called out in
+// the body..." and the second line became a footer. Pinned here so the hazard
+// is documented rather than rediscovered, and guarded in CI by
+// check-breaking-notes.mjs, which requires `!:` or an exact uppercase footer.
+assert.equal(
+  await analyzeCommits(
+    { preset: "conventionalcommits" },
+    { cwd, commits: [{ message: "fix: x\n\nasserts that a\nbreaking change is called out in the body.", hash: "f" }], logger }
+  ),
+  "major",
+  "line-initial prose still trips the parser — the guard exists because this cannot be fixed here"
+);
+assert.equal(
+  await analyzeCommits(
+    { preset: "conventionalcommits" },
+    { cwd, commits: [{ message: "fix: x\n\nnothing about a breaking change mid-sentence.", hash: "f" }], logger }
+  ),
+  "patch",
+  "the same words mid-line are harmless"
+);
+
 const workflow = await readFile(new URL("../workflows/ci.yml", import.meta.url), "utf8");
 const releaseJob = workflow.match(/\n  release:\n(?<job>[\s\S]*?)\n  # GitHub release binaries/)?.groups?.job;
 const releaseAssetsJob = workflow.match(/\n  release-assets:\n(?<job>[\s\S]*?)\n  testflight:\n/)?.groups?.job;
@@ -115,4 +138,7 @@ assert.match(testflightJob, /needs\.release\.outputs\.published == 'true'/);
 assert.doesNotMatch(testflightJob, /needs:.*release-assets/);
 assert.match(testflightJob, /fetch-depth: 0\n\s+fetch-tags: true/);
 
-console.log(`${cases.length + 37} semantic-release contract assertions passed`);
+assert.match(workflow, /check-breaking-notes\.mjs/,
+  "CI must guard against accidental major releases");
+
+console.log(`${cases.length + 40} semantic-release contract assertions passed`);
