@@ -394,7 +394,8 @@ public struct CoachingReport: Sendable {
 /// holds win over added capacity. The engine proposes changes but never mutates
 /// a program or silently claims that incomplete alpha logs are complete.
 public enum CoachingEngine {
-    public static let ruleVersion = 1
+    // v2: a second consecutive red rotation escalates to a deeper cut.
+    public static let ruleVersion = 2
     public static let greenCompletionFloor = 0.90
     public static let redCompletionFloor = 0.80
     public static let greenAtPlanFloor = 0.90
@@ -475,6 +476,9 @@ public enum CoachingEngine {
         let recommendations = recommend(
             program: program,
             latest: completed.last,
+            // The rotation before the latest verified one, so a red that
+            // persists can escalate past a red that is one bad week.
+            previousReadiness: completed.dropLast().last?.readiness ?? .unknown,
             greenStreak: greenStreak,
             sessions: relevant
         )
@@ -675,11 +679,41 @@ public enum CoachingEngine {
     private static func recommend(
         program: CoachingProgramSnapshot,
         latest: RotationAssessment?,
+        previousReadiness: ReadinessState,
         greenStreak: Int,
         sessions: [CoachingSessionSnapshot]
     ) -> [CoachingRecommendation] {
         guard let latest else { return [] }
         let evidenceKey = "c\(latest.key.cycleNumber)-r\(latest.key.rotation)"
+        // A second consecutive red rotation escalates: one bad rotation is
+        // noise, two in a row is a trend, and the 25% cut has already been
+        // tried and did not restore output. Deloading is near-universal
+        // practice but thinly studied; the survey evidence (Rogerson 2024)
+        // describes cutting volume while KEEPING frequency, which is exactly
+        // what this does — the rotation still runs, it just carries less work.
+        //
+        // Note this does NOT jump the program to its scheduled deload week.
+        // Skipping the peak would mark every wave-family slot as a missed peak
+        // and start them toward a 10% rebuild, which is a second punishment for
+        // a lifter the engine has just judged to be under-recovered.
+        //
+        // It also deliberately leaves main-lift LOAD alone. The same survey
+        // describes dropping load ~10%, but Cadence grades a cycle on the peak
+        // work actually performed (`ProgramProgression.gradeCycle`), and a
+        // session carries no "this was a planned deload" marker. Prescribing
+        // lighter mains would read back as a failed peak, so two recovery
+        // rotations would trip `stallLimit` and rebuild the base at 90%.
+        // Cutting accessory SETS has no such effect: double progression grades
+        // reps at a held weight, so fewer sets is invisible to it.
+        if latest.readiness == .red, previousReadiness == .red {
+            return [CoachingRecommendation(
+                ruleID: "readiness.red.persistent.recovery-rotation.v\(ruleVersion)",
+                priority: 110,
+                title: "Run a recovery rotation",
+                explanation: "Two rotations in a row are red and the lighter rotation did not restore output. Hold main-lift loading and cut accessory sets about 50% for one rotation, keeping every session.",
+                change: .reduceAccessoryVolume(percent: 50), evidenceKey: evidenceKey
+            )]
+        }
         if latest.readiness == .red {
             return [CoachingRecommendation(
                 ruleID: "readiness.red.reduce-accessories.v\(ruleVersion)",

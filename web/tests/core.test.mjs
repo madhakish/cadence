@@ -944,6 +944,18 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   eq(report.currentReadiness, "red", "large repeated performance drops are red");
   eq(report.recommendations[0].change.type, "reduceAccessoryVolume", "red proposes reduced accessories");
 
+  sessions = [];
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(2, dayIndex, 12 + dayIndex * 3, 90));
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(3, dayIndex, 24 + dayIndex * 3, 81));
+  report = C.evaluateCoaching(coachingProgram, sessions);
+  eq(report.currentReadiness, "red", "a second consecutive red rotation stays red");
+  eq(report.recommendations[0].ruleID, `readiness.red.persistent.recovery-rotation.v${C.COACHING_RULE_VERSION}`,
+    "a red that survives the 25% cut escalates to a recovery rotation");
+  eq(report.recommendations[0].change.percent, 50, "the recovery rotation halves accessory volume");
+  ok(!report.recommendations.some((r) => r.change.percent === 25),
+    "the escalation replaces the single-red rule rather than stacking with it");
+
   sessions = Array.from({ length: 4 }, (_, dayIndex) => coachingSession(1, dayIndex, dayIndex * 3));
   sessions[2].hasHardStopCheckIn = true;
   report = C.evaluateCoaching(coachingProgram, sessions);

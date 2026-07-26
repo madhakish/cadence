@@ -30,6 +30,32 @@ and body signals. They do not reconstruct history from today's program.
 Conditioning is counted in minutes in its own ledger. It never inflates lifting
 set completion or e1RM deltas.
 
+### When a red rotation does not resolve
+
+One red rotation is noise. **Two consecutive red rotations** mean the 25% cut
+has already been tried and did not restore output, so Cadence escalates to a
+**recovery rotation**: the accessory-set cut deepens to 50% for one rotation.
+Every session still runs. This follows the survey picture of how lifters
+actually deload — cut volume, keep frequency — rather than a fixed calendar
+rule, and like the 25% cut it is a temporary override that expires at the next
+boundary.
+
+Two things the recovery rotation deliberately does **not** do:
+
+- **It does not jump the program to its deload week.** Skipping the peak marks
+  every wave-family slot as a missed peak, which starts them toward the
+  two-stall 90% rebuild — punishing a lifter the engine has just judged to be
+  under-recovered.
+- **It does not lower main-lift load.** A cycle is graded on the peak work
+  actually performed, and no session records "this was a planned deload", so
+  deliberately lighter mains would read back as a failed peak. Cutting
+  accessory *sets* has no such side effect: double progression grades reps at a
+  held weight, so fewer sets is invisible to it.
+
+Rule identifiers carry the engine's rule version, and coaching decisions store
+the identifier they were made under, so a rule whose meaning changes gets a new
+version rather than silently reinterpreting old audit rows.
+
 ## Capacity and movement gaps
 
 After two consecutive Green rotations, Cadence may offer one bundled, audited

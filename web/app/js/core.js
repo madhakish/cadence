@@ -1318,7 +1318,8 @@ export function movementPattern(exerciseName, movementGroup, explicitPattern = n
   })[movementGroup] || "unknown";
 }
 
-export const COACHING_RULE_VERSION = 1;
+// v2: a second consecutive red rotation escalates to a deeper cut.
+export const COACHING_RULE_VERSION = 2;
 export const GREEN_COMPLETION_FLOOR = 0.90;
 export const RED_COMPLETION_FLOOR = 0.80;
 export const GREEN_AT_PLAN_FLOOR = 0.90;
@@ -1473,9 +1474,29 @@ const shorterSpacingTrial = (sessions) => {
   return median >= 4 ? Math.max(2, median - 1) : null;
 };
 
-function coachingRecommendations(program, latest, greenRotationStreak, sessions) {
+function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions) {
   if (!latest) return [];
   const evidenceKey = `c${latest.key.cycleNumber}-r${latest.key.rotation}`;
+  // A second consecutive red rotation escalates: one bad rotation is noise,
+  // two in a row is a trend, and the 25% cut has already been tried without
+  // restoring output. Cuts volume while KEEPING frequency (Rogerson 2024) —
+  // the rotation still runs, it just carries less work.
+  //
+  // Deliberately does NOT jump the program to its scheduled deload week:
+  // skipping the peak would mark every wave-family slot as a missed peak and
+  // start them toward a 10% rebuild, punishing a lifter twice. It leaves
+  // main-lift LOAD alone for the same reason — a cycle is graded on the peak
+  // work actually performed and no session records "this was a planned
+  // deload", so lighter mains would read back as a failed peak. Cutting
+  // accessory SETS is invisible to double progression, which grades reps at a
+  // held weight.
+  if (latest.readiness === "red" && previousReadiness === "red") return [{
+    id: `readiness.red.persistent.recovery-rotation.v${COACHING_RULE_VERSION}:${evidenceKey}`,
+    ruleID: `readiness.red.persistent.recovery-rotation.v${COACHING_RULE_VERSION}`, priority: 110,
+    title: "Run a recovery rotation",
+    explanation: "Two rotations in a row are red and the lighter rotation did not restore output. Hold main-lift loading and cut accessory sets about 50% for one rotation, keeping every session.",
+    change: { type: "reduceAccessoryVolume", percent: 50 },
+  }];
   if (latest.readiness === "red") return [{
     id: `readiness.red.reduce-accessories.v${COACHING_RULE_VERSION}:${evidenceKey}`,
     ruleID: `readiness.red.reduce-accessories.v${COACHING_RULE_VERSION}`, priority: 100,
@@ -1589,6 +1610,9 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null)
   }
   return {
     rotations, currentReadiness, greenRotationStreak,
-    recommendations: coachingRecommendations(program, completed.at(-1), greenRotationStreak, relevant),
+    // The rotation before the latest verified one, so a red that persists can
+    // escalate past a red that is one bad week.
+    recommendations: coachingRecommendations(program, completed.at(-1),
+      completed.at(-2)?.readiness ?? "unknown", greenRotationStreak, relevant),
   };
 }

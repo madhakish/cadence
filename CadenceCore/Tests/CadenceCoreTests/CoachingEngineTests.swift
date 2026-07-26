@@ -88,6 +88,30 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertEqual(report.recommendations.first?.change, .reduceAccessoryVolume(percent: 25))
     }
 
+    func testTwoConsecutiveRedRotationsEscalateToARecoveryRotation() {
+        var sessions = (0...3).map {
+            session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day, weight: 100)
+        }
+        sessions += (0...3).map {
+            session(cycle: 1, rotation: 2, day: $0, date: Double(12 + $0 * 3) * day,
+                    actualWeight: 90, weight: 90)
+        }
+        sessions += (0...3).map {
+            session(cycle: 1, rotation: 3, day: $0, date: Double(24 + $0 * 3) * day,
+                    actualWeight: 81, weight: 81)
+        }
+        let report = CoachingEngine.evaluate(program: program(), sessions: sessions)
+        XCTAssertEqual(report.currentReadiness, .red)
+        let first = report.recommendations.first
+        XCTAssertEqual(first?.ruleID, "readiness.red.persistent.recovery-rotation.v\(CoachingEngine.ruleVersion)")
+        XCTAssertEqual(first?.change, .reduceAccessoryVolume(percent: 50),
+                       "a red that survives the 25% cut escalates to a recovery rotation")
+        XCTAssertFalse(
+            report.recommendations.contains { $0.change == .reduceAccessoryVolume(percent: 25) },
+            "the escalation replaces the single-red rule rather than stacking with it"
+        )
+    }
+
     func testHardStopRecoveryCheckInMakesCompleteRotationRed() {
         var sessions = (0...3).map {
             session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day)
