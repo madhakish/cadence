@@ -477,6 +477,30 @@ public enum ProgramProgression {
         }
     }
 
+    /// Whether an accessory slot is configured so that it can NEVER add load.
+    ///
+    /// `advanceAccessory` uses `incrementLb > 0` as its entire test for "is
+    /// this slot weighted?". That is correct for bodyweight and timed work,
+    /// which progress by reps or duration and have no load to add. But a slot
+    /// whose exercise carries external load and whose increment is zero falls
+    /// into the same branch: it climbs reps forever, past its own `maxReps`,
+    /// and the weight never moves no matter how well the sets go.
+    ///
+    /// That combination is always a misconfiguration rather than a choice, so
+    /// the program editor surfaces it. Timed and conditioning work is excluded
+    /// deliberately — a plank progresses by `durationStepSeconds`, so a zero
+    /// increment there is correct and must not be flagged.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `accessoryCannotProgressLoad`.
+    public static func accessoryCannotProgressLoad(
+        exerciseType: String?, loadBasis: LoadBasis, incrementLb: Double
+    ) -> Bool {
+        // Reps- and duration-progressed work has no load to step.
+        guard !SwapRules.unloadableTypes.contains(exerciseType?.lowercased() ?? "") else { return false }
+        guard loadBasis != .bodyweight else { return false }
+        return incrementLb <= 0
+    }
+
     /// Accessory double progression: earn the top of the rep range across all
     /// sets, then add the smallest increment and reset reps. Never adds weight
     /// that wasn't earned.

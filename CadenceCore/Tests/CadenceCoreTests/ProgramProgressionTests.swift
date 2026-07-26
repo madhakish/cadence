@@ -181,6 +181,57 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(a.stallCount, 0)
     }
 
+    /// A loaded accessory with a zero increment silently behaves like
+    /// bodyweight work: it climbs reps past its own maximum and the weight
+    /// never moves. That is the misconfiguration the program editor flags.
+    func testLoadedAccessoryWithZeroIncrementNeverAddsLoad() {
+        let broken = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12,
+                                    weightLb: 75, incrementLb: 0)
+        let a = P.advanceAccessory(broken, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false))
+        XCTAssertEqual(a.weightLb, 75, accuracy: 1e-9, "the load cannot move without an increment")
+        XCTAssertEqual(a.currentReps, 13, "and reps climb past the slot's own maximum instead")
+
+        XCTAssertTrue(P.accessoryCannotProgressLoad(
+            exerciseType: "dumbbell", loadBasis: .perImplement, incrementLb: 0
+        ), "a per-hand dumbbell slot with no increment is flagged")
+        XCTAssertTrue(P.accessoryCannotProgressLoad(
+            exerciseType: "machine", loadBasis: .externalTotal, incrementLb: 0
+        ), "a machine slot with no increment is flagged")
+    }
+
+    /// The rule must not fire on work that progresses by reps or duration —
+    /// a plank steps `durationStepSeconds`, so its zero increment is correct.
+    func testDurationAndBodyweightAccessoriesAreNotFlagged() {
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "timed", loadBasis: .externalTotal, incrementLb: 0
+        ), "a timed slot progresses by duration, not load")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "conditioning", loadBasis: .externalTotal, incrementLb: 0
+        ), "conditioning is not load-progressed")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "bodyweight", loadBasis: .bodyweight, incrementLb: 0
+        ), "bodyweight work has no load to add")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "barbell", loadBasis: .bodyweight, incrementLb: 0
+        ), "an explicitly bodyweight basis wins over the equipment label")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "dumbbell", loadBasis: .perImplement, incrementLb: 2.5
+        ), "a fractional increment is a real increment")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "DUMBBELL", loadBasis: .perImplement, incrementLb: 5
+        ), "the type test is case-insensitive")
+    }
+
+    /// Fractional increments have to survive: a 5 lb step on a 10 lb load is a
+    /// 50% jump, so small-load slots need 2.5 and it must not round away.
+    func testAccessoryAcceptsAFractionalIncrement() {
+        let state = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12,
+                                   weightLb: 10, incrementLb: 2.5)
+        let a = P.advanceAccessory(state, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false))
+        XCTAssertEqual(a.weightLb, 12.5, accuracy: 1e-9, "the increment is added unrounded")
+        XCTAssertEqual(a.currentReps, 8)
+    }
+
     func testAccessoryDoesNotAdvanceFromAdjustedLowerLoadOrPoorQuality() {
         let state = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 10,
                                    weightLb: 55, incrementLb: 5)

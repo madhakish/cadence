@@ -353,6 +353,15 @@ async function programEditor(p) {
         const durationBased = exercise?.type === "timed" || exercise?.type === "conditioning";
         if (!durationBased && accessory.minReps > accessory.maxReps) warnings.push(`${accessory.exerciseName}'s minimum reps exceed its maximum.`);
         else if (!durationBased && (accessory.currentReps < accessory.minReps || accessory.currentReps > accessory.maxReps)) warnings.push(`${accessory.exerciseName}'s current reps are outside its rep range.`);
+        // A loaded accessory with no increment can never add weight — it
+        // climbs reps past its own maximum forever. Flag it rather than let
+        // the slot quietly stop progressing.
+        // resolvedLoadBasis mirrors the native Exercise.loadBasis getter:
+        // explicit value, else inferred from equipment. A raw read would be
+        // undefined for records that predate the explicit field.
+        if (exercise && C.accessoryCannotProgressLoad(exercise.type, C.resolvedLoadBasis(exercise), accessory.incrementLb)) {
+          warnings.push(`${accessory.exerciseName} carries load but has no increment, so it can never add weight. Set an increment.`);
+        }
         const pattern = exercise?.movementPattern || C.movementPattern(accessory.exerciseName, exercise?.movementGroup);
         addSets(exercise?.movementGroup, pattern, accessory.sets);
         if (pattern === "olympicPower" && accessory.currentReps > 3) warnings.push(`${accessory.exerciseName} is power work; keep programmed sets at 1–3 reps.`);

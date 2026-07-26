@@ -569,6 +569,15 @@ struct ProgramEditorView: View {
                 } else if !isTimed, !(accessory.minReps...accessory.maxReps).contains(accessory.currentReps) {
                     messages.append("\(accessory.exerciseName)'s current reps are outside its rep range.")
                 }
+                // A loaded accessory with no increment can never add weight —
+                // it climbs reps past its own maximum forever. Flag it here
+                // rather than let the slot quietly stop progressing.
+                if let exercise = exerciseByName[accessory.exerciseName],
+                   ProgramProgression.accessoryCannotProgressLoad(
+                       exerciseType: exercise.typeRaw, loadBasis: exercise.loadBasis,
+                       incrementLb: accessory.incrementLb) {
+                    messages.append("\(accessory.exerciseName) carries load but has no increment, so it can never add weight. Set an increment.")
+                }
                 if let group = exerciseByName[accessory.exerciseName]?.movementGroup {
                     rotationSets[group, default: 0] += accessory.sets
                 }

@@ -1050,6 +1050,25 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
   return advanceCycleLift(state, perf, focus, roundingLb);
 }
 
+// Whether an accessory slot is configured so that it can NEVER add load.
+//
+// advanceAccessory uses `incrementLb > 0` as its entire test for "is this slot
+// weighted?". That is correct for bodyweight and timed work, which progress by
+// reps or duration and have no load to add. But a slot whose exercise carries
+// external load and whose increment is zero falls into the same branch: it
+// climbs reps forever, past its own maxReps, and the weight never moves no
+// matter how well the sets go.
+//
+// Timed and conditioning work is excluded deliberately — a plank progresses by
+// durationStepSeconds, so a zero increment there is correct, not a bug.
+//
+// Mirrored 1:1 in CadenceCore ProgramProgression.accessoryCannotProgressLoad.
+export function accessoryCannotProgressLoad(exerciseType, loadBasis, incrementLb) {
+  if (UNLOADABLE_TYPES.has(String(exerciseType ?? "").toLowerCase())) return false;
+  if (loadBasis === "bodyweight") return false;
+  return !(incrementLb > 0);
+}
+
 // Accessory double progression. state: { sets, minReps, maxReps, currentReps,
 // weightLb, incrementLb, stallCount }; perf: { completedSets, minRepsAchieved, anyStoppedEarly }
 export function advanceAccessory(state, perf) {

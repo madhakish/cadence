@@ -597,6 +597,26 @@ ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "poor-qua
 let bw = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0, stallCount: 0 };
 let bwa = C.advanceAccessory(bw, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
 ok(bwa.weightLb === 0 && bwa.currentReps === 13 && bwa.stallCount === 0, "bodyweight accessory climbs past max, no reset");
+// A LOADED accessory with a zero increment falls into the same branch: it
+// climbs reps past its own maximum and the weight never moves. That is a
+// misconfiguration, not a choice, so the program editor flags it.
+let broken = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 75, incrementLb: 0, stallCount: 0 };
+let brokenAdvance = C.advanceAccessory(broken, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
+ok(brokenAdvance.weightLb === 75 && brokenAdvance.currentReps === 13,
+  "a loaded accessory with no increment never adds load and climbs reps instead");
+ok(C.accessoryCannotProgressLoad("dumbbell", "perImplement", 0), "per-hand dumbbell slot with no increment is flagged");
+ok(C.accessoryCannotProgressLoad("machine", "externalTotal", 0), "machine slot with no increment is flagged");
+ok(!C.accessoryCannotProgressLoad("timed", "externalTotal", 0), "a timed slot progresses by duration, not load");
+ok(!C.accessoryCannotProgressLoad("conditioning", "externalTotal", 0), "conditioning is not load-progressed");
+ok(!C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0), "bodyweight work has no load to add");
+ok(!C.accessoryCannotProgressLoad("barbell", "bodyweight", 0), "an explicit bodyweight basis wins over the equipment label");
+ok(!C.accessoryCannotProgressLoad("dumbbell", "perImplement", 2.5), "a fractional increment is a real increment");
+ok(!C.accessoryCannotProgressLoad("DUMBBELL", "perImplement", 5), "the type test is case-insensitive");
+// Fractional increments must survive: 5 lb on a 10 lb load is a 50% jump.
+let fractional = C.advanceAccessory(
+  { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 10, incrementLb: 2.5, stallCount: 0 },
+  { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
+ok(fractional.weightLb === 12.5 && fractional.currentReps === 8, "a 2.5 lb accessory increment is added unrounded");
 
 // ---- plate colours (gym scheme) ----
 eq(C.plateColorToken({ value: 55, unit: "lb" }), "red", "55 lb red");
