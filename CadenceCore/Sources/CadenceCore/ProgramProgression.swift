@@ -130,6 +130,56 @@ public enum ProgramProgression {
     public static let stallLimit = 2               // 2 consecutive non-success → auto deload
     public static let deloadRebuildFraction = 0.90
 
+    /// The wave's deload rotation. 1–3 are volume, load, and peak.
+    public static let deloadWeek = 4
+    /// Sessions that must be banked since the last deload rotation before
+    /// another early one is allowed — roughly two rotations of a four-day
+    /// split. Without a floor a run of red rotations turns the recovery deload
+    /// into the schedule, which is the opposite of what it is for.
+    public static let minimumSessionsBetweenDeloads = 8
+
+    /// Whether to cut this cycle short and go straight to the deload rotation.
+    ///
+    /// The survey picture of how lifters actually deload is "every 5–6 weeks,
+    /// or when performance stalls" — so a ceiling and a trigger. Cadence's
+    /// fixed four-rotation wave already deloads well inside that ceiling, and
+    /// a ceiling rule that can never fire is dead code, so only the trigger and
+    /// its floor are implemented here.
+    ///
+    /// Persistent red, not a single red: one bad rotation is noise, and the
+    /// single-red answer (a temporary accessory-set cut) is already cheaper and
+    /// reversible. Weeks 1 and 2 only — from week 3 the schedule advances into
+    /// the deload by itself, so there is nothing to skip.
+    public static func shouldDeloadEarly(
+        currentWeek: Int,
+        readiness: ReadinessState,
+        previousReadiness: ReadinessState,
+        sessionsSinceLastDeload: Int
+    ) -> Bool {
+        guard currentWeek >= 1, currentWeek < deloadWeek - 1 else { return false }
+        guard readiness == .red, previousReadiness == .red else { return false }
+        return sessionsSinceLastDeload >= minimumSessionsBetweenDeloads
+    }
+
+    /// The state a cycle-graded slot carries out of a cycle the program cut
+    /// short for recovery.
+    ///
+    /// The lifter did not miss a peak — the peak never ran — so the base holds
+    /// and no stall accrues. It is written into the same pending group a real
+    /// peak grade uses, so the rollover applies it through its existing path
+    /// and never reaches the skipped-peak stall branch.
+    public static func recoveryDeloadHold(
+        _ state: ProgramLiftState, atWeek week: Int
+    ) -> ProgressionResult {
+        var next = state
+        next.lastIncrementLb = 0
+        return ProgressionResult(
+            state: next,
+            grade: .hold,
+            note: "Recovery deload — output stayed red, so the cycle stopped after rotation \(week) and went straight to the deload. The base holds."
+        )
+    }
+
     public static func epleyE1RM(weightLb: Double, reps: Int) -> Double {
         reps >= 1 ? weightLb * (1 + Double(reps) / 30.0) : weightLb
     }

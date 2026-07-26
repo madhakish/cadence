@@ -326,6 +326,57 @@ enum SessionCompletion {
         )
     }
 
+    /// Sessions banked for this program since its most recent deload rotation.
+    /// A program that has never deloaded returns its whole history, which is
+    /// exactly right — it has accumulated everything.
+    private static func sessionsSinceLastDeload(
+        _ sessions: [WorkoutSession], program: Program
+    ) -> Int {
+        let mine = sessions.filter {
+            $0.isCompleted && ($0.programID == program.id || $0.programName == program.name)
+        }.sorted { $0.date < $1.date }
+        var lastDeload = -1
+        for (index, session) in mine.enumerated() where session.programWeek == ProgramProgression.deloadWeek {
+            lastDeload = index
+        }
+        return mine.count - 1 - lastDeload
+    }
+
+    /// Readiness-triggered deload. The schedule normally walks 1 → 2 → 3 → 4;
+    /// a second consecutive red rotation means this cycle is not worth
+    /// finishing, so it goes straight to the deload instead. Returns the
+    /// rotation being cut short, or nil to advance normally. Mirrors the web
+    /// `earlyDeloadDecision`.
+    ///
+    /// The session that just closed this rotation is already marked completed
+    /// on the context, so the fetch below sees it — but it has not been saved,
+    /// which is why the filtering happens in memory rather than in a predicate.
+    private static func earlyDeloadWeek(
+        program: Program, context: ModelContext
+    ) throws -> Int? {
+        // Structural guard first: building the coaching report is not free, and
+        // from rotation 3 the schedule advances into the deload by itself.
+        guard program.currentWeek >= 1,
+              program.currentWeek < ProgramProgression.deloadWeek - 1 else { return nil }
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let report = CoachingService.report(
+            program: program,
+            sessions: sessions,
+            exercises: try context.fetch(FetchDescriptor<Exercise>()),
+            checkIns: try context.fetch(FetchDescriptor<CheckIn>())
+        )
+        // Verified rotations only — an as-run rotation is complete by
+        // construction, so trusting one would launder an unknown into a deload.
+        let verified = report.rotations.filter { $0.isComplete && !$0.judgedAsRun }
+        let decided = ProgramProgression.shouldDeloadEarly(
+            currentWeek: program.currentWeek,
+            readiness: verified.last?.readiness ?? .unknown,
+            previousReadiness: verified.dropLast().last?.readiness ?? .unknown,
+            sessionsSinceLastDeload: sessionsSinceLastDeload(sessions, program: program)
+        )
+        return decided ? program.currentWeek : nil
+    }
+
     private static func advanceProgram(_ session: WorkoutSession, context: ModelContext,
                                        unitDisplay: UnitDisplay, events: inout [PREvent]) throws {
         let programs = try context.fetch(FetchDescriptor<Program>())
@@ -539,7 +590,30 @@ enum SessionCompletion {
         program.nextDayIndex = advance.nextDayOrder
         guard advance.isLastDay else { return }
 
-        if program.currentWeek < 4 {
+        if program.currentWeek < ProgramProgression.deloadWeek {
+            if let earlyWeek = try earlyDeloadWeek(program: program, context: context) {
+                // Write the hold through the same pending group a real peak
+                // grade uses, so the rollover applies it on its existing path
+                // and never reaches the skipped-peak stall branch. A slot that
+                // already carries a grade keeps it — this only speaks for
+                // cycles whose peak never ran.
+                for programDay in program.days {
+                    for lift in programDay.lifts
+                    where !lift.prescription.advancesPerExposure && lift.pendingBaseWeightLb == nil {
+                        let hold = ProgramProgression.recoveryDeloadHold(lift.coreState, atWeek: earlyWeek)
+                        lift.pendingBaseWeightLb = hold.state.baseWeightLb
+                        lift.pendingEstimatedMaxLb = hold.state.estimatedMaxLb
+                        lift.pendingStallCount = hold.state.stallCount
+                        lift.pendingLastIncrementLb = hold.state.lastIncrementLb
+                        lift.pendingNote = hold.note
+                    }
+                }
+                program.currentWeek = ProgramProgression.deloadWeek
+                let label = "\(program.name): two red rotations in a row — going straight to the deload. Main-lift bases hold."
+                context.insert(Milestone(date: session.date, exerciseName: nil, kind: .programNote, label: label))
+                events.append(PREvent(kind: .programNote, exercise: program.name, label: label))
+                return
+            }
             program.currentWeek += 1
             return
         }

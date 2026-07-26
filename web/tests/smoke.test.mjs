@@ -774,6 +774,41 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.importBundle(parsed);
 }
 
+// Rollover with no peak grade on record. The 10% rebuild belongs to the
+// wave family, whose peak is the graded week; the methodology styles carry
+// their own miss rules and must only hold. The two clients disagreed on which
+// branch owned the rebuild, which is shared domain behaviour.
+{
+  const name = "Fixture Skipped Peak";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 4, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0, accessories: [],
+      lifts: [
+        { exerciseName: "Back Squat", role: "main", prescription: "wave",
+          baseWeightLb: 200, estimatedMaxLb: 260, stallCount: 1, lastIncrementLb: 5 },
+        { exerciseName: "Deadlift", role: "main", prescription: "fiveThreeOne",
+          baseWeightLb: 300, estimatedMaxLb: 380, stallCount: 2, lastIncrementLb: 10 },
+      ] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const deloadId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const deload = await db.Sessions.get(deloadId);
+  for (const entry of deload.exercises) {
+    for (const set of entry.sets) set.status = "completed";
+  }
+  await session.completeSession(deload);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const [wave, methodology] = program.days[0].lifts;
+  ok(wave.baseWeightLb === 180 && wave.stallCount === 0,
+    `a wave slot's second skipped peak rebuilds at 90% (got ${wave.baseWeightLb}/${wave.stallCount})`);
+  ok(methodology.baseWeightLb === 300 && methodology.stallCount === 2,
+    `5/3/1 holds on a skipped graded week and keeps its own counter (got ${methodology.baseWeightLb}/${methodology.stallCount})`);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1, "the deload's last day rolls the cycle over");
+
+  await db.importBundle(parsed);
+}
+
 // ---- program lifecycle: untouched vs partial completion ----
 {
   let prog = await db.Programs.active();

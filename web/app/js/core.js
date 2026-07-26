@@ -768,6 +768,50 @@ export const QUALITY_FLAG_TOLERANCE = 1;   // ≤1 grindy/wobble set still SUCCE
 export const STALL_LIMIT = 2;              // 2 consecutive non-success → auto deload
 export const DELOAD_REBUILD_FRACTION = 0.90;
 
+// The wave's deload rotation. 1–3 are volume, load, and peak.
+export const DELOAD_WEEK = 4;
+// Sessions that must be banked since the last deload rotation before another
+// early one is allowed — roughly two rotations of a four-day split. Without a
+// floor a run of red rotations turns the recovery deload into the schedule,
+// which is the opposite of what it is for.
+export const MINIMUM_SESSIONS_BETWEEN_DELOADS = 8;
+
+// Whether to cut this cycle short and go straight to the deload rotation.
+//
+// The survey picture of how lifters actually deload is "every 5–6 weeks, or
+// when performance stalls" — so a ceiling and a trigger. Cadence's fixed
+// four-rotation wave already deloads well inside that ceiling, and a ceiling
+// rule that can never fire is dead code, so only the trigger and its floor are
+// implemented here.
+//
+// Persistent red, not a single red: one bad rotation is noise, and the
+// single-red answer (a temporary accessory-set cut) is already cheaper and
+// reversible. Weeks 1 and 2 only — from week 3 the schedule advances into the
+// deload by itself, so there is nothing to skip.
+export function shouldDeloadEarly(currentWeek, readiness, previousReadiness, sessionsSinceLastDeload) {
+  if (!(currentWeek >= 1 && currentWeek < DELOAD_WEEK - 1)) return false;
+  if (readiness !== "red" || previousReadiness !== "red") return false;
+  return sessionsSinceLastDeload >= MINIMUM_SESSIONS_BETWEEN_DELOADS;
+}
+
+// The state a cycle-graded slot carries out of a cycle the program cut short
+// for recovery. The lifter did not miss a peak — the peak never ran — so the
+// base holds and no stall accrues. It is written into the same `pending` a real
+// peak grade uses, so rollover applies it through its existing path and never
+// reaches the skipped-peak stall branch.
+export function recoveryDeloadHold(lift, week) {
+  return {
+    state: {
+      baseWeightLb: lift.baseWeightLb,
+      estimatedMaxLb: lift.estimatedMaxLb,
+      stallCount: lift.stallCount || 0,
+      lastIncrementLb: 0,
+    },
+    grade: "hold",
+    note: `Recovery deload — output stayed red, so the cycle stopped after rotation ${week} and went straight to the deload. The base holds.`,
+  };
+}
+
 // focus → { tm: training-max as fraction of e1RM, inc: increment fraction of base }
 export const FOCUS = {
   strength: { tm: 0.90, inc: 0.025 },

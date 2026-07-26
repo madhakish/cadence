@@ -22,7 +22,12 @@ owner table for docs; other pages link here rather than restating).
 
 Banking the **highest-ordered** day of a week advances the week; banking
 that day in week 4 applies all stashed grades and starts the next cycle at
-week 1. The schedule steps between days by `order` value, not by position
+week 1. Week 3 or 4 is the only week the wave can be in when a cycle ends,
+with one exception: after two consecutive red rotations the program cuts the
+cycle short and jumps to week 4 from week 1 or 2 (see
+`docs/reference/coaching-rules.md`). Every cycle-graded slot is handed an
+explicit **hold** as it jumps, so a peak that never ran is never mistaken for a
+peak that was missed. The schedule steps between days by `order` value, not by position
 in the list, so a program whose orders are not a contiguous `0..n-1` — a
 gap or a duplicate from an older backup — still reaches every day. The
 next prescription is always `nextDayIndex` → that exact day's stable

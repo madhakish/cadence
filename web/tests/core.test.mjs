@@ -1111,5 +1111,35 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   ok(classic.state.baseWeightLb >= 300, "non-methodology styles keep the tapered rule");
 }
 
+// ---- Readiness-triggered deload ----
+{
+  const far = C.MINIMUM_SESSIONS_BETWEEN_DELOADS;
+  ok(C.shouldDeloadEarly(2, "red", "red", far), "two red rotations cut the cycle short");
+  ok(C.shouldDeloadEarly(1, "red", "red", far), "rotation 1 can deload early once the floor is clear");
+
+  ok(!C.shouldDeloadEarly(2, "red", "yellow", far), "one red rotation is noise, not a deload");
+  ok(!C.shouldDeloadEarly(2, "red", "unknown", far), "a first-ever red has nothing to persist against");
+  ok(!C.shouldDeloadEarly(2, "yellow", "red", far), "a recovered rotation finishes the cycle");
+
+  // From rotation 3 the schedule walks into the deload by itself, and rotation
+  // 4 IS the deload — jumping either would be a no-op that still writes holds.
+  ok(!C.shouldDeloadEarly(3, "red", "red", far), "rotation 3 already advances into the deload");
+  ok(!C.shouldDeloadEarly(C.DELOAD_WEEK, "red", "red", far), "the deload rotation cannot deload again");
+
+  // The floor is what stops a run of red rotations turning the recovery deload
+  // into the schedule.
+  ok(!C.shouldDeloadEarly(2, "red", "red", far - 1), "a deload too soon after the last one is blocked");
+  ok(C.shouldDeloadEarly(2, "red", "red", far + 40), "an old deload never blocks a new one");
+
+  // The hold is what keeps the skipped peak from reading as a missed peak.
+  const stuck = { baseWeightLb: 225, estimatedMaxLb: 290, stallCount: 1, lastIncrementLb: 10 };
+  const held = C.recoveryDeloadHold(stuck, 2);
+  eq(held.grade, "hold", "a cycle the program cut short is a hold, not a fail");
+  eq(held.state.baseWeightLb, 225, "the base holds — the lifter did not miss a peak, the peak never ran");
+  eq(held.state.stallCount, 1, "no stall accrues for work that was never prescribed");
+  eq(held.state.lastIncrementLb, 0, "the increment record stops advertising a bump that did not happen");
+  ok(held.note.includes("rotation 2"), "the note says which rotation was cut short");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

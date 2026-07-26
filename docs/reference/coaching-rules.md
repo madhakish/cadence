@@ -40,12 +40,32 @@ actually deload — cut volume, keep frequency — rather than a fixed calendar
 rule, and like the 25% cut it is a temporary override that expires at the next
 boundary.
 
-Two things the recovery rotation deliberately does **not** do:
+Alongside the accessory cut, two consecutive red rotations also **cut the cycle
+short**: the program skips whatever is left of the wave and goes straight to its
+deload rotation. This is automatic and needs no consent, because it removes work
+rather than adding it.
 
-- **It does not jump the program to its deload week.** Skipping the peak marks
-  every wave-family slot as a missed peak, which starts them toward the
-  two-stall 90% rebuild — punishing a lifter the engine has just judged to be
-  under-recovered.
+- **Trigger:** persistent red, not a single red. One bad rotation is noise, and
+  its answer (the reversible accessory cut) is already cheaper.
+- **Rotations 1 and 2 only.** From rotation 3 the schedule advances into the
+  deload by itself, so there is nothing to skip.
+- **Floor:** at least eight sessions must have been banked since the last deload
+  rotation. Without it, a run of red rotations turns the recovery deload into
+  the schedule, which is the opposite of what it is for.
+- **No ceiling rule.** The survey picture is "deload every 5–6 weeks or when
+  performance stalls". Cadence's fixed four-rotation wave already deloads well
+  inside that ceiling, so a ceiling rule could never fire and none is written.
+
+A cut-short cycle would otherwise reach the rollover with no peak grade on
+record, which the wave family reads as a missed peak. It is not one — the peak
+never ran. So at the moment the program jumps, every cycle-graded slot that
+does not already carry a grade is given an explicit **hold**: the base stays,
+no stall accrues, and the increment record stops advertising a bump that did not
+happen. That hold travels through the same pending-grade mechanism a real peak
+uses, so the rollover applies it on its existing path.
+
+The recovery rotation deliberately does **not** do one further thing:
+
 - **It does not lower main-lift load.** A cycle is graded on the peak work
   actually performed, and no session records "this was a planned deload", so
   deliberately lighter mains would read back as a failed peak. Cutting
