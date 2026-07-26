@@ -17,11 +17,6 @@ struct HomeView: View {
     @Environment(\.modelContext) private var context
     @Environment(RestTimer.self) private var restTimer
     @Environment(WorkoutClock.self) private var workoutClock
-    /// Newest first, so `.first` is the last banked session — used for the
-    /// advisory spacing note on the next-session card.
-    @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted },
-           sort: \WorkoutSession.date, order: .reverse)
-    private var completedSessions: [WorkoutSession]
     @Query private var tracks: [LiftTrack]
     @Query private var programs: [Program]
     @Query private var exercises: [Exercise]
@@ -62,7 +57,9 @@ struct HomeView: View {
     /// and never read back. It never blocks a session: the lifter's calendar
     /// beats the app's opinion.
     private func spacingNote(_ program: Program) -> String? {
-        guard let last = completedSessions.first?.date else { return nil }
+        // `completedSessions` is oldest → newest (`recentTops` relies on that
+        // order), so the most recent banked session is the last element.
+        guard let last = completedSessions.last?.date else { return nil }
         let elapsed = Calendar.current.dateComponents([.day], from: last, to: .now).day
         guard let shortfall = ProgramProgression.sessionSpacingShortfall(
             daysSinceLastSession: elapsed, preferredDays: program.preferredSessionSpacingDays
