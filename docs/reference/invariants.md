@@ -195,6 +195,25 @@ to; renumbering would strand those sessions and misattribute their work.
 `nextDayIndex` names a day's **order**, so it is validated as a member of the
 day orders — never range-checked against the day count.
 
+### INV-SLOT-ID-IS-UNIQUE
+*platforms: core*
+
+A slot id is never live on two programs at once.
+
+A **program-file** import that would adopt an id another program already holds
+is refused, naming the id and the holder. A **backup** restore repairs instead:
+the first occurrence keeps its id, later ones are re-issued, and the count is
+reported. The difference is deliberate — a program file is additive and opt-in,
+so refusing costs nothing, while a backup is the recovery path of last resort
+and refusing one would strand data the app itself may have written.
+
+> A slot id is what banked sessions point at through `programSlotID`. Two live
+> slots sharing one makes that history permanently ambiguous, and nothing
+> repairs it: the launch-time repair scopes its duplicate detection to a single
+> program. Re-minting instead would be worse than refusing — identity
+> preservation is opt-in, so the lifter asked for *those* ids, and a silent
+> re-mint would hand back something that looks preserved but is not.
+
 ---
 
 ## Session lifecycle

@@ -174,6 +174,41 @@ for (const track of [
   await db.CoachingDecisions.del(decision.id);
 }
 
+// A rotation suggestion resolves against the real library, keeps the slot's
+// load, and drops the stall counter it was proposed to break.
+{
+  const original = await db.Programs.active();
+  const proposed = structuredClone(original);
+  const slot = proposed.days.flatMap((day) => day.lifts || [])[0];
+  slot.stallCount = 1;
+  const before = { name: slot.exerciseName, base: slot.baseWeightLb };
+  const message = await coach.applyCoachingRecommendation(proposed, {
+    id: "rotate-recommendation", ruleID: "program.slot.rotate.stalled", title: "Stuck",
+    explanation: "Fixture recommendation",
+    change: { type: "rotateExercise", slotID: slot.id, exerciseName: before.name },
+  }, seededExercises);
+  const rotated = proposed.days.flatMap((day) => day.lifts || []).find((item) => item.id === slot.id);
+  ok(rotated.exerciseName !== before.name, "the slot is repointed at a different exercise");
+  const from = seededExercises.find((item) => item.name === before.name);
+  const to = seededExercises.find((item) => item.name === rotated.exerciseName);
+  ok(C.swapCompatible(from, to), "the replacement passes the same swap rules as the manual gesture");
+  ok(rotated.baseWeightLb === before.base,
+    "a same-pattern, same-tier candidate keeps the slot's load as its starting prior");
+  ok(rotated.stallCount === 0, "rotating clears the counter it was proposed to break");
+  ok(message.includes(before.name) && message.includes(rotated.exerciseName),
+    "the result names both sides of the swap");
+
+  let refused = false;
+  try {
+    await coach.applyCoachingRecommendation(structuredClone(original), {
+      id: "rotate-missing", ruleID: "program.slot.rotate.stalled", title: "Stuck",
+      explanation: "Fixture recommendation",
+      change: { type: "rotateExercise", slotID: slot.id, exerciseName: "Not In The Library" },
+    }, seededExercises);
+  } catch { refused = true; }
+  ok(refused, "an exercise the library no longer has refuses rather than guessing a replacement");
+}
+
 const serviceWorkerSource = await (await import("node:fs/promises")).readFile(
   new URL("../app/sw.js", import.meta.url), "utf8");
 ok(serviceWorkerSource.includes('"js/coaching-adapter.js"'),
@@ -548,6 +583,50 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     ok(restored.days.some((d) => d.order === highest), "the sparse day survives the round trip");
     ok(restored.nextDayIndex === highest, "[INV-NEXTDAY-IS-AN-ORDER] nextDayIndex still names the same day after import");
   }
+
+  // [INV-SLOT-ID-IS-UNIQUE] Slot ids are validated within a program, so a
+  // hand-edited bundle can carry one on two programs. A backup is the recovery
+  // path of last resort, so this is REPAIRED rather than refused — the opposite
+  // of the program-file importer, deliberately.
+  {
+    const clean = structuredClone(parsed);
+    const cleanSummary = await db.importBundle(clean);
+    ok((cleanSummary?.repairedSlotIDs || 0) === 0,
+      "[INV-SLOT-ID-IS-UNIQUE] a clean backup reports no slot-id repairs");
+    const untouched = await db.Programs.all();
+    const untouchedIDs = untouched.flatMap((p) => (p.days || [])
+      .flatMap((d) => [...(d.lifts || []), ...(d.accessories || [])].map((s) => s.id)));
+    ok(new Set(untouchedIDs).size === untouchedIDs.length, "a clean backup restores with distinct slot ids");
+
+    // Forking a program while keeping its slot ids is the reachable path — it
+    // is what hand-editing an exported bundle produces.
+    const forked = structuredClone(parsed);
+    const fork = structuredClone(forked.programs[0]);
+    fork.name = `${fork.name} (forked)`;
+    fork.id = "dddddddd-0000-4000-8000-00000000000d";
+    fork.isActive = false;
+    forked.programs.push(fork);
+    const donor = forked.programs[0].days.flatMap((d) => [...(d.lifts || []), ...(d.accessories || [])]);
+    ok(donor.length > 0, "the donor program carries slots");
+    const sharedID = donor[0].id;
+    ok(sharedID != null, "the fixture's slots carry ids to collide on");
+
+    let failure = "";
+    let summary = null;
+    try { summary = await db.importBundle(forked); } catch (error) { failure = error.message; }
+    ok(!failure, `[INV-SLOT-ID-IS-UNIQUE] a backup with a cross-program duplicate still restores (${failure})`);
+    ok(summary?.repairedSlotIDs === donor.length,
+      `every duplicated slot is repaired and reported (${summary?.repairedSlotIDs} of ${donor.length})`);
+
+    const after = await db.Programs.all();
+    const liveIDs = after.flatMap((p) => (p.days || [])
+      .flatMap((d) => [...(d.lifts || []), ...(d.accessories || [])].map((s) => s.id)));
+    ok(new Set(liveIDs).size === liveIDs.length,
+      "[INV-SLOT-ID-IS-UNIQUE] no two live slots share an id after the restore");
+    ok(liveIDs.filter((id) => id === sharedID).length === 1,
+      "the first occurrence keeps the id, so the most history stays bound");
+    ok(after.length === forked.programs.length, "every program still restored");
+  }
 }
 
 // ---- rotating local recovery checkpoints ----
@@ -773,6 +852,103 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok(program.days[0].lifts[1].pending?.grade === "success"
       && program.days[0].lifts[1].pending?.state.baseWeightLb === 60,
     "adjusted target, unchanged completed row, and actual work drive the correct goal slot");
+
+  await db.importBundle(parsed);
+}
+
+// A capped AMRAP on the load rotation must reach the engine. Before the gate
+// fix only week 3 touched estimatedMaxLb, so the extra reps were history and
+// nothing else — and the ceiling that reads estimatedMaxLb stayed anchored to
+// a fixed multiple of the base it is meant to bound.
+{
+  const name = "Fixture Load-Week AMRAP";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 2, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0, accessories: [],
+      lifts: [{ exerciseName: "Back Squat", role: "main", prescription: "wave",
+        baseWeightLb: 190, estimatedMaxLb: 221.45, stallCount: 0, lastIncrementLb: 5 }] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const before = program.days[0].lifts[0];
+  const loadId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const load = await db.Sessions.get(loadId);
+  const entry = load.exercises[0];
+  const work = entry.sets.filter((set) => !set.isWarmup);
+  ok(work.length > 1 && work[0].weightLb === 210, `the load rotation prescribes 210 (got ${work[0].weightLb})`);
+  work.forEach((set, index) => {
+    set.status = "completed";
+    // Capped AMRAP: the last set is taken past the prescription, stopping well
+    // inside Epley's accurate band.
+    if (index === work.length - 1) set.reps = 6;
+  });
+  await session.completeSession(load);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const after = program.days[0].lifts[0];
+  ok(after.estimatedMaxLb > before.estimatedMaxLb,
+    `earned reps on the load rotation raise the estimate (${before.estimatedMaxLb} -> ${after.estimatedMaxLb})`);
+  ok(Math.abs(after.estimatedMaxLb - C.smoothE1RM(before.estimatedMaxLb, C.epleyE1RM(210, 6))) < 1e-9,
+    "and they raise it by exactly one smoothing step toward the sample");
+  ok(after.baseWeightLb === before.baseWeightLb && !after.pending,
+    "an observation is not a grade — the base does not move outside the peak");
+  ok(program.currentWeek === 3, "the load rotation still advances to the peak");
+
+  await db.importBundle(parsed);
+}
+
+// A deload rotation must never drag the estimate down.
+{
+  const name = "Fixture Deload Observation";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 4, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0, accessories: [],
+      lifts: [{ exerciseName: "Back Squat", role: "main", prescription: "wave",
+        baseWeightLb: 190, estimatedMaxLb: 221.45, stallCount: 0, lastIncrementLb: 5 }] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const deloadId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const deload = await db.Sessions.get(deloadId);
+  for (const set of deload.exercises[0].sets) set.status = "completed";
+  await session.completeSession(deload);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.days[0].lifts[0].estimatedMaxLb === 221.45,
+    `light deload work is not evidence the max fell (got ${program.days[0].lifts[0].estimatedMaxLb})`);
+
+  await db.importBundle(parsed);
+}
+
+// Rollover with no peak grade on record. The 10% rebuild belongs to the
+// wave family, whose peak is the graded week; the methodology styles carry
+// their own miss rules and must only hold. The two clients disagreed on which
+// branch owned the rebuild, which is shared domain behaviour.
+{
+  const name = "Fixture Skipped Peak";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 4, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0, accessories: [],
+      lifts: [
+        { exerciseName: "Back Squat", role: "main", prescription: "wave",
+          baseWeightLb: 200, estimatedMaxLb: 260, stallCount: 1, lastIncrementLb: 5 },
+        { exerciseName: "Deadlift", role: "main", prescription: "fiveThreeOne",
+          baseWeightLb: 300, estimatedMaxLb: 380, stallCount: 2, lastIncrementLb: 10 },
+      ] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const deloadId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const deload = await db.Sessions.get(deloadId);
+  for (const entry of deload.exercises) {
+    for (const set of entry.sets) set.status = "completed";
+  }
+  await session.completeSession(deload);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const [wave, methodology] = program.days[0].lifts;
+  ok(wave.baseWeightLb === 180 && wave.stallCount === 0,
+    `a wave slot's second skipped peak rebuilds at 90% (got ${wave.baseWeightLb}/${wave.stallCount})`);
+  ok(methodology.baseWeightLb === 300 && methodology.stallCount === 2,
+    `5/3/1 holds on a skipped graded week and keeps its own counter (got ${methodology.baseWeightLb}/${methodology.stallCount})`);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1, "the deload's last day rolls the cycle over");
 
   await db.importBundle(parsed);
 }

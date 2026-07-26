@@ -53,6 +53,22 @@ struct HomeView: View {
         return Set(p.days.flatMap { $0.lifts.map(\.exerciseName) })
     }
 
+    /// Advisory only — the preference used to be write-only, set by a stepper
+    /// and never read back. It never blocks a session: the lifter's calendar
+    /// beats the app's opinion.
+    private func spacingNote(_ program: Program) -> String? {
+        // `completedSessions` is oldest → newest (`recentTops` relies on that
+        // order), so the most recent banked session is the last element.
+        guard let last = completedSessions.last?.date else { return nil }
+        let elapsed = Calendar.current.dateComponents([.day], from: last, to: .now).day
+        guard let shortfall = ProgramProgression.sessionSpacingShortfall(
+            daysSinceLastSession: elapsed, preferredDays: program.preferredSessionSpacingDays
+        ), shortfall > 0, let elapsed else { return nil }
+        let since = elapsed == 0 ? "Trained today" : "\(elapsed) day\(elapsed == 1 ? "" : "s") since your last session"
+        return "\(since) · you prefer \(program.preferredSessionSpacingDays). "
+            + "Train anyway if today is the day that works."
+    }
+
     private func nextDay(_ program: Program) -> ProgramDay? {
         program.orderedDays.first { $0.order == program.nextDayIndex } ?? program.orderedDays.first
     }
@@ -244,6 +260,11 @@ struct HomeView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        if let note = spacingNote(program) {
+                            Text(note)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         ForEach(day.orderedLifts) { lift in
                             let target = rawProgramPlan(program, day, lift)
                             let plan = programPlan(program, day, lift)

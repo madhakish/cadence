@@ -3,9 +3,9 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
-import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, iso, runAll } from "../db.js";
+import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll } from "../db.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
-import { effectiveAccessoryPercent } from "../coaching-adapter.js";
+import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -1040,7 +1040,11 @@ function completedProgramInstructionsMatch(session, day) {
 function cyclePerf(se, roundingLb) {
   const w = prescribedWork(se);
   const presReps = se.plannedReps ?? (w.length ? Math.max(...w.map((s) => s.reps)) : 0); // ?? not ||: mirrors Swift's nil-coalescing
-  const top = w.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
+  // The cycle's strength sample, not simply the heaviest set — see core
+  // strengthSampleIndex. Heaviest-first discarded the extra reps of an AMRAP
+  // taken at the top weight.
+  const topIndex = C.strengthSampleIndex(w.map((s) => s.weightLb), w.map((s) => s.reps));
+  const top = topIndex == null ? null : w[topIndex];
   return {
     prescribedSets: se.plannedSets ?? w.length, prescribedReps: presReps,
     completedSets: w.filter((s) => s.reps >= presReps).length,
@@ -1067,6 +1071,48 @@ function accPerf(se, roundingLb = 5) {
 // ---- Program day/week/cycle advancement on bank ----
 // Mutates the program in memory and returns { program, noteRecords } for the
 // caller's single completion transaction — no writes of its own.
+// Complete rotations banked for this program since its most recent deload
+// rotation. A program that has never deloaded returns every rotation it has
+// run, which is exactly right — it has accumulated all of them.
+//
+// Rotations, not sessions: a session count means something different on every
+// split, and the floor it feeds has to mean the same thing on all of them.
+function rotationsSinceLastDeload(completed, program) {
+  const id = program.uuid || program.id;
+  const mine = completed
+    .filter((s) => s.programTag && (s.programTag.programId === id || s.programTag.programName === program.name))
+    .sort((a, b) => Date.parse(a.completedAt || a.date) - Date.parse(b.completedAt || b.date));
+  let lastDeload = -1;
+  mine.forEach((s, index) => { if (s.programTag.week === C.DELOAD_WEEK) lastDeload = index; });
+  return new Set(mine.slice(lastDeload + 1).map((s) => `${s.programTag.cycleNumber}-${s.programTag.week}`)).size;
+}
+
+// Readiness-triggered deload. The schedule normally walks 1 -> 2 -> 3 -> 4; a
+// second consecutive red rotation means this cycle is not worth finishing, so
+// it goes straight to the deload instead. Mirrors the native advanceProgram.
+//
+// The session that just closed this rotation is NOT in the store yet — the
+// whole completion commits in one transaction after this runs — so it is
+// passed in by hand. Judging without it would read the rotation before last.
+async function earlyDeloadDecision(program, session, exerciseByName) {
+  // Structural guard first: building the coaching report is not free, and from
+  // rotation 3 the schedule advances into the deload by itself.
+  if (!(program.currentWeek >= 1 && program.currentWeek < C.DELOAD_WEEK - 1)) return null;
+  const [stored, checkins] = await Promise.all([Sessions.completed(), Checkins.all()]);
+  const completed = [...stored.filter((s) => String(s.id) !== String(session.id)), session];
+  const report = coachingReport(program, completed, exerciseByName, checkins);
+  // Verified rotations only — an as-run rotation is complete by construction,
+  // so trusting one would launder an unknown into a deload.
+  const verified = report.rotations.filter((rotation) => rotation.isComplete && !rotation.judgedAsRun);
+  const decided = C.shouldDeloadEarly(
+    program.currentWeek,
+    verified.at(-1)?.readiness ?? "unknown",
+    verified.at(-2)?.readiness ?? "unknown",
+    rotationsSinceLastDeload(completed, program),
+  );
+  return decided ? { week: program.currentWeek } : null;
+}
+
 async function advanceProgram(session, milestones) {
   const tag = session.programTag;
   const program = await Programs.byStableId(tag.programId)
@@ -1184,8 +1230,26 @@ async function advanceProgram(session, milestones) {
       && !(set.flags || []).some((flag) => flag === "grindy" || flag === "wobble"));
     if (single) lift.lastPeakSingleLb = Math.max(lift.lastPeakSingleLb || 0, single.weightLb);
   }
+  // Outside the graded rotation the cycle does not advance, but the work still
+  // happened, and a set taken past its prescription is the best estimate
+  // available. Observation only: it can raise the estimate, never lower it,
+  // because a submaximal prescription is not evidence of a smaller max. This is
+  // what a capped AMRAP on the load rotation feeds.
+  if (tag.week !== C.GRADED_WEEK) {
+    for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
+      const se = programmedEntry(session, lift);
+      if (!se || !prescribedWork(se).length) continue;
+      const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(se.exerciseName)?.type);
+      const perf = cyclePerf(se, loadStep);
+      if (!(perf.topSetWeightLb > 0 && perf.topSetReps >= 1)) continue;
+      lift.estimatedMaxLb = C.observedMax(
+        lift.estimatedMaxLb, C.epleyE1RM(perf.topSetWeightLb, perf.topSetReps),
+      );
+    }
+  }
+
   // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
-  if (tag.week === 3) {
+  if (tag.week === C.GRADED_WEEK) {
     for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
       const se = programmedEntry(session, lift);
       if (se && prescribedWork(se).length) {
@@ -1201,8 +1265,24 @@ async function advanceProgram(session, milestones) {
   const lastDay = advance.isLastDay;
   program.nextDayIndex = advance.nextDayOrder;
   if (lastDay) {
-    if (program.currentWeek < 4) {
-      program.currentWeek += 1;
+    if (program.currentWeek < C.DELOAD_WEEK) {
+      const early = await earlyDeloadDecision(program, session, exerciseByName);
+      if (early) {
+        // Write the hold through the same `pending` a real peak grade uses, so
+        // rollover applies it on its existing path and never reaches the
+        // skipped-peak stall branch. A slot that already carries a grade keeps
+        // it — this only speaks for cycles whose peak never ran.
+        for (const d of program.days) {
+          for (const lift of d.lifts || []) {
+            if (C.advancesPerExposure(lift.prescription) || lift.pending) continue;
+            lift.pending = C.recoveryDeloadHold(lift, early.week);
+          }
+        }
+        program.currentWeek = C.DELOAD_WEEK;
+        note(`${program.name}: two red rotations in a row — going straight to the deload. Main-lift bases hold.`, null);
+      } else {
+        program.currentWeek += 1;
+      }
     } else {
       // Rollover: apply each lift's pending (or treat a skipped peak as a stall).
       for (const d of program.days) {
@@ -1230,11 +1310,6 @@ async function advanceProgram(session, milestones) {
             // effort) define their own miss rules and simply hold when the
             // graded week was skipped — a skipped week is not missed reps.
             lift.stallCount = (lift.stallCount || 0) + 1; lift.lastIncrementLb = 0;
-          } else {
-            // Methodology cycle styles hold on a skipped graded week, but the
-            // increment record must not keep advertising a bump that never
-            // happened this cycle.
-            lift.lastIncrementLb = 0;
             if (lift.stallCount >= C.STALL_LIMIT) {
               const old = lift.baseWeightLb;
               const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
@@ -1242,6 +1317,11 @@ async function advanceProgram(session, milestones) {
               lift.stallCount = 0;
               note(`${lift.exerciseName}: skipped peak — deloaded ${ui.fmtWeight(old)}→${ui.fmtWeight(lift.baseWeightLb)}.`, lift.exerciseName);
             }
+          } else {
+            // Methodology cycle styles hold on a skipped graded week, but the
+            // increment record must not keep advertising a bump that never
+            // happened this cycle.
+            lift.lastIncrementLb = 0;
           }
           // A cycle-scoped swap ends with the cycle (mirrors native; the swap
           // gesture is native-only, but this state can arrive via backup).

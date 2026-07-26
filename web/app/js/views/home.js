@@ -107,7 +107,16 @@ export async function render(host) {
             // Keep the rendered program unchanged unless both the program
             // edit and its audit record commit in one IndexedDB transaction.
             const proposed = structuredClone(program);
-            const message = await applyCoachingRecommendation(proposed, recommendation, allExercises);
+            let message;
+            try {
+              message = await applyCoachingRecommendation(proposed, recommendation, allExercises);
+            } catch (error) {
+              // A proposal can become unappliable between rendering and tapping
+              // — the library changed, the slot went away. Say so and leave the
+              // program alone rather than failing silently.
+              ui.toast(error?.message || "That change could not be applied.");
+              return;
+            }
             const decision = coachingDecision(proposed, recommendation, "accepted", latest?.reasons || []);
             await Programs.saveWithDecision(proposed, decision);
             ui.toast(message); ui.nav.refresh();
@@ -127,6 +136,12 @@ export async function render(host) {
     for (const d of program.days) for (const l of d.lifts) ownedNames.add(l.exerciseName);
     const phase = C.PHASES[program.currentWeek] || C.PHASES[1];
     root.append(ui.h("div", { class: "section-title", text: `${program.name} · Cycle ${program.cycleNumber}` }));
+    // Advisory only. The preference used to be write-only — a stepper set it
+    // and nothing read it back.
+    const lastBanked = completed[0]?.date ? new Date(completed[0].date) : null;
+    const daysSinceLast = lastBanked
+      ? Math.floor((Date.now() - lastBanked.getTime()) / 86400000) : null;
+    const shortfall = C.sessionSpacingShortfall(daysSinceLast, program.preferredSessionSpacingDays ?? 0);
     const card = ui.h("div", { class: "card" },
       ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px", cursor: "pointer" },
         onClick: () => workoutPreview(program, day, { exMap, gym, barLb }) },
@@ -135,6 +150,11 @@ export async function render(host) {
           ui.wave(program.currentWeek),
           ui.h("span", { class: "sub accent", text: phase.name }),
           ui.h("span", { class: "chev" }))));
+    if (shortfall != null) {
+      card.append(ui.h("div", { class: "sub", style: { padding: "2px 0 6px" },
+        text: `${daysSinceLast === 0 ? "Trained today" : `${daysSinceLast} day${daysSinceLast === 1 ? "" : "s"} since your last session`}`
+          + ` · you prefer ${program.preferredSessionSpacingDays}. Train anyway if today is the day that works.` }));
+    }
     const lifts = orderedSlots(day.lifts, true);
     for (const l of lifts) {
       const ex = exMap.get(l.exerciseName);

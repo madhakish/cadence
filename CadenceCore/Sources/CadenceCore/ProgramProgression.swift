@@ -130,8 +130,115 @@ public enum ProgramProgression {
     public static let stallLimit = 2               // 2 consecutive non-success → auto deload
     public static let deloadRebuildFraction = 0.90
 
+    /// The wave's deload rotation. 1–3 are volume, load, and peak.
+    public static let deloadWeek = 4
+    /// Complete rotations that must be banked since the last deload rotation
+    /// before another early one is allowed. Without a floor a run of red
+    /// rotations turns the recovery deload into the schedule, which is the
+    /// opposite of what it is for.
+    ///
+    /// Counted in ROTATIONS, not sessions. A session floor silently scales with
+    /// the split: eight sessions is two rotations of a four-day program but
+    /// four rotations of a two-day one, and is simply unreachable inside a
+    /// cycle for any rotation of three days or fewer — which disabled the
+    /// feature outright on half the shipped templates.
+    public static let minimumRotationsBetweenDeloads = 2
+
+    /// Whether to cut this cycle short and go straight to the deload rotation.
+    ///
+    /// The survey picture of how lifters actually deload is "every 5–6 weeks,
+    /// or when performance stalls" — so a ceiling and a trigger. Cadence's
+    /// fixed four-rotation wave already deloads well inside that ceiling, and
+    /// a ceiling rule that can never fire is dead code, so only the trigger and
+    /// its floor are implemented here.
+    ///
+    /// Persistent red, not a single red: one bad rotation is noise, and the
+    /// single-red answer (a temporary accessory-set cut) is already cheaper and
+    /// reversible. Weeks 1 and 2 only — from week 3 the schedule advances into
+    /// the deload by itself, so there is nothing to skip.
+    public static func shouldDeloadEarly(
+        currentWeek: Int,
+        readiness: ReadinessState,
+        previousReadiness: ReadinessState,
+        rotationsSinceLastDeload: Int
+    ) -> Bool {
+        guard currentWeek >= 1, currentWeek < deloadWeek - 1 else { return false }
+        guard readiness == .red, previousReadiness == .red else { return false }
+        return rotationsSinceLastDeload >= minimumRotationsBetweenDeloads
+    }
+
+    /// The rotation whose top work decides the cycle's progression.
+    public static let gradedWeek = 3
+
+    /// An e1RM observation from a rotation that is NOT the graded one.
+    ///
+    /// The graded rotation is a test, so it moves the estimate in either
+    /// direction. Every other rotation prescribes deliberately submaximal work
+    /// — a light set is not evidence the max fell, it is evidence the program
+    /// asked for less. So only a sample that BEATS the standing estimate says
+    /// anything, and it still smooths rather than jumping.
+    ///
+    /// This is what lets a capped AMRAP on the load rotation feed the engine.
+    /// It also matters for the training-max ceiling: an estimate derived from
+    /// the peak set is a fixed multiple of the base it is meant to bound, and
+    /// therefore never binds. A load-rotation sample is earned reps at a weight
+    /// the peak did not set, which is the independent anchor it has lacked.
+    public static func observedMax(prior: Double, sample: Double) -> Double {
+        guard sample > prior else { return prior }
+        return smoothE1RM(prior: prior, sample: sample)
+    }
+
+    /// The state a cycle-graded slot carries out of a cycle the program cut
+    /// short for recovery.
+    ///
+    /// The lifter did not miss a peak — the peak never ran — so the base holds
+    /// and no stall accrues. It is written into the same pending group a real
+    /// peak grade uses, so the rollover applies it through its existing path
+    /// and never reaches the skipped-peak stall branch.
+    public static func recoveryDeloadHold(
+        _ state: ProgramLiftState, atWeek week: Int
+    ) -> ProgressionResult {
+        var next = state
+        next.lastIncrementLb = 0
+        return ProgressionResult(
+            state: next,
+            grade: .hold,
+            note: "Recovery deload — output stayed red, so the cycle stopped after rotation \(week) and went straight to the deload. The base holds."
+        )
+    }
+
     public static func epleyE1RM(weightLb: Double, reps: Int) -> Double {
         reps >= 1 ? weightLb * (1 + Double(reps) / 30.0) : weightLb
+    }
+
+    /// Epley is accurate at roughly 2–10 reps and drifts high above that, so a
+    /// long back-off set is not allowed to masquerade as a strength sample.
+    public static let e1RMSampleRepCeiling = 10
+
+    /// Which performed set is the cycle's strength sample.
+    ///
+    /// Heaviest-first is the intuitive answer and it is wrong: it makes an
+    /// as-many-reps-as-possible set at the top weight invisible, because the
+    /// first set at that weight wins the tie and the extra reps are discarded.
+    /// A lifter who takes the last set to 8 instead of the prescribed 3 has
+    /// produced the single best estimate of the cycle, and the engine has been
+    /// throwing it away.
+    ///
+    /// Ranking by Epley fixes that and cannot be fooled by back-off volume —
+    /// 135×10 estimates 180 lb and loses to 215×3's 236.5 — as long as reps
+    /// stay inside the formula's accurate range, which is what the ceiling is
+    /// for. When every set is a long one there is nothing better available, so
+    /// the whole pool is ranked anyway rather than reporting no sample at all.
+    public static func strengthSampleIndex(weightsLb: [Double], reps: [Int]) -> Int? {
+        let count = Swift.min(weightsLb.count, reps.count)
+        guard count > 0 else { return nil }
+        let indexes = Array(0..<count)
+        let short = indexes.filter { reps[$0] <= e1RMSampleRepCeiling }
+        let pool = short.isEmpty ? indexes : short
+        return pool.max {
+            epleyE1RM(weightLb: weightsLb[$0], reps: reps[$0])
+                < epleyE1RM(weightLb: weightsLb[$1], reps: reps[$1])
+        }
     }
 
     public static func smoothE1RM(prior: Double, sample: Double) -> Double {
@@ -475,6 +582,54 @@ public enum ProgramProgression {
         default:
             return advanceCycleLift(state, perf: perf, focus: focus, roundingLb: roundingLb)
         }
+    }
+
+    /// Whether an accessory slot is CARRYING load it can never add to.
+    ///
+    /// `advanceAccessory` uses `incrementLb > 0` as its entire test for "is
+    /// this slot weighted?". That is correct for bodyweight and timed work,
+    /// which progress by reps or duration and have no load to add. But a slot
+    /// holding a real working weight with a zero increment falls into the same
+    /// branch: it climbs reps forever, past its own `maxReps`, and the weight
+    /// never moves no matter how well the sets go.
+    ///
+    /// `weightLb > 0` is what makes this a misconfiguration rather than a
+    /// choice. A zero weight with a zero increment is the documented way to say
+    /// "no external load" — it is the default every newly added accessory
+    /// starts at, and the web editor labels the field "Load step
+    /// (0 = bodyweight)". Flagging that would fire on every slot the moment it
+    /// was created, before the lifter had configured anything.
+    ///
+    /// Timed and conditioning work is excluded for the same reason in reverse:
+    /// a plank progresses by `durationStepSeconds`, so a zero increment there
+    /// is correct even when the slot carries a weight vest.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `accessoryCannotProgressLoad`.
+    public static func accessoryCannotProgressLoad(
+        exerciseType: String?, loadBasis: LoadBasis, weightLb: Double, incrementLb: Double
+    ) -> Bool {
+        // Reps- and duration-progressed work has no load to step.
+        guard !SwapRules.unloadableTypes.contains(exerciseType?.lowercased() ?? "") else { return false }
+        guard loadBasis != .bodyweight else { return false }
+        return weightLb > 0 && incrementLb <= 0
+    }
+
+    /// Whether the next session is landing sooner than the program's preferred
+    /// spacing, and by how much.
+    ///
+    /// `preferredSessionSpacingDays` was previously write-only: a stepper set
+    /// it, the coach's shorter-spacing trial wrote it, and nothing ever read it
+    /// back. A preference the app collects and then ignores is worse than not
+    /// asking. This is advisory only — it never blocks a session, because the
+    /// lifter's calendar beats the app's opinion.
+    ///
+    /// Returns nil when there is nothing useful to say: no prior session, no
+    /// preference recorded, or the gap is already met.
+    /// Mirrored 1:1 in web/app/js/core.js `sessionSpacingShortfall`.
+    public static func sessionSpacingShortfall(daysSinceLastSession: Int?, preferredDays: Int) -> Int? {
+        guard preferredDays > 0, let elapsed = daysSinceLastSession, elapsed >= 0 else { return nil }
+        let shortfall = preferredDays - elapsed
+        return shortfall > 0 ? shortfall : nil
     }
 
     /// Accessory double progression: earn the top of the rep range across all

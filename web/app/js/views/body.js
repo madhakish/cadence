@@ -42,6 +42,21 @@ export async function render(host) {
     ui.h("div", { class: "btn-row", style: { marginTop: "10px" } },
       ui.h("button", { class: "btn sm", text: "Shake ~45g", onClick: () => add(45, "Shake") }),
       ui.h("button", { class: "btn sm", text: "Meat ~50g", onClick: () => add(50, "Meat") })));
+  // Guidance, not enforcement: the stored target stays whatever the lifter
+  // set. Offered only when there is a real bodyweight to derive it from — the
+  // app never invents one — and only when it differs from what's set.
+  const guidance = C.proteinSummary(latest?.weightLb);
+  const suggested = C.proteinDailyTargetGrams(latest?.weightLb);
+  if (guidance) {
+    pcard.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: guidance }));
+    if (suggested != null && Math.round(suggested) !== Math.round(target)) {
+      pcard.append(ui.h("button", {
+        class: "btn ghost wide", style: { marginTop: "6px" },
+        text: `Use ${suggested} g as my daily target`,
+        onClick: async () => { await Settings.save({ ...settings, proteinTargetGrams: suggested }); ui.nav.refresh(); },
+      }));
+    }
+  }
   const custom = ui.h("input", { type: "number", inputmode: "numeric", placeholder: "grams" });
   pcard.append(ui.h("div", { class: "btn-row", style: { marginTop: "8px" } }, custom,
     ui.h("button", { class: "btn sm primary", text: "Add", onClick: () => { const g = parseFloat(custom.value); if (g > 0) add(g, "Custom"); } })));

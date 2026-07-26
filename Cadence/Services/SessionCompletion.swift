@@ -291,7 +291,12 @@ enum SessionCompletion {
         // Only the prescribed work block can earn the cycle progression.
         let w = prescribedWork(entry)
         let presReps = entry.plannedReps ?? (w.map(\.reps).max() ?? 0)
-        let top = w.max { $0.weightLb < $1.weightLb }
+        // The cycle's strength sample, not simply the heaviest set — see
+        // ProgramProgression.strengthSampleIndex. Heaviest-first discarded the
+        // extra reps of an AMRAP taken at the top weight.
+        let top = ProgramProgression.strengthSampleIndex(
+            weightsLb: w.map(\.weightLb), reps: w.map(\.reps)
+        ).map { w[$0] }
         return CycleLiftPerformance(
             prescribedSets: entry.plannedSets ?? w.count,
             prescribedReps: presReps,
@@ -324,6 +329,68 @@ enum SessionCompletion {
             grindyOrWobbleSets: w.filter { $0.quality == .grindy || $0.quality == .wobble }.count,
             bodyFlagSets: w.filter { $0.bodyFlagSite != nil }.count
         )
+    }
+
+    /// Complete rotations banked for this program since its most recent deload
+    /// rotation. A program that has never deloaded returns every rotation it
+    /// has run, which is exactly right — it has accumulated all of them.
+    ///
+    /// Rotations, not sessions: a session count means something different on
+    /// every split, and the floor it feeds has to mean the same thing on all of
+    /// them. Ordered by `completedAt ?? date` to match the web mirror and
+    /// `CoachingService`, so a backdated session cannot make one client cut the
+    /// cycle short while the other does not.
+    private static func rotationsSinceLastDeload(
+        _ sessions: [WorkoutSession], program: Program
+    ) -> Int {
+        let mine = sessions.filter {
+            $0.isCompleted && ($0.programID == program.id || $0.programName == program.name)
+        }.sorted { ($0.completedAt ?? $0.date) < ($1.completedAt ?? $1.date) }
+        var lastDeloadIndex = -1
+        for (index, session) in mine.enumerated() where session.programWeek == ProgramProgression.deloadWeek {
+            lastDeloadIndex = index
+        }
+        let after = mine.dropFirst(lastDeloadIndex + 1)
+        return Set(after.map { RotationKey(
+            cycleNumber: $0.programCycleNumber ?? 0, week: $0.programWeek ?? 0
+        ) }).count
+    }
+
+    private struct RotationKey: Hashable { let cycleNumber: Int; let week: Int }
+
+    /// Readiness-triggered deload. The schedule normally walks 1 → 2 → 3 → 4;
+    /// a second consecutive red rotation means this cycle is not worth
+    /// finishing, so it goes straight to the deload instead. Returns the
+    /// rotation being cut short, or nil to advance normally. Mirrors the web
+    /// `earlyDeloadDecision`.
+    ///
+    /// The session that just closed this rotation is already marked completed
+    /// on the context, so the fetch below sees it — but it has not been saved,
+    /// which is why the filtering happens in memory rather than in a predicate.
+    private static func earlyDeloadWeek(
+        program: Program, context: ModelContext
+    ) throws -> Int? {
+        // Structural guard first: building the coaching report is not free, and
+        // from rotation 3 the schedule advances into the deload by itself.
+        guard program.currentWeek >= 1,
+              program.currentWeek < ProgramProgression.deloadWeek - 1 else { return nil }
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+        let report = CoachingService.report(
+            program: program,
+            sessions: sessions,
+            exercises: try context.fetch(FetchDescriptor<Exercise>()),
+            checkIns: try context.fetch(FetchDescriptor<CheckIn>())
+        )
+        // Verified rotations only — an as-run rotation is complete by
+        // construction, so trusting one would launder an unknown into a deload.
+        let verified = report.rotations.filter { $0.isComplete && !$0.judgedAsRun }
+        let decided = ProgramProgression.shouldDeloadEarly(
+            currentWeek: program.currentWeek,
+            readiness: verified.last?.readiness ?? .unknown,
+            previousReadiness: verified.dropLast().last?.readiness ?? .unknown,
+            rotationsSinceLastDeload: rotationsSinceLastDeload(sessions, program: program)
+        )
+        return decided ? program.currentWeek : nil
     }
 
     private static func advanceProgram(_ session: WorkoutSession, context: ModelContext,
@@ -505,8 +572,32 @@ enum SessionCompletion {
             }
         }
 
+        // Outside the graded rotation the cycle does not advance, but the work
+        // still happened, and a set taken past its prescription is the best
+        // estimate available. Observation only: it can raise the estimate,
+        // never lower it, because a submaximal prescription is not evidence of
+        // a smaller max. This is what a capped AMRAP on the load rotation feeds.
+        if week != ProgramProgression.gradedWeek {
+            for lift in day.lifts where !lift.prescription.advancesPerExposure {
+                guard let entry = programmedEntry(
+                    for: lift.id, exerciseName: lift.exerciseName,
+                    role: lift.role.rawValue, in: session
+                ) else { continue }
+                let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
+                                                      exerciseType: entry.exercise?.typeRaw)
+                let perf = cyclePerf(entry, roundingLb: loadStep)
+                guard perf.topSetWeightLb > 0, perf.topSetReps >= 1 else { continue }
+                lift.estimatedMaxLb = ProgramProgression.observedMax(
+                    prior: lift.estimatedMaxLb,
+                    sample: ProgramProgression.epleyE1RM(
+                        weightLb: perf.topSetWeightLb, reps: perf.topSetReps
+                    )
+                )
+            }
+        }
+
         // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
-        if week == 3 {
+        if week == ProgramProgression.gradedWeek {
             for lift in day.lifts where !lift.prescription.advancesPerExposure {
                 if let entry = programmedEntry(
                     for: lift.id, exerciseName: lift.exerciseName,
@@ -539,7 +630,30 @@ enum SessionCompletion {
         program.nextDayIndex = advance.nextDayOrder
         guard advance.isLastDay else { return }
 
-        if program.currentWeek < 4 {
+        if program.currentWeek < ProgramProgression.deloadWeek {
+            if let earlyWeek = try earlyDeloadWeek(program: program, context: context) {
+                // Write the hold through the same pending group a real peak
+                // grade uses, so the rollover applies it on its existing path
+                // and never reaches the skipped-peak stall branch. A slot that
+                // already carries a grade keeps it — this only speaks for
+                // cycles whose peak never ran.
+                for programDay in program.days {
+                    for lift in programDay.lifts
+                    where !lift.prescription.advancesPerExposure && lift.pendingBaseWeightLb == nil {
+                        let hold = ProgramProgression.recoveryDeloadHold(lift.coreState, atWeek: earlyWeek)
+                        lift.pendingBaseWeightLb = hold.state.baseWeightLb
+                        lift.pendingEstimatedMaxLb = hold.state.estimatedMaxLb
+                        lift.pendingStallCount = hold.state.stallCount
+                        lift.pendingLastIncrementLb = hold.state.lastIncrementLb
+                        lift.pendingNote = hold.note
+                    }
+                }
+                program.currentWeek = ProgramProgression.deloadWeek
+                let label = "\(program.name): two red rotations in a row — going straight to the deload. Main-lift bases hold."
+                context.insert(Milestone(date: session.date, exerciseName: nil, kind: .programNote, label: label))
+                events.append(PREvent(kind: .programNote, exercise: program.name, label: label))
+                return
+            }
             program.currentWeek += 1
             return
         }

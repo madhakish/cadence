@@ -88,6 +88,30 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertEqual(report.recommendations.first?.change, .reduceAccessoryVolume(percent: 25))
     }
 
+    func testTwoConsecutiveRedRotationsEscalateToARecoveryRotation() {
+        var sessions = (0...3).map {
+            session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day, weight: 100)
+        }
+        sessions += (0...3).map {
+            session(cycle: 1, rotation: 2, day: $0, date: Double(12 + $0 * 3) * day,
+                    actualWeight: 90, weight: 90)
+        }
+        sessions += (0...3).map {
+            session(cycle: 1, rotation: 3, day: $0, date: Double(24 + $0 * 3) * day,
+                    actualWeight: 81, weight: 81)
+        }
+        let report = CoachingEngine.evaluate(program: program(), sessions: sessions)
+        XCTAssertEqual(report.currentReadiness, .red)
+        let first = report.recommendations.first
+        XCTAssertEqual(first?.ruleID, "readiness.red.persistent.recovery-rotation.v\(CoachingEngine.ruleVersion)")
+        XCTAssertEqual(first?.change, .reduceAccessoryVolume(percent: 50),
+                       "a red that survives the 25% cut escalates to a recovery rotation")
+        XCTAssertFalse(
+            report.recommendations.contains { $0.change == .reduceAccessoryVolume(percent: 25) },
+            "the escalation replaces the single-red rule rather than stacking with it"
+        )
+    }
+
     func testHardStopRecoveryCheckInMakesCompleteRotationRed() {
         var sessions = (0...3).map {
             session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day)
@@ -184,6 +208,96 @@ final class CoachingEngineTests: XCTestCase {
         let report = CoachingEngine.evaluate(program: snapshot, sessions: sessions)
         XCTAssertEqual(report.currentReadiness, .yellow,
                        "the complementary slot drop must not hide behind the same-name main slot")
+    }
+
+    // MARK: - Rotation suggestions
+
+    func testSlotPrescribingAShelvedExerciseIsSurfaced() throws {
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") { $0.exerciseIsShelved = true },
+            sessions: greenRotations()
+        )
+        let suggestion = try XCTUnwrap(report.recommendations.first { rotationSlotID($0) != nil })
+        XCTAssertEqual(suggestion.ruleID, "program.slot.rotate.shelved.v\(CoachingEngine.ruleVersion)")
+        XCTAssertEqual(rotationSlotID(suggestion), "squat",
+                       "the suggestion names the slot; resolving a replacement needs the exercise library")
+        XCTAssertTrue(suggestion.id.hasSuffix("-squat"),
+                      "one suggestion per slot, so two stuck slots do not collide on one id")
+    }
+
+    func testOneNonSuccessCycleOnALiftSlotProposesARotation() throws {
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") { $0.stallCount = 1 },
+            sessions: greenRotations()
+        )
+        let suggestion = try XCTUnwrap(report.recommendations.first { rotationSlotID($0) != nil })
+        XCTAssertEqual(suggestion.ruleID, "program.slot.rotate.stalled.v\(CoachingEngine.ruleVersion)")
+    }
+
+    func testStallSuggestionSurvivesARedRotationButNeverLeadsIt() {
+        var sessions = (0...3).map {
+            session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day, weight: 100)
+        }
+        sessions += (0...3).map {
+            session(cycle: 1, rotation: 2, day: $0, date: Double(12 + $0 * 3) * day,
+                    actualWeight: 90, weight: 90)
+        }
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") { $0.stallCount = 1 }, sessions: sessions
+        )
+        XCTAssertEqual(report.recommendations.first?.change, .reduceAccessoryVolume(percent: 25),
+                       "readiness still leads the list")
+        XCTAssertTrue(report.recommendations.contains { rotationSlotID($0) == "squat" },
+                      "a red rotation does not suppress program hygiene")
+    }
+
+    func testAccessoryStallsNeedARealPlateauAndConditioningIsNeverRotated() {
+        let onceStuck = CoachingEngine.evaluate(
+            program: program(patching: "row") { $0.stallCount = 1 }, sessions: greenRotations()
+        )
+        XCTAssertFalse(onceStuck.recommendations.contains { rotationSlotID($0) != nil },
+                       "one missed accessory exposure is not a plateau")
+
+        let plateaued = CoachingEngine.evaluate(
+            program: program(patching: "row") { $0.stallCount = 3 }, sessions: greenRotations()
+        )
+        XCTAssertEqual(plateaued.recommendations.compactMap(rotationSlotID), ["row"])
+
+        let conditioning = CoachingEngine.evaluate(
+            program: program(patching: "bike") {
+                $0.stallCount = 5
+                $0.exerciseIsShelved = true
+            },
+            sessions: greenRotations()
+        )
+        XCTAssertFalse(conditioning.recommendations.contains { rotationSlotID($0) != nil },
+                       "conditioning slots are never rotated by this rule")
+    }
+
+    private func rotationSlotID(_ recommendation: CoachingRecommendation) -> String? {
+        if case .rotateExercise(let slotID, _) = recommendation.change { return slotID }
+        return nil
+    }
+
+    private func greenRotations() -> [CoachingSessionSnapshot] {
+        var sessions: [CoachingSessionSnapshot] = []
+        for rotation in 1...3 {
+            for dayIndex in 0...3 {
+                sessions.append(session(cycle: 1, rotation: rotation, day: dayIndex,
+                                        date: Double((rotation - 1) * 12 + dayIndex * 3) * day,
+                                        weight: 100 + Double(rotation - 1) * 5))
+            }
+        }
+        return sessions
+    }
+
+    private func program(
+        patching slotID: String, _ patch: (inout CoachingProgramSlot) -> Void
+    ) -> CoachingProgramSnapshot {
+        var snapshot = program()
+        guard let index = snapshot.slots.firstIndex(where: { $0.id == slotID }) else { return snapshot }
+        patch(&snapshot.slots[index])
+        return snapshot
     }
 
     private func program() -> CoachingProgramSnapshot {

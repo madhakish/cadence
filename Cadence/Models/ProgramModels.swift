@@ -196,10 +196,13 @@ final class ProgramLift {
     }
 
     func prescriptionConfiguration(movementGroup: String) -> LiftPrescriptionConfiguration {
-        let lower = movementGroup == "squat" || movementGroup == "hinge"
+        // Resolved in CadenceCore so both clients agree — see resolvedOffsets.
+        let offsets = ProgramEngine.resolvedOffsets(
+            loadOffsetLb: loadOffsetLb, peakOffsetLb: peakOffsetLb, movementGroup: movementGroup
+        )
         return LiftPrescriptionConfiguration(
-            loadOffsetLb: loadOffsetLb > 0 ? loadOffsetLb : (lower ? 25 : 10),
-            peakOffsetLb: peakOffsetLb > 0 ? peakOffsetLb : (lower ? 33 : 15),
+            loadOffsetLb: offsets.load,
+            peakOffsetLb: offsets.peak,
             deloadMultiplier: deloadMultiplier > 0 ? deloadMultiplier : 0.775,
             workingSets: max(1, doubleProgressionSets),
             minimumReps: max(1, minimumReps),

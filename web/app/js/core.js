@@ -484,14 +484,34 @@ export function planFor(state, roundingLb = DEFAULT_ROUNDING_LB) {
   };
 }
 
+// Movement-aware offset defaults for offsetWave. A stored zero means "use the
+// default"; an explicit value stays user-owned. Absolute pounds on purpose —
+// that is what offsetWave is for, and they are deliberately not proportional.
+//
+// Previously resolved in sessionPrescription only, so a squat reaching
+// planForStyle directly silently got the upper-body 10/15 while the native side
+// used 25/33. Values unchanged; only the divergence is fixed.
+// Mirrored 1:1 in CadenceCore ProgramEngine.resolvedOffsets.
+export function resolvedOffsets(loadOffsetLb, peakOffsetLb, movementGroup) {
+  const lower = ["squat", "hinge"].includes(movementGroup);
+  return {
+    loadOffsetLb: loadOffsetLb > 0 ? loadOffsetLb : (lower ? 25 : 10),
+    peakOffsetLb: peakOffsetLb > 0 ? peakOffsetLb : (lower ? 33 : 15),
+  };
+}
+
 export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave", configuration = {}, movementGroup = null) {
   const p = state.nextPhase;
   const config = {
-    loadOffsetLb: 10, peakOffsetLb: 15, deloadMultiplier: 0.775,
+    // Zero is the stored sentinel for "use the movement-aware default";
+    // resolvedOffsets below supplies it. Defaulting to 10/15 here would read as
+    // an explicit user choice and suppress the lower-body upgrade.
+    loadOffsetLb: 0, peakOffsetLb: 0, deloadMultiplier: 0.775,
     workingSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 5,
     peakSingleEnabled: false, lastPeakSingleLb: 0, peakSingleIncrementLb: 5,
     phasePrimerEnabled: true, ...configuration,
   };
+  Object.assign(config, resolvedOffsets(config.loadOffsetLb, config.peakOffsetLb, movementGroup));
   if (["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(style)) {
     // Sets-across at the slot's own base; the base moves per exposure
     // (advanceLinearLift), so the 4-week phase never shapes the weight.
@@ -586,9 +606,7 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
     peakSingleEnabled: false, lastPeakSingleLb: 0, peakSingleIncrementLb: 5,
     phasePrimerEnabled: true, ...configuration,
   };
-  const lower = ["squat", "hinge"].includes(movementGroup);
-  if (!(config.loadOffsetLb > 0)) config.loadOffsetLb = lower ? 25 : 10;
-  if (!(config.peakOffsetLb > 0)) config.peakOffsetLb = lower ? 33 : 15;
+  Object.assign(config, resolvedOffsets(config.loadOffsetLb, config.peakOffsetLb, movementGroup));
   const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
   const work = programPlanFor(state, programRoundingLb, exerciseType, movementGroup, role, focus, style, config);
   const step = programLoadStep(programRoundingLb, exerciseType);
@@ -599,8 +617,11 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
   }
   if (config.peakSingleEnabled && state.nextPhase === 3
     && style !== "technique" && !buildsOwnSessionShape(style)) {
+    // The seed is a training max, so it follows the program's focus rather
+    // than a hardcoded 0.90 — a hypertrophy program's ceiling is 0.78.
+    const tm = FOCUS[focus]?.tm > 0 ? FOCUS[focus].tm : 0.90;
     const seed = config.lastPeakSingleLb > 0
-      ? config.lastPeakSingleLb + config.peakSingleIncrementLb : estimatedMaxLb * 0.90;
+      ? config.lastPeakSingleLb + config.peakSingleIncrementLb : estimatedMaxLb * tm;
     const target = roundTo(seed, step);
     if (target > work.weightLb) blocks.push({ kind: "topSingle", weightLb: target, sets: 1, reps: 1 });
   }
@@ -747,6 +768,76 @@ export const QUALITY_FLAG_TOLERANCE = 1;   // ≤1 grindy/wobble set still SUCCE
 export const STALL_LIMIT = 2;              // 2 consecutive non-success → auto deload
 export const DELOAD_REBUILD_FRACTION = 0.90;
 
+// The wave's deload rotation. 1–3 are volume, load, and peak.
+export const DELOAD_WEEK = 4;
+// Complete rotations that must be banked since the last deload rotation before
+// another early one is allowed. Without a floor a run of red rotations turns
+// the recovery deload into the schedule, which is the opposite of what it is
+// for.
+//
+// Counted in ROTATIONS, not sessions. A session floor silently scales with the
+// split: eight sessions is two rotations of a four-day program but four
+// rotations of a two-day one, and is simply unreachable inside a cycle for any
+// rotation of three days or fewer — which disabled the feature outright on half
+// the shipped templates.
+export const MINIMUM_ROTATIONS_BETWEEN_DELOADS = 2;
+
+// The rotation whose top work decides the cycle's progression.
+export const GRADED_WEEK = 3;
+
+// An e1RM observation from a rotation that is NOT the graded one.
+//
+// The graded rotation is a test, so it moves the estimate in either direction.
+// Every other rotation prescribes deliberately submaximal work — a light set is
+// not evidence the max fell, it is evidence the program asked for less. So only
+// a sample that BEATS the standing estimate says anything, and it still smooths
+// rather than jumping.
+//
+// This is what lets a capped AMRAP on the load rotation feed the engine. It
+// also matters for the training-max ceiling: an estimate derived from the peak
+// set is a fixed multiple of the base it is meant to bound, and therefore never
+// binds. A load-rotation sample is earned reps at a weight the peak did not
+// set, which is the independent anchor it has lacked.
+export function observedMax(prior, sample) {
+  return sample > prior ? smoothE1RM(prior, sample) : prior;
+}
+
+// Whether to cut this cycle short and go straight to the deload rotation.
+//
+// The survey picture of how lifters actually deload is "every 5–6 weeks, or
+// when performance stalls" — so a ceiling and a trigger. Cadence's fixed
+// four-rotation wave already deloads well inside that ceiling, and a ceiling
+// rule that can never fire is dead code, so only the trigger and its floor are
+// implemented here.
+//
+// Persistent red, not a single red: one bad rotation is noise, and the
+// single-red answer (a temporary accessory-set cut) is already cheaper and
+// reversible. Weeks 1 and 2 only — from week 3 the schedule advances into the
+// deload by itself, so there is nothing to skip.
+export function shouldDeloadEarly(currentWeek, readiness, previousReadiness, rotationsSinceLastDeload) {
+  if (!(currentWeek >= 1 && currentWeek < DELOAD_WEEK - 1)) return false;
+  if (readiness !== "red" || previousReadiness !== "red") return false;
+  return rotationsSinceLastDeload >= MINIMUM_ROTATIONS_BETWEEN_DELOADS;
+}
+
+// The state a cycle-graded slot carries out of a cycle the program cut short
+// for recovery. The lifter did not miss a peak — the peak never ran — so the
+// base holds and no stall accrues. It is written into the same `pending` a real
+// peak grade uses, so rollover applies it through its existing path and never
+// reaches the skipped-peak stall branch.
+export function recoveryDeloadHold(lift, week) {
+  return {
+    state: {
+      baseWeightLb: lift.baseWeightLb,
+      estimatedMaxLb: lift.estimatedMaxLb,
+      stallCount: lift.stallCount || 0,
+      lastIncrementLb: 0,
+    },
+    grade: "hold",
+    note: `Recovery deload — output stayed red, so the cycle stopped after rotation ${week} and went straight to the deload. The base holds.`,
+  };
+}
+
 // focus → { tm: training-max as fraction of e1RM, inc: increment fraction of base }
 export const FOCUS = {
   strength: { tm: 0.90, inc: 0.025 },
@@ -756,6 +847,32 @@ export const FOCUS = {
 export const focusParams = (focus) => FOCUS[focus] || FOCUS.strength;
 
 export const epleyE1RM = (weightLb, reps) => (reps >= 1 ? weightLb * (1 + reps / 30.0) : weightLb);
+
+// Epley is accurate at roughly 2-10 reps and drifts high above that, so a long
+// back-off set is not allowed to masquerade as a strength sample.
+export const E1RM_SAMPLE_REP_CEILING = 10;
+
+// Which performed set is the cycle's strength sample.
+//
+// Heaviest-first is the intuitive answer and it is wrong: it makes an
+// as-many-reps-as-possible set at the top weight invisible, because the first
+// set at that weight wins the tie and the extra reps are discarded. A lifter
+// who takes the last set to 8 instead of the prescribed 3 has produced the
+// single best estimate of the cycle, and the engine has been throwing it away.
+//
+// Ranking by Epley fixes that and cannot be fooled by back-off volume —
+// 135x10 estimates 180 lb and loses to 215x3's 236.5 — as long as reps stay
+// inside the formula's accurate range, which is what the ceiling is for. When
+// every set is a long one there is nothing better available, so the whole pool
+// is ranked anyway rather than reporting no sample at all.
+export function strengthSampleIndex(weightsLb, reps) {
+  const count = Math.min(weightsLb.length, reps.length);
+  if (count < 1) return null;
+  const indexes = Array.from({ length: count }, (_, i) => i);
+  const short = indexes.filter((i) => reps[i] <= E1RM_SAMPLE_REP_CEILING);
+  const pool = short.length ? short : indexes;
+  return pool.reduce((best, i) => (epleyE1RM(weightsLb[i], reps[i]) > epleyE1RM(weightsLb[best], reps[best]) ? i : best));
+}
 export const smoothE1RM = (prior, sample) => (prior <= 0 ? sample : 0.7 * prior + 0.3 * sample);
 
 // perf: { prescribedSets, prescribedReps, completedSets, anyStoppedEarly,
@@ -1050,6 +1167,77 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
   return advanceCycleLift(state, perf, focus, roundingLb);
 }
 
+// Whether an accessory slot is CARRYING load it can never add to.
+//
+// advanceAccessory uses `incrementLb > 0` as its entire test for "is this slot
+// weighted?". That is correct for bodyweight and timed work, which progress by
+// reps or duration and have no load to add. But a slot holding a real working
+// weight with a zero increment falls into the same branch: it climbs reps
+// forever, past its own maxReps, and the weight never moves.
+//
+// `weightLb > 0` is what makes this a misconfiguration rather than a choice. A
+// zero weight with a zero increment is the documented way to say "no external
+// load" — it is the default every newly added accessory starts at, and the
+// editor labels the field "Load step (0 = bodyweight)".
+//
+// Timed and conditioning work is excluded for the same reason in reverse: a
+// plank progresses by durationStepSeconds, so a zero increment there is right
+// even when the slot carries a weight vest.
+//
+// Mirrored 1:1 in CadenceCore ProgramProgression.accessoryCannotProgressLoad.
+export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, incrementLb) {
+  if (UNLOADABLE_TYPES.has(String(exerciseType ?? "").toLowerCase())) return false;
+  if (loadBasis === "bodyweight") return false;
+  return weightLb > 0 && !(incrementLb > 0);
+}
+
+// Whether the next session is landing sooner than the program's preferred
+// spacing, and by how much.
+//
+// preferredSessionSpacingDays was previously write-only: a stepper set it, the
+// coach's shorter-spacing trial wrote it, and nothing ever read it back. A
+// preference the app collects and then ignores is worse than not asking. This
+// is advisory only — it never blocks a session, because the lifter's calendar
+// beats the app's opinion.
+//
+// Returns null when there is nothing useful to say.
+// Bodyweight-derived protein guidance. Advisory, and deliberately outside the
+// programming engine — nothing here feeds progression or readiness. The stored
+// proteinTargetGrams stays whatever the lifter set; this only offers a number
+// to compare it against.
+//
+// 1.6 g/kg/day is the plateau Morton et al. (2018) found for RT-induced
+// fat-free mass gains; 0.4 g/kg/meal is the higher per-dose threshold PROT-AGE
+// recommends for older adults, whose muscle responds less to a given dose.
+// Mirrored 1:1 in CadenceCore ProteinGuidance.
+export const PROTEIN_DAILY_G_PER_KG = 1.6;
+export const PROTEIN_MEAL_G_PER_KG = 0.4;
+export const PROTEIN_MEALS_PER_DAY = 4;
+
+const proteinGrams = (bodyweightLb, perKg) => {
+  if (!(bodyweightLb > 0)) return null;
+  return Math.round(kgFromLb(bodyweightLb) * perKg / 5) * 5;
+};
+export const proteinDailyTargetGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_DAILY_G_PER_KG);
+export const proteinPerMealGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_MEAL_G_PER_KG);
+
+// One line of guidance, or null when there is no bodyweight logged — the app
+// never invents one.
+export function proteinSummary(bodyweightLb) {
+  const daily = proteinDailyTargetGrams(bodyweightLb);
+  const meal = proteinPerMealGrams(bodyweightLb);
+  if (daily == null || meal == null) return null;
+  return `${daily} g/day at ${PROTEIN_DAILY_G_PER_KG} g/kg, about ${meal} g per meal across ${PROTEIN_MEALS_PER_DAY}.`;
+}
+
+// Mirrored 1:1 in CadenceCore ProgramProgression.sessionSpacingShortfall.
+export function sessionSpacingShortfall(daysSinceLastSession, preferredDays) {
+  if (!(preferredDays > 0)) return null;
+  if (!Number.isInteger(daysSinceLastSession) || daysSinceLastSession < 0) return null;
+  const shortfall = preferredDays - daysSinceLastSession;
+  return shortfall > 0 ? shortfall : null;
+}
+
 // Accessory double progression. state: { sets, minReps, maxReps, currentReps,
 // weightLb, incrementLb, stallCount }; perf: { completedSets, minRepsAchieved, anyStoppedEarly }
 export function advanceAccessory(state, perf) {
@@ -1339,7 +1527,8 @@ export function movementPattern(exerciseName, movementGroup, explicitPattern = n
   })[movementGroup] || "unknown";
 }
 
-export const COACHING_RULE_VERSION = 1;
+// v2: a second consecutive red rotation escalates to a deeper cut.
+export const COACHING_RULE_VERSION = 2;
 export const GREEN_COMPLETION_FLOOR = 0.90;
 export const RED_COMPLETION_FLOOR = 0.80;
 export const GREEN_AT_PLAN_FLOOR = 0.90;
@@ -1494,29 +1683,96 @@ const shorterSpacingTrial = (sessions) => {
   return median >= 4 ? Math.max(2, median - 1) : null;
 };
 
-function coachingRecommendations(program, latest, greenRotationStreak, sessions) {
+// A lift slot's counter resets the moment the base is rebuilt, so any non-zero
+// value means the weight is being retried. Accessory counters are unbounded and
+// nothing ever resolves them, so they need a real plateau.
+export const LIFT_STALL_ROTATION_THRESHOLD = 1;
+export const ACCESSORY_STALL_ROTATION_THRESHOLD = 3;
+
+// Slots the program should stop prescribing as they stand: the exercise has
+// been shelved, or the slot is stuck retrying a weight it is not making. Both
+// are suggestions — the engine names the slot, the client resolves a compatible
+// variation, and the athlete decides.
+function rotationSuggestions(program, evidenceKey) {
+  const result = [];
+  const ordered = [...(program.slots || [])].sort((a, b) => a.dayIndex - b.dayIndex || String(a.id).localeCompare(String(b.id)));
+  for (const slot of ordered) {
+    if (isConditioningPattern(slot.pattern)) continue;
+    if (slot.exerciseIsShelved) {
+      result.push({
+        id: `program.slot.rotate.shelved.v${COACHING_RULE_VERSION}:${evidenceKey}-${slot.id}`,
+        ruleID: `program.slot.rotate.shelved.v${COACHING_RULE_VERSION}`, priority: 70,
+        title: `${slot.exerciseName} is shelved but still programmed`,
+        explanation: `This slot still prescribes ${slot.exerciseName}, which you have shelved. Rotate it to a compatible variation of the same movement, or reopen the exercise.`,
+        change: { type: "rotateExercise", slotID: slot.id, exerciseName: slot.exerciseName },
+      });
+      continue;
+    }
+    const threshold = slot.role === "accessory" ? ACCESSORY_STALL_ROTATION_THRESHOLD : LIFT_STALL_ROTATION_THRESHOLD;
+    const stalls = Math.max(0, slot.stallCount || 0);
+    if (stalls < threshold) continue;
+    result.push({
+      id: `program.slot.rotate.stalled.v${COACHING_RULE_VERSION}:${evidenceKey}-${slot.id}`,
+      ruleID: `program.slot.rotate.stalled.v${COACHING_RULE_VERSION}`, priority: 60,
+      title: `${slot.exerciseName} is stuck`,
+      explanation: `${slot.exerciseName} has ${stalls} exposure${stalls === 1 ? "" : "s"} on record without meeting its prescription, so it is being retried rather than added to. Rotating to a compatible variation of the same movement is the usual answer before the weight gets cut.`,
+      change: { type: "rotateExercise", slotID: slot.id, exerciseName: slot.exerciseName },
+    });
+  }
+  return result;
+}
+
+function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions) {
   if (!latest) return [];
   const evidenceKey = `c${latest.key.cycleNumber}-r${latest.key.rotation}`;
-  if (latest.readiness === "red") return [{
+  // Rotation suggestions are program hygiene, not capacity: a slot pointing at
+  // a shelved exercise or stuck retrying the same weight is wrong at every
+  // readiness level, so these are offered alongside the readiness verdict
+  // rather than gated behind a green streak. They sort below every readiness
+  // rule, so the light stays the headline.
+  const rotations = rotationSuggestions(program, evidenceKey);
+  const byPriority = (a, b) => b.priority - a.priority || b.id.localeCompare(a.id);
+  const decided = (recommendation) => [recommendation, ...rotations].sort(byPriority);
+  // A second consecutive red rotation escalates: one bad rotation is noise,
+  // two in a row is a trend, and the 25% cut has already been tried without
+  // restoring output. Cuts volume while KEEPING frequency (Rogerson 2024) —
+  // the rotation still runs, it just carries less work.
+  //
+  // Deliberately does NOT jump the program to its scheduled deload week:
+  // skipping the peak would mark every wave-family slot as a missed peak and
+  // start them toward a 10% rebuild, punishing a lifter twice. It leaves
+  // main-lift LOAD alone for the same reason — a cycle is graded on the peak
+  // work actually performed and no session records "this was a planned
+  // deload", so lighter mains would read back as a failed peak. Cutting
+  // accessory SETS is invisible to double progression, which grades reps at a
+  // held weight.
+  if (latest.readiness === "red" && previousReadiness === "red") return decided({
+    id: `readiness.red.persistent.recovery-rotation.v${COACHING_RULE_VERSION}:${evidenceKey}`,
+    ruleID: `readiness.red.persistent.recovery-rotation.v${COACHING_RULE_VERSION}`, priority: 110,
+    title: "Run a recovery rotation",
+    explanation: "Two rotations in a row are red and the lighter rotation did not restore output. Hold main-lift loading and cut accessory sets about 50% for one rotation, keeping every session.",
+    change: { type: "reduceAccessoryVolume", percent: 50 },
+  });
+  if (latest.readiness === "red") return decided({
     id: `readiness.red.reduce-accessories.v${COACHING_RULE_VERSION}:${evidenceKey}`,
     ruleID: `readiness.red.reduce-accessories.v${COACHING_RULE_VERSION}`, priority: 100,
     title: "Run one lower-volume rotation",
     explanation: "Repeated output markers are red. Hold main-lift loading and cut accessory sets about 25% for one rotation.",
     change: { type: "reduceAccessoryVolume", percent: 25 },
-  }];
-  if (latest.readiness === "yellow") return [{
+  });
+  if (latest.readiness === "yellow") return decided({
     id: `readiness.yellow.hold.v${COACHING_RULE_VERSION}:${evidenceKey}`,
     ruleID: `readiness.yellow.hold.v${COACHING_RULE_VERSION}`, priority: 80,
     title: "Hold the current prescription", explanation: latest.reasons[0] || "Another exposure is needed before adding work.",
     change: { type: "hold" },
-  }];
-  if (greenRotationStreak < 2) return [];
+  });
+  if (greenRotationStreak < 2) return [...rotations].sort(byPriority);
   const budgets = [["verticalPull", 3], ["kneeFlexion", 3], ["shoulderStability", 2], ["adductor", 2], ["core", 4]];
   const planned = {};
   for (const slot of program.slots || []) planned[slot.pattern] = (planned[slot.pattern] || 0) + slot.plannedSets;
   const capacity = Math.max(0, program.maximumAddedSetsPerRotation ?? 6);
   let changes = 0;
-  const result = [];
+  const result = [...rotations];
   const capacityAdjustments = [];
   const capacityEvidence = [];
   for (const [pattern, target] of budgets) {
@@ -1554,7 +1810,7 @@ function coachingRecommendations(program, latest, greenRotationStreak, sessions)
     explanation: `Recent exposures stayed green at the observed spacing. Try the next session after ${shorter} days once, then reassess output.`,
     change: { type: "tryShorterSpacing", days: shorter },
   });
-  return result.sort((a, b) => b.priority - a.priority || b.id.localeCompare(a.id));
+  return result.sort(byPriority);
 }
 
 export function evaluateCoaching(program, sessions, reliableHistoryStart = null) {
@@ -1610,6 +1866,9 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null)
   }
   return {
     rotations, currentReadiness, greenRotationStreak,
-    recommendations: coachingRecommendations(program, completed.at(-1), greenRotationStreak, relevant),
+    // The rotation before the latest verified one, so a red that persists can
+    // escalate past a red that is one bad week.
+    recommendations: coachingRecommendations(program, completed.at(-1),
+      completed.at(-2)?.readiness ?? "unknown", greenRotationStreak, relevant),
   };
 }

@@ -35,7 +35,7 @@ export const PROGRAM_TEMPLATES = [
     // day carries core work.
     days: [
       { name: "Upper A", lifts: [lift("Overhead Press", "main", 65, 95), lift("Incline DB Press", "complementary", 50, 80)],
-        accessories: [acc("DB Overhead Triceps Extension", 3, 8, 12, 20, 5), acc("Y-T-W Raises", 3, 10, 15, 10), acc("GHD Sit-up", 3, 8, 15)] },
+        accessories: [acc("DB Overhead Triceps Extension", 3, 8, 12, 20, 5), acc("Y-T-W Raises", 3, 10, 15, 10, 2.5), acc("GHD Sit-up", 3, 8, 15)] },
       { name: "Lower A", lifts: [lift("Back Squat", "main", 135, 205), lift("Romanian Deadlift", "complementary", 95, 165)],
         accessories: [acc("Walking Lunges", 3, 10, 20), acc("Hanging Knee Raise", 3, 8, 15)] },
       { name: "Upper B", lifts: [lift("Incline DB Press", "main", 50, 80), lift("Overhead Press", "complementary", 65, 95)],
@@ -80,11 +80,11 @@ export const PROGRAM_TEMPLATES = [
     ],
     days: [
       { name: "Engine A", lifts: [],
-        accessories: [acc("KB Swing", 5, 10, 20, 35), acc("Burpees", 4, 8, 15), acc("Mountain Climbers", 4, 20, 40)] },
+        accessories: [acc("KB Swing", 5, 10, 20, 35, 10), acc("Burpees", 4, 8, 15), acc("Mountain Climbers", 4, 20, 40)] },
       { name: "Engine B", lifts: [],
         accessories: [acc("Push-ups", 4, 10, 25), acc("Ring Row", 4, 8, 15), acc("Sit-ups", 4, 15, 30)] },
       { name: "Engine C", lifts: [],
-        accessories: [acc("Box Jumps", 4, 8, 15), acc("Goblet Squat", 4, 10, 20, 35), acc("Walking Lunges", 4, 12, 24)] },
+        accessories: [acc("Box Jumps", 4, 8, 15), acc("Goblet Squat", 4, 10, 20, 35, 10), acc("Walking Lunges", 4, 12, 24)] },
     ],
   },
   // Novice linear progression in Rippetoe's canonical 3×5-across shape: squat

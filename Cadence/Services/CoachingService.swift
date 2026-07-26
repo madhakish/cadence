@@ -45,7 +45,12 @@ enum CoachingService {
                     role: lift.role.rawValue,
                     isMain: lift.role == .main,
                     capacityManaged: lift.capacityManaged,
-                    maximumSets: lift.maximumSets
+                    maximumSets: lift.maximumSets,
+                    // A graded peak waits in `pending` until the deload ends.
+                    // Reading only the settled count would hide a stall for a
+                    // whole cycle — exactly the cycle worth rotating out of.
+                    stallCount: lift.pendingStallCount ?? lift.stallCount,
+                    exerciseIsShelved: exercise?.gateStatus == .shelved
                 )
             }
             let accessorySlots = day.accessories.map { accessory in
@@ -57,7 +62,9 @@ enum CoachingService {
                     plannedSets: accessory.sets,
                     role: "accessory",
                     capacityManaged: accessory.capacityManaged,
-                    maximumSets: accessory.maximumSets
+                    maximumSets: accessory.maximumSets,
+                    stallCount: accessory.stallCount,
+                    exerciseIsShelved: exerciseByName[accessory.exerciseName]?.gateStatus == .shelved
                 )
             }
             return liftSlots + accessorySlots
@@ -237,6 +244,40 @@ enum CoachingService {
             let old = program.preferredSessionSpacingDays
             program.preferredSessionSpacingDays = max(2, days)
             result = "Preferred spacing: \(old) → \(program.preferredSessionSpacingDays) days."
+        case .rotateExercise(let slotID, let exerciseName):
+            guard let current = exercises.first(where: { $0.name == exerciseName }) else {
+                throw CoachingApplyError.unknownExercise(exerciseName)
+            }
+            guard let replacement = exercises.first(where: {
+                SwapRules.compatible(
+                    currentName: current.name, currentCategory: current.categoryRaw,
+                    currentType: current.typeRaw, currentGroup: current.movementGroup,
+                    candidateName: $0.name, candidateCategory: $0.categoryRaw,
+                    candidateType: $0.typeRaw, candidateGroup: $0.movementGroup,
+                    candidateShelved: $0.isShelved || $0.gateStatus == .shelved
+                )
+            }) else {
+                throw CoachingApplyError.noVariation(exerciseName)
+            }
+            // Same policy as the manual swap gesture: the slot keeps its load
+            // and estimate, because a compatible candidate trains the same
+            // pattern at the same tier and those remain the best prior. The
+            // stall counter does NOT carry — rotating is the answer to the
+            // stall, so inheriting its countdown would deload a lift that has
+            // not yet missed anything.
+            if let lift = program.days.flatMap(\.lifts).first(where: { $0.id == slotID }) {
+                lift.exerciseName = replacement.name
+                lift.revertToExerciseName = nil
+                lift.stallCount = 0
+                if lift.pendingStallCount != nil { lift.pendingStallCount = 0 }
+            } else if let accessory = program.days.flatMap(\.accessories).first(where: { $0.id == slotID }) {
+                accessory.exerciseName = replacement.name
+                accessory.revertToExerciseName = nil
+                accessory.stallCount = 0
+            } else {
+                throw CoachingApplyError.unknownSlot(exerciseName)
+            }
+            result = "\(exerciseName) → \(replacement.name) for this slot."
         case .hold:
             result = "Program held unchanged."
         }
@@ -315,10 +356,19 @@ enum CoachingService {
 
     enum CoachingApplyError: LocalizedError {
         case noExercise(String)
+        case noVariation(String)
+        case unknownExercise(String)
+        case unknownSlot(String)
         var errorDescription: String? {
             switch self {
             case .noExercise(let pattern):
                 return "No available exercise is classified as \(pattern). Add or reclassify one in the library first."
+            case .noVariation(let name):
+                return "No compatible variation of \(name) is available. Add one to the library, or unshelve an existing one."
+            case .unknownExercise(let name):
+                return "\(name) is no longer in the library, so a compatible variation cannot be chosen."
+            case .unknownSlot(let name):
+                return "The program slot for \(name) no longer exists."
             }
         }
     }

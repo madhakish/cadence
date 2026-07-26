@@ -22,13 +22,43 @@ owner table for docs; other pages link here rather than restating).
 
 Banking the **highest-ordered** day of a week advances the week; banking
 that day in week 4 applies all stashed grades and starts the next cycle at
-week 1. The schedule steps between days by `order` value, not by position
+week 1. Week 3 or 4 is the only week the wave can be in when a cycle ends,
+with one exception: after two consecutive red rotations the program cuts the
+cycle short and jumps to week 4 from week 1 or 2 (see
+`docs/reference/coaching-rules.md`). Every cycle-graded slot is handed an
+explicit **hold** as it jumps, so a peak that never ran is never mistaken for a
+peak that was missed. The schedule steps between days by `order` value, not by position
 in the list, so a program whose orders are not a contiguous `0..n-1` — a
 gap or a duplicate from an older backup — still reaches every day. The
 next prescription is always `nextDayIndex` → that exact day's stable
 slots → the current phase formula. Main, complementary, and unprogrammed extra
 work are separate records; recent same-name history never substitutes for a
 program slot.
+
+## The estimated max
+
+`estimatedMaxLb` is a smoothed Epley estimate, and it updates on **every**
+rotation, not only the graded one:
+
+- On week 3 the peak is a test, so the grade moves the estimate in either
+  direction.
+- On weeks 1, 2, and 4 the prescription is deliberately submaximal, so a light
+  set is not evidence the max fell — it is evidence the program asked for less.
+  Those rotations can therefore only **raise** the estimate, and only when the
+  performed work beats it.
+
+The set that supplies the sample is the best Epley among the performed working
+sets, not the heaviest one, and sets past ten reps are excluded from that
+ranking because the formula drifts high there. So a set taken past its
+prescription — the last set of the load rotation carried to 6 instead of 3 —
+is what feeds the estimate, while a long back-off set cannot masquerade as a
+max.
+
+This is also what gives the training-max ceiling something honest to bind
+against. An estimate taken only from the peak set is a fixed multiple of the
+base it is meant to bound, so it scales with the base and the taper never
+engages. A load-rotation sample is earned reps at a weight the peak did not
+set.
 
 ## Grading a lift's peak (week 3)
 

@@ -293,6 +293,32 @@ public enum ProgramEngine {
         )
     }
 
+    /// Movement-aware offset defaults for `offsetWave`. A stored zero means
+    /// "use the default"; an explicit value stays user-owned.
+    ///
+    /// These are absolute pounds ON PURPOSE — that is the whole reason
+    /// `offsetWave` exists next to the multiplicative `wave`. A lifter who
+    /// wants "always +25 on load week" gets exactly that, and the step does not
+    /// grow with the bar. They are deliberately NOT proportional, so they do
+    /// not track the wave's 1.10/1.175 shape at any particular base; that is
+    /// the trade the style is for, not a defect to normalise away.
+    ///
+    /// Lives here rather than in the app layer so both clients resolve them
+    /// identically. The JS mirror previously applied the movement-aware upgrade
+    /// in `sessionPrescription` but not in `planForStyle`, so a squat reaching
+    /// the latter silently got the upper-body 10/15 — the values below are
+    /// unchanged, and only the divergence is fixed.
+    /// Mirrored 1:1 in web/app/js/core.js `resolvedOffsets`.
+    public static func resolvedOffsets(
+        loadOffsetLb: Double, peakOffsetLb: Double, movementGroup: String?
+    ) -> (load: Double, peak: Double) {
+        let lower = movementGroup == "squat" || movementGroup == "hinge"
+        return (
+            loadOffsetLb > 0 ? loadOffsetLb : (lower ? 25 : 10),
+            peakOffsetLb > 0 ? peakOffsetLb : (lower ? 33 : 15)
+        )
+    }
+
     /// Resolves the low-friction automatic choice. Olympic lifts prioritize
     /// crisp practice; hypertrophy programs use a rep-range wave; secondary
     /// lifts carry less fatigue than main lifts.
@@ -459,9 +485,12 @@ public enum ProgramEngine {
         }
         if configuration.peakSingleEnabled, state.nextPhase == .peak,
            style != .technique, !style.buildsOwnSessionShape {
+            // The seed is a training max, so it follows the program's focus
+            // rather than a hardcoded 0.90 — a hypertrophy program's ceiling is
+            // 0.78, and opening its first peak single at 90% ignored that.
             let seed = configuration.lastPeakSingleLb > 0
                 ? configuration.lastPeakSingleLb + configuration.peakSingleIncrementLb
-                : estimatedMaxLb * 0.90
+                : estimatedMaxLb * (focus.tmFraction > 0 ? focus.tmFraction : 0.90)
             let target = Weight.round(seed, to: step)
             if target > work.weightLb {
                 blocks.append(PrescriptionBlock(kind: .topSingle, weightLb: target, sets: 1, reps: 1))

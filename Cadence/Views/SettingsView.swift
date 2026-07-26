@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var exportJSON: Data?
     @State private var exportCSV: Data?
     @State private var showImporter = false
+    @State private var showProgramImporter = false
     @State private var importAlert: String?
     @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
     @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
@@ -191,6 +192,15 @@ struct SettingsView: View {
                         } label: {
                             Text("Blank program")
                         }
+                        // A third source alongside the built-in styles and a
+                        // blank program. Adds one program and touches nothing
+                        // else — this is NOT the backup importer.
+                        Button {
+                            showProgramImporter = true
+                        } label: {
+                            Text("From a file…")
+                            Text("A program exported from Cadence")
+                        }
                     } label: {
                         Label("Add program", systemImage: "plus")
                     }
@@ -288,6 +298,9 @@ struct SettingsView: View {
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 importAlert = restore(from: result)
             }
+            .fileImporter(isPresented: $showProgramImporter, allowedContentTypes: [.json]) { result in
+                importAlert = importProgram(from: result)
+            }
             .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } })) {
                 Button("OK") { importAlert = nil }
             } message: {
@@ -314,7 +327,33 @@ struct SettingsView: View {
                 // wouldn't run until the next app launch — leaving the rest
                 // steppers dead in the meantime.
                 try Seeder.syncLibrary(context: context)
-                return "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+                let restored = "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+                guard s.repairedSlotIDs > 0 else { return restored }
+                // Say so rather than repair silently — the backup carried a
+                // slot id on two programs, and the later one has been re-issued.
+                return restored + "\n\nRepaired \(s.repairedSlotIDs) duplicate slot "
+                    + "\(s.repairedSlotIDs == 1 ? "id" : "ids") the backup reused across programs."
+            } catch {
+                return error.localizedDescription
+            }
+        }
+    }
+
+    /// Apply a program file. Unlike `restore`, this needs no checkpoint: the
+    /// import is additive, writes only the program tree, and changes nothing
+    /// at all if the file fails validation or names an exercise the library
+    /// doesn't have.
+    private func importProgram(from result: Result<URL, Error>) -> String {
+        switch result {
+        case .failure(let err):
+            return err.localizedDescription
+        case .success(let url):
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                let report = try ProgramImportService.load(data, into: context)
+                return ([report.summary] + report.warnings).joined(separator: "\n\n")
             } catch {
                 return error.localizedDescription
             }
@@ -548,6 +587,15 @@ struct ProgramEditorView: View {
                 } else if !isTimed, !(accessory.minReps...accessory.maxReps).contains(accessory.currentReps) {
                     messages.append("\(accessory.exerciseName)'s current reps are outside its rep range.")
                 }
+                // A loaded accessory with no increment can never add weight —
+                // it climbs reps past its own maximum forever. Flag it here
+                // rather than let the slot quietly stop progressing.
+                if let exercise = exerciseByName[accessory.exerciseName],
+                   ProgramProgression.accessoryCannotProgressLoad(
+                       exerciseType: exercise.typeRaw, loadBasis: exercise.loadBasis,
+                       weightLb: accessory.weightLb, incrementLb: accessory.incrementLb) {
+                    messages.append("\(accessory.exerciseName) carries load but has no increment, so it can never add weight. Set an increment.")
+                }
                 if let group = exerciseByName[accessory.exerciseName]?.movementGroup {
                     rotationSets[group, default: 0] += accessory.sets
                 }
@@ -688,6 +736,24 @@ struct ProgramEditorView: View {
                 }
             }
             Section {
+                // The plan, not a snapshot: no stall counters, no stashed peak
+                // grade, no wave position, no slot ids. Those are this
+                // lifter's state, not properties of the program, and they are
+                // actively misleading on someone else's device. Re-importing
+                // this file makes a fresh copy rather than resuming this one.
+                // Fails closed: if the program somehow can't be encoded the
+                // button is absent rather than sharing an empty file.
+                if let data = try? ProgramExportService.jsonData(for: program) {
+                    ShareLink(
+                        item: TransferableFile(
+                            data: data,
+                            filename: ProgramExportService.filename(for: program)
+                        ),
+                        preview: SharePreview(ProgramExportService.filename(for: program))
+                    ) {
+                        Label("Export program", systemImage: "square.and.arrow.up")
+                    }
+                }
                 Button {
                     cloneProgram()
                 } label: {
@@ -886,6 +952,38 @@ struct ProgramDayEditorView: View {
     }
 }
 
+/// Opens the exercise detail from a program-editor row.
+///
+/// A `NavigationLink` is what the day view uses and it works there, because
+/// those rows hold nothing but text. A program-editor row is packed with
+/// Pickers, Steppers and Toggles, and in a Form row full of controls a
+/// `.plain`-styled NavigationLink stops taking taps — the proof is in the same
+/// HStack, where the `.borderless` Remove button next to it kept working the
+/// whole time. So this uses the style that demonstrably survives that row, and
+/// presents the detail as a sheet, matching the exercise picker one level up.
+private struct ExerciseDetailButton: View {
+    let name: String
+    @State private var showing = false
+
+    var body: some View {
+        Button { showing = true } label: {
+            Text(name).font(.headline)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityHint("Shows muscles worked, history, and which programs use \(name)")
+        .sheet(isPresented: $showing) {
+            NavigationStack {
+                ExerciseDetailByNameView(name: name)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showing = false }
+                        }
+                    }
+            }
+        }
+    }
+}
+
 private struct ProgramLiftRow: View {
     @Query private var settingsList: [AppSettings]
     @Query private var exercises: [Exercise]
@@ -903,12 +1001,7 @@ private struct ProgramLiftRow: View {
             HStack {
                 // Tapping the name opens the exercise detail (muscles worked,
                 // history, program membership).
-                NavigationLink {
-                    ExerciseDetailByNameView(name: lift.exerciseName)
-                } label: {
-                    Text(lift.exerciseName).font(.headline)
-                }
-                .buttonStyle(.plain)
+                ExerciseDetailButton(name: lift.exerciseName)
                 Spacer()
                 Button(role: .destructive, action: onRemove) {
                     Image(systemName: "trash")
@@ -993,12 +1086,7 @@ private struct ProgramAccessoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                NavigationLink {
-                    ExerciseDetailByNameView(name: accessory.exerciseName)
-                } label: {
-                    Text(accessory.exerciseName).font(.headline)
-                }
-                .buttonStyle(.plain)
+                ExerciseDetailButton(name: accessory.exerciseName)
                 Spacer()
                 Button(role: .destructive, action: onRemove) {
                     Image(systemName: "trash")

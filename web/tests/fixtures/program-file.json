@@ -1,0 +1,158 @@
+{
+  "kind": "cadence.program",
+  "program": {
+    "coachEnabled": true,
+    "currentWeek": 2,
+    "cycleNumber": 3,
+    "days": [
+      {
+        "accessories": [
+          {
+            "capacityManaged": true,
+            "conditioningEffort": "easy",
+            "currentReps": 8,
+            "durationStepSeconds": 5,
+            "exerciseName": "Copenhagen Plank",
+            "id": "f1000000-0000-4000-8000-000000000003",
+            "incrementLb": 0,
+            "maxReps": 12,
+            "maximumSets": 6,
+            "minReps": 8,
+            "order": 0,
+            "sets": 3,
+            "stallCount": 0,
+            "targetRPE": 0,
+            "targetSeconds": 20,
+            "weightLb": 0
+          }
+        ],
+        "lifts": [
+          {
+            "baseWeightLb": 185,
+            "capacityManaged": true,
+            "currentReps": 5,
+            "deloadMultiplier": 0.775,
+            "doubleProgressionSets": 3,
+            "dropIncrementLb": 0,
+            "estimatedMaxLb": 225,
+            "exerciseName": "Back Squat",
+            "id": "f1000000-0000-4000-8000-000000000001",
+            "lastIncrementLb": 5,
+            "lastPeakSingleLb": 0,
+            "loadOffsetLb": 0,
+            "maximumReps": 8,
+            "maximumSets": 6,
+            "minimumReps": 5,
+            "order": 0,
+            "peakOffsetLb": 0,
+            "peakSingleEnabled": false,
+            "peakSingleIncrementLb": 5,
+            "pending": {
+              "note": "Clean peak — add 5 lb next cycle.",
+              "state": {
+                "baseWeightLb": 190,
+                "estimatedMaxLb": 230,
+                "lastIncrementLb": 5,
+                "stallCount": 0
+              }
+            },
+            "phasePrimerEnabled": true,
+            "prescription": "automatic",
+            "role": "main",
+            "stallCount": 0,
+            "warmupPolicy": "automatic"
+          },
+          {
+            "baseWeightLb": 25,
+            "capacityManaged": true,
+            "currentReps": 5,
+            "deloadMultiplier": 0.775,
+            "doubleProgressionSets": 3,
+            "dropIncrementLb": 0,
+            "estimatedMaxLb": 50,
+            "exerciseName": "Bulgarian Split Squat",
+            "id": "f1000000-0000-4000-8000-000000000002",
+            "lastIncrementLb": 0,
+            "lastPeakSingleLb": 0,
+            "loadOffsetLb": 5,
+            "maximumReps": 8,
+            "maximumSets": 6,
+            "minimumReps": 5,
+            "order": 1,
+            "peakOffsetLb": 5,
+            "peakSingleEnabled": false,
+            "peakSingleIncrementLb": 5,
+            "phasePrimerEnabled": true,
+            "prescription": "automatic",
+            "role": "complementary",
+            "stallCount": 1,
+            "warmupPolicy": "short"
+          }
+        ],
+        "name": "Fixture Lower",
+        "order": 0
+      },
+      {
+        "accessories": [
+          {
+            "capacityManaged": true,
+            "conditioningEffort": "easy",
+            "currentReps": 10,
+            "durationStepSeconds": 5,
+            "exerciseName": "Y-T-W Raises",
+            "id": "f1000000-0000-4000-8000-000000000005",
+            "incrementLb": 2.5,
+            "maxReps": 12,
+            "maximumSets": 6,
+            "minReps": 8,
+            "order": 0,
+            "sets": 3,
+            "stallCount": 2,
+            "targetRPE": 7,
+            "targetSeconds": 30,
+            "weightLb": 10
+          }
+        ],
+        "lifts": [
+          {
+            "baseWeightLb": 95,
+            "capacityManaged": false,
+            "currentReps": 5,
+            "deloadMultiplier": 0.8,
+            "doubleProgressionSets": 5,
+            "dropIncrementLb": 5,
+            "estimatedMaxLb": 115,
+            "exerciseName": "Overhead Press",
+            "id": "f1000000-0000-4000-8000-000000000004",
+            "lastIncrementLb": 5,
+            "lastPeakSingleLb": 135,
+            "loadOffsetLb": 10,
+            "maximumReps": 5,
+            "maximumSets": 8,
+            "minimumReps": 3,
+            "order": 0,
+            "peakOffsetLb": 15,
+            "peakSingleEnabled": true,
+            "peakSingleIncrementLb": 2.5,
+            "phasePrimerEnabled": false,
+            "prescription": "fiveThreeOne",
+            "revertToExerciseName": "Push Press",
+            "role": "main",
+            "stallCount": 0,
+            "warmupPolicy": "full"
+          }
+        ],
+        "name": "Fixture Upper",
+        "order": 2
+      }
+    ],
+    "focus": "strength",
+    "id": "f0000000-0000-4000-8000-000000000000",
+    "maximumAddedSetsPerRotation": 6,
+    "name": "Fixture Upper/Lower",
+    "nextDayIndex": 2,
+    "preferredSessionSpacingDays": 3,
+    "roundingLb": 5
+  },
+  "programSchemaVersion": 1
+}

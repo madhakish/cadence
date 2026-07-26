@@ -17,14 +17,21 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
       return { id: lift.id, exerciseName: lift.exerciseName, dayIndex: day.order,
         pattern: exercise?.movementPattern || C.movementPattern(lift.exerciseName, exercise?.movementGroup),
         plannedSets: plan.sets, role: lift.role, isMain: lift.role === "main", capacityManaged: lift.capacityManaged !== false,
-        maximumSets: lift.maximumSets || 6 };
+        maximumSets: lift.maximumSets || 6,
+        // A graded peak waits in `pending` until the deload ends. Reading only
+        // the settled count would hide a stall for a whole cycle — exactly the
+        // cycle worth rotating out of. Native splits pending across columns;
+        // web stashes the whole ProgressionResult under `pending`.
+        stallCount: lift.pending?.state?.stallCount ?? lift.stallCount ?? 0,
+        exerciseIsShelved: exercise?.gateStatus === "shelved" || (!exercise?.gateStatus && !!exercise?.isShelved) };
     }),
     ...(day.accessories || []).map((accessory) => {
       const exercise = exMap.get(accessory.exerciseName);
       return { id: accessory.id, exerciseName: accessory.exerciseName, dayIndex: day.order,
         pattern: exercise?.movementPattern || C.movementPattern(accessory.exerciseName, exercise?.movementGroup),
         plannedSets: accessory.sets, role: "accessory", isMain: false, capacityManaged: accessory.capacityManaged !== false,
-        maximumSets: accessory.maximumSets || 6 };
+        maximumSets: accessory.maximumSets || 6, stallCount: accessory.stallCount || 0,
+        exerciseIsShelved: exercise?.gateStatus === "shelved" || (!exercise?.gateStatus && !!exercise?.isShelved) };
     }),
   ]);
   const history = sessions.flatMap((session) => {
@@ -131,6 +138,31 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     message = `Added ${change.sets} sets of ${exercise.name} to ${day.name}.`;
   } else if (change.type === "reduceAccessoryVolume") {
     message = `Scheduled a ${change.percent}% accessory-set cut for the next rotation only.`;
+  } else if (change.type === "rotateExercise") {
+    const current = exercises.find((item) => item.name === change.exerciseName);
+    if (!current) throw new Error(`${change.exerciseName} is no longer in the library, so a compatible variation cannot be chosen.`);
+    const replacement = exercises.find((candidate) => C.swapCompatible(
+      current,
+      { ...candidate, isShelved: !!candidate.isShelved || candidate.gateStatus === "shelved" },
+    ));
+    if (!replacement) throw new Error(`No compatible variation of ${change.exerciseName} is available. Add one to the library, or unshelve an existing one.`);
+    // Same policy as the manual swap gesture: the slot keeps its load and
+    // estimate, because a compatible candidate trains the same pattern at the
+    // same tier and those remain the best prior. The stall counter does NOT
+    // carry — rotating is the answer to the stall, so inheriting its countdown
+    // would deload a lift that has not yet missed anything.
+    const lift = (program.days || []).flatMap((day) => day.lifts || []).find((slot) => slot.id === change.slotID);
+    const accessory = (program.days || []).flatMap((day) => day.accessories || []).find((slot) => slot.id === change.slotID);
+    const slot = lift || accessory;
+    if (!slot) throw new Error(`The program slot for ${change.exerciseName} no longer exists.`);
+    slot.exerciseName = replacement.name;
+    slot.revertToExerciseName = null;
+    slot.stallCount = 0;
+    // The stashed grade belongs to the exercise being rotated out. Carrying it
+    // over is the exact inheritance the comment above rules out — and the
+    // pending base is the old lift's weight, which must not land on the new one.
+    if (lift) delete lift.pending;
+    message = `${change.exerciseName} → ${replacement.name} for this slot.`;
   } else if (change.type === "tryShorterSpacing") {
     const old = program.preferredSessionSpacingDays || 3;
     program.preferredSessionSpacingDays = Math.max(2, change.days);

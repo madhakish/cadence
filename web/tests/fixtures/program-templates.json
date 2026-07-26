@@ -62,7 +62,7 @@
             "minReps": 10,
             "maxReps": 15,
             "weightLb": 10,
-            "incrementLb": 0,
+            "incrementLb": 2.5,
             "startFraction": 0
           },
           {
@@ -447,7 +447,7 @@
             "minReps": 10,
             "maxReps": 20,
             "weightLb": 35,
-            "incrementLb": 0,
+            "incrementLb": 10,
             "startFraction": 0
           },
           {
@@ -522,7 +522,7 @@
             "minReps": 10,
             "maxReps": 20,
             "weightLb": 35,
-            "incrementLb": 0,
+            "incrementLb": 10,
             "startFraction": 0
           },
           {

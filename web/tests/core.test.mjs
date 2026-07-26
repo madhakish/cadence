@@ -581,6 +581,59 @@ pres = C.advanceCycleLift(liftState(), cleanPerf, "maintain", 5);
 eq(pres.state.baseWeightLb, 175, "maintain holds weight on success");
 eq(pres.state.stallCount, 0, "maintain success resets stall");
 
+// offsetWave's movement-aware defaults live in one place now. They used to be
+// resolved in sessionPrescription only, so a squat reaching planForStyle
+// directly got the upper-body 10/15 while the native side used 25/33.
+{
+  const lower = C.resolvedOffsets(0, 0, "squat");
+  ok(lower.loadOffsetLb === 25 && lower.peakOffsetLb === 33, "lower-body offsets default to 25/33");
+  const hinge = C.resolvedOffsets(0, 0, "hinge");
+  ok(hinge.loadOffsetLb === 25 && hinge.peakOffsetLb === 33, "hinge counts as lower body");
+  const upper = C.resolvedOffsets(0, 0, "press");
+  ok(upper.loadOffsetLb === 10 && upper.peakOffsetLb === 15, "everything else defaults to 10/15");
+  const unknown = C.resolvedOffsets(0, 0, null);
+  ok(unknown.loadOffsetLb === 10 && unknown.peakOffsetLb === 15, "an unknown group is treated as upper body");
+  const explicit = C.resolvedOffsets(40, 60, "squat");
+  ok(explicit.loadOffsetLb === 40 && explicit.peakOffsetLb === 60, "an explicit offset stays user-owned");
+  const partial = C.resolvedOffsets(40, 0, "squat");
+  ok(partial.loadOffsetLb === 40 && partial.peakOffsetLb === 33, "each offset defaults independently");
+  // The bug: planForStyle must now agree with sessionPrescription for a squat.
+  const viaStyle = C.planForStyle({ baseWeightLb: 200, nextPhase: 3, cycleNumber: 1 }, 5, "offsetWave", {}, "squat");
+  ok(viaStyle.weightLb === 235, `planForStyle applies the lower-body peak offset (got ${viaStyle.weightLb})`);
+}
+
+// A peak single's seed is a training max, so it follows the program's focus.
+{
+  const state = { baseWeightLb: 100, nextPhase: 3, cycleNumber: 1 };
+  const cfg = { peakSingleEnabled: true, lastPeakSingleLb: 0, phasePrimerEnabled: false };
+  const strength = C.sessionPrescription(state, 5, "barbell", "press", "main", "strength", "wave", cfg, 200);
+  const hyper = C.sessionPrescription(state, 5, "barbell", "press", "main", "hypertrophy", "wave", cfg, 200);
+  const single = (p) => p.blocks.find((b) => b.kind === "topSingle")?.weightLb;
+  ok(single(strength) === 180, `strength seeds the single at 0.90 of e1RM (got ${single(strength)})`);
+  ok(single(hyper) === 155, `hypertrophy seeds it at its own 0.78 ceiling (got ${single(hyper)})`);
+}
+
+// Protein guidance is derived, advisory, and silent without a bodyweight.
+ok(C.proteinDailyTargetGrams(201) === 145, `201 lb at 1.6 g/kg rounds to 145 g (got ${C.proteinDailyTargetGrams(201)})`);
+ok(C.proteinPerMealGrams(201) === 35, `201 lb at 0.4 g/kg per meal rounds to 35 g (got ${C.proteinPerMealGrams(201)})`);
+ok(C.proteinDailyTargetGrams(null) === null, "no bodyweight, no suggestion");
+ok(C.proteinDailyTargetGrams(0) === null, "a zero bodyweight is not a bodyweight");
+ok(C.proteinSummary(null) === null, "no bodyweight, no guidance line");
+ok(/145 g\/day/.test(C.proteinSummary(201)), "the guidance line names the daily figure");
+ok(/35 g per meal/.test(C.proteinSummary(201)), "and the per-meal figure");
+// A heavier lifter gets a proportionally larger target — the old flat 100 g
+// literal was the same for a 130 lb and a 250 lb lifter.
+ok(C.proteinDailyTargetGrams(250) > C.proteinDailyTargetGrams(130), "the target scales with bodyweight");
+
+// Session spacing is advisory and only speaks when it has something to say.
+ok(C.sessionSpacingShortfall(1, 3) === 2, "one day into a three-day preference is two short");
+ok(C.sessionSpacingShortfall(0, 3) === 3, "training the same day is the full shortfall");
+ok(C.sessionSpacingShortfall(3, 3) === null, "meeting the preference says nothing");
+ok(C.sessionSpacingShortfall(9, 3) === null, "being well past it says nothing");
+ok(C.sessionSpacingShortfall(null, 3) === null, "no prior session says nothing");
+ok(C.sessionSpacingShortfall(1, 0) === null, "no preference recorded says nothing");
+ok(C.sessionSpacingShortfall(-1, 3) === null, "a negative gap is nonsense, not a warning");
+
 // accessory double progression
 let acc = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 50, incrementLb: 5, stallCount: 0 };
 let ac = C.advanceAccessory(acc, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
@@ -597,6 +650,30 @@ ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "poor-qua
 let bw = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0, stallCount: 0 };
 let bwa = C.advanceAccessory(bw, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
 ok(bwa.weightLb === 0 && bwa.currentReps === 13 && bwa.stallCount === 0, "bodyweight accessory climbs past max, no reset");
+// A LOADED accessory with a zero increment falls into the same branch: it
+// climbs reps past its own maximum and the weight never moves. That is a
+// misconfiguration, not a choice, so the program editor flags it.
+let broken = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 75, incrementLb: 0, stallCount: 0 };
+let brokenAdvance = C.advanceAccessory(broken, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
+ok(brokenAdvance.weightLb === 75 && brokenAdvance.currentReps === 13,
+  "a loaded accessory with no increment never adds load and climbs reps instead");
+ok(C.accessoryCannotProgressLoad("dumbbell", "perImplement", 75, 0), "per-hand dumbbell slot with no increment is flagged");
+ok(C.accessoryCannotProgressLoad("machine", "externalTotal", 120, 0), "machine slot with no increment is flagged");
+ok(!C.accessoryCannotProgressLoad("timed", "externalTotal", 25, 0), "a timed slot progresses by duration, not load");
+ok(!C.accessoryCannotProgressLoad("conditioning", "externalTotal", 25, 0), "conditioning is not load-progressed");
+ok(!C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0, 0), "bodyweight work has no load to add");
+ok(!C.accessoryCannotProgressLoad("barbell", "bodyweight", 45, 0), "an explicit bodyweight basis wins over the equipment label");
+ok(!C.accessoryCannotProgressLoad("dumbbell", "perImplement", 10, 2.5), "a fractional increment is a real increment");
+ok(!C.accessoryCannotProgressLoad("DUMBBELL", "perImplement", 40, 5), "the type test is case-insensitive");
+// An unloaded slot is not a misconfiguration: 0/0 is how "no external load" is
+// spelled, and it is what every newly added accessory starts at.
+ok(!C.accessoryCannotProgressLoad("dumbbell", "perImplement", 0, 0), "an unconfigured accessory is not flagged");
+ok(!C.accessoryCannotProgressLoad("band", "externalTotal", 0, 0), "a band with no numeric load is not flagged");
+// Fractional increments must survive: 5 lb on a 10 lb load is a 50% jump.
+let fractional = C.advanceAccessory(
+  { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 10, incrementLb: 2.5, stallCount: 0 },
+  { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
+ok(fractional.weightLb === 12.5 && fractional.currentReps === 8, "a 2.5 lb accessory increment is added unrounded");
 
 // ---- plate colours (gym scheme) ----
 eq(C.plateColorToken({ value: 55, unit: "lb" }), "red", "55 lb red");
@@ -950,11 +1027,67 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   eq(report.currentReadiness, "red", "large repeated performance drops are red");
   eq(report.recommendations[0].change.type, "reduceAccessoryVolume", "red proposes reduced accessories");
 
+  sessions = [];
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(2, dayIndex, 12 + dayIndex * 3, 90));
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(3, dayIndex, 24 + dayIndex * 3, 81));
+  report = C.evaluateCoaching(coachingProgram, sessions);
+  eq(report.currentReadiness, "red", "a second consecutive red rotation stays red");
+  eq(report.recommendations[0].ruleID, `readiness.red.persistent.recovery-rotation.v${C.COACHING_RULE_VERSION}`,
+    "a red that survives the 25% cut escalates to a recovery rotation");
+  eq(report.recommendations[0].change.percent, 50, "the recovery rotation halves accessory volume");
+  ok(!report.recommendations.some((r) => r.change.percent === 25),
+    "the escalation replaces the single-red rule rather than stacking with it");
+
   sessions = Array.from({ length: 4 }, (_, dayIndex) => coachingSession(1, dayIndex, dayIndex * 3));
   sessions[2].hasHardStopCheckIn = true;
   report = C.evaluateCoaching(coachingProgram, sessions);
   eq(report.currentReadiness, "red", "hard-stop recovery check-in makes a complete rotation red");
   ok(report.rotations[0].reasons.some((reason) => reason.includes("check-in")), "hard-stop check-in is explained");
+
+  // ---- Rotation suggestions: shelved and stuck slots ----
+  const withSlot = (id, patch) => ({
+    ...coachingProgram,
+    slots: coachingProgram.slots.map((slot) => (slot.id === id ? { ...slot, ...patch } : slot)),
+  });
+  const greenSessions = [];
+  for (let rotation = 1; rotation <= 3; rotation++) {
+    for (let dayIndex = 0; dayIndex < 4; dayIndex++) {
+      greenSessions.push(coachingSession(rotation, dayIndex, ((rotation - 1) * 4 + dayIndex) * 3, 100 + (rotation - 1) * 5));
+    }
+  }
+  const rotationOf = (rep) => rep.change.type === "rotateExercise";
+
+  report = C.evaluateCoaching(withSlot("squat", { exerciseIsShelved: true }), greenSessions);
+  let suggestion = report.recommendations.find(rotationOf);
+  ok(!!suggestion, "a slot prescribing a shelved exercise is surfaced");
+  eq(suggestion.ruleID, `program.slot.rotate.shelved.v${C.COACHING_RULE_VERSION}`, "shelved slots get their own rule");
+  eq(suggestion.change.slotID, "squat", "the suggestion names the slot, not the exercise library");
+  ok(suggestion.id.endsWith("-squat"), "one suggestion per slot, so two stuck slots do not collide on one id");
+
+  // A stall is a program-hygiene signal, not a capacity one: it must surface
+  // even when readiness has already claimed the headline.
+  report = C.evaluateCoaching(withSlot("squat", { stallCount: 1 }), greenSessions);
+  suggestion = report.recommendations.find(rotationOf);
+  ok(!!suggestion, "one non-success cycle on a lift slot proposes a rotation");
+  eq(suggestion.ruleID, `program.slot.rotate.stalled.v${C.COACHING_RULE_VERSION}`, "stalled slots get their own rule");
+
+  sessions = [];
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(2, dayIndex, 12 + dayIndex * 3, 90));
+  report = C.evaluateCoaching(withSlot("squat", { stallCount: 1 }), sessions);
+  eq(report.recommendations[0].change.type, "reduceAccessoryVolume", "readiness still leads the list");
+  ok(report.recommendations.some(rotationOf), "a red rotation does not suppress the stall suggestion");
+
+  // Accessory counters are unbounded and nothing ever resolves them, so a
+  // single missed rep target must not read as a plateau.
+  report = C.evaluateCoaching(withSlot("row", { stallCount: 1 }), greenSessions);
+  ok(!report.recommendations.some(rotationOf), "one missed accessory exposure is not a plateau");
+  report = C.evaluateCoaching(withSlot("row", { stallCount: 3 }), greenSessions);
+  ok(report.recommendations.some(rotationOf), "three stuck accessory exposures propose a rotation");
+
+  report = C.evaluateCoaching(withSlot("bike", { stallCount: 5, exerciseIsShelved: true }), greenSessions);
+  ok(!report.recommendations.some(rotationOf), "conditioning slots are never rotated by this rule");
 }
 
 // ---- Methodology styles: 5/3/1, max/dynamic effort, linear fives, Texas ----
@@ -1059,6 +1192,66 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   eq(deHold.state.estimatedMaxLb, 330, "DE never smooths e1RM off speed doubles");
   const classic = C.advanceProgramLift(tmState, cleanTop, "strength", "wave", "squat", 5);
   ok(classic.state.baseWeightLb >= 300, "non-methodology styles keep the tapered rule");
+}
+
+// ---- The cycle's strength sample ----
+{
+  const at = (w, r) => C.strengthSampleIndex(w, r);
+  // The whole point: an AMRAP taken at the top weight must win. Heaviest-first
+  // gave the tie to the FIRST set at that weight and threw the extra reps away.
+  eq(at([225, 225, 225], [3, 3, 8]), 2, "extra reps at the top weight are the cycle's best estimate");
+  eq(at([225, 225], [3, 3]), 0, "with nothing to separate them the first top set stands");
+  // ...and back-off volume must not win, which is why Epley beats raw reps.
+  eq(at([215, 135], [3, 10]), 0, "a 135x10 back-off does not outrank a 215x3");
+  eq(at([225, 185], [3, 10]), 0, "a heavy triple outranks a long back-off set");
+  // Epley drifts high past ~10 reps, so a very long set is not a strength sample
+  // while a usable one exists.
+  eq(at([185, 95], [5, 25]), 0, "a 25-rep set is not allowed to masquerade as a max");
+  eq(at([95, 95], [20, 25]), 1, "when every set is a long one, rank them anyway rather than reporting none");
+  eq(at([], []), null, "no performed work is no sample");
+  eq(C.epleyE1RM(215, 3).toFixed(1), "236.5", "the 215x3 that actually happened estimates 236.5");
+}
+
+// ---- Readiness-triggered deload ----
+{
+  const far = C.MINIMUM_ROTATIONS_BETWEEN_DELOADS;
+  ok(C.shouldDeloadEarly(2, "red", "red", far), "two red rotations cut the cycle short");
+  ok(C.shouldDeloadEarly(1, "red", "red", far), "rotation 1 can deload early once the floor is clear");
+  // The floor is in rotations so it means the same thing on a 2-day split as on
+  // a 6-day one. A session floor of 8 was unreachable inside a cycle below 4 days.
+  eq(far, 2, "two complete rotations, whatever the split");
+
+  ok(!C.shouldDeloadEarly(2, "red", "yellow", far), "one red rotation is noise, not a deload");
+  ok(!C.shouldDeloadEarly(2, "red", "unknown", far), "a first-ever red has nothing to persist against");
+  ok(!C.shouldDeloadEarly(2, "yellow", "red", far), "a recovered rotation finishes the cycle");
+
+  // From rotation 3 the schedule walks into the deload by itself, and rotation
+  // 4 IS the deload — jumping either would be a no-op that still writes holds.
+  ok(!C.shouldDeloadEarly(3, "red", "red", far), "rotation 3 already advances into the deload");
+  ok(!C.shouldDeloadEarly(C.DELOAD_WEEK, "red", "red", far), "the deload rotation cannot deload again");
+
+  // The floor is what stops a run of red rotations turning the recovery deload
+  // into the schedule.
+  ok(!C.shouldDeloadEarly(2, "red", "red", far - 1), "a deload too soon after the last one is blocked");
+  ok(C.shouldDeloadEarly(2, "red", "red", far + 10), "an old deload never blocks a new one");
+
+  // e1RM observation outside the graded rotation: a capped AMRAP on the load
+  // week must be able to raise the estimate, and a deload week must never
+  // lower it.
+  eq(C.observedMax(221.45, 236.5), C.smoothE1RM(221.45, 236.5), "a better sample smooths the estimate up");
+  ok(C.observedMax(221.45, 236.5) > 221.45, "and it actually moves");
+  eq(C.observedMax(221.45, 169), 221.45, "a deload set is not evidence the max fell");
+  eq(C.observedMax(221.45, 221.45), 221.45, "an equal sample is no new information");
+  eq(C.GRADED_WEEK, 3, "the graded rotation is the peak");
+
+  // The hold is what keeps the skipped peak from reading as a missed peak.
+  const stuck = { baseWeightLb: 225, estimatedMaxLb: 290, stallCount: 1, lastIncrementLb: 10 };
+  const held = C.recoveryDeloadHold(stuck, 2);
+  eq(held.grade, "hold", "a cycle the program cut short is a hold, not a fail");
+  eq(held.state.baseWeightLb, 225, "the base holds — the lifter did not miss a peak, the peak never ran");
+  eq(held.state.stallCount, 1, "no stall accrues for work that was never prescribed");
+  eq(held.state.lastIncrementLb, 0, "the increment record stops advertising a bump that did not happen");
+  ok(held.note.includes("rotation 2"), "the note says which rotation was cut short");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

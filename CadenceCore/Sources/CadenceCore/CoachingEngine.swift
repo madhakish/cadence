@@ -265,6 +265,12 @@ public struct CoachingProgramSlot: Hashable, Sendable {
     public var isMain: Bool
     public var capacityManaged: Bool
     public var maximumSets: Int
+    /// Consecutive non-success exposures already on record for this slot. Lift
+    /// slots reset it whenever the base is rebuilt, so a non-zero value always
+    /// means "the weight is being retried rather than added to".
+    public var stallCount: Int
+    /// The lifter has shelved the exercise this slot prescribes.
+    public var exerciseIsShelved: Bool
 
     public init(
         id: String,
@@ -275,7 +281,9 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         role: String? = nil,
         isMain: Bool = false,
         capacityManaged: Bool = true,
-        maximumSets: Int = 6
+        maximumSets: Int = 6,
+        stallCount: Int = 0,
+        exerciseIsShelved: Bool = false
     ) {
         self.id = id
         self.exerciseName = exerciseName
@@ -286,6 +294,8 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         self.isMain = isMain
         self.capacityManaged = capacityManaged
         self.maximumSets = maximumSets
+        self.stallCount = max(0, stallCount)
+        self.exerciseIsShelved = exerciseIsShelved
     }
 }
 
@@ -348,6 +358,11 @@ public enum CoachingChange: Hashable, Sendable {
     case hold
     case reduceAccessoryVolume(percent: Int)
     case tryShorterSpacing(days: Int)
+    /// Swap one slot to a compatible variation of the same movement. The
+    /// engine names the slot only; resolving an actual replacement needs the
+    /// exercise library, which lives on the clients — the same split the
+    /// pattern-based capacity additions already use.
+    case rotateExercise(slotID: String, exerciseName: String)
 }
 
 public enum CoachingCapacityAdjustment: Hashable, Sendable {
@@ -394,7 +409,8 @@ public struct CoachingReport: Sendable {
 /// holds win over added capacity. The engine proposes changes but never mutates
 /// a program or silently claims that incomplete alpha logs are complete.
 public enum CoachingEngine {
-    public static let ruleVersion = 1
+    // v2: a second consecutive red rotation escalates to a deeper cut.
+    public static let ruleVersion = 2
     public static let greenCompletionFloor = 0.90
     public static let redCompletionFloor = 0.80
     public static let greenAtPlanFloor = 0.90
@@ -475,6 +491,9 @@ public enum CoachingEngine {
         let recommendations = recommend(
             program: program,
             latest: completed.last,
+            // The rotation before the latest verified one, so a red that
+            // persists can escalate past a red that is one bad week.
+            previousReadiness: completed.dropLast().last?.readiness ?? .unknown,
             greenStreak: greenStreak,
             sessions: relevant
         )
@@ -675,30 +694,71 @@ public enum CoachingEngine {
     private static func recommend(
         program: CoachingProgramSnapshot,
         latest: RotationAssessment?,
+        previousReadiness: ReadinessState,
         greenStreak: Int,
         sessions: [CoachingSessionSnapshot]
     ) -> [CoachingRecommendation] {
         guard let latest else { return [] }
         let evidenceKey = "c\(latest.key.cycleNumber)-r\(latest.key.rotation)"
+        // Rotation suggestions are program hygiene, not capacity: a slot
+        // pointing at a shelved exercise or stuck retrying the same weight is
+        // wrong at every readiness level, so these are offered alongside the
+        // readiness verdict rather than gated behind a green streak. They sort
+        // below every readiness rule, so the light stays the headline.
+        let rotations = rotationSuggestions(program: program, evidenceKey: evidenceKey)
+        func decided(_ recommendation: CoachingRecommendation) -> [CoachingRecommendation] {
+            ([recommendation] + rotations).sorted { ($0.priority, $0.id) > ($1.priority, $1.id) }
+        }
+        // A second consecutive red rotation escalates: one bad rotation is
+        // noise, two in a row is a trend, and the 25% cut has already been
+        // tried and did not restore output. Deloading is near-universal
+        // practice but thinly studied; the survey evidence (Rogerson 2024)
+        // describes cutting volume while KEEPING frequency, which is exactly
+        // what this does — the rotation still runs, it just carries less work.
+        //
+        // Note this does NOT jump the program to its scheduled deload week.
+        // Skipping the peak would mark every wave-family slot as a missed peak
+        // and start them toward a 10% rebuild, which is a second punishment for
+        // a lifter the engine has just judged to be under-recovered.
+        //
+        // It also deliberately leaves main-lift LOAD alone. The same survey
+        // describes dropping load ~10%, but Cadence grades a cycle on the peak
+        // work actually performed (`ProgramProgression.gradeCycle`), and a
+        // session carries no "this was a planned deload" marker. Prescribing
+        // lighter mains would read back as a failed peak, so two recovery
+        // rotations would trip `stallLimit` and rebuild the base at 90%.
+        // Cutting accessory SETS has no such effect: double progression grades
+        // reps at a held weight, so fewer sets is invisible to it.
+        if latest.readiness == .red, previousReadiness == .red {
+            return decided(CoachingRecommendation(
+                ruleID: "readiness.red.persistent.recovery-rotation.v\(ruleVersion)",
+                priority: 110,
+                title: "Run a recovery rotation",
+                explanation: "Two rotations in a row are red and the lighter rotation did not restore output. Hold main-lift loading and cut accessory sets about 50% for one rotation, keeping every session.",
+                change: .reduceAccessoryVolume(percent: 50), evidenceKey: evidenceKey
+            ))
+        }
         if latest.readiness == .red {
-            return [CoachingRecommendation(
+            return decided(CoachingRecommendation(
                 ruleID: "readiness.red.reduce-accessories.v\(ruleVersion)",
                 priority: 100,
                 title: "Run one lower-volume rotation",
                 explanation: "Repeated output markers are red. Hold main-lift loading and cut accessory sets about 25% for one rotation.",
                 change: .reduceAccessoryVolume(percent: 25), evidenceKey: evidenceKey
-            )]
+            ))
         }
         if latest.readiness == .yellow {
-            return [CoachingRecommendation(
+            return decided(CoachingRecommendation(
                 ruleID: "readiness.yellow.hold.v\(ruleVersion)",
                 priority: 80,
                 title: "Hold the current prescription",
                 explanation: latest.reasons.first ?? "One or more output markers need another exposure before adding work.",
                 change: .hold, evidenceKey: evidenceKey
-            )]
+            ))
         }
-        guard greenStreak >= 2 else { return [] }
+        guard greenStreak >= 2 else {
+            return rotations.sorted { ($0.priority, $0.id) > ($1.priority, $1.id) }
+        }
 
         let budgets: [(MovementPattern, Int)] = [
             (.verticalPull, 3), (.kneeFlexion, 3), (.shoulderStability, 2),
@@ -708,7 +768,7 @@ public enum CoachingEngine {
             .mapValues { $0.reduce(0) { $0 + $1.plannedSets } }
         let capacity = program.maximumAddedSetsPerRotation
         var changes = 0
-        var result: [CoachingRecommendation] = []
+        var result: [CoachingRecommendation] = rotations
         var capacityAdjustments: [CoachingCapacityAdjustment] = []
         var capacityEvidence: [String] = []
         for (pattern, target) in budgets {
@@ -756,6 +816,49 @@ public enum CoachingEngine {
             ))
         }
         return result.sorted { ($0.priority, $0.id) > ($1.priority, $1.id) }
+    }
+
+    /// A lift slot's counter resets the moment the base is rebuilt, so any
+    /// non-zero value means the weight is being retried. Accessory counters are
+    /// unbounded and nothing ever resolves them, so they need a real plateau.
+    static let liftStallRotationThreshold = 1
+    static let accessoryStallRotationThreshold = 3
+
+    /// Slots the program should stop prescribing as they stand: the exercise
+    /// has been shelved, or the slot is stuck retrying a weight it is not
+    /// making. Both are suggestions — the engine names the slot, the client
+    /// resolves a compatible variation, and the athlete decides.
+    private static func rotationSuggestions(
+        program: CoachingProgramSnapshot, evidenceKey: String
+    ) -> [CoachingRecommendation] {
+        var result: [CoachingRecommendation] = []
+        for slot in program.slots.sorted(by: { ($0.dayIndex, $0.id) < ($1.dayIndex, $1.id) }) {
+            guard !slot.pattern.isConditioning else { continue }
+            if slot.exerciseIsShelved {
+                result.append(CoachingRecommendation(
+                    ruleID: "program.slot.rotate.shelved.v\(ruleVersion)",
+                    priority: 70,
+                    title: "\(slot.exerciseName) is shelved but still programmed",
+                    explanation: "This slot still prescribes \(slot.exerciseName), which you have shelved. Rotate it to a compatible variation of the same movement, or reopen the exercise.",
+                    change: .rotateExercise(slotID: slot.id, exerciseName: slot.exerciseName),
+                    evidenceKey: "\(evidenceKey)-\(slot.id)"
+                ))
+                continue
+            }
+            let threshold = slot.role == "accessory"
+                ? accessoryStallRotationThreshold
+                : liftStallRotationThreshold
+            guard slot.stallCount >= threshold else { continue }
+            result.append(CoachingRecommendation(
+                ruleID: "program.slot.rotate.stalled.v\(ruleVersion)",
+                priority: 60,
+                title: "\(slot.exerciseName) is stuck",
+                explanation: "\(slot.exerciseName) has \(slot.stallCount) exposure\(slot.stallCount == 1 ? "" : "s") on record without meeting its prescription, so it is being retried rather than added to. Rotating to a compatible variation of the same movement is the usual answer before the weight gets cut.",
+                change: .rotateExercise(slotID: slot.id, exerciseName: slot.exerciseName),
+                evidenceKey: "\(evidenceKey)-\(slot.id)"
+            ))
+        }
+        return result
     }
 
     private static func preferredDay(for pattern: MovementPattern, slots: [CoachingProgramSlot]) -> Int {

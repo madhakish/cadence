@@ -181,6 +181,85 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(a.stallCount, 0)
     }
 
+    /// A loaded accessory with a zero increment silently behaves like
+    /// bodyweight work: it climbs reps past its own maximum and the weight
+    /// never moves. That is the misconfiguration the program editor flags.
+    func testLoadedAccessoryWithZeroIncrementNeverAddsLoad() {
+        let broken = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12,
+                                    weightLb: 75, incrementLb: 0)
+        let a = P.advanceAccessory(broken, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false))
+        XCTAssertEqual(a.weightLb, 75, accuracy: 1e-9, "the load cannot move without an increment")
+        XCTAssertEqual(a.currentReps, 13, "and reps climb past the slot's own maximum instead")
+
+        XCTAssertTrue(P.accessoryCannotProgressLoad(
+            exerciseType: "dumbbell", loadBasis: .perImplement, weightLb: 75, incrementLb: 0
+        ), "a per-hand dumbbell slot carrying load with no increment is flagged")
+        XCTAssertTrue(P.accessoryCannotProgressLoad(
+            exerciseType: "machine", loadBasis: .externalTotal, weightLb: 120, incrementLb: 0
+        ), "a machine slot carrying load with no increment is flagged")
+    }
+
+    /// The rule must not fire on work that progresses by reps or duration —
+    /// a plank steps `durationStepSeconds`, so its zero increment is correct.
+    func testDurationAndBodyweightAccessoriesAreNotFlagged() {
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "timed", loadBasis: .externalTotal, weightLb: 25, incrementLb: 0
+        ), "a timed slot progresses by duration, not load")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "conditioning", loadBasis: .externalTotal, weightLb: 25, incrementLb: 0
+        ), "conditioning is not load-progressed")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "bodyweight", loadBasis: .bodyweight, weightLb: 0, incrementLb: 0
+        ), "bodyweight work has no load to add")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "barbell", loadBasis: .bodyweight, weightLb: 45, incrementLb: 0
+        ), "an explicitly bodyweight basis wins over the equipment label")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "dumbbell", loadBasis: .perImplement, weightLb: 10, incrementLb: 2.5
+        ), "a fractional increment is a real increment")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "DUMBBELL", loadBasis: .perImplement, weightLb: 40, incrementLb: 5
+        ), "the type test is case-insensitive")
+
+        // An unloaded slot is not a misconfiguration. 0/0 is how "no external
+        // load" is spelled, and it is what every newly added accessory starts
+        // at — flagging it would fire on every slot the moment it was created,
+        // and on shipped templates that use bands.
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "dumbbell", loadBasis: .perImplement, weightLb: 0, incrementLb: 0
+        ), "an unconfigured accessory is not flagged")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "band", loadBasis: .externalTotal, weightLb: 0, incrementLb: 0
+        ), "a band with no numeric load is not flagged")
+    }
+
+    /// Session spacing is advisory and only speaks when it has something to
+    /// say. The preference was previously write-only.
+    func testSessionSpacingShortfallOnlySpeaksWhenEarly() {
+        XCTAssertEqual(P.sessionSpacingShortfall(daysSinceLastSession: 1, preferredDays: 3), 2)
+        XCTAssertEqual(P.sessionSpacingShortfall(daysSinceLastSession: 0, preferredDays: 3), 3)
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: 3, preferredDays: 3),
+                     "meeting the preference says nothing")
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: 9, preferredDays: 3),
+                     "being well past it says nothing")
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: nil, preferredDays: 3),
+                     "no prior session says nothing")
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: 1, preferredDays: 0),
+                     "no preference recorded says nothing")
+        XCTAssertNil(P.sessionSpacingShortfall(daysSinceLastSession: -1, preferredDays: 3),
+                     "a negative gap is nonsense, not a warning")
+    }
+
+    /// Fractional increments have to survive: a 5 lb step on a 10 lb load is a
+    /// 50% jump, so small-load slots need 2.5 and it must not round away.
+    func testAccessoryAcceptsAFractionalIncrement() {
+        let state = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12,
+                                   weightLb: 10, incrementLb: 2.5)
+        let a = P.advanceAccessory(state, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false))
+        XCTAssertEqual(a.weightLb, 12.5, accuracy: 1e-9, "the increment is added unrounded")
+        XCTAssertEqual(a.currentReps, 8)
+    }
+
     func testAccessoryDoesNotAdvanceFromAdjustedLowerLoadOrPoorQuality() {
         let state = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 10,
                                    weightLb: 55, incrementLb: 5)
@@ -385,5 +464,100 @@ final class ProgramProgressionTests: XCTestCase {
         // kg-entry noise inside half a rounding step still counts as at plan.
         XCTAssertFalse(ProgramProgression.belowPlanWork(
             weightsLb: [223.5, 225, 225], plannedLb: 225, prescribedSets: 3))
+    }
+
+    // MARK: - Readiness-triggered deload
+    // Mirrors the "Readiness-triggered deload" block in web/tests/core.test.mjs.
+
+    func testTwoRedRotationsCutTheCycleShort() {
+        let far = P.minimumRotationsBetweenDeloads
+        XCTAssertTrue(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
+                                          previousReadiness: .red, rotationsSinceLastDeload: far))
+        XCTAssertTrue(P.shouldDeloadEarly(currentWeek: 1, readiness: .red,
+                                          previousReadiness: .red, rotationsSinceLastDeload: far),
+                      "rotation 1 can deload early once the floor is clear")
+        // The floor is in rotations so it means the same thing on a 2-day split
+        // as on a 6-day one. A session floor of 8 was unreachable inside a cycle
+        // for any rotation of three days or fewer.
+        XCTAssertEqual(P.minimumRotationsBetweenDeloads, 2)
+    }
+
+    func testASingleRedRotationIsNoise() {
+        let far = P.minimumRotationsBetweenDeloads
+        XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
+                                           previousReadiness: .yellow, rotationsSinceLastDeload: far))
+        XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
+                                           previousReadiness: .unknown, rotationsSinceLastDeload: far),
+                       "a first-ever red has nothing to persist against")
+        XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 2, readiness: .yellow,
+                                           previousReadiness: .red, rotationsSinceLastDeload: far),
+                       "a recovered rotation finishes the cycle")
+    }
+
+    func testLateRotationsHaveNothingToSkip() {
+        let far = P.minimumRotationsBetweenDeloads
+        XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 3, readiness: .red,
+                                           previousReadiness: .red, rotationsSinceLastDeload: far),
+                       "rotation 3 already advances into the deload")
+        XCTAssertFalse(P.shouldDeloadEarly(currentWeek: P.deloadWeek, readiness: .red,
+                                           previousReadiness: .red, rotationsSinceLastDeload: far),
+                       "the deload rotation cannot deload again")
+    }
+
+    func testTheFloorStopsRecoveryDeloadsBecomingTheSchedule() {
+        let far = P.minimumRotationsBetweenDeloads
+        XCTAssertFalse(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
+                                           previousReadiness: .red, rotationsSinceLastDeload: far - 1))
+        XCTAssertTrue(P.shouldDeloadEarly(currentWeek: 2, readiness: .red,
+                                          previousReadiness: .red, rotationsSinceLastDeload: far + 10),
+                      "an old deload never blocks a new one")
+    }
+
+    func testAnObservationOutsideTheGradedRotationOnlyEverRaisesTheEstimate() {
+        // A capped AMRAP on the load rotation must be able to raise the
+        // estimate; a deload rotation must never lower it.
+        XCTAssertEqual(P.observedMax(prior: 221.45, sample: 236.5),
+                       P.smoothE1RM(prior: 221.45, sample: 236.5))
+        XCTAssertGreaterThan(P.observedMax(prior: 221.45, sample: 236.5), 221.45)
+        XCTAssertEqual(P.observedMax(prior: 221.45, sample: 169), 221.45,
+                       "a deload set is not evidence the max fell")
+        XCTAssertEqual(P.observedMax(prior: 221.45, sample: 221.45), 221.45)
+        XCTAssertEqual(P.gradedWeek, 3)
+    }
+
+    func testACutShortCycleHoldsRatherThanCountingAMissedPeak() throws {
+        let stuck = ProgramLiftState(baseWeightLb: 225, estimatedMaxLb: 290,
+                                     stallCount: 1, role: .main, lastIncrementLb: 10)
+        let held = P.recoveryDeloadHold(stuck, atWeek: 2)
+        XCTAssertEqual(held.grade, .hold, "a cycle the program cut short is a hold, not a fail")
+        XCTAssertEqual(held.state.baseWeightLb, 225,
+                       "the base holds — the lifter did not miss a peak, the peak never ran")
+        XCTAssertEqual(held.state.stallCount, 1, "no stall accrues for work that was never prescribed")
+        XCTAssertEqual(held.state.lastIncrementLb, 0)
+        XCTAssertTrue(try XCTUnwrap(held.note).contains("rotation 2"),
+                      "the note says which rotation was cut short")
+    }
+
+    // MARK: - The cycle's strength sample
+    // Mirrors the "cycle's strength sample" block in web/tests/core.test.mjs.
+
+    func testExtraRepsAtTheTopWeightAreTheCyclesBestEstimate() {
+        // Heaviest-first gave the tie to the FIRST set at that weight and threw
+        // an AMRAP's extra reps away.
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [225, 225, 225], reps: [3, 3, 8]), 2)
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [225, 225], reps: [3, 3]), 0,
+                       "with nothing to separate them the first top set stands")
+    }
+
+    func testBackOffVolumeNeverOutranksAHeavyTriple() {
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [215, 135], reps: [3, 10]), 0)
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [225, 185], reps: [3, 10]), 0)
+    }
+
+    func testVeryLongSetsAreNotStrengthSamplesWhileAUsableOneExists() {
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [185, 95], reps: [5, 25]), 0)
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [95, 95], reps: [20, 25]), 1,
+                       "when every set is a long one, rank them anyway rather than reporting none")
+        XCTAssertNil(P.strengthSampleIndex(weightsLb: [], reps: []))
     }
 }
