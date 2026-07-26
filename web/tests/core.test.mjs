@@ -1111,6 +1111,24 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   ok(classic.state.baseWeightLb >= 300, "non-methodology styles keep the tapered rule");
 }
 
+// ---- The cycle's strength sample ----
+{
+  const at = (w, r) => C.strengthSampleIndex(w, r);
+  // The whole point: an AMRAP taken at the top weight must win. Heaviest-first
+  // gave the tie to the FIRST set at that weight and threw the extra reps away.
+  eq(at([225, 225, 225], [3, 3, 8]), 2, "extra reps at the top weight are the cycle's best estimate");
+  eq(at([225, 225], [3, 3]), 0, "with nothing to separate them the first top set stands");
+  // ...and back-off volume must not win, which is why Epley beats raw reps.
+  eq(at([215, 135], [3, 10]), 0, "a 135x10 back-off does not outrank a 215x3");
+  eq(at([225, 185], [3, 10]), 0, "a heavy triple outranks a long back-off set");
+  // Epley drifts high past ~10 reps, so a very long set is not a strength sample
+  // while a usable one exists.
+  eq(at([185, 95], [5, 25]), 0, "a 25-rep set is not allowed to masquerade as a max");
+  eq(at([95, 95], [20, 25]), 1, "when every set is a long one, rank them anyway rather than reporting none");
+  eq(at([], []), null, "no performed work is no sample");
+  eq(C.epleyE1RM(215, 3).toFixed(1), "236.5", "the 215x3 that actually happened estimates 236.5");
+}
+
 // ---- Readiness-triggered deload ----
 {
   const far = C.MINIMUM_SESSIONS_BETWEEN_DELOADS;

@@ -291,7 +291,12 @@ enum SessionCompletion {
         // Only the prescribed work block can earn the cycle progression.
         let w = prescribedWork(entry)
         let presReps = entry.plannedReps ?? (w.map(\.reps).max() ?? 0)
-        let top = w.max { $0.weightLb < $1.weightLb }
+        // The cycle's strength sample, not simply the heaviest set — see
+        // ProgramProgression.strengthSampleIndex. Heaviest-first discarded the
+        // extra reps of an AMRAP taken at the top weight.
+        let top = ProgramProgression.strengthSampleIndex(
+            weightsLb: w.map(\.weightLb), reps: w.map(\.reps)
+        ).map { w[$0] }
         return CycleLiftPerformance(
             prescribedSets: entry.plannedSets ?? w.count,
             prescribedReps: presReps,

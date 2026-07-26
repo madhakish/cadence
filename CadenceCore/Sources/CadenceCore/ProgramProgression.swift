@@ -184,6 +184,36 @@ public enum ProgramProgression {
         reps >= 1 ? weightLb * (1 + Double(reps) / 30.0) : weightLb
     }
 
+    /// Epley is accurate at roughly 2–10 reps and drifts high above that, so a
+    /// long back-off set is not allowed to masquerade as a strength sample.
+    public static let e1RMSampleRepCeiling = 10
+
+    /// Which performed set is the cycle's strength sample.
+    ///
+    /// Heaviest-first is the intuitive answer and it is wrong: it makes an
+    /// as-many-reps-as-possible set at the top weight invisible, because the
+    /// first set at that weight wins the tie and the extra reps are discarded.
+    /// A lifter who takes the last set to 8 instead of the prescribed 3 has
+    /// produced the single best estimate of the cycle, and the engine has been
+    /// throwing it away.
+    ///
+    /// Ranking by Epley fixes that and cannot be fooled by back-off volume —
+    /// 135×10 estimates 180 lb and loses to 215×3's 236.5 — as long as reps
+    /// stay inside the formula's accurate range, which is what the ceiling is
+    /// for. When every set is a long one there is nothing better available, so
+    /// the whole pool is ranked anyway rather than reporting no sample at all.
+    public static func strengthSampleIndex(weightsLb: [Double], reps: [Int]) -> Int? {
+        let count = Swift.min(weightsLb.count, reps.count)
+        guard count > 0 else { return nil }
+        let indexes = Array(0..<count)
+        let short = indexes.filter { reps[$0] <= e1RMSampleRepCeiling }
+        let pool = short.isEmpty ? indexes : short
+        return pool.max {
+            epleyE1RM(weightLb: weightsLb[$0], reps: reps[$0])
+                < epleyE1RM(weightLb: weightsLb[$1], reps: reps[$1])
+        }
+    }
+
     public static func smoothE1RM(prior: Double, sample: Double) -> Double {
         prior <= 0 ? sample : 0.7 * prior + 0.3 * sample
     }

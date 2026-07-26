@@ -521,4 +521,27 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(held.note).contains("rotation 2"),
                       "the note says which rotation was cut short")
     }
+
+    // MARK: - The cycle's strength sample
+    // Mirrors the "cycle's strength sample" block in web/tests/core.test.mjs.
+
+    func testExtraRepsAtTheTopWeightAreTheCyclesBestEstimate() {
+        // Heaviest-first gave the tie to the FIRST set at that weight and threw
+        // an AMRAP's extra reps away.
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [225, 225, 225], reps: [3, 3, 8]), 2)
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [225, 225], reps: [3, 3]), 0,
+                       "with nothing to separate them the first top set stands")
+    }
+
+    func testBackOffVolumeNeverOutranksAHeavyTriple() {
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [215, 135], reps: [3, 10]), 0)
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [225, 185], reps: [3, 10]), 0)
+    }
+
+    func testVeryLongSetsAreNotStrengthSamplesWhileAUsableOneExists() {
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [185, 95], reps: [5, 25]), 0)
+        XCTAssertEqual(P.strengthSampleIndex(weightsLb: [95, 95], reps: [20, 25]), 1,
+                       "when every set is a long one, rank them anyway rather than reporting none")
+        XCTAssertNil(P.strengthSampleIndex(weightsLb: [], reps: []))
+    }
 }

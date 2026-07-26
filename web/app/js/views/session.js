@@ -979,7 +979,11 @@ function completedProgramInstructionsMatch(session, day) {
 function cyclePerf(se, roundingLb) {
   const w = prescribedWork(se);
   const presReps = se.plannedReps ?? (w.length ? Math.max(...w.map((s) => s.reps)) : 0); // ?? not ||: mirrors Swift's nil-coalescing
-  const top = w.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
+  // The cycle's strength sample, not simply the heaviest set — see core
+  // strengthSampleIndex. Heaviest-first discarded the extra reps of an AMRAP
+  // taken at the top weight.
+  const topIndex = C.strengthSampleIndex(w.map((s) => s.weightLb), w.map((s) => s.reps));
+  const top = topIndex == null ? null : w[topIndex];
   return {
     prescribedSets: se.plannedSets ?? w.length, prescribedReps: presReps,
     completedSets: w.filter((s) => s.reps >= presReps).length,

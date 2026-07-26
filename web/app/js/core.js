@@ -821,6 +821,32 @@ export const FOCUS = {
 export const focusParams = (focus) => FOCUS[focus] || FOCUS.strength;
 
 export const epleyE1RM = (weightLb, reps) => (reps >= 1 ? weightLb * (1 + reps / 30.0) : weightLb);
+
+// Epley is accurate at roughly 2-10 reps and drifts high above that, so a long
+// back-off set is not allowed to masquerade as a strength sample.
+export const E1RM_SAMPLE_REP_CEILING = 10;
+
+// Which performed set is the cycle's strength sample.
+//
+// Heaviest-first is the intuitive answer and it is wrong: it makes an
+// as-many-reps-as-possible set at the top weight invisible, because the first
+// set at that weight wins the tie and the extra reps are discarded. A lifter
+// who takes the last set to 8 instead of the prescribed 3 has produced the
+// single best estimate of the cycle, and the engine has been throwing it away.
+//
+// Ranking by Epley fixes that and cannot be fooled by back-off volume —
+// 135x10 estimates 180 lb and loses to 215x3's 236.5 — as long as reps stay
+// inside the formula's accurate range, which is what the ceiling is for. When
+// every set is a long one there is nothing better available, so the whole pool
+// is ranked anyway rather than reporting no sample at all.
+export function strengthSampleIndex(weightsLb, reps) {
+  const count = Math.min(weightsLb.length, reps.length);
+  if (count < 1) return null;
+  const indexes = Array.from({ length: count }, (_, i) => i);
+  const short = indexes.filter((i) => reps[i] <= E1RM_SAMPLE_REP_CEILING);
+  const pool = short.length ? short : indexes;
+  return pool.reduce((best, i) => (epleyE1RM(weightsLb[i], reps[i]) > epleyE1RM(weightsLb[best], reps[best]) ? i : best));
+}
 export const smoothE1RM = (prior, sample) => (prior <= 0 ? sample : 0.7 * prior + 0.3 * sample);
 
 // perf: { prescribedSets, prescribedReps, completedSets, anyStoppedEarly,
