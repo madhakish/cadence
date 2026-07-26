@@ -91,6 +91,21 @@ wrong goal. Older version-2 backups may omit these optional slot IDs and fall
 back to name-and-role matching. The web keeps its IndexedDB primary key private
 and resolves the portable program ID after import.
 
+## Slot identity
+
+Program slot IDs are validated for uniqueness within a program. A bundle that
+reuses one across two programs is **repaired on restore**, not rejected: the
+first occurrence keeps its id, later ones are re-issued, and the importer
+reports how many were repaired.
+
+A duplicate would make banked sessions' `programSlotId` permanently ambiguous,
+and nothing downstream can clean it up — the launch-time repair scopes its
+duplicate detection to a single program. Repairing rather than refusing is the
+deliberate choice for this format: a backup is the recovery path of last resort,
+and refusing one over a fixable problem would strand data the app itself may
+have written. The program-file contract, being additive and opt-in, refuses
+instead — see [program file](program-file.md).
+
 ## Compatibility rules
 
 - Version-0 sessions have no `isCompleted`; they are treated as completed

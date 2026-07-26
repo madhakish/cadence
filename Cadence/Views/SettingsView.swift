@@ -314,7 +314,12 @@ struct SettingsView: View {
                 // wouldn't run until the next app launch — leaving the rest
                 // steppers dead in the meantime.
                 try Seeder.syncLibrary(context: context)
-                return "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+                let restored = "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+                guard s.repairedSlotIDs > 0 else { return restored }
+                // Say so rather than repair silently — the backup carried a
+                // slot id on two programs, and the later one has been re-issued.
+                return restored + "\n\nRepaired \(s.repairedSlotIDs) duplicate slot "
+                    + "\(s.repairedSlotIDs == 1 ? "id" : "ids") the backup reused across programs."
             } catch {
                 return error.localizedDescription
             }

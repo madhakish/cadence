@@ -873,7 +873,17 @@ function importData() {
       // syncLibrary right after the restore: a pre-migration backup re-arms
       // the retired-rest-stamp clear, which otherwise wouldn't run until the
       // next full page load — leaving the rest steppers dead in the meantime.
-      try { await importBundle(JSON.parse(r.result)); await syncLibrary(); ui.toast("Imported."); ui.nav.refresh(); }
+      try {
+        const summary = await importBundle(JSON.parse(r.result));
+        await syncLibrary();
+        // Say so rather than repair silently — the backup carried a slot id on
+        // two programs, and the later one has been re-issued.
+        const repaired = summary?.repairedSlotIDs || 0;
+        ui.toast(repaired
+          ? `Imported. Repaired ${repaired} duplicate slot ${repaired === 1 ? "id" : "ids"} the backup reused across programs.`
+          : "Imported.");
+        ui.nav.refresh();
+      }
       catch (error) {
         console.error("Cadence import failed", error);
         ui.toast(`Import failed: ${error?.message || error}`);

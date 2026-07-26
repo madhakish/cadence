@@ -1059,6 +1059,40 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
     ...program,
     uuid: typeof id === "string" ? id : stableID(`program:${program.name}`),
   }));
+
+  // Slot ids are validated for uniqueness WITHIN a program, so a hand-edited
+  // bundle can carry the same id on two of them. programSlotId is what banked
+  // sessions point at, and the launch-time repair scopes its duplicate
+  // detection to a single program, so a cross-program duplicate would never be
+  // cleaned up.
+  //
+  // Repaired rather than refused, unlike the program-file importer: a backup is
+  // the recovery path of last resort and the app itself may have written the
+  // duplicate. The first occurrence keeps its id so the most history stays
+  // bound; later ones are re-derived deterministically, the same way
+  // normalizeProgram mints a missing id.
+  let repairedSlotIDs = 0;
+  if (importedPrograms) {
+    const seen = new Set();
+    for (const program of importedPrograms) {
+      for (const day of program.days || []) {
+        for (const [kind, slots] of [["lift", day.lifts || []], ["accessory", day.accessories || []]]) {
+          slots.forEach((slot, index) => {
+            if (slot.id && !seen.has(slot.id)) { seen.add(slot.id); return; }
+            if (slot.id) repairedSlotIDs += 1;
+            let candidate = stableID(`slot:${program.uuid}:day:${day.order ?? 0}:${kind}:${index}:repair`);
+            let salt = 0;
+            while (seen.has(candidate)) {
+              salt += 1;
+              candidate = stableID(`slot:${program.uuid}:day:${day.order ?? 0}:${kind}:${index}:repair:${salt}`);
+            }
+            slot.id = candidate;
+            seen.add(candidate);
+          });
+        }
+      }
+    }
+  }
   const knownPrograms = importedPrograms || await Programs.all();
   const programsById = new Map(knownPrograms.flatMap((p) => [[p.id, p], [p.uuid, p]]));
   const programsByName = new Map(knownPrograms.map((p) => [p.name, p]));
@@ -1169,6 +1203,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       for (const r of records) s.put(r);
     }
   });
+  return { repairedSlotIDs };
 }
 
 export async function wipeAll({ preserveCheckpoints = false } = {}) {

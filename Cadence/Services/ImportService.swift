@@ -22,7 +22,13 @@ enum ImportService {
         }
     }
 
-    struct Summary { let sessions, programs, tracks, gyms: Int }
+    struct Summary {
+        let sessions, programs, tracks, gyms: Int
+        /// Slot ids the bundle reused across programs, re-minted on the way in.
+        /// Reported rather than swallowed: silently rewriting identity is what
+        /// this codebase refuses to do everywhere else.
+        var repairedSlotIDs: Int = 0
+    }
 
     // Lenient decode DTOs — optional everywhere so a partial or web-origin
     // backup never throws on a missing key.
@@ -517,6 +523,7 @@ enum ImportService {
         guard hasAnything else { throw ImportError.notABackup }
         try validate(bundle, schemaVersion: schemaVersion)
 
+        var repairedSlotIDs = 0
         do {
             // Exercises: UPSERT by name (never delete — SessionExercise links to
             // them by relationship, so replacing them would orphan history).
@@ -549,8 +556,12 @@ enum ImportService {
             if let programs = bundle.programs {
                 try context.delete(model: Program.self)
                 var imported: [String: String] = [:]
+                // Bundle-wide, so a slot id repeated across two programs is
+                // caught. Validation only checks uniqueness within a program.
+                var seenSlotIDs: Set<String> = []
                 for p in programs {
-                    let program = makeProgram(p, preserveID: schemaVersion >= 2)
+                    let program = makeProgram(p, preserveID: schemaVersion >= 2,
+                                              seenSlotIDs: &seenSlotIDs, repairedSlotIDs: &repairedSlotIDs)
                     context.insert(program)
                     imported[program.name] = program.id
                 }
@@ -613,7 +624,8 @@ enum ImportService {
         }
 
         return Summary(sessions: bundle.sessions?.count ?? 0, programs: bundle.programs?.count ?? 0,
-                       tracks: bundle.tracks?.count ?? 0, gyms: bundle.gyms?.count ?? 0)
+                       tracks: bundle.tracks?.count ?? 0, gyms: bundle.gyms?.count ?? 0,
+                       repairedSlotIDs: repairedSlotIDs)
     }
 
     // MARK: - Makers
@@ -723,7 +735,34 @@ enum ImportService {
         return track
     }
 
-    private static func makeProgram(_ p: ProgramDTO, preserveID: Bool) -> Program {
+    /// Adopt a slot id from the bundle, or mint a fresh one.
+    ///
+    /// Two rules, in order: the id must be a UUID, and it must not already be
+    /// taken by another slot ANYWHERE in the bundle. Validation checks slot-id
+    /// uniqueness within one program only, so a hand-edited backup can carry
+    /// the same id on two programs — and `programSlotID` is what banked
+    /// sessions point at, so a duplicate makes that history permanently
+    /// ambiguous. The launch-time repair cannot clean it up either: its
+    /// duplicate detection is scoped to a single program.
+    ///
+    /// Repairs rather than refusing, unlike the program-file importer. A backup
+    /// is the recovery path of last resort, and the app itself may have written
+    /// the duplicate; refusing to restore would strand the lifter's data over a
+    /// problem we can fix. The first occurrence keeps its id so the most
+    /// history stays bound, and the count is reported rather than silently
+    /// swallowed.
+    private static func adoptSlotID(_ raw: String?, seen: inout Set<String>, repaired: inout Int) -> String {
+        let portable = raw.flatMap { UUID(uuidString: $0) != nil ? $0 : nil }
+        if let portable, seen.insert(portable).inserted { return portable }
+        if portable != nil { repaired += 1 }
+        var fresh = UUID().uuidString
+        while !seen.insert(fresh).inserted { fresh = UUID().uuidString }
+        return fresh
+    }
+
+    private static func makeProgram(
+        _ p: ProgramDTO, preserveID: Bool, seenSlotIDs: inout Set<String>, repairedSlotIDs: inout Int
+    ) -> Program {
         let prog = Program(name: p.name ?? "Program", focus: TrainingFocus(rawValue: p.focus ?? "strength") ?? .strength,
                            cycleNumber: p.cycleNumber ?? 1, currentWeek: p.currentWeek ?? 1,
                            nextDayIndex: p.nextDayIndex ?? 0, roundingLb: p.roundingLb ?? 5, isActive: p.isActive ?? false)
@@ -736,7 +775,7 @@ enum ImportService {
             let day = ProgramDay(name: d.name ?? "Day", order: d.order ?? 0)
             prog.days.append(day)
             for (slotOrder, l) in (d.lifts ?? []).enumerated() {
-                let lift = ProgramLift(id: l.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? UUID().uuidString,
+                let lift = ProgramLift(id: adoptSlotID(l.id, seen: &seenSlotIDs, repaired: &repairedSlotIDs),
                                        exerciseName: l.exerciseName ?? "", role: LiftRole(rawValue: l.role ?? "main") ?? .main,
                                        order: l.order ?? slotOrder,
                                        prescription: PrescriptionStyle(rawValue: l.prescription ?? "automatic") ?? .automatic,
@@ -768,7 +807,7 @@ enum ImportService {
                 day.lifts.append(lift)
             }
             for (slotOrder, a) in (d.accessories ?? []).enumerated() {
-                let acc = ProgramAccessory(id: a.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? UUID().uuidString,
+                let acc = ProgramAccessory(id: adoptSlotID(a.id, seen: &seenSlotIDs, repaired: &repairedSlotIDs),
                                            exerciseName: a.exerciseName ?? "", order: a.order ?? slotOrder,
                                            sets: a.sets ?? 3, minReps: a.minReps ?? 8,
                                            maxReps: a.maxReps ?? 12, currentReps: a.currentReps ?? 8,

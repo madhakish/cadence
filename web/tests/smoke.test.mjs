@@ -548,6 +548,50 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     ok(restored.days.some((d) => d.order === highest), "the sparse day survives the round trip");
     ok(restored.nextDayIndex === highest, "[INV-NEXTDAY-IS-AN-ORDER] nextDayIndex still names the same day after import");
   }
+
+  // [INV-SLOT-ID-IS-UNIQUE] Slot ids are validated within a program, so a
+  // hand-edited bundle can carry one on two programs. A backup is the recovery
+  // path of last resort, so this is REPAIRED rather than refused — the opposite
+  // of the program-file importer, deliberately.
+  {
+    const clean = structuredClone(parsed);
+    const cleanSummary = await db.importBundle(clean);
+    ok((cleanSummary?.repairedSlotIDs || 0) === 0,
+      "[INV-SLOT-ID-IS-UNIQUE] a clean backup reports no slot-id repairs");
+    const untouched = await db.Programs.all();
+    const untouchedIDs = untouched.flatMap((p) => (p.days || [])
+      .flatMap((d) => [...(d.lifts || []), ...(d.accessories || [])].map((s) => s.id)));
+    ok(new Set(untouchedIDs).size === untouchedIDs.length, "a clean backup restores with distinct slot ids");
+
+    // Forking a program while keeping its slot ids is the reachable path — it
+    // is what hand-editing an exported bundle produces.
+    const forked = structuredClone(parsed);
+    const fork = structuredClone(forked.programs[0]);
+    fork.name = `${fork.name} (forked)`;
+    fork.id = "dddddddd-0000-4000-8000-00000000000d";
+    fork.isActive = false;
+    forked.programs.push(fork);
+    const donor = forked.programs[0].days.flatMap((d) => [...(d.lifts || []), ...(d.accessories || [])]);
+    ok(donor.length > 0, "the donor program carries slots");
+    const sharedID = donor[0].id;
+    ok(sharedID != null, "the fixture's slots carry ids to collide on");
+
+    let failure = "";
+    let summary = null;
+    try { summary = await db.importBundle(forked); } catch (error) { failure = error.message; }
+    ok(!failure, `[INV-SLOT-ID-IS-UNIQUE] a backup with a cross-program duplicate still restores (${failure})`);
+    ok(summary?.repairedSlotIDs === donor.length,
+      `every duplicated slot is repaired and reported (${summary?.repairedSlotIDs} of ${donor.length})`);
+
+    const after = await db.Programs.all();
+    const liveIDs = after.flatMap((p) => (p.days || [])
+      .flatMap((d) => [...(d.lifts || []), ...(d.accessories || [])].map((s) => s.id)));
+    ok(new Set(liveIDs).size === liveIDs.length,
+      "[INV-SLOT-ID-IS-UNIQUE] no two live slots share an id after the restore");
+    ok(liveIDs.filter((id) => id === sharedID).length === 1,
+      "the first occurrence keeps the id, so the most history stays bound");
+    ok(after.length === forked.programs.length, "every program still restored");
+  }
 }
 
 // ---- rotating local recovery checkpoints ----

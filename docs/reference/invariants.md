@@ -150,9 +150,14 @@ day orders — never range-checked against the day count.
 ### INV-SLOT-ID-IS-UNIQUE
 *platforms: core*
 
-A slot id is never live on two programs at once. An import that would adopt an
-id another program already holds is refused, naming the id and the holder —
-never silently re-minted.
+A slot id is never live on two programs at once.
+
+A **program-file** import that would adopt an id another program already holds
+is refused, naming the id and the holder. A **backup** restore repairs instead:
+the first occurrence keeps its id, later ones are re-issued, and the count is
+reported. The difference is deliberate — a program file is additive and opt-in,
+so refusing costs nothing, while a backup is the recovery path of last resort
+and refusing one would strand data the app itself may have written.
 
 > A slot id is what banked sessions point at through `programSlotID`. Two live
 > slots sharing one makes that history permanently ambiguous, and nothing
