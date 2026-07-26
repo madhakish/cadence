@@ -77,7 +77,14 @@ to the same device. That is the mode that round-trips losslessly.
 
 Wave position is all-or-nothing. A file carrying `cycleNumber` but not
 `currentWeek` is rejected rather than guessed at, because a half-carried
-position is the difference between a deload and a peak week.
+position is the difference between a deload and a peak week. `nextDayIndex`
+must name one of the program's day orders — a pointer to a day that isn't
+there would fall back to the first day and silently lose the position.
+
+A lift's progression counters (`stallCount`, `lastIncrementLb`,
+`lastPeakSingleLb`) are likewise a group: all three or none. `pending` and
+`revertToExerciseName` are independent, since both are genuinely absent most of
+the time.
 
 A plan-only file imports at cycle 1, week 1, with cleared counters.
 
@@ -116,6 +123,11 @@ A file written by either client is read identically by the other.
 Slots reference exercises by name. On import each name is resolved against the
 library by canonical name first, then by alias. A resolved alias is rewritten
 to the canonical name.
+
+This includes `revertToExerciseName`, the cycle-scoped swap marker. Rollover
+writes that name straight onto the slot, so an unresolvable marker would leave
+the slot bound to no exercise definition weeks after the import appeared to
+succeed.
 
 **An unresolved name fails the import**, naming the exercise, and nothing is
 written. Cadence does not create a stub for it: `loadBasis` and

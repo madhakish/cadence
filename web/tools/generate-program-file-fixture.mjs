@@ -29,7 +29,10 @@ const program = {
   maximumAddedSetsPerRotation: 6,
   cycleNumber: 3,
   currentWeek: 2,
-  nextDayIndex: 1,
+  // A day ORDER, not an array position — and it has to name a day this
+  // program actually has. The days below are orders 0 and 2, so 1 would be a
+  // pointer to nothing.
+  nextDayIndex: 2,
   days: [
     {
       name: "Fixture Lower",

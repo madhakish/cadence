@@ -93,9 +93,10 @@ final class ProgramFileContractTests: XCTestCase {
         var payload = program()
         payload.cycleNumber = 3
         payload.currentWeek = 2
-        payload.nextDayIndex = 1
+        payload.nextDayIndex = 0   // the default fixture has one day, order 0
         payload.days[0].lifts[0].stallCount = 2
         payload.days[0].lifts[0].lastIncrementLb = 5
+        payload.days[0].lifts[0].lastPeakSingleLb = 0
         payload.days[0].lifts[0].pending = ProgramFileContract.PendingResult(
             state: ProgramFileContract.PendingState(
                 baseWeightLb: 140, estimatedMaxLb: 190, stallCount: 0, lastIncrementLb: 5
@@ -251,6 +252,46 @@ final class ProgramFileContractTests: XCTestCase {
         assertRejects(payload, "week 7 does not exist in a 4-week wave")
     }
 
+    /// `nextDayIndex` is a day ORDER, not an array position. A pointer naming
+    /// no day silently falls back to the first day, losing the wave position
+    /// the file was carrying. Same rule the backup validator enforces.
+    func testRejectsNextDayIndexThatNamesNoDay() {
+        let days = [
+            ProgramFileContract.Day(name: "A", order: 0, lifts: [lift()], accessories: []),
+            ProgramFileContract.Day(name: "C", order: 2, lifts: [lift()], accessories: []),
+        ]
+        var payload = program(days: days)
+        payload.cycleNumber = 1
+        payload.currentWeek = 1
+        payload.nextDayIndex = 1   // between the two real orders, but not one of them
+        assertRejects(payload, "a next-day pointer that names no day")
+
+        payload.nextDayIndex = 2
+        XCTAssertNoThrow(try ProgramFileContract.validate(ProgramFileContract.File(program: payload)),
+                         "a pointer naming a real day order is fine, gaps included")
+    }
+
+    /// Lift progression state is a group on BOTH clients. Checking these
+    /// independently would let the same file import natively and be rejected
+    /// by the PWA, which is exactly what a mirrored contract must not do.
+    func testRejectsPartialLiftProgressionState() {
+        var payload = program()
+        payload.days[0].lifts[0].stallCount = 1
+        assertRejects(payload, "stall count without the other counters")
+
+        payload = program()
+        payload.days[0].lifts[0].lastIncrementLb = 5
+        payload.days[0].lifts[0].lastPeakSingleLb = 0
+        assertRejects(payload, "increments without a stall count")
+
+        payload = program()
+        payload.days[0].lifts[0].stallCount = 1
+        payload.days[0].lifts[0].lastIncrementLb = 5
+        payload.days[0].lifts[0].lastPeakSingleLb = 225
+        XCTAssertNoThrow(try ProgramFileContract.validate(ProgramFileContract.File(program: payload)),
+                         "the complete group is accepted")
+    }
+
     /// Half-carried wave position would silently reposition the program in its
     /// cycle — the difference between a deload and a peak week.
     func testRejectsPartialWaveState() {
@@ -260,7 +301,7 @@ final class ProgramFileContractTests: XCTestCase {
 
         payload = program()
         payload.currentWeek = 3
-        payload.nextDayIndex = 1
+        payload.nextDayIndex = 0
         assertRejects(payload, "week and day index without cycle")
     }
 
@@ -301,7 +342,7 @@ final class ProgramFileContractTests: XCTestCase {
         payload.id = "11111111-2222-3333-4444-555555555555"
         payload.cycleNumber = 4
         payload.currentWeek = 3
-        payload.nextDayIndex = 2
+        payload.nextDayIndex = 0
         payload.days[0].lifts[0].id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         payload.days[0].lifts[0].stallCount = 1
         payload.days[0].lifts[0].lastIncrementLb = 5

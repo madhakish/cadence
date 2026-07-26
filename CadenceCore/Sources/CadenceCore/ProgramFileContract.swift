@@ -86,7 +86,9 @@ public enum ProgramFileContract {
         public var maximumSets: Int
         public var baseWeightLb: Double
         public var estimatedMaxLb: Double
-        // Runtime state — present as a group or not at all.
+        /// Runtime state — present as a group or not at all, enforced in
+        /// `validate`. `pending` and `revertToExerciseName` are independent:
+        /// both are markers that are genuinely absent most of the time.
         public var stallCount: Int?
         public var lastIncrementLb: Double?
         public var lastPeakSingleLb: Double?
@@ -345,6 +347,14 @@ public enum ProgramFileContract {
                 try integer(lift.maximumSets, "\(p).maximumSets", 1, 20)
                 try number(lift.baseWeightLb, "\(p).baseWeightLb", 0, 2000)
                 try number(lift.estimatedMaxLb, "\(p).estimatedMaxLb", 0, 2000)
+                // Runtime state is a group, matching the JS validator. A file
+                // carrying one counter but not the others describes a slot
+                // half-way through a cycle, which is not a state the engine
+                // ever produces — accepting it would let the two clients
+                // disagree about the same file.
+                let liftState = [lift.stallCount != nil, lift.lastIncrementLb != nil, lift.lastPeakSingleLb != nil]
+                try check(liftState.allSatisfy { $0 } || liftState.allSatisfy { !$0 }, "\(p).stallCount",
+                          "progression state must be complete or absent")
                 if let stall = lift.stallCount { try integer(stall, "\(p).stallCount", 0, 100) }
                 if let inc = lift.lastIncrementLb { try number(inc, "\(p).lastIncrementLb", 0, 500) }
                 if let peak = lift.lastPeakSingleLb { try number(peak, "\(p).lastPeakSingleLb", 0, 2000) }
@@ -380,6 +390,15 @@ public enum ProgramFileContract {
                     try check(slotIDs.insert(id).inserted, "\(p).id", "duplicate identifier \"\(id)\"")
                 }
             }
+        }
+
+        // nextDayIndex is a day ORDER, not a position in the array. A pointer
+        // that names no day silently falls back to the first day, quietly
+        // losing the wave position the file was carrying. The backup validator
+        // enforces the same membership rule (INV-NEXTDAY-IS-AN-ORDER).
+        if let next = program.nextDayIndex {
+            try check(dayOrders.contains(next), "program.nextDayIndex",
+                      "\(next) is not one of this program's day orders (\(dayOrders.sorted().map(String.init).joined(separator: ", ")))")
         }
     }
 }

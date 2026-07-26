@@ -150,7 +150,7 @@
     "id": "f0000000-0000-4000-8000-000000000000",
     "maximumAddedSetsPerRotation": 6,
     "name": "Fixture Upper/Lower",
-    "nextDayIndex": 1,
+    "nextDayIndex": 2,
     "preferredSessionSpacingDays": 3,
     "roundingLb": 5
   },

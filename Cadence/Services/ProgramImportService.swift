@@ -154,8 +154,14 @@ enum ProgramImportService {
         var missing: [String] = []
         var gated: [String] = []
         for day in payload.days {
-            let names = day.lifts.map(\.exerciseName) + day.accessories.map(\.exerciseName)
-            for raw in names where resolved[raw] == nil {
+            // Revert markers are resolved too. The marker is the name a slot
+            // springs back to at cycle rollover, and SessionCompletion writes
+            // it straight onto the slot — so an unresolvable marker leaves the
+            // slot bound to no exercise definition weeks after the import
+            // looked like it worked.
+            let names = day.lifts.flatMap { [$0.exerciseName, $0.revertToExerciseName] }
+                + day.accessories.flatMap { [$0.exerciseName, $0.revertToExerciseName] }
+            for case let raw? in names where resolved[raw] == nil {
                 let key = normalized(raw)
                 guard let match = byName[key] ?? byAlias[key] else {
                     if !missing.contains(raw) { missing.append(raw) }
@@ -256,7 +262,10 @@ enum ProgramImportService {
                 lift.maximumSets = liftPayload.maximumSets
                 if carriesState {
                     lift.lastPeakSingleLb = liftPayload.lastPeakSingleLb ?? 0
+                    // Canonical, like exerciseName — an alias stored here would
+                    // resolve to nothing when rollover applies it.
                     lift.revertToExerciseName = liftPayload.revertToExerciseName
+                        .flatMap { resolved[$0]?.name }
                     if let pending = liftPayload.pending {
                         lift.pendingBaseWeightLb = pending.state.baseWeightLb
                         lift.pendingEstimatedMaxLb = pending.state.estimatedMaxLb
@@ -289,7 +298,10 @@ enum ProgramImportService {
                 accessory.maximumSets = accessoryPayload.maximumSets
                 accessory.conditioningEffortRaw = accessoryPayload.conditioningEffort
                 accessory.targetRPE = accessoryPayload.targetRPE
-                if carriesState { accessory.revertToExerciseName = accessoryPayload.revertToExerciseName }
+                if carriesState {
+                    accessory.revertToExerciseName = accessoryPayload.revertToExerciseName
+                        .flatMap { resolved[$0]?.name }
+                }
                 context.insert(accessory)
                 day.accessories.append(accessory)
             }

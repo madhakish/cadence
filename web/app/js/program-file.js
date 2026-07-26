@@ -37,9 +37,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Shape
 // ---------------------------------------------------------------------------
 // Field lists are declared once and drive BOTH the writer and the reader, so a
-// key can never be exported without being validated or vice versa. Order here
-// is the order on disk — that is what makes the output deterministic without a
-// sort at write time.
+// key can never be exported without being validated or vice versa. Their order
+// here is not the order on disk: exportProgramText sorts keys recursively to
+// match Swift's `.sortedKeys`, so these lists can be reordered freely.
 
 const LIFT_PLAN_FIELDS = [
   ["exerciseName", "text"],
@@ -153,7 +153,8 @@ export function exportProgramFile(program, { includeState = false, includeIdenti
     .map((day, index) => ({ day, order: Number.isInteger(day.order) ? day.order : index }))
     .sort((a, b) => a.order - b.order)
     .map(({ day, order }) => ({
-      ...(includeIdentity ? {} : {}),
+      // Days have no id of their own — `order` is their identity, and it is
+      // what banked sessions refer to through programTag.dayIndex.
       name: day.name ?? "",
       order,
       lifts: [...(day.lifts || [])]
@@ -326,6 +327,15 @@ export function validateProgramFile(file) {
     day.accessories.forEach((a, i) => checkSlot(a, "accessories", i, ACCESSORY_PLAN_FIELDS, ACCESSORY_STATE_FIELDS));
   });
 
+  // nextDayIndex is a day ORDER, not a position in the array. A pointer that
+  // names no day silently falls back to the first day, quietly losing the wave
+  // position the file was carrying. The backup validator enforces the same
+  // membership rule (INV-NEXTDAY-IS-AN-ORDER).
+  if (program.nextDayIndex !== undefined && !dayOrders.has(program.nextDayIndex)) {
+    invalid("program.nextDayIndex",
+      `${program.nextDayIndex} is not one of this program's day orders (${[...dayOrders].sort((a, b) => a - b).join(", ")})`);
+  }
+
   return program;
 }
 
@@ -359,18 +369,23 @@ export async function resolveExercises(program, library) {
   const gated = [];
   for (const day of program.days) {
     for (const slot of [...day.lifts, ...day.accessories]) {
-      const raw = slot.exerciseName;
-      if (resolved.has(raw)) continue;
-      const key = normalizeName(raw);
-      const match = byName.get(key) || byAlias.get(key);
-      if (!match) {
-        if (!missing.includes(raw)) missing.push(raw);
-        continue;
-      }
-      resolved.set(raw, match);
-      const status = match.gateStatus || (match.isShelved ? "shelved" : "open");
-      if ((status === "shelved" || status === "re-entry") && !gated.includes(match.name)) {
-        gated.push(match.name);
+      // The revert marker is resolved too. It is the name the slot springs
+      // back to at cycle rollover, and rollover writes it straight onto the
+      // slot — so an unresolvable marker leaves the slot bound to no exercise
+      // definition weeks later, long after the import looked like it worked.
+      for (const raw of [slot.exerciseName, slot.revertToExerciseName]) {
+        if (!raw || resolved.has(raw)) continue;
+        const key = normalizeName(raw);
+        const match = byName.get(key) || byAlias.get(key);
+        if (!match) {
+          if (!missing.includes(raw)) missing.push(raw);
+          continue;
+        }
+        resolved.set(raw, match);
+        const status = match.gateStatus || (match.isShelved ? "shelved" : "open");
+        if ((status === "shelved" || status === "re-entry") && !gated.includes(match.name)) {
+          gated.push(match.name);
+        }
       }
     }
   }
@@ -398,8 +413,8 @@ const uniqueName = (base, taken) => {
   return `${base} ${n}`;
 };
 
-const buildSlot = (slot, canonicalName, fields, { keepIdentity, keepState, extraState }) => {
-  const record = { exerciseName: canonicalName };
+const buildSlot = (slot, resolved, fields, { keepIdentity, keepState, extraState }) => {
+  const record = { exerciseName: resolved.get(slot.exerciseName).name };
   for (const [key] of fields) {
     if (key === "exerciseName") continue;
     record[key] = slot[key];
@@ -407,7 +422,11 @@ const buildSlot = (slot, canonicalName, fields, { keepIdentity, keepState, extra
   if (keepIdentity && slot.id) record.id = slot.id;
   for (const [key] of extraState) record[key] = keepState && slot[key] !== undefined ? slot[key] : 0;
   if (keepState && slot.pending) record.pending = slot.pending;
-  if (keepState && slot.revertToExerciseName) record.revertToExerciseName = slot.revertToExerciseName;
+  // Rewritten to the canonical name, like exerciseName — an alias stored here
+  // would resolve to nothing at rollover.
+  if (keepState && slot.revertToExerciseName) {
+    record.revertToExerciseName = resolved.get(slot.revertToExerciseName).name;
+  }
   return record;
 };
 
@@ -455,11 +474,11 @@ export async function importProgramFile(file, { preserveIdentity = false } = {})
       name: day.name,
       order: day.order,
       lifts: day.lifts.map((lift) => buildSlot(
-        lift, resolved.get(lift.exerciseName).name, LIFT_PLAN_FIELDS,
+        lift, resolved, LIFT_PLAN_FIELDS,
         { keepIdentity, keepState, extraState: LIFT_STATE_FIELDS },
       )),
       accessories: day.accessories.map((accessory) => buildSlot(
-        accessory, resolved.get(accessory.exerciseName).name, ACCESSORY_PLAN_FIELDS,
+        accessory, resolved, ACCESSORY_PLAN_FIELDS,
         { keepIdentity, keepState, extraState: ACCESSORY_STATE_FIELDS },
       )),
     })),

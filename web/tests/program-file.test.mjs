@@ -138,6 +138,18 @@ const otherDomains = async () => ({
     ["reps out of range", JSON.stringify((() => {
       const f = validFile(); f.program.days[0].accessories[0].maxReps = 9999; return f;
     })())],
+    // nextDayIndex is a day ORDER. A pointer naming no day silently falls back
+    // to the first day, losing the wave position the file was carrying.
+    ["nextDayIndex naming no day", JSON.stringify((() => {
+      const f = validFile();
+      f.program.cycleNumber = 1; f.program.currentWeek = 1; f.program.nextDayIndex = 7;
+      return f;
+    })())],
+    // Lift progression state is a group on both clients; a partial set would
+    // import natively and be rejected on the web.
+    ["partial lift progression state", JSON.stringify((() => {
+      const f = validFile(); f.program.days[0].lifts[0].stallCount = 1; return f;
+    })())],
   ];
 
   for (const [label, text] of corrupt) {
@@ -292,6 +304,41 @@ const otherDomains = async () => ({
 }
 
 // ---------------------------------------------------------------------------
+// Cycle-scoped swap markers are resolved like any other name. Rollover writes
+// revertToExerciseName straight onto the slot, so an unresolvable marker would
+// leave the slot bound to nothing weeks after the import looked fine.
+// ---------------------------------------------------------------------------
+{
+  const before = await otherDomains();
+  const programsBefore = (await db.Programs.all()).length;
+
+  const file = validFile();
+  file.program.name = "Fixture Bad Revert";
+  file.program.cycleNumber = 1;
+  file.program.currentWeek = 1;
+  file.program.nextDayIndex = 0;
+  file.program.days[0].lifts[0].stallCount = 0;
+  file.program.days[0].lifts[0].lastIncrementLb = 0;
+  file.program.days[0].lifts[0].lastPeakSingleLb = 0;
+  file.program.days[0].lifts[0].revertToExerciseName = "Zercher Good Morning";
+
+  const error = await threw(() => pf.importProgramFile(file));
+  ok(error != null, "an unresolvable revert marker rejects the import");
+  ok(/Zercher Good Morning/.test(error?.message || ""),
+    `the error names the unresolved revert marker (got: ${error?.message})`);
+  ok((await db.Programs.all()).length === programsBefore, "nothing was created");
+  ok(JSON.stringify(await otherDomains()) === JSON.stringify(before), "no other domain changed");
+
+  // And a revert marker given as an alias is rewritten to the canonical name.
+  file.program.name = "Fixture Alias Revert";
+  file.program.days[0].lifts[0].revertToExerciseName = "Seal Row";
+  const report = await pf.importProgramFile(file);
+  const imported = (await db.Programs.all()).find((p) => p.uuid === report.programId);
+  ok(imported.days[0].lifts[0].revertToExerciseName === "Chest-supported Row",
+    `the revert marker is stored canonically (got: ${imported.days[0].lifts[0].revertToExerciseName})`);
+}
+
+// ---------------------------------------------------------------------------
 // Gated exercises: the program imports, and says what is shut
 // ---------------------------------------------------------------------------
 {
@@ -343,8 +390,16 @@ const otherDomains = async () => ({
   ok(fixture.program.days.map((d) => d.order).join() === "0,2",
     "the fixture keeps a non-contiguous day order, which must survive verbatim");
 
-  // And it must import cleanly into a library that has its exercises.
-  for (const name of [...lifts, ...accessories].map((s) => s.exerciseName)) {
+  ok(lifts.some((l) => l.revertToExerciseName), "the fixture exercises a revert marker needing resolution");
+  ok(fixture.program.days.some((d) => d.order === fixture.program.nextDayIndex),
+    "the fixture's next-day pointer names a day it actually has");
+
+  // And it must import cleanly into a library that has its exercises —
+  // including the ones only named by a revert marker.
+  const referenced = [...lifts, ...accessories]
+    .flatMap((s) => [s.exerciseName, s.revertToExerciseName])
+    .filter(Boolean);
+  for (const name of referenced) {
     if (!(await db.Exercises.byName(name))) {
       await db.Exercises.save({
         name, category: "Accessory", type: "dumbbell", group: "misc",
