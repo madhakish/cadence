@@ -85,6 +85,24 @@ struct BodyView: View {
                     ProgressView(value: min(1, todayProteinTotal / (settings?.proteinTargetGrams ?? 100)))
                         .tint(todayProteinTotal >= (settings?.proteinTargetGrams ?? 100) ? Theme.good : Theme.accent)
 
+                    // Guidance, not enforcement: the stored target stays
+                    // whatever the lifter set. Offered only when there is a
+                    // real bodyweight to derive it from — the app never invents
+                    // one — and only when it differs from what's set.
+                    if let guidance = ProteinGuidance.summary(bodyweightLb: bodyweight.last?.weightLb) {
+                        Text(guidance)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if let suggested = ProteinGuidance.dailyTargetGrams(bodyweightLb: bodyweight.last?.weightLb),
+                           let settings, Int(suggested) != Int(settings.proteinTargetGrams) {
+                            Button("Use \(Int(suggested)) g as my daily target") {
+                                settings.proteinTargetGrams = suggested
+                                PersistenceErrorCenter.shared.save(context, operation: "Updating the protein target")
+                            }
+                            .font(.caption)
+                        }
+                    }
+
                     HStack(spacing: 10) {
                         Button("Shake ~45g") { logProtein(45, "Shake ~45g") }
                             .buttonStyle(.bordered)

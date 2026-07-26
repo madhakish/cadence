@@ -613,6 +613,18 @@ eq(pres.state.stallCount, 0, "maintain success resets stall");
   ok(single(hyper) === 155, `hypertrophy seeds it at its own 0.78 ceiling (got ${single(hyper)})`);
 }
 
+// Protein guidance is derived, advisory, and silent without a bodyweight.
+ok(C.proteinDailyTargetGrams(201) === 145, `201 lb at 1.6 g/kg rounds to 145 g (got ${C.proteinDailyTargetGrams(201)})`);
+ok(C.proteinPerMealGrams(201) === 35, `201 lb at 0.4 g/kg per meal rounds to 35 g (got ${C.proteinPerMealGrams(201)})`);
+ok(C.proteinDailyTargetGrams(null) === null, "no bodyweight, no suggestion");
+ok(C.proteinDailyTargetGrams(0) === null, "a zero bodyweight is not a bodyweight");
+ok(C.proteinSummary(null) === null, "no bodyweight, no guidance line");
+ok(/145 g\/day/.test(C.proteinSummary(201)), "the guidance line names the daily figure");
+ok(/35 g per meal/.test(C.proteinSummary(201)), "and the per-meal figure");
+// A heavier lifter gets a proportionally larger target — the old flat 100 g
+// literal was the same for a 130 lb and a 250 lb lifter.
+ok(C.proteinDailyTargetGrams(250) > C.proteinDailyTargetGrams(130), "the target scales with bodyweight");
+
 // Session spacing is advisory and only speaks when it has something to say.
 ok(C.sessionSpacingShortfall(1, 3) === 2, "one day into a three-day preference is two short");
 ok(C.sessionSpacingShortfall(0, 3) === 3, "training the same day is the full shortfall");

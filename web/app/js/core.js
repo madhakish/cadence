@@ -1105,6 +1105,35 @@ export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, i
 // beats the app's opinion.
 //
 // Returns null when there is nothing useful to say.
+// Bodyweight-derived protein guidance. Advisory, and deliberately outside the
+// programming engine — nothing here feeds progression or readiness. The stored
+// proteinTargetGrams stays whatever the lifter set; this only offers a number
+// to compare it against.
+//
+// 1.6 g/kg/day is the plateau Morton et al. (2018) found for RT-induced
+// fat-free mass gains; 0.4 g/kg/meal is the higher per-dose threshold PROT-AGE
+// recommends for older adults, whose muscle responds less to a given dose.
+// Mirrored 1:1 in CadenceCore ProteinGuidance.
+export const PROTEIN_DAILY_G_PER_KG = 1.6;
+export const PROTEIN_MEAL_G_PER_KG = 0.4;
+export const PROTEIN_MEALS_PER_DAY = 4;
+
+const proteinGrams = (bodyweightLb, perKg) => {
+  if (!(bodyweightLb > 0)) return null;
+  return Math.round(kgFromLb(bodyweightLb) * perKg / 5) * 5;
+};
+export const proteinDailyTargetGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_DAILY_G_PER_KG);
+export const proteinPerMealGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_MEAL_G_PER_KG);
+
+// One line of guidance, or null when there is no bodyweight logged — the app
+// never invents one.
+export function proteinSummary(bodyweightLb) {
+  const daily = proteinDailyTargetGrams(bodyweightLb);
+  const meal = proteinPerMealGrams(bodyweightLb);
+  if (daily == null || meal == null) return null;
+  return `${daily} g/day at ${PROTEIN_DAILY_G_PER_KG} g/kg, about ${meal} g per meal across ${PROTEIN_MEALS_PER_DAY}.`;
+}
+
 // Mirrored 1:1 in CadenceCore ProgramProgression.sessionSpacingShortfall.
 export function sessionSpacingShortfall(daysSinceLastSession, preferredDays) {
   if (!(preferredDays > 0)) return null;
