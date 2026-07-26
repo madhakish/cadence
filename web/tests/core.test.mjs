@@ -961,6 +961,50 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   report = C.evaluateCoaching(coachingProgram, sessions);
   eq(report.currentReadiness, "red", "hard-stop recovery check-in makes a complete rotation red");
   ok(report.rotations[0].reasons.some((reason) => reason.includes("check-in")), "hard-stop check-in is explained");
+
+  // ---- Rotation suggestions: shelved and stuck slots ----
+  const withSlot = (id, patch) => ({
+    ...coachingProgram,
+    slots: coachingProgram.slots.map((slot) => (slot.id === id ? { ...slot, ...patch } : slot)),
+  });
+  const greenSessions = [];
+  for (let rotation = 1; rotation <= 3; rotation++) {
+    for (let dayIndex = 0; dayIndex < 4; dayIndex++) {
+      greenSessions.push(coachingSession(rotation, dayIndex, ((rotation - 1) * 4 + dayIndex) * 3, 100 + (rotation - 1) * 5));
+    }
+  }
+  const rotationOf = (rep) => rep.change.type === "rotateExercise";
+
+  report = C.evaluateCoaching(withSlot("squat", { exerciseIsShelved: true }), greenSessions);
+  let suggestion = report.recommendations.find(rotationOf);
+  ok(!!suggestion, "a slot prescribing a shelved exercise is surfaced");
+  eq(suggestion.ruleID, `program.slot.rotate.shelved.v${C.COACHING_RULE_VERSION}`, "shelved slots get their own rule");
+  eq(suggestion.change.slotID, "squat", "the suggestion names the slot, not the exercise library");
+  ok(suggestion.id.endsWith("-squat"), "one suggestion per slot, so two stuck slots do not collide on one id");
+
+  // A stall is a program-hygiene signal, not a capacity one: it must surface
+  // even when readiness has already claimed the headline.
+  report = C.evaluateCoaching(withSlot("squat", { stallCount: 1 }), greenSessions);
+  suggestion = report.recommendations.find(rotationOf);
+  ok(!!suggestion, "one non-success cycle on a lift slot proposes a rotation");
+  eq(suggestion.ruleID, `program.slot.rotate.stalled.v${C.COACHING_RULE_VERSION}`, "stalled slots get their own rule");
+
+  sessions = [];
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
+  for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(2, dayIndex, 12 + dayIndex * 3, 90));
+  report = C.evaluateCoaching(withSlot("squat", { stallCount: 1 }), sessions);
+  eq(report.recommendations[0].change.type, "reduceAccessoryVolume", "readiness still leads the list");
+  ok(report.recommendations.some(rotationOf), "a red rotation does not suppress the stall suggestion");
+
+  // Accessory counters are unbounded and nothing ever resolves them, so a
+  // single missed rep target must not read as a plateau.
+  report = C.evaluateCoaching(withSlot("row", { stallCount: 1 }), greenSessions);
+  ok(!report.recommendations.some(rotationOf), "one missed accessory exposure is not a plateau");
+  report = C.evaluateCoaching(withSlot("row", { stallCount: 3 }), greenSessions);
+  ok(report.recommendations.some(rotationOf), "three stuck accessory exposures propose a rotation");
+
+  report = C.evaluateCoaching(withSlot("bike", { stallCount: 5, exerciseIsShelved: true }), greenSessions);
+  ok(!report.recommendations.some(rotationOf), "conditioning slots are never rotated by this rule");
 }
 
 // ---- Methodology styles: 5/3/1, max/dynamic effort, linear fives, Texas ----

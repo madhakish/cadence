@@ -56,6 +56,39 @@ Rule identifiers carry the engine's rule version, and coaching decisions store
 the identifier they were made under, so a rule whose meaning changes gets a new
 version rather than silently reinterpreting old audit rows.
 
+## Rotation suggestions
+
+Two things make a slot wrong as it stands, independently of how the last
+rotation went:
+
+- **Its exercise is shelved.** The program keeps prescribing a movement the
+  lifter has taken out of rotation, every rotation, silently.
+- **It is stuck.** A lift slot's stall counter resets the moment its base is
+  rebuilt, so any non-zero value means the weight is being retried rather than
+  added to — the moment to rotate the variation is before the weight gets cut,
+  which is what the max-effort styles already say in their progression notes.
+  Accessory counters are unbounded and nothing ever resolves them, so an
+  accessory needs three stuck exposures before it counts as a plateau. A lift
+  whose peak grade is still pending is read from that pending grade, not the
+  settled one, so a stall does not stay hidden for the cycle worth leaving.
+
+Because both are program hygiene rather than added capacity, they are offered
+at every readiness level instead of waiting for a green streak — but they sort
+below every readiness rule, so the light stays the headline. Conditioning slots
+are never rotated by this rule.
+
+The engine names the slot only. Resolving an actual replacement needs the
+exercise library, which lives on the clients, so the swap happens at Apply time
+through the same `SwapRules` compatibility used by the manual swap gesture:
+same movement group, same programming tier, same loadability, not shelved. If
+nothing compatible is available the proposal refuses with that reason rather
+than substituting something that does not fit.
+
+An applied rotation keeps the slot's load and estimate — a compatible candidate
+trains the same pattern at the same tier, so those remain the best prior — but
+clears the stall counter, because inheriting the countdown would deload a lift
+that has not yet missed anything.
+
 ## Capacity and movement gaps
 
 After two consecutive Green rotations, Cadence may offer one bundled, audited

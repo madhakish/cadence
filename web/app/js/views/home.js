@@ -107,7 +107,16 @@ export async function render(host) {
             // Keep the rendered program unchanged unless both the program
             // edit and its audit record commit in one IndexedDB transaction.
             const proposed = structuredClone(program);
-            const message = await applyCoachingRecommendation(proposed, recommendation, allExercises);
+            let message;
+            try {
+              message = await applyCoachingRecommendation(proposed, recommendation, allExercises);
+            } catch (error) {
+              // A proposal can become unappliable between rendering and tapping
+              // — the library changed, the slot went away. Say so and leave the
+              // program alone rather than failing silently.
+              ui.toast(error?.message || "That change could not be applied.");
+              return;
+            }
             const decision = coachingDecision(proposed, recommendation, "accepted", latest?.reasons || []);
             await Programs.saveWithDecision(proposed, decision);
             ui.toast(message); ui.nav.refresh();

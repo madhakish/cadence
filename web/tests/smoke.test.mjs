@@ -174,6 +174,41 @@ for (const track of [
   await db.CoachingDecisions.del(decision.id);
 }
 
+// A rotation suggestion resolves against the real library, keeps the slot's
+// load, and drops the stall counter it was proposed to break.
+{
+  const original = await db.Programs.active();
+  const proposed = structuredClone(original);
+  const slot = proposed.days.flatMap((day) => day.lifts || [])[0];
+  slot.stallCount = 1;
+  const before = { name: slot.exerciseName, base: slot.baseWeightLb };
+  const message = await coach.applyCoachingRecommendation(proposed, {
+    id: "rotate-recommendation", ruleID: "program.slot.rotate.stalled", title: "Stuck",
+    explanation: "Fixture recommendation",
+    change: { type: "rotateExercise", slotID: slot.id, exerciseName: before.name },
+  }, seededExercises);
+  const rotated = proposed.days.flatMap((day) => day.lifts || []).find((item) => item.id === slot.id);
+  ok(rotated.exerciseName !== before.name, "the slot is repointed at a different exercise");
+  const from = seededExercises.find((item) => item.name === before.name);
+  const to = seededExercises.find((item) => item.name === rotated.exerciseName);
+  ok(C.swapCompatible(from, to), "the replacement passes the same swap rules as the manual gesture");
+  ok(rotated.baseWeightLb === before.base,
+    "a same-pattern, same-tier candidate keeps the slot's load as its starting prior");
+  ok(rotated.stallCount === 0, "rotating clears the counter it was proposed to break");
+  ok(message.includes(before.name) && message.includes(rotated.exerciseName),
+    "the result names both sides of the swap");
+
+  let refused = false;
+  try {
+    await coach.applyCoachingRecommendation(structuredClone(original), {
+      id: "rotate-missing", ruleID: "program.slot.rotate.stalled", title: "Stuck",
+      explanation: "Fixture recommendation",
+      change: { type: "rotateExercise", slotID: slot.id, exerciseName: "Not In The Library" },
+    }, seededExercises);
+  } catch { refused = true; }
+  ok(refused, "an exercise the library no longer has refuses rather than guessing a replacement");
+}
+
 const serviceWorkerSource = await (await import("node:fs/promises")).readFile(
   new URL("../app/sw.js", import.meta.url), "utf8");
 ok(serviceWorkerSource.includes('"js/coaching-adapter.js"'),

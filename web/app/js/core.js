@@ -1474,9 +1474,56 @@ const shorterSpacingTrial = (sessions) => {
   return median >= 4 ? Math.max(2, median - 1) : null;
 };
 
+// A lift slot's counter resets the moment the base is rebuilt, so any non-zero
+// value means the weight is being retried. Accessory counters are unbounded and
+// nothing ever resolves them, so they need a real plateau.
+export const LIFT_STALL_ROTATION_THRESHOLD = 1;
+export const ACCESSORY_STALL_ROTATION_THRESHOLD = 3;
+
+// Slots the program should stop prescribing as they stand: the exercise has
+// been shelved, or the slot is stuck retrying a weight it is not making. Both
+// are suggestions — the engine names the slot, the client resolves a compatible
+// variation, and the athlete decides.
+function rotationSuggestions(program, evidenceKey) {
+  const result = [];
+  const ordered = [...(program.slots || [])].sort((a, b) => a.dayIndex - b.dayIndex || String(a.id).localeCompare(String(b.id)));
+  for (const slot of ordered) {
+    if (isConditioningPattern(slot.pattern)) continue;
+    if (slot.exerciseIsShelved) {
+      result.push({
+        id: `program.slot.rotate.shelved.v${COACHING_RULE_VERSION}:${evidenceKey}-${slot.id}`,
+        ruleID: `program.slot.rotate.shelved.v${COACHING_RULE_VERSION}`, priority: 70,
+        title: `${slot.exerciseName} is shelved but still programmed`,
+        explanation: `This slot still prescribes ${slot.exerciseName}, which you have shelved. Rotate it to a compatible variation of the same movement, or reopen the exercise.`,
+        change: { type: "rotateExercise", slotID: slot.id, exerciseName: slot.exerciseName },
+      });
+      continue;
+    }
+    const threshold = slot.role === "accessory" ? ACCESSORY_STALL_ROTATION_THRESHOLD : LIFT_STALL_ROTATION_THRESHOLD;
+    const stalls = Math.max(0, slot.stallCount || 0);
+    if (stalls < threshold) continue;
+    result.push({
+      id: `program.slot.rotate.stalled.v${COACHING_RULE_VERSION}:${evidenceKey}-${slot.id}`,
+      ruleID: `program.slot.rotate.stalled.v${COACHING_RULE_VERSION}`, priority: 60,
+      title: `${slot.exerciseName} is stuck`,
+      explanation: `${slot.exerciseName} has ${stalls} exposure${stalls === 1 ? "" : "s"} on record without meeting its prescription, so it is being retried rather than added to. Rotating to a compatible variation of the same movement is the usual answer before the weight gets cut.`,
+      change: { type: "rotateExercise", slotID: slot.id, exerciseName: slot.exerciseName },
+    });
+  }
+  return result;
+}
+
 function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions) {
   if (!latest) return [];
   const evidenceKey = `c${latest.key.cycleNumber}-r${latest.key.rotation}`;
+  // Rotation suggestions are program hygiene, not capacity: a slot pointing at
+  // a shelved exercise or stuck retrying the same weight is wrong at every
+  // readiness level, so these are offered alongside the readiness verdict
+  // rather than gated behind a green streak. They sort below every readiness
+  // rule, so the light stays the headline.
+  const rotations = rotationSuggestions(program, evidenceKey);
+  const byPriority = (a, b) => b.priority - a.priority || b.id.localeCompare(a.id);
+  const decided = (recommendation) => [recommendation, ...rotations].sort(byPriority);
   // A second consecutive red rotation escalates: one bad rotation is noise,
   // two in a row is a trend, and the 25% cut has already been tried without
   // restoring output. Cuts volume while KEEPING frequency (Rogerson 2024) —
@@ -1490,33 +1537,33 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   // deload", so lighter mains would read back as a failed peak. Cutting
   // accessory SETS is invisible to double progression, which grades reps at a
   // held weight.
-  if (latest.readiness === "red" && previousReadiness === "red") return [{
+  if (latest.readiness === "red" && previousReadiness === "red") return decided({
     id: `readiness.red.persistent.recovery-rotation.v${COACHING_RULE_VERSION}:${evidenceKey}`,
     ruleID: `readiness.red.persistent.recovery-rotation.v${COACHING_RULE_VERSION}`, priority: 110,
     title: "Run a recovery rotation",
     explanation: "Two rotations in a row are red and the lighter rotation did not restore output. Hold main-lift loading and cut accessory sets about 50% for one rotation, keeping every session.",
     change: { type: "reduceAccessoryVolume", percent: 50 },
-  }];
-  if (latest.readiness === "red") return [{
+  });
+  if (latest.readiness === "red") return decided({
     id: `readiness.red.reduce-accessories.v${COACHING_RULE_VERSION}:${evidenceKey}`,
     ruleID: `readiness.red.reduce-accessories.v${COACHING_RULE_VERSION}`, priority: 100,
     title: "Run one lower-volume rotation",
     explanation: "Repeated output markers are red. Hold main-lift loading and cut accessory sets about 25% for one rotation.",
     change: { type: "reduceAccessoryVolume", percent: 25 },
-  }];
-  if (latest.readiness === "yellow") return [{
+  });
+  if (latest.readiness === "yellow") return decided({
     id: `readiness.yellow.hold.v${COACHING_RULE_VERSION}:${evidenceKey}`,
     ruleID: `readiness.yellow.hold.v${COACHING_RULE_VERSION}`, priority: 80,
     title: "Hold the current prescription", explanation: latest.reasons[0] || "Another exposure is needed before adding work.",
     change: { type: "hold" },
-  }];
-  if (greenRotationStreak < 2) return [];
+  });
+  if (greenRotationStreak < 2) return [...rotations].sort(byPriority);
   const budgets = [["verticalPull", 3], ["kneeFlexion", 3], ["shoulderStability", 2], ["adductor", 2], ["core", 4]];
   const planned = {};
   for (const slot of program.slots || []) planned[slot.pattern] = (planned[slot.pattern] || 0) + slot.plannedSets;
   const capacity = Math.max(0, program.maximumAddedSetsPerRotation ?? 6);
   let changes = 0;
-  const result = [];
+  const result = [...rotations];
   const capacityAdjustments = [];
   const capacityEvidence = [];
   for (const [pattern, target] of budgets) {
@@ -1554,7 +1601,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
     explanation: `Recent exposures stayed green at the observed spacing. Try the next session after ${shorter} days once, then reassess output.`,
     change: { type: "tryShorterSpacing", days: shorter },
   });
-  return result.sort((a, b) => b.priority - a.priority || b.id.localeCompare(a.id));
+  return result.sort(byPriority);
 }
 
 export function evaluateCoaching(program, sessions, reliableHistoryStart = null) {
