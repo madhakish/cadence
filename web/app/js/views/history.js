@@ -1,30 +1,151 @@
 // History — session log (grouped by month), progression charts, milestones.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { lineChart, multiLineChart, progressionChart, ROTATION_COLORS, ROLE_DASH } from "../charts.js";
+import { lineChart, multiLineChart, progressionChart, ROTATION_COLORS, ROLE_DASH,
+  smallMultiples, barSeries, stackedBars, chartTable } from "../charts.js";
 import { Sessions, Milestones, Exercises, Programs, Checkins, topSet, workingVolume } from "../db.js";
 import { coachingReport } from "../coaching-adapter.js";
 
 import { COPY } from "../constants.js";
 
-let mode = "rotations";
+let mode = "overview";
 
 export async function render(host) {
   const [sessions, milestones, exercises, program, checkins] = await Promise.all([
     Sessions.completed(), Milestones.all(), Exercises.all(), Programs.active(), Checkins.all(),
   ]);
   const root = ui.h("div");
-  root.append(ui.seg([{ value: "rotations", label: "Rotations" }, { value: "log", label: "Log" },
+  root.append(ui.seg([{ value: "overview", label: "Overview" },
+    { value: "rotations", label: "Rotations" }, { value: "log", label: "Log" },
     { value: "charts", label: "Charts" }, { value: "milestones", label: "Milestones" }], mode, (m) => { mode = m; render(host); }));
   const panel = ui.h("div");
   root.append(panel);
 
-  if (mode === "rotations") renderRotations(panel, sessions, exercises, program, checkins);
+  if (mode === "overview") renderOverview(panel, sessions, exercises);
+  else if (mode === "rotations") renderRotations(panel, sessions, exercises, program, checkins);
   else if (mode === "log") renderLog(panel, sessions);
   else if (mode === "charts") renderCharts(panel, sessions, exercises, program);
   else renderMilestones(panel, milestones);
 
   host.replaceChildren(root);
+}
+
+// The view History opens on. Three questions a lifter actually arrives with,
+// each answered by the form that fits it rather than by one crowded plot:
+// which lifts are moving (facets), am I turning up (counts over time), and how
+// is the work feeling (a status mix). Every one ships a table twin, so no value
+// here is reachable only by hovering.
+function renderOverview(panel, sessions, exercises) {
+  const done = [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (!done.length) { panel.append(ui.empty("\u{1F4C8}", COPY.emptyHistory)); return; }
+  const displayValue = (lb) => C.primaryUnit(ui.prefs.unitDisplay) === "kg" ? C.kgFromLb(lb) : lb;
+  const unit = C.primaryUnit(ui.prefs.unitDisplay) === "kg" ? " kg" : " lb";
+  const mainNames = new Set(exercises.filter((e) => e.category === "Main").map((e) => e.name));
+
+  // ---- 1. Every main lift's estimated 1RM, faceted -----------------------
+  // One panel per lift, each with its own y-domain: a press and a deadlift
+  // share a unit but not a range, so a shared axis would flatten the press
+  // into a line at the bottom and invite a comparison that means nothing.
+  const byLift = new Map();
+  for (const session of done) {
+    const t = new Date(session.date).getTime();
+    for (const entry of session.exercises || []) {
+      if (!mainNames.has(entry.exerciseName)) continue;
+      const performed = (entry.sets || []).filter((set) => !set.isWarmup && set.status === "completed");
+      const estimates = performed.map((set) => C.epleyE1RM(set.weightLb, set.reps)).filter((v) => v > 0);
+      if (!estimates.length) continue;
+      const best = Math.max(...estimates);
+      const points = byLift.get(entry.exerciseName) || [];
+      // One point per session per lift: the best estimate that session.
+      const existing = points.find((pt) => pt.t === t);
+      if (existing) existing.y = Math.max(existing.y, displayValue(best));
+      else points.push({ t, y: displayValue(best) });
+      byLift.set(entry.exerciseName, points);
+    }
+  }
+  const facets = [...byLift.entries()]
+    .filter(([, points]) => points.length >= 2)
+    .map(([label, points]) => ({ label, points }))
+    .sort((a, b) => b.points[b.points.length - 1].t - a.points[a.points.length - 1].t);
+
+  if (facets.length) {
+    panel.append(ui.h("div", { class: "section-title", text: "Estimated 1RM by lift" }));
+    panel.append(smallMultiples(facets, { unit, fmtY: (v) => String(Math.round(v)) }));
+    panel.append(chartTable(["Lift", "Latest", "First", "Change", "Sessions"],
+      facets.map((f) => {
+        const first = f.points[0].y, last = f.points[f.points.length - 1].y;
+        const delta = Math.round(last - first);
+        return [f.label, `${Math.round(last)}${unit}`, `${Math.round(first)}${unit}`,
+          `${delta > 0 ? "+" : ""}${delta}${unit}`, String(f.points.length)];
+      }), { label: `Table view \u00B7 ${facets.length} lifts` }));
+  }
+
+  // ---- 2. Sessions per week ---------------------------------------------
+  // A count, so the baseline is zero and every bar is one colour.
+  const weekStart = (ms) => {
+    const d = new Date(ms);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
+    return d.getTime();
+  };
+  const weeks = new Map();
+  for (const session of done) weeks.set(weekStart(new Date(session.date).getTime()),
+    (weeks.get(weekStart(new Date(session.date).getTime())) || 0) + 1);
+  const weekKeys = [...weeks.keys()].sort((a, b) => a - b);
+  // Fill the gaps: a week with no training is the signal, so it must be a zero
+  // bar rather than a missing one that silently compresses the timeline.
+  const filled = [];
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+  for (let k = weekKeys[0]; k <= weekKeys[weekKeys.length - 1]; k += WEEK) {
+    filled.push({ t: k, y: weeks.get(k) || 0, label: ui.fmtDate(new Date(k).toISOString()) });
+  }
+  if (filled.length) {
+    panel.append(ui.h("div", { class: "section-title", text: "Sessions per week" }));
+    panel.append(barSeries(filled, { label: "Sessions per week", unit: " sessions", fmtX: (p) => p.label }));
+    const trained = filled.filter((w) => w.y > 0).length;
+    panel.append(ui.h("div", { class: "sub", style: { margin: "2px 4px 0" },
+      text: `${done.length} sessions over ${filled.length} weeks \u00B7 trained in ${trained}` }));
+    panel.append(chartTable(["Week of", "Sessions"],
+      [...filled].reverse().map((w) => [w.label, String(w.y)]),
+      { label: `Table view \u00B7 ${filled.length} weeks` }));
+  }
+
+  // ---- 3. How the work felt, per rotation -------------------------------
+  // Status, not identity: clean / grindy / wobble is the input the
+  // autoregulation runs on, so it takes the reserved status scale and always
+  // carries its written label.
+  const rotations = new Map();
+  for (const session of done) {
+    for (const entry of session.exercises || []) {
+      const phase = entry.phase;
+      const tag = session.programTag;
+      const key = phase && tag ? `C${tag.cycleNumber} R${phase}` : "Untracked";
+      const bucket = rotations.get(key) || { clean: 0, grindy: 0, wobble: 0, order: phase && tag ? tag.cycleNumber * 10 + phase : -1 };
+      for (const set of entry.sets || []) {
+        if (set.isWarmup || set.status !== "completed") continue;
+        const quality = C.setQuality(set.flags);
+        if (quality) bucket[quality] += 1;
+      }
+      rotations.set(key, bucket);
+    }
+  }
+  const groups = [...rotations.entries()]
+    .filter(([, b]) => b.clean + b.grindy + b.wobble > 0)
+    .sort((a, b) => a[1].order - b[1].order)
+    .map(([label, b]) => ({ label, parts: [
+      { key: "clean", label: "clean", value: b.clean, tone: "good" },
+      { key: "grindy", label: "grindy", value: b.grindy, tone: "warn" },
+      { key: "wobble", label: "wobble", value: b.wobble, tone: "hard" },
+    ] }));
+  if (groups.length) {
+    panel.append(ui.h("div", { class: "section-title", text: "Set quality by rotation" }));
+    panel.append(stackedBars(groups));
+    panel.append(ui.h("div", { class: "sub", style: { margin: "2px 4px 0" },
+      text: "More than one grindy or wobbly working set holds the weight instead of adding it." }));
+    panel.append(chartTable(["Rotation", "Clean", "Grindy", "Wobble"],
+      groups.map((g) => [g.label, ...g.parts.map((p) => String(p.value))]),
+      { label: `Table view \u00B7 ${groups.length} rotations` }));
+  }
 }
 
 function renderRotations(panel, sessions, exercises, program, checkins) {

@@ -317,6 +317,141 @@ const chartsBtn = [...host().querySelectorAll(".seg button")].find((b) => b.text
 chartsBtn.click(); await tick();
 ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history charts mode renders");
 
+// ---- History Overview: the three visualisations, and the palette contract ----
+{
+  const charts = await import("../app/js/charts.js");
+
+  // [INV-CHART-ORDINAL-ROTATION] Rotations are an ordered sequence, so their
+  // colours are a single-hue ramp — NOT the reserved status scale. This guard
+  // exists because the palette used to be the good/warn/hard tokens, which put
+  // the logger's "hard stop" red on the Peak rotation and left R1 vs R3 at
+  // ΔE 5.8 under deuteranopia.
+  const statusTokens = ["#5ba06a", "#e8b008", "#ef4444", "#d29a3a", "#d5352b", "#4ade80", "#eab308", "#dc2626"];
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const hueOf = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    return Math.round(Math.atan2(Math.sqrt(3) * (g - b), 2 * r - g - b) * 180 / Math.PI);
+  };
+
+  // The ramp is a theme token, because an ordinal ramp has to reverse direction
+  // on a light surface: the dark ramp's bright end measures 1.60:1 on #f5f5f7.
+  for (const [mode, steps] of Object.entries(charts.ROTATION_RAMP)) {
+    const ramp = steps.slice(0, 3).map((h) => h.toLowerCase());
+    ok(ramp.every((hex) => !statusTokens.includes(hex)),
+      `[INV-CHART-ORDINAL-ROTATION] ${mode}: no rotation wears a reserved status colour`);
+    const lums = ramp.map(lum);
+    const climbs = lums[0] < lums[1] && lums[1] < lums[2];
+    const falls = lums[0] > lums[1] && lums[1] > lums[2];
+    ok(mode === "dark" ? climbs : falls,
+      `[INV-CHART-ORDINAL-ROTATION] ${mode}: lightness is monotone, running ${mode === "dark" ? "dim→bright" : "light→dark"} so the order is visible`);
+    const hues = ramp.map(hueOf);
+    ok(Math.max(...hues) - Math.min(...hues) <= 12,
+      `[INV-CHART-ORDINAL-ROTATION] ${mode}: one hue across the ramp, not a rainbow`);
+    ok(hueOf(steps[3].toLowerCase()) !== hues[0],
+      `[INV-CHART-ORDINAL-ROTATION] ${mode}: deload sits outside the ramp hue — a reset, not a fourth step`);
+  }
+
+  // The charts must draw from the token, so switching theme reaches them.
+  ok(Object.values(charts.ROTATION_COLORS).every((v) => /^var\(--rot-[1-5]\)$/.test(v)),
+    "[INV-CHART-ORDINAL-ROTATION] rotations draw from theme tokens, not baked hexes");
+  const css = await (await import("node:fs/promises")).readFile(
+    new URL("../app/styles.css", import.meta.url), "utf8");
+  // Every theme block that declares a surface must also declare the ramp, or a
+  // theme would render rotations as unstyled/transparent.
+  const themeBlocks = css.split(/(?=:root|@media)/).filter((b) => /--bg:/.test(b));
+  ok(themeBlocks.length >= 4, `found the theme blocks (${themeBlocks.length})`);
+  for (const block of themeBlocks) {
+    const name = (block.match(/data-theme="(\w+)"/) || block.match(/(@media)/) || [, "memento"])[1];
+    ok([1, 2, 3, 4, 5].every((n) => block.includes(`--rot-${n}:`)),
+      `[INV-CHART-ORDINAL-ROTATION] theme "${name}" defines the full rotation ramp`);
+  }
+
+  // Small multiples: one panel per lift, and a lift with a single point has no
+  // trend to show so it is dropped rather than drawn as a dot.
+  const facets = [
+    { label: "Back Squat", points: [{ t: 1, y: 300 }, { t: 2, y: 310 }, { t: 3, y: 315 }] },
+    { label: "Overhead Press", points: [{ t: 1, y: 120 }, { t: 2, y: 118 }] },
+    { label: "Snatch", points: [{ t: 1, y: 95 }] },
+  ];
+  const grid = charts.smallMultiples(facets, { unit: " lb" });
+  ok(grid.querySelectorAll(".mini").length === 3, "one panel per lift with any history");
+  ok(grid.querySelectorAll(".mini-plot").length === 3, "each panel draws its own plot");
+  ok(grid.querySelectorAll(".mini-plot .dot").length === 3,
+    "one endpoint marker per panel, not a dot on every point");
+  // A single session is a stat tile, not a trend: value in the head, no line,
+  // and no direction claimed.
+  const single = [...grid.querySelectorAll(".mini")].find((n) => n.textContent.includes("Snatch"));
+  ok(single.querySelector(".mini-value").textContent === "95 lb", "a one-session lift still shows its value");
+  ok(!single.querySelector(".mini-trend"), "a one-session lift claims no trend");
+  ok(!/L/.test(single.querySelector(".mini-line").getAttribute("d")),
+    "a one-session lift draws no line — a moveto only");
+  const trends = [...grid.querySelectorAll(".mini-trend")].map((n) => n.textContent);
+  ok(trends.some((t) => t.startsWith("up ")) && trends.some((t) => t.startsWith("down ")),
+    "direction is written in words, never colour alone");
+  ok(grid.querySelectorAll(".chart-tip").length === 3, "each panel carries a hover tooltip");
+  ok(grid.querySelectorAll(".hit").length === 6, "every point gets a hit band wider than the line");
+
+  // Counts start at zero and keep their gaps: an untrained week is the signal.
+  const bars = charts.barSeries([
+    { t: 1, y: 3, label: "Wk1" }, { t: 2, y: 0, label: "Wk2" }, { t: 3, y: 4, label: "Wk3" },
+  ], { label: "Sessions" });
+  ok(bars.querySelectorAll(".count-bar").length === 3, "a zero week still draws its slot");
+  const heights = [...bars.querySelectorAll(".count-bar")].map((r) => Number(r.getAttribute("height")));
+  ok(heights[1] === 0, "the zero week has zero height rather than a floor");
+  ok(heights[2] > heights[0], "bar height tracks the count");
+  ok(bars.querySelectorAll(".hit").length === 3 && bars.querySelector(".chart-tip"),
+    "bars are hoverable through full-height hit targets");
+
+  // Status mix: reserved tones, and a written legend so it is never colour-only.
+  const stack = charts.stackedBars([
+    { label: "C1 R1", parts: [
+      { key: "clean", label: "clean", value: 12, tone: "good" },
+      { key: "grindy", label: "grindy", value: 3, tone: "warn" },
+      { key: "wobble", label: "wobble", value: 1, tone: "hard" }] },
+    { label: "C1 R2", parts: [
+      { key: "clean", label: "clean", value: 9, tone: "good" },
+      { key: "grindy", label: "grindy", value: 0, tone: "warn" },
+      { key: "wobble", label: "wobble", value: 0, tone: "hard" }] },
+  ]);
+  ok(stack.querySelectorAll(".stack-seg").length === 4, "zero-valued segments are omitted, not drawn flat");
+  const legendText = [...stack.querySelectorAll(".chart-legend span")].map((n) => n.textContent);
+  ok(["clean", "grindy", "wobble"].every((t) => legendText.includes(t)),
+    "the status mix always names its tones");
+  ok([...stack.querySelectorAll(".stack-seg")].every((seg) => /var\(--(good|warn|hard)\)/.test(seg.getAttribute("style"))),
+    "the mix uses reserved status tokens rather than categorical slots");
+
+  // Every chart's twin: the values without hovering.
+  const table = charts.chartTable(["Lift", "Latest"], [["Back Squat", "315 lb"]]);
+  ok(table.tagName === "DETAILS" && table.querySelectorAll("tbody tr").length === 1,
+    "chartTable renders a collapsed table twin");
+
+  // No chart may stretch its marks non-uniformly: text and 2px strokes would
+  // distort with the container.
+  const source = await (await import("node:fs/promises")).readFile(
+    new URL("../app/js/charts.js", import.meta.url), "utf8");
+  ok(!source.includes('preserveAspectRatio: "none"'),
+    "charts scale proportionally — no non-uniform stretch of marks and labels");
+}
+
+// The Overview panel itself, against seeded history.
+{
+  await history.render(host());
+  const overviewBtn = [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Overview");
+  ok(overviewBtn, "History offers an Overview segment");
+  overviewBtn.click(); await tick();
+  const titles = [...host().querySelectorAll(".section-title")].map((n) => n.textContent);
+  ok(host().querySelector(".chart-grid") || host().querySelector(".empty"),
+    "Overview renders faceted lifts (or an honest empty state)");
+  if (!host().querySelector(".empty")) {
+    ok(titles.some((t) => t.includes("Sessions per week")), "Overview counts sessions per week");
+    ok(host().querySelectorAll(".chart-table").length >= 1, "Overview ships table twins");
+  }
+}
+
 // plate calculator overlay
 await plates.openPlateCalculator(); await tick();
 ok(document.querySelector("#overlays .overlay"), "plate calculator opened");

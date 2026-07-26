@@ -450,11 +450,35 @@ struct ProgressionChartsView: View {
         return best.keys.sorted().map { RepRecord(reps: $0, weightLb: best[$0, default: 0]) }
     }
 
-    /// Rotation → line colour: escalating heat to Peak, muted Deload.
-    /// Mirrors web `ROTATION_COLORS`.
+    /// Rotation → line colour. Rotations are ORDINAL (R1 Volume → R2 Load →
+    /// R3 Peak is escalating intensity), so this is a one-hue ramp with
+    /// monotone lightness — dim to bright, because the surface is near-black —
+    /// rather than a set of unrelated hues.
+    ///
+    /// It was green → yellow → red → grey, which was wrong twice: those are the
+    /// app's own good/warn/hard status colours, so "Peak" wore the red that
+    /// means a hard stop in the logger; and R1 vs R3 measured ΔE 5.8 under
+    /// deuteranopia — below the ΔE 6 floor, unresolvable for ~8% of men, with no
+    /// secondary encoding between two solid same-role lines. This ramp measures
+    /// 12.2 all-pairs. Adjacent steps stay close on purpose (that is what makes
+    /// the order readable), so rotation identity is always also named in the
+    /// legend, never colour alone.
+    ///
+    /// The ramp has to reverse on a light surface — the dark ramp's bright end
+    /// measures 1.60:1 against #F5F5F7, a hard fail — so these are dynamic
+    /// colours. The three custom themes force dark and take the dim → bright
+    /// steps; System follows the OS and gets light → dark steps in light mode.
+    ///
+    /// Mirrors web `ROTATION_RAMP` / `ROTATION_COLORS` (the `--rot-*` tokens).
     private static let rotationPalette: [Color] = [
-        Color(hex: 0x5BA06A), Color(hex: 0xE8B008), Color(hex: 0xEF4444),
-        Color(hex: 0x8B9196), Color(hex: 0x666B71),
+        Color(lightHex: 0xCFA94F, darkHex: 0x96762F),
+        Color(lightHex: 0x9C7526, darkHex: 0xC39A44),
+        Color(lightHex: 0x634C14, darkHex: 0xE8C67E),
+        // Out of ramp on purpose: a deload is a reset, not a fourth intensity
+        // step, and untracked work has no phase. Cool grey separates both from
+        // the brass ramp by hue rather than only by lightness.
+        Color(lightHex: 0x5F7080, darkHex: 0x8FA0AD),
+        Color(lightHex: 0x8A9199, darkHex: 0x676F76),
     ]
     /// Metric → line colour when not split by rotation. Working weight takes
     /// the accent; est. 1RM the green it also carries on web.

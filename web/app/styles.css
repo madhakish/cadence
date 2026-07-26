@@ -14,23 +14,49 @@
   --text: #efe6d2;
   --muted: #9a8f77;
   --line: #2f2718;
+  --rot-1: #96762f;
+  --rot-2: #c39a44;
+  --rot-3: #e8c67e;
+  --rot-4: #8fa0ad;
+  --rot-5: #676f76;
 }
 :root[data-theme="carbon"] {           /* Carbon — greyscale + red signal */
   --accent: #ef4444; --warn: #eab308; --hard: #dc2626; --good: #4ade80;
   --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
+  --rot-1: #96762f;
+  --rot-2: #c39a44;
+  --rot-3: #e8c67e;
+  --rot-4: #8fa0ad;
+  --rot-5: #676f76;
 }
 :root[data-theme="slate"] {            /* Slate — cool gunmetal + crimson */
   --accent: #e5484d; --warn: #d29922; --hard: #da3633; --good: #3fb950;
   --bg: #0d1117; --card: #161b22; --card2: #1e252e; --text: #eaeef4; --muted: #8a97a6; --line: #2a323c;
+  --rot-1: #96762f;
+  --rot-2: #c39a44;
+  --rot-3: #e8c67e;
+  --rot-4: #8fa0ad;
+  --rot-5: #676f76;
 }
 :root[data-theme="system"] {           /* System — follows OS; light by default, dark below */
   --accent: #c81e1e; --warn: #b8860b; --hard: #a51111; --good: #1a8f43;
   --bg: #f5f5f7; --card: #ffffff; --card2: #ececee; --text: #1a1a1c; --muted: #66666e; --line: #d9d9de;
+  --rot-1: #cfa94f;
+  --rot-2: #9c7526;
+  --rot-3: #634c14;
+  --rot-4: #5f7080;
+  --rot-5: #8a9199;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
     --accent: #ef4444; --warn: #eab308; --hard: #f0554f; --good: #4ade80;
     --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
+
+    --rot-1: #96762f;
+    --rot-2: #c39a44;
+    --rot-3: #e8c67e;
+    --rot-4: #8fa0ad;
+    --rot-5: #676f76;
   }
 }
 :root {
@@ -175,6 +201,41 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .chart .ann { fill: var(--text); font-size: 9px; }
 /* Volume bars sit behind the load lines on their own right-hand scale. */
 .chart .vol-bar { opacity: .28; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .count-bar { fill: var(--accent); opacity: .85; }
+.chart .stack-seg { opacity: .9; }
+
+/* Chart wrapper: positioning context for the hover tooltip. */
+.chart-wrap, .mini { position: relative; }
+.chart-tip {
+  position: absolute; top: 0; transform: translate(-50%, -100%);
+  background: var(--card2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 8px; font-size: 11.5px; line-height: 1.35;
+  white-space: nowrap; pointer-events: none; z-index: 5;
+  box-shadow: 0 4px 14px rgba(0,0,0,.45);
+}
+.chart-tip b { font-variant-numeric: tabular-nums; }
+
+/* Small multiples: one panel per lift, each with its own y-domain. */
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; margin: 8px 0; }
+.mini { background: var(--card2); border-radius: 12px; padding: 9px 10px 7px; }
+.mini-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.mini-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Proportional figures: a standalone panel value never aligns down a column. */
+.mini-value { font-size: 15px; font-weight: 700; flex: none; }
+.mini-plot { margin-top: 4px; }
+.mini-plot .mini-line { stroke-width: 2; }
+.mini-trend { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.mini-trend.up { color: var(--good); }
+
+/* Table twin — every chart's value is reachable without hovering. */
+.chart-table { margin: 8px 0 2px; }
+.chart-table summary { font-size: 12px; color: var(--muted); cursor: pointer; padding: 4px 2px; }
+.chart-table table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+.chart-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.chart-table td { padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.chart-table tr:last-child td { border-bottom: 0; }
 
 /* rest timer bar */
 .rest-bar { background: var(--card); border-radius: 14px; padding: 12px 16px; margin: 8px 0; position: sticky; top: calc(var(--safe-top) + 52px); z-index: 8; }

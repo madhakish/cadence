@@ -217,6 +217,24 @@ and stays main.
 > A few light squats added to an upper day were charted as main and pulled the
 > squat progression down to a weight never worked as a main lift.
 
+### INV-CHART-ORDINAL-ROTATION
+*platforms: web*
+
+Rotation colours are an **ordinal ramp**: one hue, monotone lightness, R1 → R3
+climbing as intensity climbs, with the deload and untracked buckets held outside
+the ramp by hue. No rotation ever wears a reserved status colour, and rotation
+identity is always also named in the legend, never carried by colour alone.
+
+> The palette was green → yellow → red → grey, which failed twice. Those are the
+> app's own `--good`/`--warn`/`--hard` tokens, so the Peak rotation wore the same
+> red that means a hard stop in the logger — the reader has to hold two opposite
+> meanings for one colour. And R1 vs R3 measured **ΔE 5.8** under deuteranopia
+> (OKLab ×100), below the ΔE 6 floor, so ~8% of men could not separate the two
+> most important lines in the chart — with no secondary encoding between them,
+> since both are solid and same-role. The replacement ramp measures 12.2
+> all-pairs. Rotations are ordered, so a ramp is also the correct *form*: the
+> reader sees the sequence in the colour instead of decoding four unrelated hues.
+
 ### INV-VOLUME-KEEPS-ITS-OWN-SCALE
 *platforms: web*
 
