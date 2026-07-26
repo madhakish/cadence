@@ -53,6 +53,8 @@ section that matches what you're trying to do.
   5/3/1, conjugate) and how they initialize from your history
 - [Backup schema](reference/backup-schema.md) — versioning, session state,
   cross-platform program linkage, and compatibility rules
+- [Program file](reference/program-file.md) — moving a single program in and
+  out of the app on its own, separately from a backup
 
 ## Explanation — why it works this way
 

@@ -5,6 +5,7 @@ import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
 import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate } from "../templates.js";
+import { exportProgramText, importProgramText, programFilename } from "../program-file.js";
 import { muscleProfile, muscleBlurb, figureSVG } from "../anatomy.js";
 import { Sessions } from "../db.js";
 
@@ -123,6 +124,9 @@ export async function render(host) {
         await createProgramFromTemplate(t);
         ui.nav.refresh();
       } })),
+      // A third source alongside the built-in styles and a blank program.
+      // Adds one program and touches nothing else — not the backup importer.
+      { label: "From a file… — a program exported from Cadence", onClick: () => importProgram() },
       { label: "Blank program", onClick: async () => {
         await Programs.save({ name: `Program ${programs.length + 1}`, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, roundingLb: 5, isActive: programs.length === 0, days: [] });
         ui.nav.refresh();
@@ -444,6 +448,12 @@ async function programEditor(p) {
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add day", onClick: async () => {
           p.days.push({ name: `Day ${p.days.length + 1}`, order: p.days.length, lifts: [], accessories: [] });
           await Programs.save(p); draw();
+        } }));
+        // The plan, not a snapshot: no stall counters, no stashed peak grade,
+        // no wave position, no slot ids. Those are this lifter's state, not
+        // properties of the program.
+        body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Export program", onClick: () => {
+          ui.download(programFilename(p), exportProgramText(p), "application/json");
         } }));
         body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Duplicate program", onClick: async () => {
           const all = await Programs.all();
@@ -866,6 +876,39 @@ function importData() {
   ui.sheet({ title: "Import JSON backup", build: (c, api) => {
     c.append(ui.h("div", { class: "muted", text: "This replaces everything the backup contains: sessions, bodyweight, protein, check-ins, milestones, programs, lift progression, gyms (incl. barcode + plates), the exercise library, and settings. Data missing from the backup is left untouched." }));
     c.append(ui.field("Backup file", file));
+    c.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Close", onClick: () => api.close() }));
+  } });
+}
+
+/// Import a single program. Deliberately separate from importData: this adds
+/// one program, never replaces a domain, and needs no checkpoint because a
+/// file that fails validation or names an unknown exercise changes nothing.
+function importProgram() {
+  const file = ui.h("input", { type: "file", accept: "application/json,.json" });
+  file.addEventListener("change", () => {
+    const f = file.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = async () => {
+      try {
+        const report = await importProgramText(r.result);
+        ui.toast([
+          `${report.action === "created" ? "Created" : "Updated"} ${report.name} — `
+          + `${report.days} day${report.days === 1 ? "" : "s"}, ${report.lifts} lift${report.lifts === 1 ? "" : "s"}, `
+          + `${report.accessories} accessor${report.accessories === 1 ? "y" : "ies"}.`,
+          ...report.warnings,
+        ].join(" "));
+        ui.nav.refresh();
+      } catch (error) {
+        console.error("Cadence program import failed", error);
+        ui.toast(`Import failed: ${error?.message || error}`);
+      }
+    };
+    r.onerror = () => ui.toast(`Import failed: ${r.error?.message || "couldn't read the file"}`);
+    r.readAsText(f);
+  });
+  ui.sheet({ title: "Import a program", build: (c, api) => {
+    c.append(ui.h("div", { class: "muted", text: "Adds one program. Sessions, bodyweight, milestones, gyms, and settings are left alone, and an existing program is never overwritten. Every exercise the file names has to already be in your library." }));
+    c.append(ui.field("Program file", file));
     c.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Close", onClick: () => api.close() }));
   } });
 }

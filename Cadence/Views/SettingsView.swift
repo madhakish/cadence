@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var exportJSON: Data?
     @State private var exportCSV: Data?
     @State private var showImporter = false
+    @State private var showProgramImporter = false
     @State private var importAlert: String?
     @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
     @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
@@ -178,6 +179,15 @@ struct SettingsView: View {
                         } label: {
                             Text("Blank program")
                         }
+                        // A third source alongside the built-in styles and a
+                        // blank program. Adds one program and touches nothing
+                        // else — this is NOT the backup importer.
+                        Button {
+                            showProgramImporter = true
+                        } label: {
+                            Text("From a file…")
+                            Text("A program exported from Cadence")
+                        }
                     } label: {
                         Label("Add program", systemImage: "plus")
                     }
@@ -275,6 +285,9 @@ struct SettingsView: View {
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 importAlert = restore(from: result)
             }
+            .fileImporter(isPresented: $showProgramImporter, allowedContentTypes: [.json]) { result in
+                importAlert = importProgram(from: result)
+            }
             .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } })) {
                 Button("OK") { importAlert = nil }
             } message: {
@@ -302,6 +315,27 @@ struct SettingsView: View {
                 // steppers dead in the meantime.
                 try Seeder.syncLibrary(context: context)
                 return "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+            } catch {
+                return error.localizedDescription
+            }
+        }
+    }
+
+    /// Apply a program file. Unlike `restore`, this needs no checkpoint: the
+    /// import is additive, writes only the program tree, and changes nothing
+    /// at all if the file fails validation or names an exercise the library
+    /// doesn't have.
+    private func importProgram(from result: Result<URL, Error>) -> String {
+        switch result {
+        case .failure(let err):
+            return err.localizedDescription
+        case .success(let url):
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                let report = try ProgramImportService.load(data, into: context)
+                return ([report.summary] + report.warnings).joined(separator: "\n\n")
             } catch {
                 return error.localizedDescription
             }
@@ -675,6 +709,24 @@ struct ProgramEditorView: View {
                 }
             }
             Section {
+                // The plan, not a snapshot: no stall counters, no stashed peak
+                // grade, no wave position, no slot ids. Those are this
+                // lifter's state, not properties of the program, and they are
+                // actively misleading on someone else's device. Re-importing
+                // this file makes a fresh copy rather than resuming this one.
+                // Fails closed: if the program somehow can't be encoded the
+                // button is absent rather than sharing an empty file.
+                if let data = try? ProgramExportService.jsonData(for: program) {
+                    ShareLink(
+                        item: TransferableFile(
+                            data: data,
+                            filename: ProgramExportService.filename(for: program)
+                        ),
+                        preview: SharePreview(ProgramExportService.filename(for: program))
+                    ) {
+                        Label("Export program", systemImage: "square.and.arrow.up")
+                    }
+                }
                 Button {
                     cloneProgram()
                 } label: {
