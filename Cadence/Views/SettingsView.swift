@@ -939,6 +939,38 @@ struct ProgramDayEditorView: View {
     }
 }
 
+/// Opens the exercise detail from a program-editor row.
+///
+/// A `NavigationLink` is what the day view uses and it works there, because
+/// those rows hold nothing but text. A program-editor row is packed with
+/// Pickers, Steppers and Toggles, and in a Form row full of controls a
+/// `.plain`-styled NavigationLink stops taking taps — the proof is in the same
+/// HStack, where the `.borderless` Remove button next to it kept working the
+/// whole time. So this uses the style that demonstrably survives that row, and
+/// presents the detail as a sheet, matching the exercise picker one level up.
+private struct ExerciseDetailButton: View {
+    let name: String
+    @State private var showing = false
+
+    var body: some View {
+        Button { showing = true } label: {
+            Text(name).font(.headline)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityHint("Shows muscles worked, history, and which programs use \(name)")
+        .sheet(isPresented: $showing) {
+            NavigationStack {
+                ExerciseDetailByNameView(name: name)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showing = false }
+                        }
+                    }
+            }
+        }
+    }
+}
+
 private struct ProgramLiftRow: View {
     @Query private var settingsList: [AppSettings]
     @Query private var exercises: [Exercise]
@@ -956,12 +988,7 @@ private struct ProgramLiftRow: View {
             HStack {
                 // Tapping the name opens the exercise detail (muscles worked,
                 // history, program membership).
-                NavigationLink {
-                    ExerciseDetailByNameView(name: lift.exerciseName)
-                } label: {
-                    Text(lift.exerciseName).font(.headline)
-                }
-                .buttonStyle(.plain)
+                ExerciseDetailButton(name: lift.exerciseName)
                 Spacer()
                 Button(role: .destructive, action: onRemove) {
                     Image(systemName: "trash")
@@ -1046,12 +1073,7 @@ private struct ProgramAccessoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                NavigationLink {
-                    ExerciseDetailByNameView(name: accessory.exerciseName)
-                } label: {
-                    Text(accessory.exerciseName).font(.headline)
-                }
-                .buttonStyle(.plain)
+                ExerciseDetailButton(name: accessory.exerciseName)
                 Spacer()
                 Button(role: .destructive, action: onRemove) {
                     Image(systemName: "trash")
