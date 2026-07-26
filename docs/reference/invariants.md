@@ -147,6 +147,20 @@ to; renumbering would strand those sessions and misattribute their work.
 `nextDayIndex` names a day's **order**, so it is validated as a member of the
 day orders — never range-checked against the day count.
 
+### INV-SLOT-ID-IS-UNIQUE
+*platforms: core*
+
+A slot id is never live on two programs at once. An import that would adopt an
+id another program already holds is refused, naming the id and the holder —
+never silently re-minted.
+
+> A slot id is what banked sessions point at through `programSlotID`. Two live
+> slots sharing one makes that history permanently ambiguous, and nothing
+> repairs it: the launch-time repair scopes its duplicate detection to a single
+> program. Re-minting instead would be worse than refusing — identity
+> preservation is opt-in, so the lifter asked for *those* ids, and a silent
+> re-mint would hand back something that looks preserved but is not.
+
 ---
 
 ## Session lifecycle

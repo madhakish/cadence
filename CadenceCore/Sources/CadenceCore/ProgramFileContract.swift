@@ -247,6 +247,36 @@ public enum ProgramFileContract {
         }
     }
 
+    // MARK: - Slot identity
+
+    /// Every slot id the file carries, lifts and accessories, in document
+    /// order. Slots without an id contribute nothing — a plan-only file has
+    /// none at all.
+    public static func slotIDs(of program: Program) -> [String] {
+        program.days.flatMap { day in
+            day.lifts.compactMap(\.id) + day.accessories.compactMap(\.id)
+        }
+    }
+
+    /// The file's slot ids that are ALREADY live somewhere else in the store.
+    ///
+    /// `validate` enforces slot-id uniqueness *within* the file, but nothing
+    /// there can see the store. An identity-preserving import adopts these ids
+    /// verbatim, so without this check two live slots can end up sharing one —
+    /// and `programSlotID` is what banked sessions point at, so the ambiguity
+    /// is permanent. Nothing repairs it afterwards either: the launch-time
+    /// repair in Seeder scopes its duplicate detection to a single program.
+    ///
+    /// The caller decides what counts as "elsewhere". On update-in-place the
+    /// program being replaced must be excluded — its own ids are legitimately
+    /// being reused.
+    ///
+    /// Sorted and deduplicated so the error text is stable. Empty is success.
+    /// Mirrored 1:1 in web/app/js/program-file.js `collidingSlotIDs`.
+    public static func collidingSlotIDs(_ program: Program, liveElsewhere: Set<String>) -> [String] {
+        Array(Set(slotIDs(of: program)).intersection(liveElsewhere)).sorted()
+    }
+
     // MARK: - Validation
 
     public enum ValidationError: Error, Equatable, CustomStringConvertible {

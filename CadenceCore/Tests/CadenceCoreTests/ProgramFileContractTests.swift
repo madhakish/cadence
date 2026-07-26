@@ -357,6 +357,43 @@ final class ProgramFileContractTests: XCTestCase {
         assertRejects(payload, "week and day index without cycle")
     }
 
+    // MARK: - Slot identity
+
+    /// [INV-SLOT-ID-IS-UNIQUE] `validate` enforces slot-id uniqueness within
+    /// the file, but nothing there can see the store. An identity-preserving
+    /// import adopts these ids verbatim, and once two live slots share one the
+    /// banked sessions pointing at it are permanently ambiguous — the
+    /// launch-time repair scopes its duplicate detection to a single program,
+    /// so nothing cleans it up afterwards.
+    func testCollidingSlotIDsFindsIdsAlreadyLiveElsewhere() {
+        let a = "aaaaaaaa-0000-4000-8000-000000000001"
+        let b = "bbbbbbbb-0000-4000-8000-000000000002"
+        func file(_ liftID: String, _ accessoryID: String) -> ProgramFileContract.Program {
+            var payload = program()
+            payload.days[0].lifts[0].id = liftID
+            payload.days[0].accessories[0].id = accessoryID
+            return payload
+        }
+
+        XCTAssertEqual(ProgramFileContract.slotIDs(of: file(a, b)), [a, b],
+                       "[INV-SLOT-ID-IS-UNIQUE] lift and accessory ids, in document order")
+        XCTAssertTrue(ProgramFileContract.slotIDs(of: program()).isEmpty,
+                      "[INV-SLOT-ID-IS-UNIQUE] a plan-only file carries no slot ids")
+
+        XCTAssertEqual(ProgramFileContract.collidingSlotIDs(file(a, b), liveElsewhere: []), [],
+                       "[INV-SLOT-ID-IS-UNIQUE] disjoint ids do not collide")
+        XCTAssertEqual(ProgramFileContract.collidingSlotIDs(file(a, b), liveElsewhere: [a]), [a],
+                       "[INV-SLOT-ID-IS-UNIQUE] a colliding lift id is reported")
+        XCTAssertEqual(ProgramFileContract.collidingSlotIDs(file(a, b), liveElsewhere: [b]), [b],
+                       "[INV-SLOT-ID-IS-UNIQUE] a colliding accessory id is reported")
+        XCTAssertEqual(ProgramFileContract.collidingSlotIDs(file(a, a), liveElsewhere: [a]), [a],
+                       "[INV-SLOT-ID-IS-UNIQUE] one id repeated in the file is reported once")
+        XCTAssertEqual(ProgramFileContract.collidingSlotIDs(file(b, a), liveElsewhere: [a, b]), [a, b],
+                       "[INV-SLOT-ID-IS-UNIQUE] collisions are sorted, so the error text is stable")
+        XCTAssertEqual(ProgramFileContract.collidingSlotIDs(file(a, b), liveElsewhere: ["unrelated"]), [],
+                       "[INV-SLOT-ID-IS-UNIQUE] unrelated live ids are not collisions")
+    }
+
     // MARK: - Encoding
 
     /// Deterministic output: sorted keys, no timestamp anywhere in the payload.

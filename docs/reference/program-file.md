@@ -111,8 +111,16 @@ untouched any field the program record holds that this format does not carry —
 `reliableHistoryStart`, the "first trustworthy date" choice, is the one that
 matters today.
 
-Two slots sharing an id is rejected. A duplicate would make progression
-advance the wrong lift.
+Two slots sharing an id is rejected — within the file, and against the store.
+An identity-preserving import that would adopt an id another program already
+holds is refused, naming the id and the program holding it. The ids are never
+silently re-minted: identity preservation is opt-in, so a partial re-mint would
+hand back something that looks preserved but is not.
+
+A duplicate would make progression advance the wrong lift, and nothing repairs
+it afterwards — the launch-time repair scopes its duplicate detection to a
+single program. Updating a program in place is not a collision with itself; its
+own slots are the ones being replaced.
 
 ## Determinism
 

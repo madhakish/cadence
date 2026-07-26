@@ -26,6 +26,9 @@ enum ProgramImportService {
         case unsupportedSchemaVersion(Int)
         case invalidData(String)
         case unresolvedExercises([String])
+        /// Slot ids the file wants to keep that are already live on another
+        /// program: `(slotID, owningProgramName)`.
+        case slotIdentityCollision([(String, String)])
         case writeFailed
 
         var errorDescription: String? {
@@ -41,6 +44,13 @@ enum ProgramImportService {
                 let subject = names.count == 1 ? "Exercise \(list) is" : "Exercises \(list) are"
                 return "Program import failed: \(subject) not in your library. "
                     + "Add it there first, or rename the slot to a name or alias you already have. Nothing was changed."
+            case .slotIdentityCollision(let collisions):
+                let named = collisions
+                    .map { "\"\($0.0)\" (already used by \"\($0.1)\")" }
+                    .joined(separator: ", ")
+                return "Program import failed: slot \(collisions.count == 1 ? "id" : "ids") \(named). "
+                    + "Importing with identity preserved would give two slots the same history linkage. "
+                    + "Nothing was changed."
             case .writeFailed:
                 return "Couldn't import the program — nothing was changed."
             }
@@ -168,6 +178,26 @@ enum ProgramImportService {
         let existing = options.preserveIdentity
             ? payload.id.flatMap { id in existingPrograms.first { $0.id == id } }
             : nil
+
+        // [INV-SLOT-ID-IS-UNIQUE] Adopting the file's slot ids must not give
+        // two live slots the same id. Only reachable through preserveIdentity —
+        // the additive path re-mints every id — and the program being updated
+        // is excluded, since its own slots are the ones being replaced.
+        if options.preserveIdentity {
+            var owners: [String: String] = [:]
+            for other in existingPrograms where other.id != existing?.id {
+                for day in other.orderedDays {
+                    let ids = day.orderedLifts.map(\.id) + day.orderedAccessories.map(\.id)
+                    for id in ids where owners[id] == nil {
+                        owners[id] = other.name
+                    }
+                }
+            }
+            let collisions = ProgramFileContract.collidingSlotIDs(payload, liveElsewhere: Set(owners.keys))
+            if !collisions.isEmpty {
+                throw ImportError.slotIdentityCollision(collisions.map { ($0, owners[$0] ?? "another program") })
+            }
+        }
 
         do {
             let report = try apply(payload, resolved: resolved, gated: gated, existing: existing,

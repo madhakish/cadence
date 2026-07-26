@@ -442,6 +442,91 @@ const otherDomains = async () => ({
 }
 
 // ---------------------------------------------------------------------------
+// [INV-SLOT-ID-IS-UNIQUE] An identity-preserving import must not give two live
+// slots the same id. validateProgramFile enforces uniqueness within the file,
+// but nothing there can see the store — and once two slots share an id, the
+// banked sessions pointing at it are permanently ambiguous. Nothing repairs it
+// afterwards: the launch-time repair scopes duplicate detection to one program.
+// ---------------------------------------------------------------------------
+{
+  // The pure helpers, mirrored by CadenceCore ProgramFileContract.
+  const withIDs = (liftID, accessoryID) => ({
+    days: [{
+      name: "A", order: 0,
+      lifts: [{ exerciseName: "Back Squat", id: liftID }],
+      accessories: [{ exerciseName: "Plank", id: accessoryID }],
+    }],
+  });
+  const A = "aaaaaaaa-0000-4000-8000-000000000001";
+  const B = "bbbbbbbb-0000-4000-8000-000000000002";
+
+  ok(pf.slotIDsOf(withIDs(A, B)).join() === `${A},${B}`,
+    "[INV-SLOT-ID-IS-UNIQUE] slotIDsOf reads lift and accessory ids in document order");
+  ok(pf.slotIDsOf({ days: [{ name: "A", order: 0, lifts: [{ exerciseName: "x" }], accessories: [] }] }).length === 0,
+    "[INV-SLOT-ID-IS-UNIQUE] a plan-only file carries no slot ids");
+  ok(pf.collidingSlotIDs(withIDs(A, B), new Set()).length === 0,
+    "[INV-SLOT-ID-IS-UNIQUE] disjoint ids do not collide");
+  ok(pf.collidingSlotIDs(withIDs(A, B), new Set([A])).join() === A,
+    "[INV-SLOT-ID-IS-UNIQUE] a colliding lift id is reported");
+  ok(pf.collidingSlotIDs(withIDs(A, B), new Set([B])).join() === B,
+    "[INV-SLOT-ID-IS-UNIQUE] a colliding accessory id is reported");
+  ok(pf.collidingSlotIDs(withIDs(A, A), new Set([A])).length === 1,
+    "[INV-SLOT-ID-IS-UNIQUE] one id repeated in the file is reported once");
+  ok(pf.collidingSlotIDs(withIDs(B, A), new Set([A, B])).join() === `${A},${B}`,
+    "[INV-SLOT-ID-IS-UNIQUE] collisions are sorted, so the error text is stable");
+
+  // End to end: hand-editing a file to keep its slot ids while changing the
+  // program id is the reachable path, and hand-editing is what this format is
+  // for.
+  const day = () => ({
+    name: "A", order: 0,
+    lifts: [{ exerciseName: "Back Squat", role: "main", baseWeightLb: 135, estimatedMaxLb: 185 }],
+    accessories: [{
+      exerciseName: "Plank", order: 0, sets: 3, minReps: 8, maxReps: 12,
+      currentReps: 8, weightLb: 0, incrementLb: 0,
+    }],
+  });
+  const sourceID = await db.Programs.save({
+    name: "Fixture Collision Source", focus: "strength", cycleNumber: 1, currentWeek: 1,
+    nextDayIndex: 0, roundingLb: 5, isActive: false, days: [day()],
+  });
+  const source = (await db.Programs.all()).find((p) => p.id === sourceID);
+  const liveLiftID = source.days[0].lifts[0].id;
+
+  const before = await otherDomains();
+  const programsBefore = (await db.Programs.all()).length;
+
+  const forked = JSON.parse(pf.exportProgramText(source, { includeIdentity: true }));
+  forked.program.id = "cccccccc-0000-4000-8000-00000000000c";
+  forked.program.name = "Fixture Collision Fork";
+
+  const error = await threw(() => pf.importProgramFile(forked, { preserveIdentity: true }));
+  ok(error != null, "[INV-SLOT-ID-IS-UNIQUE] an identity import reusing a live slot id is refused");
+  ok(error?.message.includes(liveLiftID),
+    `[INV-SLOT-ID-IS-UNIQUE] the error names the colliding slot id (got: ${error?.message})`);
+  ok(/Fixture Collision Source/.test(error?.message || ""),
+    "[INV-SLOT-ID-IS-UNIQUE] the error names the program already holding it");
+  ok(/Nothing was changed/.test(error?.message || ""), "the error says nothing changed");
+  ok((await db.Programs.all()).length === programsBefore, "no program was created");
+  ok(JSON.stringify(await otherDomains()) === JSON.stringify(before), "no other domain changed");
+
+  // The obvious over-correction: updating a program in place reuses its OWN
+  // slot ids by definition, and must still work.
+  const same = JSON.parse(pf.exportProgramText(source, { includeIdentity: true }));
+  const updated = await pf.importProgramFile(same, { preserveIdentity: true });
+  ok(updated.action === "updated",
+    "[INV-SLOT-ID-IS-UNIQUE] a program's own slot ids are not a collision with itself");
+  const reloaded = (await db.Programs.all()).find((p) => p.uuid === source.uuid);
+  ok(reloaded.days[0].lifts[0].id === liveLiftID, "update-in-place kept the slot id");
+
+  // And the additive path is unaffected: it re-mints, so it cannot collide.
+  const copied = await pf.importProgramFile(forked);
+  ok(copied.action === "created", "the additive import of the same file still succeeds");
+  const copy = (await db.Programs.all()).find((p) => p.uuid === copied.programId);
+  ok(copy.days[0].lifts[0].id !== liveLiftID, "the additive import minted a fresh slot id");
+}
+
+// ---------------------------------------------------------------------------
 // Shared fixture — the same file Swift's ProgramFileContractTests decodes and
 // re-encodes. Either mirror drifting fails its own CI job.
 // ---------------------------------------------------------------------------

@@ -398,6 +398,39 @@ export function validateProgramFile(file) {
 }
 
 // ---------------------------------------------------------------------------
+// Slot identity
+// ---------------------------------------------------------------------------
+
+/// Every slot id the file carries, lifts and accessories, in document order.
+/// Slots without an id contribute nothing — a plan-only file has none at all.
+/// Mirrored 1:1 in CadenceCore ProgramFileContract.slotIDs(of:).
+export function slotIDsOf(program) {
+  return (program.days || []).flatMap((day) => [
+    ...(day.lifts || []).map((l) => l.id),
+    ...(day.accessories || []).map((a) => a.id),
+  ].filter((id) => id != null));
+}
+
+/// The file's slot ids that are ALREADY live somewhere else in the store.
+///
+/// validateProgramFile enforces slot-id uniqueness *within* the file, but
+/// nothing there can see the store. An identity-preserving import adopts these
+/// ids verbatim, so without this check two live slots can end up sharing one —
+/// and programSlotId is what banked sessions point at, so the ambiguity is
+/// permanent. Nothing repairs it afterwards either.
+///
+/// The caller decides what counts as "elsewhere": on update-in-place the
+/// program being replaced must be excluded, since its own ids are legitimately
+/// being reused.
+///
+/// Sorted and deduplicated so the error text is stable. Empty is success.
+/// Mirrored 1:1 in CadenceCore ProgramFileContract.collidingSlotIDs.
+export function collidingSlotIDs(program, liveElsewhere) {
+  const live = liveElsewhere instanceof Set ? liveElsewhere : new Set(liveElsewhere);
+  return [...new Set(slotIDsOf(program).filter((id) => live.has(id)))].sort();
+}
+
+// ---------------------------------------------------------------------------
 // Exercise resolution
 // ---------------------------------------------------------------------------
 
@@ -509,6 +542,29 @@ export async function importProgramFile(file, { preserveIdentity = false } = {})
 
   const keepIdentity = preserveIdentity;
   const keepState = PROGRAM_STATE_FIELDS.every(([key]) => program[key] !== undefined);
+
+  // [INV-SLOT-ID-IS-UNIQUE] Adopting the file's slot ids must not give two live
+  // slots the same id. Only reachable through preserveIdentity — the additive
+  // path re-mints every id — and the program being updated is excluded, since
+  // its own slots are the ones being replaced.
+  if (keepIdentity) {
+    const owners = new Map();
+    for (const other of programs) {
+      if (other === existing) continue;
+      for (const id of slotIDsOf(other)) if (!owners.has(id)) owners.set(id, other.name);
+    }
+    const collisions = collidingSlotIDs(program, new Set(owners.keys()));
+    if (collisions.length) {
+      const named = collisions
+        .map((id) => `${JSON.stringify(id)} (already used by ${JSON.stringify(owners.get(id))})`)
+        .join(", ");
+      throw new Error(
+        `Program import failed: slot ${collisions.length === 1 ? "id" : "ids"} ${named}. `
+        + "Importing with identity preserved would give two slots the same history linkage. "
+        + "Nothing was changed."
+      );
+    }
+  }
 
   // A rename in the file is honoured on update, but still has to stay unique —
   // two programs sharing a name is ambiguous everywhere, and the native mirror
