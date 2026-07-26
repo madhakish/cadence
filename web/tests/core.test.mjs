@@ -581,6 +581,38 @@ pres = C.advanceCycleLift(liftState(), cleanPerf, "maintain", 5);
 eq(pres.state.baseWeightLb, 175, "maintain holds weight on success");
 eq(pres.state.stallCount, 0, "maintain success resets stall");
 
+// offsetWave's movement-aware defaults live in one place now. They used to be
+// resolved in sessionPrescription only, so a squat reaching planForStyle
+// directly got the upper-body 10/15 while the native side used 25/33.
+{
+  const lower = C.resolvedOffsets(0, 0, "squat");
+  ok(lower.loadOffsetLb === 25 && lower.peakOffsetLb === 33, "lower-body offsets default to 25/33");
+  const hinge = C.resolvedOffsets(0, 0, "hinge");
+  ok(hinge.loadOffsetLb === 25 && hinge.peakOffsetLb === 33, "hinge counts as lower body");
+  const upper = C.resolvedOffsets(0, 0, "press");
+  ok(upper.loadOffsetLb === 10 && upper.peakOffsetLb === 15, "everything else defaults to 10/15");
+  const unknown = C.resolvedOffsets(0, 0, null);
+  ok(unknown.loadOffsetLb === 10 && unknown.peakOffsetLb === 15, "an unknown group is treated as upper body");
+  const explicit = C.resolvedOffsets(40, 60, "squat");
+  ok(explicit.loadOffsetLb === 40 && explicit.peakOffsetLb === 60, "an explicit offset stays user-owned");
+  const partial = C.resolvedOffsets(40, 0, "squat");
+  ok(partial.loadOffsetLb === 40 && partial.peakOffsetLb === 33, "each offset defaults independently");
+  // The bug: planForStyle must now agree with sessionPrescription for a squat.
+  const viaStyle = C.planForStyle({ baseWeightLb: 200, nextPhase: 3, cycleNumber: 1 }, 5, "offsetWave", {}, "squat");
+  ok(viaStyle.weightLb === 235, `planForStyle applies the lower-body peak offset (got ${viaStyle.weightLb})`);
+}
+
+// A peak single's seed is a training max, so it follows the program's focus.
+{
+  const state = { baseWeightLb: 100, nextPhase: 3, cycleNumber: 1 };
+  const cfg = { peakSingleEnabled: true, lastPeakSingleLb: 0, phasePrimerEnabled: false };
+  const strength = C.sessionPrescription(state, 5, "barbell", "press", "main", "strength", "wave", cfg, 200);
+  const hyper = C.sessionPrescription(state, 5, "barbell", "press", "main", "hypertrophy", "wave", cfg, 200);
+  const single = (p) => p.blocks.find((b) => b.kind === "topSingle")?.weightLb;
+  ok(single(strength) === 180, `strength seeds the single at 0.90 of e1RM (got ${single(strength)})`);
+  ok(single(hyper) === 155, `hypertrophy seeds it at its own 0.78 ceiling (got ${single(hyper)})`);
+}
+
 // accessory double progression
 let acc = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 50, incrementLb: 5, stallCount: 0 };
 let ac = C.advanceAccessory(acc, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });

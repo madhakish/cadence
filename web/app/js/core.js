@@ -484,14 +484,34 @@ export function planFor(state, roundingLb = DEFAULT_ROUNDING_LB) {
   };
 }
 
+// Movement-aware offset defaults for offsetWave. A stored zero means "use the
+// default"; an explicit value stays user-owned. Absolute pounds on purpose —
+// that is what offsetWave is for, and they are deliberately not proportional.
+//
+// Previously resolved in sessionPrescription only, so a squat reaching
+// planForStyle directly silently got the upper-body 10/15 while the native side
+// used 25/33. Values unchanged; only the divergence is fixed.
+// Mirrored 1:1 in CadenceCore ProgramEngine.resolvedOffsets.
+export function resolvedOffsets(loadOffsetLb, peakOffsetLb, movementGroup) {
+  const lower = ["squat", "hinge"].includes(movementGroup);
+  return {
+    loadOffsetLb: loadOffsetLb > 0 ? loadOffsetLb : (lower ? 25 : 10),
+    peakOffsetLb: peakOffsetLb > 0 ? peakOffsetLb : (lower ? 33 : 15),
+  };
+}
+
 export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave", configuration = {}, movementGroup = null) {
   const p = state.nextPhase;
   const config = {
-    loadOffsetLb: 10, peakOffsetLb: 15, deloadMultiplier: 0.775,
+    // Zero is the stored sentinel for "use the movement-aware default";
+    // resolvedOffsets below supplies it. Defaulting to 10/15 here would read as
+    // an explicit user choice and suppress the lower-body upgrade.
+    loadOffsetLb: 0, peakOffsetLb: 0, deloadMultiplier: 0.775,
     workingSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 5,
     peakSingleEnabled: false, lastPeakSingleLb: 0, peakSingleIncrementLb: 5,
     phasePrimerEnabled: true, ...configuration,
   };
+  Object.assign(config, resolvedOffsets(config.loadOffsetLb, config.peakOffsetLb, movementGroup));
   if (["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(style)) {
     // Sets-across at the slot's own base; the base moves per exposure
     // (advanceLinearLift), so the 4-week phase never shapes the weight.
@@ -586,9 +606,7 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
     peakSingleEnabled: false, lastPeakSingleLb: 0, peakSingleIncrementLb: 5,
     phasePrimerEnabled: true, ...configuration,
   };
-  const lower = ["squat", "hinge"].includes(movementGroup);
-  if (!(config.loadOffsetLb > 0)) config.loadOffsetLb = lower ? 25 : 10;
-  if (!(config.peakOffsetLb > 0)) config.peakOffsetLb = lower ? 33 : 15;
+  Object.assign(config, resolvedOffsets(config.loadOffsetLb, config.peakOffsetLb, movementGroup));
   const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
   const work = programPlanFor(state, programRoundingLb, exerciseType, movementGroup, role, focus, style, config);
   const step = programLoadStep(programRoundingLb, exerciseType);
@@ -599,8 +617,11 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
   }
   if (config.peakSingleEnabled && state.nextPhase === 3
     && style !== "technique" && !buildsOwnSessionShape(style)) {
+    // The seed is a training max, so it follows the program's focus rather
+    // than a hardcoded 0.90 — a hypertrophy program's ceiling is 0.78.
+    const tm = FOCUS[focus]?.tm > 0 ? FOCUS[focus].tm : 0.90;
     const seed = config.lastPeakSingleLb > 0
-      ? config.lastPeakSingleLb + config.peakSingleIncrementLb : estimatedMaxLb * 0.90;
+      ? config.lastPeakSingleLb + config.peakSingleIncrementLb : estimatedMaxLb * tm;
     const target = roundTo(seed, step);
     if (target > work.weightLb) blocks.push({ kind: "topSingle", weightLb: target, sets: 1, reps: 1 });
   }

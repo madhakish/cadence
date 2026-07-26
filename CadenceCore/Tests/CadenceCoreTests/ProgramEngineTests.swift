@@ -309,4 +309,43 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(PrescriptionStyle.dynamicEffort.defaultStartFraction, 0.50)
         XCTAssertEqual(PrescriptionStyle.wave.defaultStartFraction, 0)
     }
+
+    /// `offsetWave`'s movement-aware defaults live in one place so both clients
+    /// agree. The JS mirror used to resolve them in `sessionPrescription` only,
+    /// so a squat reaching `planForStyle` got the upper-body pair instead.
+    func testResolvedOffsetsAreMovementAwareAndRespectExplicitValues() {
+        func offsets(_ load: Double, _ peak: Double, _ group: String?) -> [Double] {
+            let r = ProgramEngine.resolvedOffsets(loadOffsetLb: load, peakOffsetLb: peak, movementGroup: group)
+            return [r.load, r.peak]
+        }
+        XCTAssertEqual(offsets(0, 0, "squat"), [25, 33], "lower body")
+        XCTAssertEqual(offsets(0, 0, "hinge"), [25, 33], "hinge counts as lower body")
+        XCTAssertEqual(offsets(0, 0, "press"), [10, 15], "everything else")
+        XCTAssertEqual(offsets(0, 0, nil), [10, 15], "an unknown group is treated as upper body")
+        XCTAssertEqual(offsets(40, 60, "squat"), [40, 60], "an explicit offset stays user-owned")
+        XCTAssertEqual(offsets(40, 0, "squat"), [40, 33], "each offset defaults independently")
+
+        // The behaviour the divergence broke: a squat's peak week.
+        let plan = ProgramEngine.plan(
+            for: CycleState(baseWeightLb: 200, nextPhase: .peak), roundingLb: 5, style: .offsetWave,
+            configuration: .init(loadOffsetLb: 25, peakOffsetLb: 33), movementGroup: "squat"
+        )
+        XCTAssertEqual(plan.weightLb, 235, accuracy: 1e-9)
+    }
+
+    /// A peak single seeds from a training max, so it follows the program's
+    /// focus rather than a hardcoded 0.90.
+    func testPeakSingleSeedFollowsTheProgramFocus() {
+        func single(_ focus: TrainingFocus) -> Double? {
+            ProgramEngine.sessionPrescription(
+                for: CycleState(baseWeightLb: 100, nextPhase: .peak),
+                programRoundingLb: 5, exerciseType: "barbell", movementGroup: "press",
+                role: .main, focus: focus, prescriptionStyle: .wave,
+                configuration: .init(peakSingleEnabled: true, phasePrimerEnabled: false),
+                estimatedMaxLb: 200
+            ).blocks.first { $0.kind == .topSingle }?.weightLb
+        }
+        XCTAssertEqual(single(.strength), 180, "strength seeds at its own 0.90 ceiling")
+        XCTAssertEqual(single(.hypertrophy), 155, "hypertrophy seeds at 0.78, not 0.90")
+    }
 }
