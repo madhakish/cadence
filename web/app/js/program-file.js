@@ -18,22 +18,18 @@
 //   2. Nothing is written until the whole file has been validated and every
 //      exercise resolved. A malformed or partially-resolvable file changes
 //      nothing.
-import { Exercises, Programs } from "./db.js";
+import { BACKUP_ENUMS, Exercises, Programs } from "./db.js";
 
 export const PROGRAM_FILE_KIND = "cadence.program";
 export const PROGRAM_SCHEMA_VERSION = 1;
 
-const FOCUSES = ["strength", "hypertrophy", "maintain"];
-const ROLES = ["main", "complementary"];
-const CONDITIONING_EFFORTS = ["easy", "interval", "mixed"];
-const WARMUP_POLICIES = ["automatic", "full", "short", "none"];
-
-// Prescription styles are owned by core; keep the list here narrow and
-// explicit rather than importing the whole module for one array.
-const PRESCRIPTIONS = [
-  "automatic", "wave", "repRange", "linearFives", "texasDay", "fiveThreeOne",
-  "maxEffort", "dynamicEffort",
-];
+// Allowed values come from the backup validator's table, not a second copy —
+// adding a prescription style there must not leave program files rejecting it.
+const FOCUSES = BACKUP_ENUMS.focuses;
+const ROLES = BACKUP_ENUMS.liftRoles;
+const CONDITIONING_EFFORTS = BACKUP_ENUMS.conditioningEfforts;
+const WARMUP_POLICIES = BACKUP_ENUMS.warmupPolicies;
+const PRESCRIPTIONS = BACKUP_ENUMS.prescriptions;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -192,11 +188,21 @@ export function exportProgramFile(program, { includeState = false, includeIdenti
   };
 }
 
+// Recursive key sort. Swift's JSONEncoder writes `.sortedKeys` (the idiom
+// ExportService already uses), so sorting here is what lets the same program
+// produce byte-identical files on both clients — and it makes output
+// independent of the order keys happen to sit in an IndexedDB record.
+const stable = (value) => {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((k) => [k, stable(value[k])]));
+  }
+  return value;
+};
+
 /// The file as text. Two spaces and no trailing newline, matching exportJSON.
-/// Key order comes from the field tables above, not from JSON.stringify's view
-/// of the source record, so the same program always produces the same bytes.
 export const exportProgramText = (program, options) =>
-  JSON.stringify(exportProgramFile(program, options), null, 2);
+  JSON.stringify(stable(exportProgramFile(program, options)), null, 2);
 
 export const programFilename = (program) =>
   `cadence-program-${String(program?.name || "program").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.json`;

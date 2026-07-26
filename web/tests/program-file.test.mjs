@@ -308,5 +308,57 @@ const otherDomains = async () => ({
   ok(stillShelved.isShelved === true, "importing did not clear the library's gate state");
 }
 
+// ---------------------------------------------------------------------------
+// Shared fixture — the same file Swift's ProgramFileContractTests decodes and
+// re-encodes. Either mirror drifting fails its own CI job.
+// ---------------------------------------------------------------------------
+{
+  const { readFileSync } = await import("node:fs");
+  const fixturePath = new URL("./fixtures/program-file.json", import.meta.url);
+  const onDisk = readFileSync(fixturePath, "utf8");
+  const fixture = JSON.parse(onDisk);
+
+  ok(fixture.kind === pf.PROGRAM_FILE_KIND, "the fixture carries the program-file discriminator");
+  ok(fixture.programSchemaVersion === pf.PROGRAM_SCHEMA_VERSION,
+    "the fixture is at the current program schema version");
+  ok(await threw(() => pf.validateProgramFile(fixture)) === null, "the fixture validates");
+
+  // Re-export the fixture's own program through the production writer: what
+  // the generator wrote must be what the exporter still produces.
+  const reexported = `${pf.exportProgramText(
+    { ...fixture.program, uuid: fixture.program.id },
+    { includeState: true, includeIdentity: true },
+  )}\n`;
+  ok(reexported === onDisk,
+    "the exporter still produces the committed fixture byte-for-byte (regenerate with tools/generate-program-file-fixture.mjs)");
+
+  // The fixture is deliberately the widest shape the contract allows.
+  const lifts = fixture.program.days.flatMap((d) => d.lifts);
+  const accessories = fixture.program.days.flatMap((d) => d.accessories);
+  ok(lifts.some((l) => l.pending), "the fixture exercises a stashed peak grade");
+  ok(lifts.some((l) => l.revertToExerciseName), "the fixture exercises a cycle-scoped swap marker");
+  ok(accessories.some((a) => a.incrementLb === 2.5), "the fixture exercises a fractional increment");
+  ok(accessories.some((a) => a.incrementLb === 0 && a.targetSeconds > 0),
+    "the fixture exercises a timed accessory, where a zero increment is correct");
+  ok(fixture.program.days.map((d) => d.order).join() === "0,2",
+    "the fixture keeps a non-contiguous day order, which must survive verbatim");
+
+  // And it must import cleanly into a library that has its exercises.
+  for (const name of [...lifts, ...accessories].map((s) => s.exerciseName)) {
+    if (!(await db.Exercises.byName(name))) {
+      await db.Exercises.save({
+        name, category: "Accessory", type: "dumbbell", group: "misc",
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
+  const fixtureReport = await pf.importProgramText(onDisk);
+  ok(fixtureReport.action === "created", "the fixture imports");
+  ok(fixtureReport.carriedState === true, "the fixture is recognised as carrying state");
+  const importedFixture = (await db.Programs.all()).find((p) => p.uuid === fixtureReport.programId);
+  ok(importedFixture.days.map((d) => d.order).join() === "0,2",
+    "the non-contiguous day order survived the import");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

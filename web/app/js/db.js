@@ -752,7 +752,10 @@ function normalizeSettings(s) {
     gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay === true };
 }
 
-const BACKUP_ENUMS = {
+// Exported so the program-file contract validates against the SAME allowed
+// values as the backup importer. A second hand-written copy of these lists is
+// a drift source: it goes stale the first time a prescription style is added.
+export const BACKUP_ENUMS = {
   units: ["lb", "kg"], unitDisplay: ["lbPrimary", "kgPrimary", "both"],
   themes: ["memento", "carbon", "slate", "system"],
   roles: ["main", "complementary", "accessory"], liftRoles: ["main", "complementary"],
