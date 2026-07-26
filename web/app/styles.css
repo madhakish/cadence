@@ -190,6 +190,9 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .gym-tag-hero { margin-top: 2px; }
 .flagbtn.on-clean { background: var(--good); color: #022; }
 .flagbtn.on-grindy, .flagbtn.on-wobble { background: var(--warn); color: #221c00; }
+/* Reps in reserve is an observation, not a verdict — it reads as set, not as
+   good or bad, so it takes the accent rather than the good/warn palette. */
+.flagbtn.on-rir { background: var(--accent); color: #041018; }
 .gym-img { width: 100%; background: #fff; border-radius: 12px; padding: 12px; }
 .annot { font-size: 12px; }
 

@@ -20,11 +20,14 @@ public struct SetSample: Hashable, Codable, Sendable {
 
 /// An auto-detected milestone. Tone: terse, coach-like. No confetti.
 public struct PREvent: Hashable, Codable, Sendable {
-    public enum Kind: String, Codable, Sendable {
+    public enum Kind: String, Codable, CaseIterable, Sendable {
         case heaviestSet
         case volumePR
         case firstScheme
-        case programNote   // adaptive-progression explanation (deload/ceiling), not a PR
+        /// More reps at a weight than ever before at that rep count. History
+        /// already rebuilt this table for a chart; nothing announced it.
+        case repPR
+        case programNote   // adaptive-progression explanation (deload), not a PR
     }
 
     public let kind: Kind
@@ -39,6 +42,10 @@ public struct PREvent: Hashable, Codable, Sendable {
 }
 
 public enum PRDetection {
+    /// Epley degrades past ten reps and "most reps at a weight" stops being a
+    /// strength claim, so rep PRs are only tracked inside that range.
+    public static let repPRRepCeiling = 10
+
     /// Total working volume (Σ weight × reps) of a set list.
     public static func volume(_ sets: [SetSample]) -> Double {
         sets.compactMap {
@@ -124,6 +131,39 @@ public enum PRDetection {
                 exercise: exercise,
                 label: "Volume PR — \(volumeLabel) total \(exercise.lowercased())"
             ))
+        }
+
+        // Rep PR: more weight at a rep count than ever before at that same rep
+        // count. History already rebuilt this exact table to draw a chart, so
+        // the record existed — nothing announced it when it happened, which is
+        // the whole value of a PR.
+        //
+        // Capped at `repPRRepCeiling`: past that, "most reps at a weight" is a
+        // conditioning result rather than a strength one, and the table fills
+        // with noise from long back-off sets.
+        //
+        // One event per exercise per session, chosen by Epley so a genuinely
+        // harder set wins over a longer easy one — the same ranking the cycle's
+        // strength sample uses.
+        var bestByReps: [Int: Double] = [:]
+        for set in comparableHistory where set.reps >= 1 && set.reps <= repPRRepCeiling {
+            bestByReps[set.reps] = Swift.max(bestByReps[set.reps] ?? 0, set.weightLb)
+        }
+        let beaten = comparableSession.filter { set in
+            guard set.reps >= 1, set.reps <= repPRRepCeiling else { return false }
+            // A rep count never trained before is a first, not a rep PR — the
+            // firstScheme event already speaks for that.
+            guard let prior = bestByReps[set.reps] else { return false }
+            return set.weightLb > prior + 1e-9
+        }
+        if let best = beaten.max(by: {
+            ProgramProgression.epleyE1RM(weightLb: $0.weightLb, reps: $0.reps)
+                < ProgramProgression.epleyE1RM(weightLb: $1.weightLb, reps: $1.reps)
+        }) {
+            let label = basis.supportsLoadPR
+                ? "Rep PR — \(weightLabel(best.weightLb)) × \(best.reps) \(exercise.lowercased())"
+                : "Rep PR — \(best.reps) reps \(exercise.lowercased())"
+            events.append(PREvent(kind: .repPR, exercise: exercise, label: label))
         }
 
         return events

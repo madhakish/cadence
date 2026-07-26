@@ -539,6 +539,57 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok((await db.Sessions.completed()).length === 11, "poisoned import did not clear sessions");
   ok((await db.Gyms.all()).length === gymsBefore.length, "poisoned import did not clear gyms");
 
+  // Schema 5 adds three values to enums the importer validates against
+  // whitelists: the amrap block, the repPR milestone, and the rir* flags. A v4
+  // bundle predates all three and has to keep restoring; a v5 bundle carrying
+  // all three has to round-trip.
+  {
+    const v4 = structuredClone(parsed);
+    v4.schemaVersion = 4;
+    for (const session of v4.sessions) for (const entry of session.exercises || []) {
+      for (const set of entry.sets || []) {
+        set.flags = (set.flags || []).filter((flag) => !C.SET_RIRS.includes(flag));
+        if (set.prescriptionBlock === "amrap") set.prescriptionBlock = "work";
+      }
+    }
+    v4.milestones = (v4.milestones || []).filter((m) => m.kind !== "repPR");
+    await db.importBundle(v4);
+    ok((await db.Sessions.all()).length === v4.sessions.length, "a version-4 backup still restores under schema 5");
+    ok((await db.Sessions.completed()).flatMap((s) => s.exercises).flatMap((e) => e.sets)
+      .every((set) => !(set.flags || []).some((f) => C.SET_RIRS.includes(f))),
+      "and it does not gain values it never carried");
+
+    // Decorated explicitly rather than relying on the fixture's contents: this
+    // is a contract test, and it should fail if the contract regresses even
+    // when the fixture happens not to exercise a value.
+    const v5 = structuredClone(parsed);
+    const marked = v5.sessions.flatMap((session) => session.exercises || [])
+      .flatMap((entry) => entry.sets || []).filter((set) => !set.isWarmup)[0];
+    ok(!!marked, "the fixture bundle has a working set to decorate");
+    marked.flags = ["clean", "rir1"];
+    marked.prescriptionBlock = "amrap";
+    v5.milestones = [...(v5.milestones || []), {
+      date: v5.sessions[0].date, exerciseName: "Back Squat", kind: "repPR", label: "Rep PR — 235 × 3 back squat",
+    }];
+    await db.importBundle(v5);
+
+    const roundTripped = (await db.Sessions.all()).flatMap((s) => s.exercises || []).flatMap((e) => e.sets || []);
+    ok(roundTripped.some((set) => (set.flags || []).includes("rir1")),
+      "reps-in-reserve survives import — the flag normalizer used to strip it on read");
+    ok(roundTripped.some((set) => (set.flags || []).includes("clean") && (set.flags || []).includes("rir1")),
+      "a set can be both clean and one rep from failure — the two groups do not exclude each other");
+    ok(roundTripped.some((set) => set.prescriptionBlock === "amrap"), "the amrap block survives import");
+    ok((await db.Milestones.all()).some((m) => m.kind === "repPR"), "rep PRs are announced, not just charted");
+
+    // Re-exporting must not quietly drop any of them either.
+    const reexported = await db.exportBundle();
+    const reexportedSets = reexported.sessions.flatMap((s) => s.exercises || []).flatMap((e) => e.sets || []);
+    ok(reexportedSets.some((set) => (set.flags || []).includes("rir1")), "and survives the next export");
+    ok(reexportedSets.some((set) => set.prescriptionBlock === "amrap"), "and so does the amrap block");
+
+    await db.importBundle(parsed);
+  }
+
   const sessionsBeforeFuture = (await db.Sessions.all()).length;
   let threwFuture = false;
   try { await db.importBundle({ ...parsed, schemaVersion: db.BACKUP_SCHEMA_VERSION + 1 }); } catch { threwFuture = true; }

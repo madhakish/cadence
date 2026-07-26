@@ -1251,6 +1251,14 @@ private struct SetVerdictControl: View {
                     Button("Grindy") { set.quality = .grindy; save() }
                     Button("Wobble") { set.quality = .wobble; save() }
                 }
+                // Separate section, deliberately: a set can be clean at 3+ reps
+                // in reserve or clean at 1, and those say different things.
+                Section("Reps in reserve") {
+                    Button("Not graded") { set.rir = nil; save() }
+                    ForEach(SetFlag.allCases.filter(\.isRIR), id: \.self) { value in
+                        Button(value.name) { set.rir = value; save() }
+                    }
+                }
             }
         } label: {
             ZStack(alignment: .topTrailing) {
@@ -1273,7 +1281,7 @@ private struct SetVerdictControl: View {
         }
         .accessibilityLabel("Set status")
         .accessibilityValue(statusLabel(set.status))
-        .accessibilityHint("Tap to complete or undo. Touch and hold for skipped and quality options.")
+        .accessibilityHint("Tap to complete or undo. Touch and hold for skipped, quality, and reps-in-reserve options.")
     }
 
     private func apply(_ status: SetStatus) {

@@ -156,12 +156,42 @@ export function loadVolume(set) {
 // ---- Explicit set lifecycle -------------------------------------------------
 export const SET_STATUSES = ["planned", "completed", "skipped"];
 export const SET_QUALITIES = ["clean", "grindy", "wobble"];
+// Reps left in reserve, coarse on purpose. A number entry invites false
+// precision — RIR accuracy is a trainable skill and averages about a rep of
+// error even in experienced lifters, so three buckets carry the signal the
+// literature actually supports.
+//
+// Deliberately a SEPARATE group from SET_QUALITIES. Quality says how the bar
+// moved; RIR says how close to failure it was, and those are different
+// questions — a set can be clean at 3+ reps in reserve or clean at 1. Each
+// group is internally exclusive; the two never exclude each other.
+export const SET_RIRS = ["rir1", "rir2", "rir3plus"];
+export const SET_RIR_LABELS = { rir1: "1 left", rir2: "2 left", rir3plus: "3+ left" };
 export const resolveSetStatus = (raw, sessionCompleted) => SET_STATUSES.includes(raw) ? raw : (sessionCompleted ? "completed" : "planned");
 export const setQuality = (flags = []) => flags.find((flag) => SET_QUALITIES.includes(flag)) || null;
-export const normalizedSetFlags = (quality, stoppedEarly = false) => [
+export const setRIR = (flags = []) => flags.find((flag) => SET_RIRS.includes(flag)) || null;
+// Every writer of a flag list goes through here. That matters: this used to
+// rebuild the list from quality and stopped-early alone, so any flag outside
+// those two was silently dropped on export — a new flag would appear to work
+// and then vanish on restore.
+export const normalizedSetFlags = (quality, stoppedEarly = false, rir = null) => [
   ...(SET_QUALITIES.includes(quality) ? [quality] : []),
+  ...(SET_RIRS.includes(rir) ? [rir] : []),
   ...(stoppedEarly ? ["stopped early"] : []),
 ];
+
+// Whether a set of this kind counts as the slot's prescribed work — the sets
+// that are graded and that supply the cycle's strength sample.
+//
+// "amrap" has to be in here. Grading filtered on "work" alone, so an AMRAP set
+// would have been invisible: not counted toward completion, not eligible as the
+// top set, and therefore unable to reach the e1RM sample at all. The whole
+// point of the block is that its earned reps are read.
+//
+// Warm-ups, primers, ramps, top singles and back-offs stay out. They are real
+// work but they are not the prescription being graded.
+export const PRESCRIBED_WORK_BLOCKS = ["work", "amrap"];
+export const countsAsPrescribedWork = (block) => PRESCRIBED_WORK_BLOCKS.includes(block || "work");
 
 // ---- Plates & bars ---------------------------------------------------------
 
@@ -656,7 +686,12 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
       blocks.push({ kind: "ramp", weightLb: roundTo(state.baseWeightLb * pct, step), sets: 1, reps });
     }
   }
-  blocks.push({ kind: "work", weightLb: work.weightLb, sets: work.sets, reps: work.reps });
+  // 5/3/1's top set is the "+" set — the AMRAP is the progression engine, not a
+  // garnish, and shipping the percentages without it was the template's one
+  // material infidelity to the published method. Wendler's deload week has no
+  // "+" set, so it stays ordinary work.
+  const isFiveThreeOnePlusSet = style === "fiveThreeOne" && state.nextPhase !== 4;
+  blocks.push({ kind: isFiveThreeOnePlusSet ? "amrap" : "work", weightLb: work.weightLb, sets: work.sets, reps: work.reps });
   if (style === "maxEffort" && state.nextPhase !== 4) {
     blocks.push({ kind: "backoff", weightLb: roundTo(state.baseWeightLb * 0.80, step), sets: 3, reps: 3 });
   }
@@ -737,7 +772,11 @@ export function prTopScheme(sets) {
   return { weightLb: top, sets: best.count, reps: best.reps };
 }
 
-// Returns [{ kind, exercise, label }], kind ∈ heaviestSet|firstScheme|volumePR
+// Epley degrades past ten reps and "most reps at a weight" stops being a
+// strength claim, so rep PRs are only tracked inside that range.
+export const REP_PR_REP_CEILING = 10;
+
+// Returns [{ kind, exercise, label }], kind ∈ heaviestSet|firstScheme|volumePR|repPR
 export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes, historySchemes, formatWeight = null }) {
   if (!sessionSets.length) return [];
   const events = [];
@@ -773,6 +812,38 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
   if (supportsLoadPR(basis) && vol > priorVolMax + 1e-9 && historyVolumes.length) {
     const volumeLabel = formatWeight ? formatWeight(vol) : `${trim(vol)} lb`;
     events.push({ kind: "volumePR", exercise, label: `Volume PR — ${volumeLabel} total ${exercise.toLowerCase()}` });
+  }
+
+  // Rep PR: more weight at a rep count than ever before at that same rep count.
+  // History already rebuilt this exact table to draw a chart, so the record
+  // existed — nothing announced it when it happened, which is the whole value
+  // of a PR.
+  //
+  // Capped at REP_PR_REP_CEILING: past that, "most reps at a weight" is a
+  // conditioning result rather than a strength one, and the table fills with
+  // noise from long back-off sets.
+  //
+  // One event per exercise per session, chosen by Epley so a genuinely harder
+  // set wins over a longer easy one — the same ranking the cycle's strength
+  // sample uses.
+  const bestByReps = new Map();
+  for (const set of comparableHistory) {
+    if (!(set.reps >= 1 && set.reps <= REP_PR_REP_CEILING)) continue;
+    bestByReps.set(set.reps, Math.max(bestByReps.get(set.reps) ?? 0, set.weightLb));
+  }
+  const beaten = comparableSession.filter((set) => set.reps >= 1 && set.reps <= REP_PR_REP_CEILING
+    // A rep count never trained before is a first, not a rep PR — the
+    // firstScheme event already speaks for that.
+    && bestByReps.has(set.reps) && set.weightLb > bestByReps.get(set.reps) + 1e-9);
+  if (beaten.length) {
+    const best = beaten.reduce((a, b) => (epleyE1RM(b.weightLb, b.reps) > epleyE1RM(a.weightLb, a.reps) ? b : a));
+    events.push({
+      kind: "repPR",
+      exercise,
+      label: supportsLoadPR(basis)
+        ? `Rep PR — ${weightLabel(best.weightLb)} × ${best.reps} ${exercise.toLowerCase()}`
+        : `Rep PR — ${best.reps} reps ${exercise.toLowerCase()}`,
+    });
   }
   return events;
 }

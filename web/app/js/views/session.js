@@ -473,12 +473,26 @@ export async function openSession(id) {
       "aria-label": `Set quality: ${quality || "not graded"}`,
       onClick: () => chooseQuality(s, body),
     });
+    // Reps in reserve, beside quality rather than folded into it: quality says
+    // how the bar moved, RIR says how close to failure it was. A set can be
+    // clean at 3+ in reserve or clean at 1, and those mean different things.
+    const rir = C.setRIR(s.flags);
+    const rirButton = ui.h("button", {
+      class: `flagbtn${rir ? " on-rir" : ""}`,
+      text: rir ? rir.replace("rir", "").replace("3plus", "3+") : "R",
+      "aria-label": `Reps in reserve: ${rir ? C.SET_RIR_LABELS[rir] : "not graded"}`,
+      onClick: () => chooseRIR(s, body),
+    });
     // The set you're ON — the first WORKING set with no verdict yet — gets
     // the accent rail; warmups sit quiet (and often go unflagged, so they
     // must not hold the rail hostage).
     const isCurrent = se.sets.find((x) => !x.isWarmup && x.status === "planned") === s;
     const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "") + (isCurrent ? " current" : "") }, wt, tags,
-      ui.h("div", { class: "flagbtns" }, statusButton, (isCardio || isTimed) ? null : qualityButton));
+      ui.h("div", { class: "flagbtns" }, statusButton,
+        (isCardio || isTimed) ? null : qualityButton,
+        // Duration and conditioning work has no rep count, so reps-in-reserve
+        // is meaningless there — same exclusion the quality button uses.
+        (isCardio || isTimed) ? null : rirButton));
 
     // Loadout visualization — plates for barbell lifts, the rack number for
     // dumbbell lifts. Mirrors native.
@@ -520,7 +534,17 @@ export async function openSession(id) {
     ui.actionSheet("Set quality", [null, "clean", "grindy", "wobble"].map((quality) => ({
       label: quality ? quality[0].toUpperCase() + quality.slice(1) : "Not graded",
       onClick: () => {
-        s.flags = C.normalizedSetFlags(quality, (s.flags || []).includes("stopped early"));
+        s.flags = C.normalizedSetFlags(quality, (s.flags || []).includes("stopped early"), C.setRIR(s.flags));
+        save(); renderBody(body);
+      },
+    })));
+  }
+
+  function chooseRIR(s, body) {
+    ui.actionSheet("Reps in reserve", [null, ...C.SET_RIRS].map((value) => ({
+      label: value ? C.SET_RIR_LABELS[value] : "Not graded",
+      onClick: () => {
+        s.flags = C.normalizedSetFlags(C.setQuality(s.flags), (s.flags || []).includes("stopped early"), value);
         save(); renderBody(body);
       },
     })));
@@ -646,7 +670,7 @@ export async function openSession(id) {
             if (applyWeightToRemaining && !warm) for (const target of remaining) { target.weightLb = weightLb; target.enteredUnit = unit; }
             if (applyRepsToRemaining && !warm) for (const target of remaining) target.reps = reps;
             s.isWarmup = warm; s.isPerSide = per;
-            s.flags = C.normalizedSetFlags(C.setQuality(s.flags), stopped);
+            s.flags = C.normalizedSetFlags(C.setQuality(s.flags), stopped, C.setRIR(s.flags));
             s.bodyFlagSite = site; s.bodyFlagNote = site ? (noteInput.value || null) : null;
             syncSetPlan(se);
             if (applyWeightToRemaining && !warm) synchronizeWarmups(se, barFor(se), weightLb);
@@ -995,7 +1019,7 @@ async function completeSessionInner(session) {
 // ---- Performance summaries (built from logged sets, consumed by the core) ----
 function prescribedWork(se) {
   const candidates = (se.sets || []).filter((set) => !set.isWarmup
-    && (set.prescriptionBlock || "work") === "work");
+    && C.countsAsPrescribedWork(set.prescriptionBlock));
   return candidates.slice(0, se.plannedSets ?? candidates.length)
     .filter((set) => set.status === "completed");
 }

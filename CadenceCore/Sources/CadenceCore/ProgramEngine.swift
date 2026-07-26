@@ -163,8 +163,28 @@ public enum PrescriptionBlockKind: String, Codable, CaseIterable, Sendable {
     /// 65/75% sets). Real work, but not the set that gates progression.
     case ramp
     case work
+    /// A prescribed set taken past its rep target — 5/3/1's "+" set, and the
+    /// opt-in final set of the wave's load rotation. Capped, not to failure:
+    /// the athlete stops at the rep ceiling or the first grindy/wobble rep.
+    ///
+    /// It grades like any other working set, and it is the set the cycle's
+    /// strength sample usually comes from, because `strengthSampleIndex` ranks
+    /// by Epley rather than by weight.
+    case amrap
     case backoff
     case conditioning
+
+    /// Whether a set of this kind counts as the slot's prescribed work — the
+    /// sets that are graded and that supply the cycle's strength sample.
+    ///
+    /// `amrap` has to be in here. Grading filtered on `work` alone, so an AMRAP
+    /// set would have been invisible: not counted toward completion, not
+    /// eligible as the top set, and therefore unable to reach the e1RM sample
+    /// at all. The whole point of the block is that its earned reps are read.
+    ///
+    /// Warm-ups, primers, ramps, top singles and back-offs stay out. They are
+    /// real work but they are not the prescription being graded.
+    public var countsAsPrescribedWork: Bool { self == .work || self == .amrap }
 }
 
 /// Persistable knobs for a lift slot. Defaults preserve the shipped multiplier
@@ -537,7 +557,15 @@ public enum ProgramEngine {
                 ))
             }
         }
-        blocks.append(PrescriptionBlock(kind: .work, weightLb: work.weightLb, sets: work.sets, reps: work.reps))
+        // 5/3/1's top set is the "+" set — the AMRAP is the progression engine,
+        // not a garnish, and shipping the percentages without it was the
+        // template's one material infidelity to the published method. Wendler's
+        // deload week has no "+" set, so it stays ordinary work.
+        let isFiveThreeOnePlusSet = style == .fiveThreeOne && state.nextPhase != .deload
+        blocks.append(PrescriptionBlock(
+            kind: isFiveThreeOnePlusSet ? .amrap : .work,
+            weightLb: work.weightLb, sets: work.sets, reps: work.reps
+        ))
         if style == .maxEffort, state.nextPhase != .deload {
             blocks.append(PrescriptionBlock(
                 kind: .backoff,

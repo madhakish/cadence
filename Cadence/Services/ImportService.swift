@@ -241,7 +241,9 @@ enum ImportService {
         let units: Set<String> = ["lb", "kg"]
         let roles: Set<String> = ["main", "complementary", "accessory"]
         let liftRoles: Set<String> = ["main", "complementary"]
-        let flags: Set<String> = ["clean", "grindy", "wobble", "stopped early"]
+        let flags: Set<String> = Set(SetLifecycle.qualityValues)
+            .union(SetLifecycle.rirValues)
+            .union(["stopped early"])
         let statuses = Set(SetStatus.allCases.map(\.rawValue))
         let reasons = Set(AutoregReason.allCases.map(\.rawValue))
         let loadBases = Set(LoadBasis.allCases.map(\.rawValue))
@@ -293,6 +295,13 @@ enum ImportService {
                     try known(set.enteredUnit, units, "\(setPath).enteredUnit", required: schemaVersion >= 1)
                     let setFlags = set.flags ?? []
                     for (fi, flag) in setFlags.enumerated() { try known(flag, flags, "\(setPath).flags[\(fi)]") }
+                    // RIR is its own exclusive group, NOT part of the quality
+                    // group: a set can be clean at 3+ reps in reserve or clean
+                    // at 1, and those say different things. Folding them
+                    // together would make the two exclude each other.
+                    if schemaVersion >= 5 && setFlags.filter({ SetLifecycle.rirValues.contains($0) }).count > 1 {
+                        throw ImportError.invalidData("\(setPath).flags: reps in reserve must be mutually exclusive")
+                    }
                     if schemaVersion >= 2 && setFlags.filter({ SetLifecycle.qualityValues.contains($0) }).count > 1 {
                         throw ImportError.invalidData("\(setPath).flags: quality must be mutually exclusive")
                     }
@@ -321,7 +330,7 @@ enum ImportService {
             try bodySite(entry.site, "checkIns[\(i)].site", required: true)
             _ = try requiredText(entry.response, "checkIns[\(i)].response")
         }
-        let milestoneKinds: Set<String> = ["heaviestSet", "volumePR", "firstScheme", "programNote"]
+        let milestoneKinds: Set<String> = Set(PREvent.Kind.allCases.map(\.rawValue))
         for (i, entry) in (bundle.milestones ?? []).enumerated() {
             try requireDate(entry.date, "milestones[\(i)].date")
             _ = try requiredText(entry.kind, "milestones[\(i)].kind")

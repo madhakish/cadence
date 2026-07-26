@@ -13,6 +13,27 @@ enum SetFlag: String, Codable, CaseIterable {
     case grindy
     case wobble
     case stoppedEarly = "stopped early"
+    // Reps in reserve. Coarse on purpose — see SetLifecycle.rirValues. Stored
+    // in the same `flagsRaw` list as quality, in its own exclusive group.
+    case rir1
+    case rir2
+    case rir3plus
+
+    var isQuality: Bool { SetLifecycle.qualityValues.contains(rawValue) }
+    var isRIR: Bool { SetLifecycle.rirValues.contains(rawValue) }
+
+    /// "1 rep left", not "rir1" — the raw value is a storage key, not copy.
+    var name: String {
+        switch self {
+        case .clean: return "Clean"
+        case .grindy: return "Grindy"
+        case .wobble: return "Wobble"
+        case .stoppedEarly: return "Stopped early"
+        case .rir1: return "1 left"
+        case .rir2: return "2 left"
+        case .rir3plus: return "3+ left"
+        }
+    }
 }
 
 @Model
@@ -215,11 +236,16 @@ final class SetEntry {
         self.autoregReasonRaw = autoregReason?.rawValue
     }
 
+    /// Normalized on READ, so a store that somehow holds two qualities or two
+    /// RIR values still presents one of each. Every group the app understands
+    /// has to be listed here — anything omitted is silently dropped on every
+    /// read, not just on export.
     var flags: [SetFlag] {
         get {
             SetLifecycle.normalizedFlags(
                 quality: SetLifecycle.quality(in: flagsRaw),
-                stoppedEarly: flagsRaw.contains(SetFlag.stoppedEarly.rawValue)
+                stoppedEarly: flagsRaw.contains(SetFlag.stoppedEarly.rawValue),
+                rir: SetLifecycle.rir(in: flagsRaw)
             ).compactMap(SetFlag.init(rawValue:))
         }
         set { flagsRaw = newValue.map(\.rawValue) }
@@ -234,11 +260,28 @@ final class SetEntry {
     }
 
     var quality: SetFlag? {
-        get { flags.first { $0 == .clean || $0 == .grindy || $0 == .wobble } }
+        get { flags.first(where: \.isQuality) }
+        set {
+            // Carries the RIR through. Rebuilding from quality and stopped-early
+            // alone would silently erase it every time the athlete regraded how
+            // the bar moved.
+            flags = SetLifecycle.normalizedFlags(
+                quality: (newValue?.isQuality ?? false) ? newValue?.rawValue : nil,
+                stoppedEarly: flags.contains(.stoppedEarly),
+                rir: rir?.rawValue
+            ).compactMap(SetFlag.init(rawValue:))
+        }
+    }
+
+    /// Reps left in reserve. Its own exclusive group beside `quality`: quality
+    /// says how the bar moved, this says how close to failure it was.
+    var rir: SetFlag? {
+        get { flags.first(where: \.isRIR) }
         set {
             flags = SetLifecycle.normalizedFlags(
-                quality: newValue == .stoppedEarly ? nil : newValue?.rawValue,
-                stoppedEarly: flags.contains(.stoppedEarly)
+                quality: quality?.rawValue,
+                stoppedEarly: flags.contains(.stoppedEarly),
+                rir: (newValue?.isRIR ?? false) ? newValue?.rawValue : nil
             ).compactMap(SetFlag.init(rawValue:))
         }
     }

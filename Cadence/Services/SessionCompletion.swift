@@ -216,7 +216,7 @@ enum SessionCompletion {
     /// rows are appended after them and remain history-only bonus work.
     private static func prescribedWork(_ entry: SessionExercise) -> [SetEntry] {
         let candidates = entry.orderedSets.filter {
-            !$0.isWarmup && $0.prescriptionBlock == .work
+            !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork
         }
         return Array(candidates.prefix(entry.plannedSets ?? candidates.count))
             .filter { $0.status == .completed }
