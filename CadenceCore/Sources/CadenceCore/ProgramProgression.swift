@@ -1,8 +1,8 @@
 import Foundation
 
-/// Cross-cycle, performance-gated progression for program lifts. It tapers
-/// toward an estimated ceiling and auto-deloads on repeated stalls, so weight
-/// is never added blindly. Pure & deterministic — consumes a performance
+/// Cross-cycle, performance-gated progression for program lifts. It adds a
+/// proportional increment on a clean cycle and auto-deloads on repeated stalls,
+/// so weight is never added blindly. Pure & deterministic — consumes a performance
 /// SUMMARY (never a session), no clock/random. Mirrored 1:1 in web/app/js/core.js.
 
 public enum CycleGrade: String, Codable, Sendable { case success, hold, fail }
@@ -516,7 +516,7 @@ public enum ProgramProgression {
 
     /// Style-aware cycle progression, applied at the Peak grade / rollover for
     /// slots that are NOT per-exposure. Methodology styles use their published
-    /// fixed increments; every other style keeps the tapered headroom rule.
+    /// fixed increments; every other style keeps the proportional rule.
     ///
     /// - 5/3/1: +5 lb upper / +10 lb lower to the training max per clean
     ///   cycle; missing the "+" set's minimum resets the TM three cycles back

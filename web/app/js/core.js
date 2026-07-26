@@ -778,8 +778,8 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
 }
 
 // ---- Adaptive program progression --------------------------------------------
-// Cross-cycle progression that is performance-gated, tapers toward an estimated
-// ceiling, and auto-deloads on repeated stalls. Pure & deterministic — consumes
+// Cross-cycle progression that is performance-gated, adds a proportional
+// increment on a clean cycle, and auto-deloads on repeated stalls. Pure & deterministic — consumes
 // a performance SUMMARY (never a session), no clock/random. Mirrors
 // CadenceCore/Sources/CadenceCore/ProgramProgression.swift exactly.
 
@@ -1016,8 +1016,6 @@ export function scheduleAdvance(dayOrders, bankedDayOrder) {
   return { nextDayOrder: sorted[(position + 1) % sorted.length], isLastDay: position === sorted.length - 1 };
 }
 
-// Increment = fraction of base × headroom-to-ceiling, floored at plate granularity,
-// 0 at/over the focus-dependent training-max ceiling.
 // Increment = fraction of base, floored at plate granularity.
 //
 // This used to scale by headroom to a training-max ceiling
@@ -1137,7 +1135,7 @@ export function advanceLinearLift(state, perf, rule, roundingLb = DEFAULT_ROUNDI
 
 // Style-aware cycle progression at the Peak grade / rollover. Methodology
 // styles use their published fixed increments; everything else keeps the
-// tapered headroom rule. Mirrors ProgramProgression.advanceProgramLift.
+// proportional rule. Mirrors ProgramProgression.advanceProgramLift.
 export function advanceProgramLift(state, perf, focus, style, movementGroup = null, roundingLb = DEFAULT_ROUNDING_LB) {
   const lower = ["squat", "hinge"].includes(movementGroup);
   const increment = lower ? 10 : 5;
