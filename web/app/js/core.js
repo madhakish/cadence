@@ -193,6 +193,14 @@ export const normalizedSetFlags = (quality, stoppedEarly = false, rir = null) =>
 export const PRESCRIBED_WORK_BLOCKS = ["work", "amrap"];
 export const countsAsPrescribedWork = (block) => PRESCRIBED_WORK_BLOCKS.includes(block || "work");
 
+// Whether a set of this kind is an instruction the program gave the athlete —
+// the question "did they do what was asked", which is what gates advancing the
+// schedule. Wider than countsAsPrescribedWork by exactly one kind: conditioning
+// is prescribed work the athlete owes, but it is graded in its own minutes
+// ledger rather than against a load, so it never joins the lifting counts.
+export const PROGRAM_INSTRUCTION_BLOCKS = [...PRESCRIBED_WORK_BLOCKS, "conditioning"];
+export const countsAsProgramInstruction = (block) => PROGRAM_INSTRUCTION_BLOCKS.includes(block || "work");
+
 // ---- Plates & bars ---------------------------------------------------------
 
 export const plateLb = (p) => toLb(p.value, p.unit);
@@ -1653,7 +1661,7 @@ const performanceBySlot = (sessions) => {
   for (const exercise of sessions.flatMap((session) => session.exercises || [])) {
     if (!exercise.slotID || isConditioningPattern(exercise.pattern)) continue;
     const best = Math.max(0, ...(exercise.sets || [])
-      .filter((set) => !set.isWarmup && (set.prescriptionBlock || "work") === "work"
+      .filter((set) => !set.isWarmup && countsAsPrescribedWork(set.prescriptionBlock)
         && set.completed !== false && set.actualReps > 0)
       .map((set) => epleyE1RM(set.actualWeightLb, set.actualReps)));
     if (best > 0) result[exercise.slotID] = Math.max(result[exercise.slotID] || 0, best);
@@ -1678,7 +1686,7 @@ function programmedCoachingSession(session, slots) {
       let remainingWork = Math.max(0, exercise.plannedSets || 0);
       const sets = (exercise.sets || []).filter((set) => {
         const block = set.prescriptionBlock || (set.isWarmup ? "warmup" : "work");
-        if (!["work", "conditioning"].includes(block)) return true;
+        if (!countsAsProgramInstruction(block)) return true;
         if (remainingWork <= 0) return false;
         remainingWork -= 1;
         return true;
@@ -1697,7 +1705,7 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
   // cannot raise or lower lifting prescription completion/readiness.
   const liftingExercises = exercises.filter((exercise) => !isConditioningPattern(exercise.pattern));
   const working = liftingExercises.flatMap((exercise) => exercise.sets || []).filter((set) =>
-    !set.isWarmup && (set.prescriptionBlock || "work") === "work");
+    !set.isWarmup && countsAsPrescribedWork(set.prescriptionBlock));
   const completedWorking = working.filter((set) => set.completed !== false);
   const plannedWorkingSets = liftingExercises.reduce((sum, exercise) =>
     sum + Math.max(0, exercise.plannedSets || 0), 0);
@@ -1705,7 +1713,7 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
   const patternSets = {};
   for (const exercise of exercises) patternSets[exercise.pattern] = (patternSets[exercise.pattern] || 0)
     + (exercise.sets || []).filter((set) => !set.isWarmup
-      && (set.prescriptionBlock || "work") === "work" && set.completed !== false).length;
+      && countsAsPrescribedWork(set.prescriptionBlock) && set.completed !== false).length;
   const conditioningSeconds = exercises.filter((exercise) => isConditioningPattern(exercise.pattern))
     .flatMap((exercise) => exercise.sets || []).filter((set) => set.completed !== false)
     .reduce((sum, set) => sum + (set.durationSeconds || 0), 0);

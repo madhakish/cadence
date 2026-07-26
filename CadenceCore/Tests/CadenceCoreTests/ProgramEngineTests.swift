@@ -280,6 +280,18 @@ final class ProgramEngineTests: XCTestCase {
         for kind in [PrescriptionBlockKind.warmup, .primer, .ramp, .topSingle, .backoff] {
             XCTAssertFalse(kind.countsAsPrescribedWork, "\(kind) is not the prescription being graded")
         }
+
+        // A 5/3/1 day is ALL ramp and amrap — it has no ordinary `work` set at
+        // all, so a gate asking "is this `work`" answered no for the whole day
+        // and the schedule never advanced. Conditioning is an instruction the
+        // athlete owes but is graded in minutes, so it joins this gate and not
+        // the lifting one.
+        XCTAssertTrue(PrescriptionBlockKind.amrap.countsAsProgramInstruction)
+        XCTAssertTrue(PrescriptionBlockKind.conditioning.countsAsProgramInstruction)
+        XCTAssertFalse(PrescriptionBlockKind.conditioning.countsAsPrescribedWork)
+        for kind in [PrescriptionBlockKind.warmup, .primer, .ramp, .topSingle, .backoff] {
+            XCTAssertFalse(kind.countsAsProgramInstruction)
+        }
     }
 
     func testMaxEffortTopSingleWithBackoffTriplesAndDeload() {

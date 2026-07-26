@@ -185,6 +185,17 @@ public enum PrescriptionBlockKind: String, Codable, CaseIterable, Sendable {
     /// Warm-ups, primers, ramps, top singles and back-offs stay out. They are
     /// real work but they are not the prescription being graded.
     public var countsAsPrescribedWork: Bool { self == .work || self == .amrap }
+
+    /// Whether a set of this kind is an instruction the program gave the
+    /// athlete — the question "did they do what was asked", which is what
+    /// gates advancing the schedule.
+    ///
+    /// Wider than `countsAsPrescribedWork` by exactly one kind: conditioning is
+    /// prescribed work the athlete owes, but it is graded in its own minutes
+    /// ledger rather than against a load, so it never joins the lifting counts.
+    public var countsAsProgramInstruction: Bool {
+        countsAsPrescribedWork || self == .conditioning
+    }
 }
 
 /// Persistable knobs for a lift slot. Defaults preserve the shipped multiplier

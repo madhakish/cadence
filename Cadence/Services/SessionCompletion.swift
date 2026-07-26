@@ -226,8 +226,7 @@ enum SessionCompletion {
         session.exercises.contains { entry in
             guard entry.programSlotID != nil || entry.programRole != nil else { return false }
             let candidates = entry.orderedSets.filter {
-                !$0.isWarmup
-                    && ($0.prescriptionBlock == .work || $0.prescriptionBlock == .conditioning)
+                !$0.isWarmup && $0.prescriptionBlock.countsAsProgramInstruction
             }
             return candidates.prefix(entry.plannedSets ?? candidates.count)
                 .contains { $0.status == .completed }
@@ -241,8 +240,7 @@ enum SessionCompletion {
         let completed = session.exercises.filter { entry in
             guard entry.programSlotID != nil || entry.programRole != nil else { return false }
             let candidates = entry.orderedSets.filter {
-                !$0.isWarmup
-                    && ($0.prescriptionBlock == .work || $0.prescriptionBlock == .conditioning)
+                !$0.isWarmup && $0.prescriptionBlock.countsAsProgramInstruction
             }
             return candidates.prefix(entry.plannedSets ?? candidates.count)
                 .contains { $0.status == .completed }
@@ -781,7 +779,7 @@ enum SessionCompletion {
         for (exerciseName, entries) in grouped where !exerciseName.isEmpty {
             guard let track = tracks.first(where: { $0.exerciseName == exerciseName }) else { continue }
             let performedEntries = entries.filter {
-                !$0.workingSets.filter { $0.prescriptionBlock == .work }.isEmpty
+                !$0.workingSets.filter { $0.prescriptionBlock.countsAsPrescribedWork }.isEmpty
             }
             guard !performedEntries.isEmpty else { continue }
 

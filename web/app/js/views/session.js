@@ -193,7 +193,7 @@ export async function openSession(id) {
       const entry = matchingEntry(p);
       const recalledSets = entry && current.programRole
         ? (entry.sets || []).filter((set) => !set.isWarmup
-          && ["work", "conditioning"].includes(set.prescriptionBlock || "work"))
+          && C.countsAsProgramInstruction(set.prescriptionBlock))
           .slice(0, entry.plannedSets ?? entry.sets.length)
           .filter((set) => set.status === "completed")
         : (entry?.sets || []).filter((set) => !set.isWarmup && set.status === "completed");
@@ -449,6 +449,16 @@ export async function openSession(id) {
           ui.h("span", { class: "sub mono", text: ` × ${s.reps}${s.isPerSide ? "/side" : ""}` }));
     const tags = ui.h("span", { class: "sub" });
     if (s.isWarmup) tags.append(ui.h("span", { class: "pill", text: "warmup" }));
+    // The prescribed reps are a FLOOR on an AMRAP set. Without saying so,
+    // 5/3/1's week 3 reads as a plain single and the "+" — the whole
+    // progression engine — never happens.
+    if (!s.isWarmup && s.prescriptionBlock === "amrap") {
+      tags.append(ui.h("span", {
+        class: "pill accent",
+        text: `AMRAP ${s.plannedReps ?? s.reps}+`,
+        title: "Take this set past the target and stop when a rep turns grindy.",
+      }));
+    }
     if (s.autoregReason) tags.append(ui.h("span", { class: "pill warn", text: `↓ ${s.autoregReason}` }));
     if (s.bodyFlagSite) tags.append(ui.h("span", { class: "pill hard", text: "⚡︎" }));
 
@@ -606,7 +616,8 @@ export async function openSession(id) {
         // blocks at lighter loads must not anchor it. With no planned work
         // set left, fixedDrop stays null and the generic percentage drop in
         // dropLoadPlan takes over.
-        const first = se.sets.find((x) => !x.isWarmup && x.status === "planned" && (x.prescriptionBlock || "work") === "work");
+        const first = se.sets.find((x) => !x.isWarmup && x.status === "planned"
+          && C.countsAsPrescribedWork(x.prescriptionBlock));
         const fixedDrop = first && se.fallbackWeightLb != null ? Math.max(0, first.weightLb - se.fallbackWeightLb) : null;
         const ex = exMap.get(se.exerciseName);
         const step = C.programLoadStep(5, ex?.type);
@@ -966,7 +977,7 @@ async function completeSessionInner(session) {
     const track = await Tracks.byName(exerciseName);
     if (!track) continue;
     const performed = entries.filter((se) => se.sets.some((set) => !set.isWarmup
-      && set.status === "completed" && (set.prescriptionBlock || "work") === "work"));
+      && set.status === "completed" && C.countsAsPrescribedWork(set.prescriptionBlock)));
     if (!performed.length) continue;
     const advance = performed.length === entries.length
       && C.earnsStandaloneTrackAdvance(performed.map((se) => cyclePerf(se, track.roundingLb)));
@@ -983,7 +994,7 @@ async function completeSessionInner(session) {
   const hasCompletedProgramInstruction = session.exercises.some((se) => {
     if (!se.programSlotId && !se.programRole) return false;
     const candidates = (se.sets || []).filter((set) => !set.isWarmup
-      && ["work", "conditioning"].includes(set.prescriptionBlock || "work"));
+      && C.countsAsProgramInstruction(set.prescriptionBlock));
     return candidates.slice(0, se.plannedSets ?? candidates.length)
       .some((set) => set.status === "completed");
   });
@@ -1041,7 +1052,7 @@ function completedProgramInstructionsMatch(session, day) {
   const completed = (session.exercises || []).filter((entry) => {
     if (!entry.programSlotId && !entry.programRole) return false;
     const candidates = (entry.sets || []).filter((set) => !set.isWarmup
-      && ["work", "conditioning"].includes(set.prescriptionBlock || "work"));
+      && C.countsAsProgramInstruction(set.prescriptionBlock));
     return candidates.slice(0, entry.plannedSets ?? candidates.length)
       .some((set) => set.status === "completed");
   });

@@ -969,6 +969,33 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.importBundle(parsed);
 }
 
+// A 5/3/1 day is ALL amrap and ramp blocks — it has no ordinary `work` set at
+// all. Every gate that asked "is this `work`" therefore answered no, so the
+// session banked as history and the schedule never advanced. The template was
+// completely inert.
+{
+  const name = "Fixture 531 Advance";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0, accessories: [],
+      lifts: [{ exerciseName: "Back Squat", role: "main", prescription: "fiveThreeOne",
+        baseWeightLb: 300, estimatedMaxLb: 340, stallCount: 0, lastIncrementLb: 0 }] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const id = await session.createSessionFromProgramDay(program, program.days[0]);
+  const s531 = await db.Sessions.get(id);
+  const blocks = s531.exercises[0].sets.filter((set) => !set.isWarmup).map((set) => set.prescriptionBlock);
+  ok(blocks.includes("amrap") && !blocks.includes("work"),
+    `a 531 day carries an amrap top set and no ordinary work set (${blocks})`);
+  for (const set of s531.exercises[0].sets) set.status = "completed";
+  await session.completeSession(s531);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.currentWeek === 2, `banking a 531 day advances the rotation (got ${program.currentWeek})`);
+
+  await db.importBundle(parsed);
+}
+
 // Rollover with no peak grade on record. The 10% rebuild belongs to the
 // wave family, whose peak is the graded week; the methodology styles carry
 // their own miss rules and must only hold. The two clients disagreed on which

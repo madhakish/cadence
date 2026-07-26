@@ -327,7 +327,7 @@ struct ActiveSessionView: View {
                 if current.programRole != nil {
                     let prescribed = entry.orderedSets.filter {
                         !$0.isWarmup
-                            && ($0.prescriptionBlock == .work || $0.prescriptionBlock == .conditioning)
+                            && $0.prescriptionBlock.countsAsProgramInstruction
                     }
                     recalledSets = Array(prescribed.prefix(entry.plannedSets ?? prescribed.count))
                         .filter { $0.status == .completed }
@@ -400,7 +400,9 @@ struct ActiveSessionView: View {
         // blocks at lighter loads must not anchor it. With no planned work
         // set left, fixedDrop stays nil and the generic percentage drop in
         // dropLoadPlan takes over.
-        let firstPlannedWork = ordered.first { !$0.isWarmup && $0.status == .planned && $0.prescriptionBlock == .work }
+        let firstPlannedWork = ordered.first {
+            !$0.isWarmup && $0.status == .planned && $0.prescriptionBlock.countsAsPrescribedWork
+        }
         let fixedDrop = firstPlannedWork.flatMap { current in
             entry.fallbackWeightLb.map { max(0, current.weightLb - $0) }
         }
@@ -997,6 +999,12 @@ private struct SetRow: View {
                             Text("ramp").font(.caption2).foregroundStyle(.secondary)
                         } else if set.prescriptionBlock == .backoff {
                             Text("back-off").font(.caption2).foregroundStyle(.secondary)
+                        } else if set.prescriptionBlock == .amrap {
+                            // The prescribed reps are a FLOOR on this set. Without
+                            // saying so, 5/3/1's week 3 reads as a plain single and
+                            // the "+" — the whole progression engine — never happens.
+                            Text("AMRAP — \(set.plannedReps ?? set.reps)+ reps, stop when a rep turns grindy")
+                                .font(.caption2).foregroundStyle(Theme.accent)
                         }
                         if let reason = set.autoregReason {
                             Text("↓ \(reason.rawValue)").font(.caption2).foregroundStyle(Theme.warn)
