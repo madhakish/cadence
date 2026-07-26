@@ -333,9 +333,16 @@ final class ProgramFileContractTests: XCTestCase {
             .appendingPathComponent("web/tests/fixtures/program-file.json")
     }
 
-    /// The JavaScript exporter's output must decode into this contract and
-    /// re-encode to the same bytes. That is what keeps a program file written
-    /// on the web readable by the app, and vice versa.
+    /// The JavaScript exporter's output must decode into this contract without
+    /// loss and re-encode to the same JSON. That is what keeps a program file
+    /// written on the web readable by the app, and vice versa.
+    ///
+    /// Compared as parsed JSON, not as text. Foundation's `.prettyPrinted`
+    /// writes `"key" : value` where `JSON.stringify` writes `"key": value`, so
+    /// the two agree on every key and value but not on interior whitespace.
+    /// Whitespace is not part of the contract; keys, values, and ordering are.
+    /// Byte-stability *within* a platform is covered by
+    /// `testEncodingIsDeterministicAndCarriesNoTimestamp`.
     func testSharedFixtureRoundTripsThroughTheSwiftContract() throws {
         let data = try Data(contentsOf: fixtureURL())
         let decoded = try JSONDecoder().decode(ProgramFileContract.File.self, from: data)
@@ -346,8 +353,17 @@ final class ProgramFileContractTests: XCTestCase {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let reencoded = try encoder.encode(decoded)
-        let mine = String(decoding: reencoded, as: UTF8.self)
-        let theirs = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertEqual(mine, theirs, "Swift re-encodes the JS fixture byte-for-byte")
+
+        // Deep equality over the parsed graphs: same keys, same values, no
+        // field silently dropped on the way through Swift.
+        let mine = try JSONSerialization.jsonObject(with: reencoded) as? NSDictionary
+        let theirs = try JSONSerialization.jsonObject(with: data) as? NSDictionary
+        XCTAssertNotNil(mine)
+        XCTAssertNotNil(theirs)
+        XCTAssertEqual(mine, theirs, "Swift re-encodes the JS fixture with identical keys and values")
+
+        // And the decode is lossless: a second pass produces the same model.
+        let again = try JSONDecoder().decode(ProgramFileContract.File.self, from: reencoded)
+        XCTAssertEqual(again, decoded, "nothing is lost re-decoding Swift's own encoding of the JS file")
     }
 }

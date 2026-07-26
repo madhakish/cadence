@@ -97,14 +97,19 @@ advance the wrong lift.
 
 ## Determinism
 
-The same program exports to byte-identical output every time:
+On a given client, the same program exports to byte-identical output every
+time:
 
-- keys are sorted (native `JSONEncoder .sortedKeys`, web recursive key sort),
-  so both clients produce the same bytes for the same program;
+- keys are sorted (native `JSONEncoder .sortedKeys`, web recursive key sort);
 - optional fields are omitted rather than written as null; and
 - no timestamp appears anywhere in the payload.
 
 `export → import → export` produces an identical file.
+
+Across clients the two agree on every key, value, and ordering, but not on
+interior whitespace: Foundation's pretty-printer writes `"key" : value` where
+`JSON.stringify` writes `"key": value`. Whitespace is not part of the contract.
+A file written by either client is read identically by the other.
 
 ## Exercise resolution
 
