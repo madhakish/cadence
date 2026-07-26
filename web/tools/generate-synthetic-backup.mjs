@@ -59,6 +59,13 @@ const workingSets = (s, name) =>
   (s.exercises.find((e) => e.exerciseName === name)?.sets ?? []).filter((x) => !x.isWarmup);
 const flagSets = (s, name, flag, n) =>
   workingSets(s, name).slice(0, n).forEach((x) => { x.flags = [flag, ...(x.flags || []).filter((f) => f === "stopped early")]; });
+// Reps in reserve is its own exclusive group, so it ADDS to whatever quality
+// the set already carries rather than replacing it — the fixture has to prove
+// a set can be both clean and 1-rep-from-failure.
+const rirSets = (s, name, rir, n) =>
+  workingSets(s, name).slice(0, n).forEach((x) => {
+    x.flags = [...(x.flags || []).filter((f) => !["rir1", "rir2", "rir3plus"].includes(f)), rir];
+  });
 
 // Bank one session of a program day (whatever day is next), backdated,
 // optionally mutated (flags/drops/signals) before completion so the adaptive
@@ -204,6 +211,11 @@ const strengthMutate = (cycle, week, dayIdx) => (s) => {
     if (w[2]) { w[2].autoregReason = "fatigue"; w[2].weightLb = C.roundTo(w[2].weightLb * 0.9, 5); }
   }
   if (week === 2 && dayIdx === 1 && cycle === 2) flagSets(s, "Incline DB Press", "wobble", 1);
+  // Every RIR bucket appears at least once, and one of them lands on a set that
+  // is also flagged clean — the two groups must not exclude each other.
+  if (week === 2 && dayIdx === 0) rirSets(s, "Back Squat", "rir2", 2);
+  if (week === 3 && dayIdx === 0) rirSets(s, "Back Squat", "rir1", 1);
+  if (week === 1 && dayIdx === 2) rirSets(s, "Deadlift", "rir3plus", 2);
   if (week === 1 && dayIdx === 3 && cycle === 2) {
     const w = workingSets(s, "Overhead DB Press");
     if (w[1]) w[1].flags = ["stopped early"];

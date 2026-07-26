@@ -7,7 +7,7 @@ import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 4;
-export const BACKUP_SCHEMA_VERSION = 4;
+export const BACKUP_SCHEMA_VERSION = 5;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -211,7 +211,7 @@ const normalizeSession = (session) => ({
       // Pre-v2 completed history is known performed work. An open record is
       // ambiguous, so it migrates conservatively as planned.
       status: C.resolveSetStatus(set.status, !!session.isCompleted),
-      flags: C.normalizedSetFlags(C.setQuality(set.flags), (set.flags || []).includes("stopped early")),
+      flags: C.normalizedSetFlags(C.setQuality(set.flags), (set.flags || []).includes("stopped early"), C.setRIR(set.flags)),
       bodyFlagSite: normalizeBodySite(set.bodyFlagSite),
       targetWeightLb: set.targetWeightLb ?? null,
       plannedWeightLb: set.plannedWeightLb ?? null,
@@ -766,7 +766,7 @@ export const BACKUP_ENUMS = {
   themes: ["memento", "carbon", "slate", "system"],
   roles: ["main", "complementary", "accessory"], liftRoles: ["main", "complementary"],
   statuses: C.SET_STATUSES,
-  flags: [...C.SET_QUALITIES, "stopped early"],
+  flags: [...C.SET_QUALITIES, ...C.SET_RIRS, "stopped early"],
   reasons: ["bar speed", "wobble", "joint signal", "heat", "fatigue", "not there"],
   sites: BODY_SITES,
   categories: ["Main", "Accessory", "Conditioning"],
@@ -775,12 +775,12 @@ export const BACKUP_ENUMS = {
   prescriptions: ["automatic", "wave", "offsetWave", "secondary", "hypertrophy", "technique", "doubleProgression",
     "linearFives", "texasVolume", "texasLight", "texasIntensity", "fiveThreeOne", "maxEffort", "dynamicEffort"],
   warmupPolicies: ["automatic", "full", "short", "none"],
-  prescriptionBlocks: ["warmup", "primer", "topSingle", "ramp", "work", "backoff", "conditioning"],
+  prescriptionBlocks: ["warmup", "primer", "topSingle", "ramp", "work", "amrap", "backoff", "conditioning"],
   movementPatterns: C.MOVEMENT_PATTERNS,
   gateStatuses: ["open", "watch", "shelved", "re-entry"],
   conditioningEfforts: ["easy", "interval", "mixed"],
   coachingActions: ["accepted", "deferred", "dismissed", "overridden"],
-  milestoneKinds: ["heaviestSet", "volumePR", "firstScheme", "programNote"],
+  milestoneKinds: ["heaviestSet", "volumePR", "firstScheme", "repPR", "programNote"],
   loadBases: C.LOAD_BASES, loadingPolicies: C.LOADING_POLICIES,
 };
 
@@ -887,6 +887,13 @@ export function validateBackup(bundle) {
         flags?.forEach((flag, i) => enumValue(flag, BACKUP_ENUMS.flags, `${setPath}.flags[${i}]`));
         if (schemaVersion >= 2 && (flags || []).filter((flag) => C.SET_QUALITIES.includes(flag)).length > 1) {
           invalid(`${setPath}.flags`, "quality must be mutually exclusive");
+        }
+        // RIR is its own exclusive group, NOT part of the quality group: a set
+        // can be clean at 3+ reps in reserve or clean at 1, and those say
+        // different things. Folding them together would make the two exclude
+        // each other.
+        if (schemaVersion >= 5 && (flags || []).filter((flag) => C.SET_RIRS.includes(flag)).length > 1) {
+          invalid(`${setPath}.flags`, "reps in reserve must be mutually exclusive");
         }
         bodySiteValue(set.bodyFlagSite, `${setPath}.bodyFlagSite`);
         enumValue(set.autoregReason, BACKUP_ENUMS.reasons, `${setPath}.autoregReason`);

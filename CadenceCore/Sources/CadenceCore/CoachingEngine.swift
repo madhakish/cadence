@@ -528,14 +528,14 @@ public enum CoachingEngine {
         // Primers and top singles remain observable performance practice, but
         // they cannot substitute for a missing prescribed work set.
         let working = liftingExercises.flatMap(\.sets).filter {
-            !$0.isWarmup && $0.prescriptionBlock == .work
+            !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork
         }
         let completedWorking = working.filter(\.completed)
         let plannedCount = liftingExercises.reduce(0) { $0 + max(0, $1.plannedSets) }
         let atPlan = completedWorking.filter(setMeetsPlan).count
         let patternSets = Dictionary(grouping: allExercises, by: \.pattern).mapValues { entries in
             entries.flatMap(\.sets).filter {
-                !$0.isWarmup && $0.prescriptionBlock == .work && $0.completed
+                !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork && $0.completed
             }.count
         }
         let conditioningSeconds = allExercises.filter { $0.pattern.isConditioning }
@@ -632,7 +632,7 @@ public enum CoachingEngine {
         for exercise in sessions.flatMap(\.exercises) where !exercise.pattern.isConditioning {
             guard let slotID = exercise.slotID else { continue }
             let best = exercise.sets.filter {
-                !$0.isWarmup && $0.prescriptionBlock == .work && $0.completed && $0.actualReps > 0
+                !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork && $0.completed && $0.actualReps > 0
             }
                 .map { ProgramProgression.epleyE1RM(weightLb: $0.actualWeightLb, reps: $0.actualReps) }
                 .max() ?? 0
@@ -679,7 +679,7 @@ public enum CoachingEngine {
             // but cap work and conditioning to what this slot prescribed.
             var remainingWork = max(0, exercise.plannedSets)
             programmed.sets = exercise.sets.filter { set in
-                guard set.prescriptionBlock == .work || set.prescriptionBlock == .conditioning else {
+                guard set.prescriptionBlock.countsAsProgramInstruction else {
                     return true
                 }
                 guard remainingWork > 0 else { return false }

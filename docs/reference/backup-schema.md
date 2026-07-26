@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **4**. A missing version means the legacy version-0 shape.
+version **5**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,33 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 5 effort and AMRAP
+
+Version 5 adds three values to enums the importer validates against
+whitelists, which is precisely why the version has to move: an older importer
+would otherwise reject a newer backup with a confusing "unknown enum value"
+rather than "this backup is newer than this app". Both clients run the version
+gate *before* validation so the failure is the honest one.
+
+- **`amrap`** joins `prescriptionBlock`. A prescribed set taken past its rep
+  target — 5/3/1's "+" set, which is that method's actual progression engine.
+  It is graded work, not a garnish: an AMRAP set counts toward completion and
+  is eligible as the cycle's strength sample.
+- **`repPR`** joins the milestone `kind` vocabulary. More weight at a rep
+  count than ever before at that count, capped at ten reps.
+- **`rir1` / `rir2` / `rir3plus`** join set `flags`. Reps left in reserve,
+  in three coarse buckets rather than a number, because RIR accuracy averages
+  about a rep of error even in experienced lifters.
+
+Reps in reserve is a **separate exclusive group** from set quality. Each group
+allows at most one value per set, and the two never exclude each other — a set
+can be both `clean` and `rir1`, because how the bar moved and how close to
+failure it was are different questions. Importers enforce both rules
+independently from version 5 onward.
+
+No field shapes changed and no field was removed, so a version-4 bundle
+restores under version 5 untouched.
 
 ## Version 4 methodology styles
 

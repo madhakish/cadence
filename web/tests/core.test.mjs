@@ -1147,8 +1147,20 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   p = C.planForStyle(tm(4), 5, "fiveThreeOne");
   eq(`${p.weightLb}/${p.sets}x${p.reps}`, "180/1x5", "531 deload 60%×5");
 
+  // The top set is the "+" set — the AMRAP is 5/3/1's progression engine, and
+  // shipping the percentages without it was the template's one real infidelity.
   const pres531 = C.sessionPrescription(tm(3), 5, "barbell", "squat", "main", "strength", "fiveThreeOne");
-  eq(pres531.blocks.map((b) => b.kind).join(","), "ramp,ramp,work", "531 ramp precedes the top set");
+  eq(pres531.blocks.map((b) => b.kind).join(","), "ramp,ramp,amrap", "531 ramp precedes the + set");
+  // Wendler's deload has no "+" set.
+  const deload531 = C.sessionPrescription(tm(4), 5, "barbell", "squat", "main", "strength", "fiveThreeOne");
+  eq(deload531.blocks.map((b) => b.kind).join(","), "ramp,ramp,work", "the 531 deload carries no + set");
+  // An AMRAP set is graded work. Filtering to "work" alone made it invisible:
+  // uncounted for completion, ineligible as the top set, unable to reach the
+  // e1RM sample — the entire point of the block.
+  ok(C.countsAsPrescribedWork("amrap") && C.countsAsPrescribedWork("work"),
+    "amrap and work are both prescribed work");
+  ok(!["warmup", "primer", "ramp", "topSingle", "backoff"].some(C.countsAsPrescribedWork),
+    "preparation and back-off work are not the prescription being graded");
   eq(pres531.blocks.map((b) => b.weightLb).join(","), "225,255,285", "531 week-3 ramp 75/85/95%");
   eq(pres531.blocks.map((b) => b.reps).join(","), "5,3,1", "531 week-3 reps 5/3/1");
 

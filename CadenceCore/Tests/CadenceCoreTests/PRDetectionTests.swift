@@ -149,4 +149,23 @@ final class PRDetectionTests: XCTestCase {
         )
         XCTAssertTrue(events.contains { $0.kind == .heaviestSet })
     }
+
+    /// A rep PR is more weight at a rep count than ever before at that count.
+    /// History already rebuilt this table to draw a chart; nothing announced it.
+    func testRepPRFiresOnlyWhenARepCountIsBeaten() {
+        let history = [
+            SetSample(weightLb: 225, reps: 3), SetSample(weightLb: 185, reps: 5),
+        ]
+        func kinds(_ sets: [SetSample]) -> [PREvent.Kind] {
+            PRDetection.evaluate(exercise: "Back Squat", sessionSets: sets, historySets: history,
+                                 historyVolumes: [2000], historySchemes: ["1×3", "1×5"]).map(\.kind)
+        }
+        XCTAssertTrue(kinds([SetSample(weightLb: 235, reps: 3)]).contains(.repPR))
+        XCTAssertFalse(kinds([SetSample(weightLb: 225, reps: 3)]).contains(.repPR),
+                       "matching the record is not beating it")
+        XCTAssertFalse(kinds([SetSample(weightLb: 135, reps: 8)]).contains(.repPR),
+                       "a rep count never trained is a first, not a rep PR")
+        XCTAssertFalse(kinds([SetSample(weightLb: 135, reps: 20)]).contains(.repPR),
+                       "past the ceiling it is a conditioning result, not a strength one")
+    }
 }

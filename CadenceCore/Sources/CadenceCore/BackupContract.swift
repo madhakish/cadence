@@ -6,8 +6,13 @@
 /// separates immutable prescriptions from performed work. Version 4 adds the
 /// methodology prescription styles (linear fives, Texas day slots, 5/3/1,
 /// max/dynamic effort) — older importers reject them cleanly by version.
+/// Version 5 adds the AMRAP prescription block, the rep-PR milestone, and
+/// reps-in-reserve set flags. Each is a new value in an enum the importer
+/// validates against a whitelist, so a v5 bundle read by a v4 binary must fail
+/// on the VERSION check rather than on the enum — which is why the version
+/// gate runs before validation on both clients.
 public enum BackupContract {
-    public static let currentSchemaVersion = 4
+    public static let currentSchemaVersion = 5
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

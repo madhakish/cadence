@@ -193,7 +193,7 @@ export async function openSession(id) {
       const entry = matchingEntry(p);
       const recalledSets = entry && current.programRole
         ? (entry.sets || []).filter((set) => !set.isWarmup
-          && ["work", "conditioning"].includes(set.prescriptionBlock || "work"))
+          && C.countsAsProgramInstruction(set.prescriptionBlock))
           .slice(0, entry.plannedSets ?? entry.sets.length)
           .filter((set) => set.status === "completed")
         : (entry?.sets || []).filter((set) => !set.isWarmup && set.status === "completed");
@@ -449,6 +449,16 @@ export async function openSession(id) {
           ui.h("span", { class: "sub mono", text: ` × ${s.reps}${s.isPerSide ? "/side" : ""}` }));
     const tags = ui.h("span", { class: "sub" });
     if (s.isWarmup) tags.append(ui.h("span", { class: "pill", text: "warmup" }));
+    // The prescribed reps are a FLOOR on an AMRAP set. Without saying so,
+    // 5/3/1's week 3 reads as a plain single and the "+" — the whole
+    // progression engine — never happens.
+    if (!s.isWarmup && s.prescriptionBlock === "amrap") {
+      tags.append(ui.h("span", {
+        class: "pill accent",
+        text: `AMRAP ${s.plannedReps ?? s.reps}+`,
+        title: "Take this set past the target and stop when a rep turns grindy.",
+      }));
+    }
     if (s.autoregReason) tags.append(ui.h("span", { class: "pill warn", text: `↓ ${s.autoregReason}` }));
     if (s.bodyFlagSite) tags.append(ui.h("span", { class: "pill hard", text: "⚡︎" }));
 
@@ -473,12 +483,26 @@ export async function openSession(id) {
       "aria-label": `Set quality: ${quality || "not graded"}`,
       onClick: () => chooseQuality(s, body),
     });
+    // Reps in reserve, beside quality rather than folded into it: quality says
+    // how the bar moved, RIR says how close to failure it was. A set can be
+    // clean at 3+ in reserve or clean at 1, and those mean different things.
+    const rir = C.setRIR(s.flags);
+    const rirButton = ui.h("button", {
+      class: `flagbtn${rir ? " on-rir" : ""}`,
+      text: rir ? rir.replace("rir", "").replace("3plus", "3+") : "R",
+      "aria-label": `Reps in reserve: ${rir ? C.SET_RIR_LABELS[rir] : "not graded"}`,
+      onClick: () => chooseRIR(s, body),
+    });
     // The set you're ON — the first WORKING set with no verdict yet — gets
     // the accent rail; warmups sit quiet (and often go unflagged, so they
     // must not hold the rail hostage).
     const isCurrent = se.sets.find((x) => !x.isWarmup && x.status === "planned") === s;
     const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "") + (isCurrent ? " current" : "") }, wt, tags,
-      ui.h("div", { class: "flagbtns" }, statusButton, (isCardio || isTimed) ? null : qualityButton));
+      ui.h("div", { class: "flagbtns" }, statusButton,
+        (isCardio || isTimed) ? null : qualityButton,
+        // Duration and conditioning work has no rep count, so reps-in-reserve
+        // is meaningless there — same exclusion the quality button uses.
+        (isCardio || isTimed) ? null : rirButton));
 
     // Loadout visualization — plates for barbell lifts, the rack number for
     // dumbbell lifts. Mirrors native.
@@ -520,7 +544,17 @@ export async function openSession(id) {
     ui.actionSheet("Set quality", [null, "clean", "grindy", "wobble"].map((quality) => ({
       label: quality ? quality[0].toUpperCase() + quality.slice(1) : "Not graded",
       onClick: () => {
-        s.flags = C.normalizedSetFlags(quality, (s.flags || []).includes("stopped early"));
+        s.flags = C.normalizedSetFlags(quality, (s.flags || []).includes("stopped early"), C.setRIR(s.flags));
+        save(); renderBody(body);
+      },
+    })));
+  }
+
+  function chooseRIR(s, body) {
+    ui.actionSheet("Reps in reserve", [null, ...C.SET_RIRS].map((value) => ({
+      label: value ? C.SET_RIR_LABELS[value] : "Not graded",
+      onClick: () => {
+        s.flags = C.normalizedSetFlags(C.setQuality(s.flags), (s.flags || []).includes("stopped early"), value);
         save(); renderBody(body);
       },
     })));
@@ -582,7 +616,8 @@ export async function openSession(id) {
         // blocks at lighter loads must not anchor it. With no planned work
         // set left, fixedDrop stays null and the generic percentage drop in
         // dropLoadPlan takes over.
-        const first = se.sets.find((x) => !x.isWarmup && x.status === "planned" && (x.prescriptionBlock || "work") === "work");
+        const first = se.sets.find((x) => !x.isWarmup && x.status === "planned"
+          && C.countsAsPrescribedWork(x.prescriptionBlock));
         const fixedDrop = first && se.fallbackWeightLb != null ? Math.max(0, first.weightLb - se.fallbackWeightLb) : null;
         const ex = exMap.get(se.exerciseName);
         const step = C.programLoadStep(5, ex?.type);
@@ -646,7 +681,7 @@ export async function openSession(id) {
             if (applyWeightToRemaining && !warm) for (const target of remaining) { target.weightLb = weightLb; target.enteredUnit = unit; }
             if (applyRepsToRemaining && !warm) for (const target of remaining) target.reps = reps;
             s.isWarmup = warm; s.isPerSide = per;
-            s.flags = C.normalizedSetFlags(C.setQuality(s.flags), stopped);
+            s.flags = C.normalizedSetFlags(C.setQuality(s.flags), stopped, C.setRIR(s.flags));
             s.bodyFlagSite = site; s.bodyFlagNote = site ? (noteInput.value || null) : null;
             syncSetPlan(se);
             if (applyWeightToRemaining && !warm) synchronizeWarmups(se, barFor(se), weightLb);
@@ -942,7 +977,7 @@ async function completeSessionInner(session) {
     const track = await Tracks.byName(exerciseName);
     if (!track) continue;
     const performed = entries.filter((se) => se.sets.some((set) => !set.isWarmup
-      && set.status === "completed" && (set.prescriptionBlock || "work") === "work"));
+      && set.status === "completed" && C.countsAsPrescribedWork(set.prescriptionBlock)));
     if (!performed.length) continue;
     const advance = performed.length === entries.length
       && C.earnsStandaloneTrackAdvance(performed.map((se) => cyclePerf(se, track.roundingLb)));
@@ -959,7 +994,7 @@ async function completeSessionInner(session) {
   const hasCompletedProgramInstruction = session.exercises.some((se) => {
     if (!se.programSlotId && !se.programRole) return false;
     const candidates = (se.sets || []).filter((set) => !set.isWarmup
-      && ["work", "conditioning"].includes(set.prescriptionBlock || "work"));
+      && C.countsAsProgramInstruction(set.prescriptionBlock));
     return candidates.slice(0, se.plannedSets ?? candidates.length)
       .some((set) => set.status === "completed");
   });
@@ -995,7 +1030,7 @@ async function completeSessionInner(session) {
 // ---- Performance summaries (built from logged sets, consumed by the core) ----
 function prescribedWork(se) {
   const candidates = (se.sets || []).filter((set) => !set.isWarmup
-    && (set.prescriptionBlock || "work") === "work");
+    && C.countsAsPrescribedWork(set.prescriptionBlock));
   return candidates.slice(0, se.plannedSets ?? candidates.length)
     .filter((set) => set.status === "completed");
 }
@@ -1017,7 +1052,7 @@ function completedProgramInstructionsMatch(session, day) {
   const completed = (session.exercises || []).filter((entry) => {
     if (!entry.programSlotId && !entry.programRole) return false;
     const candidates = (entry.sets || []).filter((set) => !set.isWarmup
-      && ["work", "conditioning"].includes(set.prescriptionBlock || "work"));
+      && C.countsAsProgramInstruction(set.prescriptionBlock));
     return candidates.slice(0, entry.plannedSets ?? candidates.length)
       .some((set) => set.status === "completed");
   });

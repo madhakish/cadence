@@ -539,6 +539,57 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok((await db.Sessions.completed()).length === 11, "poisoned import did not clear sessions");
   ok((await db.Gyms.all()).length === gymsBefore.length, "poisoned import did not clear gyms");
 
+  // Schema 5 adds three values to enums the importer validates against
+  // whitelists: the amrap block, the repPR milestone, and the rir* flags. A v4
+  // bundle predates all three and has to keep restoring; a v5 bundle carrying
+  // all three has to round-trip.
+  {
+    const v4 = structuredClone(parsed);
+    v4.schemaVersion = 4;
+    for (const session of v4.sessions) for (const entry of session.exercises || []) {
+      for (const set of entry.sets || []) {
+        set.flags = (set.flags || []).filter((flag) => !C.SET_RIRS.includes(flag));
+        if (set.prescriptionBlock === "amrap") set.prescriptionBlock = "work";
+      }
+    }
+    v4.milestones = (v4.milestones || []).filter((m) => m.kind !== "repPR");
+    await db.importBundle(v4);
+    ok((await db.Sessions.all()).length === v4.sessions.length, "a version-4 backup still restores under schema 5");
+    ok((await db.Sessions.completed()).flatMap((s) => s.exercises).flatMap((e) => e.sets)
+      .every((set) => !(set.flags || []).some((f) => C.SET_RIRS.includes(f))),
+      "and it does not gain values it never carried");
+
+    // Decorated explicitly rather than relying on the fixture's contents: this
+    // is a contract test, and it should fail if the contract regresses even
+    // when the fixture happens not to exercise a value.
+    const v5 = structuredClone(parsed);
+    const marked = v5.sessions.flatMap((session) => session.exercises || [])
+      .flatMap((entry) => entry.sets || []).filter((set) => !set.isWarmup)[0];
+    ok(!!marked, "the fixture bundle has a working set to decorate");
+    marked.flags = ["clean", "rir1"];
+    marked.prescriptionBlock = "amrap";
+    v5.milestones = [...(v5.milestones || []), {
+      date: v5.sessions[0].date, exerciseName: "Back Squat", kind: "repPR", label: "Rep PR — 235 × 3 back squat",
+    }];
+    await db.importBundle(v5);
+
+    const roundTripped = (await db.Sessions.all()).flatMap((s) => s.exercises || []).flatMap((e) => e.sets || []);
+    ok(roundTripped.some((set) => (set.flags || []).includes("rir1")),
+      "reps-in-reserve survives import — the flag normalizer used to strip it on read");
+    ok(roundTripped.some((set) => (set.flags || []).includes("clean") && (set.flags || []).includes("rir1")),
+      "a set can be both clean and one rep from failure — the two groups do not exclude each other");
+    ok(roundTripped.some((set) => set.prescriptionBlock === "amrap"), "the amrap block survives import");
+    ok((await db.Milestones.all()).some((m) => m.kind === "repPR"), "rep PRs are announced, not just charted");
+
+    // Re-exporting must not quietly drop any of them either.
+    const reexported = await db.exportBundle();
+    const reexportedSets = reexported.sessions.flatMap((s) => s.exercises || []).flatMap((e) => e.sets || []);
+    ok(reexportedSets.some((set) => (set.flags || []).includes("rir1")), "and survives the next export");
+    ok(reexportedSets.some((set) => set.prescriptionBlock === "amrap"), "and so does the amrap block");
+
+    await db.importBundle(parsed);
+  }
+
   const sessionsBeforeFuture = (await db.Sessions.all()).length;
   let threwFuture = false;
   try { await db.importBundle({ ...parsed, schemaVersion: db.BACKUP_SCHEMA_VERSION + 1 }); } catch { threwFuture = true; }
@@ -914,6 +965,33 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   ok(program.days[0].lifts[0].estimatedMaxLb === 221.45,
     `light deload work is not evidence the max fell (got ${program.days[0].lifts[0].estimatedMaxLb})`);
+
+  await db.importBundle(parsed);
+}
+
+// A 5/3/1 day is ALL amrap and ramp blocks — it has no ordinary `work` set at
+// all. Every gate that asked "is this `work`" therefore answered no, so the
+// session banked as history and the schedule never advanced. The template was
+// completely inert.
+{
+  const name = "Fixture 531 Advance";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0, accessories: [],
+      lifts: [{ exerciseName: "Back Squat", role: "main", prescription: "fiveThreeOne",
+        baseWeightLb: 300, estimatedMaxLb: 340, stallCount: 0, lastIncrementLb: 0 }] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const id = await session.createSessionFromProgramDay(program, program.days[0]);
+  const s531 = await db.Sessions.get(id);
+  const blocks = s531.exercises[0].sets.filter((set) => !set.isWarmup).map((set) => set.prescriptionBlock);
+  ok(blocks.includes("amrap") && !blocks.includes("work"),
+    `a 531 day carries an amrap top set and no ordinary work set (${blocks})`);
+  for (const set of s531.exercises[0].sets) set.status = "completed";
+  await session.completeSession(s531);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.currentWeek === 2, `banking a 531 day advances the rotation (got ${program.currentWeek})`);
 
   await db.importBundle(parsed);
 }
