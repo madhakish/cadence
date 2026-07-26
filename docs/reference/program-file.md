@@ -13,7 +13,7 @@ one program and nothing else.
 
 A program file never contains:
 
-`sessions` · `bodyweight` · `protein` · `milestones` · `checkIns` ·
+`sessions` · `bodyweight` · `milestones` · `checkIns` ·
 `coachingDecisions` · `gyms` · `settings` · `tracks` · the exercise library ·
 gate status or re-entry criteria.
 

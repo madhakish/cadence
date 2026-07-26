@@ -37,7 +37,7 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
-    func testShippedV3StoreMigratesToV4WithoutDataLoss() throws {
+    func testShippedV3StoreMigratesToV5WithoutDataLoss() throws {
         try assertMigration(
             createStore: createV3Store,
             migrationPlan: CadenceV3MigrationPlan.self,
@@ -45,8 +45,65 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
+    /// The common case for this upgrade: every install shipped since V4 became
+    /// current carries the V4 checksum.
+    func testShippedV4StoreMigratesToV5WithoutDataLoss() throws {
+        try assertMigration(
+            createStore: { try self.createV4Store(at: $0) },
+            migrationPlan: CadenceV4MigrationPlan.self,
+            expectsExistingSessionID: true
+        )
+    }
+
+    /// V5 removes `ProteinEntry` and `proteinTargetGrams`. That is deliberate
+    /// and destructive, so the thing worth proving is the blast radius: the
+    /// dropped entity takes nothing else with it, and the store still opens.
+    func testV5DropsProteinWithoutTakingTheRestOfTheStoreWithIt() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+
+        try createV4Store(at: storeURL, proteinEntries: 12)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
+        let container = try ModelContainer(
+            for: schema, migrationPlan: CadenceV4MigrationPlan.self, configurations: configuration
+        )
+        let context = container.mainContext
+
+        // The neighbours in the same file and the same store.
+        let weights = try context.fetch(FetchDescriptor<BodyweightEntry>())
+        XCTAssertEqual(weights.count, 2, "bodyweight entries were collateral damage")
+        XCTAssertEqual(weights.map(\.weightLb).sorted(), [199, 201])
+        XCTAssertEqual(weights.first { $0.weightLb == 201 }?.bodyFatPercent, 18,
+                       "body fat did not survive alongside the weigh-in")
+        XCTAssertEqual(try context.fetch(FetchDescriptor<CheckIn>()).count, 1,
+                       "check-ins share TrackingModels.swift with the deleted entity")
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Milestone>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutSession>()).count, 1)
+
+        // The settings row loses one field and gains another; everything else
+        // it holds must be untouched.
+        let settings = try XCTUnwrap(try context.fetch(FetchDescriptor<AppSettings>()).first)
+        XCTAssertEqual(settings.birthYear, 0, "an upgraded row takes the not-set default")
+        XCTAssertEqual(settings.accessoryRestSeconds, 75, "an unrelated setting moved")
+        XCTAssertEqual(settings.themeNameRaw, "slate")
+        XCTAssertTrue(settings.healthKitEnabled)
+
+        // And the store keeps working after the upgrade: a birth year set now
+        // survives a reopen, which is what makes the new field real rather than
+        // merely declared.
+        settings.birthYear = 1958
+        try context.save()
+        XCTAssertEqual(ProteinGuidance.age(birthYear: 1958, inYear: 2026), 68)
+        XCTAssertEqual(ProteinGuidance.mealGramsPerKg(age: 68), ProteinGuidance.mealGramsPerKgOlder)
+    }
+
     func testRelationshipAliasRepairRestoresIndependentLowerBDayAndIsIdempotent() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -122,7 +179,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairDoesNotGuessBetweenIdenticalCollidingSlots() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -163,7 +220,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testMirroredLowerBMatrixRestoresRolesFromItsTaggedProgramDay() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -259,7 +316,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     private func openUsingProductionStrategies(storeURL: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
         let configuration = {
             ModelConfiguration("migration", schema: schema, url: storeURL)
         }
@@ -294,7 +351,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createStore(storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema,
@@ -465,6 +522,86 @@ final class PersistenceMigrationTests: XCTestCase {
         context.insert(CadenceSchemaV3.AppSettings())
         insertV3Program(context)
         try context.save()
+    }
+
+    /// A store at the frozen V4 checksum, carrying the two things V5 removes
+    /// plus enough neighbouring data to notice if the removal overreaches.
+    private func createV4Store(at url: URL, proteinEntries: Int = 3) throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: url)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+
+        let exercise = CadenceSchemaV4.Exercise(
+            name: "Back Squat", categoryRaw: "Main", typeRaw: "barbell")
+        exercise.movementGroup = "squat"
+        let session = CadenceSchemaV4.WorkoutSession(
+            date: Date(timeIntervalSince1970: 1_700_000_000))
+        session.notes = "V1 training log"
+        session.isCompleted = true
+        let entry = CadenceSchemaV4.SessionExercise(order: 0)
+        entry.exercise = exercise
+        entry.plannedWeightLb = 195
+        entry.plannedSets = 3
+        entry.plannedReps = 5
+        let set = CadenceSchemaV4.SetEntry(order: 0)
+        set.weightLb = 185
+        set.reps = 5
+        let warmup = CadenceSchemaV4.SetEntry(order: 1)
+        warmup.weightLb = 95
+        warmup.reps = 5
+        warmup.isWarmup = true
+        warmup.prescriptionBlockRaw = "warmup"
+        entry.session = session
+        entry.sets = [set, warmup]
+        set.sessionExercise = entry
+        warmup.sessionExercise = entry
+        session.exercises = [entry]
+
+        context.insert(exercise)
+        context.insert(session)
+        context.insert(entry)
+        context.insert(set)
+        context.insert(warmup)
+        context.insert(CadenceSchemaV4.Gym(name: "Migration Gym"))
+
+        // The data V5 destroys, and the data sitting next to it that must not be.
+        for index in 0..<proteinEntries {
+            context.insert(CadenceSchemaV4.ProteinEntry(
+                date: Date(timeIntervalSince1970: 1_700_000_000 + Double(index) * 3600),
+                grams: 40, label: "Retired entry \(index)"))
+        }
+        let heavier = CadenceSchemaV4.BodyweightEntry(
+            date: Date(timeIntervalSince1970: 1_700_000_000), weightLb: 201)
+        heavier.bodyFatPercent = 18
+        context.insert(heavier)
+        context.insert(CadenceSchemaV4.BodyweightEntry(
+            date: Date(timeIntervalSince1970: 1_700_600_000), weightLb: 199))
+        context.insert(CadenceSchemaV4.CheckIn(
+            siteRaw: "Knee", response: "All clear"))
+        context.insert(CadenceSchemaV4.Milestone(
+            kindRaw: "weight", label: "Fixture PR"))
+
+        let settings = CadenceSchemaV4.AppSettings()
+        settings.proteinTargetGrams = 145
+        settings.accessoryRestSeconds = 75
+        settings.themeNameRaw = "slate"
+        settings.healthKitEnabled = true
+        context.insert(settings)
+
+        insertV4Program(context)
+        try context.save()
+    }
+
+    private func insertV4Program(_ context: ModelContext) {
+        let program = CadenceSchemaV4.Program(name: "Migration Program")
+        let day = CadenceSchemaV4.ProgramDay(name: "Lower", order: 0)
+        let lift = CadenceSchemaV4.ProgramLift(exerciseName: "Back Squat")
+        lift.baseWeightLb = 175
+        let accessory = CadenceSchemaV4.ProgramAccessory(exerciseName: "Seated Leg Curl")
+        day.program = program; lift.day = day; accessory.day = day
+        day.lifts = [lift]; day.accessories = [accessory]; program.days = [day]
+        context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
     }
 
     private func insertV1Program(_ context: ModelContext) {

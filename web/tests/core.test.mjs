@@ -669,6 +669,27 @@ ok(/35 g per meal/.test(C.proteinSummary(201)), "and the per-meal figure");
 // literal was the same for a 130 lb and a 250 lb lifter.
 ok(C.proteinDailyTargetGrams(250) > C.proteinDailyTargetGrams(130), "the target scales with bodyweight");
 
+// Age changes the per-meal threshold and nothing else. The daily figure is
+// already the resistance-training one, so training type does not scale it.
+ok(C.proteinPerMealGrams(201, 40) === 25, "under 65 uses the 0.25 g/kg per-meal threshold");
+ok(C.proteinPerMealGrams(201, 70) === 35, "65+ uses the higher 0.4 g/kg threshold");
+ok(C.proteinPerMealGrams(201, 65) === 35, "65 is the threshold, not one past it");
+ok(C.proteinDailyTargetGrams(201) === 145, "the daily figure does not move with age");
+// An unknown age takes the higher per-dose threshold: eating to it costs a
+// younger lifter nothing, under-dosing an older one is the failure that matters.
+ok(C.proteinMealGramsPerKg(null) === C.PROTEIN_MEAL_G_PER_KG_OLDER, "unknown age is conservative");
+ok(C.proteinPerMealGrams(201, null) === 35, "and yields the older-adult figure");
+ok(C.proteinPerMealRationale(null) === null, "nothing to explain when there is no age");
+ok(/0\.4 g\/kg/.test(C.proteinPerMealRationale(70)), "the rationale names the older threshold");
+ok(/0\.25 g\/kg/.test(C.proteinPerMealRationale(40)), "and the younger one");
+// Age is never guessed from a nonsense birth year.
+ok(C.ageFromBirthYear(1980, 2026) === 46, "a plausible birth year gives an age");
+ok(C.ageFromBirthYear(0, 2026) === null, "unset is not a birth year");
+ok(C.ageFromBirthYear(1899, 2026) === null, "before 1900 is not plausible");
+ok(C.ageFromBirthYear(2030, 2026) === null, "not yet born");
+ok(C.ageFromBirthYear(1901, 2026) === null, "past a plausible lifespan");
+ok(C.ageFromBirthYear(2026, 2026) === 0, "born this year is age zero, not unknown");
+
 // Session spacing is advisory and only speaks when it has something to say.
 ok(C.sessionSpacingShortfall(1, 3) === 2, "one day into a three-day preference is two short");
 ok(C.sessionSpacingShortfall(0, 3) === 3, "training the same day is the full shortfall");

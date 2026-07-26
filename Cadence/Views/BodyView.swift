@@ -3,17 +3,16 @@ import SwiftData
 import Charts
 import CadenceCore
 
-/// Bodyweight trend with milestone annotations + daily protein running total.
+/// Bodyweight trend with milestone annotations, advisory protein guidance,
+/// and what Apple Health has to say about either.
 struct BodyView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \BodyweightEntry.date) private var bodyweight: [BodyweightEntry]
-    @Query(sort: \ProteinEntry.date, order: .reverse) private var protein: [ProteinEntry]
     @Query private var settingsList: [AppSettings]
 
     @AppStorage("healthReadEnabled") private var healthReadEnabled = false
 
     @State private var showWeightEntry = false
-    @State private var customProteinText = ""
     @State private var healthWeighIn: HealthBodyweight?
     @State private var recovery = HealthKitService.RecoverySnapshot()
 
@@ -23,14 +22,6 @@ struct BodyView: View {
     private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
     private func displayWeight(_ lb: Double) -> Double {
         unitDisplay.primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb
-    }
-
-    private var todayProtein: [ProteinEntry] {
-        protein.filter { Calendar.current.isDateInToday($0.date) }
-    }
-
-    private var todayProteinTotal: Double {
-        todayProtein.reduce(0) { $0 + $1.grams }
     }
 
     var body: some View {
@@ -81,72 +72,9 @@ struct BodyView: View {
                     }
                 }
 
-                Section {
-                    HStack {
-                        Text("\(Int(todayProteinTotal)) g")
-                            .font(.title.bold().monospacedDigit())
-                        Text("/ \(Int(settings?.proteinTargetGrams ?? 100)) g today")
-                            .foregroundStyle(.secondary)
-                    }
-                    ProgressView(value: min(1, todayProteinTotal / (settings?.proteinTargetGrams ?? 100)))
-                        .tint(todayProteinTotal >= (settings?.proteinTargetGrams ?? 100) ? Theme.good : Theme.accent)
-
-                    // Guidance, not enforcement: the stored target stays
-                    // whatever the lifter set. Offered only when there is a
-                    // real bodyweight to derive it from — the app never invents
-                    // one — and only when it differs from what's set.
-                    if let guidance = ProteinGuidance.summary(bodyweightLb: bodyweight.last?.weightLb) {
-                        Text(guidance)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        if let suggested = ProteinGuidance.dailyTargetGrams(bodyweightLb: bodyweight.last?.weightLb),
-                           let settings, Int(suggested) != Int(settings.proteinTargetGrams) {
-                            Button("Use \(Int(suggested)) g as my daily target") {
-                                settings.proteinTargetGrams = suggested
-                                PersistenceErrorCenter.shared.save(context, operation: "Updating the protein target")
-                            }
-                            .font(.caption)
-                        }
-                    }
-
-                    HStack(spacing: 10) {
-                        Button("Shake ~45g") { logProtein(45, "Shake ~45g") }
-                            .buttonStyle(.bordered)
-                        Button("Meat ~50g") { logProtein(50, "Meat meal ~50g") }
-                            .buttonStyle(.bordered)
-                    }
-                    HStack {
-                        TextField("Custom g", text: $customProteinText)
-                            .keyboardType(.numberPad)
-                        Button("Add") {
-                            if let grams = Double(customProteinText), grams > 0 {
-                                logProtein(grams, "Custom")
-                                customProteinText = ""
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                } header: {
-                    Text("Protein")
-                }
+                proteinSection
 
                 healthSection
-
-                if !todayProtein.isEmpty {
-                    Section("Today's entries") {
-                        ForEach(todayProtein) { entry in
-                            HStack {
-                                Text(entry.label)
-                                Spacer()
-                                Text("\(Int(entry.grams)) g").monospacedDigit()
-                            }
-                        }
-                        .onDelete { offsets in
-                            for index in offsets { context.delete(todayProtein[index]) }
-                            PersistenceErrorCenter.shared.save(context, operation: "Deleting the protein entry")
-                        }
-                    }
-                }
             }
             .navigationTitle("Body")
             .sheet(isPresented: $showWeightEntry) {
@@ -164,9 +92,47 @@ struct BodyView: View {
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
 
-    private func logProtein(_ grams: Double, _ label: String) {
-        context.insert(ProteinEntry(grams: grams, label: label))
-        PersistenceErrorCenter.shared.save(context, operation: "Logging protein")
+    // MARK: - Protein
+
+    /// Advice, not a tracker.
+    ///
+    /// Logging individual servings was retired in schema V5: counting grams
+    /// only works with a real meal-entry surface, and a half-measure the lifter
+    /// abandons after a week is worse than an honest target. What is left is a
+    /// figure to aim at, derived from bodyweight and — for the per-meal
+    /// threshold, where age genuinely changes the answer — year of birth.
+    @ViewBuilder
+    private var proteinSection: some View {
+        if let guidance = ProteinGuidance.summary(bodyweightLb: latestWeightLb, age: age) {
+            Section {
+                Text(guidance)
+                if let rationale = ProteinGuidance.perMealRationale(age: age) {
+                    Text(rationale)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    // Naming the assumption rather than hiding it: the figure
+                    // shown is the older-adult one until the lifter says
+                    // otherwise, and they should know why it might drop.
+                    Text("Add your year of birth in Settings for an age-adjusted per-meal figure.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Protein")
+            } footer: {
+                Text("Guidance only — Cadence does not track what you eat.")
+            }
+        }
+    }
+
+    private var latestWeightLb: Double? { bodyweight.last?.weightLb }
+
+    private var age: Int? {
+        guard let birthYear = settings?.birthYear else { return nil }
+        return ProteinGuidance.age(
+            birthYear: birthYear, inYear: Calendar.current.component(.year, from: .now)
+        )
     }
 
     // MARK: - Health

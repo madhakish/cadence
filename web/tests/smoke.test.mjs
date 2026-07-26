@@ -71,14 +71,14 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
     date: "2000-01-01T00:00:00.000Z", notes: "Fictional seed-repair sentinel",
     isCompleted: true, gymName: "Main Gym", exercises: [],
   });
-  const proteinId = await db.Protein.add({ date: "2000-01-01T00:00:00.000Z", grams: 10, label: "Fixture sentinel" });
+  const weighInId = await db.Bodyweight.add({ date: "2000-01-01T00:00:00.000Z", weightLb: 199 });
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
   ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
   ok((await db.Exercises.all()).length === 141, "seed repair does not duplicate exercises");
-  ok((await db.Protein.all()).some((entry) => entry.id === proteinId), "seed repair preserves other user stores");
+  ok((await db.Bodyweight.all()).some((entry) => entry.id === weighInId), "seed repair preserves other user stores");
   await db.Sessions.del(sentinelId);
-  await db.Protein.del(proteinId);
+  await db.Bodyweight.del(weighInId);
 }
 
 // Explicit fictional state for the remainder of the regression suite. This is
@@ -849,10 +849,6 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const after = (await db.Tracks.byName("Incline DB Press")).baseWeightLb;
   ok(after === before + 5, `duplicate sections advance the track only once (${before}→${after})`);
 }
-
-// ---- protein add reflects in today's total ----
-await db.Protein.add({ date: new Date().toISOString(), grams: 45, label: "Shake" });
-ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 
 // ---- program prescription integrity: DB steps, warmups, adjusted targets, slot identity ----
 {

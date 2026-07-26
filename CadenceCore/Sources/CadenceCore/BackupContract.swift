@@ -11,8 +11,16 @@
 /// validates against a whitelist, so a v5 bundle read by a v4 binary must fail
 /// on the VERSION check rather than on the enum — which is why the version
 /// gate runs before validation on both clients.
+///
+/// Version 6 retires protein logging: the `protein` array and
+/// `settings.proteinTargetGrams` are gone, and `settings.birthYear` is added
+/// for age-adjusted protein guidance. This is the first **lossy** version
+/// boundary — a v≤5 bundle still imports, but its protein entries are dropped
+/// on the way in because the store has nowhere to put them. Older importers
+/// reject a v6 bundle on the version gate, as they should: it carries a field
+/// they do not know and is missing one they expect.
 public enum BackupContract {
-    public static let currentSchemaVersion = 5
+    public static let currentSchemaVersion = 6
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

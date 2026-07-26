@@ -6,8 +6,8 @@ import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 4;
-export const BACKUP_SCHEMA_VERSION = 5;
+const DB_VERSION = 5;
+export const BACKUP_SCHEMA_VERSION = 6;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -15,7 +15,6 @@ const STORES = {
   tracks: { keyPath: "exerciseName" },
   sessions: { keyPath: "id", autoIncrement: true },
   bodyweight: { keyPath: "id", autoIncrement: true },
-  protein: { keyPath: "id", autoIncrement: true },
   checkins: { keyPath: "id", autoIncrement: true },
   milestones: { keyPath: "id", autoIncrement: true },
   programs: { keyPath: "id", autoIncrement: true },
@@ -43,6 +42,7 @@ function open() {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, opts);
       }
       if (event.oldVersion < 4) migrateToV4(req.transaction);
+      if (event.oldVersion < 5) migrateToV5(req.result);
     };
     req.onsuccess = () => {
       if (settled) { req.result.close(); return; }
@@ -79,6 +79,16 @@ function migrateToV4(transaction) {
   rewrite("exercises", normalizeExercise);
   rewrite("programs", normalizeProgram);
   rewrite("sessions", normalizeSession);
+}
+
+// V5 retires protein logging. The store is deleted outright rather than left
+// orphaned: serving-level logging only works with a real meal-entry surface,
+// which this app will never have, so keeping a store nothing writes to would
+// just be a place for stale rows to sit. Protein is advisory now — see
+// core.js proteinSummary. `settings.proteinTargetGrams` goes with it and is
+// dropped by normalizeSettings; `birthYear` replaces it.
+function migrateToV5(db) {
+  if (db.objectStoreNames.contains("protein")) db.deleteObjectStore("protein");
 }
 
 // One transaction over one or more stores. fn receives a store getter and is
@@ -246,7 +256,7 @@ export const localDayKey = (d) => {
   const x = d instanceof Date ? d : new Date(d);
   return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
 };
-export const isToday = (d) => localDayKey(d) === localDayKey(new Date());
+// `isToday` went with the protein tracker — it had no other caller.
 
 // ---- Settings ----
 // get/save both run normalizeSettings, so every consumer sees a COMPLETE
@@ -264,7 +274,7 @@ function defaultSettings() {
   return {
     unitDisplay: "lbPrimary",
     theme: "carbon",
-    proteinTargetGrams: 100,
+    birthYear: 0,
     accessoryRestSeconds: 90, // legacy — superseded by rest.accessorySeconds, kept for old exports
     // Five configurable rest buckets (seconds); secondary rests less than a top main.
     rest: { mainCompoundSeconds: 300, olympicSeconds: 240, mainUpperSeconds: 180, secondarySeconds: 180, accessorySeconds: 90 },
@@ -323,13 +333,6 @@ export const Bodyweight = {
   all: () => getAll("bodyweight"),
   add: (e) => put("bodyweight", e),
   del: (id) => del("bodyweight", id),
-};
-export const Protein = {
-  all: () => getAll("protein"),
-  add: (e) => put("protein", e),
-  del: (id) => del("protein", id),
-  async today() { const all = await getAll("protein"); return all.filter((p) => isToday(p.date)); },
-  async todayTotal() { return (await Protein.today()).reduce((s, p) => s + p.grams, 0); },
 };
 export const Checkins = {
   async all() {
@@ -565,10 +568,10 @@ export async function exportBundle() {
   });
   const portableSessionID = (session) => isPortableUUID(session.id)
     ? session.id : stableID(`session:${session.id ?? sessionFingerprint(session)}`);
-  const [sessions, bodyweight, protein, checkins, milestones, programs, tracks, gyms, exercises, settings, coachingDecisions] = await Promise.all([
+  const [sessions, bodyweight, checkins, milestones, programs, tracks, gyms, exercises, settings, coachingDecisions] = await Promise.all([
     Sessions.all().then((all) => all.sort((a, b) => new Date(b.date) - new Date(a.date)
       || portableSessionID(a).localeCompare(portableSessionID(b)))),
-    Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
+    Bodyweight.all(), Checkins.all(), Milestones.all(), Programs.all(),
     Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(), CoachingDecisions.all(),
   ]);
   const programsById = new Map(programs.flatMap((p) => [[p.id, p], [p.uuid, p]]));
@@ -637,7 +640,6 @@ export async function exportBundle() {
       })),
     })),
     bodyweight: bodyweight.map((b) => ({ date: iso(b.date), weightLb: b.weightLb, bodyFatPercent: b.bodyFatPercent ?? null, milestoneLabel: b.milestoneLabel || null })),
-    protein: protein.map((p) => ({ date: iso(p.date), grams: p.grams, label: p.label })),
     checkIns: checkins.map((c) => ({ date: iso(c.date), site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })),
     milestones: milestones.map((m) => ({ date: iso(m.date), exercise: m.exerciseName || null, kind: m.kind, label: m.label })),
     programs: programs.map((p) => ({
@@ -754,7 +756,12 @@ function normalizeSettings(s) {
   };
   Object.keys(flat).forEach((k) => flat[k] === undefined && delete flat[k]);
   const rest = { ...C.REST_DEFAULTS, ...flat, ...(s.rest || {}) };
-  return { ...s, rest, accessoryRestSeconds: rest.accessorySeconds,
+  // proteinTargetGrams is dropped rather than carried: backup schema 6 has no
+  // such field, and a settings row that keeps writing it would put it straight
+  // back into every export.
+  const { proteinTargetGrams, ...rest0 } = s;
+  return { ...rest0, rest, accessoryRestSeconds: rest.accessorySeconds,
+    birthYear: Number.isInteger(s.birthYear) ? s.birthYear : 0,
     gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay === true };
 }
 
@@ -910,10 +917,6 @@ export function validateBackup(bundle) {
     dateValue(entry.date, `${path}.date`, true); numberValue(entry.weightLb, `${path}.weightLb`, { required: true, min: 0 });
     numberValue(entry.bodyFatPercent, `${path}.bodyFatPercent`, { min: 0, max: 100 });
   });
-  const protein = array(bundle, "protein");
-  each(protein, "protein", (entry, path) => {
-    dateValue(entry.date, `${path}.date`, true); numberValue(entry.grams, `${path}.grams`, { required: true, min: 0 });
-  });
   const checkIns = array(bundle, "checkIns");
   each(checkIns, "checkIns", (entry, path) => {
     dateValue(entry.date, `${path}.date`, true); bodySiteValue(entry.site, `${path}.site`, true);
@@ -1037,7 +1040,15 @@ export function validateBackup(bundle) {
     const settings = object(bundle.settings, "settings");
     enumValue(settings.unitDisplay, BACKUP_ENUMS.unitDisplay, "settings.unitDisplay", schemaVersion >= 1);
     enumValue(settings.theme, BACKUP_ENUMS.themes, "settings.theme", schemaVersion >= 1);
-    numberValue(settings.proteinTargetGrams, "settings.proteinTargetGrams", { min: 0 });
+    // 0 is the "not set" sentinel and always valid. Any other year has to
+    // produce a plausible age, so a corrupted field cannot silently move the
+    // lifter across the older-adult protein threshold.
+    if (settings.birthYear !== undefined && settings.birthYear !== null && settings.birthYear !== 0) {
+      numberValue(settings.birthYear, "settings.birthYear", { integer: true });
+      if (C.ageFromBirthYear(settings.birthYear, new Date().getFullYear()) === null) {
+        throw new Error(`settings.birthYear: ${settings.birthYear} is not a plausible year of birth`);
+      }
+    }
     dateValue(settings.seededAt, "settings.seededAt");
     for (const key of ["accessoryRestSeconds", "mainCompoundRestSeconds", "olympicRestSeconds", "mainUpperRestSeconds", "secondaryRestSeconds"]) {
       numberValue(settings[key], `settings.${key}`, { integer: true, min: 0, max: 3600 });
@@ -1050,7 +1061,7 @@ export function validateBackup(bundle) {
     }
   }
 
-  if (![sessions, bodyweight, protein, checkIns, milestones, programs, tracks, gyms, exercises, coachingDecisions].some((v) => v !== null) && !("settings" in bundle)) {
+  if (![sessions, bodyweight, checkIns, milestones, programs, tracks, gyms, exercises, coachingDecisions].some((v) => v !== null) && !("settings" in bundle)) {
     throw new Error("Not a Cadence backup");
   }
 }
@@ -1159,7 +1170,8 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
     })));
   }
   if (bundle.bodyweight) writes.set("bodyweight", bundle.bodyweight.map((b) => ({ date: b.date, weightLb: b.weightLb, bodyFatPercent: b.bodyFatPercent ?? null, milestoneLabel: b.milestoneLabel || null })));
-  if (bundle.protein) writes.set("protein", bundle.protein.map((p) => ({ date: p.date, grams: p.grams, label: p.label })));
+  // A v<=5 bundle's `protein` array is ignored: schema 6 removed the store,
+  // so there is nowhere to put it and nothing that would read it back.
   if (bundle.checkIns) writes.set("checkins", bundle.checkIns.map((c) => ({ date: c.date, site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })));
   if (bundle.milestones) writes.set("milestones", bundle.milestones.map((m) => ({ date: m.date, exerciseName: m.exercise || null, kind: m.kind, label: m.label })));
   if (importedPrograms) writes.set("programs", importedPrograms);

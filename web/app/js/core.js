@@ -1317,33 +1317,69 @@ export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, i
 // beats the app's opinion.
 //
 // Returns null when there is nothing useful to say.
-// Bodyweight-derived protein guidance. Advisory, and deliberately outside the
-// programming engine — nothing here feeds progression or readiness. The stored
-// proteinTargetGrams stays whatever the lifter set; this only offers a number
-// to compare it against.
+// Bodyweight- and age-derived protein guidance. Advisory, and deliberately
+// outside the programming engine — nothing here feeds progression or readiness.
+// Since schema V5 there is no tracker and no stored target: this is a figure to
+// aim at, not a number to tick off.
 //
 // 1.6 g/kg/day is the plateau Morton et al. (2018) found for RT-induced
-// fat-free mass gains; 0.4 g/kg/meal is the higher per-dose threshold PROT-AGE
-// recommends for older adults, whose muscle responds less to a given dose.
+// fat-free mass gains. That meta-analysis pooled resistance-training trials, so
+// the training modality is already inside the number — there is no per-session
+// multiplier, because scaling a daily intake by one day's workout is not
+// something the evidence supports.
+//
+// Age is where the answer genuinely changes: Moore et al. (2015) put the
+// per-meal plateau near 0.24 g/kg for younger adults and near 0.40 g/kg for
+// older ones, the higher figure PROT-AGE (Bauer 2013) recommends, because
+// muscle responds less to a given dose with age.
 // Mirrored 1:1 in CadenceCore ProteinGuidance.
 export const PROTEIN_DAILY_G_PER_KG = 1.6;
-export const PROTEIN_MEAL_G_PER_KG = 0.4;
+export const PROTEIN_MEAL_G_PER_KG_YOUNGER = 0.25;
+export const PROTEIN_MEAL_G_PER_KG_OLDER = 0.4;
+export const PROTEIN_OLDER_ADULT_AGE = 65;
 export const PROTEIN_MEALS_PER_DAY = 4;
+
+// Age in whole years, or null when there is no usable birth year. Never
+// guessed — a default age would silently apply the wrong per-meal threshold.
+export function ageFromBirthYear(birthYear, currentYear) {
+  if (!(birthYear > 1900) || !(currentYear >= birthYear)) return null;
+  const years = currentYear - birthYear;
+  return years <= 120 ? years : null;
+}
+
+// Without an age this is the older-adult figure — the conservative direction,
+// since the higher per-dose threshold costs a younger lifter nothing while
+// under-dosing an older one is the failure that matters.
+export function proteinMealGramsPerKg(age) {
+  if (age == null) return PROTEIN_MEAL_G_PER_KG_OLDER;
+  return age >= PROTEIN_OLDER_ADULT_AGE ? PROTEIN_MEAL_G_PER_KG_OLDER : PROTEIN_MEAL_G_PER_KG_YOUNGER;
+}
 
 const proteinGrams = (bodyweightLb, perKg) => {
   if (!(bodyweightLb > 0)) return null;
   return Math.round(kgFromLb(bodyweightLb) * perKg / 5) * 5;
 };
 export const proteinDailyTargetGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_DAILY_G_PER_KG);
-export const proteinPerMealGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_MEAL_G_PER_KG);
+export const proteinPerMealGrams = (bodyweightLb, age = null) =>
+  proteinGrams(bodyweightLb, proteinMealGramsPerKg(age));
 
 // One line of guidance, or null when there is no bodyweight logged — the app
 // never invents one.
-export function proteinSummary(bodyweightLb) {
+export function proteinSummary(bodyweightLb, age = null) {
   const daily = proteinDailyTargetGrams(bodyweightLb);
-  const meal = proteinPerMealGrams(bodyweightLb);
+  const meal = proteinPerMealGrams(bodyweightLb, age);
   if (daily == null || meal == null) return null;
   return `${daily} g/day at ${PROTEIN_DAILY_G_PER_KG} g/kg, about ${meal} g per meal across ${PROTEIN_MEALS_PER_DAY}.`;
+}
+
+// Why the per-meal figure is what it is, or null without an age to explain it.
+export function proteinPerMealRationale(age) {
+  if (age == null) return null;
+  return age >= PROTEIN_OLDER_ADULT_AGE
+    ? `Per-meal figure uses the higher ${PROTEIN_MEAL_G_PER_KG_OLDER} g/kg threshold for adults `
+      + `${PROTEIN_OLDER_ADULT_AGE}+; muscle responds less to a given dose with age.`
+    : `Per-meal figure uses ${PROTEIN_MEAL_G_PER_KG_YOUNGER} g/kg, rising to `
+      + `${PROTEIN_MEAL_G_PER_KG_OLDER} g/kg from ${PROTEIN_OLDER_ADULT_AGE}.`;
 }
 
 // Mirrored 1:1 in CadenceCore ProgramProgression.sessionSpacingShortfall.

@@ -3,7 +3,7 @@ import SwiftData
 import CadenceCore
 
 /// Today: suggested next session per lift, one-tap session start,
-/// gym tag, protein running total. Nothing motivational.
+/// gym tag. Nothing motivational.
 struct HomeView: View {
     @Binding var pendingSessionID: String?
     private enum StartError: LocalizedError {
@@ -23,7 +23,6 @@ struct HomeView: View {
     @Query(sort: \CoachingDecision.date, order: .reverse) private var coachingDecisions: [CoachingDecision]
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
-    @Query private var proteinEntries: [ProteinEntry]
     @Query private var checkIns: [CheckIn]
     @Query(filter: #Predicate<WorkoutSession> { !$0.isCompleted })
     private var openSessions: [WorkoutSession]
@@ -119,13 +118,6 @@ struct HomeView: View {
                 return tops.max()
             }
             .suffix(8))
-    }
-
-    private var todayProtein: Double {
-        let cal = Calendar.current
-        return proteinEntries
-            .filter { cal.isDateInToday($0.date) }
-            .reduce(0) { $0 + $1.grams }
     }
 
     var body: some View {
@@ -347,21 +339,6 @@ struct HomeView: View {
                     }
                 }
 
-                Section("Protein") {
-                    HStack {
-                        Text("\(Int(todayProtein)) g")
-                            .font(.title2.bold().monospacedDigit())
-                        Text("/ \(Int(settings?.proteinTargetGrams ?? 100)) g")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    HStack(spacing: 12) {
-                        proteinButton("Shake ~45g", grams: 45)
-                        proteinButton("Meat ~50g", grams: 50)
-                        NavigationLink("More") { BodyView() }
-                            .font(.callout)
-                    }
-                }
             }
             .navigationTitle("Cadence")
             .fullScreenCover(item: $activeSession) { session in
@@ -466,15 +443,6 @@ struct HomeView: View {
         pendingSessionID = nil
         guard let session = openSessions.first(where: { $0.id == id }) else { return }
         activeSession = session
-    }
-
-    private func proteinButton(_ label: String, grams: Double) -> some View {
-        Button(label) {
-            context.insert(ProteinEntry(grams: grams, label: label))
-            PersistenceErrorCenter.shared.save(context, operation: "Logging protein")
-        }
-        .buttonStyle(.bordered)
-        .font(.callout)
     }
 
     private func startSession(with track: LiftTrack) {

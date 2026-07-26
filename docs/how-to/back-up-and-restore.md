@@ -10,7 +10,7 @@ visited in a while.
 
 **Settings → Data**:
 
-- **Export JSON** — the full backup bundle: sessions, body log, protein,
+- **Export JSON** — the full backup bundle: sessions, body log,
   check-ins, milestones, programs (including mid-cycle state: pending
   peak grades and cycle-swap markers), tracked lifts, gyms, exercise
   library, settings. Open workouts are included and remain open after a

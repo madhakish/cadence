@@ -64,7 +64,6 @@ const validFile = () => ({
 const otherDomains = async () => ({
   sessions: (await db.Sessions.all()).length,
   bodyweight: (await db.Bodyweight.all()).length,
-  protein: (await db.Protein.all()).length,
   milestones: (await db.Milestones.all()).length,
   checkIns: (await db.Checkins.all()).length,
   gyms: (await db.Gyms.all()).length,
@@ -200,7 +199,6 @@ const otherDomains = async () => ({
 {
   await db.Bodyweight.add({ date: "2026-07-01T12:00:00.000Z", weightLb: 201 });
   await db.Bodyweight.add({ date: "2026-07-08T12:00:00.000Z", weightLb: 199 });
-  await db.Protein.add({ date: "2026-07-01T12:00:00.000Z", grams: 180 });
   await db.Milestones.add({
     date: "2026-07-01T12:00:00.000Z", exerciseName: "Back Squat", kind: "weight", label: "Fixture PR",
   });
@@ -222,7 +220,6 @@ const otherDomains = async () => ({
   ok(after.sessions === before.sessions, `session count unchanged (${before.sessions} -> ${after.sessions})`);
   ok(after.bodyweight === before.bodyweight, `bodyweight entries unchanged (${before.bodyweight} -> ${after.bodyweight})`);
   ok(after.milestones === before.milestones, `milestone count unchanged (${before.milestones} -> ${after.milestones})`);
-  ok(after.protein === before.protein, "protein entries unchanged");
   ok(after.checkIns === before.checkIns, "check-ins unchanged");
   ok(after.gyms === before.gyms, "gyms unchanged");
   ok(after.exercises === before.exercises, "the exercise library was not added to by a fully-resolvable file");
