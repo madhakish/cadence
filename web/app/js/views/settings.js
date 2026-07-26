@@ -513,14 +513,14 @@ async function programDayEditor(p, day) {
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
               ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Prescription" }), (() => {
-              const select = ui.h("select", {}, ...[
+              const select = ui.h("select", {}, ...C.selectablePrescriptions([
                 ["automatic", "Automatic"], ["wave", "Strength wave"], ["offsetWave", "Strength wave — offsets"],
                 ["secondary", "Secondary volume"], ["hypertrophy", "Hypertrophy"], ["technique", "Technique"],
                 ["doubleProgression", "Double progression"],
                 ["linearFives", "Linear fives"], ["texasVolume", "Texas — volume day"],
                 ["texasLight", "Texas — light day"], ["texasIntensity", "Texas — intensity day"],
                 ["fiveThreeOne", "5/3/1 wave"], ["maxEffort", "Max effort"], ["dynamicEffort", "Dynamic effort"],
-              ].map(([value, label]) => ui.h("option", { value, text: label, selected: (l.prescription || "automatic") === value })));
+              ], l.prescription || "automatic").map(([value, label]) => ui.h("option", { value, text: label, selected: (l.prescription || "automatic") === value })));
               select.addEventListener("change", async () => { l.prescription = select.value; await Programs.save(p); draw(); });
               return select;
             })()),

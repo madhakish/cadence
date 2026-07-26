@@ -3,7 +3,9 @@
 <!-- MUST MATCH the constants in
      CadenceCore/Sources/CadenceCore/ProgramProgression.swift (tmFraction,
      incrementFraction, qualityFlagTolerance, stallLimit,
-     deloadRebuildFraction, belowPlanLoad) ≡ web/app/js/core.js. Update this page
+     deloadRebuildFraction, belowPlanLoad) ≡ web/app/js/core.js. tmFraction now
+     seeds peak singles and places a new program's base; it no longer caps the
+     increment. Update this page
      when tuning them. -->
 
 The engine is deterministic: same performance in, same decision out.
@@ -54,11 +56,19 @@ prescription — the last set of the load rotation carried to 6 instead of 3 —
 is what feeds the estimate, while a long back-off set cannot masquerade as a
 max.
 
-This is also what gives the training-max ceiling something honest to bind
-against. An estimate taken only from the peak set is a fixed multiple of the
-base it is meant to bound, so it scales with the base and the taper never
-engages. A load-rotation sample is earned reps at a weight the peak did not
-set.
+A load-rotation sample is also the only honest estimate of the two. An
+estimate taken from the peak set alone is a fixed multiple of the base — the
+peak *is* 1.175 × base — so it tells you what the program prescribed rather
+than what you are capable of. Earned reps at a weight the peak did not set do
+not have that problem.
+
+The estimate no longer caps the increment. It used to: the increment scaled by
+headroom to a training-max ceiling of 90%/78% of the estimate. Measured across
+10,560 realistic base/estimate pairs, that produced exactly two outcomes — one
+plate step or nothing — and the "nothing" was unreachable after a clean peak,
+because a peak at 1.175 × base outruns a 0.90 × estimate ceiling by
+construction. A ceiling derived from the base cannot bound the base. Drift is
+bounded by performance instead: two stalls rebuild at 90%.
 
 ## Grading a lift's peak (week 3)
 
@@ -79,8 +89,9 @@ Notes:
 ## What each grade does at rollover
 
 - **success** → stall count resets; weight increases by the focus
-  increment × headroom to the ceiling (90%/78% of est. 1RM), floored at
-  plate granularity, tapering to 0 as you approach the ceiling.
+  increment (2.5% strength / 1.5% hypertrophy of the current base),
+  floored at plate granularity so a clean cycle always earns at least one
+  loadable step.
 - **hold / fail** → weight holds, stall count +1.
 - **2 stalls** → automatic deload: base × 0.90 (rounded), stall reset,
   explanatory note in History.
@@ -103,7 +114,7 @@ missed exposure — it never counts against the accessory.
 
 ## Methodology styles
 
-Some prescription styles replace the tapered wave rules above with a
+Some prescription styles replace the wave rules above with a
 published methodology's own progression (full details in
 [Training methodologies](training-methodologies.md)):
 

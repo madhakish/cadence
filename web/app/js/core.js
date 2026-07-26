@@ -47,6 +47,25 @@ export function programPlanFor(state, programRoundingLb, exerciseType = null, mo
 
 // Styles whose base advances after every banked exposure of the slot instead
 // of being graded once per 4-week rotation at the Peak.
+// Styles no longer offered when configuring a slot.
+//
+// offsetWave adds fixed pound offsets on the load and peak rotations instead of
+// the wave's multipliers. No shipped template uses it, and its two defaults are
+// calibrated to bases 61 lb apart — +25 implies a 250 lb lift (25/0.10) while
+// +33 implies a 189 lb one (33/0.175) — so the intra-cycle range it produces
+// depends on how heavy you are in a way nobody chose.
+//
+// Retired rather than deleted. The raw value is persisted in programs, backups
+// and program files, so removing it would reject data that restores today. A
+// slot already using it keeps working and keeps its offsets; it just cannot be
+// newly selected. Mirrored in CadenceCore PrescriptionStyle.
+export const RETIRED_PRESCRIPTIONS = ["offsetWave"];
+
+// The styles a picker should offer, keeping whatever the slot already has so a
+// retired choice never silently rewrites itself to something else.
+export const selectablePrescriptions = (all, current) =>
+  all.filter(([value]) => !RETIRED_PRESCRIPTIONS.includes(value) || value === current);
+
 export const advancesPerExposure = (style) =>
   ["doubleProgression", "linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(style);
 
@@ -999,17 +1018,38 @@ export function scheduleAdvance(dayOrders, bankedDayOrder) {
 
 // Increment = fraction of base × headroom-to-ceiling, floored at plate granularity,
 // 0 at/over the focus-dependent training-max ceiling.
-export function taperedIncrement(baseWeightLb, estimatedMaxLb, focus, roundingLb = DEFAULT_ROUNDING_LB) {
-  const fp = focusParams(focus);
-  if (fp.inc <= 0) return 0; // maintain never increments
-  const ceiling = estimatedMaxLb * fp.tm;
-  if (ceiling <= 0 || baseWeightLb >= ceiling) return 0;
-  const headroom = Math.max(0, Math.min(1, (ceiling - baseWeightLb) / ceiling));
-  const raw = baseWeightLb * fp.inc * headroom;
-  let inc = Math.floor(raw / roundingLb) * roundingLb;
-  if (inc < roundingLb && headroom > 0.02) inc = roundingLb; // guarantee a loadable bump unless basically at ceiling
-  if (baseWeightLb + inc > ceiling) inc = Math.max(0, Math.floor((ceiling - baseWeightLb) / roundingLb) * roundingLb);
-  return inc;
+// Increment = fraction of base, floored at plate granularity.
+//
+// This used to scale by headroom to a training-max ceiling
+// (estimatedMax x tmFraction) and clamp to 0 at the cap. Both were removed,
+// because measurement showed the taper never tapered and the ceiling could not
+// bind:
+//
+// - Across 10,560 realistic (base, e1RM) pairs the function returned exactly
+//   two values, 0 or roundingLb, and nothing in between. base x 0.025 x
+//   headroom is a fraction of a pound at every realistic load, so it floored to
+//   zero and the "guarantee a loadable bump" rescue put it straight back to a
+//   full plate step. The headroom term's only observable effect was a cliff at
+//   headroom <= 0.02.
+// - That cliff was unreachable on the path that matters. A clean peak feeds
+//   smoothedMax with 1.175 x base, which outruns a 0.90 x e1RM ceiling by
+//   construction — traced over seven clean cycles, headroom RISES (0.047 ->
+//   0.070) as the base climbs. A ceiling derived from the base cannot bound
+//   the base.
+//
+// Base drift is bounded by performance instead, which is what the published
+// systems do: STALL_LIMIT consecutive non-success cycles rebuild at
+// DELOAD_REBUILD_FRACTION. tmFraction stays — it seeds peak singles and places
+// a new program's base.
+//
+// Mirrored 1:1 in CadenceCore ProgramProgression.focusIncrement.
+export function focusIncrement(baseWeightLb, focus, roundingLb = DEFAULT_ROUNDING_LB) {
+  const fraction = focusParams(focus).inc;
+  if (!(fraction > 0) || !(baseWeightLb > 0) || !(roundingLb > 0)) return 0;
+  const stepped = Math.floor((baseWeightLb * fraction) / roundingLb) * roundingLb;
+  // A clean cycle always earns at least one loadable step; anything less is not
+  // a prescription anyone can put on a bar.
+  return Math.max(roundingLb, stepped);
 }
 
 // state: { baseWeightLb, estimatedMaxLb, stallCount, role, lastIncrementLb }
@@ -1022,11 +1062,10 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
 
   if (grade === "success") {
     next.stallCount = 0;
-    const inc = taperedIncrement(state.baseWeightLb, estimatedMaxLb, focus, roundingLb);
+    const inc = focusIncrement(state.baseWeightLb, focus, roundingLb);
     next.baseWeightLb = state.baseWeightLb + inc;
     next.lastIncrementLb = inc;
-    note = inc > 0 ? `Clean peak — add ${trim(inc)} lb next cycle.`
-      : (focusParams(focus).inc <= 0 ? "Maintaining — holding weight." : "At training-max ceiling — holding weight.");
+    note = inc > 0 ? `Clean peak — add ${trim(inc)} lb next cycle.` : "Maintaining — holding weight.";
   } else {
     next.stallCount = state.stallCount + 1;
     next.lastIncrementLb = 0;

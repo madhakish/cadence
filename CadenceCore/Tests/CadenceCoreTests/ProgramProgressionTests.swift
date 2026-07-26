@@ -143,10 +143,43 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertTrue((s2.note ?? "").contains("deloaded"))
     }
 
-    func testTaperShrinksTowardCeiling() {
-        XCTAssertEqual(P.taperedIncrement(baseWeightLb: 150, estimatedMaxLb: 226, focus: .strength, roundingLb: 5), 5, accuracy: 1e-9)
-        XCTAssertEqual(P.taperedIncrement(baseWeightLb: 200, estimatedMaxLb: 226, focus: .strength, roundingLb: 5), 0, accuracy: 1e-9)
-        XCTAssertEqual(P.taperedIncrement(baseWeightLb: 210, estimatedMaxLb: 226, focus: .strength, roundingLb: 5), 0, accuracy: 1e-9)
+    /// The increment is a fraction of base floored to a loadable step, and
+    /// nothing else. The old headroom-to-ceiling taper is gone: it produced
+    /// only 0 or one step across every realistic load, and its cliff was
+    /// unreachable on the success path because a clean peak raises the estimate
+    /// faster than the base. Mirrors the block in web/tests/core.test.mjs.
+    func testIncrementIsAFractionOfBaseAndNoLongerCapped() {
+        XCTAssertEqual(P.focusIncrement(baseWeightLb: 150, focus: .strength, roundingLb: 5), 5, accuracy: 1e-9)
+        XCTAssertEqual(P.focusIncrement(baseWeightLb: 200, focus: .strength, roundingLb: 5), 5, accuracy: 1e-9,
+                       "a base near the OLD ceiling keeps progressing")
+        XCTAssertEqual(P.focusIncrement(baseWeightLb: 210, focus: .strength, roundingLb: 5), 5, accuracy: 1e-9,
+                       "and so does one past it — the cap no longer exists")
+        XCTAssertEqual(P.focusIncrement(baseWeightLb: 400, focus: .strength, roundingLb: 5), 10, accuracy: 1e-9)
+        XCTAssertEqual(P.focusIncrement(baseWeightLb: 400, focus: .hypertrophy, roundingLb: 5), 5, accuracy: 1e-9)
+        XCTAssertEqual(P.focusIncrement(baseWeightLb: 0, focus: .strength, roundingLb: 5), 0, accuracy: 1e-9)
+    }
+
+    func testEveryIncrementLandsOnALoadableStep() {
+        for base in stride(from: 45.0, through: 700.0, by: 5) {
+            for focus in [TrainingFocus.strength, .hypertrophy] {
+                let inc = P.focusIncrement(baseWeightLb: base, focus: focus, roundingLb: 5)
+                XCTAssertEqual(inc.truncatingRemainder(dividingBy: 5), 0, accuracy: 1e-9,
+                               "\(focus) at \(base) produced \(inc)")
+            }
+        }
+    }
+
+    func testTenCleanCyclesKeepAddingWeightPastTheOldCeiling() {
+        var state = ProgramLiftState(baseWeightLb: 200, estimatedMaxLb: 226)
+        let perf = CycleLiftPerformance(
+            prescribedSets: 3, prescribedReps: 3, completedSets: 3, anyStoppedEarly: false,
+            anyDroppedLoad: false, grindyOrWobbleSets: 0, topSetWeightLb: 235, topSetReps: 3
+        )
+        for _ in 0..<10 {
+            state = P.advanceCycleLift(state, perf: perf, focus: .strength, roundingLb: 5).state
+        }
+        XCTAssertGreaterThanOrEqual(state.baseWeightLb, 250,
+                                    "ten clean cycles keep adding weight")
     }
 
     func testMaintainNeverIncrements() {

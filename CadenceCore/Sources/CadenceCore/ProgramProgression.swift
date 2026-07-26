@@ -355,23 +355,42 @@ public enum ProgramProgression {
         return (sorted[(position + 1) % sorted.count], position == sorted.count - 1)
     }
 
-    /// Increment = fraction of base × headroom-to-ceiling, floored at plate
-    /// granularity, 0 at/over the focus-dependent training-max ceiling.
-    public static func taperedIncrement(
-        baseWeightLb: Double, estimatedMaxLb: Double, focus: TrainingFocus,
+    /// Increment = fraction of base, floored at plate granularity.
+    ///
+    /// This used to scale by headroom to a training-max ceiling
+    /// (`estimatedMax × tmFraction`) and clamp to 0 at the cap. Both were
+    /// removed, because measurement showed the taper never tapered and the
+    /// ceiling could not bind:
+    ///
+    /// - Across 10,560 realistic (base, e1RM) pairs the function returned
+    ///   exactly two values, 0 or `roundingLb`, and nothing in between.
+    ///   `base × 0.025 × headroom` is a fraction of a pound at every realistic
+    ///   load, so it floored to zero and the "guarantee a loadable bump" rescue
+    ///   put it straight back to a full plate step. The headroom term's only
+    ///   observable effect was a cliff at `headroom ≤ 0.02`.
+    /// - That cliff was unreachable on the path that matters. A clean peak
+    ///   feeds `smoothedMax` with `1.175 × base`, which outruns a `0.90 × e1RM`
+    ///   ceiling by construction — traced over seven clean cycles, headroom
+    ///   RISES (0.047 → 0.070) as the base climbs. A ceiling derived from the
+    ///   base cannot bound the base.
+    ///
+    /// Base drift is bounded by performance instead, which is what the
+    /// published systems do: `stallLimit` consecutive non-success cycles
+    /// rebuild at `deloadRebuildFraction`. `TrainingFocus.tmFraction` stays —
+    /// `ProgramEngine` seeds peak singles from it and `defaultStartFraction`
+    /// uses it to place a new program's base.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `focusIncrement`.
+    public static func focusIncrement(
+        baseWeightLb: Double, focus: TrainingFocus,
         roundingLb: Double = ProgramEngine.defaultRoundingLb
     ) -> Double {
-        guard focus.incrementFraction > 0 else { return 0 } // maintain never increments
-        let ceiling = estimatedMaxLb * focus.tmFraction
-        guard ceiling > 0, baseWeightLb < ceiling else { return 0 }
-        let headroom = Swift.max(0, Swift.min(1, (ceiling - baseWeightLb) / ceiling))
-        let raw = baseWeightLb * focus.incrementFraction * headroom
-        var inc = (raw / roundingLb).rounded(.down) * roundingLb
-        if inc < roundingLb && headroom > 0.02 { inc = roundingLb }
-        if baseWeightLb + inc > ceiling {
-            inc = Swift.max(0, ((ceiling - baseWeightLb) / roundingLb).rounded(.down) * roundingLb)
-        }
-        return inc
+        guard focus.incrementFraction > 0, baseWeightLb > 0, roundingLb > 0 else { return 0 }
+        let raw = baseWeightLb * focus.incrementFraction
+        let stepped = (raw / roundingLb).rounded(.down) * roundingLb
+        // A clean cycle always earns at least one loadable step; anything less
+        // is not a prescription anyone can put on a bar.
+        return Swift.max(roundingLb, stepped)
     }
 
     public static func advanceCycleLift(
@@ -386,13 +405,13 @@ public enum ProgramProgression {
 
         if grade == .success {
             next.stallCount = 0
-            let inc = taperedIncrement(baseWeightLb: state.baseWeightLb, estimatedMaxLb: estimatedMaxLb, focus: focus, roundingLb: roundingLb)
+            let inc = focusIncrement(baseWeightLb: state.baseWeightLb, focus: focus, roundingLb: roundingLb)
             next.baseWeightLb = state.baseWeightLb + inc
             next.lastIncrementLb = inc
             if inc > 0 {
                 note = "Clean peak — add \(Weight.trim(inc)) lb next cycle."
             } else {
-                note = focus.incrementFraction <= 0 ? "Maintaining — holding weight." : "At training-max ceiling — holding weight."
+                note = "Maintaining — holding weight."
             }
         } else {
             next.stallCount = state.stallCount + 1

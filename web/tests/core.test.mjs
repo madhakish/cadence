@@ -571,10 +571,54 @@ eq(st2.state.baseWeightLb, 160, "two stalls → −10% deload (175→160)");
 eq(st2.state.stallCount, 0, "deload resets stall");
 ok(/deloaded/.test(st2.note || ""), "deload note present");
 
-// taper: far below ceiling bumps, near/over ceiling does not
-eq(C.taperedIncrement(150, 226, "strength", 5), 5, "far below ceiling → +5");
-eq(C.taperedIncrement(200, 226, "strength", 5), 0, "near ceiling → 0 (tapered out)");
-eq(C.taperedIncrement(210, 226, "strength", 5), 0, "over ceiling → 0");
+// The increment is a fraction of base floored to a loadable step, and nothing
+// else. The old headroom-to-ceiling taper is gone: it produced only 0 or one
+// step across every realistic load, and its cliff was unreachable on the
+// success path because a clean peak raises the estimate faster than the base.
+eq(C.focusIncrement(150, "strength", 5), 5, "a light base still earns one loadable step");
+eq(C.focusIncrement(200, "strength", 5), 5, "a base near the OLD ceiling keeps progressing");
+eq(C.focusIncrement(210, "strength", 5), 5, "and so does one past it — the cap no longer exists");
+eq(C.focusIncrement(400, "strength", 5), 10, "a heavy base earns the full 2.5% once it clears a step");
+eq(C.focusIncrement(400, "hypertrophy", 5), 5, "hypertrophy's 1.5% is a smaller step at the same base");
+eq(C.focusIncrement(0, "strength", 5), 0, "an unset base earns nothing");
+
+// The property that made the old taper dead arithmetic: never anything between
+// zero and one step. The replacement is allowed to exceed a step; what it must
+// never do is return a weight nobody can load.
+{
+  const offStep = [];
+  for (let base = 45; base <= 700; base += 5) {
+    for (const focus of ["strength", "hypertrophy"]) {
+      const inc = C.focusIncrement(base, focus, 5);
+      if (inc % 5 !== 0) offStep.push(`${focus}@${base}=${inc}`);
+    }
+  }
+  eq(offStep.length, 0, `every increment lands on a loadable step (${offStep.slice(0, 3)})`);
+}
+
+// offsetWave is retired from the pickers but NOT deleted: its raw value is
+// persisted in programs, backups and program files, so a slot already on it has
+// to keep working and keep appearing in its own picker.
+{
+  const all = [["automatic", "A"], ["wave", "W"], ["offsetWave", "O"], ["secondary", "S"]];
+  const offered = (current) => C.selectablePrescriptions(all, current).map(([v]) => v);
+  ok(!offered("wave").includes("offsetWave"), "a new slot is never offered the retired style");
+  ok(offered("offsetWave").includes("offsetWave"),
+    "a slot already on it still sees it, so opening the picker cannot silently rewrite the slot");
+  eq(offered("wave").length, all.length - 1, "and nothing else is hidden");
+  // Still a real style everywhere that is not a picker.
+  ok(C.planForStyle({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 3, incrementLb: 0 }, 5, "offsetWave",
+    { loadOffsetLb: 25, peakOffsetLb: 33 }).weightLb > 200, "a retired style still prescribes");
+}
+
+// Ten clean cycles at a base that used to freeze: it must keep moving now.
+{
+  let state = { baseWeightLb: 200, estimatedMaxLb: 226, stallCount: 0, lastIncrementLb: 0 };
+  const perf = { prescribedSets: 3, prescribedReps: 3, completedSets: 3, anyStoppedEarly: false,
+    anyDroppedLoad: false, anyBelowPlanLoad: false, grindyOrWobbleSets: 0, topSetWeightLb: 235, topSetReps: 3 };
+  for (let i = 0; i < 10; i++) state = C.advanceCycleLift(state, perf, "strength", 5).state;
+  ok(state.baseWeightLb >= 250, `ten clean cycles keep adding weight (got ${state.baseWeightLb})`);
+}
 
 // maintain never increments
 pres = C.advanceCycleLift(liftState(), cleanPerf, "maintain", 5);
