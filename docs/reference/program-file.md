@@ -82,9 +82,16 @@ must name one of the program's day orders — a pointer to a day that isn't
 there would fall back to the first day and silently lose the position.
 
 A lift's progression counters (`stallCount`, `lastIncrementLb`,
-`lastPeakSingleLb`) are likewise a group: all three or none. `pending` and
-`revertToExerciseName` are independent, since both are genuinely absent most of
-the time.
+`lastPeakSingleLb`) are likewise a group: all three or none.
+
+Runtime state is **one decision for the whole file**. A file whose slots carry
+counters, a `pending` grade, or a swap marker, but whose program carries no
+wave position, is rejected — import keys off the wave position, so such a file
+would be accepted and then silently stripped of everything it was carrying.
+
+A `pending` grade is range-checked exactly like the live fields it overwrites.
+It is applied verbatim at cycle rollover, so an unchecked value here would not
+fail at import; it would surface weeks later, mid-session.
 
 A plan-only file imports at cycle 1, week 1, with cleared counters.
 
@@ -98,6 +105,11 @@ Import **preserving identity** when the file came from this device and should
 update the program it came from. If a program with that id is present it is
 updated in place, keeping its slot ids and therefore its coaching history and
 "last time" recall. Without the flag, the same file makes an independent copy.
+
+An update applies the file's name, made unique if it collides, and leaves
+untouched any field the program record holds that this format does not carry —
+`reliableHistoryStart`, the "first trustworthy date" choice, is the one that
+matters today.
 
 Two slots sharing an id is rejected. A duplicate would make progression
 advance the wrong lift.

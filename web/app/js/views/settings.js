@@ -359,7 +359,7 @@ async function programEditor(p) {
         // resolvedLoadBasis mirrors the native Exercise.loadBasis getter:
         // explicit value, else inferred from equipment. A raw read would be
         // undefined for records that predate the explicit field.
-        if (exercise && C.accessoryCannotProgressLoad(exercise.type, C.resolvedLoadBasis(exercise), accessory.incrementLb)) {
+        if (exercise && C.accessoryCannotProgressLoad(exercise.type, C.resolvedLoadBasis(exercise), accessory.weightLb, accessory.incrementLb)) {
           warnings.push(`${accessory.exerciseName} carries load but has no increment, so it can never add weight. Set an increment.`);
         }
         const pattern = exercise?.movementPattern || C.movementPattern(accessory.exerciseName, exercise?.movementGroup);

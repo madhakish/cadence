@@ -192,34 +192,45 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(a.currentReps, 13, "and reps climb past the slot's own maximum instead")
 
         XCTAssertTrue(P.accessoryCannotProgressLoad(
-            exerciseType: "dumbbell", loadBasis: .perImplement, incrementLb: 0
-        ), "a per-hand dumbbell slot with no increment is flagged")
+            exerciseType: "dumbbell", loadBasis: .perImplement, weightLb: 75, incrementLb: 0
+        ), "a per-hand dumbbell slot carrying load with no increment is flagged")
         XCTAssertTrue(P.accessoryCannotProgressLoad(
-            exerciseType: "machine", loadBasis: .externalTotal, incrementLb: 0
-        ), "a machine slot with no increment is flagged")
+            exerciseType: "machine", loadBasis: .externalTotal, weightLb: 120, incrementLb: 0
+        ), "a machine slot carrying load with no increment is flagged")
     }
 
     /// The rule must not fire on work that progresses by reps or duration —
     /// a plank steps `durationStepSeconds`, so its zero increment is correct.
     func testDurationAndBodyweightAccessoriesAreNotFlagged() {
         XCTAssertFalse(P.accessoryCannotProgressLoad(
-            exerciseType: "timed", loadBasis: .externalTotal, incrementLb: 0
+            exerciseType: "timed", loadBasis: .externalTotal, weightLb: 25, incrementLb: 0
         ), "a timed slot progresses by duration, not load")
         XCTAssertFalse(P.accessoryCannotProgressLoad(
-            exerciseType: "conditioning", loadBasis: .externalTotal, incrementLb: 0
+            exerciseType: "conditioning", loadBasis: .externalTotal, weightLb: 25, incrementLb: 0
         ), "conditioning is not load-progressed")
         XCTAssertFalse(P.accessoryCannotProgressLoad(
-            exerciseType: "bodyweight", loadBasis: .bodyweight, incrementLb: 0
+            exerciseType: "bodyweight", loadBasis: .bodyweight, weightLb: 0, incrementLb: 0
         ), "bodyweight work has no load to add")
         XCTAssertFalse(P.accessoryCannotProgressLoad(
-            exerciseType: "barbell", loadBasis: .bodyweight, incrementLb: 0
+            exerciseType: "barbell", loadBasis: .bodyweight, weightLb: 45, incrementLb: 0
         ), "an explicitly bodyweight basis wins over the equipment label")
         XCTAssertFalse(P.accessoryCannotProgressLoad(
-            exerciseType: "dumbbell", loadBasis: .perImplement, incrementLb: 2.5
+            exerciseType: "dumbbell", loadBasis: .perImplement, weightLb: 10, incrementLb: 2.5
         ), "a fractional increment is a real increment")
         XCTAssertFalse(P.accessoryCannotProgressLoad(
-            exerciseType: "DUMBBELL", loadBasis: .perImplement, incrementLb: 5
+            exerciseType: "DUMBBELL", loadBasis: .perImplement, weightLb: 40, incrementLb: 5
         ), "the type test is case-insensitive")
+
+        // An unloaded slot is not a misconfiguration. 0/0 is how "no external
+        // load" is spelled, and it is what every newly added accessory starts
+        // at — flagging it would fire on every slot the moment it was created,
+        // and on shipped templates that use bands.
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "dumbbell", loadBasis: .perImplement, weightLb: 0, incrementLb: 0
+        ), "an unconfigured accessory is not flagged")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "band", loadBasis: .externalTotal, weightLb: 0, incrementLb: 0
+        ), "a band with no numeric load is not flagged")
     }
 
     /// Fractional increments have to survive: a 5 lb step on a 10 lb load is a

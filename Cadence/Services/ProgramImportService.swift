@@ -82,16 +82,73 @@ enum ProgramImportService {
         }
     }
 
+    /// Just the envelope, so the discriminator and version can be read even
+    /// when the payload itself is a shape this build cannot decode.
+    private struct Envelope: Decodable {
+        let kind: String?
+        let programSchemaVersion: Int?
+    }
+
+    /// Dotted field path from a decoding error, matching the web importer's
+    /// convention (`program.days[0].lifts[2].deloadMultiplier`).
+    private static func path(of error: DecodingError) -> String {
+        let context: DecodingError.Context
+        switch error {
+        case .typeMismatch(_, let c), .valueNotFound(_, let c),
+             .keyNotFound(_, let c), .dataCorrupted(let c):
+            context = c
+        @unknown default:
+            return "file"
+        }
+        var parts: [String] = []
+        for key in context.codingPath {
+            if let index = key.intValue {
+                parts[parts.isEmpty ? 0 : parts.count - 1] += "[\(index)]"
+            } else {
+                parts.append(key.stringValue)
+            }
+        }
+        if case .keyNotFound(let key, _) = error { parts.append(key.stringValue) }
+        return parts.isEmpty ? "file" : parts.joined(separator: ".")
+    }
+
+    private static func reason(of error: DecodingError) -> String {
+        switch error {
+        case .typeMismatch(let type, _): return "expected \(type)"
+        case .valueNotFound(let type, _): return "expected a value of type \(type)"
+        case .keyNotFound: return "is required"
+        case .dataCorrupted: return "is not readable"
+        @unknown default: return "is not readable"
+        }
+    }
+
     // MARK: - Entry point
 
     @discardableResult
     static func load(_ data: Data, into context: ModelContext, options: Options = .additive) throws -> Report {
-        guard let file = try? JSONDecoder().decode(ProgramFileContract.File.self, from: data) else {
+        // Read the envelope BEFORE the full decode. A version-2 file that adds
+        // a required field would otherwise fail `decode` first and be reported
+        // as "not a Cadence program", when the honest answer — and the one the
+        // forward-compatibility contract promises — is "update Cadence".
+        let envelope = try? JSONDecoder().decode(Envelope.self, from: data)
+        guard let envelope, envelope.kind == ProgramFileContract.kind else {
             throw ImportError.notAProgramFile
         }
-        guard file.kind == ProgramFileContract.kind else { throw ImportError.notAProgramFile }
-        guard ProgramFileContract.supports(schemaVersion: file.programSchemaVersion) else {
-            throw ImportError.unsupportedSchemaVersion(file.programSchemaVersion)
+        guard ProgramFileContract.supports(schemaVersion: envelope.programSchemaVersion) else {
+            throw ImportError.unsupportedSchemaVersion(envelope.programSchemaVersion ?? 0)
+        }
+        let file: ProgramFileContract.File
+        do {
+            file = try JSONDecoder().decode(ProgramFileContract.File.self, from: data)
+        } catch let error as DecodingError {
+            // Hand-editing is a documented workflow, so name the field rather
+            // than reject the whole file anonymously. Mirrors the dotted paths
+            // the web importer reports.
+            throw ImportError.invalidData(
+                "Program file validation failed at \(Self.path(of: error)): \(Self.reason(of: error)). Nothing was changed."
+            )
+        } catch {
+            throw ImportError.notAProgramFile
         }
         do {
             try ProgramFileContract.validate(file)
@@ -201,6 +258,15 @@ enum ProgramImportService {
         let program: Program
         if let existing {
             program = existing
+            // A rename in the file is honoured, but still has to stay unique:
+            // Program.name is @Attribute(.unique), so adopting a colliding name
+            // would upsert into a different program. The web mirror applies the
+            // same rule, so the clients cannot disagree about the same file.
+            if existing.name != payload.name {
+                existing.name = ProgramTemplates.uniqueProgramName(
+                    payload.name, existing: existingPrograms.filter { $0 !== existing }.map(\.name)
+                )
+            }
             // Replacing the day tree wholesale is the point of an update: the
             // file is the new definition. Cascade deletes take the old slots.
             for day in existing.days { context.delete(day) }

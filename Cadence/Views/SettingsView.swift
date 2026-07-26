@@ -575,7 +575,7 @@ struct ProgramEditorView: View {
                 if let exercise = exerciseByName[accessory.exerciseName],
                    ProgramProgression.accessoryCannotProgressLoad(
                        exerciseType: exercise.typeRaw, loadBasis: exercise.loadBasis,
-                       incrementLb: accessory.incrementLb) {
+                       weightLb: accessory.weightLb, incrementLb: accessory.incrementLb) {
                     messages.append("\(accessory.exerciseName) carries load but has no increment, so it can never add weight. Set an increment.")
                 }
                 if let group = exerciseByName[accessory.exerciseName]?.movementGroup {

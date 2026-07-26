@@ -477,28 +477,34 @@ public enum ProgramProgression {
         }
     }
 
-    /// Whether an accessory slot is configured so that it can NEVER add load.
+    /// Whether an accessory slot is CARRYING load it can never add to.
     ///
     /// `advanceAccessory` uses `incrementLb > 0` as its entire test for "is
     /// this slot weighted?". That is correct for bodyweight and timed work,
     /// which progress by reps or duration and have no load to add. But a slot
-    /// whose exercise carries external load and whose increment is zero falls
-    /// into the same branch: it climbs reps forever, past its own `maxReps`,
-    /// and the weight never moves no matter how well the sets go.
+    /// holding a real working weight with a zero increment falls into the same
+    /// branch: it climbs reps forever, past its own `maxReps`, and the weight
+    /// never moves no matter how well the sets go.
     ///
-    /// That combination is always a misconfiguration rather than a choice, so
-    /// the program editor surfaces it. Timed and conditioning work is excluded
-    /// deliberately — a plank progresses by `durationStepSeconds`, so a zero
-    /// increment there is correct and must not be flagged.
+    /// `weightLb > 0` is what makes this a misconfiguration rather than a
+    /// choice. A zero weight with a zero increment is the documented way to say
+    /// "no external load" — it is the default every newly added accessory
+    /// starts at, and the web editor labels the field "Load step
+    /// (0 = bodyweight)". Flagging that would fire on every slot the moment it
+    /// was created, before the lifter had configured anything.
+    ///
+    /// Timed and conditioning work is excluded for the same reason in reverse:
+    /// a plank progresses by `durationStepSeconds`, so a zero increment there
+    /// is correct even when the slot carries a weight vest.
     ///
     /// Mirrored 1:1 in web/app/js/core.js `accessoryCannotProgressLoad`.
     public static func accessoryCannotProgressLoad(
-        exerciseType: String?, loadBasis: LoadBasis, incrementLb: Double
+        exerciseType: String?, loadBasis: LoadBasis, weightLb: Double, incrementLb: Double
     ) -> Bool {
         // Reps- and duration-progressed work has no load to step.
         guard !SwapRules.unloadableTypes.contains(exerciseType?.lowercased() ?? "") else { return false }
         guard loadBasis != .bodyweight else { return false }
-        return incrementLb <= 0
+        return weightLb > 0 && incrementLb <= 0
     }
 
     /// Accessory double progression: earn the top of the rep range across all

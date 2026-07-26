@@ -604,14 +604,18 @@ let broken = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 75, 
 let brokenAdvance = C.advanceAccessory(broken, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
 ok(brokenAdvance.weightLb === 75 && brokenAdvance.currentReps === 13,
   "a loaded accessory with no increment never adds load and climbs reps instead");
-ok(C.accessoryCannotProgressLoad("dumbbell", "perImplement", 0), "per-hand dumbbell slot with no increment is flagged");
-ok(C.accessoryCannotProgressLoad("machine", "externalTotal", 0), "machine slot with no increment is flagged");
-ok(!C.accessoryCannotProgressLoad("timed", "externalTotal", 0), "a timed slot progresses by duration, not load");
-ok(!C.accessoryCannotProgressLoad("conditioning", "externalTotal", 0), "conditioning is not load-progressed");
-ok(!C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0), "bodyweight work has no load to add");
-ok(!C.accessoryCannotProgressLoad("barbell", "bodyweight", 0), "an explicit bodyweight basis wins over the equipment label");
-ok(!C.accessoryCannotProgressLoad("dumbbell", "perImplement", 2.5), "a fractional increment is a real increment");
-ok(!C.accessoryCannotProgressLoad("DUMBBELL", "perImplement", 5), "the type test is case-insensitive");
+ok(C.accessoryCannotProgressLoad("dumbbell", "perImplement", 75, 0), "per-hand dumbbell slot with no increment is flagged");
+ok(C.accessoryCannotProgressLoad("machine", "externalTotal", 120, 0), "machine slot with no increment is flagged");
+ok(!C.accessoryCannotProgressLoad("timed", "externalTotal", 25, 0), "a timed slot progresses by duration, not load");
+ok(!C.accessoryCannotProgressLoad("conditioning", "externalTotal", 25, 0), "conditioning is not load-progressed");
+ok(!C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0, 0), "bodyweight work has no load to add");
+ok(!C.accessoryCannotProgressLoad("barbell", "bodyweight", 45, 0), "an explicit bodyweight basis wins over the equipment label");
+ok(!C.accessoryCannotProgressLoad("dumbbell", "perImplement", 10, 2.5), "a fractional increment is a real increment");
+ok(!C.accessoryCannotProgressLoad("DUMBBELL", "perImplement", 40, 5), "the type test is case-insensitive");
+// An unloaded slot is not a misconfiguration: 0/0 is how "no external load" is
+// spelled, and it is what every newly added accessory starts at.
+ok(!C.accessoryCannotProgressLoad("dumbbell", "perImplement", 0, 0), "an unconfigured accessory is not flagged");
+ok(!C.accessoryCannotProgressLoad("band", "externalTotal", 0, 0), "a band with no numeric load is not flagged");
 // Fractional increments must survive: 5 lb on a 10 lb load is a 50% jump.
 let fractional = C.advanceAccessory(
   { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 10, incrementLb: 2.5, stallCount: 0 },

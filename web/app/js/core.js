@@ -1050,23 +1050,28 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
   return advanceCycleLift(state, perf, focus, roundingLb);
 }
 
-// Whether an accessory slot is configured so that it can NEVER add load.
+// Whether an accessory slot is CARRYING load it can never add to.
 //
 // advanceAccessory uses `incrementLb > 0` as its entire test for "is this slot
 // weighted?". That is correct for bodyweight and timed work, which progress by
-// reps or duration and have no load to add. But a slot whose exercise carries
-// external load and whose increment is zero falls into the same branch: it
-// climbs reps forever, past its own maxReps, and the weight never moves no
-// matter how well the sets go.
+// reps or duration and have no load to add. But a slot holding a real working
+// weight with a zero increment falls into the same branch: it climbs reps
+// forever, past its own maxReps, and the weight never moves.
 //
-// Timed and conditioning work is excluded deliberately — a plank progresses by
-// durationStepSeconds, so a zero increment there is correct, not a bug.
+// `weightLb > 0` is what makes this a misconfiguration rather than a choice. A
+// zero weight with a zero increment is the documented way to say "no external
+// load" — it is the default every newly added accessory starts at, and the
+// editor labels the field "Load step (0 = bodyweight)".
+//
+// Timed and conditioning work is excluded for the same reason in reverse: a
+// plank progresses by durationStepSeconds, so a zero increment there is right
+// even when the slot carries a weight vest.
 //
 // Mirrored 1:1 in CadenceCore ProgramProgression.accessoryCannotProgressLoad.
-export function accessoryCannotProgressLoad(exerciseType, loadBasis, incrementLb) {
+export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, incrementLb) {
   if (UNLOADABLE_TYPES.has(String(exerciseType ?? "").toLowerCase())) return false;
   if (loadBasis === "bodyweight") return false;
-  return !(incrementLb > 0);
+  return weightLb > 0 && !(incrementLb > 0);
 }
 
 // Accessory double progression. state: { sets, minReps, maxReps, currentReps,

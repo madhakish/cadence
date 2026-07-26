@@ -89,6 +89,15 @@ const ACCESSORY_PLAN_FIELDS = [
 
 const ACCESSORY_STATE_FIELDS = [["stallCount", "int:0:100"]];
 
+// The stashed week-3 grade. Ranges match the live fields it overwrites at
+// rollover, and the backup validator's equivalent check.
+const PENDING_STATE_FIELDS = [
+  ["baseWeightLb", "num:0:2000"],
+  ["estimatedMaxLb", "num:0:2000"],
+  ["stallCount", "int:0:100"],
+  ["lastIncrementLb", "num:0:500"],
+];
+
 const PROGRAM_PLAN_FIELDS = [
   ["name", "text"],
   ["focus", "focus"],
@@ -205,8 +214,16 @@ const stable = (value) => {
 export const exportProgramText = (program, options) =>
   JSON.stringify(stable(exportProgramFile(program, options)), null, 2);
 
-export const programFilename = (program) =>
-  `cadence-program-${String(program?.name || "program").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.json`;
+// Keeps Unicode letters and digits, matching the Swift slug rule, and falls
+// back when the name slugs away to nothing — "日本語" and "!!!" would otherwise
+// both download as `cadence-program-.json`.
+export const programFilename = (program) => {
+  const slug = String(program?.name ?? "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+  return `cadence-program-${slug || "program"}.json`;
+};
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -287,6 +304,9 @@ export function validateProgramFile(file) {
     invalid("program.days", "expected at least one day");
   }
 
+  const programCarriesState = PROGRAM_STATE_FIELDS.every(([key]) => program[key] !== undefined);
+  let anySlotCarriesState = false;
+
   const dayOrders = new Set();
   const slotIDs = new Set();
   program.days.forEach((day, dayIndex) => {
@@ -307,6 +327,10 @@ export function validateProgramFile(file) {
       const slotPath = `${path}.${kind}[${index}]`;
       if (!slot || typeof slot !== "object" || Array.isArray(slot)) invalid(slotPath, "expected an object");
       checkFields(slot, planFields, slotPath);
+      if (stateFields.some(([key]) => slot[key] !== undefined)
+          || slot.pending !== undefined || slot.revertToExerciseName !== undefined) {
+        anySlotCarriesState = true;
+      }
       if (stateFields.some(([key]) => slot[key] !== undefined)) checkFields(slot, stateFields, slotPath);
       if (slot.id !== undefined) {
         if (!UUID_RE.test(slot.id)) invalid(`${slotPath}.id`, "expected a UUID");
@@ -314,6 +338,30 @@ export function validateProgramFile(file) {
         // progression advance the wrong lift, so reject rather than repair.
         if (slotIDs.has(slot.id)) invalid(`${slotPath}.id`, `duplicate identifier ${JSON.stringify(slot.id)}`);
         slotIDs.add(slot.id);
+      }
+      // The stashed peak grade is applied verbatim at cycle rollover, so it
+      // has to survive the same scrutiny as the fields it will overwrite. An
+      // unchecked value here does not fail at import — it fails weeks later,
+      // mid-session, when rollover reads `pending.state.baseWeightLb`.
+      if (slot.pending !== undefined) {
+        const pending = slot.pending;
+        if (!pending || typeof pending !== "object" || Array.isArray(pending)) {
+          invalid(`${slotPath}.pending`, "expected an object");
+        }
+        if (pending.note !== undefined && pending.note !== null && typeof pending.note !== "string") {
+          invalid(`${slotPath}.pending.note`, "expected text");
+        }
+        const state = pending.state;
+        if (!state || typeof state !== "object" || Array.isArray(state)) {
+          invalid(`${slotPath}.pending.state`, "expected an object");
+        }
+        for (const [key, kind] of PENDING_STATE_FIELDS) {
+          if (state[key] === undefined) invalid(`${slotPath}.pending.state.${key}`, "is required");
+          checkValue(state[key], kind, `${slotPath}.pending.state.${key}`);
+        }
+      }
+      if (slot.revertToExerciseName !== undefined) {
+        checkValue(slot.revertToExerciseName, "text", `${slotPath}.revertToExerciseName`);
       }
       if (slot.minReps !== undefined && slot.maxReps !== undefined && slot.minReps > slot.maxReps) {
         invalid(`${slotPath}.maxReps`, "maximum reps is below minimum reps");
@@ -334,6 +382,16 @@ export function validateProgramFile(file) {
   if (program.nextDayIndex !== undefined && !dayOrders.has(program.nextDayIndex)) {
     invalid("program.nextDayIndex",
       `${program.nextDayIndex} is not one of this program's day orders (${[...dayOrders].sort((a, b) => a - b).join(", ")})`);
+  }
+
+  // Runtime state is ONE decision for the whole file. Import keys off the
+  // program's wave position, so slot counters in a file that omits it were
+  // being read, accepted, and then silently zeroed — the file's state
+  // discarded with no error. Reject the combination instead of guessing which
+  // half the author meant.
+  if (anySlotCarriesState && !programCarriesState) {
+    invalid("program.cycleNumber",
+      "slots carry progression state but the program carries no wave position; runtime state is all-or-nothing for the whole file");
   }
 
   return program;
@@ -452,10 +510,19 @@ export async function importProgramFile(file, { preserveIdentity = false } = {})
   const keepIdentity = preserveIdentity;
   const keepState = PROGRAM_STATE_FIELDS.every(([key]) => program[key] !== undefined);
 
+  // A rename in the file is honoured on update, but still has to stay unique —
+  // two programs sharing a name is ambiguous everywhere, and the native mirror
+  // has Program.name as a unique attribute. Same rule for both paths, so the
+  // clients cannot disagree about what the same file does.
   const taken = new Set(programs.filter((p) => p !== existing).map((p) => p.name));
-  const name = existing ? program.name : uniqueName(program.name, taken);
+  const name = uniqueName(program.name, taken);
 
   const record = {
+    // Spread the existing record first: a program carries fields this format
+    // deliberately does not (reliableHistoryStart is the lifter's own "first
+    // trustworthy date" choice), and Programs.save is a whole-record put, so
+    // rebuilding from a literal would silently drop them on every update.
+    ...(existing ?? {}),
     ...(existing ? { id: existing.id, uuid: existing.uuid } : {}),
     ...(!existing && keepIdentity && program.id ? { uuid: program.id } : {}),
     name,

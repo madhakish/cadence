@@ -150,6 +150,36 @@ const otherDomains = async () => ({
     ["partial lift progression state", JSON.stringify((() => {
       const f = validFile(); f.program.days[0].lifts[0].stallCount = 1; return f;
     })())],
+    // A stashed peak grade is applied verbatim at rollover, so an unchecked
+    // value here crashes or poisons the training max weeks later, mid-session.
+    ...[
+      ["garbage pending", "totally bogus"],
+      ["pending missing its state", { note: "x" }],
+      ["pending with an incomplete state", { state: { baseWeightLb: 140 } }],
+      ["pending with a negative base", {
+        state: { baseWeightLb: -500, estimatedMaxLb: 200, stallCount: 0, lastIncrementLb: 5 },
+      }],
+      ["pending with an absurd max", {
+        state: { baseWeightLb: 140, estimatedMaxLb: 99999, stallCount: 0, lastIncrementLb: 5 },
+      }],
+      ["pending with a negative stall count", {
+        state: { baseWeightLb: 140, estimatedMaxLb: 200, stallCount: -3, lastIncrementLb: 5 },
+      }],
+    ].map(([label, pending]) => [label, JSON.stringify((() => {
+      const f = validFile();
+      f.program.cycleNumber = 1; f.program.currentWeek = 1; f.program.nextDayIndex = 0;
+      Object.assign(f.program.days[0].lifts[0], {
+        stallCount: 0, lastIncrementLb: 0, lastPeakSingleLb: 0, pending,
+      });
+      return f;
+    })())]),
+    // Runtime state is one decision for the whole file. Slot counters without
+    // a program wave position were being accepted and then silently zeroed.
+    ["slot state without program wave position", JSON.stringify((() => {
+      const f = validFile();
+      Object.assign(f.program.days[0].lifts[0], { stallCount: 3, lastIncrementLb: 5, lastPeakSingleLb: 225 });
+      return f;
+    })())],
   ];
 
   for (const [label, text] of corrupt) {
@@ -239,6 +269,10 @@ const otherDomains = async () => ({
   ok(first === second, "export -> import -> export is byte-identical");
   ok(!/"id"/.test(first), "the default file carries no slot or program identity");
   ok(!/exportedAt|generatedAt/.test(first), "the default file carries no timestamp");
+  ok(pf.programFilename({ name: "日本語" }) === "cadence-program-日本語.json",
+    `a non-ASCII name keeps its letters (got: ${pf.programFilename({ name: "日本語" })})`);
+  ok(pf.programFilename({ name: "!!!" }) === "cadence-program-program.json",
+    `a name that slugs away falls back (got: ${pf.programFilename({ name: "!!!" })})`);
   ok(!/stallCount|lastIncrementLb|pending|cycleNumber|currentWeek|nextDayIndex/.test(first),
     "the default file carries no runtime progression state");
   ok(!/isActive/.test(first), "the default file does not carry the active flag");
@@ -257,7 +291,11 @@ const otherDomains = async () => ({
   const source = (await db.Programs.all()).find((p) => p.name === "Fixture Alongside History");
   source.days[0].lifts[0].stallCount = 2;
   source.days[0].lifts[0].lastIncrementLb = 5;
-  source.days[0].lifts[0].pending = { state: { baseWeightLb: 140 }, note: "Clean peak" };
+  source.days[0].lifts[0].lastPeakSingleLb = 0;
+  source.days[0].lifts[0].pending = {
+    state: { baseWeightLb: 140, estimatedMaxLb: 190, stallCount: 0, lastIncrementLb: 5 },
+    note: "Clean peak",
+  };
   source.cycleNumber = 4;
   source.currentWeek = 3;
   await db.Programs.save(source);
@@ -353,6 +391,54 @@ const otherDomains = async () => ({
     "gate state is never written into a program file");
   const stillShelved = await db.Exercises.byName("Back Squat");
   ok(stillShelved.isShelved === true, "importing did not clear the library's gate state");
+}
+
+// ---------------------------------------------------------------------------
+// Update-in-place must not drop fields the format doesn't carry. A program
+// record holds more than a program file does — reliableHistoryStart is the
+// lifter's own "first trustworthy date" choice — and the store is written with
+// a whole-record put, so rebuilding from a literal would erase them silently.
+// ---------------------------------------------------------------------------
+{
+  const id = await db.Programs.save({
+    name: "Fixture Update In Place", focus: "strength", cycleNumber: 1, currentWeek: 1,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    reliableHistoryStart: "2025-01-01T00:00:00.000Z",
+    days: [{
+      name: "A", order: 0,
+      lifts: [{ exerciseName: "Back Squat", role: "main", baseWeightLb: 135, estimatedMaxLb: 185 }],
+      accessories: [],
+    }],
+  });
+  const before = (await db.Programs.all()).find((p) => p.id === id);
+  const text = pf.exportProgramText(before, { includeIdentity: true });
+  ok(!/reliableHistoryStart/.test(text), "the format does not carry reliableHistoryStart");
+
+  const edited = JSON.parse(text);
+  edited.program.name = "Fixture Update In Place RENAMED";
+  const report = await pf.importProgramFile(edited, { preserveIdentity: true });
+  ok(report.action === "updated", "the program was updated, not copied");
+
+  const after = (await db.Programs.all()).find((p) => p.uuid === before.uuid);
+  ok(after.reliableHistoryStart === "2025-01-01T00:00:00.000Z",
+    `a field the format does not carry survived the update (got: ${after.reliableHistoryStart})`);
+  ok(after.name === "Fixture Update In Place RENAMED",
+    `a rename in the file is honoured (got: ${after.name})`);
+  ok((await db.Programs.all()).filter((p) => p.uuid === before.uuid).length === 1,
+    "update-in-place did not duplicate the program");
+
+  // A rename that collides is still made unique — Program.name is a unique
+  // attribute natively, so a fixed name would upsert into another program.
+  await db.Programs.save({
+    name: "Fixture Occupied", focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "A", order: 0, lifts: [{ exerciseName: "Back Squat", role: "main", baseWeightLb: 135, estimatedMaxLb: 185 }], accessories: [] }],
+  });
+  const collide = JSON.parse(text);
+  collide.program.name = "Fixture Occupied";
+  const collided = await pf.importProgramFile(collide, { preserveIdentity: true });
+  ok(collided.name !== "Fixture Occupied",
+    `an update renaming onto a taken name is made unique (got: ${collided.name})`);
 }
 
 // ---------------------------------------------------------------------------

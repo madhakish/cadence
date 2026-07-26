@@ -100,7 +100,7 @@ public enum ProgramTemplateData {
                             lifts: [TemplateLift("Overhead Press", "main", 65, 95),
                                     TemplateLift("Incline DB Press", "complementary", 50, 80)],
                             accessories: [TemplateAccessory("DB Overhead Triceps Extension", 3, 8, 12, weightLb: 20, incrementLb: 5),
-                                          TemplateAccessory("Y-T-W Raises", 3, 10, 15, weightLb: 10),
+                                          TemplateAccessory("Y-T-W Raises", 3, 10, 15, weightLb: 10, incrementLb: 2.5),
                                           TemplateAccessory("GHD Sit-up", 3, 8, 15)]),
                 TemplateDay("Lower A",
                             lifts: [TemplateLift("Back Squat", "main", 135, 205),
@@ -164,7 +164,7 @@ public enum ProgramTemplateData {
             ],
             days: [
                 TemplateDay("Engine A", lifts: [],
-                            accessories: [TemplateAccessory("KB Swing", 5, 10, 20, weightLb: 35),
+                            accessories: [TemplateAccessory("KB Swing", 5, 10, 20, weightLb: 35, incrementLb: 10),
                                           TemplateAccessory("Burpees", 4, 8, 15),
                                           TemplateAccessory("Mountain Climbers", 4, 20, 40)]),
                 TemplateDay("Engine B", lifts: [],
@@ -173,7 +173,7 @@ public enum ProgramTemplateData {
                                           TemplateAccessory("Sit-ups", 4, 15, 30)]),
                 TemplateDay("Engine C", lifts: [],
                             accessories: [TemplateAccessory("Box Jumps", 4, 8, 15),
-                                          TemplateAccessory("Goblet Squat", 4, 10, 20, weightLb: 35),
+                                          TemplateAccessory("Goblet Squat", 4, 10, 20, weightLb: 35, incrementLb: 10),
                                           TemplateAccessory("Walking Lunges", 4, 12, 24)]),
             ]
         ),

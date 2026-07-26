@@ -315,6 +315,9 @@ public enum ProgramFileContract {
 
         try check(!program.days.isEmpty, "program.days", "expected at least one day")
 
+        let programCarriesState = program.carriesState
+        var anySlotCarriesState = false
+
         var dayOrders = Set<Int>()
         var slotIDs = Set<String>()
         for (dayIndex, day) in program.days.enumerated() {
@@ -355,9 +358,23 @@ public enum ProgramFileContract {
                 let liftState = [lift.stallCount != nil, lift.lastIncrementLb != nil, lift.lastPeakSingleLb != nil]
                 try check(liftState.allSatisfy { $0 } || liftState.allSatisfy { !$0 }, "\(p).stallCount",
                           "progression state must be complete or absent")
+                if liftState.contains(true) || lift.pending != nil || lift.revertToExerciseName != nil {
+                    anySlotCarriesState = true
+                }
                 if let stall = lift.stallCount { try integer(stall, "\(p).stallCount", 0, 100) }
                 if let inc = lift.lastIncrementLb { try number(inc, "\(p).lastIncrementLb", 0, 500) }
                 if let peak = lift.lastPeakSingleLb { try number(peak, "\(p).lastPeakSingleLb", 0, 2000) }
+                // The stashed peak grade is applied verbatim at cycle rollover,
+                // so it takes the same scrutiny as the fields it overwrites.
+                // An unchecked value here does not fail at import — it fails
+                // weeks later, when rollover writes it onto the slot.
+                if let pending = lift.pending {
+                    try number(pending.state.baseWeightLb, "\(p).pending.state.baseWeightLb", 0, 2000)
+                    try number(pending.state.estimatedMaxLb, "\(p).pending.state.estimatedMaxLb", 0, 2000)
+                    try integer(pending.state.stallCount, "\(p).pending.state.stallCount", 0, 100)
+                    try number(pending.state.lastIncrementLb, "\(p).pending.state.lastIncrementLb", 0, 500)
+                }
+                if let revert = lift.revertToExerciseName { try text(revert, "\(p).revertToExerciseName") }
                 if let id = lift.id {
                     try uuid(id, "\(p).id")
                     // Two slots sharing an id make progression advance the
@@ -385,6 +402,10 @@ public enum ProgramFileContract {
                 try number(accessory.weightLb, "\(p).weightLb", 0, 2000)
                 try number(accessory.incrementLb, "\(p).incrementLb", 0, 500)
                 if let stall = accessory.stallCount { try integer(stall, "\(p).stallCount", 0, 100) }
+                if let revert = accessory.revertToExerciseName { try text(revert, "\(p).revertToExerciseName") }
+                if accessory.stallCount != nil || accessory.revertToExerciseName != nil {
+                    anySlotCarriesState = true
+                }
                 if let id = accessory.id {
                     try uuid(id, "\(p).id")
                     try check(slotIDs.insert(id).inserted, "\(p).id", "duplicate identifier \"\(id)\"")
@@ -400,5 +421,12 @@ public enum ProgramFileContract {
             try check(dayOrders.contains(next), "program.nextDayIndex",
                       "\(next) is not one of this program's day orders (\(dayOrders.sorted().map(String.init).joined(separator: ", ")))")
         }
+
+        // Runtime state is ONE decision for the whole file. Import keys off the
+        // program's wave position, so slot counters in a file that omits it
+        // were being read, accepted, and then silently zeroed. Reject the
+        // combination rather than guess which half the author meant.
+        try check(!anySlotCarriesState || programCarriesState, "program.cycleNumber",
+                  "slots carry progression state but the program carries no wave position; runtime state is all-or-nothing for the whole file")
     }
 }

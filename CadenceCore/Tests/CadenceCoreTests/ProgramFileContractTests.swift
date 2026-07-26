@@ -285,11 +285,63 @@ final class ProgramFileContractTests: XCTestCase {
         assertRejects(payload, "increments without a stall count")
 
         payload = program()
+        payload.cycleNumber = 1      // state is one decision for the whole file
+        payload.currentWeek = 1
+        payload.nextDayIndex = 0
         payload.days[0].lifts[0].stallCount = 1
         payload.days[0].lifts[0].lastIncrementLb = 5
         payload.days[0].lifts[0].lastPeakSingleLb = 225
         XCTAssertNoThrow(try ProgramFileContract.validate(ProgramFileContract.File(program: payload)),
                          "the complete group is accepted")
+    }
+
+    /// The stashed peak grade is applied verbatim at cycle rollover, so an
+    /// unchecked value here does not fail at import — it poisons the training
+    /// max weeks later. The backup importer already guards the same payload.
+    func testRejectsOutOfRangePendingGrade() {
+        func withPending(_ state: ProgramFileContract.PendingState) -> ProgramFileContract.Program {
+            var payload = program()
+            payload.cycleNumber = 1
+            payload.currentWeek = 1
+            payload.nextDayIndex = 0
+            payload.days[0].lifts[0].stallCount = 0
+            payload.days[0].lifts[0].lastIncrementLb = 0
+            payload.days[0].lifts[0].lastPeakSingleLb = 0
+            payload.days[0].lifts[0].pending = ProgramFileContract.PendingResult(state: state, note: nil)
+            return payload
+        }
+
+        assertRejects(withPending(.init(baseWeightLb: -500, estimatedMaxLb: 200, stallCount: 0, lastIncrementLb: 5)),
+                      "a negative pending base")
+        assertRejects(withPending(.init(baseWeightLb: 140, estimatedMaxLb: 99999, stallCount: 0, lastIncrementLb: 5)),
+                      "an absurd pending estimated max")
+        assertRejects(withPending(.init(baseWeightLb: 140, estimatedMaxLb: 200, stallCount: -3, lastIncrementLb: 5)),
+                      "a negative pending stall count")
+        assertRejects(withPending(.init(baseWeightLb: .nan, estimatedMaxLb: 200, stallCount: 0, lastIncrementLb: 5)),
+                      "a non-finite pending base")
+
+        XCTAssertNoThrow(try ProgramFileContract.validate(ProgramFileContract.File(
+            program: withPending(.init(baseWeightLb: 140, estimatedMaxLb: 190, stallCount: 0, lastIncrementLb: 5))
+        )), "a sane pending grade is accepted")
+    }
+
+    /// Runtime state is one decision for the whole file. Import keys off the
+    /// program's wave position, so slot counters in a file that omits it were
+    /// read, accepted, and then silently zeroed.
+    func testRejectsSlotStateWithoutProgramWavePosition() {
+        var payload = program()
+        payload.days[0].lifts[0].stallCount = 3
+        payload.days[0].lifts[0].lastIncrementLb = 5
+        payload.days[0].lifts[0].lastPeakSingleLb = 225
+        assertRejects(payload, "slot counters with no wave position would be discarded")
+
+        payload = program()
+        payload.days[0].accessories[0].stallCount = 2
+        assertRejects(payload, "an accessory counter with no wave position")
+
+        payload = program()
+        payload.days[0].lifts[0].revertToExerciseName = "Front Squat"
+        assertRejects(payload, "a swap marker with no wave position")
     }
 
     /// Half-carried wave position would silently reposition the program in its
