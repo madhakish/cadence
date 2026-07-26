@@ -11,15 +11,28 @@ the only week that earns a verdict. Grading every session would make the
 program twitchy — reacting to a bad Tuesday — where a wave should react
 to trends.
 
-## Why tapered increments instead of fixed jumps?
+## Why a proportional increment, and why no ceiling?
 
-Fixed +5/cycle works until it doesn't, and then it fails abruptly. The
-increment here is a fraction of your base scaled by *headroom* — how far
-your working weight sits below a ceiling (90% or 78% of estimated 1RM,
-by focus). Far from the ceiling you get meaningful jumps; near it,
-progress shrinks to a plate, then to zero, instead of driving you into a
-wall. Estimated 1RM itself is smoothed (70% old / 30% new) so one great
-or terrible peak nudges the ceiling rather than yanking it.
+The increment is a fraction of your current base — 2.5% for strength,
+1.5% for hypertrophy — floored to a loadable step. A 400 lb squat and a
+95 lb press should not both move 5 lb, and this way they don't.
+
+It used to be scaled by *headroom* to a training-max ceiling as well, so
+progress would shrink to nothing as you approached 90% (or 78%) of your
+estimated 1RM. That is gone, because measuring it showed it never worked:
+across every realistic combination of base and estimate it produced one
+plate step or nothing, never anything between, and the "nothing" could not
+be reached after a clean peak. The reason is circular — the peak set is
+1.175 × base, so the estimate derived from it always outruns a ceiling
+derived from the same base. A ceiling that moves with the thing it is
+meant to bound is not a ceiling.
+
+What actually stops you running into a wall is failure, which the engine
+already reads: two consecutive stalls rebuild the base at 90%. That is
+how the published systems do it too — Wendler resets the training max,
+Rippetoe resets after repeated missed sessions. Estimated 1RM is still
+smoothed (70% old / 30% new) so one great or terrible session nudges it
+rather than yanking it; it just no longer gates the increment.
 
 ## Why do stalls deload automatically?
 

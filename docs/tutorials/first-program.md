@@ -96,7 +96,7 @@ advances the program's day pointer, and progresses your accessories.
 
 Keep banking days. When the wave reaches **week 3 (peak)**, the program
 grades each main and complementary lift on what you actually did. After
-**week 4 (rest)**, the cycle rolls over: clean lifts get a tapered
+**week 4 (rest)**, the cycle rolls over: clean lifts get a proportional
 weight increase, misses hold or eventually trigger a −10% deload, and
 week 1 of cycle 2 begins with new prescriptions. You never have to
 decide what to lift — that's the point.

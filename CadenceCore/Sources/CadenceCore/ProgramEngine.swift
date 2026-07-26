@@ -131,6 +131,28 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
         default: return 0
         }
     }
+
+    /// Styles no longer offered when configuring a slot.
+    ///
+    /// `offsetWave` adds fixed pound offsets on the load and peak rotations
+    /// instead of the wave's multipliers. No shipped template uses it, and its
+    /// two defaults are calibrated to bases 61 lb apart — +25 implies a 250 lb
+    /// lift (25/0.10) while +33 implies a 189 lb one (33/0.175) — so the
+    /// intra-cycle range it produces depends on how heavy you are in a way
+    /// nobody chose.
+    ///
+    /// Retired rather than deleted. The raw value is persisted in programs, in
+    /// backups, and in program files, so removing the case would reject data
+    /// that restores today — a breaking change for a style a lifter may be
+    /// mid-cycle on. A slot already using it keeps working and keeps its
+    /// offsets; it just cannot be newly selected.
+    public static let retiredForNewSlots: Set<PrescriptionStyle> = [.offsetWave]
+
+    /// The styles a picker should offer, keeping whatever the slot already has
+    /// so a retired choice never silently rewrites itself to something else.
+    public static func selectable(current: PrescriptionStyle) -> [PrescriptionStyle] {
+        allCases.filter { !retiredForNewSlots.contains($0) || $0 == current }
+    }
 }
 
 public enum PrescriptionBlockKind: String, Codable, CaseIterable, Sendable {

@@ -348,4 +348,21 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(single(.strength), 180, "strength seeds at its own 0.90 ceiling")
         XCTAssertEqual(single(.hypertrophy), 155, "hypertrophy seeds at 0.78, not 0.90")
     }
+
+    /// offsetWave is retired from the pickers but NOT deleted: its raw value is
+    /// persisted in programs, backups and program files, so a slot already on
+    /// it has to keep working and keep appearing in its own picker.
+    /// Mirrors the block in web/tests/core.test.mjs.
+    func testRetiredStylesStayAvailableToSlotsAlreadyUsingThem() {
+        let fresh = PrescriptionStyle.selectable(current: .wave)
+        XCTAssertFalse(fresh.contains(.offsetWave),
+                       "a new slot is never offered the retired style")
+        XCTAssertEqual(fresh.count, PrescriptionStyle.allCases.count - 1,
+                       "and nothing else is hidden")
+
+        let existing = PrescriptionStyle.selectable(current: .offsetWave)
+        XCTAssertTrue(existing.contains(.offsetWave),
+                      "a slot already on it still sees it, so opening the picker cannot silently rewrite the slot")
+        XCTAssertEqual(existing.count, PrescriptionStyle.allCases.count)
+    }
 }

@@ -1015,7 +1015,7 @@ private struct ProgramLiftRow: View {
             }
             .pickerStyle(.segmented)
             Picker("Prescription", selection: Binding(get: { lift.prescription }, set: { lift.prescription = $0 })) {
-                ForEach(PrescriptionStyle.allCases, id: \.self) { style in
+                ForEach(PrescriptionStyle.selectable(current: lift.prescription), id: \.self) { style in
                     Text(style.name).tag(style)
                 }
             }
