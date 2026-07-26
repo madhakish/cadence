@@ -1150,12 +1150,51 @@ export function restClockFractionRemaining(s, now) {
 // the shared label the logger and history rows render. Pure; mirrored 1:1 in
 // CadenceCore/CardioFormat.swift.
 
+// Distance, duration, and speed are one relationship seen from three sides:
+// distance = speed × time. Any two give the third, so the logger can accept
+// whichever two the lifter actually knows. Only distance and duration are
+// persisted — speed is always recoverable from them, so there is no third
+// field to store, disagree with itself, or migrate.
+
 // Miles per hour from distance + duration, rounded to one decimal; null when
 // either half is missing/zero (no speed without both).
 export function cardioSpeedMph(distanceMiles, durationSeconds) {
   if (!(distanceMiles > 0) || !(durationSeconds > 0)) return null;
   return Math.round((distanceMiles / (durationSeconds / 3600)) * 10) / 10;
 }
+
+// Miles from speed + duration — the treadmill case, where the lifter sets a
+// pace and a time and never sees a distance until the belt stops.
+//
+// Kept to four decimals rather than the two a treadmill displays: at two, a
+// one-minute interval cannot tell 3.0 mph from 3.1 (both land on 0.05 mi), so
+// a logged pace would read back as a different one. Display trims; storage does not.
+export function cardioDistanceMiles(speedMph, durationSeconds) {
+  if (!(speedMph > 0) || !(durationSeconds > 0)) return null;
+  return Math.round(speedMph * (durationSeconds / 3600) * 10000) / 10000;
+}
+
+// Seconds from distance + speed — "four miles at 3.5 mph" as a plan.
+export function cardioDurationSeconds(distanceMiles, speedMph) {
+  if (!(distanceMiles > 0) || !(speedMph > 0)) return null;
+  return Math.round((distanceMiles / speedMph) * 3600);
+}
+
+// Conditioning that carries external load. A ruck is a walk with a pack on,
+// and the pack weight is the training variable — progressing it is the whole
+// point. Zeroing the load the way unloaded cardio does makes a 60 lb ruck
+// indistinguishable from a stroll.
+export const LOADED_CARRIES = new Set(["Ruck", "Sled Push", "Sled Pull"]);
+
+export const cardioCarriesLoad = (exerciseName) => LOADED_CARRIES.has(exerciseName);
+
+// Where a loaded carry starts when nothing has been logged yet. A 20 lb pack
+// is the conventional entry point. Sleds vary far too much by surface and
+// implement to have an honest default.
+export const cardioDefaultLoadLb = (exerciseName) => (exerciseName === "Ruck" ? 20 : null);
+
+// Loaded carries move in plates and full pack increments, not barbell steps.
+export const CARDIO_LOAD_INCREMENT_LB = 10;
 
 // Format a duration as minutes and seconds, including hours when needed.
 export function cardioDurationLabel(seconds) {
@@ -1167,14 +1206,88 @@ export function cardioDurationLabel(seconds) {
 
 // Build one compact line from whichever cardio fields were logged.
 // Missing halves simply drop out; nothing logged → "—".
-export function cardioSetLabel(distanceMiles, durationSeconds, inclinePercent) {
+// `loadLb` is the carried weight for a ruck or sled — omitted entirely for
+// unloaded work, which has none.
+export function cardioSetLabel(distanceMiles, durationSeconds, inclinePercent, loadLb = null) {
   const parts = [];
+  if (loadLb > 0) parts.push(`${trim(loadLb)} lb`);
   if (distanceMiles > 0) parts.push(`${trim(distanceMiles, 2)} mi`);
   if (durationSeconds > 0) parts.push(cardioDurationLabel(durationSeconds));
   const mph = cardioSpeedMph(distanceMiles, durationSeconds);
   if (mph !== null) parts.push(`${trim(mph)} mph`);
   if (inclinePercent > 0) parts.push(`${trim(inclinePercent)}%`);
   return parts.length ? parts.join(" · ") : "—";
+}
+
+// ---- Health reconciliation -------------------------------------------------
+// Pure mirror of CadenceCore/HealthComparison.swift.
+//
+// Health is a second opinion, never an authority. A watch measures a ruck more
+// honestly than a lifter estimating afterwards; a treadmill belt measures a
+// walk more honestly than a wrist. Neither wins by default, so this layer
+// reports the disagreement and leaves the decision to the person who did the
+// work. Nothing here mutates a log.
+//
+// A set carries no timestamp, only the session does, so comparison is at the
+// session's conditioning total.
+
+// Distances closer than this are the same distance; long efforts get
+// proportional slack.
+export const HEALTH_TOLERANCE_MILES = 0.05;
+export const HEALTH_TOLERANCE_FRACTION = 0.02;
+
+// Seconds two half-open ranges share. Zero when they merely touch.
+// Accepts Date or epoch-millisecond numbers.
+export function healthOverlapSeconds(aStart, aEnd, bStart, bEnd) {
+  const ms = (v) => (v instanceof Date ? v.getTime() : v);
+  const start = Math.max(ms(aStart), ms(bStart));
+  const end = Math.min(ms(aEnd), ms(bEnd));
+  return end > start ? Math.round((end - start) / 1000) : 0;
+}
+
+// Whether a Health workout belongs to a session, by majority overlap.
+// Containment would drop the walk started in the car park before the app was
+// opened; any-overlap would claim the bike commute that ended as it began.
+export function healthSampleBelongsToSession(sampleStart, sampleEnd, sessionStart, sessionEnd) {
+  const ms = (v) => (v instanceof Date ? v.getTime() : v);
+  const sampleSeconds = (ms(sampleEnd) - ms(sampleStart)) / 1000;
+  if (!(sampleSeconds > 0)) return false;
+  return healthOverlapSeconds(sampleStart, sampleEnd, sessionStart, sessionEnd) >= sampleSeconds / 2;
+}
+
+// Compare a logged conditioning distance against Health's for one session.
+// Returns { kind, loggedMiles, healthMiles, isDiscrepancy, adoptableMiles }.
+export function healthCompare(loggedMiles, healthMiles) {
+  const logged = loggedMiles > 0 ? loggedMiles : null;
+  const health = healthMiles > 0 ? healthMiles : null;
+  const verdict = (kind, extra) => ({
+    kind,
+    loggedMiles: logged,
+    healthMiles: health,
+    isDiscrepancy: kind === "healthHigher" || kind === "loggedHigher" || kind === "onlyHealth",
+    adoptableMiles: kind === "onlyLogged" || kind === "agree" || kind === "neither" ? null : health,
+    ...extra,
+  });
+  if (logged === null && health === null) return verdict("neither");
+  if (logged === null) return verdict("onlyHealth");
+  if (health === null) return verdict("onlyLogged");
+  const allowed = Math.max(HEALTH_TOLERANCE_MILES, Math.max(logged, health) * HEALTH_TOLERANCE_FRACTION);
+  if (Math.abs(health - logged) <= allowed + 1e-9) return verdict("agree");
+  return verdict(health > logged ? "healthHigher" : "loggedHigher");
+}
+
+// One line stating what each source says. Never phrased as a correction.
+export function healthComparisonLabel(verdict) {
+  const l = () => trim(verdict.loggedMiles, 2);
+  const h = () => trim(verdict.healthMiles, 2);
+  switch (verdict.kind) {
+    case "agree": return `Health agrees: ${l()} mi`;
+    case "healthHigher": return `Health recorded ${h()} mi · you logged ${l()} mi`;
+    case "loggedHigher": return `You logged ${l()} mi · Health recorded ${h()} mi`;
+    case "onlyHealth": return `Health recorded ${h()} mi that isn't logged`;
+    case "onlyLogged": return "Nothing in Health for this session";
+    default: return "No conditioning distance";
+  }
 }
 
 // ---- Rotation-first coaching ----------------------------------------------

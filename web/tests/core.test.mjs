@@ -657,10 +657,93 @@ eq(C.cardioSpeedMph(5, 5400), 3.3, "rounded to one decimal");
 eq(C.cardioSpeedMph(null, 1800), null, "no distance → no speed");
 eq(C.cardioSpeedMph(2, null), null, "no time → no speed");
 eq(C.cardioSpeedMph(0, 0), null, "zeros → no speed");
+// [INV-CARDIO-SOLVES-THE-THIRD] the treadmill case: pace and time are what the
+// lifter sets, so the distance has to fall out rather than be worked out on the belt.
+eq(C.cardioDistanceMiles(3.5, 1800), 1.75, "distance from speed + time");
+eq(C.cardioDistanceMiles(4, 1350), 1.5, "distance from speed + time");
+eq(C.cardioDistanceMiles(3.7, 1020), 1.0483, "stored finer than a treadmill displays; the label trims it");
+// A one-minute interval at two decimals put 3.0 and 3.1 mph on the same 0.05 mi.
+ok(C.cardioDistanceMiles(3.0, 60) !== C.cardioDistanceMiles(3.1, 60),
+  "[INV-CARDIO-SOLVES-THE-THIRD] a 0.1 mph step survives a one-minute interval");
+eq(C.cardioSpeedMph(C.cardioDistanceMiles(3.1, 60), 60), 3.1, "and reads back as the pace that was set");
+eq(C.cardioDistanceMiles(null, 1800), null, "no speed → no distance");
+eq(C.cardioDistanceMiles(3.5, null), null, "no time → no distance");
+eq(C.cardioDistanceMiles(0, 0), null, "zeros → no distance");
+eq(C.cardioDurationSeconds(1.75, 3.5), 1800, "time from distance + speed");
+eq(C.cardioDurationSeconds(1.5, 4), 1350, "time from distance + speed");
+eq(C.cardioDurationSeconds(null, 3.5), null, "no distance → no time");
+eq(C.cardioDurationSeconds(2, null), null, "no speed → no time");
+eq(C.cardioDurationSeconds(0, 0), null, "zeros → no time");
+// [INV-CARDIO-SOLVES-THE-THIRD] only distance and duration persist, so a
+// distance computed from speed must read back as that same speed.
+for (const mph of [2.5, 3.0, 3.1, 3.5, 4.0, 5.5, 6.0, 7.5]) {
+  for (const minutes of [1, 2, 5, 10, 15, 20, 30, 45, 60]) {
+    const secs = minutes * 60;
+    const miles = C.cardioDistanceMiles(mph, secs);
+    ok(Math.abs(C.cardioSpeedMph(miles, secs) - mph) <= 0.001,
+      `[INV-CARDIO-SOLVES-THE-THIRD] ${mph} mph for ${minutes}m reads back as that pace`);
+    ok(Math.abs(C.cardioDurationSeconds(miles, mph) - secs) <= 30,
+      `[INV-CARDIO-SOLVES-THE-THIRD] ${mph} mph over ${miles} mi reads back as that time`);
+  }
+}
+// ---- health reconciliation (HealthComparisonTests.swift) ----
+// [INV-HEALTH-IS-A-SECOND-OPINION] Health reports, it never overwrites.
+{
+  const min = (m) => new Date((1_780_000_000 + m * 60) * 1000);
+  const agree = C.healthCompare(3.0, 3.04);
+  eq(agree.kind, "agree", "two honest instruments never match exactly");
+  ok(!agree.isDiscrepancy, "[INV-HEALTH-IS-A-SECOND-OPINION] a hundredth of a mile is not a discrepancy");
+  eq(agree.adoptableMiles, null, "nothing to adopt when they agree");
+  eq(C.healthCompare(10.0, 10.18).kind, "agree", "long efforts get proportional slack");
+  eq(C.healthCompare(10.0, 10.6).kind, "healthHigher", "past the band it is a real disagreement");
+
+  const higher = C.healthCompare(2.0, 2.4);
+  eq(higher.kind, "healthHigher", "Health recorded further");
+  eq(higher.adoptableMiles, 2.4, "adopting means taking Health's number");
+  eq(C.healthCompare(3.0, 2.4).kind, "loggedHigher", "the log claims further");
+  eq(C.healthCompare(3.0, 2.4).adoptableMiles, 2.4, "adopting still means taking Health's number");
+
+  eq(C.healthCompare(null, 2.0).kind, "onlyHealth", "Health has work the log missed");
+  eq(C.healthCompare(2.0, null).kind, "onlyLogged", "an unworn watch");
+  eq(C.healthCompare(null, null).kind, "neither", "nothing either side");
+  eq(C.healthCompare(0, 0).kind, "neither", "zeros are absence");
+  ok(!C.healthCompare(5.0, null).isDiscrepancy,
+    "[INV-HEALTH-IS-A-SECOND-OPINION] an unworn watch never reads as 'you logged too much'");
+  eq(C.healthCompare(5.0, null).adoptableMiles, null, "there is nothing in Health to adopt");
+
+  eq(C.healthOverlapSeconds(min(0), min(60), min(30), min(90)), 1800, "overlap in seconds");
+  eq(C.healthOverlapSeconds(min(0), min(30), min(30), min(60)), 0, "touching is not overlapping");
+  eq(C.healthOverlapSeconds(min(0), min(10), min(50), min(60)), 0, "disjoint");
+  ok(C.healthSampleBelongsToSession(min(-5), min(45), min(0), min(60)),
+    "the walk started in the car park still belongs to the session");
+  ok(!C.healthSampleBelongsToSession(min(-40), min(5), min(0), min(60)),
+    "the bike commute that ended as the session began does not");
+  ok(!C.healthSampleBelongsToSession(min(10), min(10), min(0), min(60)),
+    "a zero-length sample belongs to nothing");
+
+  eq(C.healthComparisonLabel(C.healthCompare(3, 3)), "Health agrees: 3 mi", "agreement label");
+  eq(C.healthComparisonLabel(higher), "Health recorded 2.4 mi · you logged 2 mi", "disagreement names both sides");
+  eq(C.healthComparisonLabel(C.healthCompare(2, null)), "Nothing in Health for this session", "one-sided label");
+  eq(C.healthComparisonLabel(C.healthCompare(null, null)), "No conditioning distance", "empty label");
+}
+
 eq(C.cardioDurationLabel(1350), "22:30", "m:ss");
 eq(C.cardioDurationLabel(65), "1:05", "single-digit minutes");
 eq(C.cardioDurationLabel(5400), "1:30:00", "hour-plus gets h:mm:ss");
 eq(C.cardioDurationLabel(0), "0:00", "zero");
+// [INV-RUCK-CARRIES-ITS-LOAD] a ruck is a walk with a pack on; the pack is the point.
+ok(C.cardioCarriesLoad("Ruck"), "[INV-RUCK-CARRIES-ITS-LOAD] a ruck carries load");
+ok(C.cardioCarriesLoad("Sled Push"), "a sled carries load");
+ok(!C.cardioCarriesLoad("Walk"), "a walk carries nothing");
+ok(!C.cardioCarriesLoad("Bike"), "a bike carries nothing");
+eq(C.cardioDefaultLoadLb("Ruck"), 20, "[INV-RUCK-CARRIES-ITS-LOAD] a ruck starts at a 20 lb pack");
+eq(C.cardioDefaultLoadLb("Sled Push"), null, "sleds vary too much to have an honest default");
+eq(C.cardioDefaultLoadLb("Walk"), null, "unloaded work has no default load");
+eq(C.CARDIO_LOAD_INCREMENT_LB, 10, "[INV-RUCK-CARRIES-ITS-LOAD] packs move in 10 lb steps");
+eq(C.cardioSetLabel(3, 2700, null, 20), "20 lb · 3 mi · 45:00 · 4 mph",
+  "[INV-RUCK-CARRIES-ITS-LOAD] the pack weight leads the label");
+eq(C.cardioSetLabel(3, 2700, null, 0), "3 mi · 45:00 · 4 mph", "unloaded work shows no load");
+eq(C.cardioSetLabel(3, 2700, null), "3 mi · 45:00 · 4 mph", "the load argument is optional");
 eq(C.cardioSetLabel(1.5, 1350, null), "1.5 mi · 22:30 · 4 mph", "full label");
 eq(C.cardioSetLabel(3, 2700, 12), "3 mi · 45:00 · 4 mph · 12%", "fictional full-field fixture");
 eq(C.cardioSetLabel(null, 1800, null), "30:00", "time only");

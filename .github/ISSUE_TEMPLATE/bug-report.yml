@@ -1,0 +1,88 @@
+name: Bug report
+description: Something behaves wrong — a weight, a rep count, a screen, a timer
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The most useful bug reports name **the lift, the
+        numbers, and what you expected instead** — this app is mostly arithmetic
+        about training, so a concrete case usually reproduces immediately.
+
+        ⚠️ **Do not paste a real backup file or a screenshot showing your
+        bodyweight, gym membership barcode, or health data.** If you need to
+        share data, cut it down to the one session that reproduces the problem
+        and change the weights.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where did this happen?
+      options:
+        - iOS app
+        - Web app (PWA)
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: iOS — Settings → About. Web — the version in the footer, or the date you last loaded it.
+      placeholder: "1.4.2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did the app do?
+      placeholder: |
+        Squat warmups on a Lower A day were prescribed at 81.1 lb.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      description: If it is a number, say what the number should have been and why.
+      placeholder: |
+        The ramp should have been bar × 10, then roughly 40/55/70/85% of 225 —
+        so about 95, 125, 155, 190.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to get there
+      description: The path through the app. Include the program day and lift if it is program-related.
+      placeholder: |
+        1. Today → Lower A → Start
+        2. Back Squat, working weight 225
+        3. The warmup rows are already wrong before touching anything
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything unusual about your setup?
+      description: |
+        Especially: kg plates in the rack, a mixed kg/lb inventory, a non-standard
+        bar weight, more than one gym, a custom per-lift increment, or an
+        exercise you created yourself. Loading bugs are very often
+        inventory-specific.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: data-loss
+    attributes:
+      label: Did anything get lost or changed?
+      options:
+        - label: Logged sets, history, or program state changed or disappeared
+        - label: I have exported a backup since noticing this

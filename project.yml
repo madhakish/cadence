@@ -48,11 +48,13 @@ targets:
         # keep System from ever going light.
         NSHealthUpdateUsageDescription: >-
           Optionally writes completed workouts and bodyweight to Health.
-          Cadence reads nothing from Health.
+          Off by default; you choose what gets saved.
         NSHealthShareUsageDescription: >-
-          Cadence does not read your health data. Apple requires this text
-          because Health access is enabled; Cadence only writes the workouts
-          and bodyweight you choose to save.
+          Optionally reads walking, running, and cycling distance so Cadence
+          can show it beside the conditioning you logged. Off by default,
+          separate from writing, and only ever read for a session you have
+          already recorded. Cadence never changes a logged workout on its
+          own — it shows both numbers and you decide.
         NSPhotoLibraryUsageDescription: >-
           Lets you store a photo of your gym membership barcode so your
           phone can stand in for the keychain tag.

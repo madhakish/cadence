@@ -47,8 +47,9 @@ no quotes.
   shows full-screen at max brightness so the phone is the second tag the
   gym's software can't issue.
 - **Settings & export** — units display, multiple gyms with per-gym plate
-  inventories, per-lift increments, rest defaults, optional write-only
-  HealthKit, full JSON + CSV export.
+  inventories, per-lift increments, rest defaults, optional HealthKit (write
+  workouts/bodyweight, and separately compare conditioning distance against
+  Health), full JSON + CSV export.
 
 Fresh installs contain a searchable, categorized library of 141 generic
 strength, accessory, bodyweight, Olympic, and conditioning exercises plus a
@@ -77,7 +78,7 @@ starting points and remain editable before the first session.
 │   ├── Models/              # @Model classes (canonical lb everywhere)
 │   ├── Seed/                # generic exercise seed + program style templates
 │   ├── Services/            # notifications, rest timer, completion/PRs,
-│   │                        # export, optional HealthKit (write-only)
+│   │                        # export, optional HealthKit (write + compare)
 │   └── Views/               # dark, big targets, terse copy
 ├── web/                     # Everything GitHub Pages serves (no build step)
 │   ├── index.html           # Product site: overview, guide, iOS/beta, privacy
@@ -122,6 +123,32 @@ Notes:
   persistence changes. Semantic-release cuts versioned releases with
   installable artifacts; see `CLAUDE.md` for the safety contracts and
   `docs/TESTFLIGHT.md` for TestFlight distribution and recovery.
-- HealthKit is optional: the capability is declared, the toggle lives in
-  Settings, and the app only ever writes (workouts + bodyweight).
+- HealthKit is optional and in two separately granted halves, both off by
+  default: writing (workouts + bodyweight), and reading walking/running/cycling
+  distance to show beside a logged session. Reading never overwrites a log —
+  it shows both numbers and you choose.
 - All weights are stored in lb (`Double`). kg exists only at entry/display.
+
+## Contributing
+
+Bug reports and feature ideas are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for what makes a useful one, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security issues go through
+[private reporting](https://github.com/madhakish/cadence/security/advisories/new),
+not the public tracker.
+
+Outside pull requests are not accepted; the license grants no right to publish
+derivative works. A good report is worth more here than a patch.
+
+Anyone working inside the repository — including coding agents — should start
+with [AGENTS.md](AGENTS.md), the canonical guide to the migration protocol, the
+native/web parity contract, and the definition of done.
+
+## License
+
+Copyright (c) 2026 madhakish. All rights reserved — see [LICENSE](LICENSE).
+The source is published for reference and review; it is **not** open source.
+You may read it and build it for your own personal use. You may not
+redistribute it or publish a derivative work.
+
+Cadence is a training logbook, not a medical device and not a coach.

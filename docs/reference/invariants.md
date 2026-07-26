@@ -70,6 +70,32 @@ Re-syncing warmups after a bar, gym, or working-weight change refreshes their
 equipment-changing swap is the exception: it rebuilds the ramp, because the old
 one described a different implement.
 
+### INV-CARDIO-SOLVES-THE-THIRD
+*platforms: core*
+
+Distance, duration, and speed are one relationship — `distance = speed × time`
+— so the logger accepts whichever **two** the lifter actually knows and derives
+the third. Only distance and duration are persisted; a distance computed from a
+speed must read back as that same speed.
+
+> A treadmill or a rucking plan is set by pace and time; the belt does not tell
+> you a distance until it stops. Requiring distance as an input meant doing the
+> arithmetic mid-workout or leaving the field empty, and an empty distance is
+> lost volume. Storing speed as a third column instead would create a value
+> that can disagree with the two it came from.
+
+### INV-RUCK-CARRIES-ITS-LOAD
+*platforms: core*
+
+Loaded carries — a ruck, a sled — keep a logged load where unloaded cardio
+zeroes it. A ruck defaults to a **20 lb** pack and moves in **10 lb** steps,
+and its carried weight leads the set label.
+
+> Conditioning zeroed every set's weight on the way out of the logger, so a
+> 60 lb ruck and a stroll around the block recorded identically. The pack is
+> the training variable — progressing it is the entire point of rucking — and
+> barbell-sized 2.5 lb steps are the wrong instrument for loading one.
+
 ### INV-ANATOMY-EXPLICIT
 *platforms: web*
 
@@ -82,6 +108,28 @@ exercises only.
 > and wrong for several. A leg curl inherited "hinge" and so claimed glutes;
 > hip adduction inherited "squat" and claimed quads. Adductors and rear delts
 > had no region at all, so that work could not be drawn truthfully.
+
+---
+
+## Health
+
+### INV-HEALTH-IS-A-SECOND-OPINION
+*platforms: core*
+
+Apple Health is compared against, never merged in. Reading it produces a
+verdict naming **both** numbers; adopting one is an explicit act by the
+lifter. A session with nothing in Health is not a discrepancy, and no
+comparison ever rewrites a logged set on its own.
+
+> The log is the source of truth and the only copy that a backup can restore.
+> A watch left on the charger would otherwise silently erase a ruck, and a GPS
+> track through a parking garage would silently inflate one. Both instruments
+> are honest and neither is authoritative, so the disagreement is reported and
+> the person who did the work decides.
+
+Matching is by majority overlap with the **session** window, because a set
+carries no timestamp. Claiming a per-set match would be precision the data
+cannot support.
 
 ---
 

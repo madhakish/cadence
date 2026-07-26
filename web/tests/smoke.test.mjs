@@ -583,6 +583,88 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     .find((r) => r.textContent.includes("45:00"));
   ok(walkRow && walkRow.textContent.includes("3 mi · 45:00 · 4 mph · 12%"), "cardio set row renders the shared conditioning label");
   ok(walkRow && walkRow.querySelectorAll(".flagbtn").length === 1, "cardio gets only the ✓ flag (no grindy/wobble)");
+
+  // [INV-CARDIO-SOLVES-THE-THIRD] A treadmill or ruck is set by pace and time;
+  // the distance has to fall out rather than be worked out mid-workout.
+  {
+    walkRow.querySelector("button.ghost").click(); await tick();
+    const sheetEl = [...document.querySelectorAll("#overlays .sheet")].pop();
+    const numbers = [...sheetEl.querySelectorAll("input[type=number]")];
+    const rowLabel = (input) => input.closest(".row")?.textContent || "";
+    const distField = numbers.find((i) => rowLabel(i).includes("Distance"));
+    const speedField = numbers.find((i) => rowLabel(i).includes("Speed"));
+    ok(distField && speedField, "the conditioning sheet offers both distance and speed");
+    ok(speedField.value === "4", "speed opens as the readout derived from 3 mi in 45:00");
+
+    // Typing a pace recomputes the distance, and leaves the time alone.
+    speedField.value = "3.5";
+    speedField.dispatchEvent(new window.Event("input", { bubbles: true }));
+    ok(distField.value === "2.63",
+      `[INV-CARDIO-SOLVES-THE-THIRD] 3.5 mph for 45:00 fills in 2.63 mi (got ${distField.value})`);
+
+    // Typing a distance flips the derived side back to speed.
+    distField.value = "3";
+    distField.dispatchEvent(new window.Event("input", { bubbles: true }));
+    ok(speedField.value === "4",
+      `[INV-CARDIO-SOLVES-THE-THIRD] 3 mi in 45:00 reads back as 4 mph (got ${speedField.value})`);
+
+    // Only distance and duration persist — there is no third stored value.
+    [...sheetEl.querySelectorAll("button")].find((b) => b.textContent === "Done").click(); await tick();
+    const saved = (await db.Sessions.get(sid)).exercises[0].sets[0];
+    ok(saved.distanceMiles === 3 && saved.durationSeconds === 2700,
+      "the conditioning set stores distance and duration only");
+    ok(!("speedMph" in saved), "speed is never persisted as a third field");
+  }
+
+  // [INV-RUCK-CARRIES-ITS-LOAD] A ruck is born wearing its pack, and the next
+  // leg inherits what the last one carried. This is asserted through the real
+  // "+ Set" path rather than a hand-built record: the default previously lived
+  // in the edit sheet behind a "nothing logged yet" guard that a conditioning
+  // set — always created with a planned duration — could never satisfy, so the
+  // 20 lb default was unreachable in every actual flow and no test noticed.
+  {
+    const rid = await session.createBlankSession();
+    const r = await db.Sessions.get(rid);
+    r.exercises.push({ order: 0, exerciseName: "Ruck", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+    await db.Sessions.save(r);
+    await session.openSession(rid); await tick();
+
+    const overlay = [...document.querySelectorAll("#overlays .overlay")].pop();
+    const addBtn = [...overlay.querySelectorAll("button")].find((b) => b.textContent === "+ Set");
+    ok(addBtn, "the conditioning entry offers a + Set button");
+    addBtn.click(); await tick();
+    let ruck = (await db.Sessions.get(rid)).exercises[0].sets;
+    ok(ruck.length === 1 && ruck[0].weightLb === 20,
+      `[INV-RUCK-CARRIES-ITS-LOAD] a new ruck set is born at 20 lb (got ${ruck[0]?.weightLb})`);
+
+    // A second leg inherits the load actually carried, not the default again.
+    const stored = await db.Sessions.get(rid);
+    stored.exercises[0].sets[0].weightLb = 40;
+    await db.Sessions.save(stored);
+    await session.openSession(rid); await tick();
+    const overlay2 = [...document.querySelectorAll("#overlays .overlay")].pop();
+    [...overlay2.querySelectorAll("button")].find((b) => b.textContent === "+ Set").click(); await tick();
+    ruck = (await db.Sessions.get(rid)).exercises[0].sets;
+    ok(ruck.length === 2 && ruck[1].weightLb === 40,
+      `[INV-RUCK-CARRIES-ITS-LOAD] the next leg carries the same 40 lb (got ${ruck[1]?.weightLb})`);
+  }
+
+  // Unloaded conditioning stays unloaded — the load row is for carries only.
+  // Uses Bike rather than Walk so the export assertion below still finds the
+  // fixture Walk by name rather than this one.
+  {
+    const wid = await session.createBlankSession();
+    const w = await db.Sessions.get(wid);
+    w.exercises.push({ order: 0, exerciseName: "Bike", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+    await db.Sessions.save(w);
+    await session.openSession(wid); await tick();
+    const ov = [...document.querySelectorAll("#overlays .overlay")].pop();
+    [...ov.querySelectorAll("button")].find((b) => b.textContent === "+ Set").click(); await tick();
+    const walk = (await db.Sessions.get(wid)).exercises[0].sets;
+    ok(walk[0].weightLb === 0, "[INV-RUCK-CARRIES-ITS-LOAD] a bike carries nothing");
+  }
   const overlays = document.querySelectorAll("#overlays .overlay");
   overlays[overlays.length - 1].querySelector(".overlay-head button").click(); await tick();
 

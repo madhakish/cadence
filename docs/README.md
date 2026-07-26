@@ -42,6 +42,8 @@ section that matches what you're trying to do.
   chart splits main from complementary, and what the combined view shows
 - [Milestones](reference/milestones.md) — how heaviest-set, first-scheme,
   and volume PRs are detected
+- [Conditioning](reference/conditioning.md) — distance/time/speed solving,
+  loaded carries like rucking, and comparing against Apple Health
 - [Swap rules](reference/swap-rules.md) — which exercises can substitute
   for which, and what each swap scope does
 - [Rest timers](reference/rest-timers.md) — how the rest countdown is

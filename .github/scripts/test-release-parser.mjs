@@ -1,8 +1,10 @@
 import { analyzeCommits } from "../release/node_modules/@semantic-release/commit-analyzer/index.js";
+import { generateNotes } from "../release/node_modules/@semantic-release/release-notes-generator/index.js";
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 
-const logger = { log() {} };
+const logger = { log() {}, error() {} };
+const cwd = new URL("../release", import.meta.url).pathname;
 const cases = [
   ["fix: ordinary correction", "patch"],
   ["feat: ordinary feature", "minor"],
@@ -14,11 +16,62 @@ const cases = [
 for (const [message, expected] of cases) {
   const actual = await analyzeCommits(
     { preset: "conventionalcommits" },
-    { cwd: new URL("../release", import.meta.url).pathname, commits: [{ message, hash: "fixture" }], logger }
+    { cwd, commits: [{ message, hash: "fixture" }], logger }
   );
   if (actual !== expected) {
     throw new Error(`Expected ${JSON.stringify(message)} to produce ${expected}; got ${actual}`);
   }
+}
+
+// The version bump and the release notes come from two different plugins
+// reading the same preset. Asserting only the bump let v2.0.0 through v3.2.0
+// ship with a correct version and a body containing nothing but the compare
+// header: the preset advertised writer options under a key the bundled
+// conventional-changelog-writer does not read, so every commit group rendered
+// empty and no job failed. Notes are a release artefact — assert the content.
+const notes = async (message, hash = "fixture") =>
+  generateNotes(
+    { preset: "conventionalcommits" },
+    {
+      cwd,
+      options: { repositoryUrl: "https://github.com/madhakish/cadence" },
+      lastRelease: { version: "1.0.0", gitTag: "v1.0.0" },
+      nextRelease: { version: "1.1.0", gitTag: "v1.1.0", type: "minor" },
+      commits: [{ message, hash }],
+      logger,
+    }
+  );
+
+const featureNotes = await notes("feat(anatomy): give every exercise a profile", "abcdef1234");
+assert.match(featureNotes, /### Features/, "a feat commit must render a Features section");
+assert.match(
+  featureNotes,
+  /give every exercise a profile/,
+  "the release body must contain the commit subject, not just the compare header"
+);
+assert.match(featureNotes, /\*\*anatomy:\*\*/, "a scoped commit must render its scope");
+assert.match(featureNotes, /abcdef1/, "each entry must link back to its commit");
+
+const fixNotes = await notes("fix: keep extra work out of the main line");
+assert.match(fixNotes, /### Bug Fixes/, "a fix commit must render a Bug Fixes section");
+
+const breakingNotes = await notes("feat!: advance the persisted store format");
+assert.match(
+  breakingNotes,
+  /BREAKING CHANGE/i,
+  "a breaking change must be called out in the body, not only in the version"
+);
+
+// A body of only the compare header is the exact shape of the silent failure.
+for (const [label, body] of [
+  ["feature", featureNotes],
+  ["fix", fixNotes],
+  ["breaking", breakingNotes],
+]) {
+  assert.ok(
+    body.trim().split("\n").filter(Boolean).length > 1,
+    `${label} notes collapsed to a bare header — the preset and the writer disagree on writerOpts`
+  );
 }
 
 const workflow = await readFile(new URL("../workflows/ci.yml", import.meta.url), "utf8");
@@ -62,4 +115,4 @@ assert.match(testflightJob, /needs\.release\.outputs\.published == 'true'/);
 assert.doesNotMatch(testflightJob, /needs:.*release-assets/);
 assert.match(testflightJob, /fetch-depth: 0\n\s+fetch-tags: true/);
 
-console.log(`${cases.length + 27} semantic-release contract assertions passed`);
+console.log(`${cases.length + 37} semantic-release contract assertions passed`);

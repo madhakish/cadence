@@ -811,12 +811,31 @@ private struct ExerciseSection: View {
         }
     }
 
+    /// [INV-RUCK-CARRIES-ITS-LOAD] What a new duration-based set starts loaded
+    /// with. Unloaded conditioning and timed holds carry nothing; a ruck or
+    /// sled inherits the previous leg's load, or opens at the movement's
+    /// default. A previous leg deliberately set to zero stays zero.
+    private static func startingCarryLoadLb(entry: SessionExercise, last: SetEntry?) -> Double {
+        guard entry.exercise?.type == .conditioning,
+              let name = entry.exercise?.name,
+              CardioFormat.carriesLoad(exerciseName: name) else { return 0 }
+        if let last { return last.weightLb }
+        return CardioFormat.defaultLoadLb(exerciseName: name) ?? 0
+    }
+
     private func addSet() {
         let last = entry.orderedSets.last
         let isTimed = entry.exercise?.type == .timed || entry.exercise?.type == .conditioning
+        // [INV-RUCK-CARRIES-ITS-LOAD] Duration-based work is unloaded EXCEPT a
+        // loaded carry, which is born wearing its pack and carries that weight
+        // to the next leg. Defaulting later — on first edit — cannot work: a
+        // conditioning set is created with a planned duration, so there is no
+        // moment afterwards when it is distinguishable from one the lifter
+        // deliberately set to zero.
+        let carryLb = Self.startingCarryLoadLb(entry: entry, last: last)
         let set = SetEntry(
             order: entry.sets.count,
-            weightLb: isTimed ? 0 : (last?.weightLb ?? entry.plannedWeightLb ?? 45),
+            weightLb: isTimed ? carryLb : (last?.weightLb ?? entry.plannedWeightLb ?? 45),
             reps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             isPerSide: entry.exercise?.isUnilateral ?? false,
             enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
@@ -950,7 +969,8 @@ private struct SetRow: View {
                     Text(isCardio
                          ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                                  durationSeconds: set.durationSeconds,
-                                                 inclinePercent: set.inclinePercent)
+                                                 inclinePercent: set.inclinePercent,
+                                                 loadLb: set.weightLb)
                          : (isTimed ? CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) : weightLabel))
                         .font(.title3.bold().monospacedDigit())
                         .foregroundStyle(set.isWarmup ? .secondary : .primary)
@@ -997,7 +1017,7 @@ private struct SetRow: View {
         }
         .sheet(isPresented: $showDetail) {
             if isCardio {
-                CardioSetSheet(set: set, onDelete: onRemove)
+                CardioSetSheet(set: set, exerciseName: exercise?.name ?? "", onDelete: onRemove)
                     .presentationDetents([.medium, .large])
             } else if isTimed {
                 TimedSetSheet(set: set, onDelete: onRemove)
@@ -1022,41 +1042,94 @@ private struct SetRow: View {
 
 // MARK: - Cardio set detail (distance / time / incline)
 
-/// Conditioning-type work logs distance, time, and incline; speed falls out.
+/// Conditioning-type work logs distance, time, speed, and incline.
+/// [INV-CARDIO-SOLVES-THE-THIRD] Distance and speed are two views of one
+/// relationship, so both are editable and whichever one the lifter is not
+/// adjusting is the one that recomputes. Time is never overwritten. Only
+/// distance and duration persist — speed stays derivable, so there is no third
+/// stored value that can disagree with the two it came from.
 /// Small deliberate steps for each field — content hoisted into plain
 /// rows to stay inside the type-checker's budget (see CompileRegressionTests).
 private struct CardioSetSheet: View {
+    /// Which side is currently computed from the other two.
+    private enum Derived { case speed, distance }
+
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Bindable var set: SetEntry
+    let exerciseName: String
     let onDelete: () -> Void
+
+    /// Distance is what gets stored, so it starts as the entered value and
+    /// speed is the readout — the same way the sheet behaved before speed
+    /// became editable.
+    @State private var derived: Derived = .speed
+
+    private var carriesLoad: Bool { CardioFormat.carriesLoad(exerciseName: exerciseName) }
+    private var carryLb: Double { self.set.weightLb }
 
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
     private var miles: Double { self.set.distanceMiles ?? 0 }
     private var secs: Int { self.set.durationSeconds ?? 0 }
     private var incline: Double { self.set.inclinePercent ?? 0 }
+    private var mph: Double {
+        CardioFormat.speedMph(distanceMiles: self.set.distanceMiles, durationSeconds: self.set.durationSeconds) ?? 0
+    }
+
+    /// Typing a distance makes speed the readout again.
+    private func applyDistance(_ value: Double) {
+        set.distanceMiles = value > 0 ? value : nil
+        derived = .speed
+    }
+
+    /// Setting a pace computes the distance it covers in the logged time —
+    /// the treadmill case, where the belt reports no distance until it stops.
+    private func applySpeed(_ value: Double) {
+        derived = .distance
+        // With no time logged there is nothing to solve against. Assigning the
+        // nil would delete a distance the lifter already has, so leave it.
+        guard let solved = CardioFormat.distanceMiles(speedMph: value, durationSeconds: set.durationSeconds)
+        else { return }
+        set.distanceMiles = solved
+    }
+
+    /// Changing the time holds whichever side the lifter last set. If they
+    /// entered a pace, a longer walk means more distance at that same pace;
+    /// if they entered a distance, it means a slower one.
+    private func applyDuration(_ value: Int) {
+        let keptSpeed = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds)
+        set.durationSeconds = value > 0 ? value : nil
+        if derived == .distance, let keptSpeed,
+           let solved = CardioFormat.distanceMiles(speedMph: keptSpeed, durationSeconds: set.durationSeconds) {
+            set.distanceMiles = solved
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Stepper("Distance: \(miles > 0 ? "\(Weight.trim(miles, decimals: 2)) mi" : "—")",
-                            value: Binding(get: { miles }, set: { set.distanceMiles = $0 > 0 ? $0 : nil }),
+                            value: Binding(get: { miles }, set: { applyDistance($0) }),
                             in: 0...100, step: 0.25)
                     distanceTypeRow
                     Stepper("Time: \(secs > 0 ? CardioFormat.durationLabel(seconds: secs) : "—")",
-                            value: Binding(get: { secs }, set: { set.durationSeconds = $0 > 0 ? $0 : nil }),
+                            value: Binding(get: { secs }, set: { applyDuration($0) }),
                             in: 0...36000, step: 60)
+                    Stepper("Speed: \(mph > 0 ? "\(Weight.trim(mph)) mph" : "—")",
+                            value: Binding(get: { mph }, set: { applySpeed($0) }),
+                            in: 0...20, step: 0.1)
                     Stepper("Incline: \(incline > 0 ? "\(Weight.trim(incline))%" : "—")",
                             value: Binding(get: { incline }, set: { set.inclinePercent = $0 > 0 ? $0 : nil }),
                             in: 0...30, step: 0.5)
+                    carryLoadRow
                 } header: {
-                    Text("Distance · time · incline")
+                    Text(carriesLoad ? "Load · distance · time · speed" : "Distance · time · speed · incline")
                 } footer: {
-                    if let mph = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds) {
-                        Text("Speed: \(Weight.trim(mph)) mph")
-                    }
+                    Text(derived == .distance
+                         ? "Distance is calculated from speed and time."
+                         : "Speed is calculated from distance and time.")
                 }
                 Section {
                     Button("Delete set", role: .destructive) {
@@ -1077,6 +1150,18 @@ private struct CardioSetSheet: View {
         }
     }
 
+    /// [INV-RUCK-CARRIES-ITS-LOAD] A ruck is a walk with a pack on. Unloaded
+    /// cardio gets no load row at all. Hoisted out of the Form body to keep the
+    /// section inside the type-checker's budget (see CompileRegressionTests).
+    @ViewBuilder
+    private var carryLoadRow: some View {
+        if carriesLoad {
+            Stepper("Load: \(carryLb > 0 ? "\(Weight.trim(carryLb)) lb" : "—")",
+                    value: Binding(get: { carryLb }, set: { set.weightLb = max(0, $0) }),
+                    in: 0...200, step: CardioFormat.loadIncrementLb)
+        }
+    }
+
     /// Exact distance entry for values the 0.25 steps don't land.
     private var distanceTypeRow: some View {
         HStack {
@@ -1085,8 +1170,8 @@ private struct CardioSetSheet: View {
             TextField("miles", text: Binding(
                 get: { miles == 0 ? "" : Weight.trim(miles, decimals: 2) },
                 set: {
-                    if let v = Double($0.replacingOccurrences(of: ",", with: ".")), v > 0 { set.distanceMiles = v }
-                    else if $0.isEmpty { set.distanceMiles = nil }
+                    if let v = Double($0.replacingOccurrences(of: ",", with: ".")), v > 0 { applyDistance(v) }
+                    else if $0.isEmpty { applyDistance(0) }
                 }
             ))
             .keyboardType(.decimalPad)

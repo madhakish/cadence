@@ -438,8 +438,8 @@ export async function openSession(id) {
     const isTimed = ex && ex.type === "timed";
     const wt = isCardio
       ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editCardioSet(se, s, body) },
-          ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent) }),
-          ui.h("span", { class: "sub", text: " distance · time · incline" }))
+          ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent, s.weightLb) }),
+          ui.h("span", { class: "sub", text: isCardio && C.cardioCarriesLoad(se.exerciseName) ? " load · distance · time" : " distance · time · incline" }))
       : isTimed
         ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editTimedSet(se, s, body) },
           ui.h("span", { class: "wt mono", text: C.cardioDurationLabel(s.durationSeconds || 0) }),
@@ -530,7 +530,15 @@ export async function openSession(id) {
     const last = se.sets[se.sets.length - 1];
     const ex = exMap.get(se.exerciseName);
     const durationBased = ex && (ex.type === "timed" || ex.type === "conditioning");
-    const w = durationBased ? 0 : (last ? last.weightLb : (se.plannedWeightLb ?? 45));
+    // [INV-RUCK-CARRIES-ITS-LOAD] Duration-based work is unloaded EXCEPT a
+    // loaded carry, which is born wearing its pack and carries that weight to
+    // the next leg. Defaulting on first edit cannot work: a conditioning set is
+    // created with a planned duration, so afterwards it is indistinguishable
+    // from one the lifter deliberately set to zero.
+    const carryLb = ex && ex.type === "conditioning" && C.cardioCarriesLoad(se.exerciseName)
+      ? (last ? last.weightLb : (C.cardioDefaultLoadLb(se.exerciseName) ?? 0))
+      : 0;
+    const w = durationBased ? carryLb : (last ? last.weightLb : (se.plannedWeightLb ?? 45));
     const r = durationBased ? 1 : (last ? last.reps : (se.plannedReps ?? 5));
     const inheritedLoad = last && C.LOAD_BASES.includes(last.loadBasis)
       ? { loadBasis: last.loadBasis, implementCount: last.implementCount }
@@ -652,7 +660,12 @@ export async function openSession(id) {
     });
   }
 
-  // Cardio (type conditioning) sets: distance / time / incline, speed derived.
+  // Cardio (type conditioning) sets: distance / time / speed / incline.
+  // [INV-CARDIO-SOLVES-THE-THIRD] Distance and speed are two views of one
+  // relationship, so both are editable and whichever one the lifter is NOT
+  // typing into is the one that recomputes. Time is never overwritten — it is
+  // the one value a treadmill, a watch, and a ruck plan all agree on.
+  // Only distance + duration are stored; speed is always re-derivable.
   // Mirrors the native CardioSetSheet.
   function editCardioSet(se, s, body) {
     ui.sheet({
@@ -661,31 +674,79 @@ export async function openSession(id) {
         const distInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "0.05", min: "0", placeholder: "0", value: s.distanceMiles > 0 ? C.trim(s.distanceMiles, 2) : "" });
         const minInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", placeholder: "0", value: s.durationSeconds > 0 ? String(Math.floor(s.durationSeconds / 60)) : "" });
         const secInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", max: "59", placeholder: "0", value: s.durationSeconds > 0 ? String(s.durationSeconds % 60) : "" });
+        const startSpeed = C.cardioSpeedMph(s.distanceMiles, s.durationSeconds);
+        const speedInput = ui.h("input", { type: "number", inputmode: "decimal", step: "0.1", min: "0", placeholder: "0", value: startSpeed !== null ? C.trim(startSpeed) : "" });
         let incline = s.inclinePercent > 0 ? s.inclinePercent : 0;
-        const speedLine = ui.h("div", { class: "sub", style: { margin: "6px 4px" } });
+        // Which of distance/speed is currently computed from the other two.
+        // Distance is what gets stored, so it starts as the entered value.
+        let derived = "speed";
+        // The distance input displays a 2-decimal value, but a pace entered
+        // for a short interval needs more than that to survive a round trip.
+        // Keep what was actually computed and store THAT, not the display text.
+        let computedMiles = null;
+        const distNote = ui.h("span", { class: "sub" });
+        const speedNote = ui.h("span", { class: "sub" });
         const readSecs = () => (parseInt(minInput.value, 10) || 0) * 60 + (parseInt(secInput.value, 10) || 0);
-        const paintSpeed = () => {
-          const mph = C.cardioSpeedMph(parseFloat(distInput.value) || 0, readSecs());
-          speedLine.textContent = mph !== null ? `Speed: ${C.trim(mph)} mph` : "";
+        const recompute = () => {
+          const secs = readSecs();
+          if (derived === "distance") {
+            const miles = C.cardioDistanceMiles(parseFloat(speedInput.value) || 0, secs);
+            // With no time there is nothing to solve against; leave whatever
+            // distance is already in the field rather than blanking it.
+            if (miles !== null) {
+              computedMiles = miles;
+              distInput.value = C.trim(miles, 2);
+            }
+          } else {
+            computedMiles = null;
+            const mph = C.cardioSpeedMph(parseFloat(distInput.value) || 0, secs);
+            speedInput.value = mph !== null ? C.trim(mph) : "";
+          }
+          distNote.textContent = derived === "distance" ? "calculated" : "";
+          speedNote.textContent = derived === "speed" ? "calculated" : "";
         };
-        [distInput, minInput, secInput].forEach((el) => el.addEventListener("input", paintSpeed));
-        c.append(ui.field("Distance (mi)", distInput));
+        distInput.addEventListener("input", () => { derived = "speed"; recompute(); });
+        speedInput.addEventListener("input", () => { derived = "distance"; recompute(); });
+        [minInput, secInput].forEach((el) => el.addEventListener("input", recompute));
+        c.append(ui.h("div", { class: "row" },
+          ui.h("span", {}, ui.h("span", { text: "Distance (mi) " }), distNote), distInput));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Time" }),
           ui.h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } },
             minInput, ui.h("span", { class: "sub", text: "min" }), secInput, ui.h("span", { class: "sub", text: "sec" }))));
+        c.append(ui.h("div", { class: "row" },
+          ui.h("span", {}, ui.h("span", { text: "Speed (mph) " }), speedNote), speedInput));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Incline" }),
           ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
-        c.append(speedLine);
-        paintSpeed();
+        // A ruck is a walk with a pack on — the pack weight is the training
+        // variable, so loaded carries keep a load where plain cardio zeroes it.
+        // The load is established when the set is created, so the sheet only
+        // ever edits what is already there — it never re-defaults.
+        const carries = C.cardioCarriesLoad(se.exerciseName);
+        let carryLb = carries ? (s.weightLb || 0) : 0;
+        if (carries) {
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Load" }),
+            ui.stepper(carryLb, {
+              min: 0, max: 200, step: C.CARDIO_LOAD_INCREMENT_LB,
+              format: (v) => (v > 0 ? `${C.trim(v)} lb` : "—"),
+              onChange: (v) => { carryLb = v; },
+            })));
+        }
+        recompute();
         c.append(ui.h("button", {
           class: "btn primary wide", style: { marginTop: "10px" }, text: "Done",
           onClick: () => {
-            const miles = parseFloat(distInput.value) || 0;
             const secs = readSecs();
+            // A derived distance is stored at full precision; a typed one is
+            // taken from the field as entered.
+            const miles = derived === "distance" && computedMiles !== null
+              ? computedMiles
+              : (parseFloat(distInput.value) || 0);
             s.distanceMiles = miles > 0 ? miles : null;
             s.durationSeconds = secs > 0 ? secs : null;
             s.inclinePercent = incline > 0 ? incline : null;
-            s.weightLb = 0; s.reps = Math.max(1, s.reps || 1); // cardio carries no load
+            // Unloaded cardio carries no load; a ruck or a sled does.
+            s.weightLb = carries ? carryLb : 0;
+            s.reps = Math.max(1, s.reps || 1);
             api.close(); save(); renderBody(body);
           },
         }));

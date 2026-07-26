@@ -1,0 +1,56 @@
+name: Feature request
+description: Something the app should do that it does not
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The most useful requests describe **the training problem**, not the
+        control. "I need a way to mark a planned deload so it stops reading as a
+        missed week" leads somewhere; "add a checkbox to the calendar" already
+        assumes an answer.
+
+        Worth knowing what Cadence is not going to become: it has no accounts,
+        no server, no social feed, no streaks, badges, or motivational quotes,
+        and it will not guess at your intent when guessing wrong would corrupt
+        the log.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The training situation. What happens today, and why it does not work.
+      placeholder: |
+        I took an intentional 11-day break. Every gap in the log looks the same,
+        so a planned deload reads as a missed week and my rotation sits open.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would solve it?
+      description: If you have a shape in mind, describe it. If not, leave this thin — the problem statement is the valuable part.
+    validations:
+      required: false
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you work around it now?
+      description: Including "I track it in a notebook" or "I fake a session."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is this for?
+      multiple: true
+      options:
+        - Me, training on my own
+        - A coach working with athletes
+        - A physio or rehab context
+        - Someone new to structured lifting
+    validations:
+      required: false

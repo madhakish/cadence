@@ -311,8 +311,15 @@ into it. Guard genuinely Darwin-only tests with `#if canImport(Darwin)`.
 - Seed only generic exercises, equipment defaults, and optional program-style
   templates. No real user values or exported backups belong in fixtures.
 - Synthetic fixtures must be obviously artificial and deterministic.
-- HealthKit remains optional and write-only unless an explicitly scoped change
-  updates permissions, privacy text, documentation, and tests.
+- HealthKit is optional and split into two independently granted halves:
+  writing workouts/bodyweight, and reading conditioning distance to compare
+  against a logged session. Both default off. Reading never merges — it
+  reports both numbers and the lifter adopts one explicitly
+  ([INV-HEALTH-IS-A-SECOND-OPINION]). Widening either half requires updating
+  permissions, privacy text, documentation, and tests in the same change.
+- The Health read opt-in lives in `UserDefaults`, never in SwiftData or a
+  backup: it mirrors a device-local OS grant, and restoring a backup on a new
+  phone must not imply a permission that device never gave.
 - Never log full backups, membership barcodes, body/health records, or secrets.
 - Keep GitHub Actions permissions least-privilege and pin third-party actions to
   immutable commit SHAs.
