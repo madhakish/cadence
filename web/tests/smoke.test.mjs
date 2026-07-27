@@ -426,6 +426,11 @@ ok(ms.some((m) => m.exerciseName === "Deadlift" && m.kind === "heaviestSet"), "a
 const json = await db.exportJSON();
 const parsed = JSON.parse(json);
 ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the current backup schema");
+// Pinned to a literal, and deliberately meant to fail and be updated by hand.
+// Every other assertion here compares against the constant, so a JS-only bump
+// would drift from BackupContract.currentSchemaVersion in CadenceCore without
+// anything noticing. This is the lockstep the backup docs claim exists.
+ok(db.BACKUP_SCHEMA_VERSION === 6, `backup schema is pinned at 6 (got ${db.BACKUP_SCHEMA_VERSION})`);
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
