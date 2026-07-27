@@ -507,11 +507,11 @@ final class PersistenceMigrationTests: XCTestCase {
         let set = CadenceSchemaV3.SetEntry(order: 0, weightLb: 185, reps: 5)
         let warmup = CadenceSchemaV3.SetEntry(order: 1, weightLb: 95, reps: 5)
         warmup.isWarmup = true
+        // One side only — see the note in createV4Store. This fixture carried
+        // the same aliasing before V4 froze; it proved less than it claimed.
         entry.session = session
-        entry.sets = [set, warmup]
         set.sessionExercise = entry
         warmup.sessionExercise = entry
-        session.exercises = [entry]
 
         context.insert(exercise)
         context.insert(session)
@@ -552,11 +552,13 @@ final class PersistenceMigrationTests: XCTestCase {
         warmup.reps = 5
         warmup.isWarmup = true
         warmup.prescriptionBlockRaw = "warmup"
+        // One side only. Assigning the child inverse AND appending to the
+        // parent collection persists duplicate references, and a fixture built
+        // that way would let this test pass on self-corrupted data rather than
+        // prove ordinary V4 relationships survive the upgrade.
         entry.session = session
-        entry.sets = [set, warmup]
         set.sessionExercise = entry
         warmup.sessionExercise = entry
-        session.exercises = [entry]
 
         context.insert(exercise)
         context.insert(session)

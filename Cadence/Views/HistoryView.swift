@@ -231,6 +231,7 @@ struct SessionDetailView: View {
     @Query private var settingsList: [AppSettings]
     @AppStorage("healthReadEnabled") private var healthReadEnabled = false
     @State private var healthMiles: Double?
+    @State private var healthEnergyKcal: Double?
     @State private var didCheckHealth = false
 
     /// The conditioning sets this session actually performed. `workingSets` is
@@ -327,8 +328,12 @@ struct SessionDetailView: View {
             // and a window to compare it over.
             guard !didCheckHealth, healthReadEnabled, let window = healthWindow else { return }
             didCheckHealth = true
-            healthMiles = await HealthKitService.shared
+            async let miles = HealthKitService.shared
                 .conditioningDistanceMiles(start: window.start, end: window.end)
+            async let energy = HealthKitService.shared
+                .activeEnergyKilocalories(start: window.start, end: window.end)
+            healthMiles = await miles
+            healthEnergyKcal = await energy
         }
     }
 
@@ -337,16 +342,25 @@ struct SessionDetailView: View {
     /// session with nothing in Health is silent rather than alarming.
     @ViewBuilder
     private var healthSection: some View {
-        if healthReadEnabled, healthWindow != nil, showsHealthRow {
+        if healthReadEnabled, healthWindow != nil, showsHealthRow || healthEnergyKcal != nil {
             Section {
-                Text(HealthComparison.label(healthVerdict))
-                    .font(.callout)
-                    .foregroundStyle(healthVerdict.isDiscrepancy ? Theme.warn : .secondary)
-                if let miles = adoptableMiles {
-                    Button("Use Health's \(Weight.trim(miles, decimals: 2)) mi") {
-                        adoptHealthDistance(miles)
+                if showsHealthRow {
+                    Text(HealthComparison.label(healthVerdict))
+                        .font(.callout)
+                        .foregroundStyle(healthVerdict.isDiscrepancy ? Theme.warn : .secondary)
+                    if let miles = adoptableMiles {
+                        Button("Use Health's \(Weight.trim(miles, decimals: 2)) mi") {
+                            adoptHealthDistance(miles)
+                        }
+                        .font(.callout)
                     }
-                    .font(.callout)
+                }
+                // Read-only. Cadence has no heart rate and never writes an
+                // energy figure of its own, so this is purely what Health
+                // measured for the window.
+                if let kcal = healthEnergyKcal {
+                    LabeledContent("Energy", value: "\(Int(kcal.rounded())) kcal")
+                        .font(.callout)
                 }
             } header: {
                 Text("Health")

@@ -760,8 +760,19 @@ function normalizeSettings(s) {
   // such field, and a settings row that keeps writing it would put it straight
   // back into every export.
   const { proteinTargetGrams, ...rest0 } = s;
+  // birthYear is clamped to the not-set sentinel unless it is a plausible
+  // year, using the SAME rule the importer validates against. Merely checking
+  // Number.isInteger would let a corrupted value persist, ride out in an
+  // export, and then be rejected on the way back in — an app must never write
+  // a backup it cannot itself restore. Reverting to 0 also keeps the guidance
+  // on the conservative older-adult threshold rather than a garbage age.
+  // Integer too: the importer validates `integer: true`, and 1958.5 would slip
+  // past a plausibility check alone.
+  const birthYear = Number.isInteger(s.birthYear)
+    && C.ageFromBirthYear(s.birthYear, new Date().getFullYear()) !== null
+    ? s.birthYear : 0;
   return { ...rest0, rest, accessoryRestSeconds: rest.accessorySeconds,
-    birthYear: Number.isInteger(s.birthYear) ? s.birthYear : 0,
+    birthYear,
     gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay === true };
 }
 

@@ -563,7 +563,14 @@ enum ExportService {
                                   createdAt: e.createdAt)
             },
             settings: settings.map { s in
-                ExportSettings(unitDisplay: s.unitDisplayRaw, birthYear: s.birthYear,
+                // Clamped to the not-set sentinel unless it is a plausible
+                // year, using the same rule the importer validates against.
+                // An app must never write a backup it cannot itself restore.
+                ExportSettings(unitDisplay: s.unitDisplayRaw,
+                               birthYear: ProteinGuidance.age(
+                                   birthYear: s.birthYear,
+                                   inYear: Calendar.current.component(.year, from: .now)
+                               ) == nil ? 0 : s.birthYear,
                                accessoryRestSeconds: s.accessoryRestSeconds,
                                mainCompoundRestSeconds: s.mainCompoundRestSeconds, olympicRestSeconds: s.olympicRestSeconds,
                                mainUpperRestSeconds: s.mainUpperRestSeconds, secondaryRestSeconds: s.secondaryRestSeconds,

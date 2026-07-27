@@ -272,10 +272,12 @@ final class HealthKitService {
         let found = await samples(
             HKCategoryType(.sleepAnalysis), predicate: windowPredicate(start: start, end: end)
         )
-        let stages = found.compactMap { sample -> (stage: String, seconds: Int)? in
+        // Intervals, not durations: several foreign sources may stage the same
+        // night, and the shared rule merges the overlap rather than summing it.
+        let stages = found.compactMap { sample -> (stage: String, start: Date, end: Date)? in
             guard let category = sample as? HKCategorySample,
                   let stage = Self.sleepStageName(category.value) else { return nil }
-            return (stage, Int(category.endDate.timeIntervalSince(category.startDate)))
+            return (stage, category.startDate, category.endDate)
         }
         guard !stages.isEmpty else { return nil }
         let seconds = HealthComparison.asleepSeconds(stages: stages)
@@ -306,7 +308,8 @@ final class HealthKitService {
     /// is why Health showed nothing but a duration. Sets, reps and load have no
     /// HealthKit representation at all and stay in the log.
     func saveWorkout(
-        start: Date, end: Date, modality: WorkoutModality, distanceMiles: Double? = nil
+        start: Date, end: Date, modality: WorkoutModality,
+        milesByBasis: [DistanceBasis: Double] = [:]
     ) async {
         guard isAvailable else { return }
         let config = HKWorkoutConfiguration()
@@ -314,14 +317,15 @@ final class HealthKitService {
         let builder = HKWorkoutBuilder(healthStore: store, configuration: config, device: .local())
         do {
             try await builder.beginCollection(at: start)
-            if let miles = distanceMiles, miles > 0, let type = distanceType(for: modality) {
-                let sample = HKQuantitySample(
-                    type: type,
+            let samples = milesByBasis.compactMap { basis, miles -> HKSample? in
+                guard miles > 0 else { return nil }
+                return HKQuantitySample(
+                    type: distanceType(for: basis),
                     quantity: HKQuantity(unit: .mile(), doubleValue: miles),
                     start: start, end: end
                 )
-                try await builder.addSamples([sample])
             }
+            if !samples.isEmpty { try await builder.addSamples(samples) }
             try await builder.endCollection(at: end)
             try await builder.finishWorkout()
         } catch {
@@ -342,15 +346,13 @@ final class HealthKitService {
         }
     }
 
-    /// Which distance quantity a modality's miles belong to. Foot and wheel are
-    /// separate in Health, and the remaining modalities either cover no ground
-    /// or cover it in water — filing a swim under walking distance would be a
-    /// lie, so those sessions carry duration only.
-    private func distanceType(for modality: WorkoutModality) -> HKQuantityType? {
-        switch modality {
-        case .running, .walking, .hiking: return HKQuantityType(.distanceWalkingRunning)
-        case .cycling: return HKQuantityType(.distanceCycling)
-        case .traditionalStrength, .crossTraining, .rowing, .swimming: return nil
+    /// Which quantity a distance basis maps to. The decision of *whether* an
+    /// exercise covers ground at all is `WorkoutClassification.distanceBasis`,
+    /// so it stays testable without HealthKit.
+    private func distanceType(for basis: DistanceBasis) -> HKQuantityType {
+        switch basis {
+        case .foot: return HKQuantityType(.distanceWalkingRunning)
+        case .wheel: return HKQuantityType(.distanceCycling)
         }
     }
 

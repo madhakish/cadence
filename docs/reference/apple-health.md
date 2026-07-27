@@ -9,9 +9,16 @@ grant the other. Turn either on in **Settings → HealthKit**.
 ## What Cadence writes
 
 With the write half enabled, finishing a session mirrors it to Health as a
-workout carrying its start, end, activity type, and — for walks, runs, hikes,
-and rides — the conditioning distance you logged. Logging a bodyweight writes
-that weight, plus body fat percentage when you entered one.
+workout carrying its start, end, activity type, and the conditioning distance
+you logged. Logging a bodyweight writes that weight, plus body fat percentage
+when you entered one.
+
+Distance is worked out **per exercise**, not from the session as a whole. A
+lifting day that finishes with a walk is a mixed session, and asking what type
+of distance a *mixed* session covered has no good answer — so the walk's miles
+are filed as foot distance and a bike cooldown's as cycling distance, even in
+the same workout. Rowing and swimming carry duration only; Cadence does not log
+the units Health wants for those.
 
 ### What Health cannot hold
 
@@ -69,7 +76,10 @@ are context for your own judgement, not an input to the engine.
 
 Sleep is counted from the sleep **stages** Health recorded, not from time in
 bed; a night on the mattress with no staging reports nothing rather than eight
-hours.
+hours. Where several apps staged the same night — a watch and a sleep tracker,
+say — their intervals are **merged, not added**. Excluding Cadence's own writes
+does not reduce Health to a single source, and summing two instruments would
+report ten hours to someone who slept five.
 
 ## Turning it off
 

@@ -26,9 +26,12 @@ public enum HealthComparison {
     public static let toleranceFraction = 0.02
 
     /// The shape of a disagreement, independent of what is being compared.
-    /// `Verdict` below is the conditioning-distance dressing on this; the
-    /// bodyweight and protein suggestions use the bare kind with their own
-    /// tolerances rather than duplicating the arithmetic.
+    /// `Verdict` below is the conditioning-distance dressing on this.
+    ///
+    /// Conditioning is currently the only caller. The bodyweight suggestion
+    /// deliberately does **not** use it: "is this the weigh-in I already have"
+    /// is a same-day identity question, not a which-instrument-reads-higher
+    /// one, and `isSameWeighIn` answers it directly.
     public enum VerdictKind: String, Equatable {
         case agree, healthHigher, loggedHigher, onlyHealth, onlyLogged, neither
     }
@@ -159,8 +162,9 @@ public enum HealthComparison {
     /// somewhere other than Cadence itself.
     ///
     /// Load-bearing, and invisible when wrong. Cadence writes workouts,
-    /// bodyweight and protein into Health; without this every read would find
-    /// those writes and "confirm" the log against a mirror of itself. A
+    /// conditioning distance, bodyweight and body fat into Health; without
+    /// this every read would find those writes and "confirm" the log against
+    /// a mirror of itself. A
     /// cross-check that always agrees is worse than no cross-check, because it
     /// looks like corroboration.
     ///
@@ -208,15 +212,38 @@ public enum HealthComparison {
         "asleepUnspecified", "asleepCore", "asleepDeep", "asleepREM",
     ]
 
-    /// Total time actually asleep, from stage samples of `(stage, seconds)`.
+    /// Total time actually asleep, from stage samples with real intervals.
     ///
-    /// Watches emit overlapping stage samples across sources; the caller is
-    /// responsible for handing over one source's stages, which the anti-echo
-    /// filter already does.
-    public static func asleepSeconds(stages: [(stage: String, seconds: Int)]) -> Int {
-        stages.reduce(0) { total, entry in
-            guard asleepStages.contains(entry.stage), entry.seconds > 0 else { return total }
-            return total + entry.seconds
+    /// Overlapping intervals are **merged, not added**. A watch and a sleep app
+    /// both writing stages for the same night is ordinary, and the anti-echo
+    /// filter does not help: it excludes Cadence, not third parties. Summing
+    /// durations would count that night twice and report ten hours of sleep to
+    /// someone who slept five — a number obviously wrong enough to discredit
+    /// every other figure on the screen.
+    ///
+    /// Merging also means two sources that disagree slightly produce the union
+    /// rather than a doubled total, which is the honest reading: the lifter was
+    /// asleep for the span at least one instrument saw them asleep.
+    public static func asleepSeconds(stages: [(stage: String, start: Date, end: Date)]) -> Int {
+        let intervals = stages
+            .filter { asleepStages.contains($0.stage) && $0.end > $0.start }
+            .map { ($0.start, $0.end) }
+            .sorted { $0.0 < $1.0 }
+        guard !intervals.isEmpty else { return 0 }
+
+        var total: TimeInterval = 0
+        var runStart = intervals[0].0
+        var runEnd = intervals[0].1
+        for (start, end) in intervals.dropFirst() {
+            if start > runEnd {
+                total += runEnd.timeIntervalSince(runStart)
+                runStart = start
+                runEnd = end
+            } else if end > runEnd {
+                runEnd = end
+            }
         }
+        total += runEnd.timeIntervalSince(runStart)
+        return Int(total.rounded())
     }
 }

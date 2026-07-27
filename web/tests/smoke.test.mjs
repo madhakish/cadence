@@ -431,6 +431,28 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
 ok(db.BACKUP_SCHEMA_VERSION === 6, `backup schema is pinned at 6 (got ${db.BACKUP_SCHEMA_VERSION})`);
+
+// An app must never write a backup it cannot itself restore. A corrupted or
+// out-of-range birthYear is clamped to the not-set sentinel on the way through
+// settings, using the SAME rule the importer validates against — otherwise it
+// would persist, ride out in an export, and be rejected on the way back in.
+{
+  const original = await db.Settings.get();
+  for (const bad of [1850, 3000, 1901, 1958.5, "1958", null]) {
+    await db.Settings.save({ ...original, birthYear: bad });
+    const back = await db.Settings.get();
+    ok(back.birthYear === 0, `an implausible birthYear (${JSON.stringify(bad)}) is clamped to 0, got ${back.birthYear}`);
+    const bundle = JSON.parse(await db.exportJSON());
+    ok(bundle.settings.birthYear === 0, `and never reaches an export (${JSON.stringify(bad)})`);
+  }
+  await db.Settings.save({ ...original, birthYear: 1958 });
+  ok((await db.Settings.get()).birthYear === 1958, "a plausible birth year is kept");
+  const roundTrip = JSON.parse(await db.exportJSON());
+  ok(roundTrip.settings.birthYear === 1958, "and is exported");
+  await db.importBundle(roundTrip);
+  ok((await db.Settings.get()).birthYear === 1958, "and survives a round trip through the importer");
+  await db.Settings.save(original);
+}
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");

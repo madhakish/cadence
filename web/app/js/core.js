@@ -1643,7 +1643,7 @@ export function healthComparisonLabel(verdict) {
 // other than Cadence itself.
 //
 // Load-bearing, and invisible when wrong. Cadence writes workouts, bodyweight
-// and protein into Health; without this every read would find those writes and
+// and body fat into Health; without this every read would find those writes and
 // "confirm" the log against a mirror of itself. A cross-check that always
 // agrees is worse than no cross-check, because it looks like corroboration.
 //
@@ -1681,13 +1681,34 @@ export const HEALTH_ASLEEP_STAGES = [
   "asleepUnspecified", "asleepCore", "asleepDeep", "asleepREM",
 ];
 
-// Total time actually asleep, from stage samples of { stage, seconds }.
+// Total time actually asleep, from stage samples of { stage, start, end }.
+//
+// Overlapping intervals are MERGED, not added. A watch and a sleep app both
+// staging the same night is ordinary, and the anti-echo filter does not help —
+// it excludes Cadence, not third parties. Summing durations would report ten
+// hours of sleep to someone who slept five, a number wrong enough to discredit
+// every other figure on the screen.
 export function healthAsleepSeconds(stages) {
-  return (stages || []).reduce((total, entry) => (
-    HEALTH_ASLEEP_STAGES.includes(entry.stage) && entry.seconds > 0
-      ? total + entry.seconds
-      : total
-  ), 0);
+  const ms = (v) => (v instanceof Date ? v.getTime() : new Date(v).getTime());
+  const intervals = (stages || [])
+    .filter((s) => HEALTH_ASLEEP_STAGES.includes(s.stage) && ms(s.end) > ms(s.start))
+    .map((s) => [ms(s.start), ms(s.end)])
+    .sort((a, b) => a[0] - b[0]);
+  if (!intervals.length) return 0;
+
+  let total = 0;
+  let [runStart, runEnd] = intervals[0];
+  for (const [start, end] of intervals.slice(1)) {
+    if (start > runEnd) {
+      total += runEnd - runStart;
+      runStart = start;
+      runEnd = end;
+    } else if (end > runEnd) {
+      runEnd = end;
+    }
+  }
+  total += runEnd - runStart;
+  return Math.round(total / 1000);
 }
 
 // ---- Rotation-first coaching ----------------------------------------------
