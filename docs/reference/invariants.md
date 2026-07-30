@@ -85,7 +85,7 @@ speed must read back as that same speed.
 > that can disagree with the two it came from.
 
 ### INV-STAIRS-COUNT-FLIGHTS
-*platforms: core, native*
+*platforms: core, native, web*
 
 Conditioning measured in **climbed flights** logs a count and a duration, and
 derives its pace in **flights per minute** — `flights = pace × time`, the same

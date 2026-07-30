@@ -1139,12 +1139,14 @@ private struct CardioSetSheet: View {
     /// Setting a pace computes the count it reaches in the logged time — the
     /// planned case, "twenty minutes at eight floors a minute".
     private func applyFlightPace(_ value: Double) {
-        flightDerived = .flights
         // With no time logged there is nothing to solve against. Assigning the
-        // nil would delete a count the lifter already has, so leave it.
+        // nil would delete a count the lifter already has, so leave it — and
+        // leave the derived side alone too, because a footer claiming the count
+        // is calculated from a pace nothing stored would simply be untrue.
         guard let solved = CardioFormat.flights(pacePerMinute: value, durationSeconds: set.durationSeconds)
         else { return }
         set.flights = solved
+        flightDerived = .flights
     }
 
     /// Changing the time holds whichever side the lifter last set. If they
@@ -1202,11 +1204,20 @@ private struct CardioSetSheet: View {
         }
     }
 
-    /// Names only the fields this sheet is actually showing.
+    /// Names only the fields this sheet is actually showing. Assembled from the
+    /// same conditions the rows are, so the two cannot drift: a hand-written
+    /// string had already fallen out of step with the incline and speed rows.
     private var sectionHeader: String {
-        if showsFlights && !showsDistance { return "Flights · time · pace" }
-        if showsFlights { return "Flights · distance · time · pace" }
-        return carriesLoad ? "Load · distance · time · speed" : "Distance · time · speed · incline"
+        var fields: [String] = []
+        if carriesLoad { fields.append("Load") }
+        if showsFlights { fields.append("flights") }
+        if showsDistance { fields.append("distance") }
+        fields.append("time")
+        if showsDistance { fields.append("speed") }
+        if showsFlights { fields.append("pace") }
+        if !climbsFlights || incline > 0 { fields.append("incline") }
+        if !carriesLoad, let first = fields.first { fields[0] = first.capitalized }
+        return fields.joined(separator: " · ")
     }
 
     /// Which value is the readout rather than the entry, so the lifter can see
@@ -1230,8 +1241,31 @@ private struct CardioSetSheet: View {
         if showsFlights {
             Stepper("Flights: \(flights > 0 ? CardioFormat.flightsLabel(flights) : "—")",
                     value: Binding(get: { flights }, set: { applyFlights($0) }),
-                    in: 0...500, step: 1)
+                    in: 0...2000, step: 1)
+            flightsTypeRow
         }
+    }
+
+    /// Direct entry for the number on the console. A twenty-minute climb is a
+    /// three-figure count, and reaching it one tap at a time is not a thing
+    /// anyone does mid-workout — the stepper is for nudging, this is for
+    /// logging. Mirrors `distanceTypeRow`, which exists for the same reason.
+    private var flightsTypeRow: some View {
+        HStack {
+            Text("Type flights").foregroundStyle(.secondary)
+            Spacer()
+            TextField("flights", text: Binding(
+                get: { flights == 0 ? "" : Weight.trim(flights, decimals: 1) },
+                set: {
+                    if let v = Double($0.replacingOccurrences(of: ",", with: ".")), v > 0 { applyFlights(v) }
+                    else if $0.isEmpty { applyFlights(0) }
+                }
+            ))
+            .keyboardType(.decimalPad)
+            .multilineTextAlignment(.trailing)
+            .frame(width: 90)
+        }
+        .font(.callout)
     }
 
     @ViewBuilder
