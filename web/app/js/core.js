@@ -180,6 +180,41 @@ export const normalizedSetFlags = (quality, stoppedEarly = false, rir = null) =>
   ...(stoppedEarly ? ["stopped early"] : []),
 ];
 
+// The set an "up next" affordance acts on: the first planned, NON-WARMUP set,
+// in stored order. null when the exercise has nothing left to do.
+//
+// This rule was hand-written in both clients — the iOS logger's current-row
+// highlight and this app's `.current` class — before it lived here. Three
+// copies of "which set am I on" is three chances to disagree, and iOS's Lock
+// Screen Done button is the worst place to disagree: it would complete a
+// different set from the one it displayed.
+//
+// Warmups are skipped deliberately. They often go unflagged, and a forgotten
+// warmup must not hold the working sets hostage. Skipped sets are passed over
+// rather than treated as an end: skipping set two still leaves set three.
+// Mirrored 1:1 in CadenceCore SetLifecycle.
+export function currentSetIndex(isWarmup, statuses) {
+  const count = Math.min(isWarmup.length, statuses.length);
+  for (let i = 0; i < count; i += 1) {
+    if (!isWarmup[i] && statuses[i] === "planned") return i;
+  }
+  return null;
+}
+
+// How many working sets are done and how many there are, for a "Set 3 of 5"
+// readout. Warmups are excluded from both halves. `position` is 1-based and
+// counts the current set itself, so it reads as the set being worked rather
+// than the number already banked. Returns null when there is no working set.
+export function workingSetProgress(isWarmup, statuses) {
+  const count = Math.min(isWarmup.length, statuses.length);
+  const working = [];
+  for (let i = 0; i < count; i += 1) if (!isWarmup[i]) working.push(i);
+  if (!working.length) return null;
+  const current = currentSetIndex(isWarmup, statuses);
+  if (current === null) return { position: working.length, total: working.length };
+  return { position: working.indexOf(current) + 1, total: working.length };
+}
+
 // Whether a set of this kind counts as the slot's prescribed work — the sets
 // that are graded and that supply the cycle's strength sample.
 //

@@ -132,6 +132,11 @@ struct ActiveSessionView: View {
         // name / default rest without changing which SessionExercise is current.
         .onChange(of: currentOrFirst?.exercise?.name) { pushActivityContext() }
         .onChange(of: currentRestSeconds) { pushActivityContext() }
+        // The Lock Screen card names a specific set, so it has to follow the
+        // set — not just the lift. Completing, skipping, editing, adding, or
+        // removing one all move this key, and none of them necessarily change
+        // the current exercise or its rest.
+        .onChange(of: activitySetKey, initial: true) { pushActivityContext() }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
         .alert("Couldn't bank the session", isPresented: $showBankError) {
@@ -292,9 +297,24 @@ struct ActiveSessionView: View {
         PersistenceErrorCenter.shared.save(context, operation: "Removing the exercise")
     }
 
+    /// Identity + readout of the set the Lock Screen card should name. A String
+    /// so SwiftUI can diff it cheaply; the label is in it deliberately, so
+    /// editing the weight on the current set refreshes the card rather than
+    /// leaving it advertising the old number.
+    private var activitySetKey: String {
+        guard let next = LockScreenSetService.nextSet(in: session) else { return "" }
+        return "\(next.exerciseOrder):\(next.setOrder):\(next.position)/\(next.total):\(next.label)"
+    }
+
     private func pushActivityContext() {
         workoutClock.updateContext(currentLift: currentOrFirst?.exercise?.name ?? "",
                                    defaultRestSeconds: currentRestSeconds)
+        // The Lock Screen's Done button completes whatever its card names, so
+        // the card has to follow the app. Pushed on every context change, not
+        // only after a Lock Screen tap: completing a set in the logger must not
+        // leave a card pointing at work already banked.
+        let next = LockScreenSetService.nextSet(in: session)
+        Task { await WorkoutActivityController.updateCurrentSet(next) }
     }
 
     private func bankSession() {
@@ -687,9 +707,10 @@ private struct ExerciseSection: View {
         Section {
             ForEach(entry.orderedSets) { set in
                 // The set you're ON — the first WORKING set with no verdict
-                // yet. Warmups sit quiet (and often go unflagged, so they must
-                // not hold the rail hostage).
-                let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }?.persistentModelID == set.persistentModelID
+                // yet. Warmups sit quiet. The rule lives in core because the
+                // Lock Screen's Done button completes whatever it names, and a
+                // highlight that disagreed with that button would be a trap.
+                let isCurrent = entry.currentSet?.persistentModelID == set.persistentModelID
                 VStack(alignment: .leading, spacing: 4) {
                     SetRow(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
                            targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onLogged: {

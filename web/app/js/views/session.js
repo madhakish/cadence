@@ -494,9 +494,12 @@ export async function openSession(id) {
       onClick: () => chooseRIR(s, body),
     });
     // The set you're ON — the first WORKING set with no verdict yet — gets
-    // the accent rail; warmups sit quiet (and often go unflagged, so they
-    // must not hold the rail hostage).
-    const isCurrent = se.sets.find((x) => !x.isWarmup && x.status === "planned") === s;
+    // the accent rail; warmups sit quiet. The rule lives in core because iOS
+    // decides which set its Lock Screen Done button completes with the same
+    // one, and a highlight that disagreed with that button would be a trap.
+    const currentIndex = C.currentSetIndex(
+      se.sets.map((x) => !!x.isWarmup), se.sets.map((x) => x.status));
+    const isCurrent = currentIndex !== null && se.sets[currentIndex] === s;
     const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "") + (isCurrent ? " current" : "") }, wt, tags,
       ui.h("div", { class: "flagbtns" }, statusButton,
         (isCardio || isTimed) ? null : qualityButton,

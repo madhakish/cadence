@@ -32,6 +32,35 @@ eq(C.resolveSetStatus("skipped", true), "skipped", "explicit skipped status wins
 eq(C.normalizedSetFlags("grindy", true).join(","), "grindy,stopped early", "quality and stopped-early normalize independently");
 eq(C.setQuality(["wobble", "stopped early"]), "wobble", "quality resolves from observations");
 
+// ---- current set (SetLifecycleTests.swift) ----
+// Decides which set iOS's Lock Screen Done button completes, so it has to
+// agree with the row both loggers highlight. Hand-written in both clients
+// before it lived in core.
+{
+  const warm = [true, true, false, false, false];
+  const st = ["completed", "planned", "completed", "planned", "planned"];
+  eq(C.currentSetIndex(warm, st), 3, "an unflagged warmup does not hold the working sets hostage");
+  eq(C.currentSetIndex([false, false], ["planned", "planned"]), 0, "the first planned working set");
+  eq(C.currentSetIndex([false, false], ["completed", "completed"]), null, "nothing left to work is null");
+  eq(C.currentSetIndex([], []), null, "no sets, no current set");
+  eq(C.currentSetIndex([true, true], ["planned", "planned"]), null, "warmups alone are not a current set");
+  eq(C.currentSetIndex([false, false, false], ["completed", "skipped", "planned"]), 2,
+    "a skipped set is passed over, not treated as the end");
+
+  const progress = C.workingSetProgress(
+    [true, true, false, false, false, false, false],
+    ["completed", "completed", "completed", "completed", "planned", "planned", "planned"]);
+  eq(progress.position, 3, "the set being worked, not the number already banked");
+  eq(progress.total, 5, "warmups are not part of the count");
+  eq(C.workingSetProgress([false, false], ["completed", "completed"]).position, 2,
+    "with everything done the readout parks at the end");
+  eq(C.workingSetProgress([true], ["planned"]), null, "only warmups is no working progress");
+  eq(C.workingSetProgress([], []), null, "no sets, no progress");
+  const skipped = C.workingSetProgress([false, false, false], ["skipped", "planned", "planned"]);
+  eq(skipped.position, 2, "a skipped set still occupies its position");
+  eq(skipped.total, 3, "and still counts toward the total");
+}
+
 // ---- Rounding ----
 eq(C.roundTo(192.5, 5), 195, "round 192.5");
 eq(C.roundTo(246.75, 5), 245, "round 246.75");

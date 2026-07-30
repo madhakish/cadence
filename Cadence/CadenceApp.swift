@@ -31,83 +31,53 @@ final class AppBootstrap: ObservableObject {
 
     init() { loadPersistentStore() }
 
+    /// Opens the store through `PersistenceStack` — the one ladder shared with
+    /// the Lock Screen intents — then finishes the app-launch-only preparation
+    /// (seeding and library sync) that a background tap has no business doing.
     func loadPersistentStore() {
         container = nil
         errorMessage = nil
         isTemporary = false
-        let candidates: [(String, () throws -> ModelContainer)] = [
-            // V4 first: it is the checksum every install shipped since V4
-            // became current carries, so it is the common case for this
-            // upgrade and the cheapest match to try.
-            ("V4 staged migration", { try self.makeContainer(migrationPlan: CadenceV4MigrationPlan.self) }),
-            ("V3 staged migration", { try self.makeContainer(migrationPlan: CadenceV3MigrationPlan.self) }),
-            ("pre-72 staged migration", { try self.makeContainer(migrationPlan: CadencePre72MigrationPlan.self) }),
-            ("72 staged migration", { try self.makeContainer(migrationPlan: Cadence72MigrationPlan.self) }),
-            // Builds before the schema repair changed the advertised V1
-            // checksum in place. If an installed checksum is not one of the
-            // two snapshots we know by name, let Core Data infer the same
-            // additive lightweight migration from the store metadata. This is
-            // non-destructive and is deliberately the last attempt.
-            ("inferred lightweight migration", { try self.makeUnplannedContainer() }),
-        ]
-        var failures: [String] = []
-        for (label, open) in candidates {
-            let loaded: ModelContainer
-            do {
-                loaded = try open()
-            } catch {
-                let nsError = error as NSError
-                failures.append("\(label): \(nsError.domain) \(nsError.code)")
-                continue
-            }
-            do {
-                try prepare(loaded)
-                container = loaded
-                return
-            } catch {
-                let nsError = error as NSError
-                errorMessage = "Cadence opened your store with \(label), but could not finish its "
-                    + "non-destructive data preparation (\(nsError.domain) \(nsError.code)): "
-                    + error.localizedDescription
-                return
-            }
+        let loaded: ModelContainer
+        let label: String
+        do {
+            (loaded, label) = try PersistenceStack.openUnlocked()
+        } catch {
+            errorMessage = error.localizedDescription
+            return
         }
-        errorMessage = "Cadence could not match this store to a supported schema. "
-            + failures.joined(separator: " · ")
+        do {
+            try prepare(loaded)
+            // Published only after preparation succeeds, so an intent can never
+            // pick up a store the app itself decided it could not finish
+            // opening.
+            PersistenceStack.adopt(loaded)
+            container = loaded
+        } catch {
+            let nsError = error as NSError
+            errorMessage = "Cadence opened your store with \(label), but could not finish its "
+                + "non-destructive data preparation (\(nsError.domain) \(nsError.code)): "
+                + error.localizedDescription
+        }
     }
 
     func openTemporaryStore() {
         do {
-            let loaded = try makeContainer(
+            let loaded = try PersistenceStack.makeContainer(
                 migrationPlan: CadencePre72MigrationPlan.self,
                 isStoredInMemoryOnly: true
             )
             try prepare(loaded)
+            // Adopted too: while the app is running on a throwaway store, a
+            // Lock Screen tap must land in the store the lifter can see, not in
+            // the real one sitting behind the recovery screen.
+            PersistenceStack.adopt(loaded)
             isTemporary = true
             container = loaded
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    private func makeContainer<Plan: SchemaMigrationPlan>(
-        migrationPlan: Plan.Type,
-        isStoredInMemoryOnly: Bool = false
-    ) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isStoredInMemoryOnly)
-        return try ModelContainer(
-            for: schema,
-            migrationPlan: migrationPlan,
-            configurations: config
-        )
-    }
-
-    private func makeUnplannedContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
-        let config = ModelConfiguration(schema: schema)
-        return try ModelContainer(for: schema, migrationPlan: nil, configurations: config)
     }
 
     private func prepare(_ container: ModelContainer) throws {

@@ -137,6 +137,30 @@ final class SessionExercise {
     /// Only performed work belongs in history, PRs, volume, or progression.
     var workingSets: [SetEntry] { plannedWorkingSets.filter { $0.status == .completed } }
 
+    /// The set being worked: the first planned, non-warmup set.
+    ///
+    /// Both the logger's current-row highlight and the Lock Screen's Done
+    /// button resolve through here, so the button can never complete a
+    /// different set from the one the app is pointing at. The rule itself is
+    /// `SetLifecycle.currentSetIndex`, shared with the web client.
+    var currentSet: SetEntry? {
+        let sets = orderedSets
+        guard let index = SetLifecycle.currentSetIndex(
+            isWarmup: sets.map(\.isWarmup),
+            statuses: sets.map { $0.status.rawValue }
+        ) else { return nil }
+        return sets[index]
+    }
+
+    /// "Set 3 of 5" for the Lock Screen, counting warmups out of both halves.
+    var currentSetProgress: (position: Int, total: Int)? {
+        let sets = orderedSets
+        return SetLifecycle.workingSetProgress(
+            isWarmup: sets.map(\.isWarmup),
+            statuses: sets.map { $0.status.rawValue }
+        )
+    }
+
     var workingVolumeLb: Double {
         // A carried pack is not tonnage. Twenty pounds for three miles is not
         // twenty pounds of volume, and conditioning has never contributed to

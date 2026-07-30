@@ -43,6 +43,24 @@ lifts appear under "Next up" with their own suggestions.
   pause/resume controls appear on the Live Activity's workout face, so an
   abandoned session's stopwatch can always be stopped from the Lock
   Screen.
+- **Run the whole session without unlocking** (iOS). The Live Activity's
+  workout face names the set you're on — `Set 3 of 5 · 185 lb × 5` — with a
+  **Done** button beside it. Tapping Done logs that set, starts your rest,
+  and loads the next set, so the between-sets cycle needs one tap and no
+  passcode. Two things about it are deliberate:
+  - **Done always starts rest**, even if *Auto-start rest* is off. That
+    setting exists because auto-starting lies when you log a set after
+    already resting — but with the phone locked there is no second button to
+    reach for, so the one tap does the whole cycle.
+  - **Done logs the set as prescribed** — the weight and reps on the card,
+    which is what tapping the circle in the logger does too. It is shown
+    precisely so you can see what's being credited. Did something different?
+    Unlock and edit it; nothing about the set is frozen.
+
+  The button disappears when the session has no sets left to work, and never
+  appears for a standalone rest with no workout behind it. If the app has
+  moved on since the card was drawn, Done refuses rather than logging a set
+  you weren't looking at.
 - **Done with a session you never wanted?** **Discard session** removes
   it outright, from inside the session or from the Today card. The
   confirmation says exactly how many logged sets would be lost; your

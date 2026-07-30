@@ -65,6 +65,20 @@ enum WorkoutActivityController {
         )
     }
 
+    /// The set the Lock Screen's Done button points at changed.
+    ///
+    /// Pushed whenever the app changes a set too, not only after a Lock Screen
+    /// tap — the button completes what it names, so a card naming a set the app
+    /// has already moved past would be a trap. nil clears it (session finished,
+    /// or nothing left to work), which also removes the button.
+    static func updateCurrentSet(_ set: WorkoutActivityAttributes.CurrentSet?) async {
+        guard let a = current else { return }
+        var s = a.content.state
+        guard s.currentSet != set else { return }
+        s.currentSet = set
+        await a.update(content(for: s))
+    }
+
     /// The lift being worked changed (or its smart rest did) — keep the
     /// elapsed face and the quick-rest default honest.
     static func updateContext(currentLift: String, defaultRestSeconds: Int) async {

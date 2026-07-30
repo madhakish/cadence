@@ -117,6 +117,7 @@ private struct WorkoutLockScreenView: View {
                 if !context.state.currentLift.isEmpty {
                     Text(context.state.currentLift).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
+                currentSetLine(context.state.currentSet)
                 workoutControls(context.state)
             }
         }
@@ -161,12 +162,35 @@ private func restControls(_ rest: RestClock.State) -> some View {
     .tint(restAccent)
 }
 
-/// The elapsed face's controls: arm a rest, pause/resume the clock, and —
-/// the control that was missing — END the workout, so an abandoned session's
+/// What Done will log, spelled out. The lifter is crediting this work without
+/// unlocking, so the numbers being credited have to be on screen — a bare
+/// "Done" would be asking them to trust the app's idea of where they are.
+@ViewBuilder
+private func currentSetLine(_ set: WorkoutActivityAttributes.CurrentSet?) -> some View {
+    if let set {
+        HStack(spacing: 6) {
+            Text("Set \(set.position) of \(set.total)")
+                .font(.caption.bold())
+            Text(set.label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+}
+
+/// The elapsed face's controls: complete the current set, arm a rest,
+/// pause/resume the clock, and END the workout, so an abandoned session's
 /// stopwatch can always be stopped from the Lock Screen.
 @ViewBuilder
 private func workoutControls(_ state: WorkoutActivityAttributes.ContentState) -> some View {
     HStack(spacing: 10) {
+        // Nothing left to work — or an ad-hoc rest with no session behind it —
+        // shows no Done button rather than one that would do nothing.
+        if state.currentSet != nil {
+            Button(intent: CompleteCurrentSetIntent()) { Label("Done", systemImage: "checkmark") }
+                .tint(.green)
+        }
         startRestButton(state)
         if state.stopwatchPausedAt != nil {
             Button(intent: ResumeWorkoutIntent()) { Label("Resume", systemImage: "play.fill") }
