@@ -80,11 +80,20 @@ struct SettingsView: View {
                         Text("These are the fallback timers. An exercise with a rest of its own (set in the logger or the library) always uses that instead. 0:00 = no timer. Auto-start off = tap Rest yourself.")
                     }
 
-                    Section("Protein") {
-                        Stepper(
-                            "Daily target: \(Int(settings.proteinTargetGrams)) g",
-                            value: bindable.proteinTargetGrams, in: 80...300, step: 5
-                        )
+                    Section {
+                        Picker("Year of birth", selection: bindable.birthYear) {
+                            Text("Not set").tag(0)
+                            ForEach(Self.selectableBirthYears, id: \.self) { year in
+                                Text(String(year)).tag(year)
+                            }
+                        }
+                    } header: {
+                        Text("About you")
+                    } footer: {
+                        // The only thing age is used for, said plainly. A health
+                        // app asking for a birthday without saying why is how
+                        // people learn to distrust one.
+                        Text("Used only to adjust the per-meal protein figure on the Body screen — muscle responds less to a given dose with age. Nothing else reads it, and it never affects your program.")
                     }
 
                     Section {
@@ -371,6 +380,15 @@ struct SettingsView: View {
         } catch {
             return error.localizedDescription
         }
+    }
+
+    /// Newest first, so the years most people will pick are the shortest
+    /// scroll. Bounded by the same plausible-lifespan window the import
+    /// validator enforces, so the picker cannot produce a value a backup
+    /// would reject.
+    private static var selectableBirthYears: [Int] {
+        let thisYear = Calendar.current.component(.year, from: .now)
+        return Array((thisYear - 120)...thisYear).reversed()
     }
 }
 

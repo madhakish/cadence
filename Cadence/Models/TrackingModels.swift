@@ -96,18 +96,11 @@ final class BodyweightEntry {
     }
 }
 
-@Model
-final class ProteinEntry {
-    var date: Date
-    var grams: Double
-    var label: String
-
-    init(date: Date = .now, grams: Double, label: String) {
-        self.date = date
-        self.grams = grams
-        self.label = label
-    }
-}
+// `ProteinEntry` was removed in schema V5. Logging individual servings only
+// works with a real meal-entry surface, which this app will never have, so the
+// half-measure was retired rather than kept as a tracker nobody completes.
+// Protein is now advisory only — see `ProteinGuidance`. The frozen V4 snapshot
+// keeps the model so old stores still migrate.
 
 /// Optional body-signal check-in.
 @Model

@@ -34,7 +34,10 @@ enum ImportService {
     // backup never throws on a missing key.
     private struct Bundle: Decodable {
         var schemaVersion: Int?
-        var sessions: [Session]?; var bodyweight: [Bodyweight]?; var protein: [Protein]?
+        // `protein` was dropped in backup schema 6. Decodable ignores unknown
+        // keys, so a v<=5 bundle's protein array is simply skipped — there is no
+        // longer anywhere in the store to put it.
+        var sessions: [Session]?; var bodyweight: [Bodyweight]?
         var checkIns: [CheckInDTO]?; var milestones: [MilestoneDTO]?; var programs: [ProgramDTO]?
         var tracks: [Track]?; var gyms: [GymDTO]?; var exercises: [ExerciseDef]?; var settings: SettingsDTO?
         var coachingDecisions: [CoachingDecisionDTO]?
@@ -77,7 +80,6 @@ enum ImportService {
         var durationSeconds: Int?; var distanceMiles: Double?; var inclinePercent: Double?; var autoregReason: String?
     }
     private struct Bodyweight: Decodable { var date: Date?; var weightLb: Double?; var bodyFatPercent: Double?; var milestoneLabel: String? }
-    private struct Protein: Decodable { var date: Date?; var grams: Double?; var label: String? }
     private struct CheckInDTO: Decodable { var date: Date?; var site: String?; var response: String?; var note: String? }
     private struct MilestoneDTO: Decodable { var date: Date?; var exercise: String?; var kind: String?; var label: String? }
     private struct ProgramDTO: Decodable {
@@ -158,7 +160,9 @@ enum ImportService {
         var secondarySeconds: Int?; var accessorySeconds: Int?
     }
     private struct SettingsDTO: Decodable {
-        var unitDisplay: String?; var proteinTargetGrams: Double?; var accessoryRestSeconds: Int?
+        // `proteinTargetGrams` went with the tracker in schema 6 and is
+        // ignored where old bundles still carry it.
+        var unitDisplay: String?; var birthYear: Int?; var accessoryRestSeconds: Int?
         var mainCompoundRestSeconds: Int?; var olympicRestSeconds: Int?; var mainUpperRestSeconds: Int?; var secondaryRestSeconds: Int?
         var rest: RestDTO?
         var autoStartRest: Bool?; var haptics: Bool?; var gymTagFirstLaunchOfDay: Bool?; var restSeedStampsCleared: Bool?
@@ -221,6 +225,10 @@ enum ImportService {
         guard BodySite.fromStorage(value) != nil else {
             throw ImportError.invalidData("\(path): unknown body site \(value)")
         }
+    }
+
+    private static func currentYear() -> Int {
+        Calendar.current.component(.year, from: .now)
     }
 
     private static func requireDate(_ value: Date?, _ path: String) throws {
@@ -319,10 +327,6 @@ enum ImportService {
             try requireDate(entry.date, "bodyweight[\(i)].date")
             try finite(entry.weightLb, "bodyweight[\(i)].weightLb", required: true, min: 0)
             try finite(entry.bodyFatPercent, "bodyweight[\(i)].bodyFatPercent", min: 0, max: 100)
-        }
-        for (i, entry) in (bundle.protein ?? []).enumerated() {
-            try requireDate(entry.date, "protein[\(i)].date")
-            try finite(entry.grams, "protein[\(i)].grams", required: true, min: 0)
         }
         for (i, entry) in (bundle.checkIns ?? []).enumerated() {
             try requireDate(entry.date, "checkIns[\(i)].date")
@@ -490,7 +494,13 @@ enum ImportService {
         if let settings = bundle.settings {
             try known(settings.unitDisplay, ["lbPrimary", "kgPrimary", "both"], "settings.unitDisplay", required: schemaVersion >= 1)
             try known(settings.theme, ["memento", "carbon", "slate", "system"], "settings.theme", required: schemaVersion >= 1)
-            try finite(settings.proteinTargetGrams, "settings.proteinTargetGrams", min: 0)
+            // 0 is the "not set" sentinel and always valid. Any other year has
+            // to produce a plausible age, so a corrupted field cannot silently
+            // move the lifter across the older-adult protein threshold.
+            if let year = settings.birthYear, year != 0,
+               ProteinGuidance.age(birthYear: year, inYear: currentYear()) == nil {
+                throw ImportError.invalidData("settings.birthYear: \(year) is not a plausible year of birth")
+            }
             for (path, value) in [
                 ("settings.accessoryRestSeconds", settings.accessoryRestSeconds),
                 ("settings.mainCompoundRestSeconds", settings.mainCompoundRestSeconds),
@@ -527,7 +537,7 @@ enum ImportService {
 
         let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
                            bundle.gyms != nil, bundle.exercises != nil, bundle.bodyweight != nil,
-                           bundle.protein != nil, bundle.checkIns != nil, bundle.milestones != nil,
+                           bundle.checkIns != nil, bundle.milestones != nil,
                            bundle.settings != nil, bundle.coachingDecisions != nil].contains(true)
         guard hasAnything else { throw ImportError.notABackup }
         try validate(bundle, schemaVersion: schemaVersion)
@@ -583,10 +593,6 @@ enum ImportService {
             if let bw = bundle.bodyweight {
                 try context.delete(model: BodyweightEntry.self)
                 for b in bw { context.insert(BodyweightEntry(date: b.date ?? .now, weightLb: b.weightLb ?? 0, bodyFatPercent: b.bodyFatPercent, milestoneLabel: b.milestoneLabel)) }
-            }
-            if let pr = bundle.protein {
-                try context.delete(model: ProteinEntry.self)
-                for p in pr { context.insert(ProteinEntry(date: p.date ?? .now, grams: p.grams ?? 0, label: p.label ?? "")) }
             }
             if let cis = bundle.checkIns {
                 try context.delete(model: CheckIn.self)
@@ -925,7 +931,7 @@ enum ImportService {
             let s = AppSettings(); context.insert(s); return s
         }()
         if let v = st.unitDisplay { settings.unitDisplayRaw = v }
-        if let v = st.proteinTargetGrams { settings.proteinTargetGrams = v }
+        if let v = st.birthYear { settings.birthYear = v }
         // Rest buckets arrive flat (native backups) or nested under `rest`
         // (web's canonical shape) — accept both; nested wins when both ride,
         // since the web keeps the legacy flat accessory key merely in sync.

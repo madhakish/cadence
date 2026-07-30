@@ -1,13 +1,11 @@
-// Body — bodyweight trend and daily protein logging.
+// Body — bodyweight trend and advisory protein guidance.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { lineChart } from "../charts.js";
-import { Bodyweight, Protein, Settings, iso } from "../db.js";
+import { Bodyweight, Settings, iso } from "../db.js";
 
 export async function render(host) {
-  const [weights, todays, settings, total] = await Promise.all([
-    Bodyweight.all(), Protein.today(), Settings.get(), Protein.todayTotal(),
-  ]);
+  const [weights, settings] = await Promise.all([Bodyweight.all(), Settings.get()]);
   weights.sort((a, b) => new Date(a.date) - new Date(b.date));
   const root = ui.h("div");
 
@@ -30,52 +28,28 @@ export async function render(host) {
   bw.append(ui.h("button", { class: "btn wide", style: { marginTop: "8px" }, text: "+ Log weight", onClick: () => logWeight() }));
   root.append(bw);
 
-  // Protein
-  root.append(ui.h("div", { class: "section-title", text: "Protein" }));
-  const target = settings.proteinTargetGrams;
-  const pct = Math.min(1, total / target);
-  const pcard = ui.h("div", { class: "card" },
-    ui.h("div", { class: "row", style: { borderBottom: "0" } },
-      ui.h("span", { class: "big mono", text: `${Math.round(total)} g` }),
-      ui.h("span", { class: "muted", text: `/ ${Math.round(target)} g today` })),
-    ui.h("div", { class: "progress" }, ui.h("i", { style: { width: `${pct * 100}%`, background: total >= target ? "var(--good)" : "var(--accent)" } })),
-    ui.h("div", { class: "btn-row", style: { marginTop: "10px" } },
-      ui.h("button", { class: "btn sm", text: "Shake ~45g", onClick: () => add(45, "Shake") }),
-      ui.h("button", { class: "btn sm", text: "Meat ~50g", onClick: () => add(50, "Meat") })));
-  // Guidance, not enforcement: the stored target stays whatever the lifter
-  // set. Offered only when there is a real bodyweight to derive it from — the
-  // app never invents one — and only when it differs from what's set.
-  const guidance = C.proteinSummary(latest?.weightLb);
-  const suggested = C.proteinDailyTargetGrams(latest?.weightLb);
+  // Protein — advice, not a tracker.
+  //
+  // Serving-level logging was retired in backup schema 6: counting grams only
+  // works with a real meal-entry surface, and a half-measure the lifter
+  // abandons after a week is worse than an honest target. Age changes the
+  // per-meal threshold, so it is shown when there is a birth year to use.
+  const age = C.ageFromBirthYear(settings.birthYear, new Date().getFullYear());
+  const guidance = C.proteinSummary(latest?.weightLb, age);
   if (guidance) {
-    pcard.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: guidance }));
-    if (suggested != null && Math.round(suggested) !== Math.round(target)) {
-      pcard.append(ui.h("button", {
-        class: "btn ghost wide", style: { marginTop: "6px" },
-        text: `Use ${suggested} g as my daily target`,
-        onClick: async () => { await Settings.save({ ...settings, proteinTargetGrams: suggested }); ui.nav.refresh(); },
-      }));
-    }
-  }
-  const custom = ui.h("input", { type: "number", inputmode: "numeric", placeholder: "grams" });
-  pcard.append(ui.h("div", { class: "btn-row", style: { marginTop: "8px" } }, custom,
-    ui.h("button", { class: "btn sm primary", text: "Add", onClick: () => { const g = parseFloat(custom.value); if (g > 0) add(g, "Custom"); } })));
-  root.append(pcard);
-
-  if (todays.length) {
-    root.append(ui.h("div", { class: "section-title", text: "Today's entries" }));
-    const list = ui.h("div", { class: "card" });
-    for (const p of todays.sort((a, b) => new Date(b.date) - new Date(a.date))) {
-      list.append(ui.h("div", { class: "row" },
-        ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: p.label }), ui.h("span", { class: "sub mono", text: `${Math.round(p.grams)} g` })),
-        ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { await Protein.del(p.id); ui.nav.refresh(); } })));
-    }
-    root.append(list);
+    root.append(ui.h("div", { class: "section-title", text: "Protein" }));
+    const pcard = ui.h("div", { class: "card" }, ui.h("div", { text: guidance }));
+    // Naming the assumption rather than hiding it: the per-meal figure is the
+    // older-adult one until the lifter says otherwise.
+    pcard.append(ui.h("div", { class: "sub", style: { marginTop: "6px" },
+      text: C.proteinPerMealRationale(age)
+        || "Add your year of birth in Settings for an age-adjusted per-meal figure." }));
+    pcard.append(ui.h("div", { class: "muted", style: { marginTop: "6px" },
+      text: "Guidance only — Cadence does not track what you eat." }));
+    root.append(pcard);
   }
 
   host.replaceChildren(root);
-
-  async function add(grams, label) { await Protein.add({ date: iso(new Date()), grams, label }); ui.nav.refresh(); }
 }
 
 function logWeight() {

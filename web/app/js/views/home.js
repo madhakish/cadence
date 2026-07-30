@@ -1,9 +1,9 @@
-// Today — resume/open session, next-up suggestions, gym tag, protein.
+// Today — resume/open session, next-up suggestions, gym tag.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
-import { Sessions, Tracks, Gyms, Settings, Protein, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
+import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession } from "./session.js";
 
@@ -29,8 +29,8 @@ const barbellPrescriptionView = (achievedLb, targetLb, unit, gym) => {
 };
 
 export async function render(host) {
-  const [openSessions, tracks, gym, settings, proteinTotal, program, allExercises, completed, decisions, checkins] = await Promise.all([
-    Sessions.openAll(), Tracks.all(), Gyms.default(), Settings.get(), Protein.todayTotal(), Programs.active(), Exercises.all(), Sessions.completed(), CoachingDecisions.all(), Checkins.all(),
+  const [openSessions, tracks, gym, settings, program, allExercises, completed, decisions, checkins] = await Promise.all([
+    Sessions.openAll(), Tracks.all(), Gyms.default(), Settings.get(), Programs.active(), Exercises.all(), Sessions.completed(), CoachingDecisions.all(), Checkins.all(),
   ]);
   // Last 8 top working weights for a lift, oldest→newest (sparkline source).
   const topsFor = (name) => completed
@@ -208,27 +208,11 @@ export async function render(host) {
   root.append(list);
   root.append(ui.h("button", { class: "btn ghost wide", text: "Blank session", onClick: async () => openSession(await createBlankSession()) }));
 
-  // Protein
-  root.append(ui.h("div", { class: "section-title", text: "Protein" }));
-  const total = ui.h("span", { class: "big mono", text: `${Math.round(proteinTotal)} g` });
-  const card = ui.h("div", { class: "card" },
-    ui.h("div", { class: "row", style: { borderBottom: "0" } }, total, ui.h("span", { class: "muted", text: `/ ${Math.round(settings.proteinTargetGrams)} g today` })),
-    ui.h("div", { class: "btn-row" },
-      ui.h("button", { class: "btn sm", text: "Shake ~45g", onClick: () => logProtein(45, "Shake") }),
-      ui.h("button", { class: "btn sm", text: "Meat ~50g", onClick: () => logProtein(50, "Meat") }),
-      ui.h("button", { class: "btn sm ghost", text: "More →", onClick: () => ui.nav.go("body") })));
-  root.append(card);
-
   host.replaceChildren(root);
 
   async function start(track) {
     const id = await createSessionFromTrack(track);
     openSession(id);
-  }
-  async function logProtein(grams, label) {
-    await Protein.add({ date: iso(new Date()), grams, label });
-    ui.toast(`+${grams}g ${label.toLowerCase()}`);
-    ui.nav.refresh();
   }
 }
 

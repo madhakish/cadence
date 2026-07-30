@@ -36,6 +36,10 @@ final class AppBootstrap: ObservableObject {
         errorMessage = nil
         isTemporary = false
         let candidates: [(String, () throws -> ModelContainer)] = [
+            // V4 first: it is the checksum every install shipped since V4
+            // became current carries, so it is the common case for this
+            // upgrade and the cheapest match to try.
+            ("V4 staged migration", { try self.makeContainer(migrationPlan: CadenceV4MigrationPlan.self) }),
             ("V3 staged migration", { try self.makeContainer(migrationPlan: CadenceV3MigrationPlan.self) }),
             ("pre-72 staged migration", { try self.makeContainer(migrationPlan: CadencePre72MigrationPlan.self) }),
             ("72 staged migration", { try self.makeContainer(migrationPlan: Cadence72MigrationPlan.self) }),
@@ -91,7 +95,7 @@ final class AppBootstrap: ObservableObject {
         migrationPlan: Plan.Type,
         isStoredInMemoryOnly: Bool = false
     ) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isStoredInMemoryOnly)
         return try ModelContainer(
             for: schema,
@@ -101,7 +105,7 @@ final class AppBootstrap: ObservableObject {
     }
 
     private func makeUnplannedContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
         let config = ModelConfiguration(schema: schema)
         return try ModelContainer(for: schema, migrationPlan: nil, configurations: config)
     }

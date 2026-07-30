@@ -1317,33 +1317,69 @@ export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, i
 // beats the app's opinion.
 //
 // Returns null when there is nothing useful to say.
-// Bodyweight-derived protein guidance. Advisory, and deliberately outside the
-// programming engine — nothing here feeds progression or readiness. The stored
-// proteinTargetGrams stays whatever the lifter set; this only offers a number
-// to compare it against.
+// Bodyweight- and age-derived protein guidance. Advisory, and deliberately
+// outside the programming engine — nothing here feeds progression or readiness.
+// Since schema V5 there is no tracker and no stored target: this is a figure to
+// aim at, not a number to tick off.
 //
 // 1.6 g/kg/day is the plateau Morton et al. (2018) found for RT-induced
-// fat-free mass gains; 0.4 g/kg/meal is the higher per-dose threshold PROT-AGE
-// recommends for older adults, whose muscle responds less to a given dose.
+// fat-free mass gains. That meta-analysis pooled resistance-training trials, so
+// the training modality is already inside the number — there is no per-session
+// multiplier, because scaling a daily intake by one day's workout is not
+// something the evidence supports.
+//
+// Age is where the answer genuinely changes: Moore et al. (2015) put the
+// per-meal plateau near 0.24 g/kg for younger adults and near 0.40 g/kg for
+// older ones, the higher figure PROT-AGE (Bauer 2013) recommends, because
+// muscle responds less to a given dose with age.
 // Mirrored 1:1 in CadenceCore ProteinGuidance.
 export const PROTEIN_DAILY_G_PER_KG = 1.6;
-export const PROTEIN_MEAL_G_PER_KG = 0.4;
+export const PROTEIN_MEAL_G_PER_KG_YOUNGER = 0.25;
+export const PROTEIN_MEAL_G_PER_KG_OLDER = 0.4;
+export const PROTEIN_OLDER_ADULT_AGE = 65;
 export const PROTEIN_MEALS_PER_DAY = 4;
+
+// Age in whole years, or null when there is no usable birth year. Never
+// guessed — a default age would silently apply the wrong per-meal threshold.
+export function ageFromBirthYear(birthYear, currentYear) {
+  if (!(birthYear > 1900) || !(currentYear >= birthYear)) return null;
+  const years = currentYear - birthYear;
+  return years <= 120 ? years : null;
+}
+
+// Without an age this is the older-adult figure — the conservative direction,
+// since the higher per-dose threshold costs a younger lifter nothing while
+// under-dosing an older one is the failure that matters.
+export function proteinMealGramsPerKg(age) {
+  if (age == null) return PROTEIN_MEAL_G_PER_KG_OLDER;
+  return age >= PROTEIN_OLDER_ADULT_AGE ? PROTEIN_MEAL_G_PER_KG_OLDER : PROTEIN_MEAL_G_PER_KG_YOUNGER;
+}
 
 const proteinGrams = (bodyweightLb, perKg) => {
   if (!(bodyweightLb > 0)) return null;
   return Math.round(kgFromLb(bodyweightLb) * perKg / 5) * 5;
 };
 export const proteinDailyTargetGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_DAILY_G_PER_KG);
-export const proteinPerMealGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_MEAL_G_PER_KG);
+export const proteinPerMealGrams = (bodyweightLb, age = null) =>
+  proteinGrams(bodyweightLb, proteinMealGramsPerKg(age));
 
 // One line of guidance, or null when there is no bodyweight logged — the app
 // never invents one.
-export function proteinSummary(bodyweightLb) {
+export function proteinSummary(bodyweightLb, age = null) {
   const daily = proteinDailyTargetGrams(bodyweightLb);
-  const meal = proteinPerMealGrams(bodyweightLb);
+  const meal = proteinPerMealGrams(bodyweightLb, age);
   if (daily == null || meal == null) return null;
   return `${daily} g/day at ${PROTEIN_DAILY_G_PER_KG} g/kg, about ${meal} g per meal across ${PROTEIN_MEALS_PER_DAY}.`;
+}
+
+// Why the per-meal figure is what it is, or null without an age to explain it.
+export function proteinPerMealRationale(age) {
+  if (age == null) return null;
+  return age >= PROTEIN_OLDER_ADULT_AGE
+    ? `Per-meal figure uses the higher ${PROTEIN_MEAL_G_PER_KG_OLDER} g/kg threshold for adults `
+      + `${PROTEIN_OLDER_ADULT_AGE}+; muscle responds less to a given dose with age.`
+    : `Per-meal figure uses ${PROTEIN_MEAL_G_PER_KG_YOUNGER} g/kg, rising to `
+      + `${PROTEIN_MEAL_G_PER_KG_OLDER} g/kg from ${PROTEIN_OLDER_ADULT_AGE}.`;
 }
 
 // Mirrored 1:1 in CadenceCore ProgramProgression.sessionSpacingShortfall.
@@ -1559,25 +1595,34 @@ export function healthSampleBelongsToSession(sampleStart, sampleEnd, sessionStar
   return healthOverlapSeconds(sampleStart, sampleEnd, sessionStart, sessionEnd) >= sampleSeconds / 2;
 }
 
+// Compare any two measurements of the same thing. Zero and null are both
+// absence — "Health has nothing to say" is never "Health says zero". Pass
+// toleranceFraction 0 where a flat band is the honest one (a weigh-in does not
+// get looser as the lifter gets heavier).
+export function healthVerdictKind(logged, health, toleranceAbsolute, toleranceFraction = 0) {
+  const l = logged > 0 ? logged : null;
+  const h = health > 0 ? health : null;
+  if (l === null && h === null) return "neither";
+  if (l === null) return "onlyHealth";
+  if (h === null) return "onlyLogged";
+  const allowed = Math.max(toleranceAbsolute, Math.max(l, h) * toleranceFraction);
+  if (Math.abs(h - l) <= allowed + 1e-9) return "agree";
+  return h > l ? "healthHigher" : "loggedHigher";
+}
+
 // Compare a logged conditioning distance against Health's for one session.
 // Returns { kind, loggedMiles, healthMiles, isDiscrepancy, adoptableMiles }.
 export function healthCompare(loggedMiles, healthMiles) {
   const logged = loggedMiles > 0 ? loggedMiles : null;
   const health = healthMiles > 0 ? healthMiles : null;
-  const verdict = (kind, extra) => ({
+  const kind = healthVerdictKind(logged, health, HEALTH_TOLERANCE_MILES, HEALTH_TOLERANCE_FRACTION);
+  return {
     kind,
     loggedMiles: logged,
     healthMiles: health,
     isDiscrepancy: kind === "healthHigher" || kind === "loggedHigher" || kind === "onlyHealth",
     adoptableMiles: kind === "onlyLogged" || kind === "agree" || kind === "neither" ? null : health,
-    ...extra,
-  });
-  if (logged === null && health === null) return verdict("neither");
-  if (logged === null) return verdict("onlyHealth");
-  if (health === null) return verdict("onlyLogged");
-  const allowed = Math.max(HEALTH_TOLERANCE_MILES, Math.max(logged, health) * HEALTH_TOLERANCE_FRACTION);
-  if (Math.abs(health - logged) <= allowed + 1e-9) return verdict("agree");
-  return verdict(health > logged ? "healthHigher" : "loggedHigher");
+  };
 }
 
 // One line stating what each source says. Never phrased as a correction.
@@ -1592,6 +1637,78 @@ export function healthComparisonLabel(verdict) {
     case "onlyLogged": return "Nothing in Health for this session";
     default: return "No conditioning distance";
   }
+}
+
+// [INV-HEALTH-IS-A-SECOND-OPINION] Whether a Health sample came from somewhere
+// other than Cadence itself.
+//
+// Load-bearing, and invisible when wrong. Cadence writes workouts, bodyweight
+// and body fat into Health; without this every read would find those writes and
+// "confirm" the log against a mirror of itself. A cross-check that always
+// agrees is worse than no cross-check, because it looks like corroboration.
+//
+// An unattributable sample counts as foreign: discounting a sample we cannot
+// prove is ours would silently drop a real second opinion, and the other
+// choice fails visibly the first time it offers the lifter their own number.
+export function healthSourceIsForeign(bundleIdentifier, appBundleIdentifier) {
+  const app = (appBundleIdentifier || "").trim();
+  if (!app) return true;
+  const source = (bundleIdentifier || "").trim();
+  if (!source) return true;
+  return source.toLowerCase() !== app.toLowerCase();
+}
+
+// Two weigh-ins closer than this are the same weigh-in. A scale reports to a
+// tenth of a pound and Health round-trips through kilograms, so exact equality
+// would offer an "import" of a weight the lifter just typed.
+export const HEALTH_WEIGH_IN_TOLERANCE_LB = 0.2;
+
+// Whether a Health weigh-in is one Cadence already has: same calendar day and
+// same number. A genuine second weigh-in later the same day is a different
+// weight and stays offerable; yesterday's is a different day, not a duplicate.
+export function healthIsSameWeighIn(loggedLb, loggedDate, healthLb, healthDate) {
+  const a = loggedDate instanceof Date ? loggedDate : new Date(loggedDate);
+  const b = healthDate instanceof Date ? healthDate : new Date(healthDate);
+  if (a.getFullYear() !== b.getFullYear() || a.getMonth() !== b.getMonth()
+      || a.getDate() !== b.getDate()) return false;
+  return Math.abs(loggedLb - healthLb) <= HEALTH_WEIGH_IN_TOLERANCE_LB + 1e-9;
+}
+
+// The HKCategoryValueSleepAnalysis stages that count as sleep. `inBed` is time
+// on the mattress, not time asleep, and `awake` is explicitly not sleep;
+// counting either would inflate a night by hours.
+export const HEALTH_ASLEEP_STAGES = [
+  "asleepUnspecified", "asleepCore", "asleepDeep", "asleepREM",
+];
+
+// Total time actually asleep, from stage samples of { stage, start, end }.
+//
+// Overlapping intervals are MERGED, not added. A watch and a sleep app both
+// staging the same night is ordinary, and the anti-echo filter does not help —
+// it excludes Cadence, not third parties. Summing durations would report ten
+// hours of sleep to someone who slept five, a number wrong enough to discredit
+// every other figure on the screen.
+export function healthAsleepSeconds(stages) {
+  const ms = (v) => (v instanceof Date ? v.getTime() : new Date(v).getTime());
+  const intervals = (stages || [])
+    .filter((s) => HEALTH_ASLEEP_STAGES.includes(s.stage) && ms(s.end) > ms(s.start))
+    .map((s) => [ms(s.start), ms(s.end)])
+    .sort((a, b) => a[0] - b[0]);
+  if (!intervals.length) return 0;
+
+  let total = 0;
+  let [runStart, runEnd] = intervals[0];
+  for (const [start, end] of intervals.slice(1)) {
+    if (start > runEnd) {
+      total += runEnd - runStart;
+      runStart = start;
+      runEnd = end;
+    } else if (end > runEnd) {
+      runEnd = end;
+    }
+  }
+  total += runEnd - runStart;
+  return Math.round(total / 1000);
 }
 
 // ---- Rotation-first coaching ----------------------------------------------
