@@ -10,9 +10,12 @@
 /// reps-in-reserve set flags. Each is a new value in an enum the importer
 /// validates against a whitelist, so a v5 bundle read by a v4 binary must fail
 /// on the VERSION check rather than on the enum — which is why the version
-/// gate runs before validation on both clients.
+/// gate runs before validation on both clients. Version 6 adds the per-set
+/// `flights` count for conditioning measured in climbed floors; a v5 binary
+/// reading it would silently drop the count, so the version gate has to stop
+/// the bundle first.
 public enum BackupContract {
-    public static let currentSchemaVersion = 5
+    public static let currentSchemaVersion = 6
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

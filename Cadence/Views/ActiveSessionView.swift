@@ -954,6 +954,14 @@ private struct SetRow: View {
     private var isCardio: Bool { exercise?.type == .conditioning }
     private var isTimed: Bool { exercise?.type == .timed }
 
+    /// The affordance line names the fields the sheet will actually show, so
+    /// the row never advertises one the sheet withholds.
+    private var cardioHint: String {
+        let climbs = CardioFormat.climbsFlights(exerciseName: exercise?.name ?? "")
+        if climbs || (set.flights ?? 0) > 0 { return "flights · time · pace" }
+        return "distance · time · incline"
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             if isCurrent {
@@ -972,7 +980,8 @@ private struct SetRow: View {
                          ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                                  durationSeconds: set.durationSeconds,
                                                  inclinePercent: set.inclinePercent,
-                                                 loadLb: set.weightLb)
+                                                 loadLb: set.weightLb,
+                                                 flights: set.flights)
                          : (isTimed ? CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) : weightLabel))
                         .font(.title3.bold().monospacedDigit())
                         .foregroundStyle(set.isWarmup ? .secondary : .primary)
@@ -982,7 +991,7 @@ private struct SetRow: View {
                                 .font(.callout.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         } else if isCardio {
-                            Text("tap to log distance · time · incline")
+                            Text("tap to log \(cardioHint)")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         } else {
@@ -1061,6 +1070,9 @@ private struct SetRow: View {
 private struct CardioSetSheet: View {
     /// Which side is currently computed from the other two.
     private enum Derived { case speed, distance }
+    /// The same idea against the climber's yardstick: either the pace is the
+    /// readout, or the count is.
+    private enum FlightDerived { case pace, flights }
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -1073,16 +1085,32 @@ private struct CardioSetSheet: View {
     /// became editable.
     @State private var derived: Derived = .speed
 
+    /// The count is what gets stored, so flights start as the entered value
+    /// and the pace is the readout.
+    @State private var flightDerived: FlightDerived = .pace
+
     private var carriesLoad: Bool { CardioFormat.carriesLoad(exerciseName: exerciseName) }
     private var carryLb: Double { self.set.weightLb }
+
+    /// [INV-STAIRS-COUNT-FLIGHTS] Which pair of fields this movement is
+    /// measured by. A set already holding the other measure keeps that block
+    /// too, so conditioning logged before flights existed stays editable rather
+    /// than becoming unreachable behind a field it never used.
+    private var climbsFlights: Bool { CardioFormat.climbsFlights(exerciseName: exerciseName) }
+    private var showsFlights: Bool { climbsFlights || flights > 0 }
+    private var showsDistance: Bool { !climbsFlights || miles > 0 }
 
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
     private var miles: Double { self.set.distanceMiles ?? 0 }
     private var secs: Int { self.set.durationSeconds ?? 0 }
     private var incline: Double { self.set.inclinePercent ?? 0 }
+    private var flights: Double { self.set.flights ?? 0 }
     private var mph: Double {
         CardioFormat.speedMph(distanceMiles: self.set.distanceMiles, durationSeconds: self.set.durationSeconds) ?? 0
+    }
+    private var flightPace: Double {
+        CardioFormat.flightPace(flights: self.set.flights, durationSeconds: self.set.durationSeconds) ?? 0
     }
 
     /// Typing a distance makes speed the readout again.
@@ -1102,15 +1130,38 @@ private struct CardioSetSheet: View {
         set.distanceMiles = solved
     }
 
+    /// Typing a count makes the pace the readout again.
+    private func applyFlights(_ value: Double) {
+        set.flights = value > 0 ? value : nil
+        flightDerived = .pace
+    }
+
+    /// Setting a pace computes the count it reaches in the logged time — the
+    /// planned case, "twenty minutes at eight floors a minute".
+    private func applyFlightPace(_ value: Double) {
+        flightDerived = .flights
+        // With no time logged there is nothing to solve against. Assigning the
+        // nil would delete a count the lifter already has, so leave it.
+        guard let solved = CardioFormat.flights(pacePerMinute: value, durationSeconds: set.durationSeconds)
+        else { return }
+        set.flights = solved
+    }
+
     /// Changing the time holds whichever side the lifter last set. If they
     /// entered a pace, a longer walk means more distance at that same pace;
-    /// if they entered a distance, it means a slower one.
+    /// if they entered a distance, it means a slower one. Flights follow the
+    /// same rule against their own pace.
     private func applyDuration(_ value: Int) {
         let keptSpeed = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds)
+        let keptPace = CardioFormat.flightPace(flights: set.flights, durationSeconds: set.durationSeconds)
         set.durationSeconds = value > 0 ? value : nil
         if derived == .distance, let keptSpeed,
            let solved = CardioFormat.distanceMiles(speedMph: keptSpeed, durationSeconds: set.durationSeconds) {
             set.distanceMiles = solved
+        }
+        if flightDerived == .flights, let keptPace,
+           let solved = CardioFormat.flights(pacePerMinute: keptPace, durationSeconds: set.durationSeconds) {
+            set.flights = solved
         }
     }
 
@@ -1118,26 +1169,19 @@ private struct CardioSetSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Stepper("Distance: \(miles > 0 ? "\(Weight.trim(miles, decimals: 2)) mi" : "—")",
-                            value: Binding(get: { miles }, set: { applyDistance($0) }),
-                            in: 0...100, step: 0.25)
-                    distanceTypeRow
+                    flightCountRow
+                    distanceRows
                     Stepper("Time: \(secs > 0 ? CardioFormat.durationLabel(seconds: secs) : "—")",
                             value: Binding(get: { secs }, set: { applyDuration($0) }),
                             in: 0...36000, step: 60)
-                    Stepper("Speed: \(mph > 0 ? "\(Weight.trim(mph)) mph" : "—")",
-                            value: Binding(get: { mph }, set: { applySpeed($0) }),
-                            in: 0...20, step: 0.1)
-                    Stepper("Incline: \(incline > 0 ? "\(Weight.trim(incline))%" : "—")",
-                            value: Binding(get: { incline }, set: { set.inclinePercent = $0 > 0 ? $0 : nil }),
-                            in: 0...30, step: 0.5)
+                    speedRow
+                    flightPaceRow
+                    inclineRow
                     carryLoadRow
                 } header: {
-                    Text(carriesLoad ? "Load · distance · time · speed" : "Distance · time · speed · incline")
+                    Text(sectionHeader)
                 } footer: {
-                    Text(derived == .distance
-                         ? "Distance is calculated from speed and time."
-                         : "Speed is calculated from distance and time.")
+                    Text(sectionFooter)
                 }
                 Section {
                     Button("Delete set", role: .destructive) {
@@ -1155,6 +1199,77 @@ private struct CardioSetSheet: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Names only the fields this sheet is actually showing.
+    private var sectionHeader: String {
+        if showsFlights && !showsDistance { return "Flights · time · pace" }
+        if showsFlights { return "Flights · distance · time · pace" }
+        return carriesLoad ? "Load · distance · time · speed" : "Distance · time · speed · incline"
+    }
+
+    /// Which value is the readout rather than the entry, so the lifter can see
+    /// which number the other two are driving.
+    private var sectionFooter: String {
+        if showsFlights && !showsDistance {
+            return flightDerived == .flights
+                ? "Flights are calculated from pace and time."
+                : "Pace is calculated from flights and time."
+        }
+        return derived == .distance
+            ? "Distance is calculated from speed and time."
+            : "Speed is calculated from distance and time."
+    }
+
+    /// [INV-STAIRS-COUNT-FLIGHTS] Whole steps: a console reports floors as a
+    /// count, and nobody climbs a third of one on purpose. A count solved from
+    /// a pace still keeps its decimal — the stepper is the entry, not the store.
+    @ViewBuilder
+    private var flightCountRow: some View {
+        if showsFlights {
+            Stepper("Flights: \(flights > 0 ? CardioFormat.flightsLabel(flights) : "—")",
+                    value: Binding(get: { flights }, set: { applyFlights($0) }),
+                    in: 0...500, step: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var flightPaceRow: some View {
+        if showsFlights {
+            Stepper("Pace: \(flightPace > 0 ? "\(Weight.trim(flightPace)) fl/min" : "—")",
+                    value: Binding(get: { flightPace }, set: { applyFlightPace($0) }),
+                    in: 0...60, step: 0.5)
+        }
+    }
+
+    @ViewBuilder
+    private var distanceRows: some View {
+        if showsDistance {
+            Stepper("Distance: \(miles > 0 ? "\(Weight.trim(miles, decimals: 2)) mi" : "—")",
+                    value: Binding(get: { miles }, set: { applyDistance($0) }),
+                    in: 0...100, step: 0.25)
+            distanceTypeRow
+        }
+    }
+
+    @ViewBuilder
+    private var speedRow: some View {
+        if showsDistance {
+            Stepper("Speed: \(mph > 0 ? "\(Weight.trim(mph)) mph" : "—")",
+                    value: Binding(get: { mph }, set: { applySpeed($0) }),
+                    in: 0...20, step: 0.1)
+        }
+    }
+
+    /// A climber's grade is the machine, not a setting, so it gets no incline
+    /// row unless a legacy set already carries one.
+    @ViewBuilder
+    private var inclineRow: some View {
+        if !climbsFlights || incline > 0 {
+            Stepper("Incline: \(incline > 0 ? "\(Weight.trim(incline))%" : "—")",
+                    value: Binding(get: { incline }, set: { set.inclinePercent = $0 > 0 ? $0 : nil }),
+                    in: 0...30, step: 0.5)
         }
     }
 

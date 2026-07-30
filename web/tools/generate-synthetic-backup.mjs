@@ -4,7 +4,7 @@
 // stalls and an auto-deload, standalone tracks in both modes at every cycle
 // phase, ~100 completed sessions touching every library exercise, all set
 // flags, drop-loads, kg-entered sets, per-side work, conditioning
-// duration/distance, bodyweight sets, body signals, bodyweight/protein/
+// duration/distance and climbed flights, bodyweight sets, body signals, bodyweight/protein/
 // check-in logs, and a second (kg-plate) gym. None of the values originate
 // from a user's training, health history, or exported app data.
 //
@@ -94,6 +94,7 @@ const mkSet = (order, w, r, o = {}) => ({
   enteredUnit: o.unit || "lb", status: "completed", flags: o.flags ? [...o.flags] : ["clean"],
   bodyFlagSite: o.site || null, bodyFlagNote: o.siteNote || null,
   durationSeconds: o.duration ?? null, distanceMiles: o.distance ?? null,
+  ...(o.flights != null ? { flights: o.flights } : {}),
   autoregReason: o.drop || null,
 });
 
@@ -266,7 +267,12 @@ for (let i = 0; i < leftovers.length; i += 6) {
   s.exercises = chunk.map((ex, order) => {
     const sets = [];
     if (ex.category === "Conditioning") {
-      sets.push(mkSet(0, 0, 1, { duration: 900, distance: /run|walk/i.test(ex.name) ? 1.5 : null }));
+      // A climber is measured in floors, not ground covered, so it is the one
+      // conditioning movement in the fixture that carries `flights` instead of
+      // a distance — the schema-6 field the round-trip has to preserve.
+      sets.push(C.cardioClimbsFlights(ex.name)
+        ? mkSet(0, 0, 1, { duration: 900, flights: 120 })
+        : mkSet(0, 0, 1, { duration: 900, distance: /run|walk/i.test(ex.name) ? 1.5 : null }));
     } else if (/plank|hold|carr/i.test(ex.name)) {
       for (let k = 0; k < 3; k++) sets.push(mkSet(k, 0, 1, { duration: 60, perSide: ex.isUnilateral }));
     } else if (ex.type === "bodyweight" || /pull-up|push-up|dip|raise/i.test(ex.name)) {

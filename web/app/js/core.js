@@ -1458,7 +1458,9 @@ export function restClockFractionRemaining(s, now) {
 // distance = speed × time. Any two give the third, so the logger can accept
 // whichever two the lifter actually knows. Only distance and duration are
 // persisted — speed is always recoverable from them, so there is no third
-// field to store, disagree with itself, or migrate.
+// field to store, disagree with itself, or migrate. Flights repeat that
+// relationship against a yardstick that is not ground covered, and are
+// persisted the same way: the count and the duration, never the pace.
 
 // Miles per hour from distance + duration, rounded to one decimal; null when
 // either half is missing/zero (no speed without both).
@@ -1482,6 +1484,51 @@ export function cardioDistanceMiles(speedMph, durationSeconds) {
 export function cardioDurationSeconds(distanceMiles, speedMph) {
   if (!(distanceMiles > 0) || !(speedMph > 0)) return null;
   return Math.round((distanceMiles / speedMph) * 3600);
+}
+
+// ---- Climbed flights -------------------------------------------------------
+// Conditioning measured in flights climbed, not ground covered. A stair
+// climber's belt goes nowhere, so miles and miles-per-hour describe it with a
+// unit it does not have: the console counts floors, and the training variable
+// is how many and how fast.
+//
+// flights = pace × time, the same solve-the-third rule as distance, with pace
+// in flights per minute rather than miles per hour. Minutes, because a
+// climber's console reads in floors per minute and an hourly rate on a
+// twenty-minute effort is a number nobody checks against the machine.
+export const FLIGHT_CLIMBERS = new Set(["Stair Climber"]);
+
+export const cardioClimbsFlights = (exerciseName) => FLIGHT_CLIMBERS.has(exerciseName);
+
+// Flights per minute from flights + duration, rounded to one decimal; null
+// when either half is missing/zero (no pace without both).
+export function cardioFlightPace(flights, durationSeconds) {
+  if (!(flights > 0) || !(durationSeconds > 0)) return null;
+  return Math.round((flights / (durationSeconds / 60)) * 10) / 10;
+}
+
+// Flights from pace + duration — "twenty minutes at eight floors a minute".
+//
+// Four decimals for the same reason distance is: a pace set on a short
+// interval has to read back as the pace that was set, and rounding to whole
+// flights would collapse neighbouring paces onto one count.
+export function cardioFlights(pacePerMinute, durationSeconds) {
+  if (!(pacePerMinute > 0) || !(durationSeconds > 0)) return null;
+  return Math.round(pacePerMinute * (durationSeconds / 60) * 10000) / 10000;
+}
+
+// Seconds from flights + pace — "sixty floors at eight a minute" as a plan.
+export function cardioFlightDurationSeconds(flights, pacePerMinute) {
+  if (!(flights > 0) || !(pacePerMinute > 0)) return null;
+  return Math.round((flights / pacePerMinute) * 60);
+}
+
+// "170 flights", "1 flight". Trimmed to one decimal: a count entered by hand
+// is whole, but one solved from a pace over a short interval is not, and
+// rounding it away would contradict the pace shown beside it.
+export function cardioFlightsLabel(flights) {
+  const text = trim(flights, 1);
+  return `${text} ${text === "1" ? "flight" : "flights"}`;
 }
 
 // Conditioning that carries external load. A ruck is a walk with a pack on,
@@ -1512,13 +1559,20 @@ export function cardioDurationLabel(seconds) {
 // Missing halves simply drop out; nothing logged → "—".
 // `loadLb` is the carried weight for a ruck or sled — omitted entirely for
 // unloaded work, which has none.
-export function cardioSetLabel(distanceMiles, durationSeconds, inclinePercent, loadLb = null) {
+//
+// Driven by what the set actually holds rather than by the exercise, so a
+// stair-climber set logged in miles before flights existed still renders the
+// distance it was recorded with instead of reading empty.
+export function cardioSetLabel(distanceMiles, durationSeconds, inclinePercent, loadLb = null, flights = null) {
   const parts = [];
   if (loadLb > 0) parts.push(`${trim(loadLb)} lb`);
+  if (flights > 0) parts.push(cardioFlightsLabel(flights));
   if (distanceMiles > 0) parts.push(`${trim(distanceMiles, 2)} mi`);
   if (durationSeconds > 0) parts.push(cardioDurationLabel(durationSeconds));
   const mph = cardioSpeedMph(distanceMiles, durationSeconds);
   if (mph !== null) parts.push(`${trim(mph)} mph`);
+  const pace = cardioFlightPace(flights, durationSeconds);
+  if (pace !== null) parts.push(`${trim(pace)} fl/min`);
   if (inclinePercent > 0) parts.push(`${trim(inclinePercent)}%`);
   return parts.length ? parts.join(" · ") : "—";
 }

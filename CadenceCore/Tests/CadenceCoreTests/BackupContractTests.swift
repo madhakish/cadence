@@ -2,8 +2,8 @@ import XCTest
 @testable import CadenceCore
 
 final class BackupContractTests: XCTestCase {
-    func testCurrentVersionIsV4() {
-        XCTAssertEqual(BackupContract.currentSchemaVersion, 5)
+    func testCurrentVersionIsV6() {
+        XCTAssertEqual(BackupContract.currentSchemaVersion, 6)
     }
 
     func testCurrentAndLegacyVersionsAreSupported() {
@@ -11,6 +11,8 @@ final class BackupContractTests: XCTestCase {
         XCTAssertTrue(BackupContract.supports(schemaVersion: 0))
         XCTAssertTrue(BackupContract.supports(schemaVersion: 1))
         XCTAssertTrue(BackupContract.supports(schemaVersion: 2))
+        XCTAssertTrue(BackupContract.supports(schemaVersion: 5),
+                      "a pre-flights bundle still restores")
         XCTAssertTrue(BackupContract.supports(schemaVersion: BackupContract.currentSchemaVersion))
     }
 

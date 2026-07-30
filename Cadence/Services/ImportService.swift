@@ -74,7 +74,8 @@ enum ImportService {
         var loadBasis: String?; var implementCount: Int?
         var status: String?
         var enteredUnit: String?; var flags: [String]?; var bodyFlagSite: String?; var bodyFlagNote: String?
-        var durationSeconds: Int?; var distanceMiles: Double?; var inclinePercent: Double?; var autoregReason: String?
+        var durationSeconds: Int?; var distanceMiles: Double?; var flights: Double?
+        var inclinePercent: Double?; var autoregReason: String?
     }
     private struct Bodyweight: Decodable { var date: Date?; var weightLb: Double?; var bodyFatPercent: Double?; var milestoneLabel: String? }
     private struct Protein: Decodable { var date: Date?; var grams: Double?; var label: String? }
@@ -309,6 +310,7 @@ enum ImportService {
                     try known(set.autoregReason, reasons, "\(setPath).autoregReason")
                     try integer(set.durationSeconds, "\(setPath).durationSeconds", min: 0)
                     try finite(set.distanceMiles, "\(setPath).distanceMiles", min: 0)
+                    try finite(set.flights, "\(setPath).flights", min: 0)
                     try finite(set.inclinePercent, "\(setPath).inclinePercent", min: -100, max: 100)
                 }
             }
@@ -884,6 +886,7 @@ enum ImportService {
                                    bodyFlagSite: BodySite.fromStorage(x.bodyFlagSite),
                                    bodyFlagNote: x.bodyFlagNote,
                                    durationSeconds: x.durationSeconds, distanceMiles: x.distanceMiles,
+                                   flights: x.flights,
                                    inclinePercent: x.inclinePercent,
                                    loadBasis: x.loadBasis.flatMap(LoadBasis.init(rawValue:))
                                        ?? e.name.flatMap { exByName[$0]?.loadBasis },

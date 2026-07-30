@@ -84,6 +84,23 @@ speed must read back as that same speed.
 > lost volume. Storing speed as a third column instead would create a value
 > that can disagree with the two it came from.
 
+### INV-STAIRS-COUNT-FLIGHTS
+*platforms: core, native*
+
+Conditioning measured in **climbed flights** logs a count and a duration, and
+derives its pace in **flights per minute** — `flights = pace × time`, the same
+solve-the-third rule distance keeps, against a yardstick that is not ground
+covered. Which measure a movement uses is a named property of the movement, not
+a guess from its name, and a set already holding the other measure keeps it: a
+stair climb logged in miles before flights existed stays visible and editable,
+and migration adds the column without inventing a count for it.
+
+> A stair climber's belt goes nowhere, so a distance and a miles-per-hour
+> describe it with a unit it does not have. The console counts floors and the
+> training variable is how many and how fast, so a climb logged as "1.5 mi at
+> 4 mph" recorded a number the machine never reported and could not be compared
+> against the next one.
+
 ### INV-RUCK-CARRIES-ITS-LOAD
 *platforms: core*
 

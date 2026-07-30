@@ -243,6 +243,21 @@ struct SessionDetailView: View {
             .flatMap(\.workingSets)
     }
 
+    /// [INV-STAIRS-COUNT-FLIGHTS] Conditioning that measures ground covered.
+    /// A climber is conditioning and Health may well have counted its steps as
+    /// walking distance, but a flight count is not a distance and writing miles
+    /// onto it would invent a measurement the machine never reported.
+    private var distanceLoggingSets: [SetEntry] {
+        session.orderedExercises
+            .filter { entry in
+                guard entry.exercise?.type == .conditioning else { return false }
+                guard let name = entry.exercise?.name else { return true }
+                return !CardioFormat.climbsFlights(exerciseName: name)
+            }
+            .flatMap(\.workingSets)
+            .filter { !(($0.flights ?? 0) > 0) }
+    }
+
     /// Everything this session logged as conditioning distance.
     private var loggedMiles: Double? {
         let total = conditioningSets.compactMap(\.distanceMiles).reduce(0, +)
@@ -360,7 +375,7 @@ struct SessionDetailView: View {
     /// set to write it onto. Health finding a run for a session that logged no
     /// conditioning at all is worth reporting, but the button would be a no-op.
     private var adoptableMiles: Double? {
-        guard !conditioningSets.isEmpty else { return nil }
+        guard !distanceLoggingSets.isEmpty else { return nil }
         return healthVerdict.adoptableMiles
     }
 
@@ -383,7 +398,7 @@ struct SessionDetailView: View {
     /// across several in proportion to what they already hold, so a two-leg
     /// walk keeps its shape instead of collapsing into the first set.
     private func adoptHealthDistance(_ miles: Double) {
-        let sets = conditioningSets
+        let sets = distanceLoggingSets
         guard !sets.isEmpty else { return }
         let existing = sets.compactMap(\.distanceMiles).reduce(0, +)
         if existing > 0 {
@@ -406,7 +421,8 @@ struct SessionDetailView: View {
             return CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                          durationSeconds: set.durationSeconds,
                                          inclinePercent: set.inclinePercent,
-                                         loadLb: set.weightLb)
+                                         loadLb: set.weightLb,
+                                         flights: set.flights)
         }
         if type == .timed { return CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) }
         return set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)

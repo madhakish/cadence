@@ -7,7 +7,7 @@ import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 4;
-export const BACKUP_SCHEMA_VERSION = 5;
+export const BACKUP_SCHEMA_VERSION = 6;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -392,7 +392,7 @@ export function workingVolume(sessionExercise) {
     // began storing a weight instead of a forced zero. Keyed on the DATA, like
     // isCardioSet in the history view, so restored history still behaves when
     // the library entry is gone.
-    .filter((s) => !(s.distanceMiles > 0 || s.durationSeconds > 0))
+    .filter((s) => !(s.distanceMiles > 0 || s.flights > 0 || s.durationSeconds > 0))
     .reduce((sum, set) => sum + (C.loadVolume(set) ?? 0), 0);
 }
 // ---- Seeding ----
@@ -628,9 +628,10 @@ export async function exportBundle() {
           enteredUnit: x.enteredUnit || "lb",
           flags: x.flags || [], bodyFlagSite: normalizeBodySite(x.bodyFlagSite), bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
-          // Key emitted only when set (like revertToExerciseName): stamping
+          // Keys emitted only when set (like revertToExerciseName): stamping
           // null onto every record would break byte-stable re-export of
-          // pre-incline backups.
+          // pre-incline and pre-flights backups.
+          ...(x.flights != null ? { flights: x.flights } : {}),
           ...(x.inclinePercent != null ? { inclinePercent: x.inclinePercent } : {}),
           autoregReason: x.autoregReason || null,
         })),
@@ -899,6 +900,7 @@ export function validateBackup(bundle) {
         enumValue(set.autoregReason, BACKUP_ENUMS.reasons, `${setPath}.autoregReason`);
         numberValue(set.durationSeconds, `${setPath}.durationSeconds`, { integer: true, min: 0 });
         numberValue(set.distanceMiles, `${setPath}.distanceMiles`, { min: 0 });
+        numberValue(set.flights, `${setPath}.flights`, { min: 0 });
         numberValue(set.inclinePercent, `${setPath}.inclinePercent`, { min: -100, max: 100 });
       });
     });
@@ -1152,6 +1154,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
           implementCount: x.implementCount || C.resolvedImplementCount(exerciseByName.get(e.name)),
           enteredUnit: x.enteredUnit || "lb", flags: x.flags || [], bodyFlagSite: normalizeBodySite(x.bodyFlagSite), bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
+          ...(x.flights != null ? { flights: x.flights } : {}),
           ...(x.inclinePercent != null ? { inclinePercent: x.inclinePercent } : {}),
           autoregReason: x.autoregReason || null,
         })),

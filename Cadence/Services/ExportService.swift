@@ -27,6 +27,7 @@ enum ExportService {
         let bodyFlagNote: String?
         let durationSeconds: Int?
         let distanceMiles: Double?
+        let flights: Double?
         let inclinePercent: Double?
         let autoregReason: String?
     }
@@ -462,6 +463,7 @@ enum ExportService {
                                     bodyFlagNote: set.bodyFlagNote,
                                     durationSeconds: set.durationSeconds,
                                     distanceMiles: set.distanceMiles,
+                                    flights: set.flights,
                                     inclinePercent: set.inclinePercent,
                                     autoregReason: set.autoregReasonRaw
                                 )

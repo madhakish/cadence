@@ -746,6 +746,105 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     ok(!("speedMph" in saved), "speed is never persisted as a third field");
   }
 
+  // [INV-STAIRS-COUNT-FLIGHTS] A climber's belt goes nowhere. It gets flights
+  // and a flights-per-minute pace where a walk gets miles and mph, and it never
+  // acquires a distance it could not have measured.
+  {
+    const cid = await session.createBlankSession();
+    const c = await db.Sessions.get(cid);
+    c.exercises.push({ order: 0, exerciseName: "Stair Climber", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null,
+      sets: [{ order: 0, weightLb: 0, reps: 1, isWarmup: false, isPerSide: false, enteredUnit: "lb",
+        flags: [], bodyFlagSite: null, bodyFlagNote: null,
+        durationSeconds: 900, distanceMiles: null, flights: 120, autoregReason: null }] });
+    await db.Sessions.save(c);
+    await session.openSession(cid); await tick();
+
+    const climbRow = [...document.querySelectorAll("#overlays .overlay .setrow")]
+      .find((r) => r.textContent.includes("120 flights"));
+    ok(climbRow && climbRow.textContent.includes("120 flights · 15:00 · 8 fl/min"),
+      "[INV-STAIRS-COUNT-FLIGHTS] a climb renders as flights and a pace, not miles and mph");
+
+    climbRow.querySelector("button.ghost").click(); await tick();
+    const sheetEl = [...document.querySelectorAll("#overlays .sheet")].pop();
+    const numbers = [...sheetEl.querySelectorAll("input[type=number]")];
+    const rowLabel = (input) => input.closest(".row")?.textContent || "";
+    const flightField = numbers.find((i) => rowLabel(i).includes("Flights"));
+    const paceField = numbers.find((i) => rowLabel(i).includes("Pace"));
+    ok(flightField && paceField, "the climber sheet offers both flights and pace");
+    ok(!numbers.some((i) => rowLabel(i).includes("Distance")),
+      "[INV-STAIRS-COUNT-FLIGHTS] a climber is offered no distance field at all");
+    ok(paceField.value === "8", "pace opens as the readout derived from 120 flights in 15:00");
+
+    // Setting a pace fills in the count it reaches, and leaves the time alone.
+    paceField.value = "10";
+    paceField.dispatchEvent(new window.Event("input", { bubbles: true }));
+    ok(flightField.value === "150",
+      `[INV-STAIRS-COUNT-FLIGHTS] 10 fl/min for 15:00 fills in 150 flights (got ${flightField.value})`);
+
+    // Typing a count flips the derived side back to pace.
+    flightField.value = "120";
+    flightField.dispatchEvent(new window.Event("input", { bubbles: true }));
+    ok(paceField.value === "8",
+      `[INV-STAIRS-COUNT-FLIGHTS] 120 flights in 15:00 reads back as 8 fl/min (got ${paceField.value})`);
+
+    [...sheetEl.querySelectorAll("button")].find((b) => b.textContent === "Done").click(); await tick();
+    const saved = (await db.Sessions.get(cid)).exercises[0].sets[0];
+    ok(saved.flights === 120 && saved.durationSeconds === 900,
+      "the climb stores flights and duration only");
+    ok(!("pacePerMinute" in saved), "pace is never persisted as a third field");
+    ok(saved.distanceMiles == null,
+      "[INV-STAIRS-COUNT-FLIGHTS] a hidden distance block never writes a distance");
+
+    // The count survives the portable contract, and the key stays off records
+    // that have no flights (the conditional-spread convention).
+    const climbState = await db.Sessions.get(cid);
+    climbState.isCompleted = true;
+    await db.Sessions.save(climbState);
+    const climbBundle = JSON.parse(await db.exportJSON());
+    ok(climbBundle.schemaVersion === 6, "climbed flights ship as backup schema 6");
+    const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
+      .find((e) => e.name === "Stair Climber");
+    ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
+    const noFlights = climbBundle.sessions.flatMap((x) => x.exercises)
+      .find((e) => e.name === "Deadlift").sets[0];
+    ok(!("flights" in noFlights), "sets without flights don't grow the key (byte-stable exports)");
+    await db.Sessions.del(cid);
+  }
+
+  // A climb logged in miles before flights existed keeps its distance and stays
+  // editable — the fields follow the DATA as well as the movement, so history
+  // never disappears behind a measure it was not recorded with.
+  {
+    const lid = await session.createBlankSession();
+    const l = await db.Sessions.get(lid);
+    l.exercises.push({ order: 0, exerciseName: "Stair Climber", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null,
+      sets: [{ order: 0, weightLb: 0, reps: 1, isWarmup: false, isPerSide: false, enteredUnit: "lb",
+        flags: [], bodyFlagSite: null, bodyFlagNote: null,
+        durationSeconds: 1200, distanceMiles: 0.75, autoregReason: null }] });
+    await db.Sessions.save(l);
+    await session.openSession(lid); await tick();
+
+    const legacyRow = [...document.querySelectorAll("#overlays .overlay .setrow")]
+      .find((r) => r.textContent.includes("0.75 mi"));
+    ok(legacyRow && legacyRow.textContent.includes("0.75 mi · 20:00 · 2.3 mph"),
+      "[INV-STAIRS-COUNT-FLIGHTS] a pre-flights climb still renders the distance it holds");
+    legacyRow.querySelector("button.ghost").click(); await tick();
+    const legacySheet = [...document.querySelectorAll("#overlays .sheet")].pop();
+    const legacyRows = [...legacySheet.querySelectorAll("input[type=number]")]
+      .map((i) => i.closest(".row")?.textContent || "");
+    ok(legacyRows.some((t) => t.includes("Distance")),
+      "[INV-STAIRS-COUNT-FLIGHTS] the distance it was logged with stays editable");
+    ok(legacyRows.some((t) => t.includes("Flights")),
+      "and the new measure is offered alongside it");
+    [...legacySheet.querySelectorAll("button")].find((b) => b.textContent === "Done").click(); await tick();
+    const legacySaved = (await db.Sessions.get(lid)).exercises[0].sets[0];
+    ok(legacySaved.distanceMiles === 0.75 && legacySaved.flights == null,
+      "opening and closing the sheet converts nothing");
+    await db.Sessions.del(lid);
+  }
+
   // [INV-RUCK-CARRIES-ITS-LOAD] A ruck is born wearing its pack, and the next
   // leg inherits what the last one carried. This is asserted through the real
   // "+ Set" path rather than a hand-built record: the default previously lived
