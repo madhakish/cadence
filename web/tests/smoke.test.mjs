@@ -71,14 +71,14 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
     date: "2000-01-01T00:00:00.000Z", notes: "Fictional seed-repair sentinel",
     isCompleted: true, gymName: "Main Gym", exercises: [],
   });
-  const proteinId = await db.Protein.add({ date: "2000-01-01T00:00:00.000Z", grams: 10, label: "Fixture sentinel" });
+  const weighInId = await db.Bodyweight.add({ date: "2000-01-01T00:00:00.000Z", weightLb: 199 });
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
   ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
   ok((await db.Exercises.all()).length === 141, "seed repair does not duplicate exercises");
-  ok((await db.Protein.all()).some((entry) => entry.id === proteinId), "seed repair preserves other user stores");
+  ok((await db.Bodyweight.all()).some((entry) => entry.id === weighInId), "seed repair preserves other user stores");
   await db.Sessions.del(sentinelId);
-  await db.Protein.del(proteinId);
+  await db.Bodyweight.del(weighInId);
 }
 
 // Explicit fictional state for the remainder of the regression suite. This is
@@ -426,6 +426,33 @@ ok(ms.some((m) => m.exerciseName === "Deadlift" && m.kind === "heaviestSet"), "a
 const json = await db.exportJSON();
 const parsed = JSON.parse(json);
 ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the current backup schema");
+// Pinned to a literal, and deliberately meant to fail and be updated by hand.
+// Every other assertion here compares against the constant, so a JS-only bump
+// would drift from BackupContract.currentSchemaVersion in CadenceCore without
+// anything noticing. This is the lockstep the backup docs claim exists.
+ok(db.BACKUP_SCHEMA_VERSION === 7, `backup schema is pinned at 7 (got ${db.BACKUP_SCHEMA_VERSION})`);
+
+// An app must never write a backup it cannot itself restore. A corrupted or
+// out-of-range birthYear is clamped to the not-set sentinel on the way through
+// settings, using the SAME rule the importer validates against — otherwise it
+// would persist, ride out in an export, and be rejected on the way back in.
+{
+  const original = await db.Settings.get();
+  for (const bad of [1850, 3000, 1901, 1958.5, "1958", null]) {
+    await db.Settings.save({ ...original, birthYear: bad });
+    const back = await db.Settings.get();
+    ok(back.birthYear === 0, `an implausible birthYear (${JSON.stringify(bad)}) is clamped to 0, got ${back.birthYear}`);
+    const bundle = JSON.parse(await db.exportJSON());
+    ok(bundle.settings.birthYear === 0, `and never reaches an export (${JSON.stringify(bad)})`);
+  }
+  await db.Settings.save({ ...original, birthYear: 1958 });
+  ok((await db.Settings.get()).birthYear === 1958, "a plausible birth year is kept");
+  const roundTrip = JSON.parse(await db.exportJSON());
+  ok(roundTrip.settings.birthYear === 1958, "and is exported");
+  await db.importBundle(roundTrip);
+  ok((await db.Settings.get()).birthYear === 1958, "and survives a round trip through the importer");
+  await db.Settings.save(original);
+}
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
@@ -802,7 +829,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 6, "climbed flights ship as backup schema 6");
+    ok(climbBundle.schemaVersion === 7, "climbed flights ship as backup schema 7");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -948,10 +975,6 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const after = (await db.Tracks.byName("Incline DB Press")).baseWeightLb;
   ok(after === before + 5, `duplicate sections advance the track only once (${before}→${after})`);
 }
-
-// ---- protein add reflects in today's total ----
-await db.Protein.add({ date: new Date().toISOString(), grams: 45, label: "Shake" });
-ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
 
 // ---- program prescription integrity: DB steps, warmups, adjusted targets, slot identity ----
 {

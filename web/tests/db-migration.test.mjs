@@ -1,6 +1,10 @@
 // Opens a real prior-version fake IndexedDB database through the production
-// V4 upgrader. Fresh-database smoke coverage cannot prove user records survive
-// an onupgradeneeded transaction.
+// V4 and V5 upgraders. Fresh-database smoke coverage cannot prove user records
+// survive an onupgradeneeded transaction.
+//
+// The prior database carries a `protein` store and a `proteinTargetGrams`
+// setting, because every real pre-V5 install did. V5 drops both, and the point
+// of this test is that dropping them takes nothing else with it.
 import "fake-indexeddb/auto";
 
 const old = await new Promise((resolve, reject) => {
@@ -10,13 +14,24 @@ const old = await new Promise((resolve, reject) => {
     database.createObjectStore("exercises", { keyPath: "name" });
     database.createObjectStore("programs", { keyPath: "id", autoIncrement: true });
     database.createObjectStore("sessions", { keyPath: "id", autoIncrement: true });
+    database.createObjectStore("protein", { keyPath: "id", autoIncrement: true });
+    database.createObjectStore("bodyweight", { keyPath: "id", autoIncrement: true });
+    database.createObjectStore("settings", { keyPath: "id" });
   };
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error);
 });
 
 await new Promise((resolve, reject) => {
-  const transaction = old.transaction(["exercises", "programs", "sessions"], "readwrite");
+  const transaction = old.transaction(
+    ["exercises", "programs", "sessions", "protein", "bodyweight", "settings"], "readwrite"
+  );
+  transaction.objectStore("protein").put({ id: 1, date: "2025-01-01T12:00:00.000Z", grams: 45, label: "Retired" });
+  transaction.objectStore("bodyweight").put({ id: 1, date: "2025-01-01T12:00:00.000Z", weightLb: 201 });
+  transaction.objectStore("settings").put({
+    id: "app", unitDisplay: "lbPrimary", theme: "carbon", proteinTargetGrams: 145,
+    accessoryRestSeconds: 75, autoStartRest: true, seededAt: "2025-01-01T12:00:00.000Z",
+  });
   transaction.objectStore("exercises").put({
     name: "Back Squat", category: "Main", type: "barbell",
     movementGroup: "squat", isShelved: false,
@@ -45,8 +60,9 @@ await new Promise((resolve, reject) => {
 old.close();
 
 const db = await import("../app/js/db.js");
-const [exercise, program, session] = await Promise.all([
+const [exercise, program, session, weights, settings] = await Promise.all([
   db.Exercises.byName("Back Squat"), db.Programs.get(1), db.Sessions.get(1),
+  db.Bodyweight.all(), db.Settings.get(),
 ]);
 
 const failures = [];
@@ -63,8 +79,27 @@ check(session?.exercises?.[0]?.sets?.[0]?.plannedWeightLb === null,
 check(session?.exercises?.[0]?.sets?.[0]?.prescriptionBlock === "work",
   "historical working set block default was not migrated");
 
+// V5 retires protein logging. The store goes; nothing else does.
+const database = await new Promise((resolve, reject) => {
+  const request = indexedDB.open("cadence");
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error);
+});
+check(!database.objectStoreNames.contains("protein"), "the protein store was not dropped by V5");
+check(database.objectStoreNames.contains("bodyweight"), "V5 dropped a store it had no business touching");
+database.close();
+
+check(weights.length === 1 && weights[0].weightLb === 201,
+  "a weigh-in did not survive the store deletion alongside it");
+check(settings.proteinTargetGrams === undefined,
+  "the retired protein target is still being read back into settings");
+check(settings.birthYear === 0,
+  "an upgraded store did not get the birth-year default");
+check(settings.accessoryRestSeconds === 75 && settings.autoStartRest === true,
+  "unrelated settings changed during the V5 upgrade");
+
 if (failures.length) {
   for (const failure of failures) console.error("FAIL:", failure);
   process.exit(1);
 }
-console.log("\n9 IndexedDB migration assertions passed, 0 failed");
+console.log("\n15 IndexedDB migration assertions passed, 0 failed");

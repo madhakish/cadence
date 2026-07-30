@@ -669,6 +669,27 @@ ok(/35 g per meal/.test(C.proteinSummary(201)), "and the per-meal figure");
 // literal was the same for a 130 lb and a 250 lb lifter.
 ok(C.proteinDailyTargetGrams(250) > C.proteinDailyTargetGrams(130), "the target scales with bodyweight");
 
+// Age changes the per-meal threshold and nothing else. The daily figure is
+// already the resistance-training one, so training type does not scale it.
+ok(C.proteinPerMealGrams(201, 40) === 25, "under 65 uses the 0.25 g/kg per-meal threshold");
+ok(C.proteinPerMealGrams(201, 70) === 35, "65+ uses the higher 0.4 g/kg threshold");
+ok(C.proteinPerMealGrams(201, 65) === 35, "65 is the threshold, not one past it");
+ok(C.proteinDailyTargetGrams(201) === 145, "the daily figure does not move with age");
+// An unknown age takes the higher per-dose threshold: eating to it costs a
+// younger lifter nothing, under-dosing an older one is the failure that matters.
+ok(C.proteinMealGramsPerKg(null) === C.PROTEIN_MEAL_G_PER_KG_OLDER, "unknown age is conservative");
+ok(C.proteinPerMealGrams(201, null) === 35, "and yields the older-adult figure");
+ok(C.proteinPerMealRationale(null) === null, "nothing to explain when there is no age");
+ok(/0\.4 g\/kg/.test(C.proteinPerMealRationale(70)), "the rationale names the older threshold");
+ok(/0\.25 g\/kg/.test(C.proteinPerMealRationale(40)), "and the younger one");
+// Age is never guessed from a nonsense birth year.
+ok(C.ageFromBirthYear(1980, 2026) === 46, "a plausible birth year gives an age");
+ok(C.ageFromBirthYear(0, 2026) === null, "unset is not a birth year");
+ok(C.ageFromBirthYear(1899, 2026) === null, "before 1900 is not plausible");
+ok(C.ageFromBirthYear(2030, 2026) === null, "not yet born");
+ok(C.ageFromBirthYear(1901, 2026) === null, "past a plausible lifespan");
+ok(C.ageFromBirthYear(2026, 2026) === 0, "born this year is age zero, not unknown");
+
 // Session spacing is advisory and only speaks when it has something to say.
 ok(C.sessionSpacingShortfall(1, 3) === 2, "one day into a three-day preference is two short");
 ok(C.sessionSpacingShortfall(0, 3) === 3, "training the same day is the full shortfall");
@@ -846,6 +867,52 @@ for (const mph of [2.5, 3.0, 3.1, 3.5, 4.0, 5.5, 6.0, 7.5]) {
   eq(C.healthComparisonLabel(higher), "Health recorded 2.4 mi · you logged 2 mi", "disagreement names both sides");
   eq(C.healthComparisonLabel(C.healthCompare(2, null)), "Nothing in Health for this session", "one-sided label");
   eq(C.healthComparisonLabel(C.healthCompare(null, null)), "No conditioning distance", "empty label");
+
+  // [INV-HEALTH-IS-A-SECOND-OPINION] A read never counts Cadence's own writes.
+  // Once Cadence writes distance, bodyweight and body fat into Health, every
+  // read would otherwise find them and "confirm" the log against itself.
+  const app = "com.example.cadence";
+  ok(!C.healthSourceIsForeign(app, app),
+    "[INV-HEALTH-IS-A-SECOND-OPINION] our own write is not a second opinion");
+  ok(!C.healthSourceIsForeign("COM.EXAMPLE.CADENCE", app), "bundle ids are not case sensitive");
+  ok(C.healthSourceIsForeign("com.apple.health", app), "another app is a real second opinion");
+  ok(C.healthSourceIsForeign("com.example.cadence.watch", app),
+    "a different bundle is a different source, prefix or not");
+  ok(C.healthSourceIsForeign(null, app), "unattributable counts as foreign");
+  ok(C.healthSourceIsForeign("  ", app), "blank counts as foreign");
+  ok(C.healthSourceIsForeign(app, null),
+    "[INV-HEALTH-IS-A-SECOND-OPINION] not knowing who we are cannot mean owning everything");
+
+  const morning = min(0);
+  const yesterday = new Date(morning.getTime() - 30 * 3600 * 1000);
+  ok(C.healthIsSameWeighIn(197.2, morning, 197.2, morning), "the same weigh-in");
+  ok(C.healthIsSameWeighIn(197.2, morning, 197.3, morning), "a kilogram round-trip is the same weigh-in");
+  ok(!C.healthIsSameWeighIn(197.2, morning, 198.6, morning),
+    "a genuinely different weight the same day stays offerable");
+  ok(!C.healthIsSameWeighIn(197.2, yesterday, 197.2, morning),
+    "yesterday's weight is not a duplicate of today's");
+
+  const stage = (name, from, to) => ({ stage: name, start: min(from), end: min(to) });
+  eq(C.healthAsleepSeconds([
+    stage("inBed", 0, 30), stage("asleepCore", 30, 210), stage("asleepDeep", 210, 270),
+    stage("awake", 270, 290), stage("asleepREM", 290, 380), stage("inBed", 380, 395),
+  ]), 10800 + 3600 + 5400, "sleep is asleep stages only");
+  eq(C.healthAsleepSeconds([]), 0, "no stages is no sleep");
+  eq(C.healthAsleepSeconds([stage("inBed", 0, 480)]), 0,
+    "a night on the mattress with no staging is not eight hours of sleep");
+  eq(C.healthAsleepSeconds([stage("asleepCore", 60, 60)]), 0, "a zero-length stage is no sleep");
+  eq(C.healthAsleepSeconds([stage("asleepCore", 60, 30)]), 0, "an inverted interval is not negative sleep");
+
+  // [INV-HEALTH-IS-A-SECOND-OPINION] The anti-echo filter excludes Cadence,
+  // not third parties, so several foreign sources can stage the same night.
+  // Summing a watch and a sleep app would report sixteen hours for eight.
+  eq(C.healthAsleepSeconds([
+    stage("asleepCore", 0, 240), stage("asleepREM", 240, 480), stage("asleepUnspecified", 10, 470),
+  ]), 480 * 60, "two instruments on one night is one night");
+  eq(C.healthAsleepSeconds([stage("asleepCore", 0, 120), stage("asleepCore", 300, 360)]), 180 * 60,
+    "genuinely disjoint sleep still adds — a nap is not an overlap");
+  eq(C.healthAsleepSeconds([stage("asleepCore", 0, 240), stage("asleepCore", 200, 300)]), 300 * 60,
+    "a longer-running source extends the union, never doubles it");
 }
 
 eq(C.cardioDurationLabel(1350), "22:30", "m:ss");

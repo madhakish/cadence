@@ -156,6 +156,26 @@ When both sources agree within tolerance the row still appears, reading
 `Health agrees: 3.02 mi` — confirmation that two instruments matched is worth
 seeing, and there is no adopt button because there is nothing to decide.
 
+### Cadence never compares against itself
+
+Cadence also *writes* to Health when the write half is enabled — the workout
+it mirrors now carries the conditioning distance you logged, so a run shows up
+in Health as a run with a distance rather than as a bare duration.
+
+That creates a trap the app has to avoid deliberately: if a read counted those
+writes, Health would report Cadence's own number back and the comparison would
+agree perfectly, every time. A cross-check that always agrees is worse than no
+cross-check, because it looks like confirmation.
+
+So **every read excludes Cadence's own records.** What you see beside your log
+is only ever what some other source — a watch, a treadmill, a phone, another
+app — measured independently. A sample whose source cannot be identified is
+treated as somebody else's, on the grounds that discarding a real second
+opinion is the more damaging mistake.
+
+The same rule covers bodyweight: a weigh-in Cadence wrote to Health is never
+offered back as something to import.
+
 ### How a Health workout is matched to a session
 
 By **majority overlap with the session's time window**: a Health workout

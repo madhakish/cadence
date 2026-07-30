@@ -1,20 +1,20 @@
 import Foundation
 import SwiftData
 
-/// Frozen schema shipped as V4 — the last version that registered
-/// `ProteinEntry` and carried no date of birth on `AppSettings`.
+/// Frozen schema shipped as V5 — the last version before conditioning learned
+/// to count climbed flights. V5 is where protein logging was retired and
+/// `AppSettings.birthYear` arrived.
 ///
-/// These declarations exactly preserve V4's checksum and **must never be
-/// edited**. Until this snapshot existed the V4 enum pointed at the live model
-/// types, so any edit to a live `@Model` silently rewrote released schema
-/// history; freezing it here is what makes the V5 migration provable.
-enum CadenceSchemaV4: VersionedSchema {
-    static var versionIdentifier = Schema.Version(4, 0, 0)
+/// These declarations exactly preserve V5's checksum and **must never be
+/// edited**. Freezing it here is what makes the V6 migration provable, the same
+/// way freezing V4 made V5's provable.
+enum CadenceSchemaV5: VersionedSchema {
+    static var versionIdentifier = Schema.Version(5, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [
             Exercise.self, WorkoutSession.self, SessionExercise.self, SetEntry.self,
-            LiftTrack.self, BodyweightEntry.self, ProteinEntry.self, CheckIn.self,
+            LiftTrack.self, BodyweightEntry.self, CheckIn.self,
             Milestone.self, Gym.self, AppSettings.self, Program.self, ProgramDay.self,
             ProgramLift.self, ProgramAccessory.self, CoachingDecision.self,
         ]
@@ -186,19 +186,6 @@ enum CadenceSchemaV4: VersionedSchema {
     }
 
     @Model
-    final class ProteinEntry {
-        var date: Date
-        var grams: Double
-        var label: String
-
-        init(date: Date = .now, grams: Double, label: String) {
-            self.date = date
-            self.grams = grams
-            self.label = label
-        }
-    }
-
-    @Model
     final class CheckIn {
         var date: Date
         var siteRaw: String
@@ -253,7 +240,7 @@ enum CadenceSchemaV4: VersionedSchema {
     @Model
     final class AppSettings {
         var unitDisplayRaw: String
-        var proteinTargetGrams: Double
+        var birthYear: Int = 0
         var accessoryRestSeconds: Int
         var mainCompoundRestSeconds: Int = 300
         var olympicRestSeconds: Int = 240
@@ -270,7 +257,6 @@ enum CadenceSchemaV4: VersionedSchema {
 
         init() {
             self.unitDisplayRaw = "lbPrimary"
-            self.proteinTargetGrams = 100
             self.accessoryRestSeconds = 90
             self.healthKitEnabled = false
         }

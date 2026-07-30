@@ -1,4 +1,4 @@
-// Settings — units, rest, protein target, gyms, progression, exercise library,
+// Settings — units, rest, year of birth, gyms, progression, exercise library,
 // and data export/import (the safety net against Safari storage eviction).
 import * as ui from "../ui.js";
 import * as C from "../core.js";
@@ -82,10 +82,23 @@ export async function render(host) {
         ui.h("span", { class: "sub", text: "Presents the default membership tag once, then leaves Today ready for training." })),
       ui.toggle(settings.gymTagFirstLaunchOfDay === true, async (v) => { settings.gymTagFirstLaunchOfDay = v; await saveS(); }))));
 
-  // Protein
-  root.append(ui.h("div", { class: "section-title", text: "Protein" }));
-  root.append(ui.h("div", { class: "card" }, ui.h("div", { class: "row" }, ui.h("span", { text: "Daily target" }),
-    ui.stepper(settings.proteinTargetGrams, { min: 80, max: 300, step: 5, format: (v) => `${v} g`, onChange: async (v) => { settings.proteinTargetGrams = v; await saveS(); } }))));
+  // About you. The only thing age is used for, said plainly — a health app
+  // asking for a birthday without saying why is how people learn to distrust
+  // one. Bounded by the same plausible-lifespan window the importer enforces,
+  // so the picker cannot produce a value a backup would reject.
+  root.append(ui.h("div", { class: "section-title", text: "About you" }));
+  const thisYear = new Date().getFullYear();
+  const yearSelect = ui.h("select", { class: "input" },
+    ui.h("option", { value: "0", text: "Not set" }),
+    ...Array.from({ length: 121 }, (_, i) => {
+      const year = thisYear - i;
+      return ui.h("option", { value: String(year), text: String(year) });
+    }));
+  yearSelect.value = String(settings.birthYear || 0);
+  yearSelect.onchange = async () => { settings.birthYear = parseInt(yearSelect.value, 10) || 0; await saveS(); };
+  root.append(ui.h("div", { class: "card" },
+    ui.h("div", { class: "row" }, ui.h("span", { text: "Year of birth" }), yearSelect),
+    ui.h("div", { class: "muted", text: "Used only to adjust the per-meal protein figure on the Body screen — muscle responds less to a given dose with age. Nothing else reads it, and it never affects your program." })));
 
   // Gyms
   root.append(ui.h("div", { class: "section-title", text: "Gyms" }));
@@ -899,7 +912,7 @@ function importData() {
     r.readAsText(f);
   });
   ui.sheet({ title: "Import JSON backup", build: (c, api) => {
-    c.append(ui.h("div", { class: "muted", text: "This replaces everything the backup contains: sessions, bodyweight, protein, check-ins, milestones, programs, lift progression, gyms (incl. barcode + plates), the exercise library, and settings. Data missing from the backup is left untouched." }));
+    c.append(ui.h("div", { class: "muted", text: "This replaces everything the backup contains: sessions, bodyweight, check-ins, milestones, programs, lift progression, gyms (incl. barcode + plates), the exercise library, and settings. Data missing from the backup is left untouched." }));
     c.append(ui.field("Backup file", file));
     c.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Close", onClick: () => api.close() }));
   } });

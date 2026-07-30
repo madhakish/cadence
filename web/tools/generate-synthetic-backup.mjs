@@ -4,7 +4,7 @@
 // stalls and an auto-deload, standalone tracks in both modes at every cycle
 // phase, ~100 completed sessions touching every library exercise, all set
 // flags, drop-loads, kg-entered sets, per-side work, conditioning
-// duration/distance and climbed flights, bodyweight sets, body signals, bodyweight/protein/
+// duration/distance and climbed flights, bodyweight sets, body signals, bodyweight and
 // check-in logs, and a second (kg-plate) gym. None of the values originate
 // from a user's training, health history, or exported app data.
 //
@@ -300,11 +300,6 @@ for (let w = 0; w < 26; w++) {
   const weightLb = Math.round((150 + Math.sin(w / 3) * 2 + (rng() - 0.5)) * 10) / 10;
   await db.Bodyweight.add({ date: db.iso(d), weightLb, bodyFatPercent: w % 8 === 0 ? 20 : null, milestoneLabel: w === 7 ? "Fixture checkpoint A" : w === 21 ? "Fixture checkpoint B" : null });
 }
-for (let d = -13; d <= 0; d++) {
-  await db.Protein.add({ date: day(d).toISOString(), grams: 40, label: "Fixture entry A" });
-  await db.Protein.add({ date: day(d).toISOString(), grams: 50, label: "Fixture entry B" });
-  if (rng() < 0.6) await db.Protein.add({ date: day(d).toISOString(), grams: 25 + Math.floor(rng() * 3) * 5, label: "Fixture entry C" });
-}
 const RESPONSES = ["All clear", "Mild stiffness", "Flagged", "Comfortable"];
 for (const site of ["Shoulder", "Hip", "Knee"]) {
   for (let m = 0; m < 4; m++) {
@@ -319,6 +314,8 @@ settings.theme = "slate";
 settings.rest = { ...C.REST_DEFAULTS, secondarySeconds: 150, accessorySeconds: 75 };
 settings.accessoryRestSeconds = 75;
 settings.autoStartRest = true;
+// Fictional, and old enough to exercise the older-adult per-meal branch.
+settings.birthYear = 1958;
 await db.Settings.save(settings);
 
 // ---- export, normalize the few wall-clock stamps, write ----

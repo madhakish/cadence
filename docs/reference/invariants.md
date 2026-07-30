@@ -148,6 +148,17 @@ Matching is by majority overlap with the **session** window, because a set
 carries no timestamp. Claiming a per-set match would be precision the data
 cannot support.
 
+**A read never counts Cadence's own writes. Comparing the log against a mirror
+of itself is not a second opinion.**
+
+> Cadence mirrors workouts, conditioning distance, bodyweight and body fat into
+> Health. Every read must exclude that source, or the cross-check finds those
+> writes and agrees perfectly every time — which reads as corroboration and is
+> worse than showing nothing. A sample whose source cannot be identified counts
+> as foreign: dropping one we cannot prove is ours would silently discard a real
+> second opinion, where the opposite mistake is visible the first time the app
+> offers the lifter their own number back.
+
 ---
 
 ## Milestones
