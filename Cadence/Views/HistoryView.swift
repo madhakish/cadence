@@ -244,24 +244,31 @@ struct SessionDetailView: View {
             .flatMap(\.workingSets)
     }
 
-    /// [INV-STAIRS-COUNT-FLIGHTS] Conditioning that measures ground covered.
-    /// A climber is conditioning and Health may well have counted its steps as
-    /// walking distance, but a flight count is not a distance and writing miles
-    /// onto it would invent a measurement the machine never reported.
+    /// [INV-STAIRS-COUNT-FLIGHTS] Conditioning that measures ground covered —
+    /// the sets a Health distance can honestly be compared against and written
+    /// onto. A flight count is not a distance, and spreading miles across one
+    /// would invent a measurement the machine never reported.
+    ///
+    /// Keyed on what each set HOLDS, not on the movement alone: a climb logged
+    /// in miles before flights existed is still a logged distance, and dropping
+    /// it here while `loggedMiles` still counted it would make the comparison
+    /// and the rewrite disagree — every tap of "Use Health's…" would then move
+    /// the total further from Health instead of onto it.
     private var distanceLoggingSets: [SetEntry] {
-        session.orderedExercises
-            .filter { entry in
-                guard entry.exercise?.type == .conditioning else { return false }
-                guard let name = entry.exercise?.name else { return true }
-                return !CardioFormat.climbsFlights(exerciseName: name)
-            }
-            .flatMap(\.workingSets)
-            .filter { !(($0.flights ?? 0) > 0) }
+        conditioningSets.filter { set in
+            if (set.flights ?? 0) > 0 { return false }
+            if (set.distanceMiles ?? 0) > 0 { return true }
+            // Nothing logged either way: only a movement that covers ground can
+            // receive the whole-total fallback below.
+            let name = set.sessionExercise?.exercise?.name ?? ""
+            return !CardioFormat.climbsFlights(exerciseName: name)
+        }
     }
 
-    /// Everything this session logged as conditioning distance.
+    /// Everything this session logged as conditioning distance. Same basis as
+    /// the rewrite, so adopting Health's number lands exactly on it.
     private var loggedMiles: Double? {
-        let total = conditioningSets.compactMap(\.distanceMiles).reduce(0, +)
+        let total = distanceLoggingSets.compactMap(\.distanceMiles).reduce(0, +)
         return total > 0 ? total : nil
     }
 

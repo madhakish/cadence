@@ -954,12 +954,15 @@ private struct SetRow: View {
     private var isCardio: Bool { exercise?.type == .conditioning }
     private var isTimed: Bool { exercise?.type == .timed }
 
-    /// The affordance line names the fields the sheet will actually show, so
-    /// the row never advertises one the sheet withholds.
+    /// The affordance line names the fields the sheet will actually show, from
+    /// the same rule the sheet uses, so the row never advertises one the sheet
+    /// withholds — nor understates it, which is what a hand-written string did
+    /// for a climb still holding a legacy distance.
     private var cardioHint: String {
-        let climbs = CardioFormat.climbsFlights(exerciseName: exercise?.name ?? "")
-        if climbs || (set.flights ?? 0) > 0 { return "flights · time · pace" }
-        return "distance · time · incline"
+        CardioFormat.fields(exerciseName: exercise?.name ?? "",
+                            flights: set.flights,
+                            distanceMiles: set.distanceMiles,
+                            inclinePercent: set.inclinePercent).label
     }
 
     var body: some View {
@@ -1089,16 +1092,35 @@ private struct CardioSetSheet: View {
     /// and the pace is the readout.
     @State private var flightDerived: FlightDerived = .pace
 
-    private var carriesLoad: Bool { CardioFormat.carriesLoad(exerciseName: exerciseName) }
+    /// [INV-STAIRS-COUNT-FLIGHTS] Which fields this sheet offers, captured
+    /// ONCE when it opens.
+    ///
+    /// Deliberately state rather than a computed property: the rule reads the
+    /// values being edited, so recomputing it would let a field delete itself
+    /// mid-edit. Stepping a legacy climb's distance to zero would remove the
+    /// distance and speed rows on the spot — and permanently, since reopening
+    /// re-evaluates the same now-false condition — leaving no way to retype the
+    /// number that had just been cleared.
+    @State private var fields: CardioFormat.CardioFields
+
+    init(set: SetEntry, exerciseName: String, onDelete: @escaping () -> Void) {
+        self._set = Bindable(wrappedValue: set)
+        self.exerciseName = exerciseName
+        self.onDelete = onDelete
+        self._fields = State(initialValue: CardioFormat.fields(
+            exerciseName: exerciseName,
+            flights: set.flights,
+            distanceMiles: set.distanceMiles,
+            inclinePercent: set.inclinePercent
+        ))
+    }
+
+    private var carriesLoad: Bool { fields.load }
     private var carryLb: Double { self.set.weightLb }
 
-    /// [INV-STAIRS-COUNT-FLIGHTS] Which pair of fields this movement is
-    /// measured by. A set already holding the other measure keeps that block
-    /// too, so conditioning logged before flights existed stays editable rather
-    /// than becoming unreachable behind a field it never used.
-    private var climbsFlights: Bool { CardioFormat.climbsFlights(exerciseName: exerciseName) }
-    private var showsFlights: Bool { climbsFlights || flights > 0 }
-    private var showsDistance: Bool { !climbsFlights || miles > 0 }
+    private var showsFlights: Bool { fields.flights }
+    private var showsDistance: Bool { fields.distance }
+    private var showsIncline: Bool { fields.incline }
 
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
@@ -1204,21 +1226,9 @@ private struct CardioSetSheet: View {
         }
     }
 
-    /// Names only the fields this sheet is actually showing. Assembled from the
-    /// same conditions the rows are, so the two cannot drift: a hand-written
-    /// string had already fallen out of step with the incline and speed rows.
-    private var sectionHeader: String {
-        var fields: [String] = []
-        if carriesLoad { fields.append("Load") }
-        if showsFlights { fields.append("flights") }
-        if showsDistance { fields.append("distance") }
-        fields.append("time")
-        if showsDistance { fields.append("speed") }
-        if showsFlights { fields.append("pace") }
-        if !climbsFlights || incline > 0 { fields.append("incline") }
-        if !carriesLoad, let first = fields.first { fields[0] = first.capitalized }
-        return fields.joined(separator: " · ")
-    }
+    /// Names only the fields this sheet is actually showing — the same list the
+    /// rows are built from, so the two cannot drift.
+    private var sectionHeader: String { fields.headerLabel }
 
     /// Which value is the readout rather than the entry, so the lifter can see
     /// which number the other two are driving.
@@ -1300,7 +1310,7 @@ private struct CardioSetSheet: View {
     /// row unless a legacy set already carries one.
     @ViewBuilder
     private var inclineRow: some View {
-        if !climbsFlights || incline > 0 {
+        if showsIncline {
             Stepper("Incline: \(incline > 0 ? "\(Weight.trim(incline))%" : "—")",
                     value: Binding(get: { incline }, set: { set.inclinePercent = $0 > 0 ? $0 : nil }),
                     in: 0...30, step: 0.5)

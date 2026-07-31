@@ -1567,6 +1567,41 @@ export function cardioFlightsLabel(flights) {
   return `${text} ${text === "1" ? "flight" : "flights"}`;
 }
 
+// Which fields a conditioning set is edited with. Pure mirror of
+// CadenceCore/CardioFormat.swift (`CardioFields`, `fields`).
+//
+// Decided by the movement AND by what the set already holds: a climb logged in
+// miles before flights existed keeps its distance block, because a field that
+// disappears takes the only way to correct the value with it.
+//
+// One source for the editor's rows, its section header, and the row's
+// affordance line, so a row can never advertise a field the editor withholds.
+export function cardioFields(exerciseName, flights, distanceMiles, inclinePercent) {
+  const climbs = cardioClimbsFlights(exerciseName);
+  const f = {
+    load: cardioCarriesLoad(exerciseName),
+    flights: climbs || flights > 0,
+    distance: !climbs || distanceMiles > 0,
+    // A climber's grade is the machine, not a setting — unless a legacy set
+    // already carries one.
+    incline: !climbs || inclinePercent > 0,
+  };
+  const names = [];
+  if (f.load) names.push("load");
+  if (f.flights) names.push("flights");
+  if (f.distance) names.push("distance");
+  names.push("time");
+  if (f.distance) names.push("speed");
+  if (f.flights) names.push("pace");
+  if (f.incline) names.push("incline");
+  f.names = names;
+  f.label = names.join(" · ");
+  f.headerLabel = names.length
+    ? [names[0][0].toUpperCase() + names[0].slice(1), ...names.slice(1)].join(" · ")
+    : "";
+  return f;
+}
+
 // Conditioning that carries external load. A ruck is a walk with a pack on,
 // and the pack weight is the training variable — progressing it is the whole
 // point. Zeroing the load the way unloaded cardio does makes a 60 lb ruck

@@ -71,9 +71,14 @@ A climber gets **no incline row**. The grade is the machine, not a setting.
 ### Climbs you logged before this existed
 
 Nothing was converted. A stair-climber set recorded as a distance keeps that
-distance, still shows it in history, and still opens with the distance, speed,
-and incline fields it was logged with — so it stays editable rather than
-disappearing behind a field it never used. New climbs get flights.
+distance, still shows it in history, and still opens with the distance and
+speed fields — plus an incline row if it carries an incline — so what you
+logged stays editable rather than disappearing behind a field it never used.
+New climbs get flights.
+
+The fields are decided when the editor opens and stay put while it is open.
+Clearing a legacy distance to zero does not make the field vanish under you;
+it is still there to type the corrected number into.
 
 Apple Health comparison is unaffected: it reports **distance**, and a flight
 count is not a distance. A session whose only conditioning is a climb offers no
@@ -136,8 +141,10 @@ Tapping **Use Health's …** rewrites only that session's conditioning
 distance. If the session has several conditioning sets, the new total is
 spread across them in proportion to what they already held, so a two-leg
 walk keeps its shape instead of collapsing into the first set. Sets measured
-in flights are left out of that spread entirely — a flight count is not a
-distance, and there is no honest way to write miles onto one.
+in flights sit outside this entirely — a flight count is not a distance, and
+there is no honest way to write miles onto one. They are left out of the
+comparison total for the same reason, so the number you are shown and the
+number the button rewrites are always the same number.
 
 ### When nothing appears
 

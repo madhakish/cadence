@@ -153,11 +153,21 @@ final class PersistenceMigrationTests: XCTestCase {
         climb.distanceMiles = nil
         try context.save()
 
-        let reopened = try XCTUnwrap(
-            try container.mainContext.fetch(FetchDescriptor<WorkoutSession>()).first)
+        // Re-read through a SECOND container on the same file. Fetching again
+        // from the context that wrote it returns the same registered object and
+        // would pass whether or not the column ever reached disk, which is the
+        // only thing this half of the test is for.
+        let reopenedContainer = try ModelContainer(
+            for: schema, migrationPlan: CadenceV5MigrationPlan.self,
+            configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+        )
         let saved = try XCTUnwrap(
-            reopened.orderedExercises.first { $0.exercise?.name == "Stair Climber" }?.orderedSets.first)
-        XCTAssertEqual(saved.flights, 160)
+            try reopenedContainer.mainContext
+                .fetch(FetchDescriptor<WorkoutSession>()).first?
+                .orderedExercises.first { $0.exercise?.name == "Stair Climber" }?
+                .orderedSets.first)
+        XCTAssertEqual(saved.flights, 160, "the new column did not survive a reopen")
+        XCTAssertNil(saved.distanceMiles, "clearing the legacy distance did not persist")
         XCTAssertEqual(CardioFormat.flightPace(flights: saved.flights,
                                                durationSeconds: saved.durationSeconds), 8.0)
     }

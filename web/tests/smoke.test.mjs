@@ -865,6 +865,22 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
       "[INV-STAIRS-COUNT-FLIGHTS] the distance it was logged with stays editable");
     ok(legacyRows.some((t) => t.includes("Flights")),
       "and the new measure is offered alongside it");
+
+    // The row's affordance line and the sheet's rows come from one rule, so the
+    // line can neither promise a field the sheet withholds nor — as a
+    // hand-written string did for exactly this legacy case — understate it.
+    const hinted = (legacyRow.textContent.match(/flights|distance|speed|pace|incline|load/g) || []);
+    for (const field of ["flights", "distance", "speed", "pace"]) {
+      ok(hinted.includes(field),
+        `[INV-STAIRS-COUNT-FLIGHTS] the row names "${field}", which its sheet actually shows`);
+    }
+    ok(legacyRows.some((t) => t.includes("Speed")) && legacyRows.some((t) => t.includes("Pace")),
+      "and the sheet does show both readouts the row named");
+    // This climb carries no incline, so neither names one: a legacy DISTANCE
+    // brings its block back, a legacy incline is a separate question.
+    ok(!hinted.includes("incline") && !legacyRows.some((t) => t.includes("Incline")),
+      "[INV-STAIRS-COUNT-FLIGHTS] a climber with no logged incline is offered none");
+
     [...legacySheet.querySelectorAll("button")].find((b) => b.textContent === "Done").click(); await tick();
     const legacySaved = (await db.Sessions.get(lid)).exercises[0].sets[0];
     ok(legacySaved.distanceMiles === 0.75 && legacySaved.flights == null,

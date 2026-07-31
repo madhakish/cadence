@@ -700,9 +700,7 @@ export async function openSession(id) {
   // flights / time / pace for a climber. Names the fields the sheet will
   // actually show, so the row never advertises one the sheet withholds.
   function cardioHint(exerciseName, s) {
-    if (C.cardioClimbsFlights(exerciseName) || s.flights > 0) return " flights · time · pace";
-    if (C.cardioCarriesLoad(exerciseName)) return " load · distance · time";
-    return " distance · time · incline";
+    return ` ${C.cardioFields(exerciseName, s.flights, s.distanceMiles, s.inclinePercent).label}`;
   }
 
   // [INV-CARDIO-SOLVES-THE-THIRD] Distance and speed are two views of one
@@ -721,9 +719,14 @@ export async function openSession(id) {
     ui.sheet({
       title: `Log conditioning — ${se.exerciseName}`,
       build: (c, api) => {
-        const climbs = C.cardioClimbsFlights(se.exerciseName);
-        const showFlights = climbs || s.flights > 0;
-        const showDistance = !climbs || s.distanceMiles > 0;
+        // Captured ONCE, here, from the values as they are when the sheet
+        // opens. The rule reads what is being edited, so re-deriving it later
+        // would let a field delete itself mid-edit: clearing a legacy climb's
+        // distance would take the distance and speed rows with it and leave no
+        // way to retype the number that had just been cleared.
+        const fields = C.cardioFields(se.exerciseName, s.flights, s.distanceMiles, s.inclinePercent);
+        const showFlights = fields.flights;
+        const showDistance = fields.distance;
         const minInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", placeholder: "0", value: s.durationSeconds > 0 ? String(Math.floor(s.durationSeconds / 60)) : "" });
         const secInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", max: "59", placeholder: "0", value: s.durationSeconds > 0 ? String(s.durationSeconds % 60) : "" });
         const readSecs = () => (parseInt(minInput.value, 10) || 0) * 60 + (parseInt(secInput.value, 10) || 0);
@@ -812,7 +815,7 @@ export async function openSession(id) {
         // A climber's grade is the machine, not a setting, so it gets no
         // incline row unless a legacy set already carries one.
         let incline = s.inclinePercent > 0 ? s.inclinePercent : 0;
-        if (!climbs || incline > 0) {
+        if (fields.incline) {
           c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Incline" }),
             ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
         }
@@ -820,7 +823,7 @@ export async function openSession(id) {
         // variable, so loaded carries keep a load where plain cardio zeroes it.
         // The load is established when the set is created, so the sheet only
         // ever edits what is already there — it never re-defaults.
-        const carries = C.cardioCarriesLoad(se.exerciseName);
+        const carries = fields.load;
         let carryLb = carries ? (s.weightLb || 0) : 0;
         if (carries) {
           c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Load" }),

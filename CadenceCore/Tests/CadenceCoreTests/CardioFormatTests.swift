@@ -151,6 +151,41 @@ final class CardioFormatTests: XCTestCase {
             "legacy conditioning is untouched by the flights argument")
     }
 
+    // [INV-STAIRS-COUNT-FLIGHTS]
+    func testEditorFieldsFollowTheMovementAndWhatTheSetHolds() {
+        let climb = CardioFormat.fields(exerciseName: "Stair Climber", flights: 160,
+                                        distanceMiles: nil, inclinePercent: nil)
+        XCTAssertEqual(climb.names, ["flights", "time", "pace"])
+        XCTAssertEqual(climb.label, "flights · time · pace")
+        XCTAssertEqual(climb.headerLabel, "Flights · time · pace")
+        XCTAssertFalse(climb.incline, "a climber's grade is the machine, not a setting")
+
+        let walk = CardioFormat.fields(exerciseName: "Walk", flights: nil,
+                                       distanceMiles: 3, inclinePercent: nil)
+        XCTAssertEqual(walk.names, ["distance", "time", "speed", "incline"])
+        XCTAssertFalse(walk.flights, "a walk covers ground; it has no flight count")
+
+        let ruck = CardioFormat.fields(exerciseName: "Ruck", flights: nil,
+                                       distanceMiles: 3, inclinePercent: nil)
+        XCTAssertEqual(ruck.names, ["load", "distance", "time", "speed", "incline"],
+                       "the list has to name every row the editor shows, load and incline included")
+        XCTAssertEqual(ruck.headerLabel, "Load · distance · time · speed · incline")
+
+        // A climb logged before flights existed keeps the block it was recorded
+        // with — a field that disappears takes the only way to fix the value.
+        let legacy = CardioFormat.fields(exerciseName: "Stair Climber", flights: nil,
+                                         distanceMiles: 0.75, inclinePercent: 6)
+        XCTAssertEqual(legacy.names, ["flights", "distance", "time", "speed", "pace", "incline"])
+        XCTAssertTrue(legacy.distance, "the distance it holds stays editable")
+        XCTAssertTrue(legacy.incline, "so does an incline it already carries")
+
+        // An empty climb is still a climb: no distance block appears just
+        // because nothing has been logged yet.
+        let empty = CardioFormat.fields(exerciseName: "Stair Climber", flights: nil,
+                                        distanceMiles: nil, inclinePercent: nil)
+        XCTAssertEqual(empty.names, ["flights", "time", "pace"])
+    }
+
     // [INV-RUCK-CARRIES-ITS-LOAD]
     func testLoadedCarries() {
         XCTAssertTrue(CardioFormat.carriesLoad(exerciseName: "Ruck"))

@@ -985,6 +985,23 @@ eq(C.cardioSetLabel(null, null, null, null, 160), "160 flights",
   "no time → no pace, the same way distance alone shows no mph");
 eq(C.cardioSetLabel(1.5, 1350, null), "1.5 mi · 22:30 · 4 mph",
   "legacy conditioning is untouched by the flights argument");
+// The editor's rows, its header, and the row's affordance line all read from
+// one rule, so a row can never advertise a field the editor withholds.
+eq(C.cardioFields("Stair Climber", 160, null, null).names.join(","), "flights,time,pace",
+  "[INV-STAIRS-COUNT-FLIGHTS] a climber gets flights and a pace, and no incline");
+eq(C.cardioFields("Stair Climber", 160, null, null).label, "flights · time · pace", "affordance line");
+eq(C.cardioFields("Stair Climber", 160, null, null).headerLabel, "Flights · time · pace", "section header");
+eq(C.cardioFields("Walk", null, 3, null).names.join(","), "distance,time,speed,incline",
+  "a walk covers ground; it has no flight count");
+eq(C.cardioFields("Ruck", null, 3, null).names.join(","), "load,distance,time,speed,incline",
+  "the list names every row the editor shows, load and incline included");
+// A climb logged before flights existed keeps the block it was recorded with —
+// a field that disappears takes the only way to fix the value with it.
+eq(C.cardioFields("Stair Climber", null, 0.75, 6).names.join(","),
+  "flights,distance,time,speed,pace,incline",
+  "[INV-STAIRS-COUNT-FLIGHTS] a pre-flights climb keeps its distance and incline editable");
+eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,time,pace",
+  "an empty climb grows no distance block just because nothing is logged yet");
 
 // ---- RestClock parity (RestClockTests.swift) ----
 {

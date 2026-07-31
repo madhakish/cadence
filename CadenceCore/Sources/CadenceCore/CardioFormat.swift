@@ -132,6 +132,63 @@ public enum CardioFormat {
     /// steps a barbell lift wants.
     public static let loadIncrementLb: Double = 10
 
+    // MARK: - Which fields an editor offers
+
+    /// Which fields a conditioning set is edited with.
+    ///
+    /// Decided by the movement AND by what the set already holds: a climb
+    /// logged in miles before flights existed keeps its distance block, because
+    /// a field that disappears takes the only way to correct the value with it.
+    ///
+    /// One source for the editor's rows, the editor's section header, and the
+    /// row's affordance line, so a row can never advertise a field the editor
+    /// withholds — the three had already drifted apart when each decided for
+    /// itself. Mirrored in web/app/js/core.js (`cardioFields`).
+    public struct CardioFields: Equatable, Sendable {
+        public let load: Bool
+        public let flights: Bool
+        public let distance: Bool
+        public let incline: Bool
+
+        /// Ordered field names, matching the order the rows appear in.
+        public var names: [String] {
+            var out: [String] = []
+            if load { out.append("load") }
+            if flights { out.append("flights") }
+            if distance { out.append("distance") }
+            out.append("time")
+            if distance { out.append("speed") }
+            if flights { out.append("pace") }
+            if incline { out.append("incline") }
+            return out
+        }
+
+        /// "flights · time · pace" — the affordance line under a set row.
+        public var label: String { names.joined(separator: " · ") }
+
+        /// "Flights · time · pace" — the same list as an editor section header.
+        public var headerLabel: String {
+            var out = names
+            guard let first = out.first else { return "" }
+            out[0] = first.prefix(1).uppercased() + String(first.dropFirst())
+            return out.joined(separator: " · ")
+        }
+    }
+
+    public static func fields(
+        exerciseName: String, flights: Double?, distanceMiles: Double?, inclinePercent: Double?
+    ) -> CardioFields {
+        let climbs = climbsFlights(exerciseName: exerciseName)
+        return CardioFields(
+            load: carriesLoad(exerciseName: exerciseName),
+            flights: climbs || (flights ?? 0) > 0,
+            distance: !climbs || (distanceMiles ?? 0) > 0,
+            // A climber's grade is the machine, not a setting — unless a legacy
+            // set already carries one.
+            incline: !climbs || (inclinePercent ?? 0) > 0
+        )
+    }
+
     /// Formats a duration as minutes and seconds, including hours when needed.
     public static func durationLabel(seconds: Int) -> String {
         let s = max(0, seconds)
