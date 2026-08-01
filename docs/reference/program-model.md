@@ -49,6 +49,13 @@ alphabetical display fallback and an authored hardest-first day quietly runs
 in dictionary order. See
 [Program files](program-file.md) for the rule's authorship.
 
+Resident web stores get the same repair, not just imports: normalization
+stamps an all-tied day at read time and the launch read persists it (older
+databases get it inside the V4 upgrade rewrite). Native legacy stores keep
+their documented main-first fallback instead — SwiftData's to-many
+relationships are unordered, so a pre-#69 store never kept an authored
+sequence to recover.
+
 The ordered day matrix is the prescription source of truth. For example,
 `Lower A: Back Squat/main + Deadlift/complementary` and
 `Lower B: Deadlift/main + Back Squat/complementary` are four independent

@@ -840,8 +840,11 @@ struct ProgramEditorView: View {
             let dayCopy = ProgramDay(name: sourceDay.name, order: sourceDay.order)
             context.insert(dayCopy)
             copy.days.append(dayCopy)
-            for source in sourceDay.orderedLifts {
-                let lift = ProgramLift(exerciseName: source.exerciseName, role: source.role, order: source.order,
+            // Stamp the clone's slot orders from the enumerated DISPLAY order:
+            // a legacy tied-order day (pre-#69 store) freezes exactly the
+            // sequence its source already shows, instead of cloning the tie.
+            for (index, source) in sourceDay.orderedLifts.enumerated() {
+                let lift = ProgramLift(exerciseName: source.exerciseName, role: source.role, order: index,
                                        prescription: source.prescription, warmupPolicy: source.warmupPolicy,
                                        baseWeightLb: source.baseWeightLb, estimatedMaxLb: source.estimatedMaxLb,
                                        stallCount: source.stallCount, lastIncrementLb: source.lastIncrementLb)
@@ -862,8 +865,8 @@ struct ProgramEditorView: View {
                 context.insert(lift)
                 dayCopy.lifts.append(lift)
             }
-            for source in sourceDay.orderedAccessories {
-                let accessory = ProgramAccessory(exerciseName: source.exerciseName, order: source.order,
+            for (index, source) in sourceDay.orderedAccessories.enumerated() {
+                let accessory = ProgramAccessory(exerciseName: source.exerciseName, order: index,
                                                  sets: source.sets, minReps: source.minReps, maxReps: source.maxReps,
                                                  currentReps: source.currentReps, targetSeconds: source.targetSeconds,
                                                  durationStepSeconds: source.durationStepSeconds, weightLb: source.weightLb,
@@ -1064,7 +1067,7 @@ private struct ProgramLiftRow: View {
             // on the RESOLVED style so it never appears where the engine would
             // ignore it (automatic on a complementary slot resolves secondary).
             if deloadKnobApplies {
-                Stepper("Deload: \((lift.deloadMultiplier * 100).formatted(.number.precision(.fractionLength(0...1))))% of rotation-1 base",
+                Stepper("Deload: \(Weight.trim(lift.deloadMultiplier * 100))% of rotation-1 base",
                         value: $lift.deloadMultiplier, in: 0.5...0.9, step: 0.025)
             }
             if lift.prescription == .doubleProgression {

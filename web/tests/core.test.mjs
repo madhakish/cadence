@@ -674,6 +674,14 @@ eq(C.authoredSlotOrders([]).length, 0, "empty in, empty out");
     { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "complementary", "strength", "automatic",
     { deloadMultiplier: 0.85 });
   eq(secondary.weightLb, 150, "a complementary slot resolves secondary and keeps its own fixed 0.75 deload");
+  // Zero is "unset", never "lift nothing" — no importer admits a 0, but a
+  // hand-edited store must not plan an empty bar, and both branches must
+  // agree with the native engine's identical guard.
+  eq(deload({ deloadMultiplier: 0 }).weightLb, 155, "a zero multiplier falls back to the table's 0.775 on wave");
+  const offsetZero = C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "offsetWave",
+    { loadOffsetLb: 10, peakOffsetLb: 25, deloadMultiplier: 0 });
+  eq(offsetZero.weightLb, 155, "a zero multiplier falls back to 0.775 on offsetWave too");
 }
 
 // A peak single's seed is a training max, so it follows the program's focus.

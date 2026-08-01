@@ -614,7 +614,10 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
       1: state.baseWeightLb,
       2: state.baseWeightLb + config.loadOffsetLb,
       3: state.baseWeightLb + config.peakOffsetLb,
-      4: state.baseWeightLb * config.deloadMultiplier,
+      // Zero is "unset", never "lift nothing" — same rescue as the wave
+      // branch below and as ProgramEngine's plan, so both cores agree even
+      // for a hand-edited store the validators would refuse to import.
+      4: state.baseWeightLb * (config.deloadMultiplier > 0 ? config.deloadMultiplier : 0.775),
     })[p];
     const phase = PHASES[p];
     return { weightLb: roundTo(weight, roundingLb), sets: phase.sets, reps: phase.reps, phase: p, cycleNumber: state.cycleNumber };
@@ -650,7 +653,7 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
   // Keyed on the resolved TABLE, not the style string, so an unknown style
   // falling back to the wave keeps parity with native's `?? .automatic`.
   const multiplier = table === byStyle.wave && p === 4
-    ? (config.deloadMultiplier > 0 ? config.deloadMultiplier : 0.775)
+    ? (config.deloadMultiplier > 0 ? config.deloadMultiplier : tableMultiplier)
     : tableMultiplier;
   return {
     weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),

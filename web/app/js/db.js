@@ -162,7 +162,7 @@ const normalizeProgram = (p) => {
     reliableHistoryStart: p.reliableHistoryStart || null,
     preferredSessionSpacingDays: Number.isInteger(p.preferredSessionSpacingDays) ? p.preferredSessionSpacingDays : 3,
     maximumAddedSetsPerRotation: Number.isInteger(p.maximumAddedSetsPerRotation) ? p.maximumAddedSetsPerRotation : 6,
-    days: (p.days || []).map((day, dayIndex) => ({
+    days: (p.days || []).map((day, dayIndex) => normalizeDaySlotOrders({
       ...day,
       lifts: (day.lifts || []).map((lift, slotIndex) => ({
         ...lift,
@@ -199,6 +199,24 @@ const normalizeProgram = (p) => {
     })),
   };
 };
+// An all-tied day predates authored slot ordering: an explicitly tied file
+// imported before the authored-order fix (pre-#69 native exports carried
+// order 0 on every slot), or a degenerate editor sequence. The tie holds no
+// information, so array position — the authored sequence — is stamped, per
+// kind, exactly as the importers do. Distinct and partially tied orders are
+// the author's numbers and pass through verbatim (core authoredSlotOrders).
+const normalizeDaySlotOrders = (day) => {
+  C.authoredSlotOrders(day.lifts.map((lift) => lift.order))
+    .forEach((order, i) => { day.lifts[i].order = order; });
+  C.authoredSlotOrders(day.accessories.map((accessory) => accessory.order))
+    .forEach((order, i) => { day.accessories[i].order = order; });
+  return day;
+};
+// Detects that normalization repaired a resident store's slot orders, so
+// Programs.all persists the repair once instead of re-deriving it per read.
+const slotOrdersRepaired = (raw, normalized) => (raw.days || []).some((day, dayIndex) =>
+  ["lifts", "accessories"].some((kind) => (day[kind] || []).some((slot, slotIndex) =>
+    slot.order !== normalized.days[dayIndex][kind][slotIndex].order)));
 const normalizeGym = (g) => ({
   ...g,
   id: isPortableUUID(g.id) ? g.id : stableID(`gym:${g.name}`),
@@ -355,7 +373,7 @@ export const Programs = {
   async all() {
     const all = await getAll("programs");
     const normalized = all.map(normalizeProgram);
-    await Promise.all(normalized.filter((p, i) => p.uuid !== all[i].uuid || !hasPortableProgramSlots(all[i])).map((p) => put("programs", p)));
+    await Promise.all(normalized.filter((p, i) => p.uuid !== all[i].uuid || !hasPortableProgramSlots(all[i]) || slotOrdersRepaired(all[i], p)).map((p) => put("programs", p)));
     return normalized;
   },
   get: (id) => get("programs", id),
@@ -1114,11 +1132,8 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
     for (const program of importedPrograms) {
       for (const day of program.days || []) {
         for (const [kind, slots] of [["lift", day.lifts || []], ["accessory", day.accessories || []]]) {
-          // A bundle whose slots all tie on order carries no ordering
-          // information beyond the array — keep the authored sequence rather
-          // than letting the tie fall to the alphabetical display fallback.
-          const orders = C.authoredSlotOrders(slots.map((slot) => slot.order ?? 0));
-          slots.forEach((slot, index) => { slot.order = orders[index]; });
+          // Slot-order ties were already resolved to the authored array
+          // sequence by normalizeProgram above (normalizeDaySlotOrders).
           slots.forEach((slot, index) => {
             if (slot.id && !seen.has(slot.id)) { seen.add(slot.id); return; }
             if (slot.id) repairedSlotIDs += 1;

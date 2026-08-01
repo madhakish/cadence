@@ -423,8 +423,13 @@ public enum ProgramEngine {
             // making this the adjustable side: volume stays cut either way,
             // and a lifter who finds 77.5% unproductively light raises the
             // intensity rather than adding sets back.
+            // Zero is "unset", never "lift nothing" — mirror core.js's guard
+            // inside the shared engine, not only in the app-layer builder, so
+            // both cores agree for every caller.
             prescription = (phase.sets, phase.reps,
-                            phase == .deload ? configuration.deloadMultiplier : phase.multiplier)
+                            phase == .deload
+                                ? (configuration.deloadMultiplier > 0 ? configuration.deloadMultiplier : phase.multiplier)
+                                : phase.multiplier)
         case .linearFives, .texasVolume, .texasLight, .texasIntensity:
             // Sets-across at the slot's own base; the base moves per exposure
             // (advanceLinearLift), so the 4-week phase never shapes the weight.
@@ -480,7 +485,10 @@ public enum ProgramEngine {
             case .volume: weight = state.baseWeightLb
             case .load: weight = state.baseWeightLb + configuration.loadOffsetLb
             case .peak: weight = state.baseWeightLb + configuration.peakOffsetLb
-            case .deload: weight = state.baseWeightLb * configuration.deloadMultiplier
+            case .deload:
+                // Same zero-is-unset rescue as the wave branch above.
+                weight = state.baseWeightLb
+                    * (configuration.deloadMultiplier > 0 ? configuration.deloadMultiplier : phase.multiplier)
             }
             return SessionPlan(
                 weightLb: Weight.round(weight, to: roundingLb),

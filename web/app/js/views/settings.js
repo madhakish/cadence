@@ -524,7 +524,8 @@ async function programDayEditor(p, day) {
               ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${l.exerciseName} later`, onClick: async () => { if (moveSlot(day.lifts, l, 1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.lifts = day.lifts.filter((x) => x !== l); await Programs.save(p); draw(); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
-              ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); })),
+              // draw(): the deload row's visibility resolves through role.
+              ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); draw(); })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Prescription" }), (() => {
               const select = ui.h("select", {}, ...C.selectablePrescriptions([
                 ["automatic", "Automatic"], ["wave", "Strength wave"], ["offsetWave", "Strength wave — offsets"],

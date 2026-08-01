@@ -284,9 +284,11 @@ export async function createProgramFromTemplate(template) {
     nextDayIndex: 0, roundingLb: template.roundingLb, isActive: programs.length === 0,
     days: template.days.map((d, i) => ({
       name: d.name, order: i,
-      // Slot order is stamped from the template author's written sequence —
-      // native instantiate has done this since PR #69; without it the web copy
-      // left every order at 0 and display fell to the alphabetical fallback.
+      // Slot order is stamped from the template author's written sequence,
+      // matching native instantiate (PR #69). Explicit rather than load-bearing:
+      // normalizeProgram already fills an ABSENT order with the array position,
+      // so template programs were never actually tied — this just says so at
+      // the write site instead of relying on the save-path repair.
       lifts: d.lifts.map((l, slotOrder) => {
         const { startFraction = 0, sets = 0, ...record } = l;
         record.order = slotOrder;

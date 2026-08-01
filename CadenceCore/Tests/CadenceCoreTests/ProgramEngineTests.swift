@@ -274,6 +274,15 @@ final class ProgramEngineTests: XCTestCase {
                                       roundingLb: 5, style: .automatic,
                                       configuration: .init(deloadMultiplier: 0.85))
         XCTAssertEqual(peak.weightLb, 235)
+        // Zero is "unset", never "lift nothing" — the shared engine guards it
+        // itself (mirroring core.js), not only the app-layer config builder.
+        XCTAssertEqual(deload(.init(deloadMultiplier: 0)).weightLb, 155,
+                       "a zero multiplier falls back to the historical 0.775")
+        let offsetZero = ProgramEngine.plan(for: CycleState(baseWeightLb: 200, nextPhase: .deload),
+                                            roundingLb: 5, style: .offsetWave,
+                                            configuration: .init(loadOffsetLb: 10, peakOffsetLb: 25,
+                                                                 deloadMultiplier: 0))
+        XCTAssertEqual(offsetZero.weightLb, 155, "offsetWave shares the same zero-is-unset rescue")
     }
 
     // MARK: - Methodology styles (mirrors core.test.mjs)

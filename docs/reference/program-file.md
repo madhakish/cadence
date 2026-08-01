@@ -197,6 +197,14 @@ never renumbered. Both importers apply the same rule
 (`ProgramEngine.authoredSlotOrders` / `core.js authoredSlotOrders`), and the
 backup importers apply it too.
 
+One honest edge in the backup case: a program *file* requires every slot's
+`order`, but a backup does not, and a missing backup order is filled with the
+slot's array position before the tie test on both platforms. A hand-edited
+bundle mixing missing and explicit orders can therefore manufacture a full
+tie — `[{"order": 1}, {}]` fills to `[1, 1]` — and the rescue then renumbers
+the one explicitly authored order along with the rest. Both platforms agree
+on the result (array order), and any explicitly distinct file is untouched.
+
 ## Where to find it
 
 - Export: the program editor, next to "Duplicate program".
