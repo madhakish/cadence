@@ -239,6 +239,23 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertTrue(WarmupRamp.dumbbellRamp(workingLb: 5).isEmpty)
     }
 
+    // MARK: - Authored slot order (mirrors core.test.mjs)
+
+    func testAuthoredSlotOrdersRescueTheDegenerateTie() {
+        // Every order tied → the tie carries no information; the array
+        // position the author wrote the slots in is their order. Without this
+        // the display fallback hands the day to the alphabet.
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([0, 0, 0]), [0, 1, 2])
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([7, 7]), [0, 1],
+                       "any shared value is the same degenerate case as all zeros")
+        // Distinct or even partially distinct orders are the author's numbers.
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([2, 0, 1]), [2, 0, 1])
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([0, 0, 2]), [0, 0, 2],
+                       "a partial tie is a real (if sloppy) authored ordering, kept verbatim")
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([5]), [5], "a single slot has nothing to disambiguate")
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([]), [])
+    }
+
     // MARK: - Methodology styles (mirrors core.test.mjs)
 
     func testFiveThreeOnePlansTheWaveOffTheTrainingMax() {

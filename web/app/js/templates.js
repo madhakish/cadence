@@ -284,8 +284,12 @@ export async function createProgramFromTemplate(template) {
     nextDayIndex: 0, roundingLb: template.roundingLb, isActive: programs.length === 0,
     days: template.days.map((d, i) => ({
       name: d.name, order: i,
-      lifts: d.lifts.map((l) => {
+      // Slot order is stamped from the template author's written sequence —
+      // native instantiate has done this since PR #69; without it the web copy
+      // left every order at 0 and display fell to the alphabetical fallback.
+      lifts: d.lifts.map((l, slotOrder) => {
         const { startFraction = 0, sets = 0, ...record } = l;
+        record.order = slotOrder;
         record.prescription = l.prescription || "automatic";
         if (sets > 0) record.doubleProgressionSets = sets;
         const fraction = startFraction || C.defaultStartFraction(record.prescription);
@@ -296,8 +300,9 @@ export async function createProgramFromTemplate(template) {
         }
         return record;
       }),
-      accessories: d.accessories.map((a) => {
+      accessories: d.accessories.map((a, slotOrder) => {
         const { startFraction = 0, ...record } = a;
+        record.order = slotOrder;
         const e1RM = known.get(a.exerciseName) || 0;
         if (startFraction > 0 && e1RM > 0) {
           record.weightLb = Math.max(45, floorTo(startFraction * e1RM, template.roundingLb));

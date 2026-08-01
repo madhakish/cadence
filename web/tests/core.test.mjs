@@ -646,6 +646,17 @@ eq(pres.state.stallCount, 0, "maintain success resets stall");
   ok(viaStyle.weightLb === 235, `planForStyle applies the lower-body peak offset (got ${viaStyle.weightLb})`);
 }
 
+// ---- authored slot order (ProgramEngineTests.swift) ----
+// Every order tied → the tie carries no information; the array position the
+// author wrote the slots in is their order. Without this the display fallback
+// hands the day to the alphabet.
+eq(C.authoredSlotOrders([0, 0, 0]).join(","), "0,1,2", "an all-tied day takes authored array order");
+eq(C.authoredSlotOrders([7, 7]).join(","), "0,1", "any shared value is the same degenerate case");
+eq(C.authoredSlotOrders([2, 0, 1]).join(","), "2,0,1", "distinct orders are the author's numbers");
+eq(C.authoredSlotOrders([0, 0, 2]).join(","), "0,0,2", "a partial tie is a real authored ordering, kept verbatim");
+eq(C.authoredSlotOrders([5]).join(","), "5", "a single slot has nothing to disambiguate");
+eq(C.authoredSlotOrders([]).length, 0, "empty in, empty out");
+
 // A peak single's seed is a training max, so it follows the program's focus.
 {
   const state = { baseWeightLb: 100, nextPhase: 3, cycleNumber: 1 };

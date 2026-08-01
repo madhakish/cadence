@@ -1114,6 +1114,11 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
     for (const program of importedPrograms) {
       for (const day of program.days || []) {
         for (const [kind, slots] of [["lift", day.lifts || []], ["accessory", day.accessories || []]]) {
+          // A bundle whose slots all tie on order carries no ordering
+          // information beyond the array — keep the authored sequence rather
+          // than letting the tie fall to the alphabetical display fallback.
+          const orders = C.authoredSlotOrders(slots.map((slot) => slot.order ?? 0));
+          slots.forEach((slot, index) => { slot.order = orders[index]; });
           slots.forEach((slot, index) => {
             if (slot.id && !seen.has(slot.id)) { seen.add(slot.id); return; }
             if (slot.id) repairedSlotIDs += 1;

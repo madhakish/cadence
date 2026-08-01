@@ -649,6 +649,20 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
   };
 }
 
+// The order a day's slots were AUTHORED in, recovered from an imported
+// payload. Distinct orders pass through verbatim; when every order ties (a
+// hand-written file whose slots all say order: 0, or a backup written before
+// slots carried orders) the tie holds no information and the array position
+// the author wrote the slots in IS their order. Without this a tie falls to
+// the alphabetical display fallback and the alphabet quietly does the
+// lifter's programming. Pure mirror of CadenceCore ProgramEngine.
+export function authoredSlotOrders(orders) {
+  if (orders.length > 1 && orders.every((o) => o === orders[0])) {
+    return orders.map((_, i) => i);
+  }
+  return orders;
+}
+
 export function primerWeight(baseWeightLb, phase, style, roundingLb = DEFAULT_ROUNDING_LB, configuration = {}) {
   const config = { loadOffsetLb: 10, ...configuration };
   if (phase === 1 || phase === 4) return null;

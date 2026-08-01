@@ -508,6 +508,37 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// [AUTHORED-ORDER] A backup whose slots all say order 0 was written in the
+// sequence the author meant — older exports (and native pre-#69 programs)
+// carry exactly that shape. Import stamps array positions so the tie never
+// falls to the alphabetical display fallback; explicit distinct orders are
+// the author's sequence and survive verbatim.
+{
+  const tied = structuredClone(parsed);
+  const program = tied.programs.find((p) => p.name === "Fixture Upper/Lower");
+  const upperA = program.days.find((d) => d.name === "Upper A");
+  const lowerA = program.days.find((d) => d.name === "Lower A");
+  for (const slot of [...upperA.lifts, ...upperA.accessories]) slot.order = 0;
+  lowerA.accessories.forEach((slot, i) => { slot.order = [2, 1, 0][i]; });
+
+  await db.importBundle(tied);
+  const restored = (await db.Programs.all()).find((p) => p.name === "Fixture Upper/Lower");
+  const restoredUpperA = restored.days.find((d) => d.name === "Upper A");
+  const restoredLowerA = restored.days.find((d) => d.name === "Lower A");
+  ok(restoredUpperA.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")
+    === "Incline DB Press:0, Single-arm DB Row:1",
+    `[AUTHORED-ORDER] tied backup lifts keep authored sequence (got: ${
+      restoredUpperA.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")})`);
+  ok(restoredUpperA.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")
+    === "Face Pulls:0, DB Curls:1, Band Pull-aparts:2",
+    `[AUTHORED-ORDER] tied backup accessories keep authored sequence (got: ${
+      restoredUpperA.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")})`);
+  ok(restoredLowerA.accessories.map((a) => a.order).join() === "2,1,0",
+    `[AUTHORED-ORDER] explicit distinct orders survive a backup import verbatim (got: ${
+      restoredLowerA.accessories.map((a) => a.order).join()})`);
+  await db.importBundle(parsed);
+}
+
 // Cross-platform settings: a native backup carries the rest buckets FLAT
 // (mainCompoundRestSeconds…, no nested `rest`) — import must normalize them
 // into settings.rest so the buckets survive an iOS → web restore. A partial

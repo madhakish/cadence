@@ -39,6 +39,16 @@ resume and would misattribute their work to the wrong day in history and
 coaching. `nextDayIndex` is likewise validated as *a member of* the day
 orders, not as an array index.
 
+Slot orders *within* a day are gentler: nothing banked points at them — the
+slot `id` is the identity — so they only decide the sequence a day runs in.
+Distinct slot orders survive import verbatim, but when every lift (or every
+accessory) in an imported day carries the same order, the tie is read as "the
+sequence the file was written in is the sequence the author programmed" and
+array positions are stamped instead. Otherwise the tie falls to the
+alphabetical display fallback and an authored hardest-first day quietly runs
+in dictionary order. See
+[Program files](program-file.md) for the rule's authorship.
+
 The ordered day matrix is the prescription source of truth. For example,
 `Lower A: Back Squat/main + Deadlift/complementary` and
 `Lower B: Deadlift/main + Back Squat/complementary` are four independent

@@ -346,6 +346,22 @@ public enum ProgramEngine {
         )
     }
 
+    /// The order a day's slots were AUTHORED in, recovered from an imported
+    /// payload. Distinct orders are the author's numbers and pass through
+    /// verbatim. When every order in the list ties — a hand-written program
+    /// file whose slots all say `order: 0`, or a backup written before slots
+    /// carried orders — the tie holds no information, and the array position
+    /// the author physically wrote the slots in IS their order. Without this,
+    /// a tie falls through to the alphabetical display fallback and the
+    /// alphabet quietly does the lifter's programming: pull-ups after biceps
+    /// curls because P > D.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `authoredSlotOrders`.
+    public static func authoredSlotOrders(_ orders: [Int]) -> [Int] {
+        guard orders.count > 1, Set(orders).count == 1 else { return orders }
+        return Array(0..<orders.count)
+    }
+
     /// Movement-aware offset defaults for `offsetWave`. A stored zero means
     /// "use the default"; an explicit value stays user-owned.
     ///

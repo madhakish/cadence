@@ -186,6 +186,17 @@ Day `order` values are preserved verbatim, gaps included. A day's order is the
 identity every banked session's `programTag.dayIndex` refers to; renumbering
 would misattribute already-logged work.
 
+Slot `order` values within a day are preserved verbatim with one exception:
+when every lift (or every accessory) in a day carries the same order, the tie
+carries no information and the import stamps array positions instead — the
+sequence the slots were written in is the sequence the author programmed.
+Without this, a hand-authored file whose slots all say `"order": 0` falls to
+the alphabetical display fallback, and the alphabet does the programming.
+Distinct orders, gaps included, are the author's explicit sequence and are
+never renumbered. Both importers apply the same rule
+(`ProgramEngine.authoredSlotOrders` / `core.js authoredSlotOrders`), and the
+backup importers apply it too.
+
 ## Where to find it
 
 - Export: the program editor, next to "Duplicate program".

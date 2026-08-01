@@ -791,10 +791,17 @@ enum ImportService {
         for d in (p.days ?? []) {
             let day = ProgramDay(name: d.name ?? "Day", order: d.order ?? 0)
             prog.days.append(day)
+            // Missing orders take the array position; a day whose slots ALL
+            // tie carries no ordering information either, so the authored
+            // sequence wins there too rather than the alphabetical fallback.
+            let liftOrders = ProgramEngine.authoredSlotOrders(
+                (d.lifts ?? []).enumerated().map { $1.order ?? $0 })
+            let accessoryOrders = ProgramEngine.authoredSlotOrders(
+                (d.accessories ?? []).enumerated().map { $1.order ?? $0 })
             for (slotOrder, l) in (d.lifts ?? []).enumerated() {
                 let lift = ProgramLift(id: adoptSlotID(l.id, seen: &seenSlotIDs, repaired: &repairedSlotIDs),
                                        exerciseName: l.exerciseName ?? "", role: LiftRole(rawValue: l.role ?? "main") ?? .main,
-                                       order: l.order ?? slotOrder,
+                                       order: liftOrders[slotOrder],
                                        prescription: PrescriptionStyle(rawValue: l.prescription ?? "automatic") ?? .automatic,
                                        warmupPolicy: WarmupPolicy(rawValue: l.warmupPolicy ?? "automatic") ?? .automatic,
                                        baseWeightLb: l.baseWeightLb ?? 45, estimatedMaxLb: l.estimatedMaxLb ?? 0,
@@ -825,7 +832,7 @@ enum ImportService {
             }
             for (slotOrder, a) in (d.accessories ?? []).enumerated() {
                 let acc = ProgramAccessory(id: adoptSlotID(a.id, seen: &seenSlotIDs, repaired: &repairedSlotIDs),
-                                           exerciseName: a.exerciseName ?? "", order: a.order ?? slotOrder,
+                                           exerciseName: a.exerciseName ?? "", order: accessoryOrders[slotOrder],
                                            sets: a.sets ?? 3, minReps: a.minReps ?? 8,
                                            maxReps: a.maxReps ?? 12, currentReps: a.currentReps ?? 8,
                                            targetSeconds: a.targetSeconds ?? 30,
