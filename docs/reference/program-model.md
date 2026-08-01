@@ -39,6 +39,23 @@ resume and would misattribute their work to the wrong day in history and
 coaching. `nextDayIndex` is likewise validated as *a member of* the day
 orders, not as an array index.
 
+Slot orders *within* a day are gentler: nothing banked points at them — the
+slot `id` is the identity — so they only decide the sequence a day runs in.
+Distinct slot orders survive import verbatim, but when every lift (or every
+accessory) in an imported day carries the same order, the tie is read as "the
+sequence the file was written in is the sequence the author programmed" and
+array positions are stamped instead. Otherwise the tie falls to the
+alphabetical display fallback and an authored hardest-first day quietly runs
+in dictionary order. See
+[Program files](program-file.md) for the rule's authorship.
+
+Resident web stores get the same repair, not just imports: normalization
+stamps an all-tied day at read time and the launch read persists it (older
+databases get it inside the V4 upgrade rewrite). Native legacy stores keep
+their documented main-first fallback instead — SwiftData's to-many
+relationships are unordered, so a pre-#69 store never kept an authored
+sequence to recover.
+
 The ordered day matrix is the prescription source of truth. For example,
 `Lower A: Back Squat/main + Deadlift/complementary` and
 `Lower B: Deadlift/main + Back Squat/complementary` are four independent
@@ -51,6 +68,7 @@ reconstruct the program.
 | `id` | Stable slot identity; completion uses this rather than exercise name/order |
 | `role` | `main` (one per day, anchors it, rests longest) or `complementary` |
 | `baseWeightLb` | Rotation-1 (volume week) working weight; the wave derives the other weeks |
+| `deloadMultiplier` | Rest-week intensity for wave-family styles, as a fraction of `baseWeightLb` (default 0.775, editable 0.50–0.90) — see [Progression rules](progression-rules.md#the-4-week-wave) |
 | `estimatedMaxLb` | Smoothed Epley e1RM; seeds the ceiling, re-estimated from every banked peak |
 | `stallCount` | Consecutive non-clean cycles; 2 triggers an automatic −10% deload |
 | `lastIncrementLb` | What the last rollover added |

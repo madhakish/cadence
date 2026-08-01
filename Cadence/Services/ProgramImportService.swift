@@ -336,13 +336,19 @@ enum ProgramImportService {
             // which renders as mirrored editor rows and deletes destructively.
             program.days.append(day)
 
-            for liftPayload in dayPayload.lifts {
+            // A file whose slots all say the same order carries no ordering
+            // information beyond the sequence they were written in — keep it,
+            // or the tie falls to the alphabetical display fallback.
+            let liftOrders = ProgramEngine.authoredSlotOrders(dayPayload.lifts.map(\.order))
+            let accessoryOrders = ProgramEngine.authoredSlotOrders(dayPayload.accessories.map(\.order))
+
+            for (index, liftPayload) in dayPayload.lifts.enumerated() {
                 guard let exercise = resolved[liftPayload.exerciseName] else { continue }
                 let lift = ProgramLift(
                     id: options.preserveIdentity ? (liftPayload.id ?? UUID().uuidString) : UUID().uuidString,
                     exerciseName: exercise.name,
                     role: LiftRole(rawValue: liftPayload.role) ?? .main,
-                    order: liftPayload.order,
+                    order: liftOrders[index],
                     prescription: PrescriptionStyle(rawValue: liftPayload.prescription) ?? .automatic,
                     warmupPolicy: WarmupPolicy(rawValue: liftPayload.warmupPolicy) ?? .automatic,
                     baseWeightLb: liftPayload.baseWeightLb,
@@ -381,12 +387,12 @@ enum ProgramImportService {
                 day.lifts.append(lift)
             }
 
-            for accessoryPayload in dayPayload.accessories {
+            for (index, accessoryPayload) in dayPayload.accessories.enumerated() {
                 guard let exercise = resolved[accessoryPayload.exerciseName] else { continue }
                 let accessory = ProgramAccessory(
                     id: options.preserveIdentity ? (accessoryPayload.id ?? UUID().uuidString) : UUID().uuidString,
                     exerciseName: exercise.name,
-                    order: accessoryPayload.order,
+                    order: accessoryOrders[index],
                     sets: accessoryPayload.sets,
                     minReps: accessoryPayload.minReps,
                     maxReps: accessoryPayload.maxReps,

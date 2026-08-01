@@ -614,7 +614,10 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
       1: state.baseWeightLb,
       2: state.baseWeightLb + config.loadOffsetLb,
       3: state.baseWeightLb + config.peakOffsetLb,
-      4: state.baseWeightLb * config.deloadMultiplier,
+      // Zero is "unset", never "lift nothing" — same rescue as the wave
+      // branch below and as ProgramEngine's plan, so both cores agree even
+      // for a hand-edited store the validators would refuse to import.
+      4: state.baseWeightLb * (config.deloadMultiplier > 0 ? config.deloadMultiplier : 0.775),
     })[p];
     const phase = PHASES[p];
     return { weightLb: roundTo(weight, roundingLb), sets: phase.sets, reps: phase.reps, phase: p, cycleNumber: state.cycleNumber };
@@ -642,11 +645,34 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
       1: [5, 3, 1.0], 2: [6, 2, 1.05], 3: [6, 1, 1.10], 4: [3, 2, 0.80],
     },
   };
-  const [sets, reps, multiplier] = (byStyle[style] || byStyle.wave)[p];
+  const table = byStyle[style] || byStyle.wave;
+  const [sets, reps, tableMultiplier] = table[p];
+  // The wave deload's intensity is the slot's own knob (default 0.775, the
+  // historical constant). Volume stays cut either way; a lifter who finds
+  // 77.5% unproductively light raises the intensity, not the set count.
+  // Keyed on the resolved TABLE, not the style string, so an unknown style
+  // falling back to the wave keeps parity with native's `?? .automatic`.
+  const multiplier = table === byStyle.wave && p === 4
+    ? (config.deloadMultiplier > 0 ? config.deloadMultiplier : tableMultiplier)
+    : tableMultiplier;
   return {
     weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
     sets, reps, phase: p, cycleNumber: state.cycleNumber,
   };
+}
+
+// The order a day's slots were AUTHORED in, recovered from an imported
+// payload. Distinct orders pass through verbatim; when every order ties (a
+// hand-written file whose slots all say order: 0, or a backup written before
+// slots carried orders) the tie holds no information and the array position
+// the author wrote the slots in IS their order. Without this a tie falls to
+// the alphabetical display fallback and the alphabet quietly does the
+// lifter's programming. Pure mirror of CadenceCore ProgramEngine.
+export function authoredSlotOrders(orders) {
+  if (orders.length > 1 && orders.every((o) => o === orders[0])) {
+    return orders.map((_, i) => i);
+  }
+  return orders;
 }
 
 export function primerWeight(baseWeightLb, phase, style, roundingLb = DEFAULT_ROUNDING_LB, configuration = {}) {

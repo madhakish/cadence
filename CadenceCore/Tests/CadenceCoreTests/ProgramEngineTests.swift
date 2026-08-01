@@ -239,6 +239,66 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertTrue(WarmupRamp.dumbbellRamp(workingLb: 5).isEmpty)
     }
 
+    // MARK: - Authored slot order (mirrors core.test.mjs)
+
+    // [INV-TIED-ORDER-IS-AUTHORED]
+    func testAuthoredSlotOrdersRescueTheDegenerateTie() {
+        // Every order tied → the tie carries no information; the array
+        // position the author wrote the slots in is their order. Without this
+        // the display fallback hands the day to the alphabet.
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([0, 0, 0]), [0, 1, 2])
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([7, 7]), [0, 1],
+                       "any shared value is the same degenerate case as all zeros")
+        // Distinct or even partially distinct orders are the author's numbers.
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([2, 0, 1]), [2, 0, 1])
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([0, 0, 2]), [0, 0, 2],
+                       "a partial tie is a real (if sloppy) authored ordering, kept verbatim")
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([5]), [5], "a single slot has nothing to disambiguate")
+        XCTAssertEqual(ProgramEngine.authoredSlotOrders([]), [])
+    }
+
+    // MARK: - Deload intensity knob (mirrors core.test.mjs)
+
+    // [INV-DELOAD-IS-THE-SLOTS-KNOB]
+    func testWaveDeloadHonoursTheSlotsOwnMultiplier() {
+        func deload(_ configuration: LiftPrescriptionConfiguration) -> SessionPlan {
+            ProgramEngine.plan(for: CycleState(baseWeightLb: 200, nextPhase: .deload),
+                               roundingLb: 5, style: .automatic, configuration: configuration)
+        }
+        XCTAssertEqual(deload(.init()).weightLb, 155,
+                       "default stays the historical 0.775 — nobody's deload moves uninvited")
+        XCTAssertEqual(deload(.init(deloadMultiplier: 0.85)).weightLb, 170,
+                       "a slot that finds 77.5% unproductively light raises intensity, not volume")
+        let raised = deload(.init(deloadMultiplier: 0.85))
+        XCTAssertEqual([raised.sets, raised.reps], [3, 5], "the volume cut is not negotiable through this knob")
+        // Only the deload listens: the working rotations keep the wave shape.
+        let peak = ProgramEngine.plan(for: CycleState(baseWeightLb: 200, nextPhase: .peak),
+                                      roundingLb: 5, style: .automatic,
+                                      configuration: .init(deloadMultiplier: 0.85))
+        XCTAssertEqual(peak.weightLb, 235)
+        // Zero is "unset", never "lift nothing" — the shared engine guards it
+        // itself (mirroring core.js), not only the app-layer config builder.
+        XCTAssertEqual(deload(.init(deloadMultiplier: 0)).weightLb, 155,
+                       "a zero multiplier falls back to the historical 0.775")
+        let offsetZero = ProgramEngine.plan(for: CycleState(baseWeightLb: 200, nextPhase: .deload),
+                                            roundingLb: 5, style: .offsetWave,
+                                            configuration: .init(loadOffsetLb: 10, peakOffsetLb: 25,
+                                                                 deloadMultiplier: 0))
+        XCTAssertEqual(offsetZero.weightLb, 155, "offsetWave shares the same zero-is-unset rescue")
+
+        // The knob must survive the whole session builder, not just the plan
+        // table: sessionPrescription is what actually puts the bar weight in
+        // front of the lifter on a rest week.
+        let sessionDeload = ProgramEngine.sessionPrescription(
+            for: CycleState(baseWeightLb: 200, nextPhase: .deload),
+            programRoundingLb: 5, exerciseType: "barbell", movementGroup: "press",
+            role: .main, focus: .strength, prescriptionStyle: .automatic,
+            configuration: .init(deloadMultiplier: 0.85, phasePrimerEnabled: false))
+        let workBlock = sessionDeload.blocks.first { $0.kind == .work }
+        XCTAssertEqual(workBlock?.weightLb, 170, "the session builder hands the slot's knob to the bar")
+        XCTAssertEqual([workBlock?.sets, workBlock?.reps], [3, 5], "and keeps the fixed deload volume")
+    }
+
     // MARK: - Methodology styles (mirrors core.test.mjs)
 
     func testFiveThreeOnePlansTheWaveOffTheTrainingMax() {

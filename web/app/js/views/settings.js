@@ -524,7 +524,8 @@ async function programDayEditor(p, day) {
               ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${l.exerciseName} later`, onClick: async () => { if (moveSlot(day.lifts, l, 1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.lifts = day.lifts.filter((x) => x !== l); await Programs.save(p); draw(); } })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
-              ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); })),
+              // draw(): the deload row's visibility resolves through role.
+              ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); draw(); })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Prescription" }), (() => {
               const select = ui.h("select", {}, ...C.selectablePrescriptions([
                 ["automatic", "Automatic"], ["wave", "Strength wave"], ["offsetWave", "Strength wave — offsets"],
@@ -550,6 +551,13 @@ async function programDayEditor(p, day) {
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.loadOffsetLb ?? 0, { min: 0, max: 100, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.loadOffsetLb = v; await Programs.save(p); } }),
                 ui.stepper(l.peakOffsetLb ?? 0, { min: 0, max: 150, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakOffsetLb = v; await Programs.save(p); } }))) : null,
+            // Every wave-shaped style deloads at this slot's own intensity.
+            // Gated on the RESOLVED style so the knob never appears where the
+            // engine would ignore it (automatic on a complementary slot
+            // resolves secondary, whose 75% is fixed). Mirrors SettingsView.
+            ["wave", "offsetWave"].includes(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
+              ? ui.h("div", { class: "row" }, ui.h("span", { text: "Deload intensity" }),
+                ui.stepper(l.deloadMultiplier ?? 0.775, { min: 0.5, max: 0.9, step: 0.025, format: (v) => `${C.trim(v * 100, 1)}%`, onChange: async (v) => { l.deloadMultiplier = Math.round(v * 1000) / 1000; await Programs.save(p); } })) : null,
             ["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(l.prescription)
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Working sets" }),
                 ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 10, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); } })) : null,

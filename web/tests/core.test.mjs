@@ -646,6 +646,54 @@ eq(pres.state.stallCount, 0, "maintain success resets stall");
   ok(viaStyle.weightLb === 235, `planForStyle applies the lower-body peak offset (got ${viaStyle.weightLb})`);
 }
 
+// ---- authored slot order (ProgramEngineTests.swift) ----
+// [INV-TIED-ORDER-IS-AUTHORED] Every order tied → the tie carries no
+// information; the array position the author wrote the slots in is their
+// order. Without this the display fallback hands the day to the alphabet.
+eq(C.authoredSlotOrders([0, 0, 0]).join(","), "0,1,2", "an all-tied day takes authored array order");
+eq(C.authoredSlotOrders([7, 7]).join(","), "0,1", "any shared value is the same degenerate case");
+eq(C.authoredSlotOrders([2, 0, 1]).join(","), "2,0,1", "distinct orders are the author's numbers");
+eq(C.authoredSlotOrders([0, 0, 2]).join(","), "0,0,2", "a partial tie is a real authored ordering, kept verbatim");
+eq(C.authoredSlotOrders([5]).join(","), "5", "a single slot has nothing to disambiguate");
+eq(C.authoredSlotOrders([]).length, 0, "empty in, empty out");
+
+// ---- deload intensity knob (ProgramEngineTests.swift) ----
+// [INV-DELOAD-IS-THE-SLOTS-KNOB]
+{
+  const deload = (config) => C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "wave", config);
+  eq(deload({}).weightLb, 155, "default stays the historical 0.775 — nobody's deload moves uninvited");
+  eq(deload({ deloadMultiplier: 0.85 }).weightLb, 170,
+    "a slot that finds 77.5% unproductively light raises intensity, not volume");
+  eq(`${deload({ deloadMultiplier: 0.85 }).sets}x${deload({ deloadMultiplier: 0.85 }).reps}`, "3x5",
+    "the volume cut is not negotiable through this knob");
+  const peak = C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 3, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "wave",
+    { deloadMultiplier: 0.85 });
+  eq(peak.weightLb, 235, "only the deload listens; working rotations keep the wave shape");
+  const secondary = C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "complementary", "strength", "automatic",
+    { deloadMultiplier: 0.85 });
+  eq(secondary.weightLb, 150, "a complementary slot resolves secondary and keeps its own fixed 0.75 deload");
+  // Zero is "unset", never "lift nothing" — no importer admits a 0, but a
+  // hand-edited store must not plan an empty bar, and both branches must
+  // agree with the native engine's identical guard.
+  eq(deload({ deloadMultiplier: 0 }).weightLb, 155, "a zero multiplier falls back to the table's 0.775 on wave");
+  const offsetZero = C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "offsetWave",
+    { loadOffsetLb: 10, peakOffsetLb: 25, deloadMultiplier: 0 });
+  eq(offsetZero.weightLb, 155, "a zero multiplier falls back to 0.775 on offsetWave too");
+  // The knob must survive the whole session builder, not just the plan table:
+  // sessionPrescription is what actually puts the bar weight in front of the
+  // lifter on a rest week.
+  const sessionDeload = C.sessionPrescription(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "automatic",
+    { deloadMultiplier: 0.85, phasePrimerEnabled: false });
+  const workBlock = sessionDeload.blocks.find((b) => b.kind === "work");
+  eq(workBlock.weightLb, 170, "the session builder hands the slot's knob to the bar");
+  eq(`${workBlock.sets}x${workBlock.reps}`, "3x5", "and keeps the fixed deload volume");
+}
+
 // A peak single's seed is a training max, so it follows the program's focus.
 {
   const state = { baseWeightLb: 100, nextPhase: 3, cycleNumber: 1 };

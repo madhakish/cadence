@@ -22,6 +22,18 @@ owner table for docs; other pages link here rather than restating).
 | 3 | **Peak** | Top work — **this is what gets graded** |
 | 4 | Rest | Deload prescriptions; at its last day the cycle **rolls over** |
 
+The rest-week prescription for a wave-family main lift is 3×5 at the slot's
+own **deload multiplier** — default 77.5% of the rotation-1 base, adjustable
+from 50% to 90% per slot in the program editor. The editor shows the stepper
+only where the resolved style honours it (the wave and offset-wave families);
+a complementary lift on the automatic style deloads at its fixed 75%
+volume-work prescription regardless. Cutting intensity is a choice, not a
+requirement: the taper literature maintains intensity and cuts volume, which
+is what the sets themselves already do (3×5 versus the peak's top work), so a
+lifter who wants a heavier rest week — say 85% — can have one without
+changing what the week means to the grader. The default is unchanged from
+every prior release.
+
 Banking the **highest-ordered** day of a week advances the week; banking
 that day in week 4 applies all stashed grades and starts the next cycle at
 week 1. Week 3 or 4 is the only week the wave can be in when a cycle ends,

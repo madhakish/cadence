@@ -242,6 +242,30 @@ and refusing one would strand data the app itself may have written.
 > preservation is opt-in, so the lifter asked for *those* ids, and a silent
 > re-mint would hand back something that looks preserved but is not.
 
+### INV-TIED-ORDER-IS-AUTHORED
+*platforms: core*
+
+A day whose slots all carry the same order was written in the sequence the
+author programmed: the tie holds no information, and the array position is
+stamped in its place — on import, on template instantiation, and when web
+normalization meets a resident tied store. Distinct or *partially* tied
+orders are the author's numbers and survive verbatim, and day orders are
+never touched (they are session identity — INV-DAY-ORDERS-PRESERVED).
+
+> Stored verbatim, an all-tied day falls to the alphabetical display
+> fallback and the alphabet does the lifter's programming: pull-ups drift to
+> the end of the day because P sorts after D, and the hardest accessory
+> meets the lifter at their most tired.
+
+### INV-DELOAD-IS-THE-SLOTS-KNOB
+*platforms: core*
+
+A wave-family rest week lifts at the slot's own deload multiplier — default
+0.775 of the rotation-1 base — and zero means *unset*, never an empty bar.
+The volume cut (3×5) is not adjustable through this knob, the working
+rotations never listen to it, and styles with their own published deload
+(secondary's fixed 0.75, 5/3/1's 40/50/60 ramp) keep theirs.
+
 ---
 
 ## Session lifecycle

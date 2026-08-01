@@ -346,6 +346,22 @@ public enum ProgramEngine {
         )
     }
 
+    /// The order a day's slots were AUTHORED in, recovered from an imported
+    /// payload. Distinct orders are the author's numbers and pass through
+    /// verbatim. When every order in the list ties — a hand-written program
+    /// file whose slots all say `order: 0`, or a backup written before slots
+    /// carried orders — the tie holds no information, and the array position
+    /// the author physically wrote the slots in IS their order. Without this,
+    /// a tie falls through to the alphabetical display fallback and the
+    /// alphabet quietly does the lifter's programming: pull-ups after biceps
+    /// curls because P > D.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `authoredSlotOrders`.
+    public static func authoredSlotOrders(_ orders: [Int]) -> [Int] {
+        guard orders.count > 1, Set(orders).count == 1 else { return orders }
+        return Array(0..<orders.count)
+    }
+
     /// Movement-aware offset defaults for `offsetWave`. A stored zero means
     /// "use the default"; an explicit value stays user-owned.
     ///
@@ -402,7 +418,18 @@ public enum ProgramEngine {
         let prescription: (sets: Int, reps: Int, multiplier: Double)
         switch style {
         case .automatic, .wave:
-            prescription = (phase.sets, phase.reps, phase.multiplier)
+            // The deload's intensity is the slot's own knob (default 0.775,
+            // the historical constant). The literature's asymmetry motivates
+            // making this the adjustable side: volume stays cut either way,
+            // and a lifter who finds 77.5% unproductively light raises the
+            // intensity rather than adding sets back.
+            // Zero is "unset", never "lift nothing" — mirror core.js's guard
+            // inside the shared engine, not only in the app-layer builder, so
+            // both cores agree for every caller.
+            prescription = (phase.sets, phase.reps,
+                            phase == .deload
+                                ? (configuration.deloadMultiplier > 0 ? configuration.deloadMultiplier : phase.multiplier)
+                                : phase.multiplier)
         case .linearFives, .texasVolume, .texasLight, .texasIntensity:
             // Sets-across at the slot's own base; the base moves per exposure
             // (advanceLinearLift), so the 4-week phase never shapes the weight.
@@ -458,7 +485,10 @@ public enum ProgramEngine {
             case .volume: weight = state.baseWeightLb
             case .load: weight = state.baseWeightLb + configuration.loadOffsetLb
             case .peak: weight = state.baseWeightLb + configuration.peakOffsetLb
-            case .deload: weight = state.baseWeightLb * configuration.deloadMultiplier
+            case .deload:
+                // Same zero-is-unset rescue as the wave branch above.
+                weight = state.baseWeightLb
+                    * (configuration.deloadMultiplier > 0 ? configuration.deloadMultiplier : phase.multiplier)
             }
             return SessionPlan(
                 weightLb: Weight.round(weight, to: roundingLb),
