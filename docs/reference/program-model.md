@@ -61,6 +61,7 @@ reconstruct the program.
 | `id` | Stable slot identity; completion uses this rather than exercise name/order |
 | `role` | `main` (one per day, anchors it, rests longest) or `complementary` |
 | `baseWeightLb` | Rotation-1 (volume week) working weight; the wave derives the other weeks |
+| `deloadMultiplier` | Rest-week intensity for wave-family styles, as a fraction of `baseWeightLb` (default 0.775, editable 0.50–0.90) — see [Progression rules](progression-rules.md#the-4-week-wave) |
 | `estimatedMaxLb` | Smoothed Epley e1RM; seeds the ceiling, re-estimated from every banked peak |
 | `stallCount` | Consecutive non-clean cycles; 2 triggers an automatic −10% deload |
 | `lastIncrementLb` | What the last rollover added |

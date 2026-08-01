@@ -642,7 +642,16 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
       1: [5, 3, 1.0], 2: [6, 2, 1.05], 3: [6, 1, 1.10], 4: [3, 2, 0.80],
     },
   };
-  const [sets, reps, multiplier] = (byStyle[style] || byStyle.wave)[p];
+  const table = byStyle[style] || byStyle.wave;
+  const [sets, reps, tableMultiplier] = table[p];
+  // The wave deload's intensity is the slot's own knob (default 0.775, the
+  // historical constant). Volume stays cut either way; a lifter who finds
+  // 77.5% unproductively light raises the intensity, not the set count.
+  // Keyed on the resolved TABLE, not the style string, so an unknown style
+  // falling back to the wave keeps parity with native's `?? .automatic`.
+  const multiplier = table === byStyle.wave && p === 4
+    ? (config.deloadMultiplier > 0 ? config.deloadMultiplier : 0.775)
+    : tableMultiplier;
   return {
     weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
     sets, reps, phase: p, cycleNumber: state.cycleNumber,

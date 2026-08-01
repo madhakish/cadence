@@ -418,7 +418,13 @@ public enum ProgramEngine {
         let prescription: (sets: Int, reps: Int, multiplier: Double)
         switch style {
         case .automatic, .wave:
-            prescription = (phase.sets, phase.reps, phase.multiplier)
+            // The deload's intensity is the slot's own knob (default 0.775,
+            // the historical constant). The literature's asymmetry motivates
+            // making this the adjustable side: volume stays cut either way,
+            // and a lifter who finds 77.5% unproductively light raises the
+            // intensity rather than adding sets back.
+            prescription = (phase.sets, phase.reps,
+                            phase == .deload ? configuration.deloadMultiplier : phase.multiplier)
         case .linearFives, .texasVolume, .texasLight, .texasIntensity:
             // Sets-across at the slot's own base; the base moves per exposure
             // (advanceLinearLift), so the 4-week phase never shapes the weight.

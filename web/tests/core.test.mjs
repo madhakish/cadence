@@ -657,6 +657,25 @@ eq(C.authoredSlotOrders([0, 0, 2]).join(","), "0,0,2", "a partial tie is a real 
 eq(C.authoredSlotOrders([5]).join(","), "5", "a single slot has nothing to disambiguate");
 eq(C.authoredSlotOrders([]).length, 0, "empty in, empty out");
 
+// ---- deload intensity knob (ProgramEngineTests.swift) ----
+{
+  const deload = (config) => C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "wave", config);
+  eq(deload({}).weightLb, 155, "default stays the historical 0.775 — nobody's deload moves uninvited");
+  eq(deload({ deloadMultiplier: 0.85 }).weightLb, 170,
+    "a slot that finds 77.5% unproductively light raises intensity, not volume");
+  eq(`${deload({ deloadMultiplier: 0.85 }).sets}x${deload({ deloadMultiplier: 0.85 }).reps}`, "3x5",
+    "the volume cut is not negotiable through this knob");
+  const peak = C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 3, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "wave",
+    { deloadMultiplier: 0.85 });
+  eq(peak.weightLb, 235, "only the deload listens; working rotations keep the wave shape");
+  const secondary = C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "complementary", "strength", "automatic",
+    { deloadMultiplier: 0.85 });
+  eq(secondary.weightLb, 150, "a complementary slot resolves secondary and keeps its own fixed 0.75 deload");
+}
+
 // A peak single's seed is a training max, so it follows the program's focus.
 {
   const state = { baseWeightLb: 100, nextPhase: 3, cycleNumber: 1 };

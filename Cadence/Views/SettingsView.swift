@@ -899,7 +899,7 @@ struct ProgramDayEditorView: View {
                 // editor): the segmented Role picker spans the row and eats the
                 // horizontal pan, so swipe-to-delete alone is undiscoverable here.
                 ForEach(day.orderedLifts) { lift in
-                    ProgramLiftRow(lift: lift, step: step) {
+                    ProgramLiftRow(lift: lift, step: step, focus: day.program?.focus ?? .strength) {
                         context.delete(lift)
                         PersistenceErrorCenter.shared.save(context, operation: "Removing the program lift")
                     }
@@ -1007,11 +1007,19 @@ private struct ProgramLiftRow: View {
     @Query private var exercises: [Exercise]
     @Bindable var lift: ProgramLift
     let step: Double
+    var focus: TrainingFocus = .strength
     let onRemove: () -> Void
 
     private var loadStep: Double {
         ProgramEngine.loadStep(programRoundingLb: step,
                                exerciseType: exercises.first { $0.name == lift.exerciseName }?.typeRaw)
+    }
+
+    private var deloadKnobApplies: Bool {
+        let group = exercises.first { $0.name == lift.exerciseName }?.movementGroup
+        let resolved = ProgramEngine.resolvedStyle(lift.prescription, movementGroup: group,
+                                                   role: lift.role, focus: focus)
+        return resolved == .wave || resolved == .offsetWave
     }
 
     var body: some View {
@@ -1049,8 +1057,15 @@ private struct ProgramLiftRow: View {
                         value: $lift.loadOffsetLb, in: 0...100, step: loadStep)
                 Stepper("Peak offset: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.peakOffsetLb))",
                         value: $lift.peakOffsetLb, in: 0...150, step: loadStep)
-                Stepper("Deload: \(Int(lift.deloadMultiplier * 100))%", value: $lift.deloadMultiplier,
-                        in: 0.5...0.9, step: 0.025)
+            }
+            // Every wave-shaped style deloads at this slot's own intensity.
+            // Volume stays cut regardless; the knob is for the lifter who finds
+            // 77.5% unproductively light and wants a heavier easy week. Gated
+            // on the RESOLVED style so it never appears where the engine would
+            // ignore it (automatic on a complementary slot resolves secondary).
+            if deloadKnobApplies {
+                Stepper("Deload: \(Int((lift.deloadMultiplier * 100).rounded()))% of rotation-1 base",
+                        value: $lift.deloadMultiplier, in: 0.5...0.9, step: 0.025)
             }
             if lift.prescription == .doubleProgression {
                 Stepper("Sets: \(lift.doubleProgressionSets)", value: $lift.doubleProgressionSets, in: 1...8)

@@ -256,6 +256,26 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(ProgramEngine.authoredSlotOrders([]), [])
     }
 
+    // MARK: - Deload intensity knob (mirrors core.test.mjs)
+
+    func testWaveDeloadHonoursTheSlotsOwnMultiplier() {
+        func deload(_ configuration: LiftPrescriptionConfiguration) -> SessionPlan {
+            ProgramEngine.plan(for: CycleState(baseWeightLb: 200, nextPhase: .deload),
+                               roundingLb: 5, style: .automatic, configuration: configuration)
+        }
+        XCTAssertEqual(deload(.init()).weightLb, 155,
+                       "default stays the historical 0.775 — nobody's deload moves uninvited")
+        XCTAssertEqual(deload(.init(deloadMultiplier: 0.85)).weightLb, 170,
+                       "a slot that finds 77.5% unproductively light raises intensity, not volume")
+        let raised = deload(.init(deloadMultiplier: 0.85))
+        XCTAssertEqual([raised.sets, raised.reps], [3, 5], "the volume cut is not negotiable through this knob")
+        // Only the deload listens: the working rotations keep the wave shape.
+        let peak = ProgramEngine.plan(for: CycleState(baseWeightLb: 200, nextPhase: .peak),
+                                      roundingLb: 5, style: .automatic,
+                                      configuration: .init(deloadMultiplier: 0.85))
+        XCTAssertEqual(peak.weightLb, 235)
+    }
+
     // MARK: - Methodology styles (mirrors core.test.mjs)
 
     func testFiveThreeOnePlansTheWaveOffTheTrainingMax() {
