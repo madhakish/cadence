@@ -1064,7 +1064,7 @@ private struct ProgramLiftRow: View {
             // on the RESOLVED style so it never appears where the engine would
             // ignore it (automatic on a complementary slot resolves secondary).
             if deloadKnobApplies {
-                Stepper("Deload: \(Int((lift.deloadMultiplier * 100).rounded()))% of rotation-1 base",
+                Stepper("Deload: \((lift.deloadMultiplier * 100).formatted(.number.precision(.fractionLength(0...1))))% of rotation-1 base",
                         value: $lift.deloadMultiplier, in: 0.5...0.9, step: 0.025)
             }
             if lift.prescription == .doubleProgression {
