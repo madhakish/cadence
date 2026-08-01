@@ -550,6 +550,13 @@ async function programDayEditor(p, day) {
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.loadOffsetLb ?? 0, { min: 0, max: 100, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.loadOffsetLb = v; await Programs.save(p); } }),
                 ui.stepper(l.peakOffsetLb ?? 0, { min: 0, max: 150, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakOffsetLb = v; await Programs.save(p); } }))) : null,
+            // Every wave-shaped style deloads at this slot's own intensity.
+            // Gated on the RESOLVED style so the knob never appears where the
+            // engine would ignore it (automatic on a complementary slot
+            // resolves secondary, whose 75% is fixed). Mirrors SettingsView.
+            ["wave", "offsetWave"].includes(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
+              ? ui.h("div", { class: "row" }, ui.h("span", { text: "Deload intensity" }),
+                ui.stepper(l.deloadMultiplier ?? 0.775, { min: 0.5, max: 0.9, step: 0.025, format: (v) => `${C.trim(v * 100, 1)}%`, onChange: async (v) => { l.deloadMultiplier = Math.round(v * 1000) / 1000; await Programs.save(p); } })) : null,
             ["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(l.prescription)
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Working sets" }),
                 ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 10, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); } })) : null,
