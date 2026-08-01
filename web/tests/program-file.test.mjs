@@ -524,7 +524,7 @@ const otherDomains = async () => ({
 }
 
 // ---------------------------------------------------------------------------
-// [AUTHORED-ORDER] A file whose slots all carry the same order was written in
+// [INV-TIED-ORDER-IS-AUTHORED] A file whose slots all carry the same order was written in
 // the sequence the author meant them to run. Storing the tie verbatim hands
 // display ordering to the alphabetical fallback — Pull-ups drift to the end of
 // the day because P sorts after D, and the alphabet does the programming.
@@ -565,15 +565,15 @@ const otherDomains = async () => ({
 
   ok(tied.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")
     === "Chest-supported Row:0, Back Squat:1",
-    `[AUTHORED-ORDER] tied lifts keep authored sequence over the main-first fallback (got: ${
+    `[INV-TIED-ORDER-IS-AUTHORED] tied lifts keep authored sequence over the main-first fallback (got: ${
       tied.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")})`);
   ok(tied.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")
     === "Pull-ups:0, Face Pulls:1, DB Curls:2",
-    `[AUTHORED-ORDER] tied accessories keep authored sequence over the alphabet (got: ${
+    `[INV-TIED-ORDER-IS-AUTHORED] tied accessories keep authored sequence over the alphabet (got: ${
       tied.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")})`);
   ok(explicit.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")
     === "Face Pulls:1, DB Curls:0",
-    `[AUTHORED-ORDER] explicit distinct orders survive verbatim (got: ${
+    `[INV-TIED-ORDER-IS-AUTHORED] explicit distinct orders survive verbatim (got: ${
       explicit.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")})`);
 
   // Round trip: the exporter sorts by stored order, so the file this program
@@ -581,7 +581,7 @@ const otherDomains = async () => ({
   const reexported = JSON.parse(pf.exportProgramText(created));
   ok(reexported.program.days[0].accessories.map((a) => a.exerciseName).join(", ")
     === "Pull-ups, Face Pulls, DB Curls",
-    "[AUTHORED-ORDER] the re-exported file keeps the authored accessory sequence");
+    "[INV-TIED-ORDER-IS-AUTHORED] the re-exported file keeps the authored accessory sequence");
 }
 
 // ---------------------------------------------------------------------------

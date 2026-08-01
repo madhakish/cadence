@@ -647,9 +647,9 @@ eq(pres.state.stallCount, 0, "maintain success resets stall");
 }
 
 // ---- authored slot order (ProgramEngineTests.swift) ----
-// Every order tied → the tie carries no information; the array position the
-// author wrote the slots in is their order. Without this the display fallback
-// hands the day to the alphabet.
+// [INV-TIED-ORDER-IS-AUTHORED] Every order tied → the tie carries no
+// information; the array position the author wrote the slots in is their
+// order. Without this the display fallback hands the day to the alphabet.
 eq(C.authoredSlotOrders([0, 0, 0]).join(","), "0,1,2", "an all-tied day takes authored array order");
 eq(C.authoredSlotOrders([7, 7]).join(","), "0,1", "any shared value is the same degenerate case");
 eq(C.authoredSlotOrders([2, 0, 1]).join(","), "2,0,1", "distinct orders are the author's numbers");
@@ -658,6 +658,7 @@ eq(C.authoredSlotOrders([5]).join(","), "5", "a single slot has nothing to disam
 eq(C.authoredSlotOrders([]).length, 0, "empty in, empty out");
 
 // ---- deload intensity knob (ProgramEngineTests.swift) ----
+// [INV-DELOAD-IS-THE-SLOTS-KNOB]
 {
   const deload = (config) => C.programPlanFor(
     { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "wave", config);
@@ -682,6 +683,15 @@ eq(C.authoredSlotOrders([]).length, 0, "empty in, empty out");
     { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "offsetWave",
     { loadOffsetLb: 10, peakOffsetLb: 25, deloadMultiplier: 0 });
   eq(offsetZero.weightLb, 155, "a zero multiplier falls back to 0.775 on offsetWave too");
+  // The knob must survive the whole session builder, not just the plan table:
+  // sessionPrescription is what actually puts the bar weight in front of the
+  // lifter on a rest week.
+  const sessionDeload = C.sessionPrescription(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "automatic",
+    { deloadMultiplier: 0.85, phasePrimerEnabled: false });
+  const workBlock = sessionDeload.blocks.find((b) => b.kind === "work");
+  eq(workBlock.weightLb, 170, "the session builder hands the slot's knob to the bar");
+  eq(`${workBlock.sets}x${workBlock.reps}`, "3x5", "and keeps the fixed deload volume");
 }
 
 // A peak single's seed is a training max, so it follows the program's focus.

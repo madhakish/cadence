@@ -116,7 +116,7 @@ check(C.cardioSetLabel(climb?.distanceMiles, climb?.durationSeconds, climb?.incl
   climb?.weightLb, climb?.flights) === "0.75 mi · 20:00 · 2.3 mph",
   "a pre-flights climb no longer renders what it holds");
 
-// [AUTHORED-ORDER] The upgrade rewrite (migrateToV4 → normalizeProgram) must
+// [INV-TIED-ORDER-IS-AUTHORED] The upgrade rewrite (migrateToV4 → normalizeProgram) must
 // repair the explicitly tied day IN THE STORE — Programs.get is a raw read,
 // so what it returns is what the upgrade transaction persisted.
 const upper = program?.days?.find((d) => d.name === "Upper");
@@ -137,7 +137,7 @@ const database = await new Promise((resolve, reject) => {
 check(!database.objectStoreNames.contains("protein"), "the protein store was not dropped by V5");
 check(database.objectStoreNames.contains("bodyweight"), "V5 dropped a store it had no business touching");
 
-// [AUTHORED-ORDER] A store ALREADY at the current version never re-runs the
+// [INV-TIED-ORDER-IS-AUTHORED] A store ALREADY at the current version never re-runs the
 // upgraders, so the launch-path repair (Programs.all's rewrite) has to catch
 // a resident tied program too — and persist it, not just re-derive per read.
 await new Promise((resolve, reject) => {

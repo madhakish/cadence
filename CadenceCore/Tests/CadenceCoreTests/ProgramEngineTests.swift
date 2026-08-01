@@ -241,6 +241,7 @@ final class ProgramEngineTests: XCTestCase {
 
     // MARK: - Authored slot order (mirrors core.test.mjs)
 
+    // [INV-TIED-ORDER-IS-AUTHORED]
     func testAuthoredSlotOrdersRescueTheDegenerateTie() {
         // Every order tied → the tie carries no information; the array
         // position the author wrote the slots in is their order. Without this
@@ -258,6 +259,7 @@ final class ProgramEngineTests: XCTestCase {
 
     // MARK: - Deload intensity knob (mirrors core.test.mjs)
 
+    // [INV-DELOAD-IS-THE-SLOTS-KNOB]
     func testWaveDeloadHonoursTheSlotsOwnMultiplier() {
         func deload(_ configuration: LiftPrescriptionConfiguration) -> SessionPlan {
             ProgramEngine.plan(for: CycleState(baseWeightLb: 200, nextPhase: .deload),
@@ -283,6 +285,18 @@ final class ProgramEngineTests: XCTestCase {
                                             configuration: .init(loadOffsetLb: 10, peakOffsetLb: 25,
                                                                  deloadMultiplier: 0))
         XCTAssertEqual(offsetZero.weightLb, 155, "offsetWave shares the same zero-is-unset rescue")
+
+        // The knob must survive the whole session builder, not just the plan
+        // table: sessionPrescription is what actually puts the bar weight in
+        // front of the lifter on a rest week.
+        let sessionDeload = ProgramEngine.sessionPrescription(
+            for: CycleState(baseWeightLb: 200, nextPhase: .deload),
+            programRoundingLb: 5, exerciseType: "barbell", movementGroup: "press",
+            role: .main, focus: .strength, prescriptionStyle: .automatic,
+            configuration: .init(deloadMultiplier: 0.85, phasePrimerEnabled: false))
+        let workBlock = sessionDeload.blocks.first { $0.kind == .work }
+        XCTAssertEqual(workBlock?.weightLb, 170, "the session builder hands the slot's knob to the bar")
+        XCTAssertEqual([workBlock?.sets, workBlock?.reps], [3, 5], "and keeps the fixed deload volume")
     }
 
     // MARK: - Methodology styles (mirrors core.test.mjs)

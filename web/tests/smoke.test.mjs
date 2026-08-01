@@ -508,7 +508,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
-// [AUTHORED-ORDER] A backup whose slots all say order 0 was written in the
+// [INV-TIED-ORDER-IS-AUTHORED] A backup whose slots all say order 0 was written in the
 // sequence the author meant — older exports (and native pre-#69 programs)
 // carry exactly that shape. Import stamps array positions so the tie never
 // falls to the alphabetical display fallback; explicit distinct orders are
@@ -527,15 +527,23 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const restoredLowerA = restored.days.find((d) => d.name === "Lower A");
   ok(restoredUpperA.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")
     === "Incline DB Press:0, Single-arm DB Row:1",
-    `[AUTHORED-ORDER] tied backup lifts keep authored sequence (got: ${
+    `[INV-TIED-ORDER-IS-AUTHORED] tied backup lifts keep authored sequence (got: ${
       restoredUpperA.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")})`);
   ok(restoredUpperA.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")
     === "Face Pulls:0, DB Curls:1, Band Pull-aparts:2",
-    `[AUTHORED-ORDER] tied backup accessories keep authored sequence (got: ${
+    `[INV-TIED-ORDER-IS-AUTHORED] tied backup accessories keep authored sequence (got: ${
       restoredUpperA.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")})`);
   ok(restoredLowerA.accessories.map((a) => a.order).join() === "2,1,0",
-    `[AUTHORED-ORDER] explicit distinct orders survive a backup import verbatim (got: ${
+    `[INV-TIED-ORDER-IS-AUTHORED] explicit distinct orders survive a backup import verbatim (got: ${
       restoredLowerA.accessories.map((a) => a.order).join()})`);
+  // Round-trip healing: the next export carries the resolved orders, so a
+  // once-tied backup can never re-tie itself on a future restore.
+  const healed = JSON.parse(await db.exportJSON())
+    .programs.find((p) => p.name === "Fixture Upper/Lower")
+    .days.find((d) => d.name === "Upper A");
+  ok(healed.lifts.map((l) => l.order).join() === "0,1"
+    && healed.accessories.map((a) => a.order).join() === "0,1,2",
+    "[INV-TIED-ORDER-IS-AUTHORED] the repaired orders are what the next backup exports");
   await db.importBundle(parsed);
 }
 
@@ -1579,6 +1587,10 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     const prog = await db.Programs.get(id);
     ok(prog && prog.days.length === t.days.length && prog.focus === t.focus, `${t.id}: program created with all days`);
     ok(!prog.isActive, `${t.id}: not activated over the existing program`);
+    ok(prog.days.every((day, dayIndex) =>
+      day.lifts.every((l, i) => l.order === i && l.exerciseName === t.days[dayIndex].lifts[i].exerciseName)
+      && day.accessories.every((a, i) => a.order === i && a.exerciseName === t.days[dayIndex].accessories[i].exerciseName)),
+      `[INV-TIED-ORDER-IS-AUTHORED] ${t.id}: slots carry the template author's written sequence`);
     for (const e of t.exercises) ok(!!(await db.Exercises.byName(e.name)), `${t.id}: library has ${e.name}`);
     // A session from day 0 builds and banks without touching other programs.
     const sess = await db.Sessions.get(await session.createSessionFromProgramDay(prog, prog.days[0]));
