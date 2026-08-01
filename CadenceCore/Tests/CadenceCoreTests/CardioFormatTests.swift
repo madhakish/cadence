@@ -65,6 +65,127 @@ final class CardioFormatTests: XCTestCase {
         }
     }
 
+    // [INV-STAIRS-COUNT-FLIGHTS]
+    func testFlightClimbersAreNamedNotGuessed() {
+        XCTAssertTrue(CardioFormat.climbsFlights(exerciseName: "Stair Climber"))
+        XCTAssertFalse(CardioFormat.climbsFlights(exerciseName: "Walk"), "a walk covers ground")
+        XCTAssertFalse(CardioFormat.climbsFlights(exerciseName: "Elliptical"))
+        XCTAssertFalse(CardioFormat.climbsFlights(exerciseName: "Ruck"))
+    }
+
+    // [INV-STAIRS-COUNT-FLIGHTS]
+    func testFlightPace() {
+        XCTAssertEqual(CardioFormat.flightPace(flights: 160, durationSeconds: 1200), 8.0)
+        XCTAssertEqual(CardioFormat.flightPace(flights: 55, durationSeconds: 900), 3.7, "rounded to one decimal")
+        XCTAssertNil(CardioFormat.flightPace(flights: nil, durationSeconds: 1200), "no flights → no pace")
+        XCTAssertNil(CardioFormat.flightPace(flights: 160, durationSeconds: nil), "no time → no pace")
+        XCTAssertNil(CardioFormat.flightPace(flights: 0, durationSeconds: 0), "zeros → no pace")
+    }
+
+    // [INV-STAIRS-COUNT-FLIGHTS]
+    func testFlightsFromPaceAndTime() {
+        XCTAssertEqual(CardioFormat.flights(pacePerMinute: 8, durationSeconds: 1200), 160)
+        XCTAssertEqual(CardioFormat.flights(pacePerMinute: 7.5, durationSeconds: 900), 112.5)
+        // Whole flights would put 8.0 and 8.3 floors-per-minute on the same
+        // count over a one-minute interval, exactly as two decimals of a mile
+        // collapsed 3.0 and 3.1 mph.
+        XCTAssertNotEqual(CardioFormat.flights(pacePerMinute: 8.0, durationSeconds: 30),
+                          CardioFormat.flights(pacePerMinute: 8.3, durationSeconds: 30),
+                          "a 0.1 fl/min step must survive a thirty-second interval")
+        XCTAssertNil(CardioFormat.flights(pacePerMinute: nil, durationSeconds: 1200), "no pace → no flights")
+        XCTAssertNil(CardioFormat.flights(pacePerMinute: 8, durationSeconds: nil), "no time → no flights")
+        XCTAssertNil(CardioFormat.flights(pacePerMinute: 0, durationSeconds: 0), "zeros → no flights")
+    }
+
+    // [INV-STAIRS-COUNT-FLIGHTS]
+    func testDurationFromFlightsAndPace() {
+        XCTAssertEqual(CardioFormat.durationSeconds(flights: 160, pacePerMinute: 8), 1200)
+        XCTAssertEqual(CardioFormat.durationSeconds(flights: 60, pacePerMinute: 7.5), 480)
+        XCTAssertNil(CardioFormat.durationSeconds(flights: nil, pacePerMinute: 8), "no flights → no time")
+        XCTAssertNil(CardioFormat.durationSeconds(flights: 160, pacePerMinute: nil), "no pace → no time")
+        XCTAssertNil(CardioFormat.durationSeconds(flights: 0, pacePerMinute: 0), "zeros → no time")
+    }
+
+    // [INV-STAIRS-COUNT-FLIGHTS]
+    func testFlightSolvingIsSelfConsistent() {
+        // Same contract distance keeps: only the count and the duration are
+        // stored, so a count solved from a pace has to read back as the pace
+        // that was set on the machine.
+        for pace in [4.0, 6.0, 7.5, 8.0, 8.3, 10.0, 12.5, 15.0] {
+            for minutes in [1, 2, 5, 10, 15, 20, 30, 45, 60] {
+                let secs = minutes * 60
+                guard let flights = CardioFormat.flights(pacePerMinute: pace, durationSeconds: secs) else {
+                    return XCTFail("\(pace) fl/min for \(minutes)m should yield a count")
+                }
+                guard let readBackPace = CardioFormat.flightPace(flights: flights, durationSeconds: secs),
+                      let readBackSecs = CardioFormat.durationSeconds(flights: flights, pacePerMinute: pace) else {
+                    return XCTFail("\(pace) fl/min for \(minutes)m should solve in both directions")
+                }
+                XCTAssertEqual(readBackPace, pace, accuracy: 0.001,
+                               "\(pace) fl/min for \(minutes)m read back as a different pace")
+                XCTAssertEqual(readBackSecs, secs, accuracy: 30,
+                               "\(pace) fl/min over \(flights) flights read back as a different time")
+            }
+        }
+    }
+
+    // [INV-STAIRS-COUNT-FLIGHTS]
+    func testFlightsLabelAgreesWithItsPace() {
+        XCTAssertEqual(CardioFormat.flightsLabel(170), "170 flights")
+        XCTAssertEqual(CardioFormat.flightsLabel(1), "1 flight", "one flight is singular")
+        XCTAssertEqual(CardioFormat.flightsLabel(8.46), "8.5 flights",
+                       "a solved count keeps the decimal its pace implies")
+        XCTAssertEqual(
+            CardioFormat.setLabel(distanceMiles: nil, durationSeconds: 1200, inclinePercent: nil, flights: 160),
+            "160 flights · 20:00 · 8 fl/min",
+            "flights lead, and the pace is derived exactly like mph")
+        XCTAssertEqual(
+            CardioFormat.setLabel(distanceMiles: nil, durationSeconds: nil, inclinePercent: nil, flights: 160),
+            "160 flights",
+            "no time → no pace, the same way distance alone shows no mph")
+        // A stair-climber set logged in miles before flights existed still has
+        // to render what it holds rather than reading empty.
+        XCTAssertEqual(
+            CardioFormat.setLabel(distanceMiles: 1.5, durationSeconds: 1350, inclinePercent: nil),
+            "1.5 mi · 22:30 · 4 mph",
+            "legacy conditioning is untouched by the flights argument")
+    }
+
+    // [INV-STAIRS-COUNT-FLIGHTS]
+    func testEditorFieldsFollowTheMovementAndWhatTheSetHolds() {
+        let climb = CardioFormat.fields(exerciseName: "Stair Climber", flights: 160,
+                                        distanceMiles: nil, inclinePercent: nil)
+        XCTAssertEqual(climb.names, ["flights", "time", "pace"])
+        XCTAssertEqual(climb.label, "flights · time · pace")
+        XCTAssertEqual(climb.headerLabel, "Flights · time · pace")
+        XCTAssertFalse(climb.incline, "a climber's grade is the machine, not a setting")
+
+        let walk = CardioFormat.fields(exerciseName: "Walk", flights: nil,
+                                       distanceMiles: 3, inclinePercent: nil)
+        XCTAssertEqual(walk.names, ["distance", "time", "speed", "incline"])
+        XCTAssertFalse(walk.flights, "a walk covers ground; it has no flight count")
+
+        let ruck = CardioFormat.fields(exerciseName: "Ruck", flights: nil,
+                                       distanceMiles: 3, inclinePercent: nil)
+        XCTAssertEqual(ruck.names, ["load", "distance", "time", "speed", "incline"],
+                       "the list has to name every row the editor shows, load and incline included")
+        XCTAssertEqual(ruck.headerLabel, "Load · distance · time · speed · incline")
+
+        // A climb logged before flights existed keeps the block it was recorded
+        // with — a field that disappears takes the only way to fix the value.
+        let legacy = CardioFormat.fields(exerciseName: "Stair Climber", flights: nil,
+                                         distanceMiles: 0.75, inclinePercent: 6)
+        XCTAssertEqual(legacy.names, ["flights", "distance", "time", "speed", "pace", "incline"])
+        XCTAssertTrue(legacy.distance, "the distance it holds stays editable")
+        XCTAssertTrue(legacy.incline, "so does an incline it already carries")
+
+        // An empty climb is still a climb: no distance block appears just
+        // because nothing has been logged yet.
+        let empty = CardioFormat.fields(exerciseName: "Stair Climber", flights: nil,
+                                        distanceMiles: nil, inclinePercent: nil)
+        XCTAssertEqual(empty.names, ["flights", "time", "pace"])
+    }
+
     // [INV-RUCK-CARRIES-ITS-LOAD]
     func testLoadedCarries() {
         XCTAssertTrue(CardioFormat.carriesLoad(exerciseName: "Ruck"))

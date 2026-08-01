@@ -3,7 +3,8 @@
 Walking, running, rucking, cycling, sleds, and erg work. Conditioning is
 logged differently from lifting: there is no weight × reps, and the fields
 that matter are distance, time, speed, incline, and — for a loaded carry —
-the weight you are carrying.
+the weight you are carrying. A stair climber measures floors instead of
+ground, and gets [its own pair of fields](#stair-climbers-count-flights).
 
 ## Distance, time, and speed are one thing
 
@@ -42,6 +43,47 @@ Distance is *shown* to two decimals, the granularity treadmills and watches
 report, but stored more precisely than that. At two decimals a one-minute
 interval cannot tell 3.0 mph from 3.1 — both work out to 0.05 mi — so a pace
 you entered would read back as a different one.
+
+## Stair climbers count flights
+
+A stair climber's belt goes nowhere. Logging it in miles records a number the
+machine never reported, and "4 mph" on a climber means nothing you can compare
+against next week. So a **stair climber is measured in flights**, and the
+logger shows it a different set of fields:
+
+| Movement | You log | Cadence derives |
+| --- | --- | --- |
+| Stair Climber | flights + time | **pace**, in flights per minute |
+| Everything else | two of distance / time / speed | the third |
+
+`flights = pace × time` is the same relationship distance keeps, against a
+different yardstick. Flights and pace are **both editable**; whichever one you
+are not typing into recalculates and is marked *calculated*. Time is never
+overwritten, exactly as before.
+
+A set reads `120 flights · 15:00 · 8 fl/min`. Whole flights are what you enter
+— a console reports floors as a count — but a count solved from a pace keeps
+its decimal, because rounding it away would contradict the pace shown beside
+it.
+
+A climber gets **no incline row**. The grade is the machine, not a setting.
+
+### Climbs you logged before this existed
+
+Nothing was converted. A stair-climber set recorded as a distance keeps that
+distance, still shows it in history, and still opens with the distance and
+speed fields — plus an incline row if it carries an incline — so what you
+logged stays editable rather than disappearing behind a field it never used.
+New climbs get flights.
+
+The fields are decided when the editor opens and stay put while it is open.
+Clearing a legacy distance to zero does not make the field vanish under you;
+it is still there to type the corrected number into.
+
+Apple Health comparison is unaffected: it reports **distance**, and a flight
+count is not a distance. A session whose only conditioning is a climb offers no
+"use Health's distance" button, because there would be no honest set to write
+those miles onto.
 
 ## Loaded carries
 
@@ -98,7 +140,11 @@ Your log stays the record, and it is the only thing a backup can restore.
 Tapping **Use Health's …** rewrites only that session's conditioning
 distance. If the session has several conditioning sets, the new total is
 spread across them in proportion to what they already held, so a two-leg
-walk keeps its shape instead of collapsing into the first set.
+walk keeps its shape instead of collapsing into the first set. Sets measured
+in flights sit outside this entirely — a flight count is not a distance, and
+there is no honest way to write miles onto one. They are left out of the
+comparison total for the same reason, so the number you are shown and the
+number the button rewrites are always the same number.
 
 ### When nothing appears
 
@@ -179,6 +225,7 @@ never gave.
 ## Related
 
 - [Behavioural invariants](invariants.md) — `INV-CARDIO-SOLVES-THE-THIRD`,
-  `INV-RUCK-CARRIES-ITS-LOAD`, and `INV-HEALTH-IS-A-SECOND-OPINION`
+  `INV-STAIRS-COUNT-FLIGHTS`, `INV-RUCK-CARRIES-ITS-LOAD`, and
+  `INV-HEALTH-IS-A-SECOND-OPINION`
 - [Run a training day](../how-to/run-a-training-day.md)
 - [Back up and restore your data](../how-to/back-up-and-restore.md)

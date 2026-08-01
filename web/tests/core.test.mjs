@@ -939,6 +939,70 @@ eq(C.cardioSetLabel(2, null, null), "2 mi", "distance only");
 eq(C.cardioSetLabel(0.25, null, null), "0.25 mi", "quarter-mile keeps two decimals");
 eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
 
+// [INV-STAIRS-COUNT-FLIGHTS] a stair climber's belt goes nowhere; the console
+// counts floors, so flights + time are logged and the pace is derived.
+ok(C.cardioClimbsFlights("Stair Climber"), "[INV-STAIRS-COUNT-FLIGHTS] a stair climber counts flights");
+ok(!C.cardioClimbsFlights("Walk"), "a walk covers ground");
+ok(!C.cardioClimbsFlights("Elliptical"), "an elliptical is not a climber");
+ok(!C.cardioClimbsFlights("Ruck"), "a ruck covers ground");
+eq(C.cardioFlightPace(160, 1200), 8.0, "pace from flights + time");
+eq(C.cardioFlightPace(55, 900), 3.7, "rounded to one decimal");
+eq(C.cardioFlightPace(null, 1200), null, "no flights → no pace");
+eq(C.cardioFlightPace(160, null), null, "no time → no pace");
+eq(C.cardioFlightPace(0, 0), null, "zeros → no pace");
+eq(C.cardioFlights(8, 1200), 160, "flights from pace + time");
+eq(C.cardioFlights(7.5, 900), 112.5, "flights from pace + time");
+// Whole flights would put 8.0 and 8.3 floors-per-minute on the same count over
+// a short interval, exactly as two decimals of a mile collapsed 3.0 and 3.1 mph.
+ok(C.cardioFlights(8.0, 30) !== C.cardioFlights(8.3, 30),
+  "a 0.1 fl/min step must survive a thirty-second interval");
+eq(C.cardioFlights(null, 1200), null, "no pace → no flights");
+eq(C.cardioFlights(8, null), null, "no time → no flights");
+eq(C.cardioFlights(0, 0), null, "zeros → no flights");
+eq(C.cardioFlightDurationSeconds(160, 8), 1200, "time from flights + pace");
+eq(C.cardioFlightDurationSeconds(60, 7.5), 480, "time from flights + pace");
+eq(C.cardioFlightDurationSeconds(null, 8), null, "no flights → no time");
+eq(C.cardioFlightDurationSeconds(160, null), null, "no pace → no time");
+eq(C.cardioFlightDurationSeconds(0, 0), null, "zeros → no time");
+// Only the count and the duration are stored, so a count solved from a pace has
+// to read back as the pace that was set on the machine.
+for (const pace of [4.0, 6.0, 7.5, 8.0, 8.3, 10.0, 12.5, 15.0]) {
+  for (const minutes of [1, 2, 5, 10, 15, 20, 30, 45, 60]) {
+    const secs = minutes * 60;
+    const flights = C.cardioFlights(pace, secs);
+    ok(Math.abs(C.cardioFlightPace(flights, secs) - pace) <= 0.001,
+      `${pace} fl/min for ${minutes}m reads back as the same pace`);
+    ok(Math.abs(C.cardioFlightDurationSeconds(flights, pace) - secs) <= 30,
+      `${pace} fl/min over ${flights} flights reads back as the same time`);
+  }
+}
+eq(C.cardioFlightsLabel(170), "170 flights", "whole counts stay whole");
+eq(C.cardioFlightsLabel(1), "1 flight", "one flight is singular");
+eq(C.cardioFlightsLabel(8.46), "8.5 flights", "a solved count keeps the decimal its pace implies");
+eq(C.cardioSetLabel(null, 1200, null, null, 160), "160 flights · 20:00 · 8 fl/min",
+  "[INV-STAIRS-COUNT-FLIGHTS] flights lead, and the pace is derived exactly like mph");
+eq(C.cardioSetLabel(null, null, null, null, 160), "160 flights",
+  "no time → no pace, the same way distance alone shows no mph");
+eq(C.cardioSetLabel(1.5, 1350, null), "1.5 mi · 22:30 · 4 mph",
+  "legacy conditioning is untouched by the flights argument");
+// The editor's rows, its header, and the row's affordance line all read from
+// one rule, so a row can never advertise a field the editor withholds.
+eq(C.cardioFields("Stair Climber", 160, null, null).names.join(","), "flights,time,pace",
+  "[INV-STAIRS-COUNT-FLIGHTS] a climber gets flights and a pace, and no incline");
+eq(C.cardioFields("Stair Climber", 160, null, null).label, "flights · time · pace", "affordance line");
+eq(C.cardioFields("Stair Climber", 160, null, null).headerLabel, "Flights · time · pace", "section header");
+eq(C.cardioFields("Walk", null, 3, null).names.join(","), "distance,time,speed,incline",
+  "a walk covers ground; it has no flight count");
+eq(C.cardioFields("Ruck", null, 3, null).names.join(","), "load,distance,time,speed,incline",
+  "the list names every row the editor shows, load and incline included");
+// A climb logged before flights existed keeps the block it was recorded with —
+// a field that disappears takes the only way to fix the value with it.
+eq(C.cardioFields("Stair Climber", null, 0.75, 6).names.join(","),
+  "flights,distance,time,speed,pace,incline",
+  "[INV-STAIRS-COUNT-FLIGHTS] a pre-flights climb keeps its distance and incline editable");
+eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,time,pace",
+  "an empty climb grows no distance block just because nothing is logged yet");
+
 // ---- RestClock parity (RestClockTests.swift) ----
 {
   // start counts down from total

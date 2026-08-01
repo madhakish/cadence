@@ -8,7 +8,7 @@ final class BackupContractTests: XCTestCase {
     ///
     /// Must stay in lockstep with `BACKUP_SCHEMA_VERSION` in web/app/js/db.js.
     func testCurrentVersionIsPinned() {
-        XCTAssertEqual(BackupContract.currentSchemaVersion, 6)
+        XCTAssertEqual(BackupContract.currentSchemaVersion, 7)
     }
 
     func testCurrentAndLegacyVersionsAreSupported() {
@@ -20,6 +20,8 @@ final class BackupContractTests: XCTestCase {
         // imports — its protein is dropped on the way in, which is a lossy
         // read, not a rejection.
         XCTAssertTrue(BackupContract.supports(schemaVersion: 5))
+        XCTAssertTrue(BackupContract.supports(schemaVersion: 6),
+                      "a pre-flights bundle still restores, with no count anywhere")
         XCTAssertTrue(BackupContract.supports(schemaVersion: BackupContract.currentSchemaVersion))
     }
 

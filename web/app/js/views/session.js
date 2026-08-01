@@ -19,7 +19,7 @@ const mkSet = (order, w, r, o = {}) => ({
   implementCount: Math.max(1, o.implementCount || C.inferredImplementCount(o.exerciseType)),
   status: "planned",
   flags: [], bodyFlagSite: null, bodyFlagNote: null, durationSeconds: null, distanceMiles: null,
-  inclinePercent: null, autoregReason: null,
+  flights: null, inclinePercent: null, autoregReason: null,
 });
 const loadOptions = (exercise) => ({
   loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
@@ -438,8 +438,8 @@ export async function openSession(id) {
     const isTimed = ex && ex.type === "timed";
     const wt = isCardio
       ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editCardioSet(se, s, body) },
-          ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent, s.weightLb) }),
-          ui.h("span", { class: "sub", text: isCardio && C.cardioCarriesLoad(se.exerciseName) ? " load · distance · time" : " distance · time · incline" }))
+          ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent, s.weightLb, s.flights) }),
+          ui.h("span", { class: "sub", text: cardioHint(se.exerciseName, s) }))
       : isTimed
         ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editTimedSet(se, s, body) },
           ui.h("span", { class: "wt mono", text: C.cardioDurationLabel(s.durationSeconds || 0) }),
@@ -589,6 +589,7 @@ export async function openSession(id) {
     if (ex && ex.type === "conditioning" && last) {
       // Repeat intervals: carry the last round's cardio prescription forward.
       set.distanceMiles = last.distanceMiles ?? null;
+      set.flights = last.flights ?? null;
       set.durationSeconds = last.durationSeconds ?? null;
       set.inclinePercent = last.inclinePercent ?? null;
     }
@@ -695,23 +696,45 @@ export async function openSession(id) {
     });
   }
 
-  // Cardio (type conditioning) sets: distance / time / speed / incline.
+  // Cardio (type conditioning) sets: distance / time / speed / incline, or
+  // flights / time / pace for a climber. Names the fields the sheet will
+  // actually show, so the row never advertises one the sheet withholds.
+  function cardioHint(exerciseName, s) {
+    return ` ${C.cardioFields(exerciseName, s.flights, s.distanceMiles, s.inclinePercent).label}`;
+  }
+
   // [INV-CARDIO-SOLVES-THE-THIRD] Distance and speed are two views of one
   // relationship, so both are editable and whichever one the lifter is NOT
   // typing into is the one that recomputes. Time is never overwritten — it is
   // the one value a treadmill, a watch, and a ruck plan all agree on.
   // Only distance + duration are stored; speed is always re-derivable.
+  //
+  // [INV-STAIRS-COUNT-FLIGHTS] A climber gets the same pair of fields against
+  // a different yardstick — flights and pace instead of distance and speed.
+  // Which block a movement gets is a property of the movement, except that a
+  // set already holding the other measure keeps its block so history logged
+  // before flights existed stays editable rather than becoming unreachable.
   // Mirrors the native CardioSetSheet.
   function editCardioSet(se, s, body) {
     ui.sheet({
       title: `Log conditioning — ${se.exerciseName}`,
       build: (c, api) => {
-        const distInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "0.05", min: "0", placeholder: "0", value: s.distanceMiles > 0 ? C.trim(s.distanceMiles, 2) : "" });
+        // Captured ONCE, here, from the values as they are when the sheet
+        // opens. The rule reads what is being edited, so re-deriving it later
+        // would let a field delete itself mid-edit: clearing a legacy climb's
+        // distance would take the distance and speed rows with it and leave no
+        // way to retype the number that had just been cleared.
+        const fields = C.cardioFields(se.exerciseName, s.flights, s.distanceMiles, s.inclinePercent);
+        const showFlights = fields.flights;
+        const showDistance = fields.distance;
         const minInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", placeholder: "0", value: s.durationSeconds > 0 ? String(Math.floor(s.durationSeconds / 60)) : "" });
         const secInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", max: "59", placeholder: "0", value: s.durationSeconds > 0 ? String(s.durationSeconds % 60) : "" });
+        const readSecs = () => (parseInt(minInput.value, 10) || 0) * 60 + (parseInt(secInput.value, 10) || 0);
+        const recomputers = [];
+
+        const distInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "0.05", min: "0", placeholder: "0", value: s.distanceMiles > 0 ? C.trim(s.distanceMiles, 2) : "" });
         const startSpeed = C.cardioSpeedMph(s.distanceMiles, s.durationSeconds);
         const speedInput = ui.h("input", { type: "number", inputmode: "decimal", step: "0.1", min: "0", placeholder: "0", value: startSpeed !== null ? C.trim(startSpeed) : "" });
-        let incline = s.inclinePercent > 0 ? s.inclinePercent : 0;
         // Which of distance/speed is currently computed from the other two.
         // Distance is what gets stored, so it starts as the entered value.
         let derived = "speed";
@@ -721,8 +744,7 @@ export async function openSession(id) {
         let computedMiles = null;
         const distNote = ui.h("span", { class: "sub" });
         const speedNote = ui.h("span", { class: "sub" });
-        const readSecs = () => (parseInt(minInput.value, 10) || 0) * 60 + (parseInt(secInput.value, 10) || 0);
-        const recompute = () => {
+        const recomputeDistance = () => {
           const secs = readSecs();
           if (derived === "distance") {
             const miles = C.cardioDistanceMiles(parseFloat(speedInput.value) || 0, secs);
@@ -740,23 +762,68 @@ export async function openSession(id) {
           distNote.textContent = derived === "distance" ? "calculated" : "";
           speedNote.textContent = derived === "speed" ? "calculated" : "";
         };
-        distInput.addEventListener("input", () => { derived = "speed"; recompute(); });
-        speedInput.addEventListener("input", () => { derived = "distance"; recompute(); });
-        [minInput, secInput].forEach((el) => el.addEventListener("input", recompute));
-        c.append(ui.h("div", { class: "row" },
-          ui.h("span", {}, ui.h("span", { text: "Distance (mi) " }), distNote), distInput));
+
+        const flightInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "1", min: "0", placeholder: "0", value: s.flights > 0 ? C.trim(s.flights, 1) : "" });
+        const startPace = C.cardioFlightPace(s.flights, s.durationSeconds);
+        const paceInput = ui.h("input", { type: "number", inputmode: "decimal", step: "0.1", min: "0", placeholder: "0", value: startPace !== null ? C.trim(startPace) : "" });
+        let flightDerived = "pace";
+        let computedFlights = null;
+        const flightNote = ui.h("span", { class: "sub" });
+        const paceNote = ui.h("span", { class: "sub" });
+        const recomputeFlights = () => {
+          const secs = readSecs();
+          if (flightDerived === "flights") {
+            const solved = C.cardioFlights(parseFloat(paceInput.value) || 0, secs);
+            if (solved !== null) {
+              computedFlights = solved;
+              flightInput.value = C.trim(solved, 1);
+            }
+          } else {
+            computedFlights = null;
+            const pace = C.cardioFlightPace(parseFloat(flightInput.value) || 0, secs);
+            paceInput.value = pace !== null ? C.trim(pace) : "";
+          }
+          flightNote.textContent = flightDerived === "flights" ? "calculated" : "";
+          paceNote.textContent = flightDerived === "pace" ? "calculated" : "";
+        };
+
+        if (showFlights) {
+          flightInput.addEventListener("input", () => { flightDerived = "pace"; recomputeFlights(); });
+          paceInput.addEventListener("input", () => { flightDerived = "flights"; recomputeFlights(); });
+          recomputers.push(recomputeFlights);
+          c.append(ui.h("div", { class: "row" },
+            ui.h("span", {}, ui.h("span", { text: "Flights " }), flightNote), flightInput));
+        }
+        if (showDistance) {
+          distInput.addEventListener("input", () => { derived = "speed"; recomputeDistance(); });
+          speedInput.addEventListener("input", () => { derived = "distance"; recomputeDistance(); });
+          recomputers.push(recomputeDistance);
+          c.append(ui.h("div", { class: "row" },
+            ui.h("span", {}, ui.h("span", { text: "Distance (mi) " }), distNote), distInput));
+        }
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Time" }),
           ui.h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } },
             minInput, ui.h("span", { class: "sub", text: "min" }), secInput, ui.h("span", { class: "sub", text: "sec" }))));
-        c.append(ui.h("div", { class: "row" },
-          ui.h("span", {}, ui.h("span", { text: "Speed (mph) " }), speedNote), speedInput));
-        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Incline" }),
-          ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
+        if (showDistance) {
+          c.append(ui.h("div", { class: "row" },
+            ui.h("span", {}, ui.h("span", { text: "Speed (mph) " }), speedNote), speedInput));
+        }
+        if (showFlights) {
+          c.append(ui.h("div", { class: "row" },
+            ui.h("span", {}, ui.h("span", { text: "Pace (fl/min) " }), paceNote), paceInput));
+        }
+        // A climber's grade is the machine, not a setting, so it gets no
+        // incline row unless a legacy set already carries one.
+        let incline = s.inclinePercent > 0 ? s.inclinePercent : 0;
+        if (fields.incline) {
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Incline" }),
+            ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
+        }
         // A ruck is a walk with a pack on — the pack weight is the training
         // variable, so loaded carries keep a load where plain cardio zeroes it.
         // The load is established when the set is created, so the sheet only
         // ever edits what is already there — it never re-defaults.
-        const carries = C.cardioCarriesLoad(se.exerciseName);
+        const carries = fields.load;
         let carryLb = carries ? (s.weightLb || 0) : 0;
         if (carries) {
           c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Load" }),
@@ -766,17 +833,24 @@ export async function openSession(id) {
               onChange: (v) => { carryLb = v; },
             })));
         }
-        recompute();
+        [minInput, secInput].forEach((el) => el.addEventListener("input", () => recomputers.forEach((f) => f())));
+        recomputers.forEach((f) => f());
         c.append(ui.h("button", {
           class: "btn primary wide", style: { marginTop: "10px" }, text: "Done",
           onClick: () => {
             const secs = readSecs();
-            // A derived distance is stored at full precision; a typed one is
-            // taken from the field as entered.
+            // A derived value is stored at full precision; a typed one is taken
+            // from the field as entered.
             const miles = derived === "distance" && computedMiles !== null
               ? computedMiles
               : (parseFloat(distInput.value) || 0);
-            s.distanceMiles = miles > 0 ? miles : null;
+            const flights = flightDerived === "flights" && computedFlights !== null
+              ? computedFlights
+              : (parseFloat(flightInput.value) || 0);
+            // A hidden block never writes: a climber cannot silently acquire a
+            // distance, and a walk cannot acquire a flight count.
+            if (showDistance) s.distanceMiles = miles > 0 ? miles : null;
+            if (showFlights) s.flights = flights > 0 ? flights : null;
             s.durationSeconds = secs > 0 ? secs : null;
             s.inclinePercent = incline > 0 ? incline : null;
             // Unloaded cardio carries no load; a ruck or a sled does.

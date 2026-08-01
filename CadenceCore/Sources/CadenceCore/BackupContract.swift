@@ -19,8 +19,13 @@
 /// on the way in because the store has nowhere to put them. Older importers
 /// reject a v6 bundle on the version gate, as they should: it carries a field
 /// they do not know and is missing one they expect.
+///
+/// Version 7 adds the per-set `flights` count for conditioning measured in
+/// climbed floors. Additive and lossless — but a v6 binary would parse the
+/// bundle happily and silently drop the count, which is data loss disguised as
+/// a clean restore, so the version gate has to refuse it first.
 public enum BackupContract {
-    public static let currentSchemaVersion = 6
+    public static let currentSchemaVersion = 7
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

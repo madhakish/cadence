@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **6**. A missing version means the legacy version-0 shape.
+version **7**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,27 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 7 climbed flights
+
+Version 7 adds one optional per-set field, `flights`, for conditioning a
+machine measures in floors rather than ground covered.
+
+- **`flights`** is a non-negative number on a set object, beside
+  `distanceMiles` and `durationSeconds`. It is the count climbed; the pace in
+  flights per minute is always re-derived from it and the duration, exactly as
+  speed is re-derived from distance and duration. There is no stored pace.
+- The key is **emitted only when set**, like `inclinePercent` and
+  `revertToExerciseName`, so bundles for training that has no flight count
+  re-export byte-for-byte identically to their version-6 form.
+
+The version still has to move even though the field is optional and additive:
+a version-6 importer parses the bundle happily and silently drops the count,
+which is data loss disguised as a clean restore. Moving the version makes it
+fail the gate instead, with "this backup is newer than this app".
+
+No field shapes changed and no field was removed, so a version-6 bundle
+restores under version 7 untouched, with `flights` absent everywhere.
 
 ## Version 6 retires protein logging
 

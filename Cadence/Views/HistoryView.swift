@@ -244,9 +244,31 @@ struct SessionDetailView: View {
             .flatMap(\.workingSets)
     }
 
-    /// Everything this session logged as conditioning distance.
+    /// [INV-STAIRS-COUNT-FLIGHTS] Conditioning that measures ground covered —
+    /// the sets a Health distance can honestly be compared against and written
+    /// onto. A flight count is not a distance, and spreading miles across one
+    /// would invent a measurement the machine never reported.
+    ///
+    /// Keyed on what each set HOLDS, not on the movement alone: a climb logged
+    /// in miles before flights existed is still a logged distance, and dropping
+    /// it here while `loggedMiles` still counted it would make the comparison
+    /// and the rewrite disagree — every tap of "Use Health's…" would then move
+    /// the total further from Health instead of onto it.
+    private var distanceLoggingSets: [SetEntry] {
+        conditioningSets.filter { set in
+            if (set.flights ?? 0) > 0 { return false }
+            if (set.distanceMiles ?? 0) > 0 { return true }
+            // Nothing logged either way: only a movement that covers ground can
+            // receive the whole-total fallback below.
+            let name = set.sessionExercise?.exercise?.name ?? ""
+            return !CardioFormat.climbsFlights(exerciseName: name)
+        }
+    }
+
+    /// Everything this session logged as conditioning distance. Same basis as
+    /// the rewrite, so adopting Health's number lands exactly on it.
     private var loggedMiles: Double? {
-        let total = conditioningSets.compactMap(\.distanceMiles).reduce(0, +)
+        let total = distanceLoggingSets.compactMap(\.distanceMiles).reduce(0, +)
         return total > 0 ? total : nil
     }
 
@@ -374,7 +396,7 @@ struct SessionDetailView: View {
     /// set to write it onto. Health finding a run for a session that logged no
     /// conditioning at all is worth reporting, but the button would be a no-op.
     private var adoptableMiles: Double? {
-        guard !conditioningSets.isEmpty else { return nil }
+        guard !distanceLoggingSets.isEmpty else { return nil }
         return healthVerdict.adoptableMiles
     }
 
@@ -397,7 +419,7 @@ struct SessionDetailView: View {
     /// across several in proportion to what they already hold, so a two-leg
     /// walk keeps its shape instead of collapsing into the first set.
     private func adoptHealthDistance(_ miles: Double) {
-        let sets = conditioningSets
+        let sets = distanceLoggingSets
         guard !sets.isEmpty else { return }
         let existing = sets.compactMap(\.distanceMiles).reduce(0, +)
         if existing > 0 {
@@ -420,7 +442,8 @@ struct SessionDetailView: View {
             return CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                          durationSeconds: set.durationSeconds,
                                          inclinePercent: set.inclinePercent,
-                                         loadLb: set.weightLb)
+                                         loadLb: set.weightLb,
+                                         flights: set.flights)
         }
         if type == .timed { return CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) }
         return set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)

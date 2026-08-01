@@ -51,7 +51,13 @@ await new Promise((resolve, reject) => {
     id: 1, date: "2025-01-01T12:00:00.000Z", notes: "prior-version record", isCompleted: true,
     exercises: [{ exerciseName: "Back Squat", plannedWeightLb: 195, plannedSets: 3,
       plannedReps: 5, sets: [{ order: 0, weightLb: 185, reps: 5, isWarmup: false,
-        status: "completed", flags: [] }] }],
+        status: "completed", flags: [] }] },
+      // A climb logged the only way a pre-flights install could log one. Set
+      // documents are embedded in the session, so this is the record shape the
+      // new optional field lands on.
+      { exerciseName: "Stair Climber", sets: [{ order: 0, weightLb: 0, reps: 1,
+        isWarmup: false, status: "completed", flags: [],
+        durationSeconds: 1200, distanceMiles: 0.75 }] }],
   });
   transaction.oncomplete = resolve;
   transaction.onerror = () => reject(transaction.error);
@@ -60,6 +66,7 @@ await new Promise((resolve, reject) => {
 old.close();
 
 const db = await import("../app/js/db.js");
+const C = await import("../app/js/core.js");
 const [exercise, program, session, weights, settings] = await Promise.all([
   db.Exercises.byName("Back Squat"), db.Programs.get(1), db.Sessions.get(1),
   db.Bodyweight.all(), db.Settings.get(),
@@ -78,6 +85,19 @@ check(session?.exercises?.[0]?.sets?.[0]?.plannedWeightLb === null,
   "historical set received a fabricated current plan");
 check(session?.exercises?.[0]?.sets?.[0]?.prescriptionBlock === "work",
   "historical working set block default was not migrated");
+
+// [INV-STAIRS-COUNT-FLIGHTS] `flights` is a new OPTIONAL field on embedded set
+// documents, so there is nothing to transform and no upgrader adds it — the
+// same treatment `inclinePercent` already gets. What has to hold is that a
+// session document written before the field existed still reads back whole,
+// with the count absent rather than zero, and renders the distance it holds.
+const climb = session?.exercises?.find((e) => e.exerciseName === "Stair Climber")?.sets?.[0];
+check(climb?.distanceMiles === 0.75, "a pre-flights climb lost the distance it was logged with");
+check(climb?.durationSeconds === 1200, "a pre-flights climb lost its duration");
+check(climb?.flights === undefined, "an upgraded set was given a flight count it never had");
+check(C.cardioSetLabel(climb?.distanceMiles, climb?.durationSeconds, climb?.inclinePercent,
+  climb?.weightLb, climb?.flights) === "0.75 mi · 20:00 · 2.3 mph",
+  "a pre-flights climb no longer renders what it holds");
 
 // V5 retires protein logging. The store goes; nothing else does.
 const database = await new Promise((resolve, reject) => {
@@ -102,4 +122,4 @@ if (failures.length) {
   for (const failure of failures) console.error("FAIL:", failure);
   process.exit(1);
 }
-console.log("\n15 IndexedDB migration assertions passed, 0 failed");
+console.log(`\n${19 - failures.length} IndexedDB migration assertions passed, ${failures.length} failed`);

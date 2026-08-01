@@ -180,6 +180,11 @@ final class SetEntry {
     var durationSeconds: Int?
     /// Conditioning distance, miles.
     var distanceMiles: Double?
+    /// Flights climbed, for conditioning a belt measures in floors rather than
+    /// ground covered. Nil on every set written before V5 and on every movement
+    /// that is not a climber; the pace is always re-derived from this and
+    /// `durationSeconds`, never stored.
+    var flights: Double?
     /// Conditioning treadmill/road grade, percent.
     var inclinePercent: Double?
     /// Snapshot of the load interpretation used when this set was created.
@@ -203,6 +208,7 @@ final class SetEntry {
         bodyFlagNote: String? = nil,
         durationSeconds: Int? = nil,
         distanceMiles: Double? = nil,
+        flights: Double? = nil,
         inclinePercent: Double? = nil,
         loadBasis: LoadBasis? = nil,
         implementCount: Int = 0,
@@ -230,6 +236,7 @@ final class SetEntry {
         self.bodyFlagNote = bodyFlagNote
         self.durationSeconds = durationSeconds
         self.distanceMiles = distanceMiles
+        self.flights = flights
         self.inclinePercent = inclinePercent
         self.loadBasisRaw = loadBasis?.rawValue ?? ""
         self.implementCount = implementCount
