@@ -1378,6 +1378,15 @@ async function advanceProgram(session, milestones) {
     }
   }
 
+  // In recovery phase only bridge exposures count toward completion. A
+  // non-bridge day (possible when the user manually changes "Next day" while
+  // currentWeek == 4) must not trigger rollover — reset the pointer to the
+  // first bridge day and return so the selected exposures drive schedule advance.
+  if (isRecovery && !recoveryDayOrders.includes(tag.dayIndex)) {
+    program.nextDayIndex = recoveryDayOrders[0] ?? allDayOrders[0] ?? 0;
+    return { program, noteRecords: flushNotes() };
+  }
+
   // Walk day ORDER values, not array positions (see core scheduleAdvance).
   const advance = C.scheduleAdvance(isRecovery ? recoveryDayOrders : allDayOrders, tag.dayIndex);
   const lastDay = advance.isLastDay;

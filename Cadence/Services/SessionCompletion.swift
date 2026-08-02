@@ -656,6 +656,16 @@ enum SessionCompletion {
             }
         }
 
+        // In recovery phase only bridge exposures count toward completion. A
+        // non-bridge day (possible when the user manually changes nextDayIndex
+        // while currentWeek == 4) must not trigger rollover — reset the pointer
+        // to the first bridge day and return so the selected exposures drive
+        // schedule advance.
+        if isRecovery && !recoveryDayOrders.contains(dayIndex) {
+            program.nextDayIndex = recoveryDayOrders.first ?? allDayOrders.first ?? 0
+            return
+        }
+
         // Walk day ORDER values, not array positions — `orderedDays` also
         // drops the relationship aliases that a raw `days.count` would inflate.
         let advance = ProgramProgression.scheduleAdvance(
