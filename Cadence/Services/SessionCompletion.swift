@@ -420,72 +420,79 @@ enum SessionCompletion {
         return decided ? program.currentWeek : nil
     }
 
-    /// Fetch only the evidence that can still change Recovery's decision.
-    /// Two rows are enough because two sessions close the bridge.
-    private static func recentRecoverySessions(
-        for program: Program, context: ModelContext
+    /// Fetch only the newest completed sessions for one phase of this cycle.
+    /// Keeping the predicate and descriptor as separate expressions avoids a
+    /// pathological Swift predicate-macro type-check while preserving the
+    /// database-side filter and limit.
+    private static func recentCompletedSessions(
+        for program: Program,
+        phase: Int,
+        limit: Int,
+        context: ModelContext
     ) throws -> [WorkoutSession] {
         let stableProgramID = program.id
         let legacyProgramName = program.name
         let cycleNumber = program.cycleNumber
-        let recoveryPhase = ProgramProgression.deloadWeek
+        let predicate = #Predicate<WorkoutSession> { session in
+            session.isCompleted
+                && session.programCycleNumber == cycleNumber
+                && session.programWeek == phase
+                && (session.programID == stableProgramID
+                    || (session.programID == nil && session.programName == legacyProgramName))
+        }
+        let newestFirst = [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]
         var descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { session in
-                session.isCompleted
-                    && session.programCycleNumber == cycleNumber
-                    && session.programWeek == recoveryPhase
-                    && (session.programID == stableProgramID
-                        || (session.programID == nil && session.programName == legacyProgramName))
-            },
-            sortBy: [
-                SortDescriptor(\.date, order: .reverse),
-            ]
+            predicate: predicate,
+            sortBy: newestFirst
         )
-        // The bridge closes at two sessions. Fetching anything older cannot
-        // change the decision or the selected-day set.
-        descriptor.fetchLimit = ProgramProgression.recoverySessionLimit
+        descriptor.fetchLimit = limit
         return try context.fetch(descriptor)
+    }
+
+    /// Two rows are enough because two Recovery sessions close the bridge.
+    private static func recentRecoverySessions(
+        for program: Program, context: ModelContext
+    ) throws -> [WorkoutSession] {
+        try recentCompletedSessions(
+            for: program,
+            phase: ProgramProgression.deloadWeek,
+            limit: ProgramProgression.recoverySessionLimit,
+            context: context
+        )
     }
 
     private static func lastHardPhaseCompletion(
         for program: Program, context: ModelContext
     ) throws -> Date? {
-        let stableProgramID = program.id
-        let legacyProgramName = program.name
-        let cycleNumber = program.cycleNumber
         let peakPhase = ProgramProgression.gradedWeek
         let volumePhase = 1
         let loadPhase = 2
 
-        func latest(_ predicate: Predicate<WorkoutSession>) throws -> WorkoutSession? {
-            var descriptor = FetchDescriptor<WorkoutSession>(
-                predicate: predicate,
-                sortBy: [
-                    SortDescriptor(\.date, order: .reverse),
-                ]
-            )
-            descriptor.fetchLimit = 1
-            return try context.fetch(descriptor).first
-        }
-
-        let peak = try latest(#Predicate { session in
-            session.isCompleted
-                && session.programCycleNumber == cycleNumber
-                && session.programWeek == peakPhase
-                && (session.programID == stableProgramID
-                    || (session.programID == nil && session.programName == legacyProgramName))
-        })
+        let peak = try recentCompletedSessions(
+            for: program,
+            phase: peakPhase,
+            limit: 1,
+            context: context
+        ).first
         if let peak { return peak.completedAt ?? peak.date }
 
         // Early recovery deliberately skips Peak. In that case the most
         // recent Volume/Load completion is the expiry anchor.
-        let preceding = try latest(#Predicate { session in
-            session.isCompleted
-                && session.programCycleNumber == cycleNumber
-                && (session.programWeek == volumePhase || session.programWeek == loadPhase)
-                && (session.programID == stableProgramID
-                    || (session.programID == nil && session.programName == legacyProgramName))
-        })
+        let volume = try recentCompletedSessions(
+            for: program,
+            phase: volumePhase,
+            limit: 1,
+            context: context
+        ).first
+        let load = try recentCompletedSessions(
+            for: program,
+            phase: loadPhase,
+            limit: 1,
+            context: context
+        ).first
+        let preceding = [volume, load].compactMap { $0 }.max {
+            ($0.completedAt ?? $0.date) < ($1.completedAt ?? $1.date)
+        }
         return preceding.map { $0.completedAt ?? $0.date }
     }
 
