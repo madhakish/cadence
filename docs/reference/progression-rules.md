@@ -46,14 +46,24 @@ full-body, conditioning-only, damaged, or otherwise ambiguous, Cadence keeps
 the complete authored pass rather than guessing which work to remove.
 
 Banking the highest-ordered day of rotations 1–3 advances the rotation.
-Recovery closes when its selected exposures are banked, when any two recovery
-sessions have been banked, or when seven elapsed days have passed since the
-last completed Peak exposure. The two-session cap covers an old or manually
-positioned pointer that prescribed non-selected A/B days. The elapsed value is
-only a stale-bridge expiry guard: it does not group training into weeks, count
-calendar weeks, or advance Volume/Load/Peak without completed cycles. If an
-early-recovery decision skipped Peak, the last completed hard rotation is the
-expiry anchor instead. Closing Recovery applies all stashed grades and starts
+Recovery closes when its selected exposures are banked, when as many recovery
+sessions as the bridge is long have been banked, or when seven elapsed days
+have passed with the bridge half-finished. The session cap covers an old or
+manually positioned pointer that prescribed non-selected A/B days; it is the
+bridge's own length with a floor of two, so a program keeping its complete
+authored pass is never truncated by the guard. The elapsed value is only a
+stale-bridge expiry guard: it does not group training into weeks, count
+calendar weeks, or advance Volume/Load/Peak without completed cycles. It
+measures from the most recent evidence the bridge was live — the later of its
+banked recovery exposures and the last completed Peak — so a bridge you are
+still working through is never expired mid-use. If an early-recovery decision
+skipped Peak, the last completed hard rotation is the anchor instead.
+
+Two things never trigger that expiry. A bridge with **no banked recovery
+exposure** has not started, so setting Rotation to Recovery in the editor is
+respected rather than rolled back on the next render. And reconciliation never
+runs while a **session is open**, because advancing the program beneath a
+workout in progress would make banking it fail its stale-tag check. Closing Recovery applies all stashed grades and starts
 the next mesocycle at rotation 1, day 1. Rotation 3 or recovery is the only
 phase the wave can be in when a cycle ends,
 with one exception: after two consecutive red rotations the program cuts the

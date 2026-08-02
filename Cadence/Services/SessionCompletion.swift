@@ -471,16 +471,32 @@ enum SessionCompletion {
             .sorted { $0.date > $1.date }
     }
 
-    /// Two rows are enough because two Recovery sessions close the bridge.
+    /// Enough rows to reach the bridge's own cap. That is two for a normal
+    /// upper/lower bridge, but a program keeping its full authored pass has a
+    /// longer one, and fetching only two would report it complete early.
     private static func recentRecoverySessions(
-        for program: Program, context: ModelContext
+        for program: Program, selectedExposureCount: Int, context: ModelContext
     ) throws -> [WorkoutSession] {
         try recentCompletedSessions(
             for: program,
             phase: ProgramProgression.deloadWeek,
-            limit: ProgramProgression.recoverySessionLimit,
+            limit: Swift.max(ProgramProgression.recoverySessionLimit, selectedExposureCount),
             context: context
         )
+    }
+
+    /// The most recent evidence that this recovery bridge is still live.
+    ///
+    /// Banked recovery work counts. Anchoring on the hard phases alone expired
+    /// a bridge the lifter was actively working through: peak on Monday, the
+    /// first recovery exposure on day five, open the app on day eight and the
+    /// second selected exposure was dropped before it could be prescribed.
+    private static func recoveryWindowAnchor(
+        for program: Program, recoverySessions: [WorkoutSession], context: ModelContext
+    ) throws -> Date? {
+        let stamps = recoverySessions.map { $0.completedAt ?? $0.date }
+            + [try lastHardPhaseCompletion(for: program, context: context)].compactMap { $0 }
+        return stamps.max()
     }
 
     private static func lastHardPhaseCompletion(
@@ -527,7 +543,17 @@ enum SessionCompletion {
     ) throws -> RecoveryBridgeReconciliation? {
         guard program.currentWeek == ProgramProgression.deloadWeek else { return nil }
 
-        let recoverySessions = try recentRecoverySessions(for: program, context: context)
+        // Never advance the program out from under a workout in progress. The
+        // open session was built against this rotation; rolling the cycle while
+        // it is on screen makes banking it fail the stale-tag guard and land as
+        // orphaned history. Reconciliation is not urgent — it runs on the next
+        // render once the session is banked or discarded.
+        var openDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { !$0.isCompleted }
+        )
+        openDescriptor.fetchLimit = 1
+        guard try context.fetch(openDescriptor).isEmpty else { return nil }
+
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
         let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
         let recoveryOrders = ProgramProgression.recoveryDayOrders(
@@ -539,34 +565,44 @@ enum SessionCompletion {
                 )
             }
         )
+        let recoverySessions = try recentRecoverySessions(
+            for: program, selectedExposureCount: recoveryOrders.count, context: context
+        )
         let selectedComplete = ProgramProgression.recoveryScheduleAdvance(
             dayOrders: recoveryOrders,
             completedDayOrders: recoverySessions.compactMap(\.programDayIndex)
         ).isLastDay
-        let immediateReason = ProgramProgression.recoveryBridgeCompletionReason(
+        // The anchor is only consulted for the elapsed-window case, and that
+        // case now requires banked recovery work, so resolving it eagerly would
+        // run two extra fetches on every render for nothing.
+        var reason = ProgramProgression.recoveryBridgeCompletionReason(
             completedRecoverySessions: recoverySessions.count,
+            selectedExposureCount: recoveryOrders.count,
             selectedExposuresComplete: selectedComplete,
             lastHardPhaseCompletion: nil,
             asOf: now
         )
-        var reason = immediateReason
-        if reason == nil {
+        if reason == nil, !recoverySessions.isEmpty {
             reason = ProgramProgression.recoveryBridgeCompletionReason(
                 completedRecoverySessions: recoverySessions.count,
+                selectedExposureCount: recoveryOrders.count,
                 selectedExposuresComplete: selectedComplete,
-                lastHardPhaseCompletion: try lastHardPhaseCompletion(for: program, context: context),
+                lastHardPhaseCompletion: try recoveryWindowAnchor(
+                    for: program, recoverySessions: recoverySessions, context: context
+                ),
                 asOf: now
             )
         }
         guard let reason else { return nil }
 
         let nextCycle = program.cycleNumber + 1
+        let banked = recoverySessions.count
         let message: String
         switch reason {
         case .selectedExposures:
             message = "Recovery complete — planned recovery exposures banked. Cycle \(nextCycle) starts at Volume."
         case .sessionLimit:
-            message = "Recovery complete — two recovery sessions banked. Cycle \(nextCycle) starts at Volume."
+            message = "Recovery complete — \(banked) recovery session\(banked == 1 ? "" : "s") banked. Cycle \(nextCycle) starts at Volume."
         case .windowElapsed:
             message = "Recovery complete — the seven-day recovery window elapsed. Cycle \(nextCycle) starts at Volume."
         }

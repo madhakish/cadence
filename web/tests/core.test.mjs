@@ -423,16 +423,35 @@ eq(C.recoveryScheduleAdvance([], [0]).isLastDay, false, "an empty bridge fails c
 // program. Any two banked recovery sessions are also a hard cap, even when a
 // legacy/manual pointer sent them to non-selected day orders.
 const peakMs = Date.UTC(2042, 0, 1, 12);
-eq(C.recoveryBridgeCompletionReason(1, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS - 1), null,
+eq(C.recoveryBridgeCompletionReason(1, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS - 1), null,
   "one recovery session inside the window leaves the bridge open");
-eq(C.recoveryBridgeCompletionReason(2, false, peakMs, peakMs + 60_000), "sessionLimit",
+eq(C.recoveryBridgeCompletionReason(2, 2, false, peakMs, peakMs + 60_000), "sessionLimit",
   "two recovery sessions close the bridge regardless of day order");
-eq(C.recoveryBridgeCompletionReason(0, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), "windowElapsed",
-  "recovery expires at exactly seven elapsed days");
-eq(C.recoveryBridgeCompletionReason(1, true, null, peakMs), "selectedExposures",
+eq(C.recoveryBridgeCompletionReason(1, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "a half-finished bridge expires at exactly seven elapsed days");
+eq(C.recoveryBridgeCompletionReason(1, 2, true, null, peakMs), "selectedExposures",
   "a short selected bridge may close normally");
-eq(C.recoveryBridgeCompletionReason(1, false, null, peakMs + 2 * C.RECOVERY_WINDOW_MS), null,
+eq(C.recoveryBridgeCompletionReason(1, 2, false, null, peakMs + 2 * C.RECOVERY_WINDOW_MS), null,
   "missing history never invents an expiry anchor");
+
+// A bridge nobody has banked into has not started. Expiring one reverted a
+// deliberate manual reposition to Recovery the moment Today rendered — rolling
+// the cycle, applying pendings and accruing a stall against a lifter who had
+// just asked for a recovery week.
+eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), null,
+  "an unbanked bridge is never expired by the window");
+eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + 40 * C.RECOVERY_WINDOW_MS), null,
+  "no matter how stale the hard-phase anchor is");
+
+// The cap is the bridge's OWN length. A program that is not recognizably
+// upper/lower keeps its full authored pass, and a constant two silently dropped
+// day three onward — losing exactly the work that fallback exists to preserve.
+eq(C.recoveryBridgeCompletionReason(2, 4, false, peakMs, peakMs + 60_000), null,
+  "a four-day authored bridge is not closed by two sessions");
+eq(C.recoveryBridgeCompletionReason(4, 4, false, peakMs, peakMs + 60_000), "sessionLimit",
+  "it closes once its own length is banked");
+eq(C.recoveryBridgeCompletionReason(2, 1, false, peakMs, peakMs + 60_000), "sessionLimit",
+  "and a degenerate one-day bridge still keeps the two-session floor");
 
 // The top scheme must describe work that was actually performed. Reporting the
 // group minimum across every top-weight set invented schemes nobody did — and
@@ -1574,6 +1593,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-PHASE-NAME-IS-PER-SLOT] the program-level indicator is style-neutral");
   eq(C.rotationLabel(0), "Rotation 1 of 4", "rotation clamps low");
   eq(C.rotationLabel(7), "Rotation 4 of 4", "rotation clamps high");
+  eq(C.rotationLabel(undefined), "Rotation 1 of 4", "a missing pointer never reads as NaN");
 }
 
 // ---- Exposure preview (#106) -----------------------------------------------
@@ -1637,6 +1657,41 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     && Number.isFinite(e.prescription.mainWork.reps) && e.prescription.mainWork.reps > 0),
     "a slot with no rep-window fields still previews real numbers");
   eq(bare[0].prescription.mainWork.reps, 5, "and falls back to the documented 5-rep default");
+
+  // Twin slots are ONE progression. A novice A/B split squats on both days, so
+  // the shared base advances twice per rotation; projecting one advance per
+  // exposure understated every future weight by an increment per rotation.
+  const twinned = C.exposurePreview({ count: 4, baseWeightLb: 205, prescriptionStyle: "linearFives",
+    movementGroup: "squat", programRoundingLb: 5, configuration: { workingSets: 3 },
+    synchronizedExposuresPerRotation: 2 });
+  eq(twinned.map((e) => e.baseWeightLb).join(","), "205,225,245,265",
+    "a squat on both days of an A/B split advances +20 between its own appearances");
+  ok((twinned[0].advanceNote || "").includes("Shared with 2 days"),
+    "and the note says why the jump is bigger than one increment");
+  eq(C.synchronizedExposuresPerRotation([
+    [C.synchronizedExposureKey("Back Squat", "linearFives")],
+    [C.synchronizedExposureKey("Back Squat", "linearFives"), C.synchronizedExposureKey("Bench Press", "linearFives")],
+    [C.synchronizedExposureKey("Deadlift", "linearFives")],
+  ], C.synchronizedExposureKey("Back Squat", "linearFives")), 2, "counts the days carrying the shared progression");
+  eq(C.synchronizedExposuresPerRotation([
+    [C.synchronizedExposureKey("Back Squat", "linearFives"), C.synchronizedExposureKey("Back Squat", "linearFives")],
+  ], C.synchronizedExposureKey("Back Squat", "linearFives")), 1,
+    "a day repeating one lift+style still banks it once — the banking layer dedupes on this key");
+  eq(C.synchronizedExposuresPerRotation([
+    [C.synchronizedExposureKey("Back Squat", "linearFives")],
+    [C.synchronizedExposureKey("Back Squat", "wave")],
+  ], C.synchronizedExposureKey("Back Squat", "linearFives")), 1,
+    "same lift on a different style is a different progression and never synchronizes");
+
+  // A peak banked this cycle already carries an earned base. Recovery still
+  // runs off the OLD one — the pending grade lands at the rollover, not before.
+  const banked = C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4, prescriptionStyle: "wave",
+    programRoundingLb: 5,
+    pendingState: { baseWeightLb: 210, estimatedMaxLb: 260, stallCount: 0, role: "main", lastIncrementLb: 10 } });
+  eq(banked[0].baseWeightLb, 200, "recovery previews off the base the session will actually use");
+  eq(banked[1].baseWeightLb, 210, "and the next cycle picks up the grade already banked at the peak");
+  eq(C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4, prescriptionStyle: "wave", programRoundingLb: 5 })[1]
+    .baseWeightLb, 200, "with nothing banked the base simply holds");
 
   // Contract edges.
   eq(C.exposurePreview({ baseWeightLb: 100, count: 0 }).length, 0, "a zero count previews nothing");

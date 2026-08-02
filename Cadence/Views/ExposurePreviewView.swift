@@ -24,6 +24,9 @@ struct ExposurePreviewView: View {
     let cycleNumber: Int
     let roundingLb: Double
     var focus: TrainingFocus = .strength
+    /// How many of the program's days bank this lift+style. An A/B novice split
+    /// squats on both, and the shared base advances once per day.
+    var synchronizedExposuresPerRotation: Int = 1
     var count: Int = 4
 
     private var exercise: Exercise? { exercises.first { $0.name == lift.exerciseName } }
@@ -32,6 +35,20 @@ struct ExposurePreviewView: View {
     private var resolvedStyle: PrescriptionStyle {
         ProgramEngine.resolvedStyle(lift.prescription, movementGroup: exercise?.movementGroup,
                                     role: lift.role, focus: focus)
+    }
+
+    /// The slot's own banked-but-unapplied grade, if a peak has already been
+    /// graded this cycle. Without it the next-cycle entries preview the old
+    /// base — the one the session will NOT use.
+    private var pendingState: ProgramLiftState? {
+        guard let pendingBase = lift.pendingBaseWeightLb else { return nil }
+        return ProgramLiftState(
+            baseWeightLb: pendingBase,
+            estimatedMaxLb: lift.pendingEstimatedMaxLb ?? lift.estimatedMaxLb,
+            stallCount: lift.pendingStallCount ?? lift.stallCount,
+            role: lift.role,
+            lastIncrementLb: lift.pendingLastIncrementLb ?? 0
+        )
     }
 
     private var entries: [ProgramEngine.ExposurePreviewEntry] {
@@ -48,7 +65,9 @@ struct ExposurePreviewView: View {
             role: lift.role,
             focus: focus,
             prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? "")
+            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
+            pendingState: pendingState,
+            synchronizedExposuresPerRotation: synchronizedExposuresPerRotation
         )
     }
 

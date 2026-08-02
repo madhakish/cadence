@@ -407,12 +407,28 @@ public enum ProgramProgression {
     /// Mirrored 1:1 in web/app/js/core.js `recoveryBridgeCompletionReason`.
     public static func recoveryBridgeCompletionReason(
         completedRecoverySessions: Int,
+        selectedExposureCount: Int,
         selectedExposuresComplete: Bool,
         lastHardPhaseCompletion: Date?,
         asOf now: Date
     ) -> RecoveryBridgeCompletionReason? {
         if selectedExposuresComplete { return .selectedExposures }
-        if completedRecoverySessions >= recoverySessionLimit { return .sessionLimit }
+        // The cap is the BRIDGE'S OWN LENGTH, not a constant two. A program
+        // that is not recognizably upper/lower keeps its full authored pass —
+        // that fallback is deliberate, and capping it at two silently dropped
+        // day three onward for full-body, Olympic and conditioning programs,
+        // which is the work-losing behaviour the fallback exists to prevent.
+        let cap = Swift.max(recoverySessionLimit, selectedExposureCount)
+        if completedRecoverySessions >= cap { return .sessionLimit }
+        // A bridge nobody has banked into has not started, and the seven-day
+        // guard is for a HALF-FINISHED one. Expiring an unbanked bridge
+        // reverted a deliberate manual reposition to Recovery — rolling the
+        // cycle, applying pendings and accruing a stall — the moment Today
+        // rendered, which is the opposite of what a lifter asking for a
+        // recovery week wants. The indefinite-light-work bug this guard was
+        // written for always has banked recovery sessions, so it stays fixed:
+        // it is the pointer that was stuck, not the banking.
+        guard completedRecoverySessions >= 1 else { return nil }
         guard let anchor = lastHardPhaseCompletion,
               now.timeIntervalSince(anchor) >= recoveryWindow else { return nil }
         return .windowElapsed

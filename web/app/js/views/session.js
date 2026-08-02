@@ -1299,15 +1299,22 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
   const hardPhase = cycleSessions.filter((candidate) =>
     candidate.programTag.week > 0 && candidate.programTag.week < C.DELOAD_WEEK);
   const peak = hardPhase.filter((candidate) => candidate.programTag.week === C.GRADED_WEEK);
-  const anchors = peak.length ? peak : hardPhase;
+  const hardAnchors = peak.length ? peak : hardPhase;
+  // Banked recovery work counts as evidence the bridge is still live. Anchoring
+  // on the hard phases alone expired a bridge the lifter was actively working
+  // through: peak on Monday, the first recovery exposure on day five, open the
+  // app on day eight and the second selected exposure was dropped before it
+  // could be prescribed. Mirrors SessionCompletion.recoveryWindowAnchor.
+  const anchors = [...hardAnchors, ...recoverySessions];
   const anchorMs = anchors.length
     ? Math.max(...anchors.map((candidate) => Date.parse(candidate.completedAt || candidate.date)))
     : null;
   return {
     reason: C.recoveryBridgeCompletionReason(
-      recoverySessions.length, selectedComplete, anchorMs, nowMs,
+      recoverySessions.length, recoveryDayOrders.length, selectedComplete, anchorMs, nowMs,
     ),
     recoverySessions,
+    recoveryDayOrders,
   };
 }
 
@@ -1316,16 +1323,25 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
 // ordinary progression remains driven by completed cycles.
 export async function reconcileRecoveryBridge(program, completed = null, now = new Date()) {
   if (!program || program.currentWeek !== C.DELOAD_WEEK) return null;
+  // Never advance the program out from under a workout in progress. The open
+  // session was built against this rotation; rolling the cycle while it is on
+  // screen makes banking it fail the stale-tag guard and land as orphaned
+  // history, and on this client it also let createSessionFromProgramDay open a
+  // SECOND session while the first stayed open. Reconciliation is not urgent —
+  // it runs on the next render once the session is banked or discarded.
+  // Mirrors SessionCompletion.reconcileRecoveryBridge.
+  if ((await Sessions.openAll()).length) return null;
   const [history, exercises] = await Promise.all([
     completed || Sessions.completed(), Exercises.all(),
   ]);
   const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
-  const { reason } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
+  const { reason, recoverySessions } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
   if (!reason) return null;
 
   const nextCycle = program.cycleNumber + 1;
+  const banked = recoverySessions.length;
   const message = reason === "sessionLimit"
-    ? `Recovery complete — two recovery sessions banked. Cycle ${nextCycle} starts at Volume.`
+    ? `Recovery complete — ${banked} recovery session${banked === 1 ? "" : "s"} banked. Cycle ${nextCycle} starts at Volume.`
     : reason === "windowElapsed"
       ? `Recovery complete — the seven-day recovery window elapsed. Cycle ${nextCycle} starts at Volume.`
       : `Recovery complete — planned recovery exposures banked. Cycle ${nextCycle} starts at Volume.`;

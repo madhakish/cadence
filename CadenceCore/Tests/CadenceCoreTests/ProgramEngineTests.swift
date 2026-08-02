@@ -609,6 +609,67 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertTrue(preview.allSatisfy { $0.prescription.mainWork.sets >= 1 })
     }
 
+    /// Twin slots are ONE progression. A novice A/B split squats on both days,
+    /// so the shared base advances twice per rotation; projecting one advance
+    /// per exposure understated every future weight by an increment per
+    /// rotation. Mirrors the same block in web/tests/core.test.mjs.
+    func testTwinnedSlotsAdvanceTheSharedBaseOncePerDay() {
+        let preview = ProgramEngine.exposurePreview(
+            count: 4, baseWeightLb: 205, programRoundingLb: 5, movementGroup: "squat",
+            prescriptionStyle: .linearFives, configuration: .init(workingSets: 3),
+            synchronizedExposuresPerRotation: 2
+        )
+        XCTAssertEqual(preview.map(\.baseWeightLb), [205, 225, 245, 265],
+                       "a squat on both days of an A/B split advances +20 between its own appearances")
+        XCTAssertEqual(preview[0].advanceNote?.contains("Shared with 2 days"), true,
+                       "and the note says why the jump is bigger than one increment")
+    }
+
+    func testSynchronizedExposureCountingIsPerDayAndPerStyle() {
+        func key(_ name: String, _ style: PrescriptionStyle) -> String {
+            ProgramEngine.synchronizedExposureKey(exerciseName: name, style: style)
+        }
+        XCTAssertEqual(ProgramEngine.synchronizedExposuresPerRotation(
+            dayExposureKeys: [
+                [key("Back Squat", .linearFives)],
+                [key("Back Squat", .linearFives), key("Bench Press", .linearFives)],
+                [key("Deadlift", .linearFives)],
+            ],
+            key: key("Back Squat", .linearFives)
+        ), 2, "counts the days carrying the shared progression")
+
+        XCTAssertEqual(ProgramEngine.synchronizedExposuresPerRotation(
+            dayExposureKeys: [[key("Back Squat", .linearFives), key("Back Squat", .linearFives)]],
+            key: key("Back Squat", .linearFives)
+        ), 1, "a day repeating one lift+style still banks it once — the banking layer dedupes on this key")
+
+        XCTAssertEqual(ProgramEngine.synchronizedExposuresPerRotation(
+            dayExposureKeys: [[key("Back Squat", .linearFives)], [key("Back Squat", .wave)]],
+            key: key("Back Squat", .linearFives)
+        ), 1, "same lift on a different style is a different progression and never synchronizes")
+    }
+
+    /// A peak banked this cycle already carries an earned base. Recovery still
+    /// runs off the OLD one — the pending grade lands at the rollover, not
+    /// before. Mirrors the same block in web/tests/core.test.mjs.
+    func testPreviewCarriesTheBankedPendingGradeIntoTheNextCycle() {
+        let pending = ProgramLiftState(baseWeightLb: 210, estimatedMaxLb: 260,
+                                       stallCount: 0, role: .main, lastIncrementLb: 10)
+        let banked = ProgramEngine.exposurePreview(
+            count: 2, baseWeightLb: 200, rotation: 4, programRoundingLb: 5,
+            prescriptionStyle: .wave, pendingState: pending
+        )
+        XCTAssertEqual(banked[0].baseWeightLb, 200,
+                       "recovery previews off the base the session will actually use")
+        XCTAssertEqual(banked[1].baseWeightLb, 210,
+                       "and the next cycle picks up the grade already banked at the peak")
+
+        let unbanked = ProgramEngine.exposurePreview(
+            count: 2, baseWeightLb: 200, rotation: 4, programRoundingLb: 5, prescriptionStyle: .wave
+        )
+        XCTAssertEqual(unbanked[1].baseWeightLb, 200, "with nothing banked the base simply holds")
+    }
+
     func testExposurePreviewContractEdges() {
         XCTAssertTrue(ProgramEngine.exposurePreview(count: 0, baseWeightLb: 100).isEmpty)
         XCTAssertEqual(

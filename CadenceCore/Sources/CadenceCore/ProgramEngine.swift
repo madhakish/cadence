@@ -735,6 +735,27 @@ public enum ProgramEngine {
         return SessionPrescription(mainWork: work, blocks: blocks)
     }
 
+    /// Slots sharing one lift AND one style are ONE progression: banking any of
+    /// them advances the shared base and synchronizes the twins, which is what
+    /// makes "add weight every session" hold across a novice A/B split.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `synchronizedExposureKey`.
+    public static func synchronizedExposureKey(exerciseName: String, style: PrescriptionStyle) -> String {
+        "\(exerciseName)|\(style.rawValue)"
+    }
+
+    /// How many times that shared progression is banked in one full rotation:
+    /// the number of the program's days carrying it. A day that repeats the
+    /// same lift and style still banks it once — the banking layer dedupes on
+    /// this exact key — so this counts DAYS, not slots.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `synchronizedExposuresPerRotation`.
+    public static func synchronizedExposuresPerRotation(
+        dayExposureKeys: [[String]], key: String
+    ) -> Int {
+        Swift.max(1, dayExposureKeys.reduce(0) { $0 + ($1.contains(key) ? 1 : 0) })
+    }
+
     /// One exposure in a slot's forward preview — what the engine will
     /// prescribe, and what the numbers derive from.
     public struct ExposurePreviewEntry: Hashable, Sendable {
@@ -812,7 +833,9 @@ public enum ProgramEngine {
         role: LiftRole = .main,
         focus: TrainingFocus = .strength,
         prescriptionStyle: PrescriptionStyle = .automatic,
-        configuration: LiftPrescriptionConfiguration = .init()
+        configuration: LiftPrescriptionConfiguration = .init(),
+        pendingState: ProgramLiftState? = nil,
+        synchronizedExposuresPerRotation: Int = 1
     ) -> [ExposurePreviewEntry] {
         guard count > 0, baseWeightLb >= 0 else { return [] }
         let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
@@ -821,13 +844,31 @@ public enum ProgramEngine {
             baseWeightLb: baseWeightLb, estimatedMaxLb: estimatedMaxLb,
             stallCount: stallCount, role: role, lastIncrementLb: 0
         )
+        // Normalize the rep window BEFORE the first prescription, not inside
+        // the double-progression branch that advances it. A slot whose window
+        // was never configured carries zeroes, and `plan` computes
+        // `min(max(currentReps, minimumReps), maximumReps)` — which is 0 reps,
+        // a prescription of nothing. The app layer clamps these on the way in
+        // (`ProgramLift.prescriptionConfiguration`), so only a direct core
+        // caller can reach here unclamped; doing it here as well is what keeps
+        // this function honest on its own and identical to core.js.
         var config = configuration
+        config.workingSets = Swift.max(1, config.workingSets)
+        config.minimumReps = Swift.max(1, config.minimumReps)
+        config.maximumReps = Swift.max(config.minimumReps, config.maximumReps)
+        config.currentReps = Swift.max(config.minimumReps, config.currentReps)
         var cycle = Swift.max(1, cycleNumber)
         var phase = CyclePhase(rawValue: rotation) ?? .volume
         // Graded styles stash the new base at the Peak and apply it at the
         // rollover, so the recovery rotation still runs off the old base.
         // Mirrors `pendingBaseWeightLb` in the banking layer exactly.
-        var pending: ProgramLiftState?
+        //
+        // Seeded from the slot's ALREADY-BANKED grade when there is one. Open
+        // the editor during recovery after a peak has been banked and the slot
+        // is carrying an earned new base that the next cycle will use; starting
+        // from nil previewed that cycle off the old base and quietly understated
+        // every number the lifter was about to see.
+        var pending: ProgramLiftState? = pendingState
         var entries: [ExposurePreviewEntry] = []
 
         for exposure in 1...count {
@@ -841,25 +882,18 @@ public enum ProgramEngine {
                 prescriptionStyle: style, configuration: config, estimatedMaxLb: state.estimatedMaxLb
             )
             let work = prescription.mainWork
-            // A clean exposure: every prescribed set made at the prescribed
-            // load, no quality flags, no autoreg drop.
-            let perf = CycleLiftPerformance(
-                prescribedSets: work.sets, prescribedReps: work.reps,
-                completedSets: work.sets, anyStoppedEarly: false, anyDroppedLoad: false,
-                anyBelowPlanLoad: false, grindyOrWobbleSets: 0,
-                topSetWeightLb: work.weightLb, topSetReps: work.reps
-            )
+            let perf = cleanPerformance(for: work)
             var note: String?
 
             if style == .doubleProgression {
                 // Rep window first, load second — and never on the recovery
                 // rotation, which is non-progressive by contract.
                 if phase != .deload {
+                    // `config` was normalized on the way in, so the window is
+                    // already coherent here.
                     let prior = AccessoryState(
-                        sets: Swift.max(1, config.workingSets),
-                        minReps: Swift.max(1, config.minimumReps),
-                        maxReps: Swift.max(config.minimumReps, config.maximumReps),
-                        currentReps: Swift.max(config.minimumReps, config.currentReps),
+                        sets: config.workingSets, minReps: config.minimumReps,
+                        maxReps: config.maximumReps, currentReps: config.currentReps,
                         weightLb: state.baseWeightLb, incrementLb: step, stallCount: state.stallCount
                     )
                     let next = ProgramProgression.advanceAccessory(
@@ -880,13 +914,37 @@ public enum ProgramEngine {
                 }
             } else if style.advancesPerExposure {
                 if phase != .deload {
-                    let result = ProgramProgression.advanceLinearLift(
-                        state, perf: perf,
-                        rule: ProgramProgression.linearRule(for: style, movementGroup: movementGroup),
-                        roundingLb: step
-                    )
-                    state = result.state
-                    note = result.note
+                    let rule = ProgramProgression.linearRule(for: style, movementGroup: movementGroup)
+                    let baseBefore = state.baseWeightLb
+                    // Every day carrying this lift and style banks the SHARED
+                    // progression once per rotation. A novice A/B program
+                    // squats on both days, so the base advances twice between
+                    // this slot's own appearances — advancing once per
+                    // previewed exposure understated every future weight by a
+                    // full increment per rotation, compounding down the list.
+                    for advance in 0..<Swift.max(1, synchronizedExposuresPerRotation) {
+                        // The first advance is this slot's own banking; the
+                        // rest are its twins, which sit at the same rotation on
+                        // the same shared base and so re-derive their plan from
+                        // the state each step leaves behind.
+                        let stepPlan = advance == 0 ? work : programPlan(
+                            for: CycleState(cycleNumber: cycle, baseWeightLb: state.baseWeightLb,
+                                            nextPhase: phase, incrementLb: state.lastIncrementLb),
+                            programRoundingLb: programRoundingLb, exerciseType: exerciseType,
+                            movementGroup: movementGroup, role: role, focus: focus,
+                            prescriptionStyle: style, configuration: config
+                        )
+                        let result = ProgramProgression.advanceLinearLift(
+                            state, perf: cleanPerformance(for: stepPlan), rule: rule, roundingLb: step
+                        )
+                        state = result.state
+                        note = result.note
+                    }
+                    let moved = state.baseWeightLb - baseBefore
+                    if synchronizedExposuresPerRotation > 1, moved > 0 {
+                        note = "Shared with \(synchronizedExposuresPerRotation) days — the base moves "
+                            + "\(Weight.trim(moved)) lb before this slot comes round again."
+                    }
                 } else {
                     note = "Recovery rotation — the base holds, then the exposure cadence resumes."
                 }
@@ -926,6 +984,19 @@ public enum ProgramEngine {
             }
         }
         return entries
+    }
+
+    /// A clean exposure of a plan: every prescribed set made at the prescribed
+    /// load, no quality flags, no autoreg drop. This is what the forward walk
+    /// assumes at each step — misses are the lifter's to discover, and a
+    /// preview that guessed at them would be fiction.
+    private static func cleanPerformance(for plan: SessionPlan) -> CycleLiftPerformance {
+        CycleLiftPerformance(
+            prescribedSets: plan.sets, prescribedReps: plan.reps,
+            completedSets: plan.sets, anyStoppedEarly: false, anyDroppedLoad: false,
+            anyBelowPlanLoad: false, grindyOrWobbleSets: 0,
+            topSetWeightLb: plan.weightLb, topSetReps: plan.reps
+        )
     }
 
     public static func primerWeight(

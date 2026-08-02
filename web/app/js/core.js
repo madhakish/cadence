@@ -562,8 +562,11 @@ export const portablePhaseLabel = (p) => p === 4 ? "R4 Deload 3×5" : phaseLabel
 // weight wave. The program-level indicator is shared by slots that have nothing
 // to do with each other's prescriptions, so it can only honestly report
 // position. Mirrored 1:1 in CadenceCore ProgramEngine.rotationLabel.
+// A missing or non-numeric pointer reads as rotation 1 rather than
+// "Rotation NaN of 4" — the Swift mirror takes an Int and cannot express that
+// case, so the coercion lives here to keep the two saying the same thing.
 export const rotationLabel = (rotation) =>
-  `Rotation ${Math.min(Math.max(rotation, 1), DELOAD_WEEK)} of ${DELOAD_WEEK}`;
+  `Rotation ${Number.isFinite(rotation) ? Math.min(Math.max(rotation, 1), DELOAD_WEEK) : 1} of ${DELOAD_WEEK}`;
 
 // What a slot does, for the badge beside its name: "Main · 5/3/1",
 // "Complementary · Secondary volume", "Main · Linear 5s". Resolves "automatic"
@@ -1206,12 +1209,27 @@ export function recoveryScheduleAdvance(dayOrders, completedDayOrders) {
 // Mirrored 1:1 in CadenceCore ProgramProgression.
 export function recoveryBridgeCompletionReason(
   completedRecoverySessions,
+  selectedExposureCount,
   selectedExposuresComplete,
   lastHardPhaseCompletionMs,
   nowMs,
 ) {
   if (selectedExposuresComplete) return "selectedExposures";
-  if (completedRecoverySessions >= RECOVERY_SESSION_LIMIT) return "sessionLimit";
+  // The cap is the BRIDGE'S OWN LENGTH, not a constant two. A program that is
+  // not recognizably upper/lower keeps its full authored pass — that fallback
+  // is deliberate, and capping it at two silently dropped day three onward for
+  // full-body, Olympic and conditioning programs, which is the work-losing
+  // behaviour the fallback exists to prevent.
+  const cap = Math.max(RECOVERY_SESSION_LIMIT, selectedExposureCount || 0);
+  if (completedRecoverySessions >= cap) return "sessionLimit";
+  // A bridge nobody has banked into has not started, and the seven-day guard is
+  // for a HALF-FINISHED one. Expiring an unbanked bridge reverted a deliberate
+  // manual reposition to Recovery — rolling the cycle, applying pendings and
+  // accruing a stall — the moment Today rendered, which is the opposite of what
+  // a lifter asking for a recovery week wants. The indefinite-light-work bug
+  // this guard was written for always has banked recovery sessions, so it stays
+  // fixed: it is the pointer that was stuck, not the banking.
+  if (completedRecoverySessions < 1) return null;
   if (Number.isFinite(lastHardPhaseCompletionMs)
       && nowMs - lastHardPhaseCompletionMs >= RECOVERY_WINDOW_MS) return "windowElapsed";
   return null;
@@ -1552,6 +1570,21 @@ export function advanceAccessory(state, perf) {
   return next;
 }
 
+// Slots sharing one lift AND one style are ONE progression: banking any of them
+// advances the shared base and synchronizes the twins, which is what makes "add
+// weight every session" hold across a novice A/B split.
+// Mirrored 1:1 in CadenceCore ProgramEngine.synchronizedExposureKey.
+export const synchronizedExposureKey = (exerciseName, style) =>
+  `${exerciseName}|${style}`;
+
+// How many times that shared progression is banked in one full rotation: the
+// number of the program's days carrying it. A day that repeats the same lift and
+// style still banks it once — the banking layer dedupes on this exact key — so
+// this counts DAYS, not slots.
+// Mirrored 1:1 in CadenceCore ProgramEngine.synchronizedExposuresPerRotation.
+export const synchronizedExposuresPerRotation = (dayExposureKeys, key) =>
+  Math.max(1, (dayExposureKeys || []).reduce((n, keys) => n + (keys.includes(key) ? 1 : 0), 0));
+
 // The next `count` exposures a slot will actually produce.
 //
 // The point of the deterministic engine is that its output can be audited, and
@@ -1579,6 +1612,7 @@ export function exposurePreview({
   count = 4, baseWeightLb, estimatedMaxLb = 0, stallCount = 0, cycleNumber = 1, rotation = 1,
   programRoundingLb = DEFAULT_ROUNDING_LB, exerciseType = null, movementGroup = null,
   role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {},
+  pendingState = null, synchronizedExposuresPerRotation = 1,
 } = {}) {
   if (!(count > 0) || !(baseWeightLb >= 0)) return [];
   const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
@@ -1601,8 +1635,21 @@ export function exposurePreview({
   // Graded styles stash the new base at the Peak and apply it at the rollover,
   // so the recovery rotation still runs off the old base. Mirrors
   // pendingBaseWeightLb in the banking layer exactly.
-  let pending = null;
+  //
+  // Seeded from the slot's ALREADY-BANKED grade when there is one. Open the
+  // editor during recovery after a peak has been banked and the slot is
+  // carrying an earned new base that the next cycle will use; starting from
+  // null previewed that cycle off the old base and quietly understated every
+  // number the lifter was about to see.
+  let pending = pendingState;
   const entries = [];
+  // A clean exposure of a plan: every prescribed set made at the prescribed
+  // load, no quality flags, no autoreg drop.
+  const cleanPerformance = (plan) => ({
+    prescribedSets: plan.sets, prescribedReps: plan.reps, completedSets: plan.sets,
+    anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false,
+    grindyOrWobbleSets: 0, topSetWeightLb: plan.weightLb, topSetReps: plan.reps,
+  });
 
   for (let exposure = 1; exposure <= count; exposure += 1) {
     const cycleState = {
@@ -1614,13 +1661,7 @@ export function exposurePreview({
       role, focus, style, config, state.estimatedMaxLb,
     );
     const work = prescription.mainWork;
-    // A clean exposure: every prescribed set made at the prescribed load, no
-    // quality flags, no autoreg drop.
-    const perf = {
-      prescribedSets: work.sets, prescribedReps: work.reps, completedSets: work.sets,
-      anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false,
-      grindyOrWobbleSets: 0, topSetWeightLb: work.weightLb, topSetReps: work.reps,
-    };
+    const perf = cleanPerformance(work);
     let note = null;
 
     if (style === "doubleProgression") {
@@ -1648,9 +1689,30 @@ export function exposurePreview({
       }
     } else if (advancesPerExposure(style)) {
       if (phase !== DELOAD_WEEK) {
-        const result = advanceLinearLift(state, perf, linearRule(style, movementGroup), step);
-        state = result.state;
-        note = result.note;
+        const rule = linearRule(style, movementGroup);
+        const baseBefore = state.baseWeightLb;
+        // Every day carrying this lift and style banks the SHARED progression
+        // once per rotation. A novice A/B program squats on both days, so the
+        // base advances twice between this slot's own appearances — advancing
+        // once per previewed exposure understated every future weight by a full
+        // increment per rotation, compounding down the list.
+        for (let advance = 0; advance < Math.max(1, synchronizedExposuresPerRotation); advance += 1) {
+          // The first advance is this slot's own banking; the rest are its
+          // twins, which sit at the same rotation on the same shared base and
+          // so re-derive their plan from the state each step leaves behind.
+          const stepPlan = advance === 0 ? work : programPlanFor(
+            { cycleNumber: cycle, baseWeightLb: state.baseWeightLb, nextPhase: phase, incrementLb: state.lastIncrementLb },
+            programRoundingLb, exerciseType, movementGroup, role, focus, style, config,
+          );
+          const result = advanceLinearLift(state, cleanPerformance(stepPlan), rule, step);
+          state = result.state;
+          note = result.note;
+        }
+        const moved = state.baseWeightLb - baseBefore;
+        if (synchronizedExposuresPerRotation > 1 && moved > 0) {
+          note = `Shared with ${synchronizedExposuresPerRotation} days — the base moves `
+            + `${trim(moved)} lb before this slot comes round again.`;
+        }
       } else {
         note = "Recovery rotation — the base holds, then the exposure cadence resumes.";
       }

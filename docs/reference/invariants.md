@@ -279,19 +279,37 @@ than silently losing work.
 
 Completion is the set of selected recovery exposures banked in the current
 cycle, not the current pointer's position. Either representative may be banked
-first. A non-bridge day cannot complete recovery by itself, but **any two**
-banked recovery sessions are a hard cap; a legacy or manual pointer therefore
-cannot prescribe a third reduced workout. An in-flight program upgraded from
-the old four-day phase 4 recognizes bridge exposures it already banked instead
-of prescribing them again.
+first. A non-bridge day cannot complete recovery by itself, but banking **as
+many recovery sessions as the bridge is long** is a hard cap; a legacy or
+manual pointer therefore cannot prescribe an extra reduced workout. That cap is
+the bridge's own length with a floor of two — never a constant two — so a
+program keeping its full authored pass is not truncated by the guard meant to
+protect it. An in-flight program upgraded from the old four-day phase 4
+recognizes bridge exposures it already banked instead of prescribing them again.
 
-Recovery also expires seven elapsed days after the final completed Peak
-exposure (or the preceding completed hard rotation when an early-recovery
+A **half-finished** bridge also expires seven elapsed days after the most recent
+evidence it was live: the latest of its banked recovery exposures and the final
+completed Peak (or the preceding completed hard rotation when an early-recovery
 decision skipped Peak). Today and Start reconcile that state before showing or
 creating another recovery prescription, visibly mark Recovery complete, apply
 the normal rollover, and begin the next cycle at Volume day 1. This duration is
 an expiry guard only. It never turns a cycle-based program into a week-based
 program and never advances Volume, Load, or Peak because a date changed.
+
+**A bridge with no banked recovery exposure never expires, and reconciliation
+never runs while a session is open.**
+
+> The window is for a bridge somebody started and abandoned. Applied to one
+> nobody has banked into, it read a deliberate act as staleness: setting
+> Rotation to Recovery in the editor with an older Peak behind it rolled the
+> cycle, applied pendings and accrued a stall the instant Today rendered —
+> undoing the same manual positioning that `positionAtRotation` deliberately
+> protects by stamping holds. Running it under an open session was the same
+> mistake against a workout in progress: the program advanced beneath a logged
+> session, which then failed its stale-tag check and banked as orphaned
+> history. Neither the indefinite-light-work bug nor the stuck-pointer bug this
+> guard was written for is reachable without banked recovery sessions, so both
+> stay fixed.
 
 Recovery prescriptions cut working volume, reduce every accessory to one set,
 and freeze accessory, rep-window, and per-exposure progression as well as e1RM

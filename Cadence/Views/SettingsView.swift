@@ -922,7 +922,8 @@ struct ProgramDayEditorView: View {
                 ForEach(day.orderedLifts) { lift in
                     ProgramLiftRow(lift: lift, step: step, focus: day.program?.focus ?? .strength,
                                    rotation: day.program?.currentWeek ?? 1,
-                                   cycleNumber: day.program?.cycleNumber ?? 1) {
+                                   cycleNumber: day.program?.cycleNumber ?? 1,
+                                   synchronizedExposuresPerRotation: synchronizedExposures(for: lift)) {
                         context.delete(lift)
                         PersistenceErrorCenter.shared.save(context, operation: "Removing the program lift")
                     }
@@ -976,6 +977,23 @@ struct ProgramDayEditorView: View {
                 picking = nil
             }
         }
+    }
+
+    /// How many of the program's days bank this slot's shared progression.
+    /// Slots with the same lift AND style are one progression synchronized
+    /// across days, so a novice A/B split's squat advances twice per rotation.
+    private func synchronizedExposures(for lift: ProgramLift) -> Int {
+        guard let program = day.program else { return 1 }
+        return ProgramEngine.synchronizedExposuresPerRotation(
+            dayExposureKeys: program.orderedDays.map { programDay in
+                programDay.lifts.map {
+                    ProgramEngine.synchronizedExposureKey(exerciseName: $0.exerciseName, style: $0.prescription)
+                }
+            },
+            key: ProgramEngine.synchronizedExposureKey(
+                exerciseName: lift.exerciseName, style: lift.prescription
+            )
+        )
     }
 
     private func moveLifts(from offsets: IndexSet, to destination: Int) {
@@ -1033,6 +1051,7 @@ private struct ProgramLiftRow: View {
     var focus: TrainingFocus = .strength
     var rotation: Int = 1
     var cycleNumber: Int = 1
+    var synchronizedExposuresPerRotation: Int = 1
     let onRemove: () -> Void
 
     private var loadStep: Double {
@@ -1133,7 +1152,8 @@ private struct ProgramLiftRow: View {
             // What all of the above produces. Every value on this row is an
             // input; without this, nothing on the screen is an output.
             ExposurePreviewView(lift: lift, rotation: rotation, cycleNumber: cycleNumber,
-                                roundingLb: step, focus: focus)
+                                roundingLb: step, focus: focus,
+                                synchronizedExposuresPerRotation: synchronizedExposuresPerRotation)
         }
     }
 }

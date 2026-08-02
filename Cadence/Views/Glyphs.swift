@@ -15,11 +15,20 @@ struct RotationGlyph: View {
     /// Current rotation, 1–4.
     let week: Int
 
+    /// Clamped once, then used for BOTH the lit tick and the spoken label.
+    /// `rotationLabel` clamps internally, so reading `week` raw for the fill
+    /// let a corrupt or hand-edited pointer say "Rotation 1 of 4" while no tick
+    /// was lit — the sighted and the spoken interface disagreeing about the
+    /// same value.
+    private var current: Int {
+        min(max(week, 1), ProgramProgression.deloadWeek)
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 3) {
             ForEach(1...ProgramProgression.deloadWeek, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(i == week ? Theme.accent : Color(.tertiarySystemFill))
+                    .fill(i == current ? Theme.accent : Color(.tertiarySystemFill))
                     .frame(width: 5, height: 10)
             }
         }
@@ -33,7 +42,7 @@ struct RotationGlyph: View {
         // Call sites whose adjacent text already reads the rotation mark the
         // glyph `.accessibilityHidden(true)` so it is not announced twice.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(ProgramEngine.rotationLabel(rotation: week))
+        .accessibilityLabel(ProgramEngine.rotationLabel(rotation: current))
     }
 }
 

@@ -188,11 +188,16 @@ export function applyTheme(name) {
 // sit under the same counter and neither one waves. Position is the only thing
 // this indicator actually knows, so it is the only thing it draws.
 export function rotation(week) {
-  const label = C.rotationLabel(week);
+  // Clamp once, then use it for BOTH the lit tick and the label. rotationLabel
+  // clamps internally, so reading `week` raw for the highlight let a corrupt or
+  // hand-edited pointer announce "Rotation 1 of 4" while no tick was lit — the
+  // sighted and the spoken interface disagreeing about the same value.
+  const current = Number.isFinite(week) ? Math.min(Math.max(week, 1), C.DELOAD_WEEK) : 1;
+  const label = C.rotationLabel(current);
   const el = h("span", { class: "rotation", title: label, role: "img", "aria-label": label });
   for (let i = 1; i <= C.DELOAD_WEEK; i += 1) {
     const tick = h("i");
-    if (i === week) tick.classList.add("on");
+    if (i === current) tick.classList.add("on");
     el.append(tick);
   }
   return el;
@@ -233,6 +238,20 @@ export function exposurePreview(lift, program, exercise, count = 4) {
   const movementGroup = exercise?.movementGroup ?? null;
   const style = C.resolvedPrescriptionStyle(lift.prescription || "automatic",
     movementGroup, lift.role || "main", program.focus);
+  // The slot's own banked-but-unapplied grade, if a peak has already been
+  // graded this cycle. Without it the next-cycle entries preview the old base.
+  const pendingState = lift.pendingBaseWeightLb != null ? {
+    baseWeightLb: lift.pendingBaseWeightLb,
+    estimatedMaxLb: lift.pendingEstimatedMaxLb ?? lift.estimatedMaxLb ?? 0,
+    stallCount: lift.pendingStallCount ?? lift.stallCount ?? 0,
+    role: lift.role || "main",
+    lastIncrementLb: lift.pendingLastIncrementLb ?? 0,
+  } : null;
+  // How many of the program's days bank this lift+style — an A/B novice split
+  // squats on both, and the shared base advances once per day.
+  const key = C.synchronizedExposureKey(lift.exerciseName, lift.prescription || "automatic");
+  const dayExposureKeys = (program.days || []).map((day) =>
+    (day.lifts || []).map((slot) => C.synchronizedExposureKey(slot.exerciseName, slot.prescription || "automatic")));
   const entries = C.exposurePreview({
     count,
     baseWeightLb: lift.baseWeightLb,
@@ -247,6 +266,8 @@ export function exposurePreview(lift, program, exercise, count = 4) {
     focus: program.focus,
     prescriptionStyle: lift.prescription || "automatic",
     configuration: { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+    pendingState,
+    synchronizedExposuresPerRotation: C.synchronizedExposuresPerRotation(dayExposureKeys, key),
   });
 
   const card = h("div", { class: "card sub" },

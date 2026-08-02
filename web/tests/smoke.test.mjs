@@ -1685,18 +1685,36 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     programTag: { programId: program.uuid, programName: name,
       cycleNumber: 4, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
   });
+  // A bridge nobody has banked into has not started, so the window cannot
+  // expire it — that is what made the guard revert a deliberate manual
+  // reposition to Recovery.
+  const unbanked = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-04-30T13:00:00.000Z"),
+  );
+  ok(unbanked === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] an unbanked bridge is never expired, however stale the Peak");
+
+  // Bank the first recovery exposure: now the bridge IS half-finished, and the
+  // window measures from that exposure rather than from the Peak behind it.
+  const recoveryID = await db.Sessions.save({
+    date: "2042-03-02T12:00:00.000Z", completedAt: "2042-03-02T13:00:00.000Z",
+    notes: "Synthetic recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 4, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
   const inside = await session.reconcileRecoveryBridge(
-    program, await db.Sessions.completed(), new Date("2042-03-08T12:59:59.999Z"),
+    program, await db.Sessions.completed(), new Date("2042-03-09T12:59:59.999Z"),
   );
   ok(inside === null, "Recovery remains available one millisecond before the seven-day boundary");
   const expired = await session.reconcileRecoveryBridge(
-    program, await db.Sessions.completed(), new Date("2042-03-08T13:00:00.000Z"),
+    program, await db.Sessions.completed(), new Date("2042-03-09T13:00:00.000Z"),
   );
   ok(expired?.reason === "windowElapsed",
-    "[INV-RECOVERY-IS-A-BRIDGE] Recovery expires at seven elapsed days after Peak");
+    "[INV-RECOVERY-IS-A-BRIDGE] a half-finished bridge expires seven days after its last exposure");
   program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   ok(program.cycleNumber === 5 && program.currentWeek === 1,
     "expired Recovery starts the next cycle rather than prescribing stale reduced work");
+  await db.Sessions.del(recoveryID);
   await db.Sessions.del(peakID);
   await db.Programs.del(program.id);
 }
@@ -1719,6 +1737,14 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     programTag: { programId: program.uuid, programName: name,
       cycleNumber: 2, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
   });
+  // Half-finished: one recovery exposure banked, then eight days of silence.
+  const staleRecovery = new Date(Date.now() - C.RECOVERY_WINDOW_MS - 30_000);
+  const recoveryID = await db.Sessions.save({
+    date: staleRecovery.toISOString(), completedAt: staleRecovery.toISOString(),
+    notes: "Synthetic stale recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
   const createdID = await session.createSessionFromProgramDay(program, program.days[0]);
   const created = await db.Sessions.get(createdID);
   ok(created.programTag.cycleNumber === 3 && created.programTag.week === 1,
@@ -1727,7 +1753,102 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(program.cycleNumber === 3 && program.currentWeek === 1,
     "Start never creates a stale third recovery prescription");
   await db.Sessions.del(createdID);
+  await db.Sessions.del(recoveryID);
   await db.Sessions.del(peakID);
+  await db.Programs.del(program.id);
+}
+
+// Reconciliation must never advance the program out from under a workout in
+// progress: the open session was built against this rotation, so rolling the
+// cycle makes banking it fail the stale-tag guard and land as orphaned history.
+// On this client it also let Start open a SECOND session while the first
+// stayed open.
+{
+  const name = "Fixture Recovery Open Session";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 2, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const stale = new Date(Date.now() - C.RECOVERY_WINDOW_MS - 60_000);
+  const peakID = await db.Sessions.save({
+    date: stale.toISOString(), completedAt: stale.toISOString(),
+    notes: "Synthetic expired Peak", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
+  });
+  const recoveryID = await db.Sessions.save({
+    date: stale.toISOString(), completedAt: stale.toISOString(),
+    notes: "Synthetic stale recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  // Everything is in place for the bridge to expire — except that a workout is
+  // open right now.
+  const openID = await db.Sessions.save({
+    date: new Date().toISOString(), isCompleted: false, notes: "In progress",
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  const blocked = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(blocked === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] reconciliation holds off while a session is open");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === C.DELOAD_WEEK,
+    "the program the open session was built against is left exactly as it was");
+
+  // Bank or discard it and the same reconciliation goes through.
+  await db.Sessions.del(openID);
+  const allowed = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(allowed?.reason === "windowElapsed", "and runs on the next render once nothing is open");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  await db.Sessions.del(recoveryID);
+  await db.Sessions.del(peakID);
+  await db.Programs.del(program.id);
+}
+
+// A program that is not recognizably upper/lower keeps its FULL authored pass.
+// Capping that at a constant two dropped day three onward — losing exactly the
+// work the fallback exists to preserve.
+{
+  const name = "Fixture Full Pass Recovery";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Full A", order: 0, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full B", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full C", order: 2, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const ids = [];
+  for (const dayIndex of [0, 1]) {
+    ids.push(await db.Sessions.save({
+      date: new Date().toISOString(), completedAt: new Date().toISOString(),
+      notes: "Synthetic recovery exposure", isCompleted: true,
+      programTag: { programId: program.uuid, programName: name,
+        cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex, planNames: [] }, exercises: [],
+    }));
+  }
+  const held = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(held === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] a three-day authored bridge is not closed by two sessions");
+  ids.push(await db.Sessions.save({
+    date: new Date().toISOString(), completedAt: new Date().toISOString(),
+    notes: "Synthetic recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex: 2, planNames: [] }, exercises: [],
+  }));
+  const closed = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(closed?.reason === "selectedExposures", "and closes once its own length is banked");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1, "then rolls to the next cycle at Volume");
+  for (const id of ids) await db.Sessions.del(id);
   await db.Programs.del(program.id);
 }
 
