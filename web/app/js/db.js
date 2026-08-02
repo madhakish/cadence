@@ -628,7 +628,7 @@ export async function exportBundle() {
       programTag: exportProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e) => ({
         name: e.exerciseName, notes: e.notes || "",
-        phase: e.phase ? C.phaseLabel(e.phase) : null,
+        phase: e.phase ? C.portablePhaseLabel(e.phase) : null,
         role: e.programRole || null,
         programSlotId: e.programSlotId || null,
         barId: e.barId || null,

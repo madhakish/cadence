@@ -1124,24 +1124,40 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
-// A deload rotation must never drag the estimate down.
+// A recovery exposure is observation-free and progression-free.
 {
   const name = "Fixture Deload Observation";
   await db.Programs.save({
     name, focus: "strength", cycleNumber: 1, currentWeek: 4, nextDayIndex: 0,
     roundingLb: 5, isActive: false,
-    days: [{ name: "Lower", order: 0, accessories: [],
-      lifts: [{ exerciseName: "Back Squat", role: "main", prescription: "wave",
-        baseWeightLb: 190, estimatedMaxLb: 221.45, stallCount: 0, lastIncrementLb: 5 }] }],
+    days: [{ name: "Lower", order: 0, accessories: [acc("Walking Lunges", 0, 0)],
+      lifts: [
+        { exerciseName: "Back Squat", role: "main", prescription: "wave",
+          baseWeightLb: 190, estimatedMaxLb: 221.45, stallCount: 0, lastIncrementLb: 5 },
+        { ...cyc("Deadlift", "complementary", 205, 275), prescription: "linearFives", doubleProgressionSets: 3 },
+        { ...cyc("Incline DB Press", "complementary", 45, 55), prescription: "doubleProgression",
+          doubleProgressionSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 5 },
+      ] }],
   });
   let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const before = JSON.parse(JSON.stringify(program.days[0]));
   const deloadId = await session.createSessionFromProgramDay(program, program.days[0]);
   const deload = await db.Sessions.get(deloadId);
+  ok(deload.exercises.find((entry) => entry.programRole === "accessory").plannedSets === 1,
+    "a recovery accessory is reduced to one set");
   for (const set of deload.exercises[0].sets) set.status = "completed";
+  for (const entry of deload.exercises.slice(1)) for (const set of entry.sets) set.status = "completed";
   await session.completeSession(deload);
   program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   ok(program.days[0].lifts[0].estimatedMaxLb === 221.45,
     `light deload work is not evidence the max fell (got ${program.days[0].lifts[0].estimatedMaxLb})`);
+  ok(program.days[0].lifts[1].baseWeightLb === before.lifts[1].baseWeightLb,
+    "recovery cannot advance a per-exposure linear lift");
+  ok(program.days[0].lifts[2].baseWeightLb === before.lifts[2].baseWeightLb
+    && program.days[0].lifts[2].currentReps === before.lifts[2].currentReps,
+  "recovery cannot advance a lift-level rep window");
+  ok(program.days[0].accessories[0].currentReps === before.accessories[0].currentReps,
+    "recovery cannot advance accessory double progression");
 
   await db.importBundle(parsed);
 }
@@ -1397,7 +1413,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.Programs.del(prog.id);
 }
 
-// ---- program: bank a full 4-week cycle, assert adaptive progression ----
+// ---- program: bank three full progressions + a two-exposure recovery bridge ----
 {
   const sqTrackBase = (await db.Tracks.byName("Back Squat")).baseWeightLb; // standalone, must not move
   let prog = await db.Programs.active();
@@ -1420,17 +1436,26 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "complementary work is volume at/below its base, not a heavy mirror of the main wave");
   await completeAll(built); // i=0 banked (Lower A, week 1)
 
-  for (let i = 1; i < 16; i++) {        // remaining of 4 weeks × 4 days
+  const recoveryDays = [];
+  for (let i = 1; i < 14; i++) { // 3 × 4 progression exposures + 2 recovery exposures
     prog = await db.Programs.active();
     const day = prog.days.find((d) => d.order === prog.nextDayIndex);
     const id = await session.createSessionFromProgramDay(prog, day);
     const sess = await db.Sessions.get(id);
+    if (sess.programTag.week === C.DELOAD_WEEK) {
+      recoveryDays.push(day.name);
+      ok(sess.exercises.filter((entry) => entry.programRole === "accessory")
+        .every((entry) => entry.plannedSets === 1),
+      "[INV-RECOVERY-IS-A-BRIDGE] every recovery accessory is reduced to one easy set");
+    }
     await completeAll(sess); // pre-filled working sets at target = a clean cycle
   }
 
   prog = await db.Programs.active();
   ok(prog.cycleNumber === 2, `cycle rolled over (cyc=${prog.cycleNumber})`);
   ok(prog.currentWeek === 1, `wave reset to week 1 (wk=${prog.currentWeek})`);
+  ok(recoveryDays.join(",") === "Lower A,Upper A",
+    `[INV-RECOVERY-IS-A-BRIDGE] phase 4 banks one lower and one upper exposure (${recoveryDays})`);
   const squatMain = prog.days[0].lifts.find((l) => l.role === "main");
   ok(squatMain.baseWeightLb === squatBase0 + 5, `clean cycle bumped squat ${squatBase0}→${squatMain.baseWeightLb}`);
   ok(squatMain.estimatedMaxLb > 204, "e1RM updated from the peak");
@@ -1475,9 +1500,9 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const graded1 = prog.days.find((d) => d.order === day1.order).lifts.find((l) => l.role === "main");
   ok(graded1.pending && graded1.pending.grade === "success", "at-plan peak with a lighter back-off set still grades clean");
 
-  // Bank the rest of the wave cleanly (2 more peak days + the 4 deload days);
+  // Bank the rest cleanly (2 more peak days + the 2 recovery exposures);
   // rollover applies the stashed grades.
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     const p = await db.Programs.active();
     const day = p.days.find((d) => d.order === p.nextDayIndex);
     const s = await db.Sessions.get(await session.createSessionFromProgramDay(p, day));

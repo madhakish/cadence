@@ -83,6 +83,20 @@ public struct ProgressionResult: Sendable {
     public let note: String?
 }
 
+/// The minimum information needed to choose representative recovery
+/// exposures from an authored program day. `order` is the persisted schedule
+/// address; only the MAIN lift's movement group participates, so an accessory
+/// cannot accidentally turn an upper day into a lower day (or vice versa).
+public struct RecoveryDayCandidate: Hashable, Sendable {
+    public let order: Int
+    public let mainMovementGroup: String?
+
+    public init(order: Int, mainMovementGroup: String?) {
+        self.order = order
+        self.mainMovementGroup = mainMovementGroup
+    }
+}
+
 /// Accessory double-progression state (rep range → weight).
 public struct AccessoryState: Codable, Hashable, Sendable {
     public var sets: Int
@@ -130,11 +144,12 @@ public enum ProgramProgression {
     public static let stallLimit = 2               // 2 consecutive non-success → auto deload
     public static let deloadRebuildFraction = 0.90
 
-    /// The wave's deload rotation. 1–3 are volume, load, and peak.
+    /// Persisted phase value for the recovery bridge. 1–3 are full volume,
+    /// load, and peak rotations; phase 4 is not another complete rotation.
     public static let deloadWeek = 4
-    /// Complete rotations that must be banked since the last deload rotation
+    /// Complete rotations that must be banked since the last recovery bridge
     /// before another early one is allowed. Without a floor a run of red
-    /// rotations turns the recovery deload into the schedule, which is the
+    /// rotations turns recovery into the schedule, which is the
     /// opposite of what it is for.
     ///
     /// Counted in ROTATIONS, not sessions. A session floor silently scales with
@@ -144,18 +159,12 @@ public enum ProgramProgression {
     /// feature outright on half the shipped templates.
     public static let minimumRotationsBetweenDeloads = 2
 
-    /// Whether to cut this cycle short and go straight to the deload rotation.
-    ///
-    /// The survey picture of how lifters actually deload is "every 5–6 weeks,
-    /// or when performance stalls" — so a ceiling and a trigger. Cadence's
-    /// fixed four-rotation wave already deloads well inside that ceiling, and
-    /// a ceiling rule that can never fire is dead code, so only the trigger and
-    /// its floor are implemented here.
+    /// Whether to cut this cycle short and go straight to recovery.
     ///
     /// Persistent red, not a single red: one bad rotation is noise, and the
     /// single-red answer (a temporary accessory-set cut) is already cheaper and
-    /// reversible. Weeks 1 and 2 only — from week 3 the schedule advances into
-    /// the deload by itself, so there is nothing to skip.
+    /// reversible. Rotations 1 and 2 only — from rotation 3 the schedule
+    /// advances into recovery by itself, so there is nothing to skip.
     public static func shouldDeloadEarly(
         currentWeek: Int,
         readiness: ReadinessState,
@@ -203,7 +212,7 @@ public enum ProgramProgression {
         return ProgressionResult(
             state: next,
             grade: .hold,
-            note: "Recovery deload — output stayed red, so the cycle stopped after rotation \(week) and went straight to the deload. The base holds."
+            note: "Recovery bridge — output stayed red, so the cycle stopped after rotation \(week) and went straight to recovery. The base holds."
         )
     }
 
@@ -353,6 +362,34 @@ public enum ProgramProgression {
             return (sorted.first ?? 0, true)
         }
         return (sorted[(position + 1) % sorted.count], position == sorted.count - 1)
+    }
+
+    /// Select one authored lower and one authored upper exposure for the
+    /// phase-4 recovery bridge.
+    ///
+    /// This is deliberately movement-driven rather than name-driven: "Day A"
+    /// and localized/custom day names are valid, while the main lift already
+    /// carries the structural signal we need. The first authored representative
+    /// of each half is retained and their original schedule order is preserved.
+    ///
+    /// Programs that are not recognizably upper/lower fall back to their full
+    /// authored order. That preserves existing behavior for Olympic, full-body,
+    /// conditioning-only, damaged, and otherwise ambiguous programs instead of
+    /// silently dropping work based on a guess.
+    /// Mirrored 1:1 in web/app/js/core.js `recoveryDayOrders`.
+    public static func recoveryDayOrders(_ candidates: [RecoveryDayCandidate]) -> [Int] {
+        let sorted = candidates.sorted { $0.order < $1.order }
+        let allOrders = Array(Set(sorted.map(\.order))).sorted()
+        let group: (RecoveryDayCandidate) -> String = {
+            $0.mainMovementGroup?.lowercased() ?? ""
+        }
+        guard let lower = sorted.first(where: { ["squat", "hinge"].contains(group($0)) }),
+              let upper = sorted.first(where: { ["press", "pull"].contains(group($0)) }),
+              lower.order != upper.order else {
+            return allOrders
+        }
+        let selected = Set([lower.order, upper.order])
+        return allOrders.filter { selected.contains($0) }
     }
 
     /// Increment = fraction of base, floored at plate granularity.

@@ -511,20 +511,24 @@ export function dumbbellWarmupRamp(workingLb, roundingLb = 5) {
   });
 }
 
-// ---- Program engine (4-week cycle) -----------------------------------------
+// ---- Program engine (four-phase mesocycle) ---------------------------------
 
-// phase: 1 volume, 2 load, 3 peak, 4 deload
+// phase: 1 volume, 2 load, 3 peak, 4 short recovery bridge
 export const PHASES = {
   1: { name: "Volume", sets: 5, reps: 5, multiplier: 1.0 },
   2: { name: "Load", sets: 5, reps: 3, multiplier: 1.10 },
   3: { name: "Peak", sets: 3, reps: 3, multiplier: 1.175 },
-  4: { name: "Deload", sets: 3, reps: 5, multiplier: 0.775 },
+  4: { name: "Recovery", sets: 2, reps: 3, multiplier: 0.775 },
 };
 export const phaseNext = (p) => (p >= 4 ? 1 : p + 1);
 export const phaseLabel = (p) => {
   const ph = PHASES[p];
   return `R${p} ${ph.name} ${ph.sets}×${ph.reps}`;
 };
+// Backup schema 7 stores a display label and recovers only the R-number on
+// import. Keep the historical phase-4 wire string byte-stable while the live
+// app presents the redesigned recovery bridge.
+export const portablePhaseLabel = (p) => p === 4 ? "R4 Deload 3×5" : phaseLabel(p);
 
 export const DEFAULT_ROUNDING_LB = 5.0;
 
@@ -571,10 +575,12 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
   Object.assign(config, resolvedOffsets(config.loadOffsetLb, config.peakOffsetLb, movementGroup));
   if (["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(style)) {
     // Sets-across at the slot's own base; the base moves per exposure
-    // (advanceLinearLift), so the 4-week phase never shapes the weight.
+    // (advanceLinearLift). Recovery is the sole phase override: advancement
+    // pauses while both load and volume drop, then the normal cadence resumes.
     return {
-      weightLb: roundTo(state.baseWeightLb, roundingLb),
-      sets: Math.max(1, config.workingSets), reps: 5, phase: p, cycleNumber: state.cycleNumber,
+      weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
+      sets: p === 4 ? 2 : Math.max(1, config.workingSets),
+      reps: p === 4 ? 3 : 5, phase: p, cycleNumber: state.cycleNumber,
     };
   }
   if (style === "fiveThreeOne") {
@@ -591,7 +597,7 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     // rotation trades the single for moderate triples.
     if (p === 4) return {
       weightLb: roundTo(state.baseWeightLb * 0.70, roundingLb),
-      sets: 3, reps: 3, phase: p, cycleNumber: state.cycleNumber,
+      sets: 2, reps: 3, phase: p, cycleNumber: state.cycleNumber,
     };
     return {
       weightLb: roundTo(state.baseWeightLb, roundingLb),
@@ -606,7 +612,8 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     const multiplier = { 1: 1.0, 2: 1.10, 3: 1.20, 4: 1.0 }[p];
     return {
       weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
-      sets: scheme[0], reps: scheme[1], phase: p, cycleNumber: state.cycleNumber,
+      sets: p === 4 ? Math.max(2, Math.ceil(scheme[0] / 2)) : scheme[0],
+      reps: scheme[1], phase: p, cycleNumber: state.cycleNumber,
     };
   }
   if (style === "offsetWave") {
@@ -623,26 +630,27 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     return { weightLb: roundTo(weight, roundingLb), sets: phase.sets, reps: phase.reps, phase: p, cycleNumber: state.cycleNumber };
   }
   if (style === "doubleProgression") return {
-    weightLb: roundTo(state.baseWeightLb, roundingLb),
-    sets: Math.max(1, config.workingSets),
-    reps: Math.min(Math.max(config.currentReps, config.minimumReps), config.maximumReps),
+    weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
+    sets: p === 4 ? 1 : Math.max(1, config.workingSets),
+    reps: p === 4 ? Math.min(5, Math.max(1, config.minimumReps))
+      : Math.min(Math.max(config.currentReps, config.minimumReps), config.maximumReps),
     phase: p, cycleNumber: state.cycleNumber,
   };
   const byStyle = {
     wave: {
-      1: [5, 5, 1.0], 2: [5, 3, 1.10], 3: [3, 3, 1.175], 4: [3, 5, 0.775],
+      1: [5, 5, 1.0], 2: [5, 3, 1.10], 3: [3, 3, 1.175], 4: [2, 3, 0.775],
     },
     // Complementary work is volume after the day's heavy main — never a second
     // miniature of the main wave. Sets stay at 5+ reps and at or below the
     // slot's base (a 5-rep-calibrated weight; 8s sit ~90%).
     secondary: {
-      1: [3, 8, 0.90], 2: [3, 8, 0.95], 3: [3, 6, 1.0], 4: [2, 8, 0.75],
+      1: [3, 8, 0.90], 2: [3, 8, 0.95], 3: [3, 6, 1.0], 4: [1, 5, 0.75],
     },
     hypertrophy: {
-      1: [4, 10, 1.0], 2: [4, 8, 1.025], 3: [3, 8, 1.05], 4: [2, 10, 0.85],
+      1: [4, 10, 1.0], 2: [4, 8, 1.025], 3: [3, 8, 1.05], 4: [1, 5, 0.80],
     },
     technique: {
-      1: [5, 3, 1.0], 2: [6, 2, 1.05], 3: [6, 1, 1.10], 4: [3, 2, 0.80],
+      1: [5, 3, 1.0], 2: [6, 2, 1.05], 3: [6, 1, 1.10], 4: [2, 2, 0.80],
     },
   };
   const table = byStyle[style] || byStyle.wave;
@@ -714,7 +722,7 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
     // block order puts them before the top set.
     const ramp = {
       1: [[0.65, 5], [0.75, 5]], 2: [[0.70, 3], [0.80, 3]],
-      3: [[0.75, 5], [0.85, 3]], 4: [[0.40, 5], [0.50, 5]],
+      3: [[0.75, 5], [0.85, 3]], 4: [[0.50, 5]],
     }[state.nextPhase];
     for (const [pct, reps] of ramp) {
       blocks.push({ kind: "ramp", weightLb: roundTo(state.baseWeightLb * pct, step), sets: 1, reps });
@@ -892,12 +900,12 @@ export const QUALITY_FLAG_TOLERANCE = 1;   // ≤1 grindy/wobble set still SUCCE
 export const STALL_LIMIT = 2;              // 2 consecutive non-success → auto deload
 export const DELOAD_REBUILD_FRACTION = 0.90;
 
-// The wave's deload rotation. 1–3 are volume, load, and peak.
+// Persisted phase value for the recovery bridge. 1–3 are complete progression
+// rotations; phase 4 is not another full pass through the program.
 export const DELOAD_WEEK = 4;
-// Complete rotations that must be banked since the last deload rotation before
+// Complete rotations that must be banked since the last recovery bridge before
 // another early one is allowed. Without a floor a run of red rotations turns
-// the recovery deload into the schedule, which is the opposite of what it is
-// for.
+// recovery into the schedule, which is the opposite of what it is for.
 //
 // Counted in ROTATIONS, not sessions. A session floor silently scales with the
 // split: eight sessions is two rotations of a four-day program but four
@@ -926,18 +934,12 @@ export function observedMax(prior, sample) {
   return sample > prior ? smoothE1RM(prior, sample) : prior;
 }
 
-// Whether to cut this cycle short and go straight to the deload rotation.
-//
-// The survey picture of how lifters actually deload is "every 5–6 weeks, or
-// when performance stalls" — so a ceiling and a trigger. Cadence's fixed
-// four-rotation wave already deloads well inside that ceiling, and a ceiling
-// rule that can never fire is dead code, so only the trigger and its floor are
-// implemented here.
+// Whether to cut this cycle short and go straight to recovery.
 //
 // Persistent red, not a single red: one bad rotation is noise, and the
 // single-red answer (a temporary accessory-set cut) is already cheaper and
-// reversible. Weeks 1 and 2 only — from week 3 the schedule advances into the
-// deload by itself, so there is nothing to skip.
+// reversible. Rotations 1 and 2 only — from rotation 3 the schedule advances
+// into recovery by itself, so there is nothing to skip.
 export function shouldDeloadEarly(currentWeek, readiness, previousReadiness, rotationsSinceLastDeload) {
   if (!(currentWeek >= 1 && currentWeek < DELOAD_WEEK - 1)) return false;
   if (readiness !== "red" || previousReadiness !== "red") return false;
@@ -958,7 +960,7 @@ export function recoveryDeloadHold(lift, week) {
       lastIncrementLb: 0,
     },
     grade: "hold",
-    note: `Recovery deload — output stayed red, so the cycle stopped after rotation ${week} and went straight to the deload. The base holds.`,
+    note: `Recovery bridge — output stayed red, so the cycle stopped after rotation ${week} and went straight to recovery. The base holds.`,
   };
 }
 
@@ -1119,6 +1121,23 @@ export function scheduleAdvance(dayOrders, bankedDayOrder) {
   const position = sorted.indexOf(bankedDayOrder);
   if (position < 0) return { nextDayOrder: sorted.length ? sorted[0] : 0, isLastDay: true };
   return { nextDayOrder: sorted[(position + 1) % sorted.length], isLastDay: position === sorted.length - 1 };
+}
+
+// Select one authored lower and one authored upper exposure for the phase-4
+// recovery bridge. Only the MAIN lift's movement group is supplied by callers,
+// so accessories cannot reclassify a day. Unrecognizable programs keep their
+// complete authored order: Olympic, full-body, conditioning-only, and damaged
+// programs must not silently lose days because the engine guessed.
+// Mirrored 1:1 in CadenceCore ProgramProgression.recoveryDayOrders.
+export function recoveryDayOrders(candidates) {
+  const sorted = [...candidates].sort((a, b) => a.order - b.order);
+  const allOrders = [...new Set(sorted.map((candidate) => candidate.order))].sort((a, b) => a - b);
+  const group = (candidate) => String(candidate.mainMovementGroup || "").toLowerCase();
+  const lower = sorted.find((candidate) => ["squat", "hinge"].includes(group(candidate)));
+  const upper = sorted.find((candidate) => ["press", "pull"].includes(group(candidate)));
+  if (!lower || !upper || lower.order === upper.order) return allOrders;
+  const selected = new Set([lower.order, upper.order]);
+  return allOrders.filter((order) => selected.has(order));
 }
 
 // Increment = fraction of base, floored at plate granularity.

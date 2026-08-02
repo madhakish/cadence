@@ -32,32 +32,25 @@ set completion or e1RM deltas.
 
 ### When a red rotation does not resolve
 
-One red rotation is noise. **Two consecutive red rotations** mean the 25% cut
-has already been tried and did not restore output, so Cadence escalates to a
-**recovery rotation**: the accessory-set cut deepens to 50% for one rotation.
-Every session still runs. This follows the survey picture of how lifters
-actually deload — cut volume, keep frequency — rather than a fixed calendar
-rule, and like the 25% cut it is a temporary override that expires at the next
-boundary.
-
-Alongside the accessory cut, two consecutive red rotations also **cut the cycle
-short**: the program skips whatever is left of the wave and goes straight to its
-deload rotation. This is automatic and needs no consent, because it removes work
-rather than adding it.
+One red rotation is noise. **Two consecutive red rotations** mean the temporary
+25% accessory cut did not restore output, so Cadence **cuts the cycle short**
+and goes straight to the recovery bridge. This is automatic because it only
+removes work: one representative lower exposure, one representative upper
+exposure, then rollover. Recovery's one-set accessory cap supersedes any
+ordinary percentage override while the bridge is active.
 
 - **Trigger:** persistent red, not a single red. One bad rotation is noise, and
   its answer (the reversible accessory cut) is already cheaper.
-- **Rotations 1 and 2 only.** From rotation 3 the schedule advances into the
-  deload by itself, so there is nothing to skip.
+- **Rotations 1 and 2 only.** From rotation 3 the schedule advances into
+  recovery by itself, so there is nothing to skip.
 - **Floor:** at least two complete rotations must have been banked since the
-  last deload rotation. Without it, a run of red rotations turns the recovery
-  deload into the schedule, which is the opposite of what it is for. Counted in
+  last recovery phase. Without it, a run of red rotations turns recovery into
+  the schedule, which is the opposite of what it is for. Counted in
   rotations rather than sessions so it means the same thing on every split — a
   session floor is a different number of rotations on a two-day program than on
   a six-day one, and can be unreachable inside a cycle on short ones.
-- **No ceiling rule.** The survey picture is "deload every 5–6 weeks or when
-  performance stalls". Cadence's fixed four-rotation wave already deloads well
-  inside that ceiling, so a ceiling rule could never fire and none is written.
+- **No calendar ceiling.** Cadence has no week counter. The three progression
+  rotations already establish the block length, and readiness can shorten it.
 
 A cut-short cycle would otherwise reach the rollover with no peak grade on
 record, which the wave family reads as a missed peak. It is not one — the peak
@@ -67,13 +60,11 @@ no stall accrues, and the increment record stops advertising a bump that did not
 happen. That hold travels through the same pending-grade mechanism a real peak
 uses, so the rollover applies it on its existing path.
 
-The recovery rotation deliberately does **not** do one further thing:
-
-- **It does not lower main-lift load.** A cycle is graded on the peak work
-  actually performed, and no session records "this was a planned deload", so
-  deliberately lighter mains would read back as a failed peak. Cutting
-  accessory *sets* has no such side effect: double progression grades reps at a
-  held weight, so fewer sets is invisible to it.
+The bridge is deliberately inert: main work uses its reduced recovery
+prescription, accessories fall to one set, and banking cannot change accessory
+targets, per-exposure bases, stall counts, peak-single anchors, or e1RM. The
+peak was already graded (or explicitly held during the early jump); recovery
+does not grade it again.
 
 Rule identifiers carry the engine's rule version, and coaching decisions store
 the identifier they were made under, so a rule whose meaning changes gets a new

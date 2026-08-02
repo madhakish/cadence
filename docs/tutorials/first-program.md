@@ -74,8 +74,9 @@ Two or three accessories per day is plenty to start.
 ## 5. Check your position
 
 Back in the program editor, the **Rotation** control shows where you are
-in the 4-week wave — week 1 (volume), 2 (load), 3 (peak), 4 (rest). A
-new program starts at week 1, day 1, which is what you want. (This
+in the mesocycle — rotation 1 (volume), 2 (load), 3 (peak), followed by
+phase 4 (recovery). A new program starts at rotation 1, day 1, which is what
+you want. (This
 control is also how you'd tell Cadence "I'm mid-cycle" if you migrated
 from a notebook.)
 
@@ -94,12 +95,12 @@ advances the program's day pointer, and progresses your accessories.
 
 ## What happens next
 
-Keep banking days. When the wave reaches **week 3 (peak)**, the program
+Keep banking days. When the wave reaches **rotation 3 (peak)**, the program
 grades each main and complementary lift on what you actually did. After
-**week 4 (rest)**, the cycle rolls over: clean lifts get a proportional
-weight increase, misses hold or eventually trigger a −10% deload, and
-week 1 of cycle 2 begins with new prescriptions. You never have to
-decide what to lift — that's the point.
+the **recovery bridge**—one reduced lower day and one reduced upper day—the
+cycle rolls over: clean lifts get a proportional weight increase, misses hold
+or eventually trigger a −10% rebuild, and rotation 1 of cycle 2 begins with
+new prescriptions. You never have to decide what to lift — that's the point.
 
 Where to go from here:
 

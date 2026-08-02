@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The 4-week cycle at a glance: Volume / Load / Peak / Deload as rising bars
-/// with the deload dropped low, the current rotation lit in accent. Mirrors
+/// The mesocycle at a glance: Volume / Load / Peak / Recovery as rising bars
+/// with recovery dropped low, the current phase lit in accent. Mirrors
 /// the web `.wave` component (ui.js).
 struct WaveGlyph: View {
     /// Current rotation, 1–4.

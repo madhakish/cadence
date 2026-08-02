@@ -482,6 +482,37 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(allDup.nextDayOrder, 0)
         XCTAssertTrue(allDup.isLastDay, "an all-duplicate program still closes its rotation")
     }
+
+    // [INV-RECOVERY-IS-A-BRIDGE]
+    func testRecoveryBridgeSelectsOneAuthoredUpperAndLowerExposure() {
+        let upperLower = [
+            RecoveryDayCandidate(order: 0, mainMovementGroup: "press"),
+            RecoveryDayCandidate(order: 1, mainMovementGroup: "squat"),
+            RecoveryDayCandidate(order: 2, mainMovementGroup: "pull"),
+            RecoveryDayCandidate(order: 3, mainMovementGroup: "hinge"),
+        ]
+        XCTAssertEqual(P.recoveryDayOrders(upperLower), [0, 1],
+                       "the first authored representative of each half forms the bridge")
+
+        let lowerFirst = [
+            RecoveryDayCandidate(order: 2, mainMovementGroup: "hinge"),
+            RecoveryDayCandidate(order: 7, mainMovementGroup: "press"),
+            RecoveryDayCandidate(order: 9, mainMovementGroup: "squat"),
+        ]
+        XCTAssertEqual(P.recoveryDayOrders(lowerFirst), [2, 7],
+                       "sparse authored order and lower-first programs stay authored")
+    }
+
+    func testRecoveryBridgeFallsBackWhenTheProgramIsNotUpperLower() {
+        let olympic = [
+            RecoveryDayCandidate(order: 5, mainMovementGroup: "olympic"),
+            RecoveryDayCandidate(order: 0, mainMovementGroup: "squat"),
+            RecoveryDayCandidate(order: 2, mainMovementGroup: nil),
+        ]
+        XCTAssertEqual(P.recoveryDayOrders(olympic), [0, 2, 5],
+                       "ambiguous programs keep every authored exposure")
+        XCTAssertEqual(P.recoveryDayOrders([]), [])
+    }
     // [INV-BELOW-PLAN-IS-BELOW-PLAN]
     func testLighterWorkStillGradesBelowPlan() {
         // Propagating an edit changes the work about to be done, not the bar

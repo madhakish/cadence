@@ -424,7 +424,7 @@ enum ExportService {
                         ExportExercise(
                             name: entry.exercise?.name ?? "Unknown",
                             notes: entry.notes,
-                            phase: entry.phase?.label,
+                            phase: entry.phase?.portableLabel,
                             role: entry.programRole,
                             programSlotId: entry.programSlotID,
                             barId: entry.barID,

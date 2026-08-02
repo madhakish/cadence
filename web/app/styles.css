@@ -211,7 +211,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .setrow.current { border-left: 3px solid var(--accent); padding-left: 9px; margin-left: -12px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%); }
 
-/* wave-position glyph: the 4-week cycle (V/L/P/D), current rotation lit */
+/* wave-position glyph: volume/load/peak/recovery, current phase lit */
 .wave { display: inline-flex; gap: 3px; align-items: flex-end; height: 16px; }
 .wave i { width: 5px; border-radius: 2px; background: color-mix(in srgb, var(--text) 22%, transparent); display: block; }
 .wave i.on { background: var(--accent); }

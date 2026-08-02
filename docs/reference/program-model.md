@@ -11,8 +11,8 @@ the standalone "Next up" tracks.
 |---|---|
 | `name` | Display name |
 | `focus` | `strength` / `hypertrophy` / `maintain` — see table below |
-| `cycleNumber` | Which 4-week cycle you're on (increments at rollover) |
-| `currentWeek` | 1 volume · 2 load · 3 peak · 4 rest (deload) |
+| `cycleNumber` | Which mesocycle you're on (increments after recovery) |
+| `currentWeek` | Persisted compatibility name for the phase pointer: 1 volume · 2 load · 3 peak · 4 recovery |
 | `nextDayIndex` | The `order` of the day the Today screen offers next — a day's order value, not its position in the array |
 | `roundingLb` | Default load granularity. Dumbbells use at most 5 lb per-hand steps, and above-base wave rotations stay within one 5 lb rack jump |
 | `isActive` | Drives the Today screen |
@@ -27,7 +27,8 @@ hypertrophy to 78% with 1.5%, maintain never increments.
 ## Lift (per day)
 
 Day `order` values address the rotation: banking a day advances to the next
-day *by order*, and banking the highest-ordered day advances the week. The
+day *by order*, and banking the highest-ordered day advances rotations 1–3. The
+recovery bridge instead walks its selected representative day orders. The
 editors keep orders tidy at `0..n-1`, but nothing else depends on that — a
 gap or a duplicate (possible in a hand-edited or older backup, since orders
 are validated as unique but never as contiguous) still walks correctly.
@@ -67,12 +68,12 @@ reconstruct the program.
 |---|---|
 | `id` | Stable slot identity; completion uses this rather than exercise name/order |
 | `role` | `main` (one per day, anchors it, rests longest) or `complementary` |
-| `baseWeightLb` | Rotation-1 (volume week) working weight; the wave derives the other weeks |
-| `deloadMultiplier` | Rest-week intensity for wave-family styles, as a fraction of `baseWeightLb` (default 0.775, editable 0.50–0.90) — see [Progression rules](progression-rules.md#the-4-week-wave) |
+| `baseWeightLb` | Rotation-1 volume working weight; the wave derives the other phases |
+| `deloadMultiplier` | Recovery intensity for wave-family styles, as a fraction of `baseWeightLb` (default 0.775, editable 0.50–0.90) — see [Progression rules](progression-rules.md#three-progression-rotations-and-a-recovery-bridge) |
 | `estimatedMaxLb` | Smoothed Epley e1RM; seeds the ceiling, re-estimated from every banked peak |
 | `stallCount` | Consecutive non-clean cycles; 2 triggers an automatic −10% deload |
 | `lastIncrementLb` | What the last rollover added |
-| `pending…` | Week-3 grade stashed until rollover |
+| `pending…` | Rotation-3 grade stashed until rollover |
 | `revertToExerciseName` | Set by a cycle-scoped swap; the slot reverts to this name at rollover |
 
 ## Accessory (per day)

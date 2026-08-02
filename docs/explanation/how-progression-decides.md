@@ -5,11 +5,21 @@ the engine does; this page explains *why*.
 
 ## Why grade only the peak?
 
-Weeks 1–2 build toward week 3; week 4 is recovery. The peak is the only
-week that tests whether the current loading actually fits you, so it's
-the only week that earns a verdict. Grading every session would make the
-program twitchy — reacting to a bad Tuesday — where a wave should react
-to trends.
+The volume and load rotations build toward the third, peak rotation. Recovery
+then bridges into the next mesocycle with only one lower and one upper
+exposure. The peak is the only rotation that tests whether the current loading
+actually fits you, so it is the only one that earns a verdict. Grading every
+session would make the program twitchy where a wave should react to trends.
+
+## Why is recovery not a fourth rotation?
+
+A full A/B pass preserves normal lifting frequency even after load and sets
+fall. That is more training at exactly the point the accumulated-fatigue block
+is supposed to end. Cadence therefore keeps the movement patterns familiar
+with two reduced exposures, collapses accessories to one set, and freezes every
+progression and e1RM side effect. Active work between them—walking, mowing,
+splitting wood, or an easy ruck—does not need to be forced into a calendar week
+or represented as another lifting day.
 
 ## Why a proportional increment, and why no ceiling?
 
