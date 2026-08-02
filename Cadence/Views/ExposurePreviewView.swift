@@ -24,9 +24,9 @@ struct ExposurePreviewView: View {
     let cycleNumber: Int
     let roundingLb: Double
     var focus: TrainingFocus = .strength
-    /// How many of the program's days bank this lift+style. An A/B novice split
-    /// squats on both, and the shared base advances once per day.
-    var synchronizedExposuresPerRotation: Int = 1
+    /// The selected slot's authored day, the program's next-day pointer, the
+    /// shortened recovery selection, and any still-synchronized twins.
+    var schedule: ProgramEngine.ExposurePreviewSchedule?
     var count: Int = 4
 
     private var exercise: Exercise? { exercises.first { $0.name == lift.exerciseName } }
@@ -67,7 +67,7 @@ struct ExposurePreviewView: View {
             prescriptionStyle: lift.prescription,
             configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
             pendingState: pendingState,
-            synchronizedExposuresPerRotation: synchronizedExposuresPerRotation
+            schedule: schedule
         )
     }
 
@@ -99,6 +99,11 @@ struct ExposurePreviewView: View {
                         Text("\(entry.prescription.mainWork.sets)×\(entry.prescription.mainWork.reps)")
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
+                        if mainWorkIsAMRAP(entry) {
+                            Text("+ set")
+                                .font(.caption2.bold())
+                                .foregroundStyle(Theme.warn)
+                        }
                         Spacer(minLength: 0)
                     }
                     // Ramps, primers, top singles and the "+" set are real
@@ -126,8 +131,30 @@ struct ExposurePreviewView: View {
 
     /// The blocks either side of the graded work, in the order they are
     /// performed. Returns nil when the session is a single uniform block.
+    private func mainWorkIsAMRAP(_ entry: ProgramEngine.ExposurePreviewEntry) -> Bool {
+        let main = entry.prescription.mainWork
+        return entry.prescription.blocks.contains { block in
+            block.kind == .amrap
+                && abs(block.weightLb - main.weightLb) < 0.001
+                && block.sets == main.sets
+                && block.reps == main.reps
+        }
+    }
+
     private func supportingLine(_ entry: ProgramEngine.ExposurePreviewEntry) -> String? {
-        let extras = entry.prescription.blocks.filter { $0.kind != .work }
+        let main = entry.prescription.mainWork
+        var removedMainBlock = false
+        let extras = entry.prescription.blocks.filter { block in
+            guard block.kind != .work else { return false }
+            if !removedMainBlock,
+               abs(block.weightLb - main.weightLb) < 0.001,
+               block.sets == main.sets,
+               block.reps == main.reps {
+                removedMainBlock = true
+                return false
+            }
+            return true
+        }
         guard !extras.isEmpty else { return nil }
         return extras.map { block in
             let load = unitDisplay.format(lb: block.weightLb)

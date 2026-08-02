@@ -15,6 +15,8 @@ struct SettingsView: View {
     @State private var exportCSV: Data?
     @State private var showImporter = false
     @State private var showProgramImporter = false
+    @State private var showProgramCreator = false
+    @State private var importProgramAfterCreator = false
     @State private var importAlert: String?
     @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
     @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
@@ -175,41 +177,8 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    // Start from a style (ProgramTemplateData in CadenceCore,
-                    // fixture-locked to the web copy) or from scratch. First
-                    // program = active; names kept unique (Program.name is a
-                    // unique attribute — a collision would upsert, not add).
-                    Menu {
-                        ForEach(ProgramTemplateData.all) { template in
-                            Button {
-                                do {
-                                    try ProgramTemplates.instantiate(template, context: context)
-                                    PersistenceErrorCenter.shared.save(context, operation: "Adding the program")
-                                } catch {
-                                    PersistenceErrorCenter.shared.report(error, operation: "Adding the program", context: context)
-                                }
-                            } label: {
-                                Text(template.name)
-                                Text(template.tagline)
-                            }
-                        }
-                        Button {
-                            let name = ProgramTemplates.uniqueProgramName("Program \(programs.count + 1)", existing: programs.map(\.name))
-                            let program = Program(name: name, isActive: programs.isEmpty)
-                            context.insert(program)
-                            PersistenceErrorCenter.shared.save(context, operation: "Adding the program")
-                        } label: {
-                            Text("Blank program")
-                        }
-                        // A third source alongside the built-in styles and a
-                        // blank program. Adds one program and touches nothing
-                        // else — this is NOT the backup importer.
-                        Button {
-                            showProgramImporter = true
-                        } label: {
-                            Text("From a file…")
-                            Text("A program exported from Cadence")
-                        }
+                    Button {
+                        showProgramCreator = true
                     } label: {
                         Label("Add program", systemImage: "plus")
                     }
@@ -304,6 +273,17 @@ struct SettingsView: View {
         }
         .saveChangesOnDisappear(context, operation: "Saving settings")
         .navigationTitle("Settings")
+            .sheet(isPresented: $showProgramCreator, onDismiss: {
+                guard importProgramAfterCreator else { return }
+                importProgramAfterCreator = false
+                showProgramImporter = true
+            }) {
+                ProgramCreationSheet(existingPrograms: programs) {
+                    importProgramAfterCreator = true
+                    showProgramCreator = false
+                }
+                .presentationDetents([.medium, .large])
+            }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 importAlert = restore(from: result)
             }
@@ -389,6 +369,100 @@ struct SettingsView: View {
     private static var selectableBirthYears: [Int] {
         let thisYear = Calendar.current.component(.year, from: .now)
         return Array((thisYear - 120)...thisYear).reversed()
+    }
+}
+
+/// Three deliberate creation paths. Templates live one level deeper so their
+/// schedule and prescription shape can be inspected before they mutate data.
+private struct ProgramCreationSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+
+    let existingPrograms: [Program]
+    let onImport: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                NavigationLink {
+                    templatePicker
+                } label: {
+                    Label("Start from a template", systemImage: "rectangle.stack.badge.plus")
+                }
+
+                Button {
+                    let name = ProgramTemplates.uniqueProgramName(
+                        "Program \(existingPrograms.count + 1)",
+                        existing: existingPrograms.map(\.name)
+                    )
+                    context.insert(Program(name: name, isActive: existingPrograms.isEmpty))
+                    PersistenceErrorCenter.shared.save(context, operation: "Adding the program")
+                    dismiss()
+                } label: {
+                    Label("Blank program", systemImage: "doc")
+                }
+
+                Button {
+                    onImport()
+                } label: {
+                    Label("Import a program file", systemImage: "square.and.arrow.down")
+                }
+            }
+            .navigationTitle("Add program")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var templatePicker: some View {
+        List(ProgramTemplateData.all) { template in
+            Button {
+                do {
+                    try ProgramTemplates.instantiate(template, context: context)
+                    PersistenceErrorCenter.shared.save(context, operation: "Adding the program")
+                    dismiss()
+                } catch {
+                    PersistenceErrorCenter.shared.report(error, operation: "Adding the program", context: context)
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(template.name).font(.headline)
+                    Text(template.tagline).font(.subheadline).foregroundStyle(.secondary)
+                    Text("\(template.days.count) days · \(template.focus.capitalized) · \(dominantPrescriptions(template))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .navigationTitle("Templates")
+    }
+
+    private func dominantPrescriptions(_ template: ProgramTemplateData.Template) -> String {
+        let focus = TrainingFocus(rawValue: template.focus) ?? .strength
+        let rawStyles = template.days.flatMap { day in
+            day.lifts.map { lift in
+                ProgramEngine.resolvedStyle(
+                    PrescriptionStyle(rawValue: lift.prescription) ?? .automatic,
+                    movementGroup: nil,
+                    role: LiftRole(rawValue: lift.role) ?? .main,
+                    focus: focus
+                ).rawValue
+            }
+        }
+        guard !rawStyles.isEmpty else { return "Accessory progression" }
+        let counts = Dictionary(grouping: rawStyles, by: { $0 }).mapValues { $0.count }
+        return counts.sorted { lhs, rhs in
+            lhs.value == rhs.value ? lhs.key < rhs.key : lhs.value > rhs.value
+        }
+        .prefix(2)
+        .map { PrescriptionStyle(rawValue: $0.key)?.name ?? $0.key }
+        .joined(separator: " + ")
     }
 }
 
@@ -923,7 +997,7 @@ struct ProgramDayEditorView: View {
                     ProgramLiftRow(lift: lift, step: step, focus: day.program?.focus ?? .strength,
                                    rotation: day.program?.currentWeek ?? 1,
                                    cycleNumber: day.program?.cycleNumber ?? 1,
-                                   synchronizedExposuresPerRotation: synchronizedExposures(for: lift)) {
+                                   previewSchedule: previewSchedule(for: lift)) {
                         context.delete(lift)
                         PersistenceErrorCenter.shared.save(context, operation: "Removing the program lift")
                     }
@@ -979,20 +1053,37 @@ struct ProgramDayEditorView: View {
         }
     }
 
-    /// How many of the program's days bank this slot's shared progression.
-    /// Slots with the same lift AND style are one progression synchronized
-    /// across days, so a novice A/B split's squat advances twice per rotation.
-    private func synchronizedExposures(for lift: ProgramLift) -> Int {
-        guard let program = day.program else { return 1 }
-        return ProgramEngine.synchronizedExposuresPerRotation(
-            dayExposureKeys: program.orderedDays.map { programDay in
-                programDay.lifts.map {
-                    ProgramEngine.synchronizedExposureKey(exerciseName: $0.exerciseName, style: $0.prescription)
-                }
-            },
-            key: ProgramEngine.synchronizedExposureKey(
-                exerciseName: lift.exerciseName, style: lift.prescription
-            )
+    /// Full schedule context is load-bearing. Counting matching slots is not
+    /// enough: a twin before this day can advance the shared base before the
+    /// first preview row, and a manually diverged twin must not advance it at
+    /// all. Recovery also omits two authored days in an upper/lower program.
+    private func previewSchedule(for lift: ProgramLift) -> ProgramEngine.ExposurePreviewSchedule? {
+        guard let program = day.program else { return nil }
+        let orderedDays = program.orderedDays
+        let recoveryOrders = ProgramProgression.recoveryDayOrders(
+            orderedDays.map { programDay in
+                let mainName = programDay.orderedLifts.first(where: { $0.role == .main })?.exerciseName
+                return RecoveryDayCandidate(
+                    order: programDay.order,
+                    mainMovementGroup: mainName.flatMap { name in
+                        exercises.first(where: { $0.name == name })?.movementGroup
+                    }
+                )
+            }
+        )
+        let synchronizedOrders = orderedDays.compactMap { programDay -> Int? in
+            programDay.lifts.contains { candidate in
+                candidate.exerciseName == lift.exerciseName
+                    && candidate.prescription == lift.prescription
+                    && abs(candidate.baseWeightLb - lift.baseWeightLb) < 0.001
+            } ? programDay.order : nil
+        }
+        return ProgramEngine.ExposurePreviewSchedule(
+            targetDayOrder: day.order,
+            nextDayOrder: program.nextDayIndex,
+            allDayOrders: orderedDays.map(\.order),
+            recoveryDayOrders: recoveryOrders,
+            synchronizedDayOrders: synchronizedOrders
         )
     }
 
@@ -1051,7 +1142,7 @@ private struct ProgramLiftRow: View {
     var focus: TrainingFocus = .strength
     var rotation: Int = 1
     var cycleNumber: Int = 1
-    var synchronizedExposuresPerRotation: Int = 1
+    var previewSchedule: ProgramEngine.ExposurePreviewSchedule?
     let onRemove: () -> Void
 
     private var loadStep: Double {
@@ -1153,7 +1244,7 @@ private struct ProgramLiftRow: View {
             // input; without this, nothing on the screen is an output.
             ExposurePreviewView(lift: lift, rotation: rotation, cycleNumber: cycleNumber,
                                 roundingLb: step, focus: focus,
-                                synchronizedExposuresPerRotation: synchronizedExposuresPerRotation)
+                                schedule: previewSchedule)
         }
     }
 }

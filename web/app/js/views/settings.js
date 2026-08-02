@@ -137,23 +137,8 @@ export async function render(host) {
       ui.h("span", { class: "chev" })));
   }
   root.append(progList);
-  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add program", onClick: () => {
-    // Start from a style (templates.js) or from scratch. The first program
-    // created becomes active either way.
-    ui.actionSheet("Start from", [
-      ...PROGRAM_TEMPLATES.map((t) => ({ label: `${t.name} — ${t.tagline}`, onClick: async () => {
-        await createProgramFromTemplate(t);
-        ui.nav.refresh();
-      } })),
-      // A third source alongside the built-in styles and a blank program.
-      // Adds one program and touches nothing else — not the backup importer.
-      { label: "From a file… — a program exported from Cadence", onClick: () => importProgram() },
-      { label: "Blank program", onClick: async () => {
-        await Programs.save({ name: `Program ${programs.length + 1}`, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, roundingLb: 5, isActive: programs.length === 0, days: [] });
-        ui.nav.refresh();
-      } },
-    ]);
-  } }));
+  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add program",
+    onClick: () => openAddProgramSheet(programs) }));
 
   root.append(ui.h("div", { class: "section-title", text: "Progression (standalone lifts)" }));
   const trackList = ui.h("div", { class: "card list" });
@@ -220,6 +205,72 @@ export async function render(host) {
   root.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "10px" }, text: "Reset all data", onClick: () => resetData() }));
 
   host.replaceChildren(root);
+}
+
+function dominantPrescriptions(template) {
+  const counts = new Map();
+  for (const day of template.days || []) for (const lift of day.lifts || []) {
+    const style = C.resolvedPrescriptionStyle(
+      lift.prescription || "automatic", null, lift.role || "main", template.focus || "strength",
+    );
+    counts.set(style, (counts.get(style) || 0) + 1);
+  }
+  if (!counts.size) return "Accessory progression";
+  return [...counts.entries()]
+    .sort(([aStyle, aCount], [bStyle, bCount]) => bCount - aCount || aStyle.localeCompare(bStyle))
+    .slice(0, 2)
+    .map(([style]) => C.prescriptionShortName(style))
+    .join(" + ");
+}
+
+function openTemplateSheet() {
+  ui.sheet({
+    title: "Start from a template",
+    build: (content, api) => {
+      for (const template of PROGRAM_TEMPLATES) {
+        content.append(ui.h("button", {
+          class: "card wide", style: { marginTop: "8px", textAlign: "left" },
+          onClick: async () => {
+            await createProgramFromTemplate(template);
+            api.close();
+            ui.nav.refresh();
+          },
+        },
+        ui.h("span", { style: { display: "flex", flexDirection: "column", gap: "4px" } },
+          ui.h("span", { class: "title", text: template.name }),
+          ui.h("span", { class: "sub", text: template.tagline }),
+          ui.h("span", { class: "sub", text: `${template.days.length} days · ${template.focus} · ${dominantPrescriptions(template)}` }))));
+      }
+      content.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "12px" },
+        text: "Cancel", onClick: () => api.close() }));
+    },
+  });
+}
+
+function openAddProgramSheet(programs) {
+  ui.sheet({
+    title: "Add program",
+    build: (content, api) => {
+      content.append(
+        ui.h("button", { class: "btn wide primary", style: { marginTop: "8px" },
+          text: "Start from a template", onClick: () => { api.close(); openTemplateSheet(); } }),
+        ui.h("button", { class: "btn wide", style: { marginTop: "8px" }, text: "Blank program", onClick: async () => {
+          let number = programs.length + 1;
+          const names = new Set(programs.map((program) => program.name));
+          while (names.has(`Program ${number}`)) number += 1;
+          await Programs.save({ name: `Program ${number}`, focus: "strength", cycleNumber: 1,
+            currentWeek: 1, nextDayIndex: 0, roundingLb: 5,
+            isActive: programs.length === 0, days: [] });
+          api.close();
+          ui.nav.refresh();
+        } }),
+        ui.h("button", { class: "btn wide", style: { marginTop: "8px" },
+          text: "Import a program file", onClick: () => { api.close(); importProgram(); } }),
+        ui.h("button", { class: "btn wide ghost", style: { marginTop: "12px" },
+          text: "Cancel", onClick: () => api.close() }),
+      );
+    },
+  });
 }
 
 function gymEditor(g) {
@@ -527,6 +578,25 @@ async function programDayEditor(p, day) {
         body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
         const openDetail = async (name) => { const ex = await Exercises.byName(name); if (ex) exerciseDetail(ex); };
         for (const l of orderedSlots(day.lifts)) {
+          const orderedDays = [...(p.days || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          const recoveryOrders = C.recoveryDayOrders(orderedDays.map((candidate) => {
+            const mainName = orderedSlots(candidate.lifts).find((lift) => lift.role === "main")?.exerciseName;
+            return { order: candidate.order ?? 0, mainMovementGroup: exerciseByName.get(mainName)?.movementGroup };
+          }));
+          const schedule = {
+            targetDayOrder: day.order ?? 0,
+            nextDayOrder: p.nextDayIndex ?? 0,
+            allDayOrders: orderedDays.map((candidate) => candidate.order ?? 0),
+            recoveryDayOrders: recoveryOrders,
+            // Production synchronizes only twins still at the same base. A
+            // manually diverged slot is an independent progression and must not
+            // inflate this preview.
+            synchronizedDayOrders: orderedDays.filter((candidate) =>
+              (candidate.lifts || []).some((slot) => slot.exerciseName === l.exerciseName
+                && (slot.prescription || "automatic") === (l.prescription || "automatic")
+                && Math.abs((slot.baseWeightLb ?? 0) - (l.baseWeightLb ?? 0)) < 0.001))
+              .map((candidate) => candidate.order ?? 0),
+          };
           // The preview is the only OUTPUT on this card, so a stepper that
           // saves without refreshing it leaves the lifter reading the previous
           // walk — which defeats the point of showing the 188-vs-190 lb
@@ -535,9 +605,16 @@ async function programDayEditor(p, day) {
           // under a held control fights the hand doing the pressing. So the
           // preview node is swapped in place instead.
           const exercise = exerciseByName.get(l.exerciseName);
-          let preview = ui.exposurePreview(l, p, exercise);
+          let preview = ui.exposurePreview(l, p, exercise, 4, schedule);
           const refresh = () => {
-            const next = ui.exposurePreview(l, p, exercise);
+            // Rebuild the schedule too: editing this base can intentionally
+            // split or rejoin a synchronized progression.
+            schedule.synchronizedDayOrders = orderedDays.filter((candidate) =>
+              (candidate.lifts || []).some((slot) => slot.exerciseName === l.exerciseName
+                && (slot.prescription || "automatic") === (l.prescription || "automatic")
+                && Math.abs((slot.baseWeightLb ?? 0) - (l.baseWeightLb ?? 0)) < 0.001))
+              .map((candidate) => candidate.order ?? 0);
+            const next = ui.exposurePreview(l, p, exercise, 4, schedule);
             preview.replaceWith(next);
             preview = next;
           };

@@ -434,14 +434,12 @@ eq(C.recoveryBridgeCompletionReason(1, 2, true, null, peakMs), "selectedExposure
 eq(C.recoveryBridgeCompletionReason(1, 2, false, null, peakMs + 2 * C.RECOVERY_WINDOW_MS), null,
   "missing history never invents an expiry anchor");
 
-// A bridge nobody has banked into has not started. Expiring one reverted a
-// deliberate manual reposition to Recovery the moment Today rendered — rolling
-// the cycle, applying pendings and accruing a stall against a lifter who had
-// just asked for a recovery week.
-eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), null,
-  "an unbanked bridge is never expired by the window");
-eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + 40 * C.RECOVERY_WINDOW_MS), null,
-  "no matter how stale the hard-phase anchor is");
+// Recovery is a fixed window after Peak, not a timer that starts only when the
+// first reduced workout is banked. Zero workouts is a valid deload choice.
+eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "an unbanked bridge expires at the same seven-day boundary");
+eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + 40 * C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "a stale hard-phase anchor cannot leave Recovery open indefinitely");
 
 // The cap is the bridge's OWN length. A program that is not recognizably
 // upper/lower keeps its full authored pass, and a constant two silently dropped
@@ -1658,30 +1656,26 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "a slot with no rep-window fields still previews real numbers");
   eq(bare[0].prescription.mainWork.reps, 5, "and falls back to the documented 5-rep default");
 
-  // Twin slots are ONE progression. A novice A/B split squats on both days, so
-  // the shared base advances twice per rotation; projecting one advance per
-  // exposure understated every future weight by an increment per rotation.
-  const twinned = C.exposurePreview({ count: 4, baseWeightLb: 205, prescriptionStyle: "linearFives",
-    movementGroup: "squat", programRoundingLb: 5, configuration: { workingSets: 3 },
-    synchronizedExposuresPerRotation: 2 });
-  eq(twinned.map((e) => e.baseWeightLb).join(","), "205,225,245,265",
-    "a squat on both days of an A/B split advances +20 between its own appearances");
-  ok((twinned[0].advanceNote || "").includes("Shared with 2 days"),
-    "and the note says why the jump is bigger than one increment");
-  eq(C.synchronizedExposuresPerRotation([
-    [C.synchronizedExposureKey("Back Squat", "linearFives")],
-    [C.synchronizedExposureKey("Back Squat", "linearFives"), C.synchronizedExposureKey("Bench Press", "linearFives")],
-    [C.synchronizedExposureKey("Deadlift", "linearFives")],
-  ], C.synchronizedExposureKey("Back Squat", "linearFives")), 2, "counts the days carrying the shared progression");
-  eq(C.synchronizedExposuresPerRotation([
-    [C.synchronizedExposureKey("Back Squat", "linearFives"), C.synchronizedExposureKey("Back Squat", "linearFives")],
-  ], C.synchronizedExposureKey("Back Squat", "linearFives")), 1,
-    "a day repeating one lift+style still banks it once — the banking layer dedupes on this key");
-  eq(C.synchronizedExposuresPerRotation([
-    [C.synchronizedExposureKey("Back Squat", "linearFives")],
-    [C.synchronizedExposureKey("Back Squat", "wave")],
-  ], C.synchronizedExposureKey("Back Squat", "linearFives")), 1,
-    "same lift on a different style is a different progression and never synchronizes");
+  // Day B is next, so its synchronized squat advances before Day A appears.
+  // Day A was already banked in R2; its actual next exposure is R3.
+  const twinned = C.exposurePreview({ count: 3, baseWeightLb: 205, rotation: 2,
+    prescriptionStyle: "linearFives", movementGroup: "squat", programRoundingLb: 5,
+    configuration: { workingSets: 3 }, schedule: {
+      targetDayOrder: 0, nextDayOrder: 1, allDayOrders: [0, 1],
+      recoveryDayOrders: [0], synchronizedDayOrders: [0, 1],
+    } });
+  eq(twinned.map((e) => e.rotation).join(","), "3,4,1",
+    "the day pointer determines the slot's next actual rotation");
+  eq(twinned.map((e) => e.baseWeightLb).join(","), "215,235,235",
+    "the earlier twin moves the first load and Recovery holds it");
+
+  const omittedRecovery = C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4,
+    prescriptionStyle: "wave", schedule: {
+      targetDayOrder: 1, nextDayOrder: 0, allDayOrders: [0, 1],
+      recoveryDayOrders: [0], synchronizedDayOrders: [1],
+    } });
+  eq(omittedRecovery.map((e) => e.rotation).join(","), "1,2",
+    "a day omitted from the bridge has no fictional Recovery exposure");
 
   // A peak banked this cycle already carries an earned base. Recovery still
   // runs off the OLD one — the pending grade lands at the rollover, not before.

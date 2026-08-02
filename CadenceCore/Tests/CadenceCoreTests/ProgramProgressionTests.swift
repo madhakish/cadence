@@ -590,22 +590,25 @@ final class ProgramProgressionTests: XCTestCase {
         ), "missing history never invents an elapsed-time anchor")
     }
 
-    /// A bridge nobody has banked into has not started. Expiring one reverted a
-    /// deliberate manual reposition to Recovery the moment Today rendered —
-    /// rolling the cycle, applying pendings and accruing a stall against a
-    /// lifter who had just asked for a recovery week.
+    /// The bridge is bounded from the last hard phase even when no reduced work
+    /// was banked. Otherwise a stale pointer can prescribe Recovery forever.
     /// Mirrors the same block in web/tests/core.test.mjs.
-    func testAnUnbankedBridgeIsNeverExpired() {
+    func testAnUnbankedBridgeExpiresFromTheHardPhase() {
         let peak = Date(timeIntervalSince1970: 1_000_000)
-        for elapsed in [P.recoveryWindow, P.recoveryWindow * 40] {
-            XCTAssertNil(P.recoveryBridgeCompletionReason(
-                completedRecoverySessions: 0,
-                selectedExposureCount: 2,
-                selectedExposuresComplete: false,
-                lastHardPhaseCompletion: peak,
-                asOf: peak.addingTimeInterval(elapsed)
-            ), "no banked recovery work means nothing to expire, however stale the anchor")
-        }
+        XCTAssertNil(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 0,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow - 1)
+        ))
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 0,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow)
+        ), .windowElapsed)
     }
 
     /// The cap is the bridge's OWN length. A program that is not recognizably

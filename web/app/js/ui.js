@@ -218,6 +218,21 @@ export function slotBadge(lift, rotationWeek, movementGroup = null, focus = "str
   return el;
 }
 
+// Sessions persist the phase for schedule/history reconstruction, even when a
+// slot's prescription does not use phase names. Render that stored value only
+// when the captured prescription style says the label is truthful. Old rows
+// without a captured style keep their legacy label because they cannot be
+// classified safely after the fact.
+export function sessionPhaseLabel(entry, exercise) {
+  if (!entry?.phase) return null;
+  const style = entry.prescriptionStyle || entry.prescriptionStyleRaw;
+  if (!style) return C.phaseLabel(entry.phase);
+  return C.slotPhaseLabel(
+    entry.phase, entry.programRole || "main", style,
+    exercise?.movementGroup ?? null, "strength",
+  );
+}
+
 const BLOCK_LABELS = {
   warmup: "warm-up", primer: "primer", topSingle: "top single", ramp: "ramp",
   work: "work", amrap: "+ set", backoff: "back-off", conditioning: "conditioning",
@@ -234,7 +249,7 @@ const BLOCK_LABELS = {
 // forward; there is no second implementation that could disagree with the
 // session the lifter eventually starts. It costs no persisted state.
 // Mirrors the native ExposurePreviewView (Cadence/Views/ExposurePreviewView.swift).
-export function exposurePreview(lift, program, exercise, count = 4) {
+export function exposurePreview(lift, program, exercise, count = 4, schedule = null) {
   const movementGroup = exercise?.movementGroup ?? null;
   const style = C.resolvedPrescriptionStyle(lift.prescription || "automatic",
     movementGroup, lift.role || "main", program.focus);
@@ -246,11 +261,6 @@ export function exposurePreview(lift, program, exercise, count = 4) {
   // the native field names here made the seeding silently dead on web and left
   // the two clients previewing different next-cycle bases for the same slot.
   const pendingState = lift.pending?.state ? { ...lift.pending.state } : null;
-  // How many of the program's days bank this lift+style — an A/B novice split
-  // squats on both, and the shared base advances once per day.
-  const key = C.synchronizedExposureKey(lift.exerciseName, lift.prescription || "automatic");
-  const dayExposureKeys = (program.days || []).map((day) =>
-    (day.lifts || []).map((slot) => C.synchronizedExposureKey(slot.exerciseName, slot.prescription || "automatic")));
   const entries = C.exposurePreview({
     count,
     baseWeightLb: lift.baseWeightLb,
@@ -266,13 +276,16 @@ export function exposurePreview(lift, program, exercise, count = 4) {
     prescriptionStyle: lift.prescription || "automatic",
     configuration: { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
     pendingState,
-    synchronizedExposuresPerRotation: C.synchronizedExposuresPerRotation(dayExposureKeys, key),
+    schedule,
   });
 
   const card = h("div", { class: "card sub" },
     h("div", { class: "section-title", text: `Next ${count} exposures` }));
   for (const entry of entries) {
     const work = entry.prescription.mainWork;
+    const mainWorkIsAMRAP = entry.prescription.blocks.some((b) => b.kind === "amrap"
+      && Math.abs(b.weightLb - work.weightLb) < 0.001
+      && b.sets === work.sets && b.reps === work.reps);
     // Phase-independent styles are numbered exposures, not phases — labelling a
     // linearFives session "Peak" would assert something the engine does not do.
     const lead = entry.phaseName || `Session ${entry.exposureNumber}`;
@@ -280,10 +293,20 @@ export function exposurePreview(lift, program, exercise, count = 4) {
       h("div", { style: { display: "flex", gap: "8px", alignItems: "baseline" } },
         h("span", { class: entry.isRecovery ? "sub warn" : "sub", text: lead, style: { minWidth: "92px" } }),
         h("span", { class: "mono", text: fmtWeight(work.weightLb) }),
-        h("span", { class: "sub mono", text: `${work.sets}×${work.reps}` })));
+        h("span", { class: "sub mono", text: `${work.sets}×${work.reps}` }),
+        mainWorkIsAMRAP ? h("span", { class: "sub warn", text: "+ set" }) : null));
     // Ramps, primers, top singles and the "+" set are real prescribed work. A
     // preview showing only the top line would hide most of a 5/3/1 session.
-    const extras = entry.prescription.blocks.filter((b) => b.kind !== "work");
+    let removedMainBlock = false;
+    const extras = entry.prescription.blocks.filter((b) => {
+      if (b.kind === "work") return false;
+      if (!removedMainBlock && Math.abs(b.weightLb - work.weightLb) < 0.001
+          && b.sets === work.sets && b.reps === work.reps) {
+        removedMainBlock = true;
+        return false;
+      }
+      return true;
+    });
     if (extras.length) {
       row.append(h("div", { class: "sub mono", style: { opacity: "0.7" },
         text: extras.map((b) => `${BLOCK_LABELS[b.kind] || b.kind} ${fmtWeight(b.weightLb)} ${b.sets}×${b.reps}`).join(" · ") }));

@@ -1222,14 +1222,10 @@ export function recoveryBridgeCompletionReason(
   // behaviour the fallback exists to prevent.
   const cap = Math.max(RECOVERY_SESSION_LIMIT, selectedExposureCount || 0);
   if (completedRecoverySessions >= cap) return "sessionLimit";
-  // A bridge nobody has banked into has not started, and the seven-day guard is
-  // for a HALF-FINISHED one. Expiring an unbanked bridge reverted a deliberate
-  // manual reposition to Recovery — rolling the cycle, applying pendings and
-  // accruing a stall — the moment Today rendered, which is the opposite of what
-  // a lifter asking for a recovery week wants. The indefinite-light-work bug
-  // this guard was written for always has banked recovery sessions, so it stays
-  // fixed: it is the pointer that was stuck, not the banking.
-  if (completedRecoverySessions < 1) return null;
+  // Recovery is a bounded bridge from the last hard phase, not a new calendar
+  // window that starts when reduced work is banked. Otherwise a first recovery
+  // exposure on day six silently extends the bridge to day thirteen, and an
+  // untouched recovery pointer can prescribe reduced work forever.
   if (Number.isFinite(lastHardPhaseCompletionMs)
       && nowMs - lastHardPhaseCompletionMs >= RECOVERY_WINDOW_MS) return "windowElapsed";
   return null;
@@ -1570,21 +1566,6 @@ export function advanceAccessory(state, perf) {
   return next;
 }
 
-// Slots sharing one lift AND one style are ONE progression: banking any of them
-// advances the shared base and synchronizes the twins, which is what makes "add
-// weight every session" hold across a novice A/B split.
-// Mirrored 1:1 in CadenceCore ProgramEngine.synchronizedExposureKey.
-export const synchronizedExposureKey = (exerciseName, style) =>
-  `${exerciseName}|${style}`;
-
-// How many times that shared progression is banked in one full rotation: the
-// number of the program's days carrying it. A day that repeats the same lift and
-// style still banks it once — the banking layer dedupes on this exact key — so
-// this counts DAYS, not slots.
-// Mirrored 1:1 in CadenceCore ProgramEngine.synchronizedExposuresPerRotation.
-export const synchronizedExposuresPerRotation = (dayExposureKeys, key) =>
-  Math.max(1, (dayExposureKeys || []).reduce((n, keys) => n + (keys.includes(key) ? 1 : 0), 0));
-
 // The next `count` exposures a slot will actually produce.
 //
 // The point of the deterministic engine is that its output can be audited, and
@@ -1612,7 +1593,7 @@ export function exposurePreview({
   count = 4, baseWeightLb, estimatedMaxLb = 0, stallCount = 0, cycleNumber = 1, rotation = 1,
   programRoundingLb = DEFAULT_ROUNDING_LB, exerciseType = null, movementGroup = null,
   role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {},
-  pendingState = null, synchronizedExposuresPerRotation = 1,
+  pendingState = null, schedule = null,
 } = {}) {
   if (!(count > 0) || !(baseWeightLb >= 0)) return [];
   const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
@@ -1651,7 +1632,30 @@ export function exposurePreview({
     grindyOrWobbleSets: 0, topSetWeightLb: plan.weightLb, topSetReps: plan.reps,
   });
 
-  for (let exposure = 1; exposure <= count; exposure += 1) {
+  // A direct core caller may omit schedule context. Treat that as a one-day
+  // program; app surfaces supply the real day pointer and recovery selection.
+  const previewSchedule = schedule || {
+    targetDayOrder: 0, nextDayOrder: 0, allDayOrders: [0],
+    recoveryDayOrders: [0], synchronizedDayOrders: [0],
+  };
+  const uniqueSorted = (values) => [...new Set(values || [])].sort((a, b) => a - b);
+  const allOrders = uniqueSorted(previewSchedule.allDayOrders);
+  const recoveryOrders = uniqueSorted(previewSchedule.recoveryDayOrders);
+  if (!allOrders.includes(previewSchedule.targetDayOrder)) return [];
+  const synchronizedOrders = new Set([
+    ...(previewSchedule.synchronizedDayOrders || []), previewSchedule.targetDayOrder,
+  ]);
+  const activeOrders = () => (phase === DELOAD_WEEK && recoveryOrders.length ? recoveryOrders : allOrders);
+  let orders = activeOrders();
+  let orderIndex = Math.max(0, orders.indexOf(previewSchedule.nextDayOrder));
+  const maxSteps = count * Math.max(1, allOrders.length + recoveryOrders.length) + allOrders.length + 8;
+  let steps = 0;
+
+  while (entries.length < count && orders.length && steps < maxSteps) {
+    steps += 1;
+    const dayOrder = orders[orderIndex];
+    const isTarget = dayOrder === previewSchedule.targetDayOrder;
+    const isSynchronizedDay = synchronizedOrders.has(dayOrder);
     const cycleState = {
       cycleNumber: cycle, baseWeightLb: state.baseWeightLb,
       nextPhase: phase, incrementLb: state.lastIncrementLb,
@@ -1661,10 +1665,9 @@ export function exposurePreview({
       role, focus, style, config, state.estimatedMaxLb,
     );
     const work = prescription.mainWork;
-    const perf = cleanPerformance(work);
     let note = null;
 
-    if (style === "doubleProgression") {
+    if (isTarget && style === "doubleProgression") {
       // Rep window first, load second — and never on the recovery rotation,
       // which is non-progressive by contract.
       if (phase !== DELOAD_WEEK) {
@@ -1687,79 +1690,62 @@ export function exposurePreview({
         state.stallCount = next.stallCount;
         config.currentReps = next.currentReps;
       }
-    } else if (advancesPerExposure(style)) {
+    } else if (advancesPerExposure(style) && style !== "doubleProgression" && isSynchronizedDay) {
       if (phase !== DELOAD_WEEK) {
-        const rule = linearRule(style, movementGroup);
-        const baseBefore = state.baseWeightLb;
-        // Every day carrying this lift and style banks the SHARED progression
-        // once per rotation. A novice A/B program squats on both days, so the
-        // base advances twice between this slot's own appearances — advancing
-        // once per previewed exposure understated every future weight by a full
-        // increment per rotation, compounding down the list.
-        for (let advance = 0; advance < Math.max(1, synchronizedExposuresPerRotation); advance += 1) {
-          // The first advance is this slot's own banking; the rest are its
-          // twins, which sit at the same rotation on the same shared base and
-          // so re-derive their plan from the state each step leaves behind.
-          const stepPlan = advance === 0 ? work : programPlanFor(
-            { cycleNumber: cycle, baseWeightLb: state.baseWeightLb, nextPhase: phase, incrementLb: state.lastIncrementLb },
-            programRoundingLb, exerciseType, movementGroup, role, focus, style, config,
-          );
-          const result = advanceLinearLift(state, cleanPerformance(stepPlan), rule, step);
-          state = result.state;
-          note = result.note;
-        }
-        const moved = state.baseWeightLb - baseBefore;
-        if (synchronizedExposuresPerRotation > 1 && moved > 0) {
-          note = `Shared with ${synchronizedExposuresPerRotation} days — the base moves `
-            + `${trim(moved)} lb before this slot comes round again.`;
-        }
-      } else {
+        const result = advanceLinearLift(
+          state, cleanPerformance(work), linearRule(style, movementGroup), step,
+        );
+        state = result.state;
+        if (isTarget) note = result.note;
+      } else if (isTarget) {
         note = "Recovery rotation — the base holds, then the exposure cadence resumes.";
       }
-    } else if (phase === GRADED_WEEK) {
-      const result = advanceProgramLift(state, perf, focus, style, movementGroup, step);
+    } else if (isTarget && phase === GRADED_WEEK) {
+      const result = advanceProgramLift(state, cleanPerformance(work), focus, style, movementGroup, step);
       // The grade is banked now; the base lands at the rollover.
       pending = result.state;
       note = result.note;
     }
 
-    entries.push({
-      exposureNumber: exposure,
-      cycleNumber: cycle,
-      rotation: phase,
-      phaseName: slotPhaseLabel(phase, role, style, movementGroup, focus),
-      isRecovery: phase === DELOAD_WEEK,
-      baseWeightLb: cycleState.baseWeightLb,
-      prescription,
-      advanceNote: note,
-    });
+    if (isTarget) {
+      entries.push({
+        exposureNumber: entries.length + 1,
+        cycleNumber: cycle,
+        rotation: phase,
+        phaseName: slotPhaseLabel(phase, role, style, movementGroup, focus),
+        isRecovery: phase === DELOAD_WEEK,
+        baseWeightLb: cycleState.baseWeightLb,
+        prescription,
+        advanceNote: note,
+      });
+    }
 
-    if (phase === DELOAD_WEEK) {
-      cycle += 1;
-      // Mirror rollOverRecovery exactly, all three branches. It is not "apply
-      // the pending if there is one": a per-exposure slot already advanced
-      // while training, so a stale grade left behind by a later style edit is
-      // DELETED rather than applied, and a wave-family slot that reaches the
-      // rollover without a banked peak accrues a stall toward the rebuild.
-      // Previewing only the middle branch showed a linear slot dropping to a
-      // phantom graded base, and hid the rebuild a stalled wave slot is about
-      // to take.
-      if (advancesPerExposure(style)) {
-        pending = null;
-      } else if (pending) {
-        state = pending;
-        pending = null;
-      } else if (usesCyclePhases(style)) {
-        state.stallCount = (state.stallCount || 0) + 1;
-        state.lastIncrementLb = 0;
-        if (state.stallCount >= STALL_LIMIT) {
-          state.baseWeightLb = roundTo(state.baseWeightLb * DELOAD_REBUILD_FRACTION, step);
-          state.stallCount = 0;
+    orderIndex += 1;
+    if (orderIndex >= orders.length) {
+      if (phase === DELOAD_WEEK) {
+        cycle += 1;
+        // Mirror rollOverRecovery exactly, all three branches. Per-exposure
+        // slots discard stale pending grades; graded slots apply a banked
+        // grade; a peak-less wave accrues the real stall/rebuild.
+        if (advancesPerExposure(style)) {
+          pending = null;
+        } else if (pending) {
+          state = pending;
+          pending = null;
+        } else if (usesCyclePhases(style)) {
+          state.stallCount = (state.stallCount || 0) + 1;
+          state.lastIncrementLb = 0;
+          if (state.stallCount >= STALL_LIMIT) {
+            state.baseWeightLb = roundTo(state.baseWeightLb * DELOAD_REBUILD_FRACTION, step);
+            state.stallCount = 0;
+          }
         }
+        phase = 1;
+      } else {
+        phase += 1;
       }
-      phase = 1;
-    } else {
-      phase += 1;
+      orders = activeOrders();
+      orderIndex = 0;
     }
   }
   return entries;

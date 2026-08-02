@@ -381,13 +381,25 @@ for (const [name, view] of [["home", home], ["history", history], ["body", body]
   ok(text.includes("Base"), "the preview says what the numbers derive from");
 
   lift.prescription = "fiveThreeOne";
-  const wendler = ui.exposurePreview(lift, program, exercise).textContent;
+  const wendlerCard = ui.exposurePreview(lift, program, exercise);
+  const wendler = wendlerCard.textContent;
   ok(!wendler.includes("Peak") && !wendler.includes("Volume"),
     "5/3/1 previews exposures, never wave phases");
   ok(wendler.includes("Session 1"), "phase-independent styles number their exposures");
   ok(wendler.includes("+ set"), "the graded + set is visible, not hidden behind the top line");
   ok(wendler.includes("ramp"), "and so are the ramp sets that make up most of the session");
   ok(wendler.includes("Training max"), "a 5/3/1 base is named as the training max it is");
+  const firstWendlerRow = wendlerCard.querySelector(".row");
+  const mainLoad = firstWendlerRow?.querySelector(".mono")?.textContent;
+  ok(mainLoad && firstWendlerRow.textContent.split(mainLoad).length - 1 === 1,
+    "the 5/3/1 top set is identified without duplicating its load and scheme");
+
+  ok(ui.sessionPhaseLabel({ phase: 3, prescriptionStyle: "linearFives", programRole: "main" }, exercise) === null,
+    "active and history surfaces hide false Peak labels on linear slots");
+  ok(ui.sessionPhaseLabel({ phase: 3, prescriptionStyle: "wave", programRole: "main" }, exercise) === "R3 Peak",
+    "active and history surfaces retain truthful wave phase labels");
+  ok(ui.sessionPhaseLabel({ phase: 3 }, exercise) === C.phaseLabel(3),
+    "legacy sessions without captured style retain their historical label");
 
   lift.prescription = prior.prescription;
   lift.baseWeightLb = prior.base;
@@ -411,6 +423,21 @@ for (const [name, view] of [["home", home], ["history", history], ["body", body]
   await db.Programs.save(program);
 
   await settings.render(host());
+  const addProgram = [...host().querySelectorAll("button")].find((button) => button.textContent.includes("Add program"));
+  addProgram.click(); await tick();
+  let creator = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  ok(["Start from a template", "Blank program", "Import a program file"]
+    .every((label) => creator.textContent.includes(label)),
+  "Add program exposes three clear creation paths before making a choice");
+  [...creator.querySelectorAll("button")].find((button) => button.textContent.includes("Start from a template")).click();
+  await tick();
+  creator = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  ok(creator.textContent.includes("days ·") && creator.textContent.includes("strength")
+    && creator.textContent.includes("Wave"),
+  "template choices expose days, focus, and dominant prescriptions before selection");
+  [...creator.querySelectorAll("button")].find((button) => button.textContent === "Cancel").click();
+  await tick();
+
   const progRow = [...host().querySelectorAll(".row")].find((r) => r.textContent.includes("Cycle"));
   progRow.click(); await tick();
   const editor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
@@ -1685,17 +1712,14 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     programTag: { programId: program.uuid, programName: name,
       cycleNumber: 4, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
   });
-  // A bridge nobody has banked into has not started, so the window cannot
-  // expire it — that is what made the guard revert a deliberate manual
-  // reposition to Recovery.
-  const unbanked = await session.reconcileRecoveryBridge(
-    program, await db.Sessions.completed(), new Date("2042-04-30T13:00:00.000Z"),
+  // The window is fixed to Peak even before reduced work is banked.
+  const beforeBoundary = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-03-08T12:59:59.999Z"),
   );
-  ok(unbanked === null,
-    "[INV-RECOVERY-IS-A-BRIDGE] an unbanked bridge is never expired, however stale the Peak");
+  ok(beforeBoundary === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] Recovery remains available inside seven days of Peak");
 
-  // Bank the first recovery exposure: now the bridge IS half-finished, and the
-  // window measures from that exposure rather than from the Peak behind it.
+  // Banking reduced work does not start a fresh seven-day window.
   const recoveryID = await db.Sessions.save({
     date: "2042-03-02T12:00:00.000Z", completedAt: "2042-03-02T13:00:00.000Z",
     notes: "Synthetic recovery exposure", isCompleted: true,
@@ -1703,14 +1727,14 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
       cycleNumber: 4, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
   });
   const inside = await session.reconcileRecoveryBridge(
-    program, await db.Sessions.completed(), new Date("2042-03-09T12:59:59.999Z"),
+    program, await db.Sessions.completed(), new Date("2042-03-08T12:59:59.999Z"),
   );
   ok(inside === null, "Recovery remains available one millisecond before the seven-day boundary");
   const expired = await session.reconcileRecoveryBridge(
-    program, await db.Sessions.completed(), new Date("2042-03-09T13:00:00.000Z"),
+    program, await db.Sessions.completed(), new Date("2042-03-08T13:00:00.000Z"),
   );
   ok(expired?.reason === "windowElapsed",
-    "[INV-RECOVERY-IS-A-BRIDGE] a half-finished bridge expires seven days after its last exposure");
+    "[INV-RECOVERY-IS-A-BRIDGE] the bridge expires seven days after Peak, not seven days after reduced work");
   program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   ok(program.cycleNumber === 5 && program.currentWeek === 1,
     "expired Recovery starts the next cycle rather than prescribing stale reduced work");

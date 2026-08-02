@@ -758,8 +758,8 @@ private struct ExerciseSection: View {
         } header: {
             HStack {
                 Text(entry.exercise?.name ?? "Exercise")
-                if let phase = entry.phase {
-                    Text(phase.label).foregroundStyle(Theme.accent)
+                if let phaseLabel = entry.truthfulPhaseLabel {
+                    Text(phaseLabel).foregroundStyle(Theme.accent)
                 }
                 if let lastTime {
                     Text(lastTime).textCase(nil)

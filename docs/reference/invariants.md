@@ -287,29 +287,18 @@ program keeping its full authored pass is not truncated by the guard meant to
 protect it. An in-flight program upgraded from the old four-day phase 4
 recognizes bridge exposures it already banked instead of prescribing them again.
 
-A **half-finished** bridge also expires seven elapsed days after the most recent
-evidence it was live: the latest of its banked recovery exposures and the final
-completed Peak (or the preceding completed hard rotation when an early-recovery
-decision skipped Peak). Today and Start reconcile that state before showing or
-creating another recovery prescription, visibly mark Recovery complete, apply
-the normal rollover, and begin the next cycle at Volume day 1. This duration is
-an expiry guard only. It never turns a cycle-based program into a week-based
-program and never advances Volume, Load, or Peak because a date changed.
+A recovery bridge expires seven elapsed days after the final completed Peak (or
+the preceding completed hard rotation when an early-recovery decision skipped
+Peak). Recovery exposures never restart that clock. Today and Start reconcile
+the state before showing or creating another recovery prescription, visibly
+mark Recovery complete, apply the normal rollover, and begin the next cycle at
+Volume day 1. The bridge can therefore contain zero, one, or two reduced
+workouts, but it cannot prescribe one beyond the fixed seven-day boundary.
 
-**A bridge with no banked recovery exposure never expires, and reconciliation
-never runs while a session is open.**
-
-> The window is for a bridge somebody started and abandoned. Applied to one
-> nobody has banked into, it read a deliberate act as staleness: setting
-> Rotation to Recovery in the editor with an older Peak behind it rolled the
-> cycle, applied pendings and accrued a stall the instant Today rendered —
-> undoing the same manual positioning that `positionAtRotation` deliberately
-> protects by stamping holds. Running it under an open session was the same
-> mistake against a workout in progress: the program advanced beneath a logged
-> session, which then failed its stale-tag check and banked as orphaned
-> history. Neither the indefinite-light-work bug nor the stuck-pointer bug this
-> guard was written for is reachable without banked recovery sessions, so both
-> stay fixed.
+This duration is an expiry guard only. It never turns a cycle-based program
+into a week-based program and never advances Volume, Load, or Peak because a
+date changed. Reconciliation still never runs while a session is open, so an
+in-progress workout cannot be made stale underneath the lifter.
 
 Recovery prescriptions cut working volume, reduce every accessory to one set,
 and freeze accessory, rep-window, and per-exposure progression as well as e1RM

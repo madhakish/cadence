@@ -735,25 +735,26 @@ public enum ProgramEngine {
         return SessionPrescription(mainWork: work, blocks: blocks)
     }
 
-    /// Slots sharing one lift AND one style are ONE progression: banking any of
-    /// them advances the shared base and synchronizes the twins, which is what
-    /// makes "add weight every session" hold across a novice A/B split.
-    ///
-    /// Mirrored 1:1 in web/app/js/core.js `synchronizedExposureKey`.
-    public static func synchronizedExposureKey(exerciseName: String, style: PrescriptionStyle) -> String {
-        "\(exerciseName)|\(style.rawValue)"
-    }
+    /// The authored schedule surrounding a slot preview. The current pointer is
+    /// required because a slot already banked in this rotation belongs to the
+    /// NEXT rotation, while a synchronized twin before it may move the shared
+    /// base before the slot appears. Recovery orders are separate because the
+    /// shortened bridge deliberately omits authored days.
+    public struct ExposurePreviewSchedule: Hashable, Sendable {
+        public let targetDayOrder: Int
+        public let nextDayOrder: Int
+        public let allDayOrders: [Int]
+        public let recoveryDayOrders: [Int]
+        public let synchronizedDayOrders: [Int]
 
-    /// How many times that shared progression is banked in one full rotation:
-    /// the number of the program's days carrying it. A day that repeats the
-    /// same lift and style still banks it once — the banking layer dedupes on
-    /// this exact key — so this counts DAYS, not slots.
-    ///
-    /// Mirrored 1:1 in web/app/js/core.js `synchronizedExposuresPerRotation`.
-    public static func synchronizedExposuresPerRotation(
-        dayExposureKeys: [[String]], key: String
-    ) -> Int {
-        Swift.max(1, dayExposureKeys.reduce(0) { $0 + ($1.contains(key) ? 1 : 0) })
+        public init(targetDayOrder: Int, nextDayOrder: Int, allDayOrders: [Int],
+                    recoveryDayOrders: [Int], synchronizedDayOrders: [Int]) {
+            self.targetDayOrder = targetDayOrder
+            self.nextDayOrder = nextDayOrder
+            self.allDayOrders = allDayOrders
+            self.recoveryDayOrders = recoveryDayOrders
+            self.synchronizedDayOrders = synchronizedDayOrders
+        }
     }
 
     /// One exposure in a slot's forward preview — what the engine will
@@ -835,7 +836,7 @@ public enum ProgramEngine {
         prescriptionStyle: PrescriptionStyle = .automatic,
         configuration: LiftPrescriptionConfiguration = .init(),
         pendingState: ProgramLiftState? = nil,
-        synchronizedExposuresPerRotation: Int = 1
+        schedule: ExposurePreviewSchedule? = nil
     ) -> [ExposurePreviewEntry] {
         guard count > 0, baseWeightLb >= 0 else { return [] }
         let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
@@ -871,7 +872,36 @@ public enum ProgramEngine {
         var pending: ProgramLiftState? = pendingState
         var entries: [ExposurePreviewEntry] = []
 
-        for exposure in 1...count {
+        // A direct core caller may omit schedule context. Treat that as a
+        // one-day program so the pure prescription walk remains useful, while
+        // the app surfaces always supply the real authored schedule.
+        let previewSchedule = schedule ?? ExposurePreviewSchedule(
+            targetDayOrder: 0, nextDayOrder: 0,
+            allDayOrders: [0], recoveryDayOrders: [0], synchronizedDayOrders: [0]
+        )
+        let allOrders = Array(Set(previewSchedule.allDayOrders)).sorted()
+        let recoveryOrders = Array(Set(previewSchedule.recoveryDayOrders)).sorted()
+        guard allOrders.contains(previewSchedule.targetDayOrder) else { return [] }
+        let synchronizedOrders = Set(previewSchedule.synchronizedDayOrders + [previewSchedule.targetDayOrder])
+
+        func activeOrders(for phase: CyclePhase) -> [Int] {
+            if phase == .deload, !recoveryOrders.isEmpty { return recoveryOrders }
+            return allOrders
+        }
+
+        var orders = activeOrders(for: phase)
+        var orderIndex = orders.firstIndex(of: previewSchedule.nextDayOrder) ?? 0
+        // Four requested exposures need at most four complete authored passes,
+        // plus the partial pass before the first target and one omitted recovery
+        // pass. The guard fails closed for malformed/empty schedules.
+        let maxSteps = count * Swift.max(1, allOrders.count + recoveryOrders.count) + allOrders.count + 8
+        var steps = 0
+
+        while entries.count < count, !orders.isEmpty, steps < maxSteps {
+            steps += 1
+            let dayOrder = orders[orderIndex]
+            let isTarget = dayOrder == previewSchedule.targetDayOrder
+            let isSynchronizedDay = synchronizedOrders.contains(dayOrder)
             let cycleState = CycleState(
                 cycleNumber: cycle, baseWeightLb: state.baseWeightLb,
                 nextPhase: phase, incrementLb: state.lastIncrementLb
@@ -882,10 +912,9 @@ public enum ProgramEngine {
                 prescriptionStyle: style, configuration: config, estimatedMaxLb: state.estimatedMaxLb
             )
             let work = prescription.mainWork
-            let perf = cleanPerformance(for: work)
             var note: String?
 
-            if style == .doubleProgression {
+            if isTarget, style == .doubleProgression {
                 // Rep window first, load second — and never on the recovery
                 // rotation, which is non-progressive by contract.
                 if phase != .deload {
@@ -912,45 +941,21 @@ public enum ProgramEngine {
                     state.stallCount = next.stallCount
                     config.currentReps = next.currentReps
                 }
-            } else if style.advancesPerExposure {
+            } else if style.advancesPerExposure, style != .doubleProgression, isSynchronizedDay {
                 if phase != .deload {
-                    let rule = ProgramProgression.linearRule(for: style, movementGroup: movementGroup)
-                    let baseBefore = state.baseWeightLb
-                    // Every day carrying this lift and style banks the SHARED
-                    // progression once per rotation. A novice A/B program
-                    // squats on both days, so the base advances twice between
-                    // this slot's own appearances — advancing once per
-                    // previewed exposure understated every future weight by a
-                    // full increment per rotation, compounding down the list.
-                    for advance in 0..<Swift.max(1, synchronizedExposuresPerRotation) {
-                        // The first advance is this slot's own banking; the
-                        // rest are its twins, which sit at the same rotation on
-                        // the same shared base and so re-derive their plan from
-                        // the state each step leaves behind.
-                        let stepPlan = advance == 0 ? work : programPlan(
-                            for: CycleState(cycleNumber: cycle, baseWeightLb: state.baseWeightLb,
-                                            nextPhase: phase, incrementLb: state.lastIncrementLb),
-                            programRoundingLb: programRoundingLb, exerciseType: exerciseType,
-                            movementGroup: movementGroup, role: role, focus: focus,
-                            prescriptionStyle: style, configuration: config
-                        )
-                        let result = ProgramProgression.advanceLinearLift(
-                            state, perf: cleanPerformance(for: stepPlan), rule: rule, roundingLb: step
-                        )
-                        state = result.state
-                        note = result.note
-                    }
-                    let moved = state.baseWeightLb - baseBefore
-                    if synchronizedExposuresPerRotation > 1, moved > 0 {
-                        note = "Shared with \(synchronizedExposuresPerRotation) days — the base moves "
-                            + "\(Weight.trim(moved)) lb before this slot comes round again."
-                    }
-                } else {
+                    let result = ProgramProgression.advanceLinearLift(
+                        state, perf: cleanPerformance(for: work),
+                        rule: ProgramProgression.linearRule(for: style, movementGroup: movementGroup),
+                        roundingLb: step
+                    )
+                    state = result.state
+                    if isTarget { note = result.note }
+                } else if isTarget {
                     note = "Recovery rotation — the base holds, then the exposure cadence resumes."
                 }
-            } else if phase.rawValue == ProgramProgression.gradedWeek {
+            } else if isTarget, phase.rawValue == ProgramProgression.gradedWeek {
                 let result = ProgramProgression.advanceProgramLift(
-                    state, perf: perf, focus: focus, style: style,
+                    state, perf: cleanPerformance(for: work), focus: focus, style: style,
                     movementGroup: movementGroup, roundingLb: step
                 )
                 // The grade is banked now; the base lands at the rollover.
@@ -958,49 +963,51 @@ public enum ProgramEngine {
                 note = result.note
             }
 
-            entries.append(ExposurePreviewEntry(
-                exposureNumber: exposure,
-                cycleNumber: cycle,
-                rotation: phase.rawValue,
-                phaseName: slotPhaseLabel(
-                    rotation: phase.rawValue, role: role, prescriptionStyle: style,
-                    movementGroup: movementGroup, focus: focus
-                ),
-                isRecovery: phase == .deload,
-                baseWeightLb: cycleState.baseWeightLb,
-                prescription: prescription,
-                advanceNote: note
-            ))
+            if isTarget {
+                entries.append(ExposurePreviewEntry(
+                    exposureNumber: entries.count + 1,
+                    cycleNumber: cycle,
+                    rotation: phase.rawValue,
+                    phaseName: slotPhaseLabel(
+                        rotation: phase.rawValue, role: role, prescriptionStyle: style,
+                        movementGroup: movementGroup, focus: focus
+                    ),
+                    isRecovery: phase == .deload,
+                    baseWeightLb: cycleState.baseWeightLb,
+                    prescription: prescription,
+                    advanceNote: note
+                ))
+            }
 
-            if phase == .deload {
-                cycle += 1
-                // Mirror `rollOverRecovery` exactly, all three branches. It is
-                // not "apply the pending if there is one": a per-exposure slot
-                // already advanced while training, so a stale grade left behind
-                // by a later style edit is DELETED rather than applied, and a
-                // wave-family slot that reaches the rollover without a banked
-                // peak accrues a stall toward the rebuild. Previewing only the
-                // middle branch showed a linear slot dropping to a phantom
-                // graded base, and hid the rebuild a stalled wave slot is about
-                // to take.
-                if style.advancesPerExposure {
-                    pending = nil
-                } else if let banked = pending {
-                    state = banked
-                    pending = nil
-                } else if style.usesCyclePhases {
-                    state.stallCount += 1
-                    state.lastIncrementLb = 0
-                    if state.stallCount >= ProgramProgression.stallLimit {
-                        state.baseWeightLb = Weight.round(
-                            state.baseWeightLb * ProgramProgression.deloadRebuildFraction, to: step
-                        )
-                        state.stallCount = 0
+            orderIndex += 1
+            if orderIndex >= orders.count {
+                if phase == .deload {
+                    cycle += 1
+                    // Mirror `rollOverRecovery` exactly, all three branches.
+                    // Per-exposure slots discard stale pending grades; graded
+                    // slots apply a banked grade; a peak-less wave accrues the
+                    // same stall/rebuild the real rollover will apply.
+                    if style.advancesPerExposure {
+                        pending = nil
+                    } else if let banked = pending {
+                        state = banked
+                        pending = nil
+                    } else if style.usesCyclePhases {
+                        state.stallCount += 1
+                        state.lastIncrementLb = 0
+                        if state.stallCount >= ProgramProgression.stallLimit {
+                            state.baseWeightLb = Weight.round(
+                                state.baseWeightLb * ProgramProgression.deloadRebuildFraction, to: step
+                            )
+                            state.stallCount = 0
+                        }
                     }
+                    phase = .volume
+                } else {
+                    phase = phase.next
                 }
-                phase = .volume
-            } else {
-                phase = phase.next
+                orders = activeOrders(for: phase)
+                orderIndex = 0
             }
         }
         return entries

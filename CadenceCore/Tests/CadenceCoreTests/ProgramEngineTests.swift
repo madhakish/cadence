@@ -609,44 +609,36 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertTrue(preview.allSatisfy { $0.prescription.mainWork.sets >= 1 })
     }
 
-    /// Twin slots are ONE progression. A novice A/B split squats on both days,
-    /// so the shared base advances twice per rotation; projecting one advance
-    /// per exposure understated every future weight by an increment per
-    /// rotation. Mirrors the same block in web/tests/core.test.mjs.
-    func testTwinnedSlotsAdvanceTheSharedBaseOncePerDay() {
+    /// The pointer sits on Day B, so its synchronized squat advances before
+    /// Day A's first previewed exposure. Day A was already banked in R2; its
+    /// next actual appearance is R3, not another fictional R2 exposure.
+    func testScheduledPreviewHonorsTheDayPointerAndSynchronizedTwins() {
         let preview = ProgramEngine.exposurePreview(
-            count: 4, baseWeightLb: 205, programRoundingLb: 5, movementGroup: "squat",
+            count: 3, baseWeightLb: 205, rotation: 2,
+            programRoundingLb: 5, movementGroup: "squat",
             prescriptionStyle: .linearFives, configuration: .init(workingSets: 3),
-            synchronizedExposuresPerRotation: 2
+            schedule: .init(
+                targetDayOrder: 0, nextDayOrder: 1,
+                allDayOrders: [0, 1], recoveryDayOrders: [0],
+                synchronizedDayOrders: [0, 1]
+            )
         )
-        XCTAssertEqual(preview.map(\.baseWeightLb), [205, 225, 245, 265],
-                       "a squat on both days of an A/B split advances +20 between its own appearances")
-        XCTAssertEqual(preview[0].advanceNote?.contains("Shared with 2 days"), true,
-                       "and the note says why the jump is bigger than one increment")
+        XCTAssertEqual(preview.map(\.rotation), [3, 4, 1])
+        XCTAssertEqual(preview.map(\.baseWeightLb), [215, 235, 235],
+                       "the twin before Day A moves its first load, while Recovery holds")
     }
 
-    func testSynchronizedExposureCountingIsPerDayAndPerStyle() {
-        func key(_ name: String, _ style: PrescriptionStyle) -> String {
-            ProgramEngine.synchronizedExposureKey(exerciseName: name, style: style)
-        }
-        XCTAssertEqual(ProgramEngine.synchronizedExposuresPerRotation(
-            dayExposureKeys: [
-                [key("Back Squat", .linearFives)],
-                [key("Back Squat", .linearFives), key("Bench Press", .linearFives)],
-                [key("Deadlift", .linearFives)],
-            ],
-            key: key("Back Squat", .linearFives)
-        ), 2, "counts the days carrying the shared progression")
-
-        XCTAssertEqual(ProgramEngine.synchronizedExposuresPerRotation(
-            dayExposureKeys: [[key("Back Squat", .linearFives), key("Back Squat", .linearFives)]],
-            key: key("Back Squat", .linearFives)
-        ), 1, "a day repeating one lift+style still banks it once — the banking layer dedupes on this key")
-
-        XCTAssertEqual(ProgramEngine.synchronizedExposuresPerRotation(
-            dayExposureKeys: [[key("Back Squat", .linearFives)], [key("Back Squat", .wave)]],
-            key: key("Back Squat", .linearFives)
-        ), 1, "same lift on a different style is a different progression and never synchronizes")
+    func testScheduledPreviewSkipsAnOmittedRecoveryDay() {
+        let preview = ProgramEngine.exposurePreview(
+            count: 2, baseWeightLb: 200, rotation: 4, prescriptionStyle: .wave,
+            schedule: .init(
+                targetDayOrder: 1, nextDayOrder: 0,
+                allDayOrders: [0, 1], recoveryDayOrders: [0],
+                synchronizedDayOrders: [1]
+            )
+        )
+        XCTAssertEqual(preview.map(\.rotation), [1, 2],
+                       "a day omitted from the bridge has no fictional Recovery exposure")
     }
 
     /// A peak banked this cycle already carries an earned base. Recovery still

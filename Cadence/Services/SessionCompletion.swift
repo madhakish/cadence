@@ -485,20 +485,6 @@ enum SessionCompletion {
         )
     }
 
-    /// The most recent evidence that this recovery bridge is still live.
-    ///
-    /// Banked recovery work counts. Anchoring on the hard phases alone expired
-    /// a bridge the lifter was actively working through: peak on Monday, the
-    /// first recovery exposure on day five, open the app on day eight and the
-    /// second selected exposure was dropped before it could be prescribed.
-    private static func recoveryWindowAnchor(
-        for program: Program, recoverySessions: [WorkoutSession], context: ModelContext
-    ) throws -> Date? {
-        let stamps = recoverySessions.map { $0.completedAt ?? $0.date }
-            + [try lastHardPhaseCompletion(for: program, context: context)].compactMap { $0 }
-        return stamps.max()
-    }
-
     private static func lastHardPhaseCompletion(
         for program: Program, context: ModelContext
     ) throws -> Date? {
@@ -596,9 +582,6 @@ enum SessionCompletion {
             dayOrders: recoveryOrders,
             completedDayOrders: recoverySessions.compactMap(\.programDayIndex)
         ).isLastDay
-        // The anchor is only consulted for the elapsed-window case, and that
-        // case now requires banked recovery work, so resolving it eagerly would
-        // run two extra fetches on every render for nothing.
         var reason = ProgramProgression.recoveryBridgeCompletionReason(
             completedRecoverySessions: recoverySessions.count,
             selectedExposureCount: recoveryOrders.count,
@@ -606,14 +589,12 @@ enum SessionCompletion {
             lastHardPhaseCompletion: nil,
             asOf: now
         )
-        if reason == nil, !recoverySessions.isEmpty {
+        if reason == nil {
             reason = ProgramProgression.recoveryBridgeCompletionReason(
                 completedRecoverySessions: recoverySessions.count,
                 selectedExposureCount: recoveryOrders.count,
                 selectedExposuresComplete: selectedComplete,
-                lastHardPhaseCompletion: try recoveryWindowAnchor(
-                    for: program, recoverySessions: recoverySessions, context: context
-                ),
+                lastHardPhaseCompletion: try lastHardPhaseCompletion(for: program, context: context),
                 asOf: now
             )
         }

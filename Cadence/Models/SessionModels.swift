@@ -132,6 +132,24 @@ final class SessionExercise {
         set { phaseRaw = newValue?.rawValue }
     }
 
+    /// A phase label is truthful only for prescriptions that use Cadence's
+    /// Volume/Load/Peak vocabulary. Sessions created before prescription style
+    /// was captured retain their legacy label because there is no evidence to
+    /// classify them more precisely.
+    var truthfulPhaseLabel: String? {
+        guard let phase else { return nil }
+        guard !prescriptionStyleRaw.isEmpty else { return phase.label }
+        let style = PrescriptionStyle(rawValue: prescriptionStyleRaw) ?? .automatic
+        let role = LiftRole(rawValue: programRole ?? "") ?? .main
+        return ProgramEngine.slotPhaseLabel(
+            rotation: phase.rawValue,
+            role: role,
+            prescriptionStyle: style,
+            movementGroup: exercise?.movementGroup,
+            focus: .strength
+        )
+    }
+
     var orderedSets: [SetEntry] { uniqueSessionModels(sets).sorted { $0.order < $1.order } }
     var plannedWorkingSets: [SetEntry] { orderedSets.filter { !$0.isWarmup } }
     /// Only performed work belongs in history, PRs, volume, or progression.

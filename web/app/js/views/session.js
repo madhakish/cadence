@@ -352,10 +352,11 @@ export async function openSession(id) {
 
   function exerciseCard(se, body) {
     const ex = exMap.get(se.exerciseName);
+    const phaseLabel = ui.sessionPhaseLabel(se, ex);
     const head = ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
       ui.h("div", { class: "lead" },
         ui.h("span", { class: "title", text: se.exerciseName }),
-        se.phase ? ui.h("span", { class: "sub accent", text: C.phaseLabel(se.phase) }) : null),
+        phaseLabel ? ui.h("span", { class: "sub accent", text: phaseLabel }) : null),
       ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
         ui.h("div", { style: { width: "100px" } },
           ui.seg([{ value: "lb", label: "lb" }, { value: "kg", label: "kg" }], exUnit(se), (u) => { unitByEx[se.exerciseName] = u; renderBody(body); })),
@@ -1299,13 +1300,10 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
   const hardPhase = cycleSessions.filter((candidate) =>
     candidate.programTag.week > 0 && candidate.programTag.week < C.DELOAD_WEEK);
   const peak = hardPhase.filter((candidate) => candidate.programTag.week === C.GRADED_WEEK);
-  const hardAnchors = peak.length ? peak : hardPhase;
-  // Banked recovery work counts as evidence the bridge is still live. Anchoring
-  // on the hard phases alone expired a bridge the lifter was actively working
-  // through: peak on Monday, the first recovery exposure on day five, open the
-  // app on day eight and the second selected exposure was dropped before it
-  // could be prescribed. Mirrors SessionCompletion.recoveryWindowAnchor.
-  const anchors = [...hardAnchors, ...recoverySessions];
+  // The window is anchored to the last hard phase. A reduced exposure does not
+  // start a fresh seven-day window and silently stretch recovery past the
+  // program's bound.
+  const anchors = peak.length ? peak : hardPhase;
   const anchorMs = anchors.length
     ? Math.max(...anchors.map((candidate) => Date.parse(candidate.completedAt || candidate.date)))
     : null;
