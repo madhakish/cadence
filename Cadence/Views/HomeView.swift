@@ -15,6 +15,7 @@ struct HomeView: View {
         }
     }
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(RestTimer.self) private var restTimer
     @Environment(WorkoutClock.self) private var workoutClock
     @Query private var tracks: [LiftTrack]
@@ -34,6 +35,7 @@ struct HomeView: View {
     @State private var previewDay: ProgramDay?
     @State private var discardSession: WorkoutSession?
     @State private var coachingMessage: String?
+    @State private var recoveryMessage: String?
 
     private var settings: AppSettings? { settingsList.first }
     private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
@@ -184,6 +186,15 @@ struct HomeView: View {
                     }
                 }
 
+                if let recoveryMessage {
+                    Section {
+                        Label(recoveryMessage, systemImage: "arrow.triangle.2.circlepath")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(Theme.accent)
+                            .accessibilityLabel(Text(recoveryMessage))
+                    }
+                }
+
                 if let program = activeProgram, let report = coachingReport {
                     Section("Coach · per rotation") {
                         HStack(spacing: 10) {
@@ -237,7 +248,7 @@ struct HomeView: View {
                         // Tapping the day opens the full preview — browse the
                         // whole workout without starting it.
                         Button {
-                            previewDay = day
+                            previewProgramDay(program, fallback: day)
                         } label: {
                             HStack(spacing: 8) {
                                 Text(day.name).font(.headline)
@@ -368,7 +379,13 @@ struct HomeView: View {
             .sheet(isPresented: $showGymCard) {
                 GymCardView(gym: defaultGym)
             }
-            .task { openPendingSessionIfNeeded() }
+            .task {
+                reconcileActiveRecovery()
+                openPendingSessionIfNeeded()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { reconcileActiveRecovery() }
+            }
             .onChange(of: pendingSessionID) { _, _ in openPendingSessionIfNeeded() }
             .confirmationDialog("Discard this open session?", isPresented: Binding(
                 get: { discardSession != nil },
@@ -452,6 +469,36 @@ struct HomeView: View {
         pendingSessionID = nil
         guard let session = openSessions.first(where: { $0.id == id }) else { return }
         activeSession = session
+    }
+
+    private func reconcileRecoveryBridge(for program: Program) throws -> Bool {
+        guard let result = try SessionCompletion.reconcileRecoveryBridge(
+            program: program, context: context
+        ) else { return false }
+        recoveryMessage = result.message
+        return true
+    }
+
+    private func reconcileActiveRecovery() {
+        guard let program = activeProgram else { return }
+        do {
+            _ = try reconcileRecoveryBridge(for: program)
+        } catch {
+            PersistenceErrorCenter.shared.report(
+                error, operation: "Finishing the recovery bridge", context: context
+            )
+        }
+    }
+
+    private func previewProgramDay(_ program: Program, fallback day: ProgramDay) {
+        do {
+            let changed = try reconcileRecoveryBridge(for: program)
+            previewDay = changed ? (nextDay(program) ?? day) : day
+        } catch {
+            PersistenceErrorCenter.shared.report(
+                error, operation: "Opening the program preview", context: context
+            )
+        }
     }
 
     private func startSession(with track: LiftTrack) {
@@ -543,7 +590,9 @@ struct HomeView: View {
 
     private func startProgramDay(_ program: Program, _ day: ProgramDay) {
         do {
-            let session = try ProgramSession.make(program: program, day: day, context: context)
+            let changed = try reconcileRecoveryBridge(for: program)
+            let resolvedDay = changed ? (nextDay(program) ?? day) : day
+            let session = try ProgramSession.make(program: program, day: resolvedDay, context: context)
             if PersistenceErrorCenter.shared.save(context, operation: "Starting the program session") { activeSession = session }
         } catch {
             PersistenceErrorCenter.shared.report(error, operation: "Starting the program session", context: context)

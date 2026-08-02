@@ -545,6 +545,45 @@ final class ProgramProgressionTests: XCTestCase {
         let empty = P.recoveryScheduleAdvance(dayOrders: [], completedDayOrders: [0])
         XCTAssertFalse(empty.isLastDay, "an empty bridge fails closed")
     }
+
+    func testRecoveryBridgeHasTwoSessionCapAndSevenDayExpiry() {
+        let peak = Date(timeIntervalSince1970: 1_000_000)
+
+        XCTAssertNil(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 1,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow - 1)
+        ), "one recovery session inside the window leaves the bridge open")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(60)
+        ), .sessionLimit, "two recovery sessions are a hard cap regardless of day order")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 0,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow)
+        ), .windowElapsed, "the bridge expires at exactly seven elapsed days")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 1,
+            selectedExposuresComplete: true,
+            lastHardPhaseCompletion: nil,
+            asOf: peak
+        ), .selectedExposures, "a one-day program may close its selected bridge normally")
+
+        XCTAssertNil(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 1,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: nil,
+            asOf: peak.addingTimeInterval(P.recoveryWindow * 2)
+        ), "missing history never invents an elapsed-time anchor")
+    }
     // [INV-BELOW-PLAN-IS-BELOW-PLAN]
     func testLighterWorkStillGradesBelowPlan() {
         // Propagating an edit changes the work about to be done, not the bar

@@ -961,6 +961,10 @@ export const DELOAD_REBUILD_FRACTION = 0.90;
 // Persisted phase value for the recovery bridge. 1–3 are complete progression
 // rotations; phase 4 is not another full pass through the program.
 export const DELOAD_WEEK = 4;
+// Recovery remains cycle-based. These elapsed days only expire a bridge that
+// would otherwise sit open indefinitely; they do not schedule rotations.
+export const RECOVERY_SESSION_LIMIT = 2;
+export const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 // Complete rotations that must be banked since the last recovery bridge before
 // another early one is allowed. Without a floor a run of red rotations turns
 // recovery into the schedule, which is the opposite of what it is for.
@@ -1194,6 +1198,23 @@ export function recoveryScheduleAdvance(dayOrders, completedDayOrders) {
   return next === undefined
     ? { nextDayOrder: selected[0], isLastDay: true }
     : { nextDayOrder: next, isLastDay: false };
+}
+
+// Why a bounded recovery bridge is ready to hand off to the next cycle.
+// `lastHardPhaseCompletionMs` is normally the final Peak completion; callers
+// may supply the preceding rotation completion when recovery started early.
+// Mirrored 1:1 in CadenceCore ProgramProgression.
+export function recoveryBridgeCompletionReason(
+  completedRecoverySessions,
+  selectedExposuresComplete,
+  lastHardPhaseCompletionMs,
+  nowMs,
+) {
+  if (selectedExposuresComplete) return "selectedExposures";
+  if (completedRecoverySessions >= RECOVERY_SESSION_LIMIT) return "sessionLimit";
+  if (Number.isFinite(lastHardPhaseCompletionMs)
+      && nowMs - lastHardPhaseCompletionMs >= RECOVERY_WINDOW_MS) return "windowElapsed";
+  return null;
 }
 
 // Select one authored lower and one authored upper exposure for the phase-4

@@ -1225,6 +1225,123 @@ async function earlyDeloadDecision(program, session, exerciseByName) {
   return decided ? { week: program.currentWeek } : null;
 }
 
+function rollOverRecovery(program, exerciseByName, note) {
+  const allDayOrders = [...new Set(program.days.map((candidate) => candidate.order ?? 0))]
+    .sort((a, b) => a - b);
+  for (const d of program.days) {
+    for (const lift of d.lifts || []) {
+      if (C.advancesPerExposure(lift.prescription)) {
+        // Per-exposure slots already advanced while training. A stale pending
+        // grade left by a later style edit must never apply at rollover.
+        delete lift.pending;
+      } else if (lift.pending) {
+        const p = lift.pending.state;
+        const oldBase = lift.baseWeightLb;
+        lift.baseWeightLb = p.baseWeightLb; lift.estimatedMaxLb = p.estimatedMaxLb;
+        lift.stallCount = p.stallCount; lift.lastIncrementLb = p.lastIncrementLb;
+        if (lift.pending.note) {
+          const presented = lift.pending.note.startsWith("Two cycles without a clean peak")
+            ? `Two cycles without a clean peak — deloaded ${ui.fmtWeight(oldBase)}→${ui.fmtWeight(p.baseWeightLb)} to rebuild.`
+            : lift.pending.note;
+          note(`${lift.exerciseName}: ${presented}`, lift.exerciseName);
+        }
+        delete lift.pending;
+      } else if (!C.buildsOwnSessionShape(lift.prescription || "automatic")) {
+        // Wave-family slots: no banked Peak is a stall toward the rebuild.
+        lift.stallCount = (lift.stallCount || 0) + 1; lift.lastIncrementLb = 0;
+        if (lift.stallCount >= C.STALL_LIMIT) {
+          const old = lift.baseWeightLb;
+          const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
+          lift.baseWeightLb = C.roundTo(old * C.DELOAD_REBUILD_FRACTION, loadStep);
+          lift.stallCount = 0;
+          note(`${lift.exerciseName}: skipped peak — deloaded ${ui.fmtWeight(old)}→${ui.fmtWeight(lift.baseWeightLb)}.`, lift.exerciseName);
+        }
+      } else {
+        lift.lastIncrementLb = 0;
+      }
+      if (lift.revertToExerciseName) {
+        const original = lift.revertToExerciseName;
+        note(`${original}: cycle swap over — slot reverts from ${lift.exerciseName} for the new cycle.`, original);
+        lift.exerciseName = original;
+        delete lift.revertToExerciseName;
+      }
+    }
+    for (const acc of d.accessories || []) {
+      if (acc.revertToExerciseName) {
+        const original = acc.revertToExerciseName;
+        note(`${original}: cycle swap over — slot reverts from ${acc.exerciseName} for the new cycle.`, original);
+        acc.exerciseName = original;
+        delete acc.revertToExerciseName;
+      }
+    }
+  }
+  program.cycleNumber += 1;
+  program.currentWeek = 1;
+  program.nextDayIndex = allDayOrders[0] ?? 0;
+}
+
+function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
+  const stableID = program.uuid || program.id;
+  const cycleSessions = completed.filter((candidate) => candidate.programTag
+    && (candidate.programTag.programId === stableID
+      || (candidate.programTag.programId == null
+        && candidate.programTag.programName === program.name))
+    && candidate.programTag.cycleNumber === program.cycleNumber);
+  const recoverySessions = cycleSessions.filter((candidate) =>
+    candidate.programTag.week === C.DELOAD_WEEK);
+  const recoveryDayOrders = C.recoveryDayOrders(program.days.map((candidate) => {
+    const mainName = (candidate.lifts || []).find((lift) => lift.role === "main")?.exerciseName;
+    return { order: candidate.order ?? 0, mainMovementGroup: exerciseByName.get(mainName)?.movementGroup };
+  }));
+  const selectedComplete = C.recoveryScheduleAdvance(
+    recoveryDayOrders, recoverySessions.map((candidate) => candidate.programTag.dayIndex),
+  ).isLastDay;
+  const hardPhase = cycleSessions.filter((candidate) =>
+    candidate.programTag.week > 0 && candidate.programTag.week < C.DELOAD_WEEK);
+  const peak = hardPhase.filter((candidate) => candidate.programTag.week === C.GRADED_WEEK);
+  const anchors = peak.length ? peak : hardPhase;
+  const anchorMs = anchors.length
+    ? Math.max(...anchors.map((candidate) => Date.parse(candidate.completedAt || candidate.date)))
+    : null;
+  return {
+    reason: C.recoveryBridgeCompletionReason(
+      recoverySessions.length, selectedComplete, anchorMs, nowMs,
+    ),
+    recoverySessions,
+  };
+}
+
+// Close stale/already-satisfied Recovery before Today or Start can prescribe
+// another reduced workout. The seven-day threshold only expires the bridge;
+// ordinary progression remains driven by completed cycles.
+export async function reconcileRecoveryBridge(program, completed = null, now = new Date()) {
+  if (!program || program.currentWeek !== C.DELOAD_WEEK) return null;
+  const [history, exercises] = await Promise.all([
+    completed || Sessions.completed(), Exercises.all(),
+  ]);
+  const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
+  const { reason } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
+  if (!reason) return null;
+
+  const nextCycle = program.cycleNumber + 1;
+  const message = reason === "sessionLimit"
+    ? `Recovery complete — two recovery sessions banked. Cycle ${nextCycle} starts at Volume.`
+    : reason === "windowElapsed"
+      ? `Recovery complete — the seven-day recovery window elapsed. Cycle ${nextCycle} starts at Volume.`
+      : `Recovery complete — planned recovery exposures banked. Cycle ${nextCycle} starts at Volume.`;
+  const noteRecords = [];
+  const note = (label, exerciseName) => noteRecords.push({
+    date: iso(now), exerciseName: exerciseName || null, kind: "programNote", label,
+  });
+  rollOverRecovery(program, exerciseByName, note);
+  note(`${program.name}: ${message}`, null);
+  await runAll(["milestones", "programs"], "readwrite", (os) => {
+    for (const record of noteRecords) os("milestones").put(record);
+    os("programs").put(program);
+  });
+  return { program, reason, message };
+}
+
 async function advanceProgram(session, milestones) {
   const tag = session.programTag;
   const program = await Programs.byStableId(tag.programId)
@@ -1386,20 +1503,28 @@ async function advanceProgram(session, milestones) {
   // cycle. That handles either order, manual selection, and an old phase-4
   // pointer left on a day omitted by the shortened bridge.
   let advance;
+  let recoveryCompletionReason = null;
   if (isRecovery) {
-    const completedOrders = (await Sessions.completed())
+    const completedRecovery = (await Sessions.completed())
       .filter((candidate) => candidate.programTag
         && (candidate.programTag.programId === (program.uuid || program.id)
-          || candidate.programTag.programName === program.name)
+          || (candidate.programTag.programId == null
+            && candidate.programTag.programName === program.name))
         && candidate.programTag.cycleNumber === program.cycleNumber
-        && candidate.programTag.week === C.DELOAD_WEEK)
-      .map((candidate) => candidate.programTag.dayIndex);
-    completedOrders.push(tag.dayIndex); // current session is staged, not stored yet
+        && candidate.programTag.week === C.DELOAD_WEEK);
+    if (!completedRecovery.some((candidate) => String(candidate.id) === String(session.id))) {
+      completedRecovery.push(session); // current session is staged, not stored yet
+    }
+    const completedOrders = completedRecovery.map((candidate) => candidate.programTag.dayIndex);
     advance = C.recoveryScheduleAdvance(recoveryDayOrders, completedOrders);
+    recoveryCompletionReason = C.recoveryBridgeCompletionReason(
+      completedRecovery.length, advance.isLastDay, null,
+      Date.parse(session.completedAt || session.date),
+    );
   } else {
     advance = C.scheduleAdvance(allDayOrders, tag.dayIndex);
   }
-  const lastDay = advance.isLastDay;
+  const lastDay = advance.isLastDay || recoveryCompletionReason !== null;
   program.nextDayIndex = advance.nextDayOrder;
   if (lastDay) {
     if (program.currentWeek < C.DELOAD_WEEK) {
@@ -1425,66 +1550,7 @@ async function advanceProgram(session, milestones) {
         }
       }
     } else {
-      // Rollover: apply each lift's pending (or treat a skipped peak as a stall).
-      for (const d of program.days) {
-        for (const lift of d.lifts || []) {
-          if (C.advancesPerExposure(lift.prescription)) {
-            // This slot advanced after each exposure; it has no Peak
-            // pending. Clear any stale one left by a style edit after a
-            // grade — it must never apply months later.
-            delete lift.pending;
-          } else if (lift.pending) {
-            const p = lift.pending.state;
-            const oldBase = lift.baseWeightLb;
-            lift.baseWeightLb = p.baseWeightLb; lift.estimatedMaxLb = p.estimatedMaxLb;
-            lift.stallCount = p.stallCount; lift.lastIncrementLb = p.lastIncrementLb;
-            if (lift.pending.note) {
-              const presented = lift.pending.note.startsWith("Two cycles without a clean peak")
-                ? `Two cycles without a clean peak — deloaded ${ui.fmtWeight(oldBase)}→${ui.fmtWeight(p.baseWeightLb)} to rebuild.`
-                : lift.pending.note;
-              note(`${lift.exerciseName}: ${presented}`, lift.exerciseName);
-            }
-            delete lift.pending;
-          } else if (!C.buildsOwnSessionShape(lift.prescription || "automatic")) {
-            // Wave-family slots: a peak never banked is a stall toward the
-            // 10% rebuild. The methodology cycle styles (5/3/1, max/dynamic
-            // effort) define their own miss rules and simply hold when the
-            // graded week was skipped — a skipped week is not missed reps.
-            lift.stallCount = (lift.stallCount || 0) + 1; lift.lastIncrementLb = 0;
-            if (lift.stallCount >= C.STALL_LIMIT) {
-              const old = lift.baseWeightLb;
-              const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
-              lift.baseWeightLb = C.roundTo(old * C.DELOAD_REBUILD_FRACTION, loadStep);
-              lift.stallCount = 0;
-              note(`${lift.exerciseName}: skipped peak — deloaded ${ui.fmtWeight(old)}→${ui.fmtWeight(lift.baseWeightLb)}.`, lift.exerciseName);
-            }
-          } else {
-            // Methodology cycle styles hold on a skipped graded week, but the
-            // increment record must not keep advertising a bump that never
-            // happened this cycle.
-            lift.lastIncrementLb = 0;
-          }
-          // A cycle-scoped swap ends with the cycle (mirrors native; the swap
-          // gesture is native-only, but this state can arrive via backup).
-          if (lift.revertToExerciseName) {
-            const original = lift.revertToExerciseName;
-            note(`${original}: cycle swap over — slot reverts from ${lift.exerciseName} for the new cycle.`, original);
-            lift.exerciseName = original;
-            delete lift.revertToExerciseName;
-          }
-        }
-        for (const acc of d.accessories || []) {
-          if (acc.revertToExerciseName) {
-            const original = acc.revertToExerciseName;
-            note(`${original}: cycle swap over — slot reverts from ${acc.exerciseName} for the new cycle.`, original);
-            acc.exerciseName = original;
-            delete acc.revertToExerciseName;
-          }
-        }
-      }
-      program.cycleNumber += 1;
-      program.currentWeek = 1;
-      program.nextDayIndex = allDayOrders[0] ?? 0;
+      rollOverRecovery(program, exerciseByName, note);
     }
   }
   return { program, noteRecords: flushNotes() };
@@ -1539,6 +1605,13 @@ function sessionTargetsMatch(session, program, day, exMap) {
 }
 
 export async function createSessionFromProgramDay(program, day) {
+  const recovery = await reconcileRecoveryBridge(program);
+  if (recovery) {
+    program = recovery.program;
+    day = program.days.find((candidate) => candidate.order === program.nextDayIndex)
+      || program.days[0];
+    ui.toast(recovery.message);
+  }
   // Resume, don't duplicate — but only a session for THIS day at the current
   // position whose BUILT-FROM plan still matches the current plan (issue 17).
   // A name/program-only match resurrected stale snapshots after a day was

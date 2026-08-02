@@ -3,7 +3,8 @@
 <!-- MUST MATCH the constants in
      CadenceCore/Sources/CadenceCore/ProgramProgression.swift (tmFraction,
      incrementFraction, qualityFlagTolerance, stallLimit,
-     deloadRebuildFraction, belowPlanLoad) ≡ web/app/js/core.js. tmFraction now
+     deloadRebuildFraction, recoverySessionLimit, recoveryWindow,
+     belowPlanLoad) ≡ web/app/js/core.js. tmFraction now
      seeds peak singles and places a new program's base; it no longer caps the
      increment. Update this page
      when tuning them. -->
@@ -21,8 +22,8 @@ completed passes through the authored days, not by elapsed calendar weeks:
 - Rotation 1 — **Volume:** base weight, higher reps.
 - Rotation 2 — **Load:** heavier, fewer reps.
 - Rotation 3 — **Peak:** top work; this is what gets graded.
-- Phase 4 — **Recovery:** one representative lower and one representative
-  upper exposure, then rollover.
+- Phase 4 — **Recovery:** at most one representative lower and one
+  representative upper exposure, then rollover.
 
 Week-bound programs are valid too; this recovery-bridge change neither defines
 nor alters their calendar behavior. Timing basis belongs to the program. It is
@@ -45,9 +46,16 @@ full-body, conditioning-only, damaged, or otherwise ambiguous, Cadence keeps
 the complete authored pass rather than guessing which work to remove.
 
 Banking the highest-ordered day of rotations 1–3 advances the rotation.
-Banking the second selected recovery exposure applies all stashed grades and
-starts the next mesocycle at rotation 1, day 1. Rotation 3 or recovery is the
-only phase the wave can be in when a cycle ends,
+Recovery closes when its selected exposures are banked, when any two recovery
+sessions have been banked, or when seven elapsed days have passed since the
+last completed Peak exposure. The two-session cap covers an old or manually
+positioned pointer that prescribed non-selected A/B days. The elapsed value is
+only a stale-bridge expiry guard: it does not group training into weeks, count
+calendar weeks, or advance Volume/Load/Peak without completed cycles. If an
+early-recovery decision skipped Peak, the last completed hard rotation is the
+expiry anchor instead. Closing Recovery applies all stashed grades and starts
+the next mesocycle at rotation 1, day 1. Rotation 3 or recovery is the only
+phase the wave can be in when a cycle ends,
 with one exception: after two consecutive red rotations the program cuts the
 cycle short and jumps to recovery from rotation 1 or 2 (see
 `docs/reference/coaching-rules.md`). Every cycle-graded slot is handed an
