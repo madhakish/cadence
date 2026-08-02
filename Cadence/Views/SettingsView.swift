@@ -725,7 +725,7 @@ struct ProgramEditorView: View {
             } header: {
                 Text("Where you are")
             } footer: {
-                Text("Set your position mid-cycle. Rotations 1–3 are working (volume/load/peak), rotation 4 is the rest rotation, then the cycle bumps. Lifts progress automatically — weights are the rotation-1 base.")
+                Text("Set your position mid-cycle. Rotations 1–3 are complete authored passes (volume/load/peak); recovery is one representative lower and upper exposure, then rollover. Weights are the rotation-1 base.")
             }
             Section("Days") {
                 ForEach(program.orderedDays) { day in
@@ -796,6 +796,20 @@ struct ProgramEditorView: View {
     /// A real Peak session logged in rotation 3 overwrites this hold with its grade.
     private func positionAtRotation(_ newValue: Int) {
         program.currentWeek = newValue
+        if newValue == ProgramProgression.deloadWeek {
+            let exercises = (try? context.fetch(FetchDescriptor<Exercise>())) ?? []
+            let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
+            let recoveryOrders = ProgramProgression.recoveryDayOrders(
+                program.orderedDays.map { day in
+                    let mainName = day.orderedLifts.first(where: { $0.role == .main })?.exerciseName
+                    return RecoveryDayCandidate(
+                        order: day.order,
+                        mainMovementGroup: mainName.flatMap { exerciseByName[$0]?.movementGroup }
+                    )
+                }
+            )
+            program.nextDayIndex = recoveryOrders.first ?? program.nextDayIndex
+        }
         if newValue >= 3 {
             for day in program.days {
                 for lift in day.lifts where lift.pendingBaseWeightLb == nil {
@@ -1067,7 +1081,7 @@ private struct ProgramLiftRow: View {
             // on the RESOLVED style so it never appears where the engine would
             // ignore it (automatic on a complementary slot resolves secondary).
             if deloadKnobApplies {
-                Stepper("Deload: \(Weight.trim(lift.deloadMultiplier * 100))% of rotation-1 base",
+                Stepper("Recovery: \(Weight.trim(lift.deloadMultiplier * 100))% of rotation-1 base",
                         value: $lift.deloadMultiplier, in: 0.5...0.9, step: 0.025)
             }
             if lift.prescription == .doubleProgression {

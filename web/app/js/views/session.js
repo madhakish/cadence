@@ -1230,6 +1230,13 @@ async function advanceProgram(session, milestones) {
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const day = program.days.find((d) => d.order === tag.dayIndex);
   if (!day) return null;
+  const allDayOrders = [...new Set(program.days.map((candidate) => candidate.order ?? 0))]
+    .sort((a, b) => a - b);
+  const recoveryDayOrders = C.recoveryDayOrders(program.days.map((candidate) => {
+    const mainName = (candidate.lifts || []).find((lift) => lift.role === "main")?.exerciseName;
+    return { order: candidate.order ?? 0, mainMovementGroup: exerciseByName.get(mainName)?.movementGroup };
+  }));
+  const isRecovery = tag.week === C.DELOAD_WEEK;
   const note = (label, name) => milestones.push({ kind: "programNote", exercise: name, label, _persist: { exerciseName: name, label } });
   // Program notes become milestones so the explanation shows in History; the
   // caller persists them with the rest of the completion transaction.
@@ -1253,7 +1260,7 @@ async function advanceProgram(session, milestones) {
   }
 
   // Accessories: double progression, evaluated every bank.
-  for (const acc of day.accessories || []) {
+  for (const acc of (day.accessories || []).filter(() => !isRecovery)) {
     const se = programmedEntry(session, { ...acc, role: "accessory" });
     if (!se) continue;
     const completed = prescribedWork(se);
@@ -1274,7 +1281,8 @@ async function advanceProgram(session, milestones) {
     }
   }
   // Lift slots can opt into rep-window progression instead of phase grading.
-  for (const lift of (day.lifts || []).filter((candidate) => candidate.prescription === "doubleProgression")) {
+  for (const lift of (day.lifts || []).filter((candidate) =>
+    candidate.prescription === "doubleProgression" && !isRecovery)) {
     const se = programmedEntry(session, lift);
     if (!se) continue;
     if (!prescribedWork(se).length) continue;
@@ -1295,7 +1303,8 @@ async function advanceProgram(session, milestones) {
   // (twin sync carries the rest), so duplicates can never double-progress.
   const advancedLinearSlots = new Set();
   for (const lift of (day.lifts || []).filter((candidate) =>
-    C.advancesPerExposure(candidate.prescription) && candidate.prescription !== "doubleProgression")) {
+    C.advancesPerExposure(candidate.prescription)
+      && candidate.prescription !== "doubleProgression" && !isRecovery)) {
     const exposureKey = `${lift.exerciseName}|${lift.prescription}`;
     if (advancedLinearSlots.has(exposureKey)) continue;
     const se = programmedEntry(session, lift);
@@ -1332,7 +1341,7 @@ async function advanceProgram(session, milestones) {
       }
     }
   }
-  for (const lift of (day.lifts || []).filter((candidate) => candidate.peakSingleEnabled)) {
+  for (const lift of (day.lifts || []).filter((candidate) => candidate.peakSingleEnabled && !isRecovery)) {
     const se = programmedEntry(session, lift);
     const single = se?.sets.find((set) => set.status === "completed" && set.prescriptionBlock === "topSingle"
       && set.reps >= 1 && !set.autoregReason && !set.bodyFlagSite
@@ -1344,7 +1353,7 @@ async function advanceProgram(session, milestones) {
   // available. Observation only: it can raise the estimate, never lower it,
   // because a submaximal prescription is not evidence of a smaller max. This is
   // what a capped AMRAP on the load rotation feeds.
-  if (tag.week !== C.GRADED_WEEK) {
+  if (tag.week !== C.GRADED_WEEK && !isRecovery) {
     for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
       const se = programmedEntry(session, lift);
       if (!se || !prescribedWork(se).length) continue;
@@ -1370,7 +1379,23 @@ async function advanceProgram(session, milestones) {
   }
 
   // Walk day ORDER values, not array positions (see core scheduleAdvance).
-  const advance = C.scheduleAdvance(program.days.map((d) => d.order ?? 0), tag.dayIndex);
+  // Recovery is set-based: count selected exposures actually banked in this
+  // cycle. That handles either order, manual selection, and an old phase-4
+  // pointer left on a day omitted by the shortened bridge.
+  let advance;
+  if (isRecovery) {
+    const completedOrders = (await Sessions.completed())
+      .filter((candidate) => candidate.programTag
+        && (candidate.programTag.programId === (program.uuid || program.id)
+          || candidate.programTag.programName === program.name)
+        && candidate.programTag.cycleNumber === program.cycleNumber
+        && candidate.programTag.week === C.DELOAD_WEEK)
+      .map((candidate) => candidate.programTag.dayIndex);
+    completedOrders.push(tag.dayIndex); // current session is staged, not stored yet
+    advance = C.recoveryScheduleAdvance(recoveryDayOrders, completedOrders);
+  } else {
+    advance = C.scheduleAdvance(allDayOrders, tag.dayIndex);
+  }
   const lastDay = advance.isLastDay;
   program.nextDayIndex = advance.nextDayOrder;
   if (lastDay) {
@@ -1388,9 +1413,13 @@ async function advanceProgram(session, milestones) {
           }
         }
         program.currentWeek = C.DELOAD_WEEK;
-        note(`${program.name}: two red rotations in a row — going straight to the deload. Main-lift bases hold.`, null);
+        program.nextDayIndex = recoveryDayOrders[0] ?? allDayOrders[0] ?? 0;
+        note(`${program.name}: two red rotations in a row — going straight to the recovery bridge. Main-lift bases hold.`, null);
       } else {
         program.currentWeek += 1;
+        if (program.currentWeek === C.DELOAD_WEEK) {
+          program.nextDayIndex = recoveryDayOrders[0] ?? allDayOrders[0] ?? 0;
+        }
       }
     } else {
       // Rollover: apply each lift's pending (or treat a skipped peak as a stall).
@@ -1452,6 +1481,7 @@ async function advanceProgram(session, milestones) {
       }
       program.cycleNumber += 1;
       program.currentWeek = 1;
+      program.nextDayIndex = allDayOrders[0] ?? 0;
     }
   }
   return { program, noteRecords: flushNotes() };
@@ -1602,8 +1632,11 @@ export async function createSessionFromProgramDay(program, day) {
     const ex = exMap.get(acc.exerciseName);
     const weightLb = neat(acc.weightLb, ex, false);
     const isTimed = ex?.type === "timed" || ex?.type === "conditioning";
-    const effectiveSets = acc.capacityManaged === false
+    const ordinarySets = acc.capacityManaged === false
       ? acc.sets : Math.max(1, Math.round(acc.sets * accessoryPercent / 100));
+    // Recovery retains movement familiarity but not a full accessory session.
+    // Banking this exposure cannot advance the slot's rep/load target.
+    const effectiveSets = program.currentWeek === C.DELOAD_WEEK ? 1 : ordinarySets;
     const sets = [];
     for (let i = 0; i < effectiveSets; i += 1) {
       const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : acc.currentReps, {

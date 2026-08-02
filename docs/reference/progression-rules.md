@@ -13,32 +13,43 @@ Numbers below are the shipped constants (source of truth:
 `ProgramProgression.swift` and its `core.js` mirror — this page is the
 owner table for docs; other pages link here rather than restating).
 
-## The 4-week wave
+## Three progression rotations and a recovery bridge
 
-| Week | Phase | What happens |
-|---|---|---|
-| 1 | Volume | Base weight, higher reps |
-| 2 | Load | Heavier, fewer reps |
-| 3 | **Peak** | Top work — **this is what gets graded** |
-| 4 | Rest | Deload prescriptions; at its last day the cycle **rolls over** |
+The Strength — Upper/Lower wave is a **cycle-based program**. It advances by
+completed passes through the authored days, not by elapsed calendar weeks:
 
-The rest-week prescription for a wave-family main lift is 3×5 at the slot's
+- Rotation 1 — **Volume:** base weight, higher reps.
+- Rotation 2 — **Load:** heavier, fewer reps.
+- Rotation 3 — **Peak:** top work; this is what gets graded.
+- Phase 4 — **Recovery:** one representative lower and one representative
+  upper exposure, then rollover.
+
+Week-bound programs are valid too; this recovery-bridge change neither defines
+nor alters their calendar behavior. Timing basis belongs to the program. It is
+not inferred from a lift's prescription style or template name. The persisted
+field `currentWeek` predates that terminology and remains a compatibility wire
+name. In this cycle-based wave, its value is a phase/rotation index.
+
+The recovery prescription for a wave-family main lift is 2×3 at the slot's
 own **deload multiplier** — default 77.5% of the rotation-1 base, adjustable
 from 50% to 90% per slot in the program editor. The editor shows the stepper
 only where the resolved style honours it (the wave and offset-wave families);
-a complementary lift on the automatic style deloads at its fixed 75%
-volume-work prescription regardless. Cutting intensity is a choice, not a
-requirement: the taper literature maintains intensity and cuts volume, which
-is what the sets themselves already do (3×5 versus the peak's top work), so a
-lifter who wants a heavier rest week — say 85% — can have one without
-changing what the week means to the grader. The default is unchanged from
-every prior release.
+a complementary lift on the automatic style uses 1×5 at its fixed 75%.
+Every accessory is reduced to one easy set. A lifter who wants a heavier
+recovery exposure — say 85% — can raise intensity without adding volume.
 
-Banking the **highest-ordered** day of a week advances the week; banking
-that day in week 4 applies all stashed grades and starts the next cycle at
-week 1. Week 3 or 4 is the only week the wave can be in when a cycle ends,
+For an upper/lower program, the bridge selects the first authored squat/hinge
+main day and the first authored press/pull main day. It uses movement metadata,
+never strings such as "Upper A" or "Lower B". If the program is Olympic,
+full-body, conditioning-only, damaged, or otherwise ambiguous, Cadence keeps
+the complete authored pass rather than guessing which work to remove.
+
+Banking the highest-ordered day of rotations 1–3 advances the rotation.
+Banking the second selected recovery exposure applies all stashed grades and
+starts the next mesocycle at rotation 1, day 1. Rotation 3 or recovery is the
+only phase the wave can be in when a cycle ends,
 with one exception: after two consecutive red rotations the program cuts the
-cycle short and jumps to week 4 from week 1 or 2 (see
+cycle short and jumps to recovery from rotation 1 or 2 (see
 `docs/reference/coaching-rules.md`). Every cycle-graded slot is handed an
 explicit **hold** as it jumps, so a peak that never ran is never mistaken for a
 peak that was missed. The schedule steps between days by `order` value, not by position
@@ -52,14 +63,15 @@ program slot.
 ## The estimated max
 
 `estimatedMaxLb` is a smoothed Epley estimate, and it updates on **every**
-rotation, not only the graded one:
+progression rotation, not only the graded one:
 
-- On week 3 the peak is a test, so the grade moves the estimate in either
+- On rotation 3 the peak is a test, so the grade moves the estimate in either
   direction.
-- On weeks 1, 2, and 4 the prescription is deliberately submaximal, so a light
+- On rotations 1 and 2 the prescription is deliberately submaximal, so a light
   set is not evidence the max fell — it is evidence the program asked for less.
   Those rotations can therefore only **raise** the estimate, and only when the
   performed work beats it.
+- Recovery is intentionally observation-free: it never raises or lowers e1RM.
 
 The set that supplies the sample is the best Epley among the performed working
 sets, not the heaviest one, and sets past ten reps are excluded from that
@@ -82,7 +94,7 @@ because a peak at 1.175 × base outruns a 0.90 × estimate ceiling by
 construction. A ceiling derived from the base cannot bound the base. Drift is
 bounded by performance instead: two stalls rebuild at 90%.
 
-## Grading a lift's peak (week 3)
+## Grading a lift's peak (rotation 3)
 
 | Grade | Condition |
 |---|---|
@@ -112,7 +124,7 @@ Notes:
 Est. 1RM updates every graded peak: Epley (weight × (1 + reps/30)),
 smoothed 70% old / 30% new.
 
-## Accessories (every bank, not just peaks)
+## Accessories (every progression bank, not recovery)
 
 Double progression: all sets at the current rep target, at the planned
 load, none stopped early, at most **1** grindy/wobble set, and **no body
@@ -122,7 +134,8 @@ adding reps; the range top is advisory.
 
 Anything short of that holds the target and counts a stall. A rotation
 deliberately cut by an accepted red-readiness proposal is a hold, not a
-missed exposure — it never counts against the accessory.
+missed exposure — it never counts against the accessory. Phase-4 recovery
+work is exposure only: it never advances or stalls the target.
 
 ## Methodology styles
 

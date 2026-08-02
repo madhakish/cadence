@@ -178,8 +178,8 @@ export function applyTheme(name) {
 }
 
 // ---- Wave-position glyph ----
-// The 4-week cycle at a glance: Volume / Load / Peak / Deload as rising bars
-// with the deload dropped low, current rotation lit in accent. Mirrors the
+// The mesocycle at a glance: Volume / Load / Peak / Recovery as rising bars
+// with recovery dropped low, current phase lit in accent. Mirrors the
 // native WaveGlyph (Cadence/Views/Glyphs.swift).
 export function wave(week) {
   const heights = [8, 12, 16, 6];

@@ -86,7 +86,7 @@ public enum ProgramTemplateData {
         Template(
             id: "strength-upper-lower",
             name: "Strength — Upper/Lower",
-            tagline: "4 days · barbell strength · A/B split over a 4-week wave",
+            tagline: "4 days · barbell strength · completion-based A/B wave",
             focus: "strength", roundingLb: 5,
             exercises: [
                 TemplateExercise("Back Extension", "Accessory", "bodyweight", "hinge"),

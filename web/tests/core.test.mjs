@@ -199,7 +199,7 @@ eq(C.resolvedPrescriptionStyle("automatic", "olympic", "main", "strength"), "tec
 let rolePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 0 }, 5,
   "barbell", "hinge", "complementary", "strength", "automatic");
 eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x8@180", "complementary volume avoids a second 5x5");
-for (const [phase, expected] of [[1, "3x8@180"], [2, "3x8@190"], [3, "3x6@200"], [4, "2x8@150"]]) {
+for (const [phase, expected] of [[1, "3x8@180"], [2, "3x8@190"], [3, "3x6@200"], [4, "1x5@150"]]) {
   const p = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: phase, incrementLb: 0 }, 5,
     "barbell", "hinge", "complementary", "strength", "automatic");
   eq(`${p.sets}x${p.reps}@${p.weightLb}`, expected, `complementary phase ${phase} stays volume-oriented`);
@@ -237,7 +237,9 @@ eq(plan.weightLb, 195, "SQ load weight"); eq(plan.sets, 5, "SQ load sets"); eq(p
 plan = C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 1, incrementLb: 10 });
 eq(plan.weightLb, 210, "volume = base"); eq(plan.sets, 5, "vol sets"); eq(plan.reps, 5, "vol reps");
 plan = C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 4, incrementLb: 10 });
-eq(plan.weightLb, 165, "deload weight"); eq(plan.sets, 3, "deload sets"); eq(plan.reps, 5, "deload reps");
+eq(plan.weightLb, 165, "recovery weight"); eq(plan.sets, 2, "recovery sets"); eq(plan.reps, 3, "recovery reps");
+eq(C.PHASES[4].name, "Recovery", "phase 4 is presented as recovery, not a fourth training rotation");
+eq(C.portablePhaseLabel(4), "R4 Deload 3×5", "the v7 backup wire label remains backward-compatible");
 ok(plan.weightLb / 210 >= 0.75 && plan.weightLb / 210 <= 0.80, "deload band");
 
 let st = { cycleNumber: 1, baseWeightLb: 210, nextPhase: 1, incrementLb: 10 };
@@ -384,6 +386,38 @@ eq(sa([], 0), "0!", "an empty program does not crash");
 eq(sa([0, 0, 1], 0), "1", "[INV-SCHEDULE-WALKS-ORDERS] duplicate orders never advance a day to itself");
 eq(sa([0, 1, 1], 1), "0!", "a duplicated last order is still the last day");
 eq(sa([0, 0], 0), "0!", "an all-duplicate program still closes its rotation");
+
+// [INV-RECOVERY-IS-A-BRIDGE] Phase 4 selects structural representatives,
+// never day-name substrings, and preserves authored schedule order.
+eq(C.recoveryDayOrders([
+  { order: 0, mainMovementGroup: "press" }, { order: 1, mainMovementGroup: "squat" },
+  { order: 2, mainMovementGroup: "pull" }, { order: 3, mainMovementGroup: "hinge" },
+]).join(","), "0,1", "recovery keeps one authored upper and one lower exposure");
+eq(C.recoveryDayOrders([
+  { order: 9, mainMovementGroup: "squat" }, { order: 2, mainMovementGroup: "hinge" },
+  { order: 7, mainMovementGroup: "press" },
+]).join(","), "2,7", "lower-first sparse programs retain their authored order");
+eq(C.recoveryDayOrders([
+  { order: 5, mainMovementGroup: "olympic" }, { order: 0, mainMovementGroup: "squat" },
+  { order: 2, mainMovementGroup: null },
+]).join(","), "0,2,5", "ambiguous programs retain their complete authored rotation");
+eq(C.recoveryDayOrders([]).length, 0, "empty recovery candidates stay empty");
+
+// Recovery completion counts selected exposures actually banked in the
+// current cycle. Pointer order cannot make the second-authored day roll early,
+// and an old full-rotation day cannot count as part of the shortened bridge.
+let recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [0]);
+eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "1:false",
+  "banking lower points at the remaining upper exposure");
+recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [1]);
+eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "0:false",
+  "either recovery exposure may be banked first");
+recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [1, 0, 0]);
+eq(recoveryAdvance.isLastDay, true, "both selected exposures complete recovery exactly once");
+recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [2]);
+eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "0:false",
+  "a non-bridge day cannot complete recovery");
+eq(C.recoveryScheduleAdvance([], [0]).isLastDay, false, "an empty bridge fails closed");
 
 // The top scheme must describe work that was actually performed. Reporting the
 // group minimum across every top-weight set invented schemes nobody did — and
@@ -665,7 +699,7 @@ eq(C.authoredSlotOrders([]).length, 0, "empty in, empty out");
   eq(deload({}).weightLb, 155, "default stays the historical 0.775 — nobody's deload moves uninvited");
   eq(deload({ deloadMultiplier: 0.85 }).weightLb, 170,
     "a slot that finds 77.5% unproductively light raises intensity, not volume");
-  eq(`${deload({ deloadMultiplier: 0.85 }).sets}x${deload({ deloadMultiplier: 0.85 }).reps}`, "3x5",
+  eq(`${deload({ deloadMultiplier: 0.85 }).sets}x${deload({ deloadMultiplier: 0.85 }).reps}`, "2x3",
     "the volume cut is not negotiable through this knob");
   const peak = C.programPlanFor(
     { baseWeightLb: 200, nextPhase: 3, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "wave",
@@ -691,7 +725,7 @@ eq(C.authoredSlotOrders([]).length, 0, "empty in, empty out");
     { deloadMultiplier: 0.85, phasePrimerEnabled: false });
   const workBlock = sessionDeload.blocks.find((b) => b.kind === "work");
   eq(workBlock.weightLb, 170, "the session builder hands the slot's knob to the bar");
-  eq(`${workBlock.sets}x${workBlock.reps}`, "3x5", "and keeps the fixed deload volume");
+  eq(`${workBlock.sets}x${workBlock.reps}`, "2x3", "and keeps the fixed recovery volume");
 }
 
 // A peak single's seed is a training max, so it follows the program's focus.
@@ -1330,9 +1364,9 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   // shipping the percentages without it was the template's one real infidelity.
   const pres531 = C.sessionPrescription(tm(3), 5, "barbell", "squat", "main", "strength", "fiveThreeOne");
   eq(pres531.blocks.map((b) => b.kind).join(","), "ramp,ramp,amrap", "531 ramp precedes the + set");
-  // Wendler's deload has no "+" set.
+  // The recovery bridge has no "+" set and trims the ramp to one set.
   const deload531 = C.sessionPrescription(tm(4), 5, "barbell", "squat", "main", "strength", "fiveThreeOne");
-  eq(deload531.blocks.map((b) => b.kind).join(","), "ramp,ramp,work", "the 531 deload carries no + set");
+  eq(deload531.blocks.map((b) => b.kind).join(","), "ramp,work", "the 531 recovery bridge carries no + set and one ramp");
   // An AMRAP set is graded work. Filtering to "work" alone made it invisible:
   // uncounted for completion, ineligible as the top set, unable to reach the
   // e1RM sample — the entire point of the block.
@@ -1350,7 +1384,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(me.blocks.map((b) => b.kind).join(","), "work,backoff", "ME single then backoff");
   eq(me.blocks[1].weightLb, 250, "ME backoff at 80%");
   const meDeload = C.planForStyle({ cycleNumber: 1, baseWeightLb: 315, nextPhase: 4, incrementLb: 0 }, 5, "maxEffort");
-  eq(`${meDeload.weightLb}/${meDeload.sets}x${meDeload.reps}`, "220/3x3", "ME deload is moderate triples");
+  eq(`${meDeload.weightLb}/${meDeload.sets}x${meDeload.reps}`, "220/2x3", "ME recovery is two moderate triples");
 
   // Dynamic effort: movement-pattern schemes and the 3-week wave.
   let de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 150, nextPhase: 2, incrementLb: 0 }, 5, "dynamicEffort", {}, "squat");
@@ -1360,11 +1394,16 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 100, nextPhase: 3, incrementLb: 0 }, 5, "dynamicEffort", {}, "press");
   eq(`${de.weightLb}/${de.sets}x${de.reps}`, "120/9x3", "DE bench wave week 3 (+20%)");
 
-  // Linear fives ignore the phase wave entirely.
-  for (const phase of [1, 2, 3, 4]) {
+  // Linear fives ignore the three progression waves; recovery is the
+  // intentional override and cannot advance the slot when banked.
+  for (const phase of [1, 2, 3]) {
     const lp = C.planForStyle({ cycleNumber: 1, baseWeightLb: 205, nextPhase: phase, incrementLb: 0 }, 5, "linearFives", { workingSets: 3 });
     eq(`${lp.weightLb}/${lp.sets}x${lp.reps}`, "205/3x5", `linearFives constant at phase ${phase}`);
   }
+  const recoveryLinear = C.planForStyle(
+    { cycleNumber: 1, baseWeightLb: 205, nextPhase: 4, incrementLb: 0 }, 5, "linearFives", { workingSets: 3 });
+  eq(`${recoveryLinear.weightLb}/${recoveryLinear.sets}x${recoveryLinear.reps}`, "165/2x3",
+    "linear fives yield to the recovery prescription");
 
   // Style helpers.
   ok(C.advancesPerExposure("texasVolume") && C.advancesPerExposure("linearFives"), "linear styles advance per exposure");

@@ -15,8 +15,16 @@ import { Sessions } from "../db.js";
 // any lift lacking pending so manual positioning never penalizes. A real Peak
 // session logged in rotation 3 overwrites this hold with its grade. Mirrors the
 // native ProgramEditorView.positionAtRotation.
-function positionAtRotation(program, rotation) {
+async function positionAtRotation(program, rotation) {
   program.currentWeek = rotation;
+  if (rotation === C.DELOAD_WEEK) {
+    const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
+    const recoveryOrders = C.recoveryDayOrders((program.days || []).map((day) => {
+      const mainName = (day.lifts || []).find((lift) => lift.role === "main")?.exerciseName;
+      return { order: day.order ?? 0, mainMovementGroup: exerciseByName.get(mainName)?.movementGroup };
+    }));
+    program.nextDayIndex = recoveryOrders[0] ?? program.nextDayIndex;
+  }
   if (rotation < 3) return;
   for (const day of program.days || []) {
     for (const lift of day.lifts || []) {
@@ -439,20 +447,20 @@ async function programEditor(p) {
             ui.stepper(p.maximumAddedSetsPerRotation ?? 6, { min: 0, max: 10, step: 1, format: (v) => `${v} sets`, onChange: async (v) => { p.maximumAddedSetsPerRotation = v; await Programs.save(p); } })),
           ui.h("div", { class: "sub", style: { margin: "8px" }, text: "Uses completed output by full program rotation. Nothing changes until you apply a proposal." })));
         body.append(ui.h("div", { class: "section-title", text: "Where you are" }));
-        const PHASE = ["", "Volume", "Load", "Peak", "Deload"];
+        const PHASE = ["", "Volume", "Load", "Peak", "Recovery"];
         const sortedDays = [...p.days].sort((a, b) => a.order - b.order);
         const pos = ui.h("div", { class: "card" });
         pos.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Cycle" }),
           ui.stepper(p.cycleNumber, { min: 1, max: 99, step: 1, onChange: async (v) => { p.cycleNumber = v; await Programs.save(p); } })));
         pos.append(ui.h("div", { class: "row", style: { borderBottom: sortedDays.length ? undefined : "0" } }, ui.h("span", { text: "Rotation" }),
-          ui.stepper(p.currentWeek, { min: 1, max: 4, step: 1, format: (v) => `${v} of 4 · ${PHASE[v]}`, onChange: async (v) => { positionAtRotation(p, v); await Programs.save(p); } })));
+          ui.stepper(p.currentWeek, { min: 1, max: 4, step: 1, format: (v) => `${v} of 4 · ${PHASE[v]}`, onChange: async (v) => { await positionAtRotation(p, v); await Programs.save(p); } })));
         if (sortedDays.length) {
           const daySel = ui.h("select", {}, ...sortedDays.map((d) => ui.h("option", { value: String(d.order), text: d.name, selected: d.order === p.nextDayIndex })));
           daySel.addEventListener("change", async () => { p.nextDayIndex = Number(daySel.value); await Programs.save(p); });
           pos.append(ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Next day" }), daySel));
         }
         body.append(pos);
-        body.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Set your position mid-cycle. Rotations 1–3 are working (volume/load/peak), rotation 4 is the rest rotation, then the cycle bumps. Lifts progress automatically — weights are the rotation-1 base." }));
+        body.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Set your position mid-cycle. Rotations 1–3 are complete authored passes (volume/load/peak); recovery is one representative lower and upper exposure, then rollover. Weights are the rotation-1 base." }));
         body.append(ui.h("div", { class: "section-title", text: "Days" }));
         const list = ui.h("div", { class: "card list" });
         const days = [...p.days].sort((a, b) => a.order - b.order);
@@ -556,7 +564,7 @@ async function programDayEditor(p, day) {
             // engine would ignore it (automatic on a complementary slot
             // resolves secondary, whose 75% is fixed). Mirrors SettingsView.
             ["wave", "offsetWave"].includes(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
-              ? ui.h("div", { class: "row" }, ui.h("span", { text: "Deload intensity" }),
+              ? ui.h("div", { class: "row" }, ui.h("span", { text: "Recovery intensity" }),
                 ui.stepper(l.deloadMultiplier ?? 0.775, { min: 0.5, max: 0.9, step: 0.025, format: (v) => `${C.trim(v * 100, 1)}%`, onChange: async (v) => { l.deloadMultiplier = Math.round(v * 1000) / 1000; await Programs.save(p); } })) : null,
             ["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(l.prescription)
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Working sets" }),

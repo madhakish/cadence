@@ -353,8 +353,8 @@ enum SessionCompletion {
         )
     }
 
-    /// Complete rotations banked for this program since its most recent deload
-    /// rotation. A program that has never deloaded returns every rotation it
+    /// Complete rotations banked for this program since its most recent
+    /// recovery bridge. A program that has never recovered returns every rotation it
     /// has run, which is exactly right — it has accumulated all of them.
     ///
     /// Rotations, not sessions: a session count means something different on
@@ -380,9 +380,9 @@ enum SessionCompletion {
 
     private struct RotationKey: Hashable { let cycleNumber: Int; let week: Int }
 
-    /// Readiness-triggered deload. The schedule normally walks 1 → 2 → 3 → 4;
+    /// Readiness-triggered recovery. The schedule normally walks 1 → 2 → 3 → 4;
     /// a second consecutive red rotation means this cycle is not worth
-    /// finishing, so it goes straight to the deload instead. Returns the
+    /// finishing, so it goes straight to recovery instead. Returns the
     /// rotation being cut short, or nil to advance normally. Mirrors the web
     /// `earlyDeloadDecision`.
     ///
@@ -393,7 +393,7 @@ enum SessionCompletion {
         program: Program, context: ModelContext
     ) throws -> Int? {
         // Structural guard first: building the coaching report is not free, and
-        // from rotation 3 the schedule advances into the deload by itself.
+        // from rotation 3 the schedule advances into recovery by itself.
         guard program.currentWeek >= 1,
               program.currentWeek < ProgramProgression.deloadWeek - 1 else { return nil }
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
@@ -404,7 +404,7 @@ enum SessionCompletion {
             checkIns: try context.fetch(FetchDescriptor<CheckIn>())
         )
         // Verified rotations only — an as-run rotation is complete by
-        // construction, so trusting one would launder an unknown into a deload.
+        // construction, so trusting one would launder an unknown into recovery.
         let verified = report.rotations.filter { $0.isComplete && !$0.judgedAsRun }
         let decided = ProgramProgression.shouldDeloadEarly(
             currentWeek: program.currentWeek,
@@ -423,9 +423,20 @@ enum SessionCompletion {
         let dayIndex = session.programDayIndex ?? 0
         guard let day = program.days.first(where: { $0.order == dayIndex }) else { return }
         let week = session.programWeek ?? program.currentWeek
-        let exerciseTypeByName = Dictionary(
-            uniqueKeysWithValues: try context.fetch(FetchDescriptor<Exercise>()).map { ($0.name, $0.typeRaw) }
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
+        let exerciseTypeByName = exerciseByName.mapValues { $0.typeRaw }
+        let allDayOrders = program.orderedDays.map(\.order)
+        let recoveryDayOrders = ProgramProgression.recoveryDayOrders(
+            program.orderedDays.map { programDay in
+                let mainName = programDay.orderedLifts.first(where: { $0.role == .main })?.exerciseName
+                return RecoveryDayCandidate(
+                    order: programDay.order,
+                    mainMovementGroup: mainName.flatMap { exerciseByName[$0]?.movementGroup }
+                )
+            }
         )
+        let isRecovery = week == ProgramProgression.deloadWeek
 
         // Duplicate/stale guard (mirrors web advanceProgram): the tag captured
         // at creation must still match the program's live position, or this
@@ -450,7 +461,7 @@ enum SessionCompletion {
         }
 
         // Accessories: double progression, every bank.
-        for acc in day.accessories {
+        for acc in day.accessories where !isRecovery {
             if let entry = programmedEntry(
                 for: acc.id, exerciseName: acc.exerciseName,
                 role: "accessory", in: session
@@ -485,7 +496,7 @@ enum SessionCompletion {
         // DB lifts and other coarse implements can opt into the same earned
         // rep-window progression as accessories. It advances after each
         // exposure, independent of the four-phase calendar.
-        for lift in day.lifts where lift.prescription == .doubleProgression {
+        for lift in day.lifts where lift.prescription == .doubleProgression && !isRecovery {
             guard let entry = programmedEntry(
                 for: lift.id, exerciseName: lift.exerciseName,
                 role: lift.role.rawValue, in: session
@@ -520,7 +531,8 @@ enum SessionCompletion {
         // slot advances (twin sync carries the rest), so duplicates can never
         // double-progress.
         var advancedLinearSlots = Set<String>()
-        for lift in day.lifts where lift.prescription.advancesPerExposure && lift.prescription != .doubleProgression {
+        for lift in day.lifts where lift.prescription.advancesPerExposure
+            && lift.prescription != .doubleProgression && !isRecovery {
             let exposureKey = "\(lift.exerciseName)|\(lift.prescription.rawValue)"
             guard !advancedLinearSlots.contains(exposureKey) else { continue }
             // Slot-scoped matching and completed-work gating share the same
@@ -547,7 +559,7 @@ enum SessionCompletion {
             lift.stallCount = result.state.stallCount
             lift.lastIncrementLb = result.state.lastIncrementLb
             // Non-success outcomes surface their explanation — a silent hold
-            // would read as a broken app, and a deload must always say why.
+            // would read as a broken app, and a rebuild must always say why.
             if result.grade != .success, let note = result.note {
                 let label = "\(lift.exerciseName): \(note)"
                 context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
@@ -579,7 +591,7 @@ enum SessionCompletion {
 
         // A clean, completed top-single becomes the next peak projection's
         // explicit anchor. Adjusted or quality-flagged singles do not.
-        for lift in day.lifts where lift.peakSingleEnabled {
+        for lift in day.lifts where lift.peakSingleEnabled && !isRecovery {
             guard let entry = programmedEntry(
                 for: lift.id, exerciseName: lift.exerciseName,
                 role: lift.role.rawValue, in: session
@@ -599,7 +611,7 @@ enum SessionCompletion {
         // estimate available. Observation only: it can raise the estimate,
         // never lower it, because a submaximal prescription is not evidence of
         // a smaller max. This is what a capped AMRAP on the load rotation feeds.
-        if week != ProgramProgression.gradedWeek {
+        if week != ProgramProgression.gradedWeek && !isRecovery {
             for lift in day.lifts where !lift.prescription.advancesPerExposure {
                 guard let entry = programmedEntry(
                     for: lift.id, exerciseName: lift.exerciseName,
@@ -646,9 +658,29 @@ enum SessionCompletion {
 
         // Walk day ORDER values, not array positions — `orderedDays` also
         // drops the relationship aliases that a raw `days.count` would inflate.
-        let advance = ProgramProgression.scheduleAdvance(
-            dayOrders: program.orderedDays.map(\.order), bankedDayOrder: dayIndex
-        )
+        // Recovery is different: completion is the set of selected exposures
+        // actually banked in this cycle. That handles either order, manual day
+        // selection, and an old phase-4 pointer left on an omitted day.
+        let advance: (nextDayOrder: Int, isLastDay: Bool)
+        if isRecovery {
+            let completed = try context.fetch(FetchDescriptor<WorkoutSession>())
+                .filter {
+                    $0.isCompleted
+                        && ($0.programID == program.id || $0.programName == program.name)
+                        && $0.programCycleNumber == program.cycleNumber
+                        && $0.programWeek == ProgramProgression.deloadWeek
+                }
+                .compactMap(\.programDayIndex) + [dayIndex]
+            advance = ProgramProgression.recoveryScheduleAdvance(
+                dayOrders: recoveryDayOrders,
+                completedDayOrders: completed
+            )
+        } else {
+            advance = ProgramProgression.scheduleAdvance(
+                dayOrders: allDayOrders,
+                bankedDayOrder: dayIndex
+            )
+        }
         program.nextDayIndex = advance.nextDayOrder
         guard advance.isLastDay else { return }
 
@@ -671,16 +703,20 @@ enum SessionCompletion {
                     }
                 }
                 program.currentWeek = ProgramProgression.deloadWeek
-                let label = "\(program.name): two red rotations in a row — going straight to the deload. Main-lift bases hold."
+                program.nextDayIndex = recoveryDayOrders.first ?? allDayOrders.first ?? 0
+                let label = "\(program.name): two red rotations in a row — going straight to the recovery bridge. Main-lift bases hold."
                 context.insert(Milestone(date: session.date, exerciseName: nil, kind: .programNote, label: label))
                 events.append(PREvent(kind: .programNote, exercise: program.name, label: label))
                 return
             }
             program.currentWeek += 1
+            if program.currentWeek == ProgramProgression.deloadWeek {
+                program.nextDayIndex = recoveryDayOrders.first ?? allDayOrders.first ?? 0
+            }
             return
         }
 
-        // Rollover at the deload week's last day.
+        // Rollover after the recovery bridge's last selected exposure.
         for d in program.days {
             for lift in d.lifts {
                 if lift.prescription.advancesPerExposure {
@@ -758,6 +794,7 @@ enum SessionCompletion {
         }
         program.cycleNumber += 1
         program.currentWeek = 1
+        program.nextDayIndex = allDayOrders.first ?? 0
     }
 
     /// All working sets / volumes / top schemes for an exercise across prior

@@ -1,33 +1,38 @@
 import Foundation
 
-/// 4-week microcycle phase. Each main lift runs its own track —
-/// progression keys off the lift's last COMPLETED session, not the calendar.
+/// Four-phase mesocycle state. In a cycle-based program, each main lift runs
+/// its own track and progression keys off completed work rather than dates.
+/// Week-bound programs are also valid; this phase type does not infer timing
+/// semantics from a lift's prescription style. Phase 4 is a short recovery
+/// bridge rather than another full authored rotation.
 public enum CyclePhase: Int, Codable, CaseIterable, Sendable {
     case volume = 1 // 5×5 moderate
     case load = 2   // 5×3 heavier
     case peak = 3   // 3×3 top working weight
-    case deload = 4 // 3×5 ~75–80% of week 1
+    case deload = 4 // recovery exposure: 2×3 ~75–85% of rotation-1 base
 
     public var name: String {
         switch self {
         case .volume: return "Volume"
         case .load: return "Load"
         case .peak: return "Peak"
-        case .deload: return "Deload"
+        case .deload: return "Recovery"
         }
     }
 
     public var sets: Int {
         switch self {
         case .volume, .load: return 5
-        case .peak, .deload: return 3
+        case .peak: return 3
+        case .deload: return 2
         }
     }
 
     public var reps: Int {
         switch self {
-        case .volume, .deload: return 5
+        case .volume: return 5
         case .load, .peak: return 3
+        case .deload: return 3
         }
     }
 
@@ -47,9 +52,17 @@ public enum CyclePhase: Int, Codable, CaseIterable, Sendable {
 
     /// "R2 Load 5×3"
     public var label: String { "R\(rawValue) \(name) \(sets)×\(reps)" }
+
+    /// Backup phase labels are a wire-format snapshot, not live UI copy.
+    /// Version-7 bundles encode only this label and import recovers the phase
+    /// number from `R4`; preserving the old phase-4 string keeps every existing
+    /// backup byte-stable without adding a schema field solely for wording.
+    public var portableLabel: String {
+        self == .deload ? "R4 Deload 3×5" : label
+    }
 }
 
-/// Linear vs 4-week cycle progression.
+/// Linear vs mesocycle progression.
 public enum TrackMode: String, Codable, Sendable {
     case cycle
     case linear
@@ -96,7 +109,7 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
 
     /// Styles whose base advances after every banked exposure of the slot
     /// (session-to-session or week-to-week linear progression) instead of
-    /// being graded once per 4-week rotation at the Peak.
+    /// being graded once per mesocycle at the Peak.
     public var advancesPerExposure: Bool {
         switch self {
         case .doubleProgression, .linearFives, .texasVolume, .texasLight, .texasIntensity:
@@ -418,7 +431,7 @@ public enum ProgramEngine {
         let prescription: (sets: Int, reps: Int, multiplier: Double)
         switch style {
         case .automatic, .wave:
-            // The deload's intensity is the slot's own knob (default 0.775,
+            // Recovery intensity is the slot's own knob (default 0.775,
             // the historical constant). The literature's asymmetry motivates
             // making this the adjustable side: volume stays cut either way,
             // and a lifter who finds 77.5% unproductively light raises the
@@ -432,8 +445,12 @@ public enum ProgramEngine {
                                 : phase.multiplier)
         case .linearFives, .texasVolume, .texasLight, .texasIntensity:
             // Sets-across at the slot's own base; the base moves per exposure
-            // (advanceLinearLift), so the 4-week phase never shapes the weight.
-            prescription = (max(1, configuration.workingSets), 5, 1.0)
+            // (advanceLinearLift). Recovery is the only phase that overrides
+            // that contract: it is intentionally non-progressive and trims
+            // both load and volume before the normal exposure cadence resumes.
+            prescription = phase == .deload
+                ? (2, 3, 0.80)
+                : (max(1, configuration.workingSets), 5, 1.0)
         case .fiveThreeOne:
             // baseWeightLb is the TRAINING MAX. The plan is the graded top set
             // ("+" set); the two ramp sets are emitted by sessionPrescription.
@@ -449,12 +466,12 @@ public enum ProgramEngine {
                 sets: 1, reps: top.reps, phase: phase, cycleNumber: state.cycleNumber
             )
         case .maxEffort:
-            // Work up to a top single at the slot's current target; the deload
-            // rotation trades the single for moderate triples.
+            // Work up to a top single at the slot's current target; recovery
+            // trades the single for two moderate triples.
             if phase == .deload {
                 return SessionPlan(
                     weightLb: Weight.round(state.baseWeightLb * 0.70, to: roundingLb),
-                    sets: 3, reps: 3, phase: phase, cycleNumber: state.cycleNumber
+                    sets: 2, reps: 3, phase: phase, cycleNumber: state.cycleNumber
                 )
             }
             return SessionPlan(
@@ -463,7 +480,7 @@ public enum ProgramEngine {
             )
         case .dynamicEffort:
             // Speed work: base ≈ 50% of the slot's max, waved up over the two
-            // middle rotations, back to the wave floor on deload. Squat pattern
+            // middle rotations, back to the wave floor on recovery. Squat pattern
             // takes speed doubles, hinge takes speed pulls, presses take triples.
             let scheme: (sets: Int, reps: Int)
             if movementGroup == "squat" { scheme = (10, 2) }
@@ -477,7 +494,8 @@ public enum ProgramEngine {
             }
             return SessionPlan(
                 weightLb: Weight.round(state.baseWeightLb * multiplier, to: roundingLb),
-                sets: scheme.sets, reps: scheme.reps, phase: phase, cycleNumber: state.cycleNumber
+                sets: phase == .deload ? Swift.max(2, (scheme.sets + 1) / 2) : scheme.sets,
+                reps: scheme.reps, phase: phase, cycleNumber: state.cycleNumber
             )
         case .offsetWave:
             let weight: Double
@@ -503,23 +521,32 @@ public enum ProgramEngine {
             case .volume: prescription = (3, 8, 0.90)
             case .load: prescription = (3, 8, 0.95)
             case .peak: prescription = (3, 6, 1.0)
-            case .deload: prescription = (2, 8, 0.75)
+            case .deload: prescription = (1, 5, 0.75)
             }
         case .hypertrophy:
             switch phase {
             case .volume: prescription = (4, 10, 1.0)
             case .load: prescription = (4, 8, 1.025)
             case .peak: prescription = (3, 8, 1.05)
-            case .deload: prescription = (2, 10, 0.85)
+            case .deload: prescription = (1, 5, 0.80)
             }
         case .technique:
             switch phase {
             case .volume: prescription = (5, 3, 1.0)
             case .load: prescription = (6, 2, 1.05)
             case .peak: prescription = (6, 1, 1.10)
-            case .deload: prescription = (3, 2, 0.80)
+            case .deload: prescription = (2, 2, 0.80)
             }
         case .doubleProgression:
+            if phase == .deload {
+                return SessionPlan(
+                    weightLb: Weight.round(state.baseWeightLb * 0.80, to: roundingLb),
+                    sets: 1,
+                    reps: Swift.min(5, Swift.max(1, configuration.minimumReps)),
+                    phase: phase,
+                    cycleNumber: state.cycleNumber
+                )
+            }
             return SessionPlan(
                 weightLb: Weight.round(state.baseWeightLb, to: roundingLb),
                 sets: max(1, configuration.workingSets),
@@ -588,7 +615,7 @@ public enum ProgramEngine {
             case .volume: ramp = [(0.65, 5), (0.75, 5)]
             case .load: ramp = [(0.70, 3), (0.80, 3)]
             case .peak: ramp = [(0.75, 5), (0.85, 3)]
-            case .deload: ramp = [(0.40, 5), (0.50, 5)]
+            case .deload: ramp = [(0.50, 5)]
             }
             for step531 in ramp {
                 blocks.append(PrescriptionBlock(
@@ -601,7 +628,7 @@ public enum ProgramEngine {
         // 5/3/1's top set is the "+" set — the AMRAP is the progression engine,
         // not a garnish, and shipping the percentages without it was the
         // template's one material infidelity to the published method. Wendler's
-        // deload week has no "+" set, so it stays ordinary work.
+        // recovery has no "+" set, so it stays ordinary work.
         let isFiveThreeOnePlusSet = style == .fiveThreeOne && state.nextPhase != .deload
         blocks.append(PrescriptionBlock(
             kind: isFiveThreeOnePlusSet ? .amrap : .work,
@@ -648,7 +675,7 @@ public enum ProgramEngine {
         )
     }
 
-    /// Advance state after completing a phase. Completing deload rolls the
+    /// Advance state after completing a phase. Completing recovery rolls the
     /// cycle: base weight += increment, back to volume.
     public static func advancing(_ state: CycleState, afterCompleting phase: CyclePhase) -> CycleState {
         var next = state

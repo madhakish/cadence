@@ -262,9 +262,30 @@ never touched (they are session identity — INV-DAY-ORDERS-PRESERVED).
 
 A wave-family rest week lifts at the slot's own deload multiplier — default
 0.775 of the rotation-1 base — and zero means *unset*, never an empty bar.
-The volume cut (3×5) is not adjustable through this knob, the working
-rotations never listen to it, and styles with their own published deload
-(secondary's fixed 0.75, 5/3/1's 40/50/60 ramp) keep theirs.
+The volume cut (2×3) is not adjustable through this knob, the three working
+rotations never listen to it, and other styles keep a recovery-specific shape
+(secondary 1×5 at 0.75; 5/3/1 one ramp at 0.50 plus 1×5 at 0.60).
+
+### INV-RECOVERY-IS-A-BRIDGE
+*platforms: core, web*
+
+Phase 4 of a recognizable upper/lower program is a **two-exposure recovery
+bridge**, not a fourth pass through every A/B day. Cadence selects the first
+authored day whose main lift is squat/hinge and the first whose main lift is
+press/pull, preserves their authored order, and rolls over after the second.
+For this cycle-based wave, day names and calendar weeks never participate.
+Programs that cannot be classified safely retain every authored day rather
+than silently losing work.
+
+Completion is the set of selected recovery exposures banked in the current
+cycle, not the current pointer's position. Either representative may be banked
+first. A non-bridge day cannot complete recovery by itself, while an in-flight
+program upgraded from the old four-day phase 4 recognizes bridge exposures it
+already banked instead of prescribing them again.
+
+Recovery prescriptions cut working volume, reduce every accessory to one set,
+and freeze accessory, rep-window, and per-exposure progression as well as e1RM
+observations. The next mesocycle always restarts at the first full authored day.
 
 ---
 

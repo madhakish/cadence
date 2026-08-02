@@ -32,12 +32,15 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(plan.reps, 5)
     }
 
-    func testDeloadLandsIn75To80PercentBand() {
+    func testRecoveryBridgeCutsVolumeAndLandsIn75To80PercentBand() {
         let state = CycleState(baseWeightLb: 210, nextPhase: .deload)
         let plan = ProgramEngine.plan(for: state)
         XCTAssertEqual(plan.weightLb, 165)
-        XCTAssertEqual(plan.sets, 3)
-        XCTAssertEqual(plan.reps, 5)
+        XCTAssertEqual(plan.sets, 2)
+        XCTAssertEqual(plan.reps, 3)
+        XCTAssertEqual(plan.phase?.name, "Recovery")
+        XCTAssertEqual(plan.phase?.portableLabel, "R4 Deload 3×5",
+                       "the v7 backup wire label remains backward-compatible")
         let pct = plan.weightLb / state.baseWeightLb
         XCTAssertTrue((0.75...0.80).contains(pct), "deload \(pct) outside 75-80% band")
     }
@@ -169,8 +172,8 @@ final class ProgramEngineTests: XCTestCase {
                 movementGroup: "hinge", role: .complementary
             )
         }
-        XCTAssertEqual(plans.map(\.sets), [3, 3, 3, 2])
-        XCTAssertEqual(plans.map(\.reps), [8, 8, 6, 8])
+        XCTAssertEqual(plans.map(\.sets), [3, 3, 3, 1])
+        XCTAssertEqual(plans.map(\.reps), [8, 8, 6, 5])
         XCTAssertEqual(plans.map(\.weightLb), [180, 190, 200, 150])
         XCTAssertTrue(plans.allSatisfy { $0.reps >= 5 && $0.weightLb <= 200 })
     }
@@ -270,7 +273,7 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(deload(.init(deloadMultiplier: 0.85)).weightLb, 170,
                        "a slot that finds 77.5% unproductively light raises intensity, not volume")
         let raised = deload(.init(deloadMultiplier: 0.85))
-        XCTAssertEqual([raised.sets, raised.reps], [3, 5], "the volume cut is not negotiable through this knob")
+        XCTAssertEqual([raised.sets, raised.reps], [2, 3], "the volume cut is not negotiable through this knob")
         // Only the deload listens: the working rotations keep the wave shape.
         let peak = ProgramEngine.plan(for: CycleState(baseWeightLb: 200, nextPhase: .peak),
                                       roundingLb: 5, style: .automatic,
@@ -296,7 +299,7 @@ final class ProgramEngineTests: XCTestCase {
             configuration: .init(deloadMultiplier: 0.85, phasePrimerEnabled: false))
         let workBlock = sessionDeload.blocks.first { $0.kind == .work }
         XCTAssertEqual(workBlock?.weightLb, 170, "the session builder hands the slot's knob to the bar")
-        XCTAssertEqual([workBlock?.sets, workBlock?.reps], [3, 5], "and keeps the fixed deload volume")
+        XCTAssertEqual([workBlock?.sets, workBlock?.reps], [2, 3], "and keeps the fixed recovery volume")
     }
 
     // MARK: - Methodology styles (mirrors core.test.mjs)
@@ -325,12 +328,12 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(prescription.blocks.map(\.reps), [5, 3, 1])
         XCTAssertEqual(prescription.mainWork.weightLb, 285)
 
-        // Wendler's deload week has no "+" set.
+        // The recovery bridge has no "+" set and trims the ramp to one set.
         let deload = ProgramEngine.sessionPrescription(
             for: CycleState(baseWeightLb: 300, nextPhase: .deload),
             programRoundingLb: 5, exerciseType: "barbell", movementGroup: "squat",
             prescriptionStyle: .fiveThreeOne)
-        XCTAssertEqual(deload.blocks.map(\.kind), [.ramp, .ramp, .work])
+        XCTAssertEqual(deload.blocks.map(\.kind), [.ramp, .work])
 
         // An AMRAP set is graded work. Filtering to `work` alone made it
         // invisible: uncounted for completion, ineligible as the top set,
@@ -364,7 +367,7 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(prescription.blocks.last?.weightLb, 250)
         let deload = ProgramEngine.plan(for: CycleState(baseWeightLb: 315, nextPhase: .deload),
                                         roundingLb: 5, style: .maxEffort)
-        XCTAssertEqual([deload.weightLb, Double(deload.sets), Double(deload.reps)], [220, 3, 3])
+        XCTAssertEqual([deload.weightLb, Double(deload.sets), Double(deload.reps)], [220, 2, 3])
     }
 
     func testDynamicEffortSpeedSchemesByMovementPattern() {
@@ -379,14 +382,20 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual([bench.weightLb, Double(bench.sets), Double(bench.reps)], [120, 9, 3])
     }
 
-    func testLinearFivesSetsAcrossIgnoresThePhaseWave() {
-        for phase in CyclePhase.allCases {
+    func testLinearFivesSetsAcrossIgnoreProgressionPhasesButYieldToRecovery() {
+        for phase in [CyclePhase.volume, .load, .peak] {
             let plan = ProgramEngine.plan(for: CycleState(baseWeightLb: 205, nextPhase: phase),
                                           roundingLb: 5, style: .linearFives,
                                           configuration: .init(workingSets: 3))
             XCTAssertEqual([plan.weightLb, Double(plan.sets), Double(plan.reps)], [205, 3, 5],
                            "phase \(phase.rawValue) must not reshape linear fives")
         }
+        let recovery = ProgramEngine.plan(
+            for: CycleState(baseWeightLb: 205, nextPhase: .deload),
+            roundingLb: 5, style: .linearFives,
+            configuration: .init(workingSets: 3)
+        )
+        XCTAssertEqual([recovery.weightLb, Double(recovery.sets), Double(recovery.reps)], [165, 2, 3])
     }
 
     func testMethodologyStyleHelpers() {
