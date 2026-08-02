@@ -527,6 +527,20 @@ async function programDayEditor(p, day) {
         body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
         const openDetail = async (name) => { const ex = await Exercises.byName(name); if (ex) exerciseDetail(ex); };
         for (const l of orderedSlots(day.lifts)) {
+          // The preview is the only OUTPUT on this card, so a stepper that
+          // saves without refreshing it leaves the lifter reading the previous
+          // walk — which defeats the point of showing the 188-vs-190 lb
+          // rounding difference at all. A full draw() would be worse: these
+          // steppers are pressed repeatedly, and rebuilding the whole editor
+          // under a held control fights the hand doing the pressing. So the
+          // preview node is swapped in place instead.
+          const exercise = exerciseByName.get(l.exerciseName);
+          let preview = ui.exposurePreview(l, p, exercise);
+          const refresh = () => {
+            const next = ui.exposurePreview(l, p, exercise);
+            preview.replaceWith(next);
+            preview = next;
+          };
           body.append(ui.h("div", { class: "card" },
             ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
               ui.h("span", { class: "title", text: l.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(l.exerciseName) }),
@@ -560,41 +574,41 @@ async function programDayEditor(p, day) {
               return select;
             })()),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Rotation-1 base" }),
-              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
+              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); refresh(); } })),
             l.prescription === "offsetWave" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Load / peak offsets" }),
               ui.h("div", { class: "btn-row" },
-                ui.stepper(l.loadOffsetLb ?? 0, { min: 0, max: 100, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.loadOffsetLb = v; await Programs.save(p); } }),
-                ui.stepper(l.peakOffsetLb ?? 0, { min: 0, max: 150, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakOffsetLb = v; await Programs.save(p); } }))) : null,
+                ui.stepper(l.loadOffsetLb ?? 0, { min: 0, max: 100, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.loadOffsetLb = v; await Programs.save(p); refresh(); } }),
+                ui.stepper(l.peakOffsetLb ?? 0, { min: 0, max: 150, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakOffsetLb = v; await Programs.save(p); refresh(); } }))) : null,
             // Every wave-shaped style deloads at this slot's own intensity.
             // Gated on the RESOLVED style so the knob never appears where the
             // engine would ignore it (automatic on a complementary slot
             // resolves secondary, whose 75% is fixed). Mirrors SettingsView.
             ["wave", "offsetWave"].includes(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Recovery intensity" }),
-                ui.stepper(l.deloadMultiplier ?? 0.775, { min: 0.5, max: 0.9, step: 0.025, format: (v) => `${C.trim(v * 100, 1)}%`, onChange: async (v) => { l.deloadMultiplier = Math.round(v * 1000) / 1000; await Programs.save(p); } })) : null,
+                ui.stepper(l.deloadMultiplier ?? 0.775, { min: 0.5, max: 0.9, step: 0.025, format: (v) => `${C.trim(v * 100, 1)}%`, onChange: async (v) => { l.deloadMultiplier = Math.round(v * 1000) / 1000; await Programs.save(p); refresh(); } })) : null,
             ["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(l.prescription)
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Working sets" }),
-                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 10, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); } })) : null,
+                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 10, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } })) : null,
             l.prescription === "doubleProgression" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Sets / rep window" }),
               ui.h("div", { class: "btn-row" },
-                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); } }),
-                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; await Programs.save(p); } }),
-                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; await Programs.save(p); } }))) : null,
+                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } }),
+                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; await Programs.save(p); refresh(); } }),
+                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; await Programs.save(p); refresh(); } }))) : null,
             ui.h("div", { class: "row" }, ui.h("span", { text: "Peak top single" }),
               ui.toggle(!!l.peakSingleEnabled, async (v) => { l.peakSingleEnabled = v; await Programs.save(p); draw(); })),
             l.peakSingleEnabled ? ui.h("div", { class: "row" }, ui.h("span", { text: "Last clean / step" }),
               ui.h("div", { class: "btn-row" },
-                ui.stepper(l.lastPeakSingleLb ?? 0, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.lastPeakSingleLb = v; await Programs.save(p); } }),
-                ui.stepper(l.peakSingleIncrementLb ?? 5, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakSingleIncrementLb = v; await Programs.save(p); } }))) : null,
+                ui.stepper(l.lastPeakSingleLb ?? 0, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.lastPeakSingleLb = v; await Programs.save(p); refresh(); } }),
+                ui.stepper(l.peakSingleIncrementLb ?? 5, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakSingleIncrementLb = v; await Programs.save(p); refresh(); } }))) : null,
             ui.h("div", { class: "row" }, ui.h("span", { text: "Phase primer single" }),
-              ui.toggle(l.phasePrimerEnabled !== false, async (v) => { l.phasePrimerEnabled = v; await Programs.save(p); })),
+              ui.toggle(l.phasePrimerEnabled !== false, async (v) => { l.phasePrimerEnabled = v; await Programs.save(p); refresh(); })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "One-tap drop (0 = auto)" }),
               ui.stepper(l.dropIncrementLb ?? 0, { min: 0, max: 50, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.dropIncrementLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
-              ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } })),
+              ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); refresh(); } })),
             // What all of the above produces. Every other value on this card is
             // an input; without this, nothing on it is an output.
-            ui.exposurePreview(l, p, exerciseByName.get(l.exerciseName))));
+            preview));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add lift", onClick: () => pickExerciseSheet(async (e) => {
           day.lifts.push({ exerciseName: e.name, role: "complementary", order: day.lifts.length, prescription: "automatic", warmupPolicy: "automatic", baseWeightLb: 45, estimatedMaxLb: 52, stallCount: 0, lastIncrementLb: 0 });

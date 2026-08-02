@@ -394,6 +394,54 @@ for (const [name, view] of [["home", home], ["history", history], ["body", body]
   await db.Programs.save(program);
 }
 
+// The preview is the only output on the slot editor, and every control beside
+// it is an input. A stepper that saves without refreshing it leaves the lifter
+// reading the previous walk — which is precisely the 188-vs-190 lb comparison
+// the feature exists to make visible. Drive the real editor DOM, not the
+// component in isolation, because the defect was in the wiring.
+{
+  const program = await db.Programs.active();
+  const day = program.days.find((d) => (d.lifts || []).length) || program.days[0];
+  const lift = day.lifts[0];
+  const priorStyle = lift.prescription;
+  const priorBase = lift.baseWeightLb;
+  lift.prescription = "wave";
+  lift.baseWeightLb = 190;
+  program.roundingLb = 5;
+  await db.Programs.save(program);
+
+  await settings.render(host());
+  const progRow = [...host().querySelectorAll(".row")].find((r) => r.textContent.includes("Cycle"));
+  progRow.click(); await tick();
+  const editor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const dayLead = [...editor.querySelectorAll(".lead")].find((el) => el.textContent.includes(day.name));
+  ok(dayLead, "the program editor lists the day");
+  dayLead.click(); await tick();
+
+  const dayEditor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const baseRow = [...dayEditor.querySelectorAll(".row")].find((r) => r.textContent.includes("Rotation-1 base"));
+  ok(baseRow, "the slot editor offers the base stepper");
+  const before = dayEditor.textContent;
+  ok(before.includes("225"), "a 190 lb base previews its 225 lb peak before any edit");
+
+  // One step down: 190 → 185, whose peak rounds to 215 rather than 225.
+  baseRow.querySelector(".stepper button").click(); await tick();
+  const after = dayEditor.textContent;
+  ok(!after.includes("225") || after.includes("215"),
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] stepping the base refreshes the preview instead of leaving a stale walk");
+  ok(after.includes("215"), "and it shows the new base's real peak");
+
+  // Close both overlays and restore.
+  for (const overlay of [...document.querySelectorAll("#overlays .overlay")].reverse()) {
+    overlay.querySelector(".overlay-head button").click(); await tick();
+  }
+  const restored = await db.Programs.active();
+  const restoredLift = (restored.days.find((d) => d.name === day.name) || restored.days[0]).lifts[0];
+  restoredLift.prescription = priorStyle;
+  restoredLift.baseWeightLb = priorBase;
+  await db.Programs.save(restored);
+}
+
 // Today with no active program is the very first screen a new install shows.
 // The coach section used to run on a null program and throw, leaving the tab
 // blank — which is only reachable before any program exists, so every other

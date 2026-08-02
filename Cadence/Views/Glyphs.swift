@@ -23,6 +23,16 @@ struct RotationGlyph: View {
                     .frame(width: 5, height: 10)
             }
         }
+        // `.accessibilityElement` is load-bearing, not decoration. A stack of
+        // Shapes contains no accessibility element of its own, so a bare
+        // `.accessibilityLabel` here has nothing to attach to and the rotation
+        // simply goes unannounced. That was survivable while a phase name sat
+        // beside the glyph; now that the neighbouring "R3" is decorative, this
+        // view is the only thing that can say where the program is.
+        //
+        // Call sites whose adjacent text already reads the rotation mark the
+        // glyph `.accessibilityHidden(true)` so it is not announced twice.
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(ProgramEngine.rotationLabel(rotation: week))
     }
 }

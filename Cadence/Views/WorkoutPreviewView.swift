@@ -54,7 +54,9 @@ struct WorkoutPreviewView: View {
                     // Position, not phase: this header sits above slots whose
                     // prescriptions may have nothing to do with each other, so
                     // the phase name belongs on the slots it describes.
+                    // The text beside it already reads the rotation aloud.
                     RotationGlyph(week: program.currentWeek)
+                        .accessibilityHidden(true)
                     Text("\(program.name) · Cycle \(program.cycleNumber) · \(ProgramEngine.rotationLabel(rotation: program.currentWeek))")
                         .font(.caption.bold())
                         .foregroundStyle(Theme.accent)
