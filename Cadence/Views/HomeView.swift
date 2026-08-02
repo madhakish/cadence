@@ -242,10 +242,15 @@ struct HomeView: View {
                             HStack(spacing: 8) {
                                 Text(day.name).font(.headline)
                                 Spacer()
-                                WaveGlyph(week: program.currentWeek)
-                                Text((CyclePhase(rawValue: program.currentWeek) ?? .volume).name)
-                                    .font(.caption.bold())
+                                // Position only. The phase NAME moved onto the
+                                // slots it actually describes — this counter is
+                                // shared by slots whose prescriptions have
+                                // nothing to do with each other.
+                                RotationGlyph(week: program.currentWeek)
+                                Text("R\(min(max(program.currentWeek, 1), ProgramProgression.deloadWeek))")
+                                    .font(.caption.bold().monospacedDigit())
                                     .foregroundStyle(Theme.accent)
+                                    .accessibilityHidden(true)
                                 Image(systemName: "chevron.right")
                                     .font(.caption.bold())
                                     .foregroundStyle(.tertiary)
@@ -264,7 +269,11 @@ struct HomeView: View {
                                 HStack(alignment: .firstTextBaseline) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(lift.exerciseName).font(.subheadline.bold())
-                                        Text(lift.role.rawValue).font(.caption).foregroundStyle(.secondary)
+                                        SlotPrescriptionBadge(
+                                            lift: lift, rotation: program.currentWeek,
+                                            movementGroup: exercises.first { $0.name == lift.exerciseName }?.movementGroup,
+                                            focus: program.focus
+                                        )
                                     }
                                     Spacer()
                                     VStack(alignment: .trailing, spacing: 2) {

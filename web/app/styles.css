@@ -211,10 +211,16 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .setrow.current { border-left: 3px solid var(--accent); padding-left: 9px; margin-left: -12px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%); }
 
-/* wave-position glyph: volume/load/peak/recovery, current phase lit */
-.wave { display: inline-flex; gap: 3px; align-items: flex-end; height: 16px; }
-.wave i { width: 5px; border-radius: 2px; background: color-mix(in srgb, var(--text) 22%, transparent); display: block; }
-.wave i.on { background: var(--accent); }
+/* rotation-position glyph: equal ticks, current rotation lit. Deliberately not
+   a rising wave — the counter is shared by slots whose prescriptions have
+   nothing to do with each other, so it reports position and nothing more. */
+.rotation { display: inline-flex; gap: 3px; align-items: center; height: 16px; }
+.rotation i { width: 5px; height: 10px; border-radius: 2px; background: color-mix(in srgb, var(--text) 22%, transparent); display: block; }
+.rotation i.on { background: var(--accent); }
+
+/* per-slot prescription badge: what the slot actually does, and its phase only
+   where the phase vocabulary describes it */
+.slot-badge { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 
 /* emphasized weight readouts */
 .wt-big { font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; }

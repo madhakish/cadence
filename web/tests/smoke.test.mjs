@@ -27,6 +27,7 @@ const settings = await import("../app/js/views/settings.js");
 const session = await import("../app/js/views/session.js");
 const plates = await import("../app/js/views/plates.js");
 const barbell = await import("../app/js/barbell.js");
+const ui = await import("../app/js/ui.js");
 const C = await import("../app/js/core.js");
 const coach = await import("../app/js/coaching-adapter.js");
 const completeAll = async (workout) => {
@@ -320,6 +321,77 @@ for (let i = 0; i < 10; i++) {
 for (const [name, view] of [["home", home], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
   try { await view.render(host()); ok(host().childElementCount > 0, `${name} rendered`); }
   catch (e) { ok(false, `${name} threw: ${e.message}`); }
+}
+
+// ---- style-aware labels and the exposure preview render (#105, #106) -------
+// Today used to print a Volume/Load/Peak name against every slot on the screen,
+// including the ones whose prescription never touches a phase. The label is now
+// per-slot, so a program mixing styles has to be able to say so on one screen.
+{
+  const program = await db.Programs.active();
+  const day = program.days.find((d) => d.order === program.nextDayIndex) || program.days[0];
+  const originals = day.lifts.map((l) => l.prescription);
+  day.lifts[0].prescription = "linearFives";
+  if (day.lifts[1]) day.lifts[1].prescription = "wave";
+  program.currentWeek = 3;
+  await db.Programs.save(program);
+  try {
+    await home.render(host());
+    const text = host().textContent;
+    ok(text.includes("Main · Linear 5s") || text.includes("Complementary · Linear 5s"),
+      "a per-exposure slot is badged with what it actually does");
+    ok(!host().querySelector(".wave"), "the rising wave glyph is gone from the program header");
+    ok(host().querySelector(".rotation"), "a style-neutral rotation indicator took its place");
+
+    // The phase name survives ONLY against the wave slot.
+    const badges = [...host().querySelectorAll(".slot-badge")];
+    ok(badges.length > 0, "every program slot carries a badge");
+    const linearBadge = badges.find((b) => b.textContent.includes("Linear 5s"));
+    ok(linearBadge && !linearBadge.textContent.includes("Peak"),
+      "[INV-PHASE-NAME-IS-PER-SLOT] no phase name is rendered against a slot whose style does not use phases");
+    if (day.lifts[1]) {
+      const waveBadge = badges.find((b) => b.textContent.includes("· Wave"));
+      ok(waveBadge && waveBadge.textContent.includes("R3 Peak"),
+        "a wave slot still says which phase it is in");
+    }
+  } finally {
+    day.lifts.forEach((l, i) => { l.prescription = originals[i]; });
+    program.currentWeek = 1;
+    await db.Programs.save(program);
+  }
+}
+
+// The editor is a wall of inputs; the preview is the only output on it.
+{
+  const program = await db.Programs.active();
+  const day = program.days[0];
+  const lift = day.lifts[0];
+  const exercises = await db.Exercises.all();
+  const exercise = exercises.find((e) => e.name === lift.exerciseName);
+  const prior = { prescription: lift.prescription, base: lift.baseWeightLb };
+  lift.prescription = "wave";
+  lift.baseWeightLb = 190;
+  program.roundingLb = 5;
+  const card = ui.exposurePreview(lift, program, exercise);
+  const text = card.textContent;
+  ok(text.includes("Next 4 exposures"), "the preview names what it is showing");
+  ok(text.includes("R3 Peak"), "a wave slot's exposures carry their phase names");
+  ok(text.includes("225"),
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] a 190 lb base previews its real 225 lb peak triple");
+  ok(text.includes("Base"), "the preview says what the numbers derive from");
+
+  lift.prescription = "fiveThreeOne";
+  const wendler = ui.exposurePreview(lift, program, exercise).textContent;
+  ok(!wendler.includes("Peak") && !wendler.includes("Volume"),
+    "5/3/1 previews exposures, never wave phases");
+  ok(wendler.includes("Session 1"), "phase-independent styles number their exposures");
+  ok(wendler.includes("+ set"), "the graded + set is visible, not hidden behind the top line");
+  ok(wendler.includes("ramp"), "and so are the ramp sets that make up most of the session");
+  ok(wendler.includes("Training max"), "a 5/3/1 base is named as the training max it is");
+
+  lift.prescription = prior.prescription;
+  lift.baseWeightLb = prior.base;
+  await db.Programs.save(program);
 }
 
 // Today with no active program is the very first screen a new install shows.

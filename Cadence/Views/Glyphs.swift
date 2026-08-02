@@ -1,23 +1,72 @@
 import SwiftUI
+import CadenceCore
 
-/// The mesocycle at a glance: Volume / Load / Peak / Recovery as rising bars
-/// with recovery dropped low, the current phase lit in accent. Mirrors
-/// the web `.wave` component (ui.js).
-struct WaveGlyph: View {
+/// Where the program is in its rotation — four equal ticks with the current one
+/// lit. Mirrors the web `.rotation` component (ui.js).
+///
+/// This replaced a rising-bar "wave" glyph that drew Volume / Load / Peak as
+/// climbing and recovery as a drop. That shape is a claim about the
+/// prescription, and the program-level indicator is shared by slots that have
+/// nothing to do with each other's: a novice `linearFives` slot and a `5/3/1`
+/// slot sit under the same counter and neither one waves. Position is the only
+/// thing this indicator actually knows, so it is the only thing it draws. The
+/// per-slot badge says what each slot does.
+struct RotationGlyph: View {
     /// Current rotation, 1–4.
     let week: Int
 
-    private static let heights: [CGFloat] = [8, 12, 16, 6]
-
     var body: some View {
-        HStack(alignment: .bottom, spacing: 3) {
-            ForEach(1...4, id: \.self) { i in
+        HStack(alignment: .center, spacing: 3) {
+            ForEach(1...ProgramProgression.deloadWeek, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(i == week ? Theme.accent : Color(.tertiarySystemFill))
-                    .frame(width: 5, height: Self.heights[i - 1])
+                    .frame(width: 5, height: 10)
             }
         }
-        .accessibilityLabel("Rotation \(week) of 4")
+        .accessibilityLabel(ProgramEngine.rotationLabel(rotation: week))
+    }
+}
+
+/// What a program slot actually does — `Main · 5/3/1`, `Complementary ·
+/// Secondary volume` — plus the current phase, but ONLY where the phase
+/// vocabulary describes the slot's prescription.
+///
+/// Both strings come from shared core (`ProgramEngine.slotBadge` /
+/// `slotPhaseLabel`), so native and web cannot label the same slot differently
+/// and neither can drift from the engine that produces the sets.
+struct SlotPrescriptionBadge: View {
+    let lift: ProgramLift
+    let rotation: Int
+    var movementGroup: String?
+    var focus: TrainingFocus = .strength
+
+    private var badge: String {
+        ProgramEngine.slotBadge(role: lift.role, prescriptionStyle: lift.prescription,
+                                movementGroup: movementGroup, focus: focus)
+    }
+
+    private var phase: String? {
+        ProgramEngine.slotPhaseLabel(rotation: rotation, role: lift.role,
+                                     prescriptionStyle: lift.prescription,
+                                     movementGroup: movementGroup, focus: focus)
+    }
+
+    var body: some View {
+        // The two facts stay separate elements so the phase can be absent
+        // without leaving a dangling separator, and so VoiceOver reads one
+        // combined label instead of two fragments.
+        HStack(spacing: 4) {
+            Text(badge)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let phase {
+                Text(phase)
+                    .font(.caption2.bold())
+                    .foregroundStyle(Theme.accent)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(phase.map { "\(badge), \($0)" } ?? badge)
     }
 }
 

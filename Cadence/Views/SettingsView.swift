@@ -167,7 +167,7 @@ struct SettingsView: View {
                             VStack(alignment: .leading) {
                                 Text(program.name)
                                 HStack(spacing: 6) {
-                                    WaveGlyph(week: program.currentWeek)
+                                    RotationGlyph(week: program.currentWeek)
                                     Text("\(program.focus.rawValue) · \(program.days.count) days · Cycle \(program.cycleNumber)\(program.isActive ? " · active" : "")")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
@@ -916,7 +916,9 @@ struct ProgramDayEditorView: View {
                 // editor): the segmented Role picker spans the row and eats the
                 // horizontal pan, so swipe-to-delete alone is undiscoverable here.
                 ForEach(day.orderedLifts) { lift in
-                    ProgramLiftRow(lift: lift, step: step, focus: day.program?.focus ?? .strength) {
+                    ProgramLiftRow(lift: lift, step: step, focus: day.program?.focus ?? .strength,
+                                   rotation: day.program?.currentWeek ?? 1,
+                                   cycleNumber: day.program?.cycleNumber ?? 1) {
                         context.delete(lift)
                         PersistenceErrorCenter.shared.save(context, operation: "Removing the program lift")
                     }
@@ -1025,6 +1027,8 @@ private struct ProgramLiftRow: View {
     @Bindable var lift: ProgramLift
     let step: Double
     var focus: TrainingFocus = .strength
+    var rotation: Int = 1
+    var cycleNumber: Int = 1
     let onRemove: () -> Void
 
     private var loadStep: Double {
@@ -1052,6 +1056,13 @@ private struct ProgramLiftRow: View {
                 .buttonStyle(.borderless) // scoped to the icon, not the whole row
                 .accessibilityLabel("Remove \(lift.exerciseName)")
             }
+            // What this slot actually does, resolved through the engine — the
+            // picker below can still say "Automatic".
+            SlotPrescriptionBadge(
+                lift: lift, rotation: rotation,
+                movementGroup: exercises.first { $0.name == lift.exerciseName }?.movementGroup,
+                focus: focus
+            )
             Picker("Role", selection: Binding(get: { lift.role }, set: { lift.role = $0 })) {
                 Text("Main").tag(LiftRole.main)
                 Text("Complementary").tag(LiftRole.complementary)
@@ -1114,6 +1125,11 @@ private struct ProgramLiftRow: View {
             if lift.capacityManaged {
                 Stepper("Maximum sets: \(lift.maximumSets)", value: $lift.maximumSets, in: 1...10)
             }
+            Divider()
+            // What all of the above produces. Every value on this row is an
+            // input; without this, nothing on the screen is an output.
+            ExposurePreviewView(lift: lift, rotation: rotation, cycleNumber: cycleNumber,
+                                roundingLb: step, focus: focus)
         }
     }
 }

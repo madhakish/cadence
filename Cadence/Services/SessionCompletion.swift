@@ -218,8 +218,11 @@ enum SessionCompletion {
            let program = session.programID.flatMap({ id in programs.first { $0.id == id } })
                 ?? programs.first(where: { $0.name == session.programName }),
            let nextDay = program.orderedDays.first(where: { $0.order == program.nextDayIndex }) ?? program.orderedDays.first {
-            let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
-            coachingNotes.append("Next: \(nextDay.name) · R\(program.currentWeek) \(phase.name).")
+            // A day is not in a phase — its slots are, and they can disagree.
+            // Naming one phase for the whole day claims a wave over slots that
+            // may be linear, 5/3/1 or speed work. Position is what a "next up"
+            // note actually knows. Mirrored in web session.js.
+            coachingNotes.append("Next: \(nextDay.name) · \(ProgramEngine.rotationLabel(rotation: program.currentWeek)).")
         }
         return SessionSummary(lines: lines, milestones: allEvents, coachingNotes: coachingNotes)
     }

@@ -51,8 +51,11 @@ struct WorkoutPreviewView: View {
         List {
             Section {
                 HStack(spacing: 8) {
-                    WaveGlyph(week: program.currentWeek)
-                    Text("\(program.name) · Cycle \(program.cycleNumber) · \(phase.name)")
+                    // Position, not phase: this header sits above slots whose
+                    // prescriptions may have nothing to do with each other, so
+                    // the phase name belongs on the slots it describes.
+                    RotationGlyph(week: program.currentWeek)
+                    Text("\(program.name) · Cycle \(program.cycleNumber) · \(ProgramEngine.rotationLabel(rotation: program.currentWeek))")
                         .font(.caption.bold())
                         .foregroundStyle(Theme.accent)
                     Spacer()
@@ -70,7 +73,11 @@ struct WorkoutPreviewView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(lift.exerciseName).font(.subheadline.bold())
-                                    Text(lift.role.rawValue).font(.caption).foregroundStyle(.secondary)
+                                    SlotPrescriptionBadge(
+                                        lift: lift, rotation: program.currentWeek,
+                                        movementGroup: exercises.first { $0.name == lift.exerciseName }?.movementGroup,
+                                        focus: program.focus
+                                    )
                                 }
                             }
                             .buttonStyle(.plain)

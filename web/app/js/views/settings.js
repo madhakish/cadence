@@ -132,7 +132,7 @@ export async function render(host) {
     progList.append(ui.h("div", { class: "row", onClick: () => programEditor(p) },
       ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: p.name }),
         ui.h("span", { class: "sub", style: { display: "flex", alignItems: "center", gap: "6px" } },
-          ui.wave(p.currentWeek),
+          ui.rotation(p.currentWeek),
           ui.h("span", { text: `${p.focus} · ${p.days.length} days · Cycle ${p.cycleNumber}${p.isActive ? " · active" : ""}` }))),
       ui.h("span", { class: "chev" })));
   }
@@ -531,6 +531,10 @@ async function programDayEditor(p, day) {
               ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${l.exerciseName} earlier`, onClick: async () => { if (moveSlot(day.lifts, l, -1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${l.exerciseName} later`, onClick: async () => { if (moveSlot(day.lifts, l, 1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.lifts = day.lifts.filter((x) => x !== l); await Programs.save(p); draw(); } })),
+            // What this slot actually does, resolved through the engine — the
+            // picker below can still say "Automatic".
+            ui.h("div", { class: "row", style: { borderBottom: "0", paddingTop: "0" } },
+              ui.slotBadge(l, p.currentWeek, exerciseByName.get(l.exerciseName)?.movementGroup ?? null, p.focus)),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
               // draw(): the deload row's visibility resolves through role.
               ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); draw(); })),
@@ -585,7 +589,10 @@ async function programDayEditor(p, day) {
             ui.h("div", { class: "row" }, ui.h("span", { text: "One-tap drop (0 = auto)" }),
               ui.stepper(l.dropIncrementLb ?? 0, { min: 0, max: 50, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.dropIncrementLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
-              ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } }))));
+              ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } })),
+            // What all of the above produces. Every other value on this card is
+            // an input; without this, nothing on it is an output.
+            ui.exposurePreview(l, p, exerciseByName.get(l.exerciseName))));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add lift", onClick: () => pickExerciseSheet(async (e) => {
           day.lifts.push({ exerciseName: e.name, role: "complementary", order: day.lifts.length, prescription: "automatic", warmupPolicy: "automatic", baseWeightLb: 45, estimatedMaxLb: 52, stallCount: 0, lastIncrementLb: 0 });

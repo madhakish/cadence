@@ -1096,7 +1096,10 @@ async function completeSessionInner(session) {
   if (heldStandaloneTracks.length) coachingNotes.push(`Held progression for ${heldStandaloneTracks.sort().join(", ")} — actual work was saved, but the original prescription was not fully met.`);
   if (prog?.program) {
     const nextDay = prog.program.days.find((day) => day.order === prog.program.nextDayIndex) || prog.program.days[0];
-    if (nextDay) coachingNotes.push(`Next: ${nextDay.name} · R${prog.program.currentWeek} ${C.PHASES[prog.program.currentWeek]?.name || "Volume"}.`);
+    // A day is not in a phase — its slots are, and they can disagree. Naming one
+    // phase for the whole day claims a wave over slots that may be linear, 5/3/1
+    // or speed work. Mirrored in SessionCompletion.swift.
+    if (nextDay) coachingNotes.push(`Next: ${nextDay.name} · ${C.rotationLabel(prog.program.currentWeek)}.`);
   }
   return { lines, milestones, coachingNotes };
 }

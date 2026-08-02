@@ -134,7 +134,6 @@ export async function render(host) {
   if (program && program.days.length) {
     const day = program.days.find((d) => d.order === program.nextDayIndex) || program.days[0];
     for (const d of program.days) for (const l of d.lifts) ownedNames.add(l.exerciseName);
-    const phase = C.PHASES[program.currentWeek] || C.PHASES[1];
     root.append(ui.h("div", { class: "section-title", text: `${program.name} · Cycle ${program.cycleNumber}` }));
     // Advisory only. The preference used to be write-only — a stepper set it
     // and nothing read it back.
@@ -147,8 +146,11 @@ export async function render(host) {
         onClick: () => workoutPreview(program, day, { exMap, gym, barLb }) },
         ui.h("span", { class: "title", text: day.name }),
         ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
-          ui.wave(program.currentWeek),
-          ui.h("span", { class: "sub accent", text: phase.name }),
+          // Position only. The phase NAME moved onto the slots it actually
+          // describes — this counter is shared by slots whose prescriptions
+          // have nothing to do with each other.
+          ui.rotation(program.currentWeek),
+          ui.h("span", { class: "sub accent mono", text: `R${Math.min(Math.max(program.currentWeek, 1), C.DELOAD_WEEK)}` }),
           ui.h("span", { class: "chev" }))));
     if (shortfall != null) {
       card.append(ui.h("div", { class: "sub", style: { padding: "2px 0 6px" },
@@ -167,7 +169,7 @@ export async function render(host) {
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
         ui.h("div", { class: "lead" },
           ui.h("span", { class: "title", text: l.exerciseName }),
-          ui.h("span", { class: "sub", text: l.role })),
+          ui.slotBadge(l, program.currentWeek, ex?.movementGroup, program.focus)),
         ui.h("div", { style: { textAlign: "right" } },
           ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) }),
           ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
@@ -242,17 +244,18 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
   ui.pushScreen({
     title: day.name,
     build: (body) => {
-      const phase = C.PHASES[program.currentWeek] || C.PHASES[1];
       body.append(ui.h("button", { class: "btn primary wide", text: `▶︎ Start ${day.name}`, onClick: async () => {
         openSession(await createSessionFromProgramDay(program, day));
       } }));
+      // Position, not phase: this header sits above slots whose prescriptions
+      // may have nothing to do with each other.
       body.append(ui.h("div", { class: "sub", style: { margin: "6px 4px" },
-        text: `${program.name} · Cycle ${program.cycleNumber} · ${phase.name}` }));
+        text: `${program.name} · Cycle ${program.cycleNumber} · ${C.rotationLabel(program.currentWeek)}` }));
 
       body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
       const liftCard = ui.h("div", { class: "card" });
       const lifts = orderedSlots(day.lifts, true);
-      if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No wave lifts this day." }));
+      if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No program lifts this day." }));
       for (const l of lifts) {
         const ex = exMap.get(l.exerciseName);
         const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
@@ -263,7 +266,7 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
         liftCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
           ui.h("div", { class: "lead" },
             ui.h("span", { class: "title", text: l.exerciseName }),
-            ui.h("span", { class: "sub", text: l.role })),
+            ui.slotBadge(l, program.currentWeek, ex?.movementGroup, program.focus)),
           ui.h("div", { style: { textAlign: "right" } },
             ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) }),
             ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
