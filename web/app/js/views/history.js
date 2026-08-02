@@ -20,7 +20,7 @@ export async function render(host) {
   root.append(panel);
 
   if (mode === "rotations") renderRotations(panel, sessions, exercises, program, checkins);
-  else if (mode === "log") renderLog(panel, sessions);
+  else if (mode === "log") renderLog(panel, sessions, exercises);
   else if (mode === "charts") renderCharts(panel, sessions, exercises, program);
   else renderMilestones(panel, milestones);
 
@@ -74,8 +74,9 @@ function setLabel(s) { return s.weightLb === 0 ? "BW" : ui.fmtWeight(s.weightLb)
 // even if the library entry is gone).
 const isCardioSet = (s) => s.distanceMiles > 0 || s.flights > 0 || s.durationSeconds > 0;
 
-function renderLog(panel, sessions) {
+function renderLog(panel, sessions, exercises) {
   if (!sessions.length) { panel.append(ui.empty("📋", COPY.emptyHistory)); return; }
+  const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
   // Session volume relative to the biggest session on record — the thin bar
   // under each card makes trends scannable while scrolling.
   const volumeOf = (s) => (s.exercises || []).reduce((a, e) => a + workingVolume(e), 0);
@@ -92,7 +93,7 @@ function renderLog(panel, sessions) {
     const vol = volumeOf(s);
     const bar = ui.h("div", { class: "volbar" }, ui.h("i", { style: { width: `${Math.max(2, (vol / maxVolume) * 100)}%` } }));
     panel.append(ui.h("div", { class: "card list", style: { margin: "6px 0" } },
-      ui.h("div", { class: "row", style: { borderBottom: "0" }, onClick: () => openDetail(s) },
+      ui.h("div", { class: "row", style: { borderBottom: "0" }, onClick: () => openDetail(s, exerciseByName) },
         ui.h("div", { class: "lead" },
           ui.h("span", { class: "sub", text: ui.fmtDate(s.date) }),
           lead ? ui.h("span", {},
@@ -104,16 +105,17 @@ function renderLog(panel, sessions) {
   }
 }
 
-function openDetail(s) {
+function openDetail(s, exerciseByName) {
   ui.pushScreen({
     title: ui.fmtDate(s.date),
     build: (body) => {
       if (s.notes) body.append(ui.h("div", { class: "card" }, ui.h("span", { class: "sub", text: s.notes })));
       for (const e of s.exercises || []) {
+        const phaseLabel = ui.sessionPhaseLabel(e, exerciseByName.get(e.exerciseName));
         const card = ui.h("div", { class: "card" },
           ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
             ui.h("span", { class: "title", text: e.exerciseName }),
-            e.phase ? ui.h("span", { class: "pill accent", text: C.phaseLabel(e.phase) }) : null));
+            phaseLabel ? ui.h("span", { class: "pill accent", text: phaseLabel }) : null));
         for (const x of e.sets || []) {
           card.append(ui.h("div", { class: "setrow" },
             ui.h("span", { class: "wt mono" + (x.isWarmup ? " muted" : ""),

@@ -27,6 +27,7 @@ const settings = await import("../app/js/views/settings.js");
 const session = await import("../app/js/views/session.js");
 const plates = await import("../app/js/views/plates.js");
 const barbell = await import("../app/js/barbell.js");
+const ui = await import("../app/js/ui.js");
 const C = await import("../app/js/core.js");
 const coach = await import("../app/js/coaching-adapter.js");
 const completeAll = async (workout) => {
@@ -320,6 +321,152 @@ for (let i = 0; i < 10; i++) {
 for (const [name, view] of [["home", home], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
   try { await view.render(host()); ok(host().childElementCount > 0, `${name} rendered`); }
   catch (e) { ok(false, `${name} threw: ${e.message}`); }
+}
+
+// ---- style-aware labels and the exposure preview render (#105, #106) -------
+// Today used to print a Volume/Load/Peak name against every slot on the screen,
+// including the ones whose prescription never touches a phase. The label is now
+// per-slot, so a program mixing styles has to be able to say so on one screen.
+{
+  const program = await db.Programs.active();
+  const day = program.days.find((d) => d.order === program.nextDayIndex) || program.days[0];
+  const originals = day.lifts.map((l) => l.prescription);
+  day.lifts[0].prescription = "linearFives";
+  if (day.lifts[1]) day.lifts[1].prescription = "wave";
+  program.currentWeek = 3;
+  await db.Programs.save(program);
+  try {
+    await home.render(host());
+    const text = host().textContent;
+    ok(text.includes("Main · Linear 5s") || text.includes("Complementary · Linear 5s"),
+      "a per-exposure slot is badged with what it actually does");
+    ok(!host().querySelector(".wave"), "the rising wave glyph is gone from the program header");
+    ok(host().querySelector(".rotation"), "a style-neutral rotation indicator took its place");
+
+    // The phase name survives ONLY against the wave slot.
+    const badges = [...host().querySelectorAll(".slot-badge")];
+    ok(badges.length > 0, "every program slot carries a badge");
+    const linearBadge = badges.find((b) => b.textContent.includes("Linear 5s"));
+    ok(linearBadge && !linearBadge.textContent.includes("Peak"),
+      "[INV-PHASE-NAME-IS-PER-SLOT] no phase name is rendered against a slot whose style does not use phases");
+    if (day.lifts[1]) {
+      const waveBadge = badges.find((b) => b.textContent.includes("· Wave"));
+      ok(waveBadge && waveBadge.textContent.includes("R3 Peak"),
+        "a wave slot still says which phase it is in");
+    }
+  } finally {
+    day.lifts.forEach((l, i) => { l.prescription = originals[i]; });
+    program.currentWeek = 1;
+    await db.Programs.save(program);
+  }
+}
+
+// The editor is a wall of inputs; the preview is the only output on it.
+{
+  const program = await db.Programs.active();
+  const day = program.days[0];
+  const lift = day.lifts[0];
+  const exercises = await db.Exercises.all();
+  const exercise = exercises.find((e) => e.name === lift.exerciseName);
+  const prior = { prescription: lift.prescription, base: lift.baseWeightLb };
+  lift.prescription = "wave";
+  lift.baseWeightLb = 190;
+  program.roundingLb = 5;
+  const card = ui.exposurePreview(lift, program, exercise);
+  const text = card.textContent;
+  ok(text.includes("Next 4 exposures"), "the preview names what it is showing");
+  ok(text.includes("R3 Peak"), "a wave slot's exposures carry their phase names");
+  ok(text.includes("225"),
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] a 190 lb base previews its real 225 lb peak triple");
+  ok(text.includes("Base"), "the preview says what the numbers derive from");
+
+  lift.prescription = "fiveThreeOne";
+  const wendlerCard = ui.exposurePreview(lift, program, exercise);
+  const wendler = wendlerCard.textContent;
+  ok(!wendler.includes("Peak") && !wendler.includes("Volume"),
+    "5/3/1 previews exposures, never wave phases");
+  ok(wendler.includes("Session 1"), "phase-independent styles number their exposures");
+  ok(wendler.includes("+ set"), "the graded + set is visible, not hidden behind the top line");
+  ok(wendler.includes("ramp"), "and so are the ramp sets that make up most of the session");
+  ok(wendler.includes("Training max"), "a 5/3/1 base is named as the training max it is");
+  const firstWendlerRow = wendlerCard.querySelector(".row");
+  const mainLoad = firstWendlerRow?.querySelector(".mono")?.textContent;
+  ok(mainLoad && firstWendlerRow.textContent.split(mainLoad).length - 1 === 1,
+    "the 5/3/1 top set is identified without duplicating its load and scheme");
+
+  ok(ui.sessionPhaseLabel({ phase: 3, prescriptionStyle: "linearFives", programRole: "main" }, exercise) === null,
+    "active and history surfaces hide false Peak labels on linear slots");
+  ok(ui.sessionPhaseLabel({ phase: 3, prescriptionStyle: "wave", programRole: "main" }, exercise) === "R3 Peak",
+    "active and history surfaces retain truthful wave phase labels");
+  ok(ui.sessionPhaseLabel({ phase: 3 }, exercise) === C.phaseLabel(3),
+    "legacy sessions without captured style retain their historical label");
+
+  lift.prescription = prior.prescription;
+  lift.baseWeightLb = prior.base;
+  await db.Programs.save(program);
+}
+
+// The preview is the only output on the slot editor, and every control beside
+// it is an input. A stepper that saves without refreshing it leaves the lifter
+// reading the previous walk — which is precisely the 188-vs-190 lb comparison
+// the feature exists to make visible. Drive the real editor DOM, not the
+// component in isolation, because the defect was in the wiring.
+{
+  const program = await db.Programs.active();
+  const day = program.days.find((d) => (d.lifts || []).length) || program.days[0];
+  const lift = day.lifts[0];
+  const priorStyle = lift.prescription;
+  const priorBase = lift.baseWeightLb;
+  lift.prescription = "wave";
+  lift.baseWeightLb = 190;
+  program.roundingLb = 5;
+  await db.Programs.save(program);
+
+  await settings.render(host());
+  const addProgram = [...host().querySelectorAll("button")].find((button) => button.textContent.includes("Add program"));
+  addProgram.click(); await tick();
+  let creator = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  ok(["Start from a template", "Blank program", "Import a program file"]
+    .every((label) => creator.textContent.includes(label)),
+  "Add program exposes three clear creation paths before making a choice");
+  [...creator.querySelectorAll("button")].find((button) => button.textContent.includes("Start from a template")).click();
+  await tick();
+  creator = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  ok(creator.textContent.includes("days ·") && creator.textContent.includes("strength")
+    && creator.textContent.includes("Wave"),
+  "template choices expose days, focus, and dominant prescriptions before selection");
+  [...creator.querySelectorAll("button")].find((button) => button.textContent === "Cancel").click();
+  await tick();
+
+  const progRow = [...host().querySelectorAll(".row")].find((r) => r.textContent.includes("Cycle"));
+  progRow.click(); await tick();
+  const editor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const dayLead = [...editor.querySelectorAll(".lead")].find((el) => el.textContent.includes(day.name));
+  ok(dayLead, "the program editor lists the day");
+  dayLead.click(); await tick();
+
+  const dayEditor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const baseRow = [...dayEditor.querySelectorAll(".row")].find((r) => r.textContent.includes("Rotation-1 base"));
+  ok(baseRow, "the slot editor offers the base stepper");
+  const before = dayEditor.textContent;
+  ok(before.includes("225"), "a 190 lb base previews its 225 lb peak before any edit");
+
+  // One step down: 190 → 185, whose peak rounds to 215 rather than 225.
+  baseRow.querySelector(".stepper button").click(); await tick();
+  const after = dayEditor.textContent;
+  ok(!after.includes("225") || after.includes("215"),
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] stepping the base refreshes the preview instead of leaving a stale walk");
+  ok(after.includes("215"), "and it shows the new base's real peak");
+
+  // Close both overlays and restore.
+  for (const overlay of [...document.querySelectorAll("#overlays .overlay")].reverse()) {
+    overlay.querySelector(".overlay-head button").click(); await tick();
+  }
+  const restored = await db.Programs.active();
+  const restoredLift = (restored.days.find((d) => d.name === day.name) || restored.days[0]).lifts[0];
+  restoredLift.prescription = priorStyle;
+  restoredLift.baseWeightLb = priorBase;
+  await db.Programs.save(restored);
 }
 
 // Today with no active program is the very first screen a new install shows.
@@ -1565,6 +1712,20 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     programTag: { programId: program.uuid, programName: name,
       cycleNumber: 4, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
   });
+  // The window is fixed to Peak even before reduced work is banked.
+  const beforeBoundary = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-03-08T12:59:59.999Z"),
+  );
+  ok(beforeBoundary === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] Recovery remains available inside seven days of Peak");
+
+  // Banking reduced work does not start a fresh seven-day window.
+  const recoveryID = await db.Sessions.save({
+    date: "2042-03-02T12:00:00.000Z", completedAt: "2042-03-02T13:00:00.000Z",
+    notes: "Synthetic recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 4, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
   const inside = await session.reconcileRecoveryBridge(
     program, await db.Sessions.completed(), new Date("2042-03-08T12:59:59.999Z"),
   );
@@ -1573,10 +1734,11 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     program, await db.Sessions.completed(), new Date("2042-03-08T13:00:00.000Z"),
   );
   ok(expired?.reason === "windowElapsed",
-    "[INV-RECOVERY-IS-A-BRIDGE] Recovery expires at seven elapsed days after Peak");
+    "[INV-RECOVERY-IS-A-BRIDGE] the bridge expires seven days after Peak, not seven days after reduced work");
   program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   ok(program.cycleNumber === 5 && program.currentWeek === 1,
     "expired Recovery starts the next cycle rather than prescribing stale reduced work");
+  await db.Sessions.del(recoveryID);
   await db.Sessions.del(peakID);
   await db.Programs.del(program.id);
 }
@@ -1599,6 +1761,14 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     programTag: { programId: program.uuid, programName: name,
       cycleNumber: 2, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
   });
+  // Half-finished: one recovery exposure banked, then eight days of silence.
+  const staleRecovery = new Date(Date.now() - C.RECOVERY_WINDOW_MS - 30_000);
+  const recoveryID = await db.Sessions.save({
+    date: staleRecovery.toISOString(), completedAt: staleRecovery.toISOString(),
+    notes: "Synthetic stale recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
   const createdID = await session.createSessionFromProgramDay(program, program.days[0]);
   const created = await db.Sessions.get(createdID);
   ok(created.programTag.cycleNumber === 3 && created.programTag.week === 1,
@@ -1607,7 +1777,162 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(program.cycleNumber === 3 && program.currentWeek === 1,
     "Start never creates a stale third recovery prescription");
   await db.Sessions.del(createdID);
+  await db.Sessions.del(recoveryID);
   await db.Sessions.del(peakID);
+  await db.Programs.del(program.id);
+}
+
+// Reconciliation must never advance the program out from under a workout in
+// progress: the open session was built against this rotation, so rolling the
+// cycle makes banking it fail the stale-tag guard and land as orphaned history.
+// On this client it also let Start open a SECOND session while the first
+// stayed open.
+{
+  const name = "Fixture Recovery Open Session";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 2, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const stale = new Date(Date.now() - C.RECOVERY_WINDOW_MS - 60_000);
+  const peakID = await db.Sessions.save({
+    date: stale.toISOString(), completedAt: stale.toISOString(),
+    notes: "Synthetic expired Peak", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
+  });
+  const recoveryID = await db.Sessions.save({
+    date: stale.toISOString(), completedAt: stale.toISOString(),
+    notes: "Synthetic stale recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  // Everything is in place for the bridge to expire — except that a workout is
+  // open right now.
+  const openID = await db.Sessions.save({
+    date: new Date().toISOString(), isCompleted: false, notes: "In progress",
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  const blocked = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(blocked === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] reconciliation holds off while a session is open");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === C.DELOAD_WEEK,
+    "the program the open session was built against is left exactly as it was");
+
+  // Scoped to THIS program. A lingering blank session — which Today explicitly
+  // supports keeping around — must not suppress the cap and the expiry window
+  // indefinitely; that is the indefinite-light-work path this mechanism closes.
+  await db.Sessions.del(openID);
+  const blankID = await db.Sessions.save({
+    date: new Date().toISOString(), isCompleted: false, notes: "Unrelated blank session",
+    exercises: [],
+  });
+  const unrelated = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(unrelated?.reason === "windowElapsed",
+    "an open session belonging to no program never blocks reconciliation");
+  await db.Sessions.del(blankID);
+  // Put the program back into recovery for the final leg of this scenario.
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  program.cycleNumber = 2; program.currentWeek = C.DELOAD_WEEK;
+  await db.Programs.save(program);
+  const openID2 = await db.Sessions.save({
+    date: new Date().toISOString(), isCompleted: false, notes: "In progress",
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  ok((await session.reconcileRecoveryBridge(program, await db.Sessions.completed())) === null,
+    "but one belonging to this program still does");
+  await db.Sessions.del(openID2);
+
+  // Bank or discard it and the same reconciliation goes through.
+  const allowed = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(allowed?.reason === "windowElapsed", "and runs on the next render once nothing is open");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  await db.Sessions.del(recoveryID);
+  await db.Sessions.del(peakID);
+  await db.Programs.del(program.id);
+}
+
+// A program that is not recognizably upper/lower keeps its FULL authored pass.
+// Capping that at a constant two dropped day three onward — losing exactly the
+// work the fallback exists to preserve.
+{
+  const name = "Fixture Full Pass Recovery";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Full A", order: 0, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full B", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full C", order: 2, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const ids = [];
+  for (const dayIndex of [0, 1]) {
+    ids.push(await db.Sessions.save({
+      date: new Date().toISOString(), completedAt: new Date().toISOString(),
+      notes: "Synthetic recovery exposure", isCompleted: true,
+      programTag: { programId: program.uuid, programName: name,
+        cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex, planNames: [] }, exercises: [],
+    }));
+  }
+  const held = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(held === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] a three-day authored bridge is not closed by two sessions");
+  ids.push(await db.Sessions.save({
+    date: new Date().toISOString(), completedAt: new Date().toISOString(),
+    notes: "Synthetic recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex: 2, planNames: [] }, exercises: [],
+  }));
+  const closed = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(closed?.reason === "selectedExposures", "and closes once its own length is banked");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1, "then rolls to the next cycle at Volume");
+  for (const id of ids) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
+}
+
+// Banking is a SECOND call site for the completion rule, and it took the count
+// positionally. A three-day authored bridge must not close at bank time after
+// two exposures either — that is the same truncation, reached the other way.
+{
+  const name = "Fixture Full Pass Bank Time";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Full A", order: 0, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full B", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full C", order: 2, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const banked = [];
+  for (const dayIndex of [0, 1]) {
+    const day = program.days.find((d) => d.order === dayIndex);
+    const id = await session.createSessionFromProgramDay(program, day);
+    banked.push(id);
+    await completeAll(await db.Sessions.get(id));
+    program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  }
+  ok(program.cycleNumber === 1 && program.currentWeek === C.DELOAD_WEEK,
+    "[INV-RECOVERY-IS-A-BRIDGE] banking two of a three-day bridge does not close it");
+  const lastDay = program.days.find((d) => d.order === 2);
+  const lastID = await session.createSessionFromProgramDay(program, lastDay);
+  banked.push(lastID);
+  await completeAll(await db.Sessions.get(lastID));
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1,
+    "banking the third closes it and starts the next cycle at Volume");
+  for (const id of banked) await db.Sessions.del(id);
   await db.Programs.del(program.id);
 }
 

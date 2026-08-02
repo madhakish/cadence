@@ -132,28 +132,13 @@ export async function render(host) {
     progList.append(ui.h("div", { class: "row", onClick: () => programEditor(p) },
       ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: p.name }),
         ui.h("span", { class: "sub", style: { display: "flex", alignItems: "center", gap: "6px" } },
-          ui.wave(p.currentWeek),
+          ui.rotation(p.currentWeek),
           ui.h("span", { text: `${p.focus} · ${p.days.length} days · Cycle ${p.cycleNumber}${p.isActive ? " · active" : ""}` }))),
       ui.h("span", { class: "chev" })));
   }
   root.append(progList);
-  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add program", onClick: () => {
-    // Start from a style (templates.js) or from scratch. The first program
-    // created becomes active either way.
-    ui.actionSheet("Start from", [
-      ...PROGRAM_TEMPLATES.map((t) => ({ label: `${t.name} — ${t.tagline}`, onClick: async () => {
-        await createProgramFromTemplate(t);
-        ui.nav.refresh();
-      } })),
-      // A third source alongside the built-in styles and a blank program.
-      // Adds one program and touches nothing else — not the backup importer.
-      { label: "From a file… — a program exported from Cadence", onClick: () => importProgram() },
-      { label: "Blank program", onClick: async () => {
-        await Programs.save({ name: `Program ${programs.length + 1}`, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, roundingLb: 5, isActive: programs.length === 0, days: [] });
-        ui.nav.refresh();
-      } },
-    ]);
-  } }));
+  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add program",
+    onClick: () => openAddProgramSheet(programs) }));
 
   root.append(ui.h("div", { class: "section-title", text: "Progression (standalone lifts)" }));
   const trackList = ui.h("div", { class: "card list" });
@@ -220,6 +205,72 @@ export async function render(host) {
   root.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "10px" }, text: "Reset all data", onClick: () => resetData() }));
 
   host.replaceChildren(root);
+}
+
+function dominantPrescriptions(template) {
+  const counts = new Map();
+  for (const day of template.days || []) for (const lift of day.lifts || []) {
+    const style = C.resolvedPrescriptionStyle(
+      lift.prescription || "automatic", null, lift.role || "main", template.focus || "strength",
+    );
+    counts.set(style, (counts.get(style) || 0) + 1);
+  }
+  if (!counts.size) return "Accessory progression";
+  return [...counts.entries()]
+    .sort(([aStyle, aCount], [bStyle, bCount]) => bCount - aCount || aStyle.localeCompare(bStyle))
+    .slice(0, 2)
+    .map(([style]) => C.prescriptionShortName(style))
+    .join(" + ");
+}
+
+function openTemplateSheet() {
+  ui.sheet({
+    title: "Start from a template",
+    build: (content, api) => {
+      for (const template of PROGRAM_TEMPLATES) {
+        content.append(ui.h("button", {
+          class: "card wide", style: { marginTop: "8px", textAlign: "left" },
+          onClick: async () => {
+            await createProgramFromTemplate(template);
+            api.close();
+            ui.nav.refresh();
+          },
+        },
+        ui.h("span", { style: { display: "flex", flexDirection: "column", gap: "4px" } },
+          ui.h("span", { class: "title", text: template.name }),
+          ui.h("span", { class: "sub", text: template.tagline }),
+          ui.h("span", { class: "sub", text: `${template.days.length} days · ${template.focus} · ${dominantPrescriptions(template)}` }))));
+      }
+      content.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "12px" },
+        text: "Cancel", onClick: () => api.close() }));
+    },
+  });
+}
+
+function openAddProgramSheet(programs) {
+  ui.sheet({
+    title: "Add program",
+    build: (content, api) => {
+      content.append(
+        ui.h("button", { class: "btn wide primary", style: { marginTop: "8px" },
+          text: "Start from a template", onClick: () => { api.close(); openTemplateSheet(); } }),
+        ui.h("button", { class: "btn wide", style: { marginTop: "8px" }, text: "Blank program", onClick: async () => {
+          let number = programs.length + 1;
+          const names = new Set(programs.map((program) => program.name));
+          while (names.has(`Program ${number}`)) number += 1;
+          await Programs.save({ name: `Program ${number}`, focus: "strength", cycleNumber: 1,
+            currentWeek: 1, nextDayIndex: 0, roundingLb: 5,
+            isActive: programs.length === 0, days: [] });
+          api.close();
+          ui.nav.refresh();
+        } }),
+        ui.h("button", { class: "btn wide", style: { marginTop: "8px" },
+          text: "Import a program file", onClick: () => { api.close(); importProgram(); } }),
+        ui.h("button", { class: "btn wide ghost", style: { marginTop: "12px" },
+          text: "Cancel", onClick: () => api.close() }),
+      );
+    },
+  });
 }
 
 function gymEditor(g) {
@@ -447,13 +498,15 @@ async function programEditor(p) {
             ui.stepper(p.maximumAddedSetsPerRotation ?? 6, { min: 0, max: 10, step: 1, format: (v) => `${v} sets`, onChange: async (v) => { p.maximumAddedSetsPerRotation = v; await Programs.save(p); } })),
           ui.h("div", { class: "sub", style: { margin: "8px" }, text: "Uses completed output by full program rotation. Nothing changes until you apply a proposal." })));
         body.append(ui.h("div", { class: "section-title", text: "Where you are" }));
-        const PHASE = ["", "Volume", "Load", "Peak", "Recovery"];
         const sortedDays = [...p.days].sort((a, b) => a.order - b.order);
         const pos = ui.h("div", { class: "card" });
         pos.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Cycle" }),
           ui.stepper(p.cycleNumber, { min: 1, max: 99, step: 1, onChange: async (v) => { p.cycleNumber = v; await Programs.save(p); } })));
         pos.append(ui.h("div", { class: "row", style: { borderBottom: sortedDays.length ? undefined : "0" } }, ui.h("span", { text: "Rotation" }),
-          ui.stepper(p.currentWeek, { min: 1, max: 4, step: 1, format: (v) => `${v} of 4 · ${PHASE[v]}`, onChange: async (v) => { await positionAtRotation(p, v); await Programs.save(p); } })));
+          // Position, not phase — this pointer is shared by every slot in the
+          // program, and most styles never run a Volume/Load/Peak wave. The
+          // per-slot badges say what each one does. Mirrors SettingsView.
+          ui.stepper(p.currentWeek, { min: 1, max: C.DELOAD_WEEK, step: 1, format: (v) => `${v} of ${C.DELOAD_WEEK}`, onChange: async (v) => { await positionAtRotation(p, v); await Programs.save(p); } })));
         if (sortedDays.length) {
           const daySel = ui.h("select", {}, ...sortedDays.map((d) => ui.h("option", { value: String(d.order), text: d.name, selected: d.order === p.nextDayIndex })));
           daySel.addEventListener("change", async () => { p.nextDayIndex = Number(daySel.value); await Programs.save(p); });
@@ -525,12 +578,56 @@ async function programDayEditor(p, day) {
         body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
         const openDetail = async (name) => { const ex = await Exercises.byName(name); if (ex) exerciseDetail(ex); };
         for (const l of orderedSlots(day.lifts)) {
+          const orderedDays = [...(p.days || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          const recoveryOrders = C.recoveryDayOrders(orderedDays.map((candidate) => {
+            const mainName = orderedSlots(candidate.lifts).find((lift) => lift.role === "main")?.exerciseName;
+            return { order: candidate.order ?? 0, mainMovementGroup: exerciseByName.get(mainName)?.movementGroup };
+          }));
+          const schedule = {
+            targetDayOrder: day.order ?? 0,
+            nextDayOrder: p.nextDayIndex ?? 0,
+            allDayOrders: orderedDays.map((candidate) => candidate.order ?? 0),
+            recoveryDayOrders: recoveryOrders,
+            // Production synchronizes only twins still at the same base. A
+            // manually diverged slot is an independent progression and must not
+            // inflate this preview.
+            synchronizedDayOrders: orderedDays.filter((candidate) =>
+              (candidate.lifts || []).some((slot) => slot.exerciseName === l.exerciseName
+                && (slot.prescription || "automatic") === (l.prescription || "automatic")
+                && Math.abs((slot.baseWeightLb ?? 0) - (l.baseWeightLb ?? 0)) < 0.001))
+              .map((candidate) => candidate.order ?? 0),
+          };
+          // The preview is the only OUTPUT on this card, so a stepper that
+          // saves without refreshing it leaves the lifter reading the previous
+          // walk — which defeats the point of showing the 188-vs-190 lb
+          // rounding difference at all. A full draw() would be worse: these
+          // steppers are pressed repeatedly, and rebuilding the whole editor
+          // under a held control fights the hand doing the pressing. So the
+          // preview node is swapped in place instead.
+          const exercise = exerciseByName.get(l.exerciseName);
+          let preview = ui.exposurePreview(l, p, exercise, 4, schedule);
+          const refresh = () => {
+            // Rebuild the schedule too: editing this base can intentionally
+            // split or rejoin a synchronized progression.
+            schedule.synchronizedDayOrders = orderedDays.filter((candidate) =>
+              (candidate.lifts || []).some((slot) => slot.exerciseName === l.exerciseName
+                && (slot.prescription || "automatic") === (l.prescription || "automatic")
+                && Math.abs((slot.baseWeightLb ?? 0) - (l.baseWeightLb ?? 0)) < 0.001))
+              .map((candidate) => candidate.order ?? 0);
+            const next = ui.exposurePreview(l, p, exercise, 4, schedule);
+            preview.replaceWith(next);
+            preview = next;
+          };
           body.append(ui.h("div", { class: "card" },
             ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
               ui.h("span", { class: "title", text: l.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(l.exerciseName) }),
               ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${l.exerciseName} earlier`, onClick: async () => { if (moveSlot(day.lifts, l, -1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${l.exerciseName} later`, onClick: async () => { if (moveSlot(day.lifts, l, 1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.lifts = day.lifts.filter((x) => x !== l); await Programs.save(p); draw(); } })),
+            // What this slot actually does, resolved through the engine — the
+            // picker below can still say "Automatic".
+            ui.h("div", { class: "row", style: { borderBottom: "0", paddingTop: "0" } },
+              ui.slotBadge(l, p.currentWeek, exerciseByName.get(l.exerciseName)?.movementGroup ?? null, p.focus)),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Role" }),
               // draw(): the deload row's visibility resolves through role.
               ui.seg([{ value: "main", label: "Main" }, { value: "complementary", label: "Comp." }], l.role, async (v) => { l.role = v; await Programs.save(p); draw(); })),
@@ -554,38 +651,41 @@ async function programDayEditor(p, day) {
               return select;
             })()),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Rotation-1 base" }),
-              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); } })),
+              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); refresh(); } })),
             l.prescription === "offsetWave" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Load / peak offsets" }),
               ui.h("div", { class: "btn-row" },
-                ui.stepper(l.loadOffsetLb ?? 0, { min: 0, max: 100, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.loadOffsetLb = v; await Programs.save(p); } }),
-                ui.stepper(l.peakOffsetLb ?? 0, { min: 0, max: 150, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakOffsetLb = v; await Programs.save(p); } }))) : null,
+                ui.stepper(l.loadOffsetLb ?? 0, { min: 0, max: 100, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.loadOffsetLb = v; await Programs.save(p); refresh(); } }),
+                ui.stepper(l.peakOffsetLb ?? 0, { min: 0, max: 150, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakOffsetLb = v; await Programs.save(p); refresh(); } }))) : null,
             // Every wave-shaped style deloads at this slot's own intensity.
             // Gated on the RESOLVED style so the knob never appears where the
             // engine would ignore it (automatic on a complementary slot
             // resolves secondary, whose 75% is fixed). Mirrors SettingsView.
             ["wave", "offsetWave"].includes(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Recovery intensity" }),
-                ui.stepper(l.deloadMultiplier ?? 0.775, { min: 0.5, max: 0.9, step: 0.025, format: (v) => `${C.trim(v * 100, 1)}%`, onChange: async (v) => { l.deloadMultiplier = Math.round(v * 1000) / 1000; await Programs.save(p); } })) : null,
+                ui.stepper(l.deloadMultiplier ?? 0.775, { min: 0.5, max: 0.9, step: 0.025, format: (v) => `${C.trim(v * 100, 1)}%`, onChange: async (v) => { l.deloadMultiplier = Math.round(v * 1000) / 1000; await Programs.save(p); refresh(); } })) : null,
             ["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(l.prescription)
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Working sets" }),
-                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 10, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); } })) : null,
+                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 10, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } })) : null,
             l.prescription === "doubleProgression" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Sets / rep window" }),
               ui.h("div", { class: "btn-row" },
-                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); } }),
-                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; await Programs.save(p); } }),
-                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; await Programs.save(p); } }))) : null,
+                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } }),
+                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; await Programs.save(p); refresh(); } }),
+                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; await Programs.save(p); refresh(); } }))) : null,
             ui.h("div", { class: "row" }, ui.h("span", { text: "Peak top single" }),
               ui.toggle(!!l.peakSingleEnabled, async (v) => { l.peakSingleEnabled = v; await Programs.save(p); draw(); })),
             l.peakSingleEnabled ? ui.h("div", { class: "row" }, ui.h("span", { text: "Last clean / step" }),
               ui.h("div", { class: "btn-row" },
-                ui.stepper(l.lastPeakSingleLb ?? 0, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.lastPeakSingleLb = v; await Programs.save(p); } }),
-                ui.stepper(l.peakSingleIncrementLb ?? 5, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakSingleIncrementLb = v; await Programs.save(p); } }))) : null,
+                ui.stepper(l.lastPeakSingleLb ?? 0, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.lastPeakSingleLb = v; await Programs.save(p); refresh(); } }),
+                ui.stepper(l.peakSingleIncrementLb ?? 5, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakSingleIncrementLb = v; await Programs.save(p); refresh(); } }))) : null,
             ui.h("div", { class: "row" }, ui.h("span", { text: "Phase primer single" }),
-              ui.toggle(l.phasePrimerEnabled !== false, async (v) => { l.phasePrimerEnabled = v; await Programs.save(p); })),
+              ui.toggle(l.phasePrimerEnabled !== false, async (v) => { l.phasePrimerEnabled = v; await Programs.save(p); refresh(); })),
             ui.h("div", { class: "row" }, ui.h("span", { text: "One-tap drop (0 = auto)" }),
               ui.stepper(l.dropIncrementLb ?? 0, { min: 0, max: 50, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.dropIncrementLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
-              ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); } }))));
+              ui.stepper(l.estimatedMaxLb, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.estimatedMaxLb = v; await Programs.save(p); refresh(); } })),
+            // What all of the above produces. Every other value on this card is
+            // an input; without this, nothing on it is an output.
+            preview));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add lift", onClick: () => pickExerciseSheet(async (e) => {
           day.lifts.push({ exerciseName: e.name, role: "complementary", order: day.lifts.length, prescription: "automatic", warmupPolicy: "automatic", baseWeightLb: 45, estimatedMaxLb: 52, stallCount: 0, lastIncrementLb: 0 });

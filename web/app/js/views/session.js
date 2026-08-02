@@ -352,10 +352,11 @@ export async function openSession(id) {
 
   function exerciseCard(se, body) {
     const ex = exMap.get(se.exerciseName);
+    const phaseLabel = ui.sessionPhaseLabel(se, ex);
     const head = ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
       ui.h("div", { class: "lead" },
         ui.h("span", { class: "title", text: se.exerciseName }),
-        se.phase ? ui.h("span", { class: "sub accent", text: C.phaseLabel(se.phase) }) : null),
+        phaseLabel ? ui.h("span", { class: "sub accent", text: phaseLabel }) : null),
       ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
         ui.h("div", { style: { width: "100px" } },
           ui.seg([{ value: "lb", label: "lb" }, { value: "kg", label: "kg" }], exUnit(se), (u) => { unitByEx[se.exerciseName] = u; renderBody(body); })),
@@ -1096,7 +1097,10 @@ async function completeSessionInner(session) {
   if (heldStandaloneTracks.length) coachingNotes.push(`Held progression for ${heldStandaloneTracks.sort().join(", ")} — actual work was saved, but the original prescription was not fully met.`);
   if (prog?.program) {
     const nextDay = prog.program.days.find((day) => day.order === prog.program.nextDayIndex) || prog.program.days[0];
-    if (nextDay) coachingNotes.push(`Next: ${nextDay.name} · R${prog.program.currentWeek} ${C.PHASES[prog.program.currentWeek]?.name || "Volume"}.`);
+    // A day is not in a phase — its slots are, and they can disagree. Naming one
+    // phase for the whole day claims a wave over slots that may be linear, 5/3/1
+    // or speed work. Mirrored in SessionCompletion.swift.
+    if (nextDay) coachingNotes.push(`Next: ${nextDay.name} · ${C.rotationLabel(prog.program.currentWeek)}.`);
   }
   return { lines, milestones, coachingNotes };
 }
@@ -1296,15 +1300,19 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
   const hardPhase = cycleSessions.filter((candidate) =>
     candidate.programTag.week > 0 && candidate.programTag.week < C.DELOAD_WEEK);
   const peak = hardPhase.filter((candidate) => candidate.programTag.week === C.GRADED_WEEK);
+  // The window is anchored to the last hard phase. A reduced exposure does not
+  // start a fresh seven-day window and silently stretch recovery past the
+  // program's bound.
   const anchors = peak.length ? peak : hardPhase;
   const anchorMs = anchors.length
     ? Math.max(...anchors.map((candidate) => Date.parse(candidate.completedAt || candidate.date)))
     : null;
   return {
     reason: C.recoveryBridgeCompletionReason(
-      recoverySessions.length, selectedComplete, anchorMs, nowMs,
+      recoverySessions.length, recoveryDayOrders.length, selectedComplete, anchorMs, nowMs,
     ),
     recoverySessions,
+    recoveryDayOrders,
   };
 }
 
@@ -1313,16 +1321,36 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
 // ordinary progression remains driven by completed cycles.
 export async function reconcileRecoveryBridge(program, completed = null, now = new Date()) {
   if (!program || program.currentWeek !== C.DELOAD_WEEK) return null;
+  // Never advance the program out from under a workout in progress. The open
+  // session was built against this rotation; rolling the cycle while it is on
+  // screen makes banking it fail the stale-tag guard and land as orphaned
+  // history, and on this client it also let createSessionFromProgramDay open a
+  // SECOND session while the first stayed open. Reconciliation is not urgent —
+  // it runs on the next render once the session is banked or discarded.
+  //
+  // Scoped to THIS PROGRAM'S sessions, deliberately. Blocking on any open
+  // session at all would let one lingering blank session — which Today
+  // explicitly supports keeping around — suppress the session cap and the
+  // expiry window indefinitely, and Start would go on minting stale recovery
+  // prescriptions. That is the indefinite-light-work path this whole mechanism
+  // exists to close. Mirrors SessionCompletion.reconcileRecoveryBridge.
+  const stableID = program.uuid || program.id;
+  const openForThisProgram = (await Sessions.openAll()).some((candidate) => candidate.programTag
+    && (candidate.programTag.programId === stableID
+      || (candidate.programTag.programId == null
+        && candidate.programTag.programName === program.name)));
+  if (openForThisProgram) return null;
   const [history, exercises] = await Promise.all([
     completed || Sessions.completed(), Exercises.all(),
   ]);
   const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
-  const { reason } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
+  const { reason, recoverySessions } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
   if (!reason) return null;
 
   const nextCycle = program.cycleNumber + 1;
+  const banked = recoverySessions.length;
   const message = reason === "sessionLimit"
-    ? `Recovery complete — two recovery sessions banked. Cycle ${nextCycle} starts at Volume.`
+    ? `Recovery complete — ${banked} recovery session${banked === 1 ? "" : "s"} banked. Cycle ${nextCycle} starts at Volume.`
     : reason === "windowElapsed"
       ? `Recovery complete — the seven-day recovery window elapsed. Cycle ${nextCycle} starts at Volume.`
       : `Recovery complete — planned recovery exposures banked. Cycle ${nextCycle} starts at Volume.`;
@@ -1515,7 +1543,7 @@ async function advanceProgram(session, milestones) {
     const completedOrders = completedRecovery.map((candidate) => candidate.programTag.dayIndex);
     advance = C.recoveryScheduleAdvance(recoveryDayOrders, completedOrders);
     recoveryCompletionReason = C.recoveryBridgeCompletionReason(
-      completedRecovery.length, advance.isLastDay, null,
+      completedRecovery.length, recoveryDayOrders.length, advance.isLastDay, null,
       Date.parse(session.completedAt || session.date),
     );
   } else {

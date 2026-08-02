@@ -423,16 +423,33 @@ eq(C.recoveryScheduleAdvance([], [0]).isLastDay, false, "an empty bridge fails c
 // program. Any two banked recovery sessions are also a hard cap, even when a
 // legacy/manual pointer sent them to non-selected day orders.
 const peakMs = Date.UTC(2042, 0, 1, 12);
-eq(C.recoveryBridgeCompletionReason(1, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS - 1), null,
+eq(C.recoveryBridgeCompletionReason(1, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS - 1), null,
   "one recovery session inside the window leaves the bridge open");
-eq(C.recoveryBridgeCompletionReason(2, false, peakMs, peakMs + 60_000), "sessionLimit",
+eq(C.recoveryBridgeCompletionReason(2, 2, false, peakMs, peakMs + 60_000), "sessionLimit",
   "two recovery sessions close the bridge regardless of day order");
-eq(C.recoveryBridgeCompletionReason(0, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), "windowElapsed",
-  "recovery expires at exactly seven elapsed days");
-eq(C.recoveryBridgeCompletionReason(1, true, null, peakMs), "selectedExposures",
+eq(C.recoveryBridgeCompletionReason(1, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "a half-finished bridge expires at exactly seven elapsed days");
+eq(C.recoveryBridgeCompletionReason(1, 2, true, null, peakMs), "selectedExposures",
   "a short selected bridge may close normally");
-eq(C.recoveryBridgeCompletionReason(1, false, null, peakMs + 2 * C.RECOVERY_WINDOW_MS), null,
+eq(C.recoveryBridgeCompletionReason(1, 2, false, null, peakMs + 2 * C.RECOVERY_WINDOW_MS), null,
   "missing history never invents an expiry anchor");
+
+// Recovery is a fixed window after Peak, not a timer that starts only when the
+// first reduced workout is banked. Zero workouts is a valid deload choice.
+eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "an unbanked bridge expires at the same seven-day boundary");
+eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + 40 * C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "a stale hard-phase anchor cannot leave Recovery open indefinitely");
+
+// The cap is the bridge's OWN length. A program that is not recognizably
+// upper/lower keeps its full authored pass, and a constant two silently dropped
+// day three onward — losing exactly the work that fallback exists to preserve.
+eq(C.recoveryBridgeCompletionReason(2, 4, false, peakMs, peakMs + 60_000), null,
+  "a four-day authored bridge is not closed by two sessions");
+eq(C.recoveryBridgeCompletionReason(4, 4, false, peakMs, peakMs + 60_000), "sessionLimit",
+  "it closes once its own length is banked");
+eq(C.recoveryBridgeCompletionReason(2, 1, false, peakMs, peakMs + 60_000), "sessionLimit",
+  "and a degenerate one-day bridge still keeps the two-session floor");
 
 // The top scheme must describe work that was actually performed. Reporting the
 // group minimum across every top-weight set invented schemes nobody did — and
@@ -1541,6 +1558,158 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(held.state.stallCount, 1, "no stall accrues for work that was never prescribed");
   eq(held.state.lastIncrementLb, 0, "the increment record stops advertising a bump that did not happen");
   ok(held.note.includes("rotation 2"), "the note says which rotation was cut short");
+}
+
+// ---- Style-aware labels (#105) ---------------------------------------------
+// The rotation counter is shared by every slot; the phase NAMES are a claim
+// about one slot's prescription. Rendering "Peak" against a linear slot asserts
+// something about the engine that is false.
+{
+  ok(C.usesCyclePhases("wave") && C.usesCyclePhases("secondary") && C.usesCyclePhases("hypertrophy"),
+    "the wave family and its volume cousins really do run V/L/P/D");
+  ok(C.usesCyclePhases("technique"), "technique is phase-shaped too — it comes out of the shared table");
+  for (const style of ["linearFives", "texasVolume", "texasLight", "texasIntensity",
+    "doubleProgression", "fiveThreeOne", "maxEffort", "dynamicEffort"]) {
+    ok(!C.usesCyclePhases(style), `[INV-PHASE-NAME-IS-PER-SLOT] ${style} does not use the phase vocabulary`);
+    eq(C.slotPhaseLabel(3, "main", style), null,
+      `[INV-PHASE-NAME-IS-PER-SLOT] ${style} gets no phase label at rotation 3`);
+  }
+
+  eq(C.slotPhaseLabel(3, "main", "wave"), "R3 Peak", "a wave slot still says which phase it is in");
+  eq(C.slotPhaseLabel(4, "complementary", "automatic"), "R4 Recovery",
+    "automatic resolves to secondary on a complementary slot, which is phase-shaped");
+  eq(C.slotPhaseLabel(9, "main", "wave"), null, "an out-of-range rotation labels nothing");
+
+  eq(C.slotBadge("main", "fiveThreeOne"), "Main · 5/3/1", "5/3/1 badge");
+  eq(C.slotBadge("main", "linearFives"), "Main · Linear 5s", "linear badge");
+  eq(C.slotBadge("complementary", "automatic"), "Complementary · Secondary volume",
+    "automatic names the style the engine will actually run, not the placeholder");
+  eq(C.slotBadge("main", "automatic", "olympic"), "Main · Technique", "olympic auto-resolves to technique");
+  eq(C.slotBadge("main", "automatic"), "Main · Wave", "a main strength slot resolves to the wave");
+
+  eq(C.rotationLabel(2), "Rotation 2 of 4",
+    "[INV-PHASE-NAME-IS-PER-SLOT] the program-level indicator is style-neutral");
+  eq(C.rotationLabel(0), "Rotation 1 of 4", "rotation clamps low");
+  eq(C.rotationLabel(7), "Rotation 4 of 4", "rotation clamps high");
+  eq(C.rotationLabel(undefined), "Rotation 1 of 4", "a missing pointer never reads as NaN");
+}
+
+// ---- Exposure preview (#106) -----------------------------------------------
+{
+  // A wave slot walks V/L/P/R off one base, then rolls with the clean-peak bump.
+  const wave = C.exposurePreview({ baseWeightLb: 190, estimatedMaxLb: 250, prescriptionStyle: "wave",
+    movementGroup: "squat", programRoundingLb: 5, exerciseType: "barbell" });
+  eq(wave.length, 4, "four exposures by default");
+  eq(wave.map((e) => e.rotation).join(","), "1,2,3,4", "the wave walks the rotation in order");
+  eq(wave.map((e) => e.prescription.mainWork.weightLb).join(","), "190,210,225,145",
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] the preview reports the engine's own rounded loads");
+  eq(wave[2].phaseName, "R3 Peak", "a wave exposure carries its phase name");
+  ok(wave.every((e) => e.baseWeightLb === 190), "the base holds for a whole cycle, recovery included");
+  ok((wave[2].advanceNote || "").includes("Clean peak"), "the peak exposure explains next cycle's bump");
+
+  // The rounding boundary the issue calls out: two pounds of base apart, and
+  // the peak triple lands a whole plate step apart. This is exactly the class
+  // of defect the preview exists to make visible without a parameter sweep.
+  const at188 = C.exposurePreview({ baseWeightLb: 188, prescriptionStyle: "wave", programRoundingLb: 5 });
+  eq(at188[2].prescription.mainWork.weightLb, 220, "a 188 lb base peaks at 220");
+  eq(wave[2].prescription.mainWork.weightLb, 225, "a 190 lb base peaks at 225 — one plate step for two pounds");
+
+  // A per-exposure slot previews EXPOSURES: the base moves every session and no
+  // phase name is ever attached, but the recovery rotation still holds.
+  const linear = C.exposurePreview({ count: 5, baseWeightLb: 205, prescriptionStyle: "linearFives",
+    movementGroup: "squat", programRoundingLb: 5, configuration: { workingSets: 3 } });
+  eq(linear.map((e) => e.prescription.mainWork.weightLb).join(","), "205,215,225,190,235",
+    "linear fives add 10 per exposure, cut to 80% for the recovery rotation, then resume from the held base");
+  eq(linear.map((e) => e.baseWeightLb).join(","), "205,215,225,235,235",
+    "the base advances per exposure and holds across recovery");
+  ok(linear.every((e) => e.phaseName === null), "no phase name is rendered against a linear slot");
+  ok(linear[3].isRecovery, "the recovery rotation is still flagged — it changes the prescription");
+
+  // 5/3/1 previews its own shape: ramps plus a graded "+" set, never V/L/P.
+  const wendler = C.exposurePreview({ count: 5, baseWeightLb: 200, prescriptionStyle: "fiveThreeOne",
+    movementGroup: "press", programRoundingLb: 5 });
+  eq(wendler.map((e) => e.prescription.mainWork.reps).join(","), "5,3,1,5,5", "5+/3+/1+/deload then round again");
+  ok(wendler.every((e) => e.phaseName === null), "5/3/1 is never labelled Volume/Load/Peak");
+  eq(wendler[0].prescription.blocks.filter((b) => b.kind === "ramp").length, 2, "the ramp sets are previewed");
+  eq(wendler[0].prescription.blocks.at(-1).kind, "amrap", "weeks 1–3 top out on the + set");
+  eq(wendler[3].prescription.blocks.at(-1).kind, "work", "the deload has no + set");
+  eq(wendler[4].baseWeightLb, 205, "a clean cycle adds +5 to an upper-body training max at the rollover");
+  eq(wendler[3].baseWeightLb, 200,
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] and not before — recovery still runs off the old training max");
+
+  // Double progression climbs the rep window before it touches the load.
+  const dp = C.exposurePreview({ count: 4, baseWeightLb: 60, prescriptionStyle: "doubleProgression",
+    exerciseType: "dumbbell", programRoundingLb: 10,
+    configuration: { workingSets: 3, minimumReps: 6, maximumReps: 8, currentReps: 7 } });
+  eq(dp.map((e) => `${e.prescription.mainWork.weightLb}x${e.prescription.mainWork.reps}`).join(","),
+    "60x7,60x8,65x6,50x5", "reps climb to the cap, then load steps and reps drop back");
+  ok(dp.every((e) => e.phaseName === null), "double progression is a rep window, not a phase");
+
+  // A freshly added slot carries no rep-window keys at all. An explicit
+  // `undefined` wins an object spread, so defaulting by spread would have
+  // reached the engine as NaN and previewed a window of nothing.
+  const bare = C.exposurePreview({ count: 2, baseWeightLb: 100, prescriptionStyle: "doubleProgression",
+    programRoundingLb: 5, configuration: { workingSets: undefined, minimumReps: undefined,
+      maximumReps: undefined, currentReps: undefined } });
+  ok(bare.every((e) => Number.isFinite(e.prescription.mainWork.weightLb)
+    && Number.isFinite(e.prescription.mainWork.reps) && e.prescription.mainWork.reps > 0),
+    "a slot with no rep-window fields still previews real numbers");
+  eq(bare[0].prescription.mainWork.reps, 5, "and falls back to the documented 5-rep default");
+
+  // Day B is next, so its synchronized squat advances before Day A appears.
+  // Day A was already banked in R2; its actual next exposure is R3.
+  const twinned = C.exposurePreview({ count: 3, baseWeightLb: 205, rotation: 2,
+    prescriptionStyle: "linearFives", movementGroup: "squat", programRoundingLb: 5,
+    configuration: { workingSets: 3 }, schedule: {
+      targetDayOrder: 0, nextDayOrder: 1, allDayOrders: [0, 1],
+      recoveryDayOrders: [0], synchronizedDayOrders: [0, 1],
+    } });
+  eq(twinned.map((e) => e.rotation).join(","), "3,4,1",
+    "the day pointer determines the slot's next actual rotation");
+  eq(twinned.map((e) => e.baseWeightLb).join(","), "215,235,235",
+    "the earlier twin moves the first load and Recovery holds it");
+
+  const omittedRecovery = C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4,
+    prescriptionStyle: "wave", schedule: {
+      targetDayOrder: 1, nextDayOrder: 0, allDayOrders: [0, 1],
+      recoveryDayOrders: [0], synchronizedDayOrders: [1],
+    } });
+  eq(omittedRecovery.map((e) => e.rotation).join(","), "1,2",
+    "a day omitted from the bridge has no fictional Recovery exposure");
+
+  // A peak banked this cycle already carries an earned base. Recovery still
+  // runs off the OLD one — the pending grade lands at the rollover, not before.
+  const banked = C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4, prescriptionStyle: "wave",
+    programRoundingLb: 5,
+    pendingState: { baseWeightLb: 210, estimatedMaxLb: 260, stallCount: 0, role: "main", lastIncrementLb: 10 } });
+  eq(banked[0].baseWeightLb, 200, "recovery previews off the base the session will actually use");
+  eq(banked[1].baseWeightLb, 210, "and the next cycle picks up the grade already banked at the peak");
+  eq(C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4, prescriptionStyle: "wave", programRoundingLb: 5 })[1]
+    .baseWeightLb, 200, "with nothing banked the base simply holds");
+
+  // The rollover mirrors rollOverRecovery's THREE branches, not just "apply the
+  // pending". A per-exposure slot already advanced while training, so a stale
+  // grade left by a later style edit is deleted rather than applied.
+  const staleOnLinear = C.exposurePreview({ count: 5, baseWeightLb: 205, prescriptionStyle: "linearFives",
+    movementGroup: "squat", programRoundingLb: 5, configuration: { workingSets: 3 },
+    pendingState: { baseWeightLb: 150, estimatedMaxLb: 200, stallCount: 0, role: "main", lastIncrementLb: 0 } });
+  eq(staleOnLinear.map((e) => e.prescription.mainWork.weightLb).join(","), "205,215,225,190,235",
+    "a linear slot never drops to a phantom graded base at the rollover");
+
+  // And a wave slot that reaches the rollover with no banked peak accrues a
+  // stall toward the rebuild — the preview must show the drop that is coming.
+  const skippedPeak = C.exposurePreview({ count: 3, baseWeightLb: 200, rotation: 4, stallCount: 1,
+    prescriptionStyle: "wave", programRoundingLb: 5 });
+  eq(skippedPeak.map((e) => e.baseWeightLb).join(","), "200,180,180",
+    "a second peak-less cycle rebuilds at 90%, and the preview says so");
+  eq(C.exposurePreview({ count: 3, baseWeightLb: 200, rotation: 4, stallCount: 0,
+    prescriptionStyle: "wave", programRoundingLb: 5 }).map((e) => e.baseWeightLb).join(","), "200,200,200",
+    "the first peak-less cycle only accrues the stall");
+
+  // Contract edges.
+  eq(C.exposurePreview({ baseWeightLb: 100, count: 0 }).length, 0, "a zero count previews nothing");
+  eq(C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 3, prescriptionStyle: "wave" })
+    .map((e) => e.rotation).join(","), "3,4", "the preview starts from the slot's current rotation");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

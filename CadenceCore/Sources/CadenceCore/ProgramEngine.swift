@@ -126,6 +126,48 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
         advancesPerExposure || self == .fiveThreeOne || self == .maxEffort || self == .dynamicEffort
     }
 
+    /// Whether the Volume / Load / Peak / Recovery vocabulary actually
+    /// describes what this style prescribes.
+    ///
+    /// The rotation counter advances for every slot — the program is one
+    /// calendar — but the *names* on it are a claim about the prescription, and
+    /// for most styles that claim is false. `linearFives` and the Texas days
+    /// move per exposure and never grade at a peak; `doubleProgression` is a
+    /// rep window at a held load; `fiveThreeOne`, `maxEffort` and
+    /// `dynamicEffort` grade at the cycle boundary but with shapes of their own
+    /// (5+/3+/1+/recovery is not "Volume/Load/Peak"). Rendering a phase name
+    /// against any of them asserts something about the engine that is not true.
+    ///
+    /// This is deliberately derived from `buildsOwnSessionShape` rather than
+    /// listed again: those are exactly the styles whose plan comes out of their
+    /// own branch instead of the shared phase-shaped table, so one predicate
+    /// cannot drift from the other.
+    public var usesCyclePhases: Bool { !buildsOwnSessionShape }
+
+    /// Badge-length name for a slot — what the slot actually does, short enough
+    /// to sit beside the lift name. `name` is the picker's full label.
+    ///
+    /// `automatic` never reaches a badge: resolve it with `resolvedStyle`
+    /// first, which is what `ProgramEngine.slotBadge` does.
+    public var shortName: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .wave: return "Wave"
+        case .offsetWave: return "Wave — offsets"
+        case .secondary: return "Secondary volume"
+        case .hypertrophy: return "Hypertrophy"
+        case .technique: return "Technique"
+        case .doubleProgression: return "Double progression"
+        case .linearFives: return "Linear 5s"
+        case .texasVolume: return "Texas volume"
+        case .texasLight: return "Texas light"
+        case .texasIntensity: return "Texas intensity"
+        case .fiveThreeOne: return "5/3/1"
+        case .maxEffort: return "Max effort"
+        case .dynamicEffort: return "Speed work"
+        }
+    }
+
     /// Starting base weight as a fraction of a known estimated 1RM, used when
     /// a program is created from recorded history. 0 = keep the template's
     /// hand-set base. Values follow each methodology's published guidance:
@@ -417,6 +459,55 @@ public enum ProgramEngine {
         return .wave
     }
 
+    /// Where the program is in its rotation, said without claiming the
+    /// rotation is a weight wave. The program-level indicator is shared by
+    /// slots that have nothing to do with each other's prescriptions, so it can
+    /// only honestly report position.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `rotationLabel`.
+    public static func rotationLabel(rotation: Int) -> String {
+        let clamped = Swift.min(Swift.max(rotation, 1), ProgramProgression.deloadWeek)
+        return "Rotation \(clamped) of \(ProgramProgression.deloadWeek)"
+    }
+
+    /// What a slot does, for the badge beside its name: `Main · 5/3/1`,
+    /// `Complementary · Secondary volume`, `Main · Linear 5s`.
+    ///
+    /// Resolves `automatic` first, so the badge names the style the engine will
+    /// actually run rather than the placeholder the lifter left in the picker.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `slotBadge`.
+    public static func slotBadge(
+        role: LiftRole,
+        prescriptionStyle: PrescriptionStyle,
+        movementGroup: String? = nil,
+        focus: TrainingFocus = .strength
+    ) -> String {
+        let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
+        let roleLabel = role == .main ? "Main" : "Complementary"
+        return "\(roleLabel) · \(style.shortName)"
+    }
+
+    /// The phase name for a slot, or `nil` where the phase vocabulary does not
+    /// describe what the slot prescribes.
+    ///
+    /// This is the whole of the fix: the phase label is a per-slot fact, not a
+    /// program-wide one, and a program mixing a wave main lift with a novice
+    /// linear complementary lift has to be able to say so on one screen.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `slotPhaseLabel`.
+    public static func slotPhaseLabel(
+        rotation: Int,
+        role: LiftRole = .main,
+        prescriptionStyle: PrescriptionStyle,
+        movementGroup: String? = nil,
+        focus: TrainingFocus = .strength
+    ) -> String? {
+        let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
+        guard style.usesCyclePhases, let phase = CyclePhase(rawValue: rotation) else { return nil }
+        return "R\(phase.rawValue) \(phase.name)"
+    }
+
     /// Phase-shaped plan for a specific training stimulus. The phase still
     /// advances with the unified four-rotation program, but every slot no
     /// longer has to inherit the main-lift 5×5 → 5×3 prescription.
@@ -642,6 +733,297 @@ public enum ProgramEngine {
             ))
         }
         return SessionPrescription(mainWork: work, blocks: blocks)
+    }
+
+    /// The authored schedule surrounding a slot preview. The current pointer is
+    /// required because a slot already banked in this rotation belongs to the
+    /// NEXT rotation, while a synchronized twin before it may move the shared
+    /// base before the slot appears. Recovery orders are separate because the
+    /// shortened bridge deliberately omits authored days.
+    public struct ExposurePreviewSchedule: Hashable, Sendable {
+        public let targetDayOrder: Int
+        public let nextDayOrder: Int
+        public let allDayOrders: [Int]
+        public let recoveryDayOrders: [Int]
+        public let synchronizedDayOrders: [Int]
+
+        public init(targetDayOrder: Int, nextDayOrder: Int, allDayOrders: [Int],
+                    recoveryDayOrders: [Int], synchronizedDayOrders: [Int]) {
+            self.targetDayOrder = targetDayOrder
+            self.nextDayOrder = nextDayOrder
+            self.allDayOrders = allDayOrders
+            self.recoveryDayOrders = recoveryDayOrders
+            self.synchronizedDayOrders = synchronizedDayOrders
+        }
+    }
+
+    /// One exposure in a slot's forward preview — what the engine will
+    /// prescribe, and what the numbers derive from.
+    public struct ExposurePreviewEntry: Hashable, Sendable {
+        /// 1 = the next exposure of this slot.
+        public let exposureNumber: Int
+        public let cycleNumber: Int
+        /// Position in the program's rotation, 1…4. Always real: the rotation
+        /// counter advances for every slot, including the ones whose
+        /// prescription ignores its names.
+        public let rotation: Int
+        /// "R3 Peak", or nil where the phase vocabulary does not describe this
+        /// slot. Same predicate the badges use, so a preview can never label a
+        /// per-exposure slot with a wave phase.
+        public let phaseName: String?
+        public let isRecovery: Bool
+        /// The base — or, for `fiveThreeOne`, the TRAINING MAX — these numbers
+        /// are computed from.
+        public let baseWeightLb: Double
+        public let prescription: SessionPrescription
+        /// What the engine does to the slot after this exposure is banked as
+        /// prescribed: the increment, the reset, or the hold.
+        public let advanceNote: String?
+
+        public init(exposureNumber: Int, cycleNumber: Int, rotation: Int, phaseName: String?,
+                    isRecovery: Bool, baseWeightLb: Double, prescription: SessionPrescription,
+                    advanceNote: String?) {
+            self.exposureNumber = exposureNumber
+            self.cycleNumber = cycleNumber
+            self.rotation = rotation
+            self.phaseName = phaseName
+            self.isRecovery = isRecovery
+            self.baseWeightLb = baseWeightLb
+            self.prescription = prescription
+            self.advanceNote = advanceNote
+        }
+    }
+
+    /// The next `count` exposures a slot will actually produce.
+    ///
+    /// The point of the deterministic engine is that its output can be audited,
+    /// and a wall of steppers is not an audit. A lifter setting a 190 lb base
+    /// cannot see that it yields a 225 lb peak triple while 188 yields 220 —
+    /// the difference between a +10 and a +5 jump, decided entirely by which
+    /// side of a rounding boundary the multiplication lands on. This turns that
+    /// into something a human reads at a glance.
+    ///
+    /// It runs the SHIPPED engine forward rather than describing it: every
+    /// prescription comes from `sessionPrescription`, and every step between
+    /// exposures comes from the same `advanceAccessory` / `advanceLinearLift` /
+    /// `advanceProgramLift` calls the banking layer makes. A parallel
+    /// implementation would be able to disagree with the app, which would make
+    /// the preview worse than nothing.
+    ///
+    /// The forward walk assumes each exposure is banked exactly as prescribed —
+    /// a clean success. That is the honest reading of "what will this produce":
+    /// misses are the lifter's to discover, and a preview that guessed at them
+    /// would be fiction. Reset and stall state still show, because the slot's
+    /// CURRENT `stallCount` is carried in and the engine's own notes come back
+    /// on each entry.
+    ///
+    /// Costs no persisted state — it takes a copy of the slot's values and
+    /// returns a value type.
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `exposurePreview`.
+    public static func exposurePreview(
+        count: Int = 4,
+        baseWeightLb: Double,
+        estimatedMaxLb: Double = 0,
+        stallCount: Int = 0,
+        cycleNumber: Int = 1,
+        rotation: Int = 1,
+        programRoundingLb: Double = defaultRoundingLb,
+        exerciseType: String? = nil,
+        movementGroup: String? = nil,
+        role: LiftRole = .main,
+        focus: TrainingFocus = .strength,
+        prescriptionStyle: PrescriptionStyle = .automatic,
+        configuration: LiftPrescriptionConfiguration = .init(),
+        pendingState: ProgramLiftState? = nil,
+        schedule: ExposurePreviewSchedule? = nil
+    ) -> [ExposurePreviewEntry] {
+        guard count > 0, baseWeightLb >= 0 else { return [] }
+        let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
+        let step = loadStep(programRoundingLb: programRoundingLb, exerciseType: exerciseType)
+        var state = ProgramLiftState(
+            baseWeightLb: baseWeightLb, estimatedMaxLb: estimatedMaxLb,
+            stallCount: stallCount, role: role, lastIncrementLb: 0
+        )
+        // Normalize the rep window BEFORE the first prescription, not inside
+        // the double-progression branch that advances it. A slot whose window
+        // was never configured carries zeroes, and `plan` computes
+        // `min(max(currentReps, minimumReps), maximumReps)` — which is 0 reps,
+        // a prescription of nothing. The app layer clamps these on the way in
+        // (`ProgramLift.prescriptionConfiguration`), so only a direct core
+        // caller can reach here unclamped; doing it here as well is what keeps
+        // this function honest on its own and identical to core.js.
+        var config = configuration
+        config.workingSets = Swift.max(1, config.workingSets)
+        config.minimumReps = Swift.max(1, config.minimumReps)
+        config.maximumReps = Swift.max(config.minimumReps, config.maximumReps)
+        config.currentReps = Swift.max(config.minimumReps, config.currentReps)
+        var cycle = Swift.max(1, cycleNumber)
+        var phase = CyclePhase(rawValue: rotation) ?? .volume
+        // Graded styles stash the new base at the Peak and apply it at the
+        // rollover, so the recovery rotation still runs off the old base.
+        // Mirrors `pendingBaseWeightLb` in the banking layer exactly.
+        //
+        // Seeded from the slot's ALREADY-BANKED grade when there is one. Open
+        // the editor during recovery after a peak has been banked and the slot
+        // is carrying an earned new base that the next cycle will use; starting
+        // from nil previewed that cycle off the old base and quietly understated
+        // every number the lifter was about to see.
+        var pending: ProgramLiftState? = pendingState
+        var entries: [ExposurePreviewEntry] = []
+
+        // A direct core caller may omit schedule context. Treat that as a
+        // one-day program so the pure prescription walk remains useful, while
+        // the app surfaces always supply the real authored schedule.
+        let previewSchedule = schedule ?? ExposurePreviewSchedule(
+            targetDayOrder: 0, nextDayOrder: 0,
+            allDayOrders: [0], recoveryDayOrders: [0], synchronizedDayOrders: [0]
+        )
+        let allOrders = Array(Set(previewSchedule.allDayOrders)).sorted()
+        let recoveryOrders = Array(Set(previewSchedule.recoveryDayOrders)).sorted()
+        guard allOrders.contains(previewSchedule.targetDayOrder) else { return [] }
+        let synchronizedOrders = Set(previewSchedule.synchronizedDayOrders + [previewSchedule.targetDayOrder])
+
+        func activeOrders(for phase: CyclePhase) -> [Int] {
+            if phase == .deload, !recoveryOrders.isEmpty { return recoveryOrders }
+            return allOrders
+        }
+
+        var orders = activeOrders(for: phase)
+        var orderIndex = orders.firstIndex(of: previewSchedule.nextDayOrder) ?? 0
+        // Four requested exposures need at most four complete authored passes,
+        // plus the partial pass before the first target and one omitted recovery
+        // pass. The guard fails closed for malformed/empty schedules.
+        let maxSteps = count * Swift.max(1, allOrders.count + recoveryOrders.count) + allOrders.count + 8
+        var steps = 0
+
+        while entries.count < count, !orders.isEmpty, steps < maxSteps {
+            steps += 1
+            let dayOrder = orders[orderIndex]
+            let isTarget = dayOrder == previewSchedule.targetDayOrder
+            let isSynchronizedDay = synchronizedOrders.contains(dayOrder)
+            let cycleState = CycleState(
+                cycleNumber: cycle, baseWeightLb: state.baseWeightLb,
+                nextPhase: phase, incrementLb: state.lastIncrementLb
+            )
+            let prescription = sessionPrescription(
+                for: cycleState, programRoundingLb: programRoundingLb, exerciseType: exerciseType,
+                movementGroup: movementGroup, role: role, focus: focus,
+                prescriptionStyle: style, configuration: config, estimatedMaxLb: state.estimatedMaxLb
+            )
+            let work = prescription.mainWork
+            var note: String?
+
+            if isTarget, style == .doubleProgression {
+                // Rep window first, load second — and never on the recovery
+                // rotation, which is non-progressive by contract.
+                if phase != .deload {
+                    // `config` was normalized on the way in, so the window is
+                    // already coherent here.
+                    let prior = AccessoryState(
+                        sets: config.workingSets, minReps: config.minimumReps,
+                        maxReps: config.maximumReps, currentReps: config.currentReps,
+                        weightLb: state.baseWeightLb, incrementLb: step, stallCount: state.stallCount
+                    )
+                    let next = ProgramProgression.advanceAccessory(
+                        prior,
+                        perf: AccessoryPerformance(
+                            completedSets: work.sets, minRepsAchieved: work.reps,
+                            anyStoppedEarly: false, performedAtPlannedLoad: true,
+                            grindyOrWobbleSets: 0, bodyFlagSets: 0
+                        )
+                    )
+                    note = next.weightLb > prior.weightLb
+                        ? "Top of the window earned — add \(Weight.trim(step)) lb and drop back to \(next.currentReps) reps."
+                        : "Earned the reps — \(next.currentReps) next time at the same load."
+                    state.lastIncrementLb = next.weightLb - prior.weightLb
+                    state.baseWeightLb = next.weightLb
+                    state.stallCount = next.stallCount
+                    config.currentReps = next.currentReps
+                }
+            } else if style.advancesPerExposure, style != .doubleProgression, isSynchronizedDay {
+                if phase != .deload {
+                    let result = ProgramProgression.advanceLinearLift(
+                        state, perf: cleanPerformance(for: work),
+                        rule: ProgramProgression.linearRule(for: style, movementGroup: movementGroup),
+                        roundingLb: step
+                    )
+                    state = result.state
+                    if isTarget { note = result.note }
+                } else if isTarget {
+                    note = "Recovery rotation — the base holds, then the exposure cadence resumes."
+                }
+            } else if isTarget, phase.rawValue == ProgramProgression.gradedWeek {
+                let result = ProgramProgression.advanceProgramLift(
+                    state, perf: cleanPerformance(for: work), focus: focus, style: style,
+                    movementGroup: movementGroup, roundingLb: step
+                )
+                // The grade is banked now; the base lands at the rollover.
+                pending = result.state
+                note = result.note
+            }
+
+            if isTarget {
+                entries.append(ExposurePreviewEntry(
+                    exposureNumber: entries.count + 1,
+                    cycleNumber: cycle,
+                    rotation: phase.rawValue,
+                    phaseName: slotPhaseLabel(
+                        rotation: phase.rawValue, role: role, prescriptionStyle: style,
+                        movementGroup: movementGroup, focus: focus
+                    ),
+                    isRecovery: phase == .deload,
+                    baseWeightLb: cycleState.baseWeightLb,
+                    prescription: prescription,
+                    advanceNote: note
+                ))
+            }
+
+            orderIndex += 1
+            if orderIndex >= orders.count {
+                if phase == .deload {
+                    cycle += 1
+                    // Mirror `rollOverRecovery` exactly, all three branches.
+                    // Per-exposure slots discard stale pending grades; graded
+                    // slots apply a banked grade; a peak-less wave accrues the
+                    // same stall/rebuild the real rollover will apply.
+                    if style.advancesPerExposure {
+                        pending = nil
+                    } else if let banked = pending {
+                        state = banked
+                        pending = nil
+                    } else if style.usesCyclePhases {
+                        state.stallCount += 1
+                        state.lastIncrementLb = 0
+                        if state.stallCount >= ProgramProgression.stallLimit {
+                            state.baseWeightLb = Weight.round(
+                                state.baseWeightLb * ProgramProgression.deloadRebuildFraction, to: step
+                            )
+                            state.stallCount = 0
+                        }
+                    }
+                    phase = .volume
+                } else {
+                    phase = phase.next
+                }
+                orders = activeOrders(for: phase)
+                orderIndex = 0
+            }
+        }
+        return entries
+    }
+
+    /// A clean exposure of a plan: every prescribed set made at the prescribed
+    /// load, no quality flags, no autoreg drop. This is what the forward walk
+    /// assumes at each step — misses are the lifter's to discover, and a
+    /// preview that guessed at them would be fiction.
+    private static func cleanPerformance(for plan: SessionPlan) -> CycleLiftPerformance {
+        CycleLiftPerformance(
+            prescribedSets: plan.sets, prescribedReps: plan.reps,
+            completedSets: plan.sets, anyStoppedEarly: false, anyDroppedLoad: false,
+            anyBelowPlanLoad: false, grindyOrWobbleSets: 0,
+            topSetWeightLb: plan.weightLb, topSetReps: plan.reps
+        )
     }
 
     public static func primerWeight(

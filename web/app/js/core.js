@@ -74,6 +74,34 @@ export const advancesPerExposure = (style) =>
 export const buildsOwnSessionShape = (style) =>
   advancesPerExposure(style) || ["fiveThreeOne", "maxEffort", "dynamicEffort"].includes(style);
 
+// Whether the Volume / Load / Peak / Recovery vocabulary actually describes
+// what this style prescribes.
+//
+// The rotation counter advances for every slot — the program is one calendar —
+// but the NAMES on it are a claim about the prescription, and for most styles
+// that claim is false. linearFives and the Texas days move per exposure and
+// never grade at a peak; doubleProgression is a rep window at a held load;
+// fiveThreeOne, maxEffort and dynamicEffort grade at the cycle boundary but
+// with shapes of their own (5+/3+/1+/recovery is not "Volume/Load/Peak").
+//
+// Derived from buildsOwnSessionShape rather than listed again: those are
+// exactly the styles whose plan comes out of their own branch instead of the
+// shared phase-shaped table, so one predicate cannot drift from the other.
+// Mirrored 1:1 in CadenceCore PrescriptionStyle.usesCyclePhases.
+export const usesCyclePhases = (style) => !buildsOwnSessionShape(style);
+
+// Badge-length name for a slot — what the slot actually does, short enough to
+// sit beside the lift name. "automatic" never reaches a badge: slotBadge
+// resolves it first. Mirrored 1:1 in CadenceCore PrescriptionStyle.shortName.
+export const PRESCRIPTION_SHORT_NAMES = {
+  automatic: "Automatic", wave: "Wave", offsetWave: "Wave — offsets",
+  secondary: "Secondary volume", hypertrophy: "Hypertrophy", technique: "Technique",
+  doubleProgression: "Double progression", linearFives: "Linear 5s",
+  texasVolume: "Texas volume", texasLight: "Texas light", texasIntensity: "Texas intensity",
+  fiveThreeOne: "5/3/1", maxEffort: "Max effort", dynamicEffort: "Speed work",
+};
+export const prescriptionShortName = (style) => PRESCRIPTION_SHORT_NAMES[style] || style;
+
 // Starting base weight as a fraction of a known e1RM for history-driven
 // program creation; 0 keeps the template's hand-set base.
 export const defaultStartFraction = (style) => ({
@@ -529,6 +557,39 @@ export const phaseLabel = (p) => {
 // import. Keep the historical phase-4 wire string byte-stable while the live
 // app presents the redesigned recovery bridge.
 export const portablePhaseLabel = (p) => p === 4 ? "R4 Deload 3×5" : phaseLabel(p);
+
+// Where the program is in its rotation, said without claiming the rotation is a
+// weight wave. The program-level indicator is shared by slots that have nothing
+// to do with each other's prescriptions, so it can only honestly report
+// position. Mirrored 1:1 in CadenceCore ProgramEngine.rotationLabel.
+// A missing or non-numeric pointer reads as rotation 1 rather than
+// "Rotation NaN of 4" — the Swift mirror takes an Int and cannot express that
+// case, so the coercion lives here to keep the two saying the same thing.
+export const rotationLabel = (rotation) =>
+  `Rotation ${Number.isFinite(rotation) ? Math.min(Math.max(rotation, 1), DELOAD_WEEK) : 1} of ${DELOAD_WEEK}`;
+
+// What a slot does, for the badge beside its name: "Main · 5/3/1",
+// "Complementary · Secondary volume", "Main · Linear 5s". Resolves "automatic"
+// first, so the badge names the style the engine will actually run rather than
+// the placeholder left in the picker.
+// Mirrored 1:1 in CadenceCore ProgramEngine.slotBadge.
+export function slotBadge(role = "main", prescriptionStyle = "automatic",
+  movementGroup = null, focus = "strength") {
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  return `${role === "main" ? "Main" : "Complementary"} · ${prescriptionShortName(style)}`;
+}
+
+// The phase name for a slot, or null where the phase vocabulary does not
+// describe what the slot prescribes. This is the whole of the fix: the phase
+// label is a per-slot fact, not a program-wide one, and a program mixing a wave
+// main lift with a novice linear complementary lift has to be able to say so on
+// one screen. Mirrored 1:1 in CadenceCore ProgramEngine.slotPhaseLabel.
+export function slotPhaseLabel(rotation, role = "main", prescriptionStyle = "automatic",
+  movementGroup = null, focus = "strength") {
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  if (!usesCyclePhases(style) || !PHASES[rotation]) return null;
+  return `R${rotation} ${PHASES[rotation].name}`;
+}
 
 export const DEFAULT_ROUNDING_LB = 5.0;
 
@@ -1148,12 +1209,23 @@ export function recoveryScheduleAdvance(dayOrders, completedDayOrders) {
 // Mirrored 1:1 in CadenceCore ProgramProgression.
 export function recoveryBridgeCompletionReason(
   completedRecoverySessions,
+  selectedExposureCount,
   selectedExposuresComplete,
   lastHardPhaseCompletionMs,
   nowMs,
 ) {
   if (selectedExposuresComplete) return "selectedExposures";
-  if (completedRecoverySessions >= RECOVERY_SESSION_LIMIT) return "sessionLimit";
+  // The cap is the BRIDGE'S OWN LENGTH, not a constant two. A program that is
+  // not recognizably upper/lower keeps its full authored pass — that fallback
+  // is deliberate, and capping it at two silently dropped day three onward for
+  // full-body, Olympic and conditioning programs, which is the work-losing
+  // behaviour the fallback exists to prevent.
+  const cap = Math.max(RECOVERY_SESSION_LIMIT, selectedExposureCount || 0);
+  if (completedRecoverySessions >= cap) return "sessionLimit";
+  // Recovery is a bounded bridge from the last hard phase, not a new calendar
+  // window that starts when reduced work is banked. Otherwise a first recovery
+  // exposure on day six silently extends the bridge to day thirteen, and an
+  // untouched recovery pointer can prescribe reduced work forever.
   if (Number.isFinite(lastHardPhaseCompletionMs)
       && nowMs - lastHardPhaseCompletionMs >= RECOVERY_WINDOW_MS) return "windowElapsed";
   return null;
@@ -1492,6 +1564,191 @@ export function advanceAccessory(state, perf) {
     next.stallCount = 0;
   }
   return next;
+}
+
+// The next `count` exposures a slot will actually produce.
+//
+// The point of the deterministic engine is that its output can be audited, and
+// a wall of steppers is not an audit. A lifter setting a 190 lb base cannot see
+// that it yields a 225 lb peak triple while 188 yields 220 — the difference
+// between a +10 and a +5 jump, decided entirely by which side of a rounding
+// boundary the multiplication lands on. This turns that into something a human
+// reads at a glance.
+//
+// It runs the SHIPPED engine forward rather than describing it: every
+// prescription comes from sessionPrescription, and every step between exposures
+// comes from the same advanceAccessory / advanceLinearLift / advanceProgramLift
+// calls the banking layer makes. A parallel implementation would be able to
+// disagree with the app, which would make the preview worse than nothing.
+//
+// The walk assumes each exposure is banked exactly as prescribed — a clean
+// success. That is the honest reading of "what will this produce": misses are
+// the lifter's to discover, and a preview that guessed at them would be
+// fiction. Reset and stall state still show, because the slot's CURRENT
+// stallCount is carried in and the engine's own notes come back on each entry.
+//
+// Costs no persisted state. Mirrored 1:1 in CadenceCore
+// ProgramEngine.exposurePreview.
+export function exposurePreview({
+  count = 4, baseWeightLb, estimatedMaxLb = 0, stallCount = 0, cycleNumber = 1, rotation = 1,
+  programRoundingLb = DEFAULT_ROUNDING_LB, exerciseType = null, movementGroup = null,
+  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {},
+  pendingState = null, schedule = null,
+} = {}) {
+  if (!(count > 0) || !(baseWeightLb >= 0)) return [];
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  const step = programLoadStep(programRoundingLb, exerciseType);
+  // Coerce rather than spread-with-defaults: a slot record written before the
+  // rep-window fields existed (and every freshly added lift) carries them as
+  // `undefined`, and an explicit undefined WINS an object spread. That would
+  // reach advanceAccessory as NaN and preview a rep window of nothing.
+  // Same clamps the native side applies in ProgramLift.prescriptionConfiguration,
+  // so both platforms read a malformed slot identically.
+  const config = { ...configuration };
+  const num = (value, fallback) => (Number.isFinite(value) ? value : fallback);
+  config.workingSets = Math.max(1, num(config.workingSets, 3));
+  config.minimumReps = Math.max(1, num(config.minimumReps, 5));
+  config.maximumReps = Math.max(config.minimumReps, num(config.maximumReps, 8));
+  config.currentReps = Math.max(config.minimumReps, num(config.currentReps, config.minimumReps));
+  let state = { baseWeightLb, estimatedMaxLb, stallCount, role, lastIncrementLb: 0 };
+  let cycle = Math.max(1, cycleNumber);
+  let phase = PHASES[rotation] ? rotation : 1;
+  // Graded styles stash the new base at the Peak and apply it at the rollover,
+  // so the recovery rotation still runs off the old base. Mirrors
+  // pendingBaseWeightLb in the banking layer exactly.
+  //
+  // Seeded from the slot's ALREADY-BANKED grade when there is one. Open the
+  // editor during recovery after a peak has been banked and the slot is
+  // carrying an earned new base that the next cycle will use; starting from
+  // null previewed that cycle off the old base and quietly understated every
+  // number the lifter was about to see.
+  let pending = pendingState;
+  const entries = [];
+  // A clean exposure of a plan: every prescribed set made at the prescribed
+  // load, no quality flags, no autoreg drop.
+  const cleanPerformance = (plan) => ({
+    prescribedSets: plan.sets, prescribedReps: plan.reps, completedSets: plan.sets,
+    anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false,
+    grindyOrWobbleSets: 0, topSetWeightLb: plan.weightLb, topSetReps: plan.reps,
+  });
+
+  // A direct core caller may omit schedule context. Treat that as a one-day
+  // program; app surfaces supply the real day pointer and recovery selection.
+  const previewSchedule = schedule || {
+    targetDayOrder: 0, nextDayOrder: 0, allDayOrders: [0],
+    recoveryDayOrders: [0], synchronizedDayOrders: [0],
+  };
+  const uniqueSorted = (values) => [...new Set(values || [])].sort((a, b) => a - b);
+  const allOrders = uniqueSorted(previewSchedule.allDayOrders);
+  const recoveryOrders = uniqueSorted(previewSchedule.recoveryDayOrders);
+  if (!allOrders.includes(previewSchedule.targetDayOrder)) return [];
+  const synchronizedOrders = new Set([
+    ...(previewSchedule.synchronizedDayOrders || []), previewSchedule.targetDayOrder,
+  ]);
+  const activeOrders = () => (phase === DELOAD_WEEK && recoveryOrders.length ? recoveryOrders : allOrders);
+  let orders = activeOrders();
+  let orderIndex = Math.max(0, orders.indexOf(previewSchedule.nextDayOrder));
+  const maxSteps = count * Math.max(1, allOrders.length + recoveryOrders.length) + allOrders.length + 8;
+  let steps = 0;
+
+  while (entries.length < count && orders.length && steps < maxSteps) {
+    steps += 1;
+    const dayOrder = orders[orderIndex];
+    const isTarget = dayOrder === previewSchedule.targetDayOrder;
+    const isSynchronizedDay = synchronizedOrders.has(dayOrder);
+    const cycleState = {
+      cycleNumber: cycle, baseWeightLb: state.baseWeightLb,
+      nextPhase: phase, incrementLb: state.lastIncrementLb,
+    };
+    const prescription = sessionPrescription(
+      cycleState, programRoundingLb, exerciseType, movementGroup,
+      role, focus, style, config, state.estimatedMaxLb,
+    );
+    const work = prescription.mainWork;
+    let note = null;
+
+    if (isTarget && style === "doubleProgression") {
+      // Rep window first, load second — and never on the recovery rotation,
+      // which is non-progressive by contract.
+      if (phase !== DELOAD_WEEK) {
+        const prior = {
+          sets: Math.max(1, config.workingSets),
+          minReps: Math.max(1, config.minimumReps),
+          maxReps: Math.max(config.minimumReps, config.maximumReps),
+          currentReps: Math.max(config.minimumReps, config.currentReps),
+          weightLb: state.baseWeightLb, incrementLb: step, stallCount: state.stallCount,
+        };
+        const next = advanceAccessory(prior, {
+          completedSets: work.sets, minRepsAchieved: work.reps, anyStoppedEarly: false,
+          performedAtPlannedLoad: true, grindyOrWobbleSets: 0, bodyFlagSets: 0,
+        });
+        note = next.weightLb > prior.weightLb
+          ? `Top of the window earned — add ${trim(step)} lb and drop back to ${next.currentReps} reps.`
+          : `Earned the reps — ${next.currentReps} next time at the same load.`;
+        state.lastIncrementLb = next.weightLb - prior.weightLb;
+        state.baseWeightLb = next.weightLb;
+        state.stallCount = next.stallCount;
+        config.currentReps = next.currentReps;
+      }
+    } else if (advancesPerExposure(style) && style !== "doubleProgression" && isSynchronizedDay) {
+      if (phase !== DELOAD_WEEK) {
+        const result = advanceLinearLift(
+          state, cleanPerformance(work), linearRule(style, movementGroup), step,
+        );
+        state = result.state;
+        if (isTarget) note = result.note;
+      } else if (isTarget) {
+        note = "Recovery rotation — the base holds, then the exposure cadence resumes.";
+      }
+    } else if (isTarget && phase === GRADED_WEEK) {
+      const result = advanceProgramLift(state, cleanPerformance(work), focus, style, movementGroup, step);
+      // The grade is banked now; the base lands at the rollover.
+      pending = result.state;
+      note = result.note;
+    }
+
+    if (isTarget) {
+      entries.push({
+        exposureNumber: entries.length + 1,
+        cycleNumber: cycle,
+        rotation: phase,
+        phaseName: slotPhaseLabel(phase, role, style, movementGroup, focus),
+        isRecovery: phase === DELOAD_WEEK,
+        baseWeightLb: cycleState.baseWeightLb,
+        prescription,
+        advanceNote: note,
+      });
+    }
+
+    orderIndex += 1;
+    if (orderIndex >= orders.length) {
+      if (phase === DELOAD_WEEK) {
+        cycle += 1;
+        // Mirror rollOverRecovery exactly, all three branches. Per-exposure
+        // slots discard stale pending grades; graded slots apply a banked
+        // grade; a peak-less wave accrues the real stall/rebuild.
+        if (advancesPerExposure(style)) {
+          pending = null;
+        } else if (pending) {
+          state = pending;
+          pending = null;
+        } else if (usesCyclePhases(style)) {
+          state.stallCount = (state.stallCount || 0) + 1;
+          state.lastIncrementLb = 0;
+          if (state.stallCount >= STALL_LIMIT) {
+            state.baseWeightLb = roundTo(state.baseWeightLb * DELOAD_REBUILD_FRACTION, step);
+            state.stallCount = 0;
+          }
+        }
+        phase = 1;
+      } else {
+        phase += 1;
+      }
+      orders = activeOrders();
+      orderIndex = 0;
+    }
+  }
+  return entries;
 }
 
 // ---- Rest defaults ---------------------------------------------------------

@@ -546,11 +546,12 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertFalse(empty.isLastDay, "an empty bridge fails closed")
     }
 
-    func testRecoveryBridgeHasTwoSessionCapAndSevenDayExpiry() {
+    func testRecoveryBridgeCapIsItsOwnLengthAndExpiryNeedsBankedWork() {
         let peak = Date(timeIntervalSince1970: 1_000_000)
 
         XCTAssertNil(P.recoveryBridgeCompletionReason(
             completedRecoverySessions: 1,
+            selectedExposureCount: 2,
             selectedExposuresComplete: false,
             lastHardPhaseCompletion: peak,
             asOf: peak.addingTimeInterval(P.recoveryWindow - 1)
@@ -558,20 +559,23 @@ final class ProgramProgressionTests: XCTestCase {
 
         XCTAssertEqual(P.recoveryBridgeCompletionReason(
             completedRecoverySessions: 2,
+            selectedExposureCount: 2,
             selectedExposuresComplete: false,
             lastHardPhaseCompletion: peak,
             asOf: peak.addingTimeInterval(60)
         ), .sessionLimit, "two recovery sessions are a hard cap regardless of day order")
 
         XCTAssertEqual(P.recoveryBridgeCompletionReason(
-            completedRecoverySessions: 0,
+            completedRecoverySessions: 1,
+            selectedExposureCount: 2,
             selectedExposuresComplete: false,
             lastHardPhaseCompletion: peak,
             asOf: peak.addingTimeInterval(P.recoveryWindow)
-        ), .windowElapsed, "the bridge expires at exactly seven elapsed days")
+        ), .windowElapsed, "a half-finished bridge expires at exactly seven elapsed days")
 
         XCTAssertEqual(P.recoveryBridgeCompletionReason(
             completedRecoverySessions: 1,
+            selectedExposureCount: 2,
             selectedExposuresComplete: true,
             lastHardPhaseCompletion: nil,
             asOf: peak
@@ -579,10 +583,63 @@ final class ProgramProgressionTests: XCTestCase {
 
         XCTAssertNil(P.recoveryBridgeCompletionReason(
             completedRecoverySessions: 1,
+            selectedExposureCount: 2,
             selectedExposuresComplete: false,
             lastHardPhaseCompletion: nil,
             asOf: peak.addingTimeInterval(P.recoveryWindow * 2)
         ), "missing history never invents an elapsed-time anchor")
+    }
+
+    /// The bridge is bounded from the last hard phase even when no reduced work
+    /// was banked. Otherwise a stale pointer can prescribe Recovery forever.
+    /// Mirrors the same block in web/tests/core.test.mjs.
+    func testAnUnbankedBridgeExpiresFromTheHardPhase() {
+        let peak = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertNil(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 0,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow - 1)
+        ))
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 0,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow)
+        ), .windowElapsed)
+    }
+
+    /// The cap is the bridge's OWN length. A program that is not recognizably
+    /// upper/lower keeps its full authored pass, and a constant two silently
+    /// dropped day three onward — losing exactly the work that fallback exists
+    /// to preserve. Mirrors the same block in web/tests/core.test.mjs.
+    func testTheSessionCapFollowsTheBridgeLength() {
+        let peak = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertNil(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 2,
+            selectedExposureCount: 4,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(60)
+        ), "a four-day authored bridge is not closed by two sessions")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 4,
+            selectedExposureCount: 4,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(60)
+        ), .sessionLimit, "it closes once its own length is banked")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 2,
+            selectedExposureCount: 1,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(60)
+        ), .sessionLimit, "and a degenerate one-day bridge still keeps the two-session floor")
     }
     // [INV-BELOW-PLAN-IS-BELOW-PLAN]
     func testLighterWorkStillGradesBelowPlan() {
