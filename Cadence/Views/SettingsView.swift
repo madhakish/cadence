@@ -713,8 +713,12 @@ struct ProgramEditorView: View {
             }
             Section {
                 Stepper("Cycle: \(program.cycleNumber)", value: $program.cycleNumber, in: 1...99)
-                Stepper("Rotation: \(program.currentWeek) of 4 · \((CyclePhase(rawValue: program.currentWeek) ?? .volume).name)",
-                        value: Binding(get: { program.currentWeek }, set: { positionAtRotation($0) }), in: 1...4)
+                // Position, not phase — this pointer is shared by every slot in
+                // the program, and most styles never run a Volume/Load/Peak
+                // wave. The per-slot badges say what each one does.
+                Stepper(ProgramEngine.rotationLabel(rotation: program.currentWeek),
+                        value: Binding(get: { program.currentWeek }, set: { positionAtRotation($0) }),
+                        in: 1...ProgramProgression.deloadWeek)
                 if !program.orderedDays.isEmpty {
                     Picker("Next day", selection: Binding(get: { program.nextDayIndex }, set: { program.nextDayIndex = $0 })) {
                         ForEach(program.orderedDays) { day in

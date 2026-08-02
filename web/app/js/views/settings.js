@@ -447,13 +447,15 @@ async function programEditor(p) {
             ui.stepper(p.maximumAddedSetsPerRotation ?? 6, { min: 0, max: 10, step: 1, format: (v) => `${v} sets`, onChange: async (v) => { p.maximumAddedSetsPerRotation = v; await Programs.save(p); } })),
           ui.h("div", { class: "sub", style: { margin: "8px" }, text: "Uses completed output by full program rotation. Nothing changes until you apply a proposal." })));
         body.append(ui.h("div", { class: "section-title", text: "Where you are" }));
-        const PHASE = ["", "Volume", "Load", "Peak", "Recovery"];
         const sortedDays = [...p.days].sort((a, b) => a.order - b.order);
         const pos = ui.h("div", { class: "card" });
         pos.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Cycle" }),
           ui.stepper(p.cycleNumber, { min: 1, max: 99, step: 1, onChange: async (v) => { p.cycleNumber = v; await Programs.save(p); } })));
         pos.append(ui.h("div", { class: "row", style: { borderBottom: sortedDays.length ? undefined : "0" } }, ui.h("span", { text: "Rotation" }),
-          ui.stepper(p.currentWeek, { min: 1, max: 4, step: 1, format: (v) => `${v} of 4 · ${PHASE[v]}`, onChange: async (v) => { await positionAtRotation(p, v); await Programs.save(p); } })));
+          // Position, not phase — this pointer is shared by every slot in the
+          // program, and most styles never run a Volume/Load/Peak wave. The
+          // per-slot badges say what each one does. Mirrors SettingsView.
+          ui.stepper(p.currentWeek, { min: 1, max: C.DELOAD_WEEK, step: 1, format: (v) => `${v} of ${C.DELOAD_WEEK}`, onChange: async (v) => { await positionAtRotation(p, v); await Programs.save(p); } })));
         if (sortedDays.length) {
           const daySel = ui.h("select", {}, ...sortedDays.map((d) => ui.h("option", { value: String(d.order), text: d.name, selected: d.order === p.nextDayIndex })));
           daySel.addEventListener("change", async () => { p.nextDayIndex = Number(daySel.value); await Programs.save(p); });
