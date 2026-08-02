@@ -5,7 +5,7 @@ import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
-import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession } from "./session.js";
+import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, reconcileRecoveryBridge } from "./session.js";
 
 const orderedSlots = (slots = [], roleAwareLegacy = false) => {
   const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
@@ -32,6 +32,7 @@ export async function render(host) {
   const [openSessions, tracks, gym, settings, program, allExercises, completed, decisions, checkins] = await Promise.all([
     Sessions.openAll(), Tracks.all(), Gyms.default(), Settings.get(), Programs.active(), Exercises.all(), Sessions.completed(), CoachingDecisions.all(), Checkins.all(),
   ]);
+  const recoveryCompletion = await reconcileRecoveryBridge(program, completed);
   // Last 8 top working weights for a lift, oldest→newest (sparkline source).
   const topsFor = (name) => completed
     .map((s) => ({
@@ -56,6 +57,12 @@ export async function render(host) {
       onClick: () => showGymTag(gym) },
       ui.h("span", { text: "▤  Gym Tag" }),
       ui.h("span", { class: "sub", text: gym && gym.barcodeImage ? "Ready to scan ›" : "Add barcode ›" }))));
+
+  if (recoveryCompletion) {
+    root.append(ui.h("div", { class: "card" },
+      ui.h("div", { class: "row", style: { borderBottom: "0" } },
+        ui.h("span", { class: "accent", text: `↻ ${recoveryCompletion.message}` }))));
+  }
 
   const todayKey = new Date().toLocaleDateString("en-CA");
   if (settings.gymTagFirstLaunchOfDay && gym?.barcodeImage

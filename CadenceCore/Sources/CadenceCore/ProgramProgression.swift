@@ -97,6 +97,15 @@ public struct RecoveryDayCandidate: Hashable, Sendable {
     }
 }
 
+/// Why a bounded recovery bridge is ready to hand off to the next cycle.
+/// The elapsed-time case is only an expiry guard; it does not make a
+/// cycle-based program advance by calendar weeks.
+public enum RecoveryBridgeCompletionReason: String, Hashable, Sendable {
+    case selectedExposures
+    case sessionLimit
+    case windowElapsed
+}
+
 /// Accessory double-progression state (rep range → weight).
 public struct AccessoryState: Codable, Hashable, Sendable {
     public var sets: Int
@@ -147,6 +156,11 @@ public enum ProgramProgression {
     /// Persisted phase value for the recovery bridge. 1–3 are full volume,
     /// load, and peak rotations; phase 4 is not another complete rotation.
     public static let deloadWeek = 4
+    /// Recovery is deliberately smaller than a full authored rotation.
+    public static let recoverySessionLimit = 2
+    /// Maximum elapsed time after the last hard-phase completion during which
+    /// Cadence may prescribe another recovery workout.
+    public static let recoveryWindow: TimeInterval = 7 * 24 * 60 * 60
     /// Complete rotations that must be banked since the last recovery bridge
     /// before another early one is allowed. Without a floor a run of red
     /// rotations turns recovery into the schedule, which is the
@@ -380,6 +394,28 @@ public enum ProgramProgression {
             return (next, false)
         }
         return (selected[0], true)
+    }
+
+    /// Decide whether recovery has done its job.
+    ///
+    /// Selected representative exposures still close a short bridge normally.
+    /// Independently, two banked recovery sessions are a hard cap even when
+    /// an old/manual pointer sent those sessions to non-selected day orders.
+    /// Finally, the bridge expires after seven elapsed days from the last Peak
+    /// (or other hard-phase anchor supplied by the persistence edge), so a
+    /// stale Recovery pointer can never prescribe reduced work indefinitely.
+    /// Mirrored 1:1 in web/app/js/core.js `recoveryBridgeCompletionReason`.
+    public static func recoveryBridgeCompletionReason(
+        completedRecoverySessions: Int,
+        selectedExposuresComplete: Bool,
+        lastHardPhaseCompletion: Date?,
+        asOf now: Date
+    ) -> RecoveryBridgeCompletionReason? {
+        if selectedExposuresComplete { return .selectedExposures }
+        if completedRecoverySessions >= recoverySessionLimit { return .sessionLimit }
+        guard let anchor = lastHardPhaseCompletion,
+              now.timeIntervalSince(anchor) >= recoveryWindow else { return nil }
+        return .windowElapsed
     }
 
     /// Select one authored lower and one authored upper exposure for the

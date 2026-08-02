@@ -21,6 +21,13 @@ progression and e1RM side effect. Active work between them—walking, mowing,
 splitting wood, or an easy ruck—does not need to be forced into a calendar week
 or represented as another lifting day.
 
+The bridge is bounded on both axes. It can contain no more than two lifting
+sessions, even if an old pointer chose the wrong A/B days, and it expires seven
+elapsed days after the final Peak exposure. That seven-day window is not a
+programming week: it is simply the point at which the rest period has already
+done its job, so Cadence marks Recovery complete and returns to cycle-driven
+Volume work instead of offering a stale light session.
+
 That reduction is the point. A 2024 controlled study found that inserting a
 week of complete training cessation did not improve hypertrophy and produced
 smaller strength gains than continuous training. A 2026 within-subject study

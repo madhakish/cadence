@@ -419,6 +419,21 @@ eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "0:false",
   "a non-bridge day cannot complete recovery");
 eq(C.recoveryScheduleAdvance([], [0]).isLastDay, false, "an empty bridge fails closed");
 
+// The seven-day value expires Recovery; it does not schedule this cycle-based
+// program. Any two banked recovery sessions are also a hard cap, even when a
+// legacy/manual pointer sent them to non-selected day orders.
+const peakMs = Date.UTC(2042, 0, 1, 12);
+eq(C.recoveryBridgeCompletionReason(1, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS - 1), null,
+  "one recovery session inside the window leaves the bridge open");
+eq(C.recoveryBridgeCompletionReason(2, false, peakMs, peakMs + 60_000), "sessionLimit",
+  "two recovery sessions close the bridge regardless of day order");
+eq(C.recoveryBridgeCompletionReason(0, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "recovery expires at exactly seven elapsed days");
+eq(C.recoveryBridgeCompletionReason(1, true, null, peakMs), "selectedExposures",
+  "a short selected bridge may close normally");
+eq(C.recoveryBridgeCompletionReason(1, false, null, peakMs + 2 * C.RECOVERY_WINDOW_MS), null,
+  "missing history never invents an expiry anchor");
+
 // The top scheme must describe work that was actually performed. Reporting the
 // group minimum across every top-weight set invented schemes nobody did — and
 // those strings are banked as the history baseline.
