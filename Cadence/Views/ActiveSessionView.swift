@@ -151,9 +151,14 @@ struct ActiveSessionView: View {
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Later") {
+                // Navigation only. Leaving the logger must not mutate either
+                // timer; pause/end remain explicit workout-clock controls.
+                Button {
                     if PersistenceErrorCenter.shared.save(context, operation: "Saving the open session") { dismiss() }
+                } label: {
+                    Label("Back", systemImage: "chevron.backward")
                 }
+                .accessibilityHint("Returns to Today while the workout and rest timers keep running")
             }
             // Workout clock controls: pause/resume/reset the stopwatch, or end
             // the workout outright (Live Activity + timers) without banking —
@@ -180,7 +185,7 @@ struct ActiveSessionView: View {
                     Divider()
                     Divider()
                     // The way OUT of a session you never want to keep. Without
-                    // this the only exits were Later (leaves it open), Stop
+                    // this the only exits were Back (leaves it open), Stop
                     // workout clock (stops the clock, leaves it open), and
                     // Bank it (commits it) — so a session started by mistake
                     // could not be got rid of from inside it at all, and the
