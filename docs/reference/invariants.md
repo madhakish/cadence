@@ -277,6 +277,12 @@ For this cycle-based wave, day names and calendar weeks never participate.
 Programs that cannot be classified safely retain every authored day rather
 than silently losing work.
 
+Completion is the set of selected recovery exposures banked in the current
+cycle, not the current pointer's position. Either representative may be banked
+first. A non-bridge day cannot complete recovery by itself, while an in-flight
+program upgraded from the old four-day phase 4 recognizes bridge exposures it
+already banked instead of prescribing them again.
+
 Recovery prescriptions cut working volume, reduce every accessory to one set,
 and freeze accessory, rep-window, and per-exposure progression as well as e1RM
 observations. The next mesocycle always restarts at the first full authored day.

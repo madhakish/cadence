@@ -1123,6 +1123,21 @@ export function scheduleAdvance(dayOrders, bankedDayOrder) {
   return { nextDayOrder: sorted[(position + 1) % sorted.length], isLastDay: position === sorted.length - 1 };
 }
 
+// Recovery completion is set-based, not pointer-based. The bridge can be
+// banked in either order, and an in-flight phase-4 program may still point at
+// an old full-rotation day omitted by the shortened bridge. Only selected
+// exposures actually banked in this cycle count toward completion.
+// Mirrored 1:1 in CadenceCore ProgramProgression.recoveryScheduleAdvance.
+export function recoveryScheduleAdvance(dayOrders, completedDayOrders) {
+  const selected = [...new Set(dayOrders)].sort((a, b) => a - b);
+  if (!selected.length) return { nextDayOrder: 0, isLastDay: false };
+  const completed = new Set(completedDayOrders);
+  const next = selected.find((order) => !completed.has(order));
+  return next === undefined
+    ? { nextDayOrder: selected[0], isLastDay: true }
+    : { nextDayOrder: next, isLastDay: false };
+}
+
 // Select one authored lower and one authored upper exposure for the phase-4
 // recovery bridge. Only the MAIN lift's movement group is supplied by callers,
 // so accessories cannot reclassify a day. Unrecognizable programs keep their

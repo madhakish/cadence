@@ -403,6 +403,22 @@ eq(C.recoveryDayOrders([
 ]).join(","), "0,2,5", "ambiguous programs retain their complete authored rotation");
 eq(C.recoveryDayOrders([]).length, 0, "empty recovery candidates stay empty");
 
+// Recovery completion counts selected exposures actually banked in the
+// current cycle. Pointer order cannot make the second-authored day roll early,
+// and an old full-rotation day cannot count as part of the shortened bridge.
+let recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [0]);
+eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "1:false",
+  "banking lower points at the remaining upper exposure");
+recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [1]);
+eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "0:false",
+  "either recovery exposure may be banked first");
+recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [1, 0, 0]);
+eq(recoveryAdvance.isLastDay, true, "both selected exposures complete recovery exactly once");
+recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [2]);
+eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "0:false",
+  "a non-bridge day cannot complete recovery");
+eq(C.recoveryScheduleAdvance([], [0]).isLastDay, false, "an empty bridge fails closed");
+
 // The top scheme must describe work that was actually performed. Reporting the
 // group minimum across every top-weight set invented schemes nobody did — and
 // those strings are banked as the history baseline.

@@ -364,6 +364,24 @@ public enum ProgramProgression {
         return (sorted[(position + 1) % sorted.count], position == sorted.count - 1)
     }
 
+    /// Recovery completion is set-based, not pointer-based. The bridge may be
+    /// banked in either order, and a program upgraded while already in phase 4
+    /// may point at a day omitted by the shortened bridge. Count the selected
+    /// exposures actually banked in this cycle, then choose the first missing
+    /// authored order. Unknown/non-bridge days never count by themselves.
+    /// Mirrored 1:1 in web/app/js/core.js `recoveryScheduleAdvance`.
+    public static func recoveryScheduleAdvance(
+        dayOrders: [Int], completedDayOrders: [Int]
+    ) -> (nextDayOrder: Int, isLastDay: Bool) {
+        let selected = Array(Set(dayOrders)).sorted()
+        guard !selected.isEmpty else { return (0, false) }
+        let completed = Set(completedDayOrders)
+        if let next = selected.first(where: { !completed.contains($0) }) {
+            return (next, false)
+        }
+        return (selected[0], true)
+    }
+
     /// Select one authored lower and one authored upper exposure for the
     /// phase-4 recovery bridge.
     ///

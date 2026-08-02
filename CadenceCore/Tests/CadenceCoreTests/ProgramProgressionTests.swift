@@ -513,6 +513,38 @@ final class ProgramProgressionTests: XCTestCase {
                        "ambiguous programs keep every authored exposure")
         XCTAssertEqual(P.recoveryDayOrders([]), [])
     }
+
+    func testRecoveryAdvanceCountsBankedRepresentativesInsteadOfPointerOrder() {
+        let selected = [0, 1]
+        let afterLower = P.recoveryScheduleAdvance(
+            dayOrders: selected, completedDayOrders: [0]
+        )
+        XCTAssertEqual(afterLower.nextDayOrder, 1)
+        XCTAssertFalse(afterLower.isLastDay)
+
+        let upperFirst = P.recoveryScheduleAdvance(
+            dayOrders: selected, completedDayOrders: [1]
+        )
+        XCTAssertEqual(upperFirst.nextDayOrder, 0,
+                       "either recovery exposure may be banked first")
+        XCTAssertFalse(upperFirst.isLastDay)
+
+        let complete = P.recoveryScheduleAdvance(
+            dayOrders: selected, completedDayOrders: [1, 0, 0]
+        )
+        XCTAssertTrue(complete.isLastDay,
+                      "both selected exposures complete recovery exactly once")
+
+        let nonBridge = P.recoveryScheduleAdvance(
+            dayOrders: selected, completedDayOrders: [2]
+        )
+        XCTAssertEqual(nonBridge.nextDayOrder, 0)
+        XCTAssertFalse(nonBridge.isLastDay,
+                       "an omitted full-rotation day cannot complete recovery")
+
+        let empty = P.recoveryScheduleAdvance(dayOrders: [], completedDayOrders: [0])
+        XCTAssertFalse(empty.isLastDay, "an empty bridge fails closed")
+    }
     // [INV-BELOW-PLAN-IS-BELOW-PLAN]
     func testLighterWorkStillGradesBelowPlan() {
         // Propagating an edit changes the work about to be done, not the bar

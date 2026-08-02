@@ -656,22 +656,31 @@ enum SessionCompletion {
             }
         }
 
-        // In recovery phase only bridge exposures count toward completion. A
-        // non-bridge day (possible when the user manually changes nextDayIndex
-        // while the legacy persisted phase pointer `currentWeek` is 4) must not
-        // trigger rollover — reset the pointer to the first bridge day and
-        // return so the selected exposures drive schedule advance.
-        if isRecovery && !recoveryDayOrders.contains(dayIndex) {
-            program.nextDayIndex = recoveryDayOrders.first ?? allDayOrders.first ?? 0
-            return
-        }
-
         // Walk day ORDER values, not array positions — `orderedDays` also
         // drops the relationship aliases that a raw `days.count` would inflate.
-        let advance = ProgramProgression.scheduleAdvance(
-            dayOrders: isRecovery ? recoveryDayOrders : allDayOrders,
-            bankedDayOrder: dayIndex
-        )
+        // Recovery is different: completion is the set of selected exposures
+        // actually banked in this cycle. That handles either order, manual day
+        // selection, and an old phase-4 pointer left on an omitted day.
+        let advance: (nextDayOrder: Int, isLastDay: Bool)
+        if isRecovery {
+            let completed = try context.fetch(FetchDescriptor<WorkoutSession>())
+                .filter {
+                    $0.isCompleted
+                        && ($0.programID == program.id || $0.programName == program.name)
+                        && $0.programCycleNumber == program.cycleNumber
+                        && $0.programWeek == ProgramProgression.deloadWeek
+                }
+                .compactMap(\.programDayIndex) + [dayIndex]
+            advance = ProgramProgression.recoveryScheduleAdvance(
+                dayOrders: recoveryDayOrders,
+                completedDayOrders: completed
+            )
+        } else {
+            advance = ProgramProgression.scheduleAdvance(
+                dayOrders: allDayOrders,
+                bankedDayOrder: dayIndex
+            )
+        }
         program.nextDayIndex = advance.nextDayOrder
         guard advance.isLastDay else { return }
 

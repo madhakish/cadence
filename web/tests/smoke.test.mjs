@@ -1463,6 +1463,46 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok((await db.Tracks.byName("Back Squat")).baseWeightLb === sqTrackBase, "standalone Back Squat track NOT double-advanced");
 }
 
+// ---- in-flight legacy phase 4 accounts for bridge work already banked ----
+{
+  const name = "Fixture In-flight Recovery Bridge";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 2, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Lower B", order: 2, lifts: [cyc("Deadlift", "main", 205, 275)], accessories: [] },
+      { name: "Upper B", order: 3, lifts: [cyc("Overhead Press", "main", 95, 125)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const priorIds = [];
+  for (const [index, dayIndex] of [0, 1].entries()) {
+    priorIds.push(await db.Sessions.save({
+      date: `2042-01-0${index + 1}T12:00:00.000Z`,
+      completedAt: `2042-01-0${index + 1}T13:00:00.000Z`,
+      notes: "Synthetic pre-upgrade recovery exposure", isCompleted: true,
+      programTag: { programId: program.uuid, programName: name,
+        cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex, planNames: [] },
+      exercises: [],
+    }));
+  }
+
+  // The previous release expected all four phase-4 days, so its persisted
+  // pointer can legitimately sit on Lower B even though the new bridge's
+  // Lower A and Upper A representatives are already complete.
+  const oldDay = program.days.find((day) => day.order === 2);
+  const currentId = await session.createSessionFromProgramDay(program, oldDay);
+  await completeAll(await db.Sessions.get(currentId));
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1 && program.nextDayIndex === 0,
+    "[INV-RECOVERY-IS-A-BRIDGE] an in-flight old phase-4 pointer rolls over from already-banked bridge exposures");
+
+  for (const id of [...priorIds, currentId]) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
+}
+
 // ---- program: a below-plan peak must not grade clean or bump the base (issue 18) ----
 {
   // Advance the fresh cycle-2 wave to week 3 (2 weeks × 4 days, banked clean).

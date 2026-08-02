@@ -1378,18 +1378,24 @@ async function advanceProgram(session, milestones) {
     }
   }
 
-  // In recovery phase only bridge exposures count toward completion. A
-  // non-bridge day (possible when the user manually changes "Next day" while
-  // the legacy persisted phase pointer currentWeek is 4) must not trigger
-  // rollover — reset the pointer to the first bridge day and return so the
-  // selected exposures drive schedule advance.
-  if (isRecovery && !recoveryDayOrders.includes(tag.dayIndex)) {
-    program.nextDayIndex = recoveryDayOrders[0] ?? allDayOrders[0] ?? 0;
-    return { program, noteRecords: flushNotes() };
-  }
-
   // Walk day ORDER values, not array positions (see core scheduleAdvance).
-  const advance = C.scheduleAdvance(isRecovery ? recoveryDayOrders : allDayOrders, tag.dayIndex);
+  // Recovery is set-based: count selected exposures actually banked in this
+  // cycle. That handles either order, manual selection, and an old phase-4
+  // pointer left on a day omitted by the shortened bridge.
+  let advance;
+  if (isRecovery) {
+    const completedOrders = (await Sessions.completed())
+      .filter((candidate) => candidate.programTag
+        && (candidate.programTag.programId === (program.uuid || program.id)
+          || candidate.programTag.programName === program.name)
+        && candidate.programTag.cycleNumber === program.cycleNumber
+        && candidate.programTag.week === C.DELOAD_WEEK)
+      .map((candidate) => candidate.programTag.dayIndex);
+    completedOrders.push(tag.dayIndex); // current session is staged, not stored yet
+    advance = C.recoveryScheduleAdvance(recoveryDayOrders, completedOrders);
+  } else {
+    advance = C.scheduleAdvance(allDayOrders, tag.dayIndex);
+  }
   const lastDay = advance.isLastDay;
   program.nextDayIndex = advance.nextDayOrder;
   if (lastDay) {
