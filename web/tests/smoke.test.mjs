@@ -1801,8 +1801,32 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(program.cycleNumber === 2 && program.currentWeek === C.DELOAD_WEEK,
     "the program the open session was built against is left exactly as it was");
 
-  // Bank or discard it and the same reconciliation goes through.
+  // Scoped to THIS program. A lingering blank session — which Today explicitly
+  // supports keeping around — must not suppress the cap and the expiry window
+  // indefinitely; that is the indefinite-light-work path this mechanism closes.
   await db.Sessions.del(openID);
+  const blankID = await db.Sessions.save({
+    date: new Date().toISOString(), isCompleted: false, notes: "Unrelated blank session",
+    exercises: [],
+  });
+  const unrelated = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(unrelated?.reason === "windowElapsed",
+    "an open session belonging to no program never blocks reconciliation");
+  await db.Sessions.del(blankID);
+  // Put the program back into recovery for the final leg of this scenario.
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  program.cycleNumber = 2; program.currentWeek = C.DELOAD_WEEK;
+  await db.Programs.save(program);
+  const openID2 = await db.Sessions.save({
+    date: new Date().toISOString(), isCompleted: false, notes: "In progress",
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  ok((await session.reconcileRecoveryBridge(program, await db.Sessions.completed())) === null,
+    "but one belonging to this program still does");
+  await db.Sessions.del(openID2);
+
+  // Bank or discard it and the same reconciliation goes through.
   const allowed = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
   ok(allowed?.reason === "windowElapsed", "and runs on the next render once nothing is open");
   program = (await db.Programs.all()).find((candidate) => candidate.name === name);
@@ -1849,6 +1873,42 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   ok(program.cycleNumber === 2 && program.currentWeek === 1, "then rolls to the next cycle at Volume");
   for (const id of ids) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
+}
+
+// Banking is a SECOND call site for the completion rule, and it took the count
+// positionally. A three-day authored bridge must not close at bank time after
+// two exposures either — that is the same truncation, reached the other way.
+{
+  const name = "Fixture Full Pass Bank Time";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Full A", order: 0, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full B", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full C", order: 2, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const banked = [];
+  for (const dayIndex of [0, 1]) {
+    const day = program.days.find((d) => d.order === dayIndex);
+    const id = await session.createSessionFromProgramDay(program, day);
+    banked.push(id);
+    await completeAll(await db.Sessions.get(id));
+    program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  }
+  ok(program.cycleNumber === 1 && program.currentWeek === C.DELOAD_WEEK,
+    "[INV-RECOVERY-IS-A-BRIDGE] banking two of a three-day bridge does not close it");
+  const lastDay = program.days.find((d) => d.order === 2);
+  const lastID = await session.createSessionFromProgramDay(program, lastDay);
+  banked.push(lastID);
+  await completeAll(await db.Sessions.get(lastID));
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1,
+    "banking the third closes it and starts the next cycle at Volume");
+  for (const id of banked) await db.Sessions.del(id);
   await db.Programs.del(program.id);
 }
 

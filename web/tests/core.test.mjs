@@ -1693,6 +1693,25 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4, prescriptionStyle: "wave", programRoundingLb: 5 })[1]
     .baseWeightLb, 200, "with nothing banked the base simply holds");
 
+  // The rollover mirrors rollOverRecovery's THREE branches, not just "apply the
+  // pending". A per-exposure slot already advanced while training, so a stale
+  // grade left by a later style edit is deleted rather than applied.
+  const staleOnLinear = C.exposurePreview({ count: 5, baseWeightLb: 205, prescriptionStyle: "linearFives",
+    movementGroup: "squat", programRoundingLb: 5, configuration: { workingSets: 3 },
+    pendingState: { baseWeightLb: 150, estimatedMaxLb: 200, stallCount: 0, role: "main", lastIncrementLb: 0 } });
+  eq(staleOnLinear.map((e) => e.prescription.mainWork.weightLb).join(","), "205,215,225,190,235",
+    "a linear slot never drops to a phantom graded base at the rollover");
+
+  // And a wave slot that reaches the rollover with no banked peak accrues a
+  // stall toward the rebuild — the preview must show the drop that is coming.
+  const skippedPeak = C.exposurePreview({ count: 3, baseWeightLb: 200, rotation: 4, stallCount: 1,
+    prescriptionStyle: "wave", programRoundingLb: 5 });
+  eq(skippedPeak.map((e) => e.baseWeightLb).join(","), "200,180,180",
+    "a second peak-less cycle rebuilds at 90%, and the preview says so");
+  eq(C.exposurePreview({ count: 3, baseWeightLb: 200, rotation: 4, stallCount: 0,
+    prescriptionStyle: "wave", programRoundingLb: 5 }).map((e) => e.baseWeightLb).join(","), "200,200,200",
+    "the first peak-less cycle only accrues the stall");
+
   // Contract edges.
   eq(C.exposurePreview({ baseWeightLb: 100, count: 0 }).length, 0, "a zero count previews nothing");
   eq(C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 3, prescriptionStyle: "wave" })

@@ -670,6 +670,36 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(unbanked[1].baseWeightLb, 200, "with nothing banked the base simply holds")
     }
 
+    /// The rollover mirrors `rollOverRecovery`'s THREE branches, not just
+    /// "apply the pending". Mirrors the same block in web/tests/core.test.mjs.
+    func testRolloverDropsAStalePendingOnAPerExposureSlot() {
+        let stale = ProgramLiftState(baseWeightLb: 150, estimatedMaxLb: 200,
+                                     stallCount: 0, role: .main, lastIncrementLb: 0)
+        let preview = ProgramEngine.exposurePreview(
+            count: 5, baseWeightLb: 205, programRoundingLb: 5, movementGroup: "squat",
+            prescriptionStyle: .linearFives, configuration: .init(workingSets: 3),
+            pendingState: stale
+        )
+        XCTAssertEqual(preview.map(\.prescription.mainWork.weightLb), [205, 215, 225, 190, 235],
+                       "a linear slot never drops to a phantom graded base at the rollover")
+    }
+
+    func testRolloverShowsTheRebuildAPeaklessWaveSlotIsAboutToTake() {
+        let stalled = ProgramEngine.exposurePreview(
+            count: 3, baseWeightLb: 200, stallCount: 1, rotation: 4,
+            programRoundingLb: 5, prescriptionStyle: .wave
+        )
+        XCTAssertEqual(stalled.map(\.baseWeightLb), [200, 180, 180],
+                       "a second peak-less cycle rebuilds at 90%, and the preview says so")
+
+        let first = ProgramEngine.exposurePreview(
+            count: 3, baseWeightLb: 200, stallCount: 0, rotation: 4,
+            programRoundingLb: 5, prescriptionStyle: .wave
+        )
+        XCTAssertEqual(first.map(\.baseWeightLb), [200, 200, 200],
+                       "the first peak-less cycle only accrues the stall")
+    }
+
     func testExposurePreviewContractEdges() {
         XCTAssertTrue(ProgramEngine.exposurePreview(count: 0, baseWeightLb: 100).isEmpty)
         XCTAssertEqual(

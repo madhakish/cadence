@@ -548,11 +548,35 @@ enum SessionCompletion {
         // it is on screen makes banking it fail the stale-tag guard and land as
         // orphaned history. Reconciliation is not urgent — it runs on the next
         // render once the session is banked or discarded.
-        var openDescriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate<WorkoutSession> { !$0.isCompleted }
+        //
+        // Scoped to THIS PROGRAM'S sessions, deliberately. Blocking on any open
+        // session at all would let one lingering blank session — which Today
+        // explicitly supports keeping around — suppress the session cap and the
+        // expiry window indefinitely, and Start would go on minting stale
+        // recovery prescriptions. That is the indefinite-light-work path this
+        // whole mechanism exists to close.
+        //
+        // Stable-ID and legacy-name matching use separate descriptors for the
+        // same reason `recentCompletedSessions` does: the predicate macro never
+        // has to type-check the combined optional fallback.
+        let stableProgramID = program.id
+        let legacyProgramName = program.name
+        var openByID = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { session in
+                !session.isCompleted && session.programID == stableProgramID
+            }
         )
-        openDescriptor.fetchLimit = 1
-        guard try context.fetch(openDescriptor).isEmpty else { return nil }
+        openByID.fetchLimit = 1
+        guard try context.fetch(openByID).isEmpty else { return nil }
+
+        var openByName = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { session in
+                !session.isCompleted && session.programID == nil
+                    && session.programName == legacyProgramName
+            }
+        )
+        openByName.fetchLimit = 1
+        guard try context.fetch(openByName).isEmpty else { return nil }
 
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
         let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
@@ -880,7 +904,9 @@ enum SessionCompletion {
         let advance: (nextDayOrder: Int, isLastDay: Bool)
         var recoveryCompletionReason: RecoveryBridgeCompletionReason?
         if isRecovery {
-            var completedSessions = try recentRecoverySessions(for: program, context: context)
+            var completedSessions = try recentRecoverySessions(
+                for: program, selectedExposureCount: recoveryDayOrders.count, context: context
+            )
             if !completedSessions.contains(where: { $0.id == session.id }) {
                 completedSessions.append(session)
             }
@@ -890,6 +916,7 @@ enum SessionCompletion {
             )
             recoveryCompletionReason = ProgramProgression.recoveryBridgeCompletionReason(
                 completedRecoverySessions: completedSessions.count,
+                selectedExposureCount: recoveryDayOrders.count,
                 selectedExposuresComplete: advance.isLastDay,
                 lastHardPhaseCompletion: nil,
                 asOf: session.completedAt ?? session.date

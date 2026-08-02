@@ -157,7 +157,10 @@ export async function render(host) {
           // describes — this counter is shared by slots whose prescriptions
           // have nothing to do with each other.
           ui.rotation(program.currentWeek),
-          ui.h("span", { class: "sub accent mono", text: `R${Math.min(Math.max(program.currentWeek, 1), C.DELOAD_WEEK)}` }),
+          // Decorative: the glyph beside it already announces the rotation, so
+          // without this VoiceOver reads it twice. Matches HomeView.swift.
+          ui.h("span", { class: "sub accent mono", "aria-hidden": "true",
+            text: `R${Math.min(Math.max(program.currentWeek, 1), C.DELOAD_WEEK)}` }),
           ui.h("span", { class: "chev" }))));
     if (shortfall != null) {
       card.append(ui.h("div", { class: "sub", style: { padding: "2px 0 6px" },

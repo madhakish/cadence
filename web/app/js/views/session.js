@@ -1329,8 +1329,19 @@ export async function reconcileRecoveryBridge(program, completed = null, now = n
   // history, and on this client it also let createSessionFromProgramDay open a
   // SECOND session while the first stayed open. Reconciliation is not urgent —
   // it runs on the next render once the session is banked or discarded.
-  // Mirrors SessionCompletion.reconcileRecoveryBridge.
-  if ((await Sessions.openAll()).length) return null;
+  //
+  // Scoped to THIS PROGRAM'S sessions, deliberately. Blocking on any open
+  // session at all would let one lingering blank session — which Today
+  // explicitly supports keeping around — suppress the session cap and the
+  // expiry window indefinitely, and Start would go on minting stale recovery
+  // prescriptions. That is the indefinite-light-work path this whole mechanism
+  // exists to close. Mirrors SessionCompletion.reconcileRecoveryBridge.
+  const stableID = program.uuid || program.id;
+  const openForThisProgram = (await Sessions.openAll()).some((candidate) => candidate.programTag
+    && (candidate.programTag.programId === stableID
+      || (candidate.programTag.programId == null
+        && candidate.programTag.programName === program.name)));
+  if (openForThisProgram) return null;
   const [history, exercises] = await Promise.all([
     completed || Sessions.completed(), Exercises.all(),
   ]);
@@ -1534,7 +1545,7 @@ async function advanceProgram(session, milestones) {
     const completedOrders = completedRecovery.map((candidate) => candidate.programTag.dayIndex);
     advance = C.recoveryScheduleAdvance(recoveryDayOrders, completedOrders);
     recoveryCompletionReason = C.recoveryBridgeCompletionReason(
-      completedRecovery.length, advance.isLastDay, null,
+      completedRecovery.length, recoveryDayOrders.length, advance.isLastDay, null,
       Date.parse(session.completedAt || session.date),
     );
   } else {

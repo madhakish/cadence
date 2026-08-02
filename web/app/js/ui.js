@@ -240,13 +240,12 @@ export function exposurePreview(lift, program, exercise, count = 4) {
     movementGroup, lift.role || "main", program.focus);
   // The slot's own banked-but-unapplied grade, if a peak has already been
   // graded this cycle. Without it the next-cycle entries preview the old base.
-  const pendingState = lift.pendingBaseWeightLb != null ? {
-    baseWeightLb: lift.pendingBaseWeightLb,
-    estimatedMaxLb: lift.pendingEstimatedMaxLb ?? lift.estimatedMaxLb ?? 0,
-    stallCount: lift.pendingStallCount ?? lift.stallCount ?? 0,
-    role: lift.role || "main",
-    lastIncrementLb: lift.pendingLastIncrementLb ?? 0,
-  } : null;
+  //
+  // This client stores it as `lift.pending = { state, note }`; the native slot
+  // spreads the same values across `pendingBaseWeightLb` and friends. Reading
+  // the native field names here made the seeding silently dead on web and left
+  // the two clients previewing different next-cycle bases for the same slot.
+  const pendingState = lift.pending?.state ? { ...lift.pending.state } : null;
   // How many of the program's days bank this lift+style — an A/B novice split
   // squats on both, and the shared base advances once per day.
   const key = C.synchronizedExposureKey(lift.exerciseName, lift.prescription || "automatic");

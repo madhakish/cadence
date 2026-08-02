@@ -974,10 +974,30 @@ public enum ProgramEngine {
 
             if phase == .deload {
                 cycle += 1
-                if let pending {
-                    state = pending
+                // Mirror `rollOverRecovery` exactly, all three branches. It is
+                // not "apply the pending if there is one": a per-exposure slot
+                // already advanced while training, so a stale grade left behind
+                // by a later style edit is DELETED rather than applied, and a
+                // wave-family slot that reaches the rollover without a banked
+                // peak accrues a stall toward the rebuild. Previewing only the
+                // middle branch showed a linear slot dropping to a phantom
+                // graded base, and hid the rebuild a stalled wave slot is about
+                // to take.
+                if style.advancesPerExposure {
+                    pending = nil
+                } else if let banked = pending {
+                    state = banked
+                    pending = nil
+                } else if style.usesCyclePhases {
+                    state.stallCount += 1
+                    state.lastIncrementLb = 0
+                    if state.stallCount >= ProgramProgression.stallLimit {
+                        state.baseWeightLb = Weight.round(
+                            state.baseWeightLb * ProgramProgression.deloadRebuildFraction, to: step
+                        )
+                        state.stallCount = 0
+                    }
                 }
-                pending = nil
                 phase = .volume
             } else {
                 phase = phase.next

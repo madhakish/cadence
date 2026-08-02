@@ -1736,8 +1736,27 @@ export function exposurePreview({
 
     if (phase === DELOAD_WEEK) {
       cycle += 1;
-      if (pending) state = pending;
-      pending = null;
+      // Mirror rollOverRecovery exactly, all three branches. It is not "apply
+      // the pending if there is one": a per-exposure slot already advanced
+      // while training, so a stale grade left behind by a later style edit is
+      // DELETED rather than applied, and a wave-family slot that reaches the
+      // rollover without a banked peak accrues a stall toward the rebuild.
+      // Previewing only the middle branch showed a linear slot dropping to a
+      // phantom graded base, and hid the rebuild a stalled wave slot is about
+      // to take.
+      if (advancesPerExposure(style)) {
+        pending = null;
+      } else if (pending) {
+        state = pending;
+        pending = null;
+      } else if (usesCyclePhases(style)) {
+        state.stallCount = (state.stallCount || 0) + 1;
+        state.lastIncrementLb = 0;
+        if (state.stallCount >= STALL_LIMIT) {
+          state.baseWeightLb = roundTo(state.baseWeightLb * DELOAD_REBUILD_FRACTION, step);
+          state.stallCount = 0;
+        }
+      }
       phase = 1;
     } else {
       phase += 1;
