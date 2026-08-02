@@ -1,10 +1,12 @@
 # Deterministic coaching rules
 
-Cadence evaluates a complete pass through the program's ordered days as one
-**rotation**. A four-day Lower A → Upper A → Lower B → Upper B program can take
-12 days or 16 days; the calendar week does not change the boundary. Calendar
-weeks remain an optional history view, while coaching and capacity decisions
-use rotations and rolling 14/28-day totals.
+For a cycle-based program, Cadence evaluates a complete pass through the
+program's ordered days as one **rotation**. A four-day Lower A → Upper A →
+Lower B → Upper B program can take 12 days or 16 days; the calendar week does
+not change that program's boundary. A week-bound design can use calendar weeks
+instead; this recovery-bridge change neither defines nor alters that behavior.
+The choice is a program concern, not something coaching should infer from its
+lifts. Capacity still uses rolling 14/28-day totals.
 
 The first complete rotation after the program's optional reliable-history date
 establishes a baseline. Before that baseline, incomplete rotations remain

@@ -273,8 +273,9 @@ Phase 4 of a recognizable upper/lower program is a **two-exposure recovery
 bridge**, not a fourth pass through every A/B day. Cadence selects the first
 authored day whose main lift is squat/hinge and the first whose main lift is
 press/pull, preserves their authored order, and rolls over after the second.
-Day names and calendar weeks never participate. Programs that cannot be
-classified safely retain every authored day rather than silently losing work.
+For this cycle-based wave, day names and calendar weeks never participate.
+Programs that cannot be classified safely retain every authored day rather
+than silently losing work.
 
 Recovery prescriptions cut working volume, reduce every accessory to one set,
 and freeze accessory, rep-window, and per-exposure progression as well as e1RM

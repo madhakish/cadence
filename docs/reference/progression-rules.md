@@ -15,14 +15,20 @@ owner table for docs; other pages link here rather than restating).
 
 ## Three progression rotations and a recovery bridge
 
-Cadence advances by completed passes through the authored program, not by
-calendar weeks:
+The Strength — Upper/Lower wave is a **cycle-based program**. It advances by
+completed passes through the authored days, not by elapsed calendar weeks:
 
 - Rotation 1 — **Volume:** base weight, higher reps.
 - Rotation 2 — **Load:** heavier, fewer reps.
 - Rotation 3 — **Peak:** top work; this is what gets graded.
 - Phase 4 — **Recovery:** one representative lower and one representative
   upper exposure, then rollover.
+
+Week-bound programs are valid too; this recovery-bridge change neither defines
+nor alters their calendar behavior. Timing basis belongs to the program. It is
+not inferred from a lift's prescription style or template name. The persisted
+field `currentWeek` predates that terminology and remains a compatibility wire
+name. In this cycle-based wave, its value is a phase/rotation index.
 
 The recovery prescription for a wave-family main lift is 2×3 at the slot's
 own **deload multiplier** — default 77.5% of the rotation-1 base, adjustable

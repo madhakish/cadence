@@ -21,6 +21,37 @@ progression and e1RM side effect. Active work between them—walking, mowing,
 splitting wood, or an easy ruck—does not need to be forced into a calendar week
 or represented as another lifting day.
 
+That reduction is the point. A 2024 controlled study found that inserting a
+week of complete training cessation did not improve hypertrophy and produced
+smaller strength gains than continuous training. A 2026 within-subject study
+found that reducing set volume by roughly two thirds to three quarters and
+cutting frequency preserved hypertrophy and 10RM improvement in untrained men.
+Neither study proves one universal deload for an experienced lifter outside
+those study populations, but together they support keeping a small amount of
+familiar work while cutting the total stress hard. That is what the
+two-exposure bridge does.
+
+- [Coleman et al. 2024 — one-week deload](https://pubmed.ncbi.nlm.nih.gov/38274324/)
+- [Pancar et al. 2026 — reduced-volume/frequency deload](https://www.nature.com/articles/s41598-026-40612-5)
+
+## Why doesn't Cadence rotate complementary lifts on a timer?
+
+Complement selection belongs to the authored program. Same-session squat and
+hinge work with contrasting stress can be perfectly reasonable when technique,
+performance, and recovery remain sound. Acute biomechanics studies can show
+that a trap bar shifts joint moments or that front and back squats distribute
+load differently; they do not establish that every pain-free lifter should
+swap movements at an arbitrary bar weight or every four calendar weeks.
+
+Keep a useful complement through the mesocycle so it can actually progress.
+Reassess it at rollover when performance stalls, setup friction kills
+adherence, or body feedback gives a concrete reason to change it. Cadence does
+not diagnose an old injury, infer pain, or manufacture a variation schedule
+from age alone.
+
+- [Swinton et al. 2011 — straight versus hex-bar deadlift biomechanics](https://pubmed.ncbi.nlm.nih.gov/21659894/)
+- [Gullett et al. 2009 — front versus back squat biomechanics](https://pubmed.ncbi.nlm.nih.gov/19002072/)
+
 ## Why a proportional increment, and why no ceiling?
 
 The increment is a fraction of your current base — 2.5% for strength,

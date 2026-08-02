@@ -1,8 +1,10 @@
 import Foundation
 
-/// Four-phase mesocycle state. Each main lift runs its own track — progression
-/// keys off completed work, never dates or calendar weeks. Phase 4 is a short
-/// recovery bridge rather than another full authored rotation.
+/// Four-phase mesocycle state. In a cycle-based program, each main lift runs
+/// its own track and progression keys off completed work rather than dates.
+/// Week-bound programs are also valid; this phase type does not infer timing
+/// semantics from a lift's prescription style. Phase 4 is a short recovery
+/// bridge rather than another full authored rotation.
 public enum CyclePhase: Int, Codable, CaseIterable, Sendable {
     case volume = 1 // 5×5 moderate
     case load = 2   // 5×3 heavier
