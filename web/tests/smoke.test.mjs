@@ -1611,6 +1611,55 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.Programs.del(program.id);
 }
 
+{
+  const name = "Fixture Reused Recovery Name";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const ids = [];
+  for (const [index, dayIndex] of [0, 1].entries()) {
+    ids.push(await db.Sessions.save({
+      date: `2042-04-0${index + 1}T12:00:00.000Z`,
+      completedAt: `2042-04-0${index + 1}T13:00:00.000Z`,
+      notes: "Synthetic session owned by a deleted same-name program", isCompleted: true,
+      programTag: { programId: "deleted-program-stable-id", programName: name,
+        cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex, planNames: [] }, exercises: [],
+    }));
+  }
+  const collision = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-04-03T12:00:00.000Z"),
+  );
+  ok(collision === null,
+    "same-name sessions carrying another stable program ID cannot close Recovery");
+
+  // Name fallback remains valid for genuinely legacy sessions with no ID.
+  for (const [index, dayIndex] of [0, 1].entries()) {
+    ids.push(await db.Sessions.save({
+      date: `2042-04-0${index + 3}T12:00:00.000Z`,
+      completedAt: `2042-04-0${index + 3}T13:00:00.000Z`,
+      notes: "Synthetic legacy same-name Recovery", isCompleted: true,
+      programTag: { programId: null, programName: name,
+        cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex, planNames: [] }, exercises: [],
+    }));
+  }
+  const legacy = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-04-05T12:00:00.000Z"),
+  );
+  ok(legacy?.reason === "selectedExposures",
+    "legacy sessions without a stable ID retain the program-name fallback");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1,
+    "only the legacy fallback sessions close the reused-name program's Recovery");
+  for (const id of ids) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
+}
+
 // ---- program: a below-plan peak must not grade clean or bump the base (issue 18) ----
 {
   // Advance the fresh cycle-2 wave to week 3 (2 weeks × 4 days, banked clean).

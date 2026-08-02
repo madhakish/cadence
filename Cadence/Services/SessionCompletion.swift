@@ -420,6 +420,75 @@ enum SessionCompletion {
         return decided ? program.currentWeek : nil
     }
 
+    /// Fetch only the evidence that can still change Recovery's decision.
+    /// Two rows are enough because two sessions close the bridge.
+    private static func recentRecoverySessions(
+        for program: Program, context: ModelContext
+    ) throws -> [WorkoutSession] {
+        let stableProgramID = program.id
+        let legacyProgramName = program.name
+        let cycleNumber = program.cycleNumber
+        let recoveryPhase = ProgramProgression.deloadWeek
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { session in
+                session.isCompleted
+                    && session.programCycleNumber == cycleNumber
+                    && session.programWeek == recoveryPhase
+                    && (session.programID == stableProgramID
+                        || (session.programID == nil && session.programName == legacyProgramName))
+            },
+            sortBy: [
+                SortDescriptor(\.date, order: .reverse),
+            ]
+        )
+        // The bridge closes at two sessions. Fetching anything older cannot
+        // change the decision or the selected-day set.
+        descriptor.fetchLimit = ProgramProgression.recoverySessionLimit
+        return try context.fetch(descriptor)
+    }
+
+    private static func lastHardPhaseCompletion(
+        for program: Program, context: ModelContext
+    ) throws -> Date? {
+        let stableProgramID = program.id
+        let legacyProgramName = program.name
+        let cycleNumber = program.cycleNumber
+        let peakPhase = ProgramProgression.gradedWeek
+        let volumePhase = 1
+        let loadPhase = 2
+
+        func latest(_ predicate: Predicate<WorkoutSession>) throws -> WorkoutSession? {
+            var descriptor = FetchDescriptor<WorkoutSession>(
+                predicate: predicate,
+                sortBy: [
+                    SortDescriptor(\.date, order: .reverse),
+                ]
+            )
+            descriptor.fetchLimit = 1
+            return try context.fetch(descriptor).first
+        }
+
+        let peak = try latest(#Predicate { session in
+            session.isCompleted
+                && session.programCycleNumber == cycleNumber
+                && session.programWeek == peakPhase
+                && (session.programID == stableProgramID
+                    || (session.programID == nil && session.programName == legacyProgramName))
+        })
+        if let peak { return peak.completedAt ?? peak.date }
+
+        // Early recovery deliberately skips Peak. In that case the most
+        // recent Volume/Load completion is the expiry anchor.
+        let preceding = try latest(#Predicate { session in
+            session.isCompleted
+                && session.programCycleNumber == cycleNumber
+                && (session.programWeek == volumePhase || session.programWeek == loadPhase)
+                && (session.programID == stableProgramID
+                    || (session.programID == nil && session.programName == legacyProgramName))
+        })
+        return preceding.map { $0.completedAt ?? $0.date }
+    }
+
     /// Close a stale or already-satisfied recovery bridge before Today or
     /// Start can prescribe another reduced workout. The seven-day threshold is
     /// an expiry guard only; normal program advancement remains cycle-based.
@@ -429,14 +498,7 @@ enum SessionCompletion {
     ) throws -> RecoveryBridgeReconciliation? {
         guard program.currentWeek == ProgramProgression.deloadWeek else { return nil }
 
-        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>()).filter {
-            $0.isCompleted
-                && ($0.programID == program.id || $0.programName == program.name)
-                && $0.programCycleNumber == program.cycleNumber
-        }
-        let recoverySessions = sessions.filter {
-            $0.programWeek == ProgramProgression.deloadWeek
-        }
+        let recoverySessions = try recentRecoverySessions(for: program, context: context)
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
         let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
         let recoveryOrders = ProgramProgression.recoveryDayOrders(
@@ -452,18 +514,22 @@ enum SessionCompletion {
             dayOrders: recoveryOrders,
             completedDayOrders: recoverySessions.compactMap(\.programDayIndex)
         ).isLastDay
-        let hardPhase = sessions.filter {
-            ($0.programWeek ?? 0) > 0 && ($0.programWeek ?? 0) < ProgramProgression.deloadWeek
-        }
-        let peak = hardPhase.filter { $0.programWeek == ProgramProgression.gradedWeek }
-        let anchorSessions = peak.isEmpty ? hardPhase : peak
-        let anchor = anchorSessions.map { $0.completedAt ?? $0.date }.max()
-        guard let reason = ProgramProgression.recoveryBridgeCompletionReason(
+        let immediateReason = ProgramProgression.recoveryBridgeCompletionReason(
             completedRecoverySessions: recoverySessions.count,
             selectedExposuresComplete: selectedComplete,
-            lastHardPhaseCompletion: anchor,
+            lastHardPhaseCompletion: nil,
             asOf: now
-        ) else { return nil }
+        )
+        var reason = immediateReason
+        if reason == nil {
+            reason = ProgramProgression.recoveryBridgeCompletionReason(
+                completedRecoverySessions: recoverySessions.count,
+                selectedExposuresComplete: selectedComplete,
+                lastHardPhaseCompletion: try lastHardPhaseCompletion(for: program, context: context),
+                asOf: now
+            )
+        }
+        guard let reason else { return nil }
 
         let nextCycle = program.cycleNumber + 1
         let message: String
@@ -749,13 +815,7 @@ enum SessionCompletion {
         let advance: (nextDayOrder: Int, isLastDay: Bool)
         var recoveryCompletionReason: RecoveryBridgeCompletionReason?
         if isRecovery {
-            var completedSessions = try context.fetch(FetchDescriptor<WorkoutSession>())
-                .filter {
-                    $0.isCompleted
-                        && ($0.programID == program.id || $0.programName == program.name)
-                        && $0.programCycleNumber == program.cycleNumber
-                        && $0.programWeek == ProgramProgression.deloadWeek
-                }
+            var completedSessions = try recentRecoverySessions(for: program, context: context)
             if !completedSessions.contains(where: { $0.id == session.id }) {
                 completedSessions.append(session)
             }

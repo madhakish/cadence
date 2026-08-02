@@ -1281,7 +1281,8 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
   const stableID = program.uuid || program.id;
   const cycleSessions = completed.filter((candidate) => candidate.programTag
     && (candidate.programTag.programId === stableID
-      || candidate.programTag.programName === program.name)
+      || (candidate.programTag.programId == null
+        && candidate.programTag.programName === program.name))
     && candidate.programTag.cycleNumber === program.cycleNumber);
   const recoverySessions = cycleSessions.filter((candidate) =>
     candidate.programTag.week === C.DELOAD_WEEK);
@@ -1504,7 +1505,8 @@ async function advanceProgram(session, milestones) {
     const completedRecovery = (await Sessions.completed())
       .filter((candidate) => candidate.programTag
         && (candidate.programTag.programId === (program.uuid || program.id)
-          || candidate.programTag.programName === program.name)
+          || (candidate.programTag.programId == null
+            && candidate.programTag.programName === program.name))
         && candidate.programTag.cycleNumber === program.cycleNumber
         && candidate.programTag.week === C.DELOAD_WEEK);
     if (!completedRecovery.some((candidate) => String(candidate.id) === String(session.id))) {
