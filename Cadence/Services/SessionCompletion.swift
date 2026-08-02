@@ -421,9 +421,10 @@ enum SessionCompletion {
     }
 
     /// Fetch only the newest completed sessions for one phase of this cycle.
-    /// Keeping the predicate and descriptor as separate expressions avoids a
-    /// pathological Swift predicate-macro type-check while preserving the
-    /// database-side filter and limit.
+    /// Stable-ID and legacy-name matching use separate descriptors so Swift's
+    /// predicate macro never has to type-check the combined fallback. The
+    /// legacy query runs only when stable rows have not filled the requested
+    /// limit, so the total number of returned rows remains bounded by `limit`.
     private static func recentCompletedSessions(
         for program: Program,
         phase: Int,
@@ -433,20 +434,38 @@ enum SessionCompletion {
         let stableProgramID = program.id
         let legacyProgramName = program.name
         let cycleNumber = program.cycleNumber
-        let predicate = #Predicate<WorkoutSession> { session in
+        guard limit > 0 else { return [] }
+
+        let identifiedPredicate = #Predicate<WorkoutSession> { session in
             session.isCompleted
+                && session.programID == stableProgramID
                 && session.programCycleNumber == cycleNumber
                 && session.programWeek == phase
-                && (session.programID == stableProgramID
-                    || (session.programID == nil && session.programName == legacyProgramName))
         }
         let newestFirst = [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]
-        var descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: predicate,
+        var identifiedDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: identifiedPredicate,
             sortBy: newestFirst
         )
-        descriptor.fetchLimit = limit
-        return try context.fetch(descriptor)
+        identifiedDescriptor.fetchLimit = limit
+        let identified = try context.fetch(identifiedDescriptor)
+        guard identified.count < limit else { return identified }
+
+        let legacyPredicate = #Predicate<WorkoutSession> { session in
+            session.isCompleted
+                && session.programID == nil
+                && session.programName == legacyProgramName
+                && session.programCycleNumber == cycleNumber
+                && session.programWeek == phase
+        }
+        var legacyDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: legacyPredicate,
+            sortBy: newestFirst
+        )
+        legacyDescriptor.fetchLimit = limit - identified.count
+        let legacy = try context.fetch(legacyDescriptor)
+        return (identified + legacy)
+            .sorted { $0.date > $1.date }
     }
 
     /// Two rows are enough because two Recovery sessions close the bridge.
