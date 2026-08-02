@@ -18,6 +18,11 @@ struct SessionSummary {
 
 enum SessionCompletion {
 
+    struct RecoveryBridgeReconciliation {
+        let reason: RecoveryBridgeCompletionReason
+        let message: String
+    }
+
     /// The save failed and everything staged was rolled back — the session is
     /// still open and Bank can simply be tapped again.
     struct SaveFailure: LocalizedError {
@@ -415,6 +420,178 @@ enum SessionCompletion {
         return decided ? program.currentWeek : nil
     }
 
+    /// Fetch only the newest completed sessions for one phase of this cycle.
+    /// Stable-ID and legacy-name matching use separate descriptors so Swift's
+    /// predicate macro never has to type-check the combined fallback. The
+    /// legacy query runs only when stable rows have not filled the requested
+    /// limit, so the total number of returned rows remains bounded by `limit`.
+    private static func recentCompletedSessions(
+        for program: Program,
+        phase: Int,
+        limit: Int,
+        context: ModelContext
+    ) throws -> [WorkoutSession] {
+        let stableProgramID = program.id
+        let legacyProgramName = program.name
+        let cycleNumber = program.cycleNumber
+        guard limit > 0 else { return [] }
+
+        let identifiedPredicate = #Predicate<WorkoutSession> { session in
+            session.isCompleted
+                && session.programID == stableProgramID
+                && session.programCycleNumber == cycleNumber
+                && session.programWeek == phase
+        }
+        let newestFirst = [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]
+        var identifiedDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: identifiedPredicate,
+            sortBy: newestFirst
+        )
+        identifiedDescriptor.fetchLimit = limit
+        let identified = try context.fetch(identifiedDescriptor)
+        guard identified.count < limit else { return identified }
+
+        let legacyPredicate = #Predicate<WorkoutSession> { session in
+            session.isCompleted
+                && session.programID == nil
+                && session.programName == legacyProgramName
+                && session.programCycleNumber == cycleNumber
+                && session.programWeek == phase
+        }
+        var legacyDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: legacyPredicate,
+            sortBy: newestFirst
+        )
+        legacyDescriptor.fetchLimit = limit - identified.count
+        let legacy = try context.fetch(legacyDescriptor)
+        return (identified + legacy)
+            .sorted { $0.date > $1.date }
+    }
+
+    /// Two rows are enough because two Recovery sessions close the bridge.
+    private static func recentRecoverySessions(
+        for program: Program, context: ModelContext
+    ) throws -> [WorkoutSession] {
+        try recentCompletedSessions(
+            for: program,
+            phase: ProgramProgression.deloadWeek,
+            limit: ProgramProgression.recoverySessionLimit,
+            context: context
+        )
+    }
+
+    private static func lastHardPhaseCompletion(
+        for program: Program, context: ModelContext
+    ) throws -> Date? {
+        let peakPhase = ProgramProgression.gradedWeek
+        let volumePhase = 1
+        let loadPhase = 2
+
+        let peak = try recentCompletedSessions(
+            for: program,
+            phase: peakPhase,
+            limit: 1,
+            context: context
+        ).first
+        if let peak { return peak.completedAt ?? peak.date }
+
+        // Early recovery deliberately skips Peak. In that case the most
+        // recent Volume/Load completion is the expiry anchor.
+        let volume = try recentCompletedSessions(
+            for: program,
+            phase: volumePhase,
+            limit: 1,
+            context: context
+        ).first
+        let load = try recentCompletedSessions(
+            for: program,
+            phase: loadPhase,
+            limit: 1,
+            context: context
+        ).first
+        let preceding = [volume, load].compactMap { $0 }.max {
+            ($0.completedAt ?? $0.date) < ($1.completedAt ?? $1.date)
+        }
+        return preceding.map { $0.completedAt ?? $0.date }
+    }
+
+    /// Close a stale or already-satisfied recovery bridge before Today or
+    /// Start can prescribe another reduced workout. The seven-day threshold is
+    /// an expiry guard only; normal program advancement remains cycle-based.
+    @discardableResult
+    static func reconcileRecoveryBridge(
+        program: Program, context: ModelContext, asOf now: Date = .now
+    ) throws -> RecoveryBridgeReconciliation? {
+        guard program.currentWeek == ProgramProgression.deloadWeek else { return nil }
+
+        let recoverySessions = try recentRecoverySessions(for: program, context: context)
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
+        let recoveryOrders = ProgramProgression.recoveryDayOrders(
+            program.orderedDays.map { programDay in
+                let mainName = programDay.orderedLifts.first(where: { $0.role == .main })?.exerciseName
+                return RecoveryDayCandidate(
+                    order: programDay.order,
+                    mainMovementGroup: mainName.flatMap { exerciseByName[$0]?.movementGroup }
+                )
+            }
+        )
+        let selectedComplete = ProgramProgression.recoveryScheduleAdvance(
+            dayOrders: recoveryOrders,
+            completedDayOrders: recoverySessions.compactMap(\.programDayIndex)
+        ).isLastDay
+        let immediateReason = ProgramProgression.recoveryBridgeCompletionReason(
+            completedRecoverySessions: recoverySessions.count,
+            selectedExposuresComplete: selectedComplete,
+            lastHardPhaseCompletion: nil,
+            asOf: now
+        )
+        var reason = immediateReason
+        if reason == nil {
+            reason = ProgramProgression.recoveryBridgeCompletionReason(
+                completedRecoverySessions: recoverySessions.count,
+                selectedExposuresComplete: selectedComplete,
+                lastHardPhaseCompletion: try lastHardPhaseCompletion(for: program, context: context),
+                asOf: now
+            )
+        }
+        guard let reason else { return nil }
+
+        let nextCycle = program.cycleNumber + 1
+        let message: String
+        switch reason {
+        case .selectedExposures:
+            message = "Recovery complete — planned recovery exposures banked. Cycle \(nextCycle) starts at Volume."
+        case .sessionLimit:
+            message = "Recovery complete — two recovery sessions banked. Cycle \(nextCycle) starts at Volume."
+        case .windowElapsed:
+            message = "Recovery complete — the seven-day recovery window elapsed. Cycle \(nextCycle) starts at Volume."
+        }
+
+        let unitDisplay = (try context.fetch(FetchDescriptor<AppSettings>()).first?.unitDisplay) ?? .lbPrimary
+        var events: [PREvent] = []
+        rollOverRecovery(
+            program: program,
+            allDayOrders: program.orderedDays.map(\.order),
+            exerciseTypeByName: exerciseByName.mapValues(\.typeRaw),
+            context: context,
+            unitDisplay: unitDisplay,
+            date: now,
+            events: &events
+        )
+        context.insert(Milestone(
+            date: now, exerciseName: nil, kind: .programNote,
+            label: "\(program.name): \(message)"
+        ))
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+        return RecoveryBridgeReconciliation(reason: reason, message: message)
+    }
+
     private static func advanceProgram(_ session: WorkoutSession, context: ModelContext,
                                        unitDisplay: UnitDisplay, events: inout [PREvent]) throws {
         let programs = try context.fetch(FetchDescriptor<Program>())
@@ -662,18 +839,21 @@ enum SessionCompletion {
         // actually banked in this cycle. That handles either order, manual day
         // selection, and an old phase-4 pointer left on an omitted day.
         let advance: (nextDayOrder: Int, isLastDay: Bool)
+        var recoveryCompletionReason: RecoveryBridgeCompletionReason?
         if isRecovery {
-            let completed = try context.fetch(FetchDescriptor<WorkoutSession>())
-                .filter {
-                    $0.isCompleted
-                        && ($0.programID == program.id || $0.programName == program.name)
-                        && $0.programCycleNumber == program.cycleNumber
-                        && $0.programWeek == ProgramProgression.deloadWeek
-                }
-                .compactMap(\.programDayIndex) + [dayIndex]
+            var completedSessions = try recentRecoverySessions(for: program, context: context)
+            if !completedSessions.contains(where: { $0.id == session.id }) {
+                completedSessions.append(session)
+            }
             advance = ProgramProgression.recoveryScheduleAdvance(
                 dayOrders: recoveryDayOrders,
-                completedDayOrders: completed
+                completedDayOrders: completedSessions.compactMap(\.programDayIndex)
+            )
+            recoveryCompletionReason = ProgramProgression.recoveryBridgeCompletionReason(
+                completedRecoverySessions: completedSessions.count,
+                selectedExposuresComplete: advance.isLastDay,
+                lastHardPhaseCompletion: nil,
+                asOf: session.completedAt ?? session.date
             )
         } else {
             advance = ProgramProgression.scheduleAdvance(
@@ -682,7 +862,7 @@ enum SessionCompletion {
             )
         }
         program.nextDayIndex = advance.nextDayOrder
-        guard advance.isLastDay else { return }
+        guard advance.isLastDay || recoveryCompletionReason != nil else { return }
 
         if program.currentWeek < ProgramProgression.deloadWeek {
             if let earlyWeek = try earlyDeloadWeek(program: program, context: context) {
@@ -716,7 +896,28 @@ enum SessionCompletion {
             return
         }
 
-        // Rollover after the recovery bridge's last selected exposure.
+        // Rollover after the recovery bridge closes by selected exposures,
+        // the two-session cap, or the elapsed-time reconciliation path.
+        rollOverRecovery(
+            program: program,
+            allDayOrders: allDayOrders,
+            exerciseTypeByName: exerciseTypeByName,
+            context: context,
+            unitDisplay: unitDisplay,
+            date: session.completedAt ?? session.date,
+            events: &events
+        )
+    }
+
+    private static func rollOverRecovery(
+        program: Program,
+        allDayOrders: [Int],
+        exerciseTypeByName: [String: String],
+        context: ModelContext,
+        unitDisplay: UnitDisplay,
+        date: Date,
+        events: inout [PREvent]
+    ) {
         for d in program.days {
             for lift in d.lifts {
                 if lift.prescription.advancesPerExposure {
@@ -741,7 +942,7 @@ enum SessionCompletion {
                             ? "Two cycles without a clean peak — deloaded \(unitDisplay.format(lb: oldBase))→\(unitDisplay.format(lb: pendingBase)) to rebuild."
                             : note
                         let label = "\(lift.exerciseName): \(presented)"
-                        context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
+                        context.insert(Milestone(date: date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
                         events.append(PREvent(kind: .programNote, exercise: lift.exerciseName, label: label))
                     }
                     lift.pendingBaseWeightLb = nil
@@ -764,7 +965,7 @@ enum SessionCompletion {
                         lift.baseWeightLb = Weight.round(old * ProgramProgression.deloadRebuildFraction, to: loadStep)
                         lift.stallCount = 0
                         let label = "\(lift.exerciseName): skipped peak — deloaded \(unitDisplay.format(lb: old))→\(unitDisplay.format(lb: lift.baseWeightLb))."
-                        context.insert(Milestone(date: session.date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
+                        context.insert(Milestone(date: date, exerciseName: lift.exerciseName, kind: .programNote, label: label))
                         events.append(PREvent(kind: .programNote, exercise: lift.exerciseName, label: label))
                     }
                 } else {
@@ -778,7 +979,7 @@ enum SessionCompletion {
                     let label = "\(original): cycle swap over — slot reverts from \(lift.exerciseName) for the new cycle."
                     lift.exerciseName = original
                     lift.revertToExerciseName = nil
-                    context.insert(Milestone(date: session.date, exerciseName: original, kind: .programNote, label: label))
+                    context.insert(Milestone(date: date, exerciseName: original, kind: .programNote, label: label))
                     events.append(PREvent(kind: .programNote, exercise: original, label: label))
                 }
             }
@@ -787,7 +988,7 @@ enum SessionCompletion {
                     let label = "\(original): cycle swap over — slot reverts from \(acc.exerciseName) for the new cycle."
                     acc.exerciseName = original
                     acc.revertToExerciseName = nil
-                    context.insert(Milestone(date: session.date, exerciseName: original, kind: .programNote, label: label))
+                    context.insert(Milestone(date: date, exerciseName: original, kind: .programNote, label: label))
                     events.append(PREvent(kind: .programNote, exercise: original, label: label))
                 }
             }

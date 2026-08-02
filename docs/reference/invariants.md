@@ -279,9 +279,19 @@ than silently losing work.
 
 Completion is the set of selected recovery exposures banked in the current
 cycle, not the current pointer's position. Either representative may be banked
-first. A non-bridge day cannot complete recovery by itself, while an in-flight
-program upgraded from the old four-day phase 4 recognizes bridge exposures it
-already banked instead of prescribing them again.
+first. A non-bridge day cannot complete recovery by itself, but **any two**
+banked recovery sessions are a hard cap; a legacy or manual pointer therefore
+cannot prescribe a third reduced workout. An in-flight program upgraded from
+the old four-day phase 4 recognizes bridge exposures it already banked instead
+of prescribing them again.
+
+Recovery also expires seven elapsed days after the final completed Peak
+exposure (or the preceding completed hard rotation when an early-recovery
+decision skipped Peak). Today and Start reconcile that state before showing or
+creating another recovery prescription, visibly mark Recovery complete, apply
+the normal rollover, and begin the next cycle at Volume day 1. This duration is
+an expiry guard only. It never turns a cycle-based program into a week-based
+program and never advances Volume, Load, or Peak because a date changed.
 
 Recovery prescriptions cut working volume, reduce every accessory to one set,
 and freeze accessory, rep-window, and per-exposure progression as well as e1RM
