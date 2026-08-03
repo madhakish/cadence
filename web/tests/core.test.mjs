@@ -1747,5 +1747,90 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-CHART-ROTATION-FROM-SESSION] every rotation label has a chart colour");
 }
 
+// Where a lift is heading, fitted from what was performed. Mirrors CadenceCore
+// TrendProjectionTests — same samples, same numbers.
+{
+  const S = (pairs) => pairs.map(([day, value]) => ({ day, value }));
+  const climb = S([[0, 200], [7, 205], [14, 210], [21, 215], [28, 220]]);
+  const near = (a, b, msg) => ok(Math.abs(a - b) < 0.0001, `${msg} (got ${a})`);
+
+  // A history that climbed 5 lb a week projects 5 lb a week. The line is the
+  // rate the lifter already walked, not a target anyone set.
+  const up = C.projectTrend(climb, 30, 28);
+  near(up.perWeek, 5, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the projection is the performed rate");
+  near(up.fitQuality, 1, "[INV-PROJECTION-DECLARES-ITS-FIT] a clean climb fits perfectly");
+  near(up.horizonDay, 58, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the horizon lands past today");
+  near(up.horizonValue, 241.4285714, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the horizon value follows the fit");
+  // Weekly steps from the last performed session, ending exactly on the
+  // horizon so the line reaches the date the caption names.
+  eq(up.points.map((p) => p.day).join(","), "28,35,42,49,56,58",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] weekly steps ending on the horizon");
+  near(up.points[0].value, 220, "[INV-PROJECTION-DECLARES-ITS-FIT] the line starts at the fitted value");
+  near(up.points.at(-1).value, up.horizonValue, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the last point is the horizon");
+
+  // Bad news is data.
+  const down = C.projectTrend(S([[0, 220], [7, 215], [14, 210], [21, 205], [28, 200]]), 30, 28);
+  near(down.perWeek, -5, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] a decline projects downward");
+  near(down.horizonValue, 178.5714286, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the decline continues");
+
+  // ...but never through the floor.
+  const floor = C.projectTrend(S([[0, 100], [7, 75], [14, 50], [21, 25]]), 90, 21);
+  near(floor.perWeek, -25, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] a steep slide keeps its rate");
+  near(floor.horizonValue, 0, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] no projection below zero");
+  ok(floor.points.every((p) => p.value >= 0),
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] no projected point below zero");
+
+  // Refusals.
+  eq(C.projectTrend(S([[0, 200], [14, 210], [28, 220]]), 30, 28), null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] three exposures is an anecdote");
+  eq(C.projectTrend(S([[0, 200], [3, 205], [7, 210], [10, 215]]), 30, 10), null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] four sessions in ten days say nothing about a month out");
+  eq(C.projectTrend(climb, 30, 70), null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] a lift untouched for six weeks is not extended");
+  ok(C.projectTrend(climb, 30, 63) !== null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] one day inside the staleness limit still projects");
+  eq(C.projectTrend(climb, 0, 28), null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] the off horizon projects nothing");
+
+  // A line drawn through noise still has a slope. Reporting how badly it fits
+  // is what stops that slope from reading as a finding.
+  const noisy = C.projectTrend(S([[0, 200], [7, 300], [14, 200], [21, 300]]), 30, 21);
+  near(noisy.perWeek, 20, "[INV-PROJECTION-DECLARES-ITS-FIT] noise still has a slope");
+  near(noisy.fitQuality, 0.2, "[INV-PROJECTION-DECLARES-ITS-FIT] and the fit says how little it means");
+  eq(C.fitDescription(noisy.fitQuality), "very noisy — treat as a guess",
+    "[INV-PROJECTION-DECLARES-ITS-FIT] a poor fit says so in words");
+
+  const flat = C.projectTrend(S([[0, 200], [7, 200], [14, 200], [21, 200]]), 30, 21);
+  near(flat.perWeek, 0, "[INV-PROJECTION-DECLARES-ITS-FIT] a flat history has no rate");
+  near(flat.fitQuality, 1, "[INV-PROJECTION-DECLARES-ITS-FIT] a flat line describes it perfectly");
+  near(flat.horizonValue, 200, "[INV-PROJECTION-DECLARES-ITS-FIT] and projects flat");
+
+  eq(C.fitDescription(1), "steady trend", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band: steady");
+  eq(C.fitDescription(0.75), "steady trend", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band edge: steady");
+  eq(C.fitDescription(0.74), "rough trend", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band: rough");
+  eq(C.fitDescription(0.4), "rough trend", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band edge: rough");
+  eq(C.fitDescription(0.39), "very noisy — treat as a guess", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band: noisy");
+
+  // The chart converts to the display unit before projecting. A linear fit
+  // commutes with that scaling, so kg and lb describe the same line.
+  const kg = C.projectTrend(climb.map((s) => ({ day: s.day, value: C.kgFromLb(s.value) })), 30, 28);
+  near(kg.perWeek, C.kgFromLb(up.perWeek), "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the rate scales with the unit");
+  near(kg.horizonValue, C.kgFromLb(up.horizonValue), "[INV-PROJECTION-IS-THE-PERFORMED-RATE] so does the horizon");
+  near(kg.fitQuality, up.fitQuality, "[INV-PROJECTION-DECLARES-ITS-FIT] the fit is unit-free");
+
+  // Copy always says "at this rate".
+  eq(C.trendSummary(5, "1 month", "241 lb", "lb"), "+5 lb/week · 241 lb in 1 month at this rate",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the summary hedges the number");
+  eq(C.trendSummary(-2.25, "3 months", "180 lb", "lb"), "−2.3 lb/week · 180 lb in 3 months at this rate",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] a falling rate reads as falling");
+  eq(C.trendSummary(0, "1 month", "200 lb", "lb"), "Holding flat · 200 lb in 1 month at this rate",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] flat says flat");
+  eq(C.trendSummary(0.04, "1 month", "200 lb", "lb"), "Holding flat · 200 lb in 1 month at this rate",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] a rate that rounds away is flat, not a vanishing +0");
+
+  eq(C.TREND_HORIZONS.map((h) => h.value).join(","), "0,30,90", "the horizons are off, one month, three");
+  eq(C.TREND_HORIZONS.map((h) => h.label).join(","), "Off,1 month,3 months", "and say so in words");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

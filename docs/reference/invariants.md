@@ -432,6 +432,41 @@ rotation label the split view can produce has a chart colour.
 > "Cycle 2 · R3" collapsed into the untracked series on Charts, so most of a
 > real training history looked like it belonged to no cycle at all.
 
+### INV-PROJECTION-IS-THE-PERFORMED-RATE
+*platforms: core*
+
+A chart projection is the least-squares rate of the **performed** history,
+extended forward. It is not a plan, not a target, and not what the program
+engine will prescribe — programmed work has its own forward view
+(`INV-PREVIEW-RUNS-THE-REAL-ENGINE`) and the two are allowed to disagree. A
+downward trend projects downward; no projected value falls below zero. The
+copy says "at this rate" every time.
+
+> A forward line on a training chart is read as a promise. Every property here
+> exists to keep it a description of what the lifter has already done: fitted
+> from performed sets, honest about decline, and worded so it can never be
+> mistaken for the program's intent.
+
+### INV-PROJECTION-REFUSES-THIN-HISTORY
+*platforms: core*
+
+A projection needs at least four exposures spanning at least 21 days, on a
+lift trained within the last 35 days. Otherwise there is no projection at all
+— not a shorter or fainter one.
+
+> Four sessions inside one week extrapolate to anything you like. A confident
+> line through three points is the most misleading thing a chart can draw.
+
+### INV-PROJECTION-DECLARES-ITS-FIT
+*platforms: core*
+
+Every projection reports how well its line describes the history it was fitted
+from, and the UI shows it. A flat history is a perfect fit, not a division by
+zero.
+
+> A line drawn through noise still has a slope. Reporting R² is what stops that
+> slope from reading as a finding.
+
 ---
 
 ## Delivery

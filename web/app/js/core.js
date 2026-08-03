@@ -582,6 +582,105 @@ export function chartRotationLabel(entryPhase, sessionRotation) {
   return `R${rotation} ${PHASES[rotation].name}`;
 }
 
+// Where a lift is heading, fitted from what was actually performed.
+//
+// The charts stop at today, which is honest but not useful for the question a
+// lifter actually asks — "at this rate, where am I in a month?" — so this fits
+// a least-squares line through the performed points and extends it forward.
+//
+// A projection is a claim about the future, and the whole job here is to keep
+// that claim narrow: it describes the rate the history already shows, it is not
+// a plan and not what the program engine will prescribe (programmed work has
+// its own forward view in exposurePreview, which runs the real engine), it
+// refuses more often than it answers, it reports how well the line actually
+// describes the history, and a downward trend projects downward.
+//
+// Pure in its samples — no dates, no timezones, no unit assumptions. A linear
+// fit commutes with lb→kg scaling, so the projection is the same line either
+// way. Mirrored 1:1 in CadenceCore TrendProjection.
+export const TREND_MIN_SAMPLES = 4;
+export const TREND_MIN_SPAN_DAYS = 21;
+export const TREND_STALENESS_LIMIT_DAYS = 35;
+export const TREND_STEP_DAYS = 7;
+export const TREND_HORIZONS = [
+  { value: 0, label: "Off" },
+  { value: 30, label: "1 month" },
+  { value: 90, label: "3 months" },
+];
+
+export function projectTrend(samples, horizonDays, asOfDay) {
+  const usable = (samples || []).filter((s) => Number.isFinite(s.day) && Number.isFinite(s.value));
+  if (usable.length < TREND_MIN_SAMPLES || !(horizonDays > 0)) return null;
+
+  const days = usable.map((s) => s.day);
+  const first = Math.min(...days), last = Math.max(...days);
+  if (last - first < TREND_MIN_SPAN_DAYS) return null;
+  if (asOfDay - last > TREND_STALENESS_LIMIT_DAYS) return null;
+
+  const n = usable.length;
+  const meanDay = days.reduce((a, b) => a + b, 0) / n;
+  const meanValue = usable.reduce((a, s) => a + s.value, 0) / n;
+  let covariance = 0, dayVariance = 0, valueVariance = 0;
+  for (const s of usable) {
+    const dx = s.day - meanDay, dy = s.value - meanValue;
+    covariance += dx * dy; dayVariance += dx * dx; valueVariance += dy * dy;
+  }
+  // Every exposure on the same day: no rate can be read from it. The span
+  // guard above already rejects this, but the division must not depend on that
+  // ordering to stay safe.
+  if (!(dayVariance > 0)) return null;
+
+  const slope = covariance / dayVariance;
+  const intercept = meanValue - slope * meanDay;
+  const fitted = (day) => Math.max(0, intercept + slope * day);
+
+  // R² against the mean. A flat history is perfectly described by a flat line,
+  // so zero variance is a perfect fit, not a divide-by-zero.
+  let residual = 0;
+  for (const s of usable) {
+    const error = s.value - (intercept + slope * s.day);
+    residual += error * error;
+  }
+  const fitQuality = valueVariance > 0
+    ? Math.max(0, Math.min(1, 1 - residual / valueVariance)) : 1;
+
+  const end = asOfDay + horizonDays;
+  if (!(end > last)) return null;
+  // Starts at the FITTED value on the last performed day, not the performed
+  // one: the gap between the last dot and where the line begins is the fit's
+  // error, and hiding it by anchoring to the final point would dress a fluke
+  // session up as the new baseline.
+  const points = [];
+  for (let day = last; day < end; day += TREND_STEP_DAYS) points.push({ day, value: fitted(day) });
+  points.push({ day: end, value: fitted(end) });
+
+  return { perWeek: slope * 7, fitQuality, points, horizonValue: fitted(end), horizonDay: end };
+}
+
+// One line of plain language for the trend. Deliberately says "at this rate"
+// every time — the number is a continuation of the past, and the copy should
+// never let it read as a promise about the future.
+// Mirrored 1:1 in CadenceCore TrendProjection.summary.
+export function trendSummary(perWeek, horizonLabel, horizonValue, unit) {
+  // Round the MAGNITUDE, then re-apply the sign. Rounding the signed value
+  // splits the two platforms on exact halves — Swift rounds away from zero,
+  // JavaScript toward +∞ — so −2.25/week reads as −2.3 on one and −2.2 on the
+  // other for the same history.
+  const magnitude = Math.round(Math.abs(perWeek) * 10) / 10;
+  if (magnitude === 0) return `Holding flat · ${horizonValue} in ${horizonLabel} at this rate`;
+  const rate = magnitude === Math.round(magnitude) ? magnitude.toFixed(0) : magnitude.toFixed(1);
+  return `${perWeek > 0 ? "+" : "−"}${rate} ${unit}/week · ${horizonValue} in ${horizonLabel} at this rate`;
+}
+
+// How much to trust the line, in a word. Thresholds are deliberately harsh: a
+// projection the lifter should not lean on must not look like one they should.
+// Mirrored 1:1 in CadenceCore TrendProjection.fitDescription.
+export function fitDescription(fitQuality) {
+  if (fitQuality >= 0.75) return "steady trend";
+  if (fitQuality >= 0.4) return "rough trend";
+  return "very noisy — treat as a guess";
+}
+
 // Where the program is in its rotation, said without claiming the rotation is a
 // weight wave. The program-level indicator is shared by slots that have nothing
 // to do with each other's prescriptions, so it can only honestly report

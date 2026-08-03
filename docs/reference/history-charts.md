@@ -44,12 +44,49 @@ stretch the load axis.
 
 ## Split by rotation
 
-Plots one line per rotation (R1 Volume → R4 Deload) so this cycle's R1 is
+Plots one line per rotation (R1 Volume → R4 Recovery) so this cycle's R1 is
 compared against last cycle's R1 instead of reading the wave as a sawtooth.
 
 The two splits compose: **colour carries the rotation, dash carries the
 role**, so turning both on stays legible instead of fighting over one
 visual channel.
+
+A point's rotation comes from the session it was performed in. Slots that
+carry their own phase use it; everything else — accessory work, and anything
+logged before per-entry phase capture — takes the rotation from the session's
+program tag, the same tag the **Rotations** tab groups by. Only a session
+logged outside a program reads as **Untracked**.
+
+## Project forward
+
+**Off · 1 month · 3 months.** With a horizon selected, the chart fits a
+least-squares line through the performed history and extends it past today,
+drawn thin and dashed behind a shaded future region and a *today* divider.
+Below the chart it names the rate, the value it reaches, and how well the
+line actually fits:
+
+> **+4.2 lb/week · 245 lb in 1 month at this rate**
+> steady trend · fitted from performed sessions — a continuation of the past,
+> not a plan.
+
+What it is and is not:
+
+- It is **the rate you have already been adding**, extended. It is not a
+  target, and not what the program will prescribe — programmed work has its
+  own forward view, which runs the real progression engine and is allowed to
+  disagree with the trend.
+- It follows the **lift**, not a rotation. Splitting the history into four
+  rotation lines does not fit four separate futures through a quarter of the
+  evidence each.
+- **A decline projects downward.** No projected value goes below zero.
+- The fit quality is always shown — *steady trend*, *rough trend*, or *very
+  noisy — treat as a guess*. A line through noise still has a slope, and the
+  wording is what stops that slope reading as a finding.
+
+It **refuses** rather than drawing a confident line through thin history, and
+says why: fewer than 4 exposures, a span under 21 days, or a lift untrained
+for more than 35 days. Selecting a horizon always produces an answer — either
+the trend or the reason there isn't one.
 
 ## Peak target
 
