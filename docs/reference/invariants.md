@@ -418,6 +418,20 @@ and stays main.
 In the combined chart, tonnage never stretches the load axis that working
 weight and estimated 1RM share.
 
+### INV-CHART-ROTATION-FROM-SESSION
+*platforms: core*
+
+The rotation a charted point belongs to is a fact about the session. A slot's
+own phase names it where the slot carries one; otherwise the session's program
+tag does. Only a session logged outside a program is "Untracked". Every
+rotation label the split view can produce has a chart colour.
+
+> Only main and complementary slots ever carried a per-entry phase — accessory
+> slots never have, and neither did entries logged before phase capture. Read
+> from the entry alone, a session History's Rotations tab counted under
+> "Cycle 2 · R3" collapsed into the untracked series on Charts, so most of a
+> real training history looked like it belonged to no cycle at all.
+
 ---
 
 ## Delivery

@@ -1712,5 +1712,40 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     .map((e) => e.rotation).join(","), "3,4", "the preview starts from the slot's current rotation");
 }
 
+// The rotation a charted session belongs to. Mirrors CadenceCore
+// ChartRotation.label — same cases, same strings.
+{
+  // The per-entry phase wins where a slot carries one.
+  eq(C.chartRotationLabel(2, 3), "R2 Load",
+    "[INV-CHART-ROTATION-FROM-SESSION] a slot's own phase names its rotation");
+  // Accessory slots and entries logged before per-entry phase capture carry
+  // none, so the session's own rotation tag has to answer — this is the whole
+  // bug: real program work charted as "Untracked".
+  eq(C.chartRotationLabel(null, 3), "R3 Peak",
+    "[INV-CHART-ROTATION-FROM-SESSION] an untagged entry inherits its session's rotation");
+  eq(C.chartRotationLabel(undefined, 1), "R1 Volume",
+    "[INV-CHART-ROTATION-FROM-SESSION] a missing entry phase is not an absent rotation");
+  eq(C.chartRotationLabel(null, 4), "R4 Recovery",
+    "[INV-CHART-ROTATION-FROM-SESSION] rotation 4 is Recovery");
+  // Only a session with no program tag at all is genuinely untracked.
+  eq(C.chartRotationLabel(null, null), "Untracked",
+    "[INV-CHART-ROTATION-FROM-SESSION] a session outside a program is untracked");
+  eq(C.chartRotationLabel(null, undefined), "Untracked",
+    "[INV-CHART-ROTATION-FROM-SESSION] an absent tag is untracked");
+  // A tag outside the rotation vocabulary is not invented into one.
+  eq(C.chartRotationLabel(null, 0), "Untracked",
+    "[INV-CHART-ROTATION-FROM-SESSION] rotation 0 is not a rotation");
+  eq(C.chartRotationLabel(null, 9), "Untracked",
+    "[INV-CHART-ROTATION-FROM-SESSION] a rotation beyond the cycle is not invented");
+
+  // Every label the split view can produce must have a palette entry, or a
+  // rotation silently loses its colour (R4 did, through the Deload rename).
+  const { ROTATION_COLORS } = await import("../app/js/charts.js");
+  const produced = [1, 2, 3, 4].map((r) => C.chartRotationLabel(null, r)).concat(C.UNTRACKED_ROTATION);
+  const uncoloured = produced.filter((label) => !ROTATION_COLORS[label]);
+  eq(uncoloured.join(",") || "none", "none",
+    "[INV-CHART-ROTATION-FROM-SESSION] every rotation label has a chart colour");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

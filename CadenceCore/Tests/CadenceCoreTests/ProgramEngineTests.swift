@@ -45,6 +45,24 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertTrue((0.75...0.80).contains(pct), "deload \(pct) outside 75-80% band")
     }
 
+    // [INV-CHART-ROTATION-FROM-SESSION]
+    func testChartRotationFallsBackToTheSessionTag() {
+        // The per-entry phase wins where a slot carries one.
+        XCTAssertEqual(ChartRotation.label(entryPhase: 2, sessionRotation: 3), "R2 Load")
+        // Accessory slots and entries logged before per-entry phase capture
+        // carry none, so the session's own rotation tag has to answer — this
+        // is the whole bug: real program work charted as "Untracked".
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 3), "R3 Peak")
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 1), "R1 Volume")
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 4), "R4 Recovery",
+                       "rotation 4 is Recovery, and the web palette keys off this exact label")
+        // Only a session with no program tag at all is genuinely untracked.
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: nil), "Untracked")
+        // A tag outside the rotation vocabulary is not invented into one.
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 0), "Untracked")
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 9), "Untracked")
+    }
+
     func testPhaseAdvanceWithinCycle() {
         var state = CycleState(cycleNumber: 1, baseWeightLb: 210, nextPhase: .volume, incrementLb: 10)
         state = ProgramEngine.advancing(state, afterCompleting: .volume)

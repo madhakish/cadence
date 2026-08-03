@@ -58,11 +58,15 @@ export function lineChart(series, { height = 200, fmtY = (v) => String(Math.roun
   return svg;
 }
 
-// Rotation → line colour: escalating heat to Peak, muted Deload. Mirrors the
-// native ProgressionChartsView.rotationColors.
+// Rotation → line colour: escalating heat to Peak, muted Recovery. Mirrors the
+// native ProgressionChartsView.rotationPalette.
+//
+// These keys must be the labels `C.chartRotationLabel` produces. Rotation 4 was
+// renamed Deload → Recovery with the recovery bridge; the stale key here meant
+// R4 missed the palette and fell through to the neutral default.
 export const ROTATION_COLORS = {
   "R1 Volume": "#5ba06a", "R2 Load": "#e8b008", "R3 Peak": "#ef4444",
-  "R4 Deload": "#8b9196", "Untracked": "#666b71",
+  "R4 Recovery": "#8b9196", "Untracked": "#666b71",
 };
 
 // Role → line style. A lift can occupy a MAIN slot on one day and a

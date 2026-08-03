@@ -558,6 +558,30 @@ export const phaseLabel = (p) => {
 // app presents the redesigned recovery bridge.
 export const portablePhaseLabel = (p) => p === 4 ? "R4 Deload 3×5" : phaseLabel(p);
 
+// The series key for a charted session that belongs to no program rotation.
+export const UNTRACKED_ROTATION = "Untracked";
+
+// Which rotation a charted session belongs to.
+//
+// The rotation is a fact about the SESSION — the program stamps every
+// generated session with the rotation it was built for. Only some entries
+// repeat it: main and complementary slots carry a per-entry phase, accessory
+// slots never have, and entries logged before per-entry phase capture do not
+// either. Reading the entry alone therefore reported real program work as
+// "Untracked", and the same session that History's Rotations tab counted under
+// "Cycle 2 · R3" vanished into the untracked series on Charts.
+//
+// The entry still wins where it exists: a slot re-logged into a later session
+// keeps the rotation it was actually performed in. The session tag is the
+// fallback, and only a session with no program tag at all is untracked.
+//
+// Mirrored 1:1 in CadenceCore ProgramEngine `ChartRotation.label`.
+export function chartRotationLabel(entryPhase, sessionRotation) {
+  const rotation = entryPhase ?? sessionRotation;
+  if (!PHASES[rotation]) return UNTRACKED_ROTATION;
+  return `R${rotation} ${PHASES[rotation].name}`;
+}
+
 // Where the program is in its rotation, said without claiming the rotation is a
 // weight wave. The program-level indicator is shared by slots that have nothing
 // to do with each other's prescriptions, so it can only honestly report

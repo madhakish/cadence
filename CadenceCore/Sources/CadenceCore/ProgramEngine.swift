@@ -62,6 +62,32 @@ public enum CyclePhase: Int, Codable, CaseIterable, Sendable {
     }
 }
 
+/// Which rotation a charted session belongs to.
+///
+/// The rotation is a fact about the SESSION — the program stamps every
+/// generated session with the rotation it was built for. Only some entries
+/// repeat it: main and complementary slots carry a per-entry phase, accessory
+/// slots never have, and entries logged before per-entry phase capture do not
+/// either. Reading the entry alone therefore reported real program work as
+/// "Untracked", and the same session that History's Rotations tab counted
+/// under "Cycle 2 · R3" vanished into the untracked series on Charts.
+///
+/// The entry still wins where it exists: a slot re-logged into a later session
+/// keeps the rotation it was actually performed in. The session tag is the
+/// fallback, and only a session with no program tag at all is untracked.
+///
+/// Mirrored 1:1 in web/app/js/core.js `chartRotationLabel`.
+public enum ChartRotation {
+    /// The series key for a session that belongs to no program rotation.
+    public static let untrackedLabel = "Untracked"
+
+    public static func label(entryPhase: Int?, sessionRotation: Int?) -> String {
+        guard let rotation = entryPhase ?? sessionRotation,
+              let phase = CyclePhase(rawValue: rotation) else { return untrackedLabel }
+        return "R\(phase.rawValue) \(phase.name)"
+    }
+}
+
 /// Linear vs mesocycle progression.
 public enum TrackMode: String, Codable, Sendable {
     case cycle

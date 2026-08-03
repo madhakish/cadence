@@ -187,10 +187,12 @@ function renderCharts(panel, sessions, exercises, program) {
       for (const role of ["main", "complementary"]) {
         const entries = matching.filter((entry) => chartRoleOf(entry, s) === role);
         if (!entries.length) continue;
-        // The point's rotation (R1–R4) for the split view; sessions logged
-        // outside a cycle bucket read as "Untracked".
+        // The point's rotation (R1–R4) for the split view. The session's
+        // program tag is the fallback, so accessory slots and pre-phase-capture
+        // entries chart under the rotation they were actually performed in;
+        // only sessions logged outside a program read as "Untracked".
         const phase = entries.find((entry) => entry.phase)?.phase;
-        const rot = phase ? `R${phase} ${(C.PHASES[phase] || {}).name || ""}`.trim() : "Untracked";
+        const rot = C.chartRotationLabel(phase, s.programTag?.week);
         const performed = entries.flatMap((entry) => (entry.sets || [])
           .filter((set) => !set.isWarmup && set.status === "completed"));
         const top = entries.map(topSet).filter(Boolean).sort((a, b) => b.weightLb - a.weightLb)[0];

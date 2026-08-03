@@ -535,8 +535,13 @@ struct ProgressionChartsView: View {
             for role in visibleRoles {
                 let entries = matching.filter { ChartRole.of($0, in: session) == role }
                 guard !entries.isEmpty else { continue }
-                let phase = entries.compactMap(\.phase).first
-                let rotation = phase.map { "R\($0.rawValue) \($0.name)" } ?? "Untracked"
+                // The session's program tag is the fallback, so accessory
+                // slots and pre-phase-capture entries chart under the rotation
+                // they were actually performed in instead of "Untracked".
+                let rotation = ChartRotation.label(
+                    entryPhase: entries.compactMap(\.phase).first?.rawValue,
+                    sessionRotation: session.programWeek
+                )
                 let suffix = showComplementary ? " (\(role == .main ? "main" : "comp."))" : ""
                 if metric == .topSet || metric == .all, let top = entries.compactMap(\.topSet?.weightLb).max() {
                     result.append(Point(date: session.date, value: shown(top), rotation: rotation,
