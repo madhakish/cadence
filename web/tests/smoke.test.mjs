@@ -499,6 +499,25 @@ const chartsBtn = [...host().querySelectorAll(".seg button")].find((b) => b.text
 chartsBtn.click(); await tick();
 ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history charts mode renders");
 
+// Asking for a projection must always produce an answer. A control that
+// silently changes nothing when the history is too thin reads as broken, so
+// the chart either draws the trend or says why it will not.
+{
+  const horizonBtn = [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "3 months");
+  if (horizonBtn) {
+    horizonBtn.click(); await tick();
+    const drewIt = host().querySelector("path.projection");
+    const saidWhyNot = [...host().querySelectorAll(".sub, .title")]
+      .some((n) => /project|trained|history/i.test(n.textContent || ""));
+    ok(drewIt || saidWhyNot,
+      "[INV-PROJECTION-REFUSES-THIN-HISTORY] a horizon either projects or explains its refusal");
+    // Back to off, so later renders in this file see the default chart.
+    [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Off")?.click();
+    await tick();
+    ok(!host().querySelector("path.projection"), "turning the horizon off removes the projected line");
+  }
+}
+
 // plate calculator overlay
 await plates.openPlateCalculator(); await tick();
 ok(document.querySelector("#overlays .overlay"), "plate calculator opened");
@@ -2521,6 +2540,41 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok([...chart.querySelectorAll(".chart-legend span")].length === 4, "every series is named in the legend");
   const empty = progressionChart({ lines: [{ key: "x", points: [] }], bars: null });
   ok(empty.querySelectorAll("path.line").length === 0, "an empty series renders nothing rather than throwing");
+
+  // ---- the projected trend, drawn past today ----
+  // The forecast shares the load axis with the history it continues, but must
+  // be impossible to mistake for performed work at a glance.
+  const history = [[1, 200], [8, 205], [15, 210], [22, 215], [29, 220]].map(([d, y]) => ({ t: at(d), y }));
+  const nowT = at(29);
+  const fit = C.projectTrend(history.map((p) => ({ day: p.t / 86400000, value: p.y })), 30, nowT / 86400000);
+  ok(fit && Math.abs(fit.perWeek - 5) < 0.0001, "the chart's samples fit the rate they were built from");
+  const projected = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: history }],
+    projection: { label: "Projected · 1 month", color: "#7aa7d9", nowT,
+      points: fit.points.map((p) => ({ t: p.day * 86400000, y: p.value })) },
+  });
+  const psvg = projected.querySelector("svg");
+  const proj = psvg.querySelector("path.projection");
+  ok(proj, "the projected trend is drawn");
+  ok((proj.getAttribute("style") || "").includes("#7aa7d9"), "in its own colour, not the history's");
+  ok(psvg.querySelectorAll("path.line").length === 1, "and is not counted as another performed line");
+  ok(psvg.querySelector("line.now-line"), "a today divider separates performed from projected");
+  ok([...psvg.querySelectorAll("text.now-lbl")].some((t) => t.textContent === "today"), "and says so");
+  ok(psvg.querySelector("rect.future"), "the future region is shaded before anything is drawn on it");
+  ok([...projected.querySelectorAll(".chart-legend span")].some((s) => s.textContent.includes("Projected")),
+    "the legend names the projection as projected");
+  // The forecast climbs above every performed point, so a load axis fitted to
+  // the history alone would clip it off the top of the plot.
+  const axis = [...psvg.querySelectorAll("text.lbl")]
+    .filter((t) => +t.getAttribute("x") < 20).map((t) => Number(t.textContent)).filter(Number.isFinite);
+  ok(axis.length > 0 && Math.max(...axis) >= 235,
+    `the load axis grows to hold the projection (${axis.join()})`);
+  // Off means off.
+  const noProjection = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: history }],
+  });
+  ok(!noProjection.querySelector("path.projection"), "no horizon, no projected line");
+  ok(!noProjection.querySelector("line.now-line"), "and no today divider on a chart of the past");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -152,7 +152,16 @@ const chartRoleOf = (entry, session) => {
 // Exported for the invariant test; the chart itself uses it directly.
 export const chartRoleOfForTest = chartRoleOf;
 
+// Milliseconds per day. The projection engine works in day offsets so it stays
+// free of dates and timezones; the chart converts at the boundary.
+const DAY_MS = 86400000;
+// Projected lines are drawn in the accent's cooler sibling — near enough to the
+// history to read as its continuation, distinct enough to never be mistaken
+// for a session that happened.
+const PROJECTION_COLOR = "#7aa7d9";
+
 let chartEx = null, chartMetric = "weight", chartSplit = false, chartComplementary = false;
+let chartHorizon = 0;
 function renderCharts(panel, sessions, exercises, program) {
   const mains = exercises.filter((e) => e.category === "Main").map((e) => e.name).sort();
   if (!mains.length) { panel.append(ui.empty("📈", COPY.emptyHistory)); return; }
@@ -171,6 +180,11 @@ function renderCharts(panel, sessions, exercises, program) {
   panel.append(ui.h("div", { class: "row", style: { padding: "8px 4px" } },
     ui.h("span", { class: "sub", text: "Split by rotation" }),
     ui.toggle(chartSplit, (v) => { chartSplit = v; renderInner(); })));
+  // How far past today to extend the fitted trend. Off by default: the chart's
+  // job is what happened, and a forecast is something the lifter asks for.
+  panel.append(ui.h("div", { class: "sub", style: { padding: "8px 4px 0" }, text: "Project forward" }));
+  panel.append(ui.seg(C.TREND_HORIZONS.map((h) => ({ value: String(h.value), label: h.label })),
+    String(chartHorizon), (v) => { chartHorizon = Number(v); renderInner(); }));
   const slot = ui.h("div", { class: "card" });
   panel.append(slot);
   renderInner();
@@ -187,10 +201,12 @@ function renderCharts(panel, sessions, exercises, program) {
       for (const role of ["main", "complementary"]) {
         const entries = matching.filter((entry) => chartRoleOf(entry, s) === role);
         if (!entries.length) continue;
-        // The point's rotation (R1–R4) for the split view; sessions logged
-        // outside a cycle bucket read as "Untracked".
+        // The point's rotation (R1–R4) for the split view. The session's
+        // program tag is the fallback, so accessory slots and pre-phase-capture
+        // entries chart under the rotation they were actually performed in;
+        // only sessions logged outside a program read as "Untracked".
         const phase = entries.find((entry) => entry.phase)?.phase;
-        const rot = phase ? `R${phase} ${(C.PHASES[phase] || {}).name || ""}`.trim() : "Untracked";
+        const rot = C.chartRotationLabel(phase, s.programTag?.week);
         const performed = entries.flatMap((entry) => (entry.sets || [])
           .filter((set) => !set.isWarmup && set.status === "completed"));
         const top = entries.map(topSet).filter(Boolean).sort((a, b) => b.weightLb - a.weightLb)[0];
@@ -225,8 +241,30 @@ function renderCharts(panel, sessions, exercises, program) {
     const rawTarget = lift?.peakSingleEnabled && lift.lastPeakSingleLb > 0
       ? lift.lastPeakSingleLb + (lift.peakSingleIncrementLb || 5) : null;
     const targetY = Number.isFinite(rawTarget) ? displayValue(rawTarget) : null;
-    const chartOptions = { fmtY: (v) => C.trim(v), targetY, targetLabel: "Peak target" };
     const unit = C.primaryUnit(ui.prefs.unitDisplay);
+
+    // The projection follows the LIFT, not a rotation: it is fitted from every
+    // main-role point of the shown metric, so splitting the history into four
+    // rotation lines does not fit four separate futures through a quarter of
+    // the evidence each. Volume projects too — a tonnage trend is a real thing
+    // to ask about — so it reads whichever metric is on screen.
+    const projectionMetric = chartMetric === "all" ? "weight" : chartMetric;
+    const projectionRole = roles.includes("main") ? "main" : roles[0];
+    const nowT = Date.now();
+    const fitted = chartHorizon > 0 ? C.projectTrend(
+      pick(projectionMetric, projectionRole).map((p) => ({ day: p.t / DAY_MS, value: p.y })),
+      chartHorizon, nowT / DAY_MS,
+    ) : null;
+    const horizonLabel = (C.TREND_HORIZONS.find((h) => h.value === chartHorizon) || {}).label || "";
+    const projection = fitted ? {
+      label: `Projected · ${horizonLabel}`, color: PROJECTION_COLOR, nowT,
+      points: fitted.points.map((p) => ({ t: p.day * DAY_MS, y: p.value })),
+    } : null;
+    const projectionNote = fitted
+      ? `${C.trendSummary(fitted.perWeek, horizonLabel, `${C.trim(fitted.horizonValue)} ${unit}`, unit)} · ${C.fitDescription(fitted.fitQuality)}`
+      : null;
+
+    const chartOptions = { fmtY: (v) => C.trim(v), targetY, targetLabel: "Peak target", projection };
     const metricLabel = chartMetric === "weight" ? "Top working weight"
       : chartMetric === "e1rm" ? "Estimated 1RM"
         : chartMetric === "volume" ? "Working volume" : "Working weight, est. 1RM, and volume";
@@ -270,6 +308,19 @@ function renderCharts(panel, sessions, exercises, program) {
       slot.append(progressionChart({ ...chartOptions, lines, bars,
         caption: `${metricLabel} per session (${unit})${roleNote}` }));
     }
+    // Say what the projection is, or say why there isn't one. Asking for a
+    // forecast and getting an unchanged chart back reads as a broken control,
+    // and the reason is the useful part: the refusal names what the history is
+    // missing.
+    if (projectionNote) {
+      slot.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
+        ui.h("div", { class: "lead" },
+          ui.h("span", { class: "title", style: { color: PROJECTION_COLOR }, text: projectionNote }),
+          ui.h("span", { class: "sub", text: "Fitted from performed sessions — a continuation of the past, not a plan." }))));
+    } else if (chartHorizon > 0) {
+      slot.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
+        ui.h("span", { class: "sub", text: projectionRefusal(pick(projectionMetric, projectionRole), nowT) })));
+    }
     const records = new Map();
     for (const session of sessions) for (const entry of session.exercises || []) if (entry.exerciseName === chartEx) {
       for (const set of entry.sets || []) if (!set.isWarmup && set.status === "completed" && set.reps > 0 && set.reps <= 12) {
@@ -282,6 +333,25 @@ function renderCharts(panel, sessions, exercises, program) {
           ui.h("span", { class: "sub", text: `${reps} rep${reps === 1 ? "" : "s"}` }),
           ui.h("span", { class: "mono title", text: ui.fmtWeight(weight) })))));
   }
+}
+
+// Why a projection was refused, in the lifter's terms. The engine returns a
+// bare null; a chart that just ignores the control it was given is worse than
+// one that explains itself.
+function projectionRefusal(points, nowT) {
+  if (points.length < C.TREND_MIN_SAMPLES) {
+    return `Not enough history to project — ${points.length} of ${C.TREND_MIN_SAMPLES} sessions so far.`;
+  }
+  const days = points.map((p) => p.t / DAY_MS);
+  const first = Math.min(...days), last = Math.max(...days);
+  if (last - first < C.TREND_MIN_SPAN_DAYS) {
+    return `Not enough time to project — this lift spans ${Math.round(last - first)} days, and a trend needs ${C.TREND_MIN_SPAN_DAYS}.`;
+  }
+  const idle = Math.round(nowT / DAY_MS - last);
+  if (idle > C.TREND_STALENESS_LIMIT_DAYS) {
+    return `Last trained ${idle} days ago — too long to extend a trend from. Log a session to project again.`;
+  }
+  return "Not enough history to project from yet.";
 }
 
 function renderMilestones(panel, milestones) {

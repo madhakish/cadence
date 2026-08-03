@@ -468,6 +468,9 @@ struct ProgressionChartsView: View {
     /// Main only by default — that alone removes the main/complementary
     /// sawtooth that made a main lift's progression unreadable.
     @State private var showComplementary = false
+    /// Off by default: the chart's job is what happened, and a forecast is
+    /// something the lifter asks for rather than something they are handed.
+    @State private var horizon: TrendProjection.Horizon = .off
 
     enum Metric: String, CaseIterable {
         case topSet = "Working weight"
@@ -535,8 +538,13 @@ struct ProgressionChartsView: View {
             for role in visibleRoles {
                 let entries = matching.filter { ChartRole.of($0, in: session) == role }
                 guard !entries.isEmpty else { continue }
-                let phase = entries.compactMap(\.phase).first
-                let rotation = phase.map { "R\($0.rawValue) \($0.name)" } ?? "Untracked"
+                // The session's program tag is the fallback, so accessory
+                // slots and pre-phase-capture entries chart under the rotation
+                // they were actually performed in instead of "Untracked".
+                let rotation = ChartRotation.label(
+                    entryPhase: entries.compactMap(\.phase).first?.rawValue,
+                    sessionRotation: session.programWeek
+                )
                 let suffix = showComplementary ? " (\(role == .main ? "main" : "comp."))" : ""
                 if metric == .topSet || metric == .all, let top = entries.compactMap(\.topSet?.weightLb).max() {
                     result.append(Point(date: session.date, value: shown(top), rotation: rotation,
@@ -632,6 +640,109 @@ struct ProgressionChartsView: View {
         return base + (ceiling - base) * 0.82 * (value / maxVolume)
     }
 
+    // MARK: - Projected trend
+
+    private static let secondsPerDay: TimeInterval = 86_400
+    /// Near enough to the history to read as its continuation, distinct enough
+    /// to never be mistaken for a session that happened.
+    private static let projectionColor = Color(hex: 0x7AA7D9)
+
+    private struct Projection {
+        let result: TrendProjection.Result
+        let points: [Point]
+        let horizonDate: Date
+    }
+
+    /// The projection follows the LIFT, not a rotation: it is fitted from every
+    /// main-role point of the shown metric, so splitting the history into four
+    /// rotation lines does not fit four separate futures through a quarter of
+    /// the evidence each.
+    private var projectionSeriesPrefix: String {
+        switch metric {
+        case .estimatedMax: return "Est. 1RM"
+        case .volume: return "Volume"
+        case .topSet, .all: return "Working weight"
+        }
+    }
+
+    private var projectionSamplePoints: [Point] {
+        points.filter { $0.role == .main && $0.series.hasPrefix(projectionSeriesPrefix) }
+    }
+
+    private var projection: Projection? {
+        guard horizon != .off else { return nil }
+        let samples = projectionSamplePoints
+        guard let origin = samples.map(\.date).min() else { return nil }
+        let day = { (date: Date) in date.timeIntervalSince(origin) / Self.secondsPerDay }
+        guard let result = TrendProjection.project(
+            samples: samples.map { TrendProjection.Sample(day: day($0.date), value: $0.value) },
+            horizonDays: horizon.days,
+            asOfDay: day(Date.now)
+        ) else { return nil }
+        let date = { (offset: Double) in origin.addingTimeInterval(offset * Self.secondsPerDay) }
+        return Projection(
+            result: result,
+            points: result.points.map {
+                Point(date: date($0.day), value: $0.value, rotation: "", role: .main, series: "Projected")
+            },
+            horizonDate: date(result.horizonDay)
+        )
+    }
+
+    /// Say what the projection is, or say why there isn't one. Asking for a
+    /// forecast and getting an unchanged chart back reads as a broken control,
+    /// and the reason is the useful part: the refusal names what the history is
+    /// missing.
+    private var projectionRefusal: String? {
+        guard horizon != .off, projection == nil else { return nil }
+        let samples = projectionSamplePoints
+        guard samples.count >= TrendProjection.minimumSamples else {
+            return "Not enough history to project — \(samples.count) of \(TrendProjection.minimumSamples) sessions so far."
+        }
+        guard let first = samples.map(\.date).min(), let last = samples.map(\.date).max() else {
+            return "Not enough history to project from yet."
+        }
+        let span = last.timeIntervalSince(first) / Self.secondsPerDay
+        guard span >= TrendProjection.minimumSpanDays else {
+            return "Not enough time to project — this lift spans \(Int(span.rounded())) days, and a trend needs \(Int(TrendProjection.minimumSpanDays))."
+        }
+        let idle = Date.now.timeIntervalSince(last) / Self.secondsPerDay
+        if idle > TrendProjection.stalenessLimitDays {
+            return "Last trained \(Int(idle.rounded())) days ago — too long to extend a trend from. Log a session to project again."
+        }
+        return "Not enough history to project from yet."
+    }
+
+    /// The value range every load mark occupies, so the future shading spans
+    /// the plot without depending on the chart's derived domain. Volume bars
+    /// are excluded — they ride their own scale and would drag the band down
+    /// past the load lines it is meant to sit behind.
+    private func loadRange(including projection: Projection) -> (low: Double, high: Double)? {
+        let values = points.map(\.value) + projection.points.map(\.value)
+        guard let low = values.min(), let high = values.max(), high > low else { return nil }
+        return (low, high)
+    }
+
+    /// Values are already in the display unit — the chart converts before it
+    /// builds points, and a linear fit commutes with that scaling — so the
+    /// headline needs the unit appended, not converted again.
+    private func projectionSummary(_ projection: Projection) -> String {
+        TrendProjection.summary(
+            perWeek: projection.result.perWeek,
+            horizonLabel: horizon.label,
+            horizonValue: "\(Weight.trim(projection.result.horizonValue)) \(chartUnitLabel)",
+            unit: chartUnitLabel
+        )
+    }
+
+    /// A single series, drawn on its own, is the only case where an area fill
+    /// is depth rather than clutter. Rotation split and the combined metric
+    /// both put several lines on the plot, and translucent areas over each
+    /// other read as regions that mean something.
+    private var showsAreaFill: Bool {
+        !splitByRotation && Set(points.map(\.series)).count == 1
+    }
+
     private var chartCaption: String {
         let metricLabel: String
         switch metric {
@@ -660,11 +771,34 @@ struct ProgressionChartsView: View {
                 .font(.callout)
             Toggle("Split by rotation", isOn: $splitByRotation)
                 .font(.callout)
+            // How far past today to extend the fitted trend.
+            Picker("Project forward", selection: $horizon) {
+                ForEach(TrendProjection.Horizon.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("Project forward")
+            .accessibilityHint("Extends the trend fitted from performed sessions past today")
 
             if points.isEmpty {
                 ContentUnavailableView(Copy.emptyHistory, systemImage: "chart.xyaxis.line")
             } else {
                 Chart {
+                    // The future, shaded behind everything: the region right of
+                    // today is a different kind of space and should read that
+                    // way before the eye reaches the dashes.
+                    // The y bounds are spelled out rather than left to span the
+                    // plot: RectangleMark's x-only initializer is ambiguous
+                    // between two overloads, and the load range is exactly what
+                    // the shading should cover anyway.
+                    if let projection, let range = loadRange(including: projection) {
+                        RectangleMark(
+                            xStart: .value("Today", Date.now),
+                            xEnd: .value("Horizon", projection.horizonDate),
+                            yStart: .value(chartUnitLabel, range.low),
+                            yEnd: .value(chartUnitLabel, range.high)
+                        )
+                        .foregroundStyle(Color.secondary.opacity(0.07))
+                    }
                     // Tonnage recedes to bars scaled against their own maximum,
                     // so the two same-unit load lines keep the weight axis to
                     // themselves and stay comparable.
@@ -672,6 +806,20 @@ struct ProgressionChartsView: View {
                         BarMark(x: .value("Date", bar.date),
                                 y: .value(chartUnitLabel, scaledVolume(bar.value)))
                             .foregroundStyle(Color(hex: 0x8B9196).opacity(0.28))
+                    }
+                    // A wash under a lone line gives the plot depth without
+                    // adding a second thing to read. Only when there IS one
+                    // line — stacking translucent areas makes their overlaps
+                    // look like data.
+                    if showsAreaFill {
+                        ForEach(points) { point in
+                            AreaMark(x: .value("Date", point.date),
+                                     y: .value(chartUnitLabel, point.value))
+                                .foregroundStyle(LinearGradient(
+                                    colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.01)],
+                                    startPoint: .top, endPoint: .bottom
+                                ))
+                        }
                     }
                     ForEach(points) { point in
                         LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value),
@@ -692,8 +840,42 @@ struct ProgressionChartsView: View {
                                     .font(.caption2).foregroundStyle(Theme.accent)
                             }
                     }
+                    // The projection last, so it reads as an overlay on the
+                    // history rather than another member of it. Its colour is
+                    // set outright rather than through the foreground-style
+                    // scale: joining that scale's domain would renumber every
+                    // performed series' colour the moment a horizon was picked.
+                    // No point marks either — there is no session to mark.
+                    if let projection {
+                        ForEach(projection.points) { point in
+                            LineMark(x: .value("Date", point.date),
+                                     y: .value(chartUnitLabel, point.value),
+                                     series: .value("Series", "Projected"))
+                                .foregroundStyle(Self.projectionColor)
+                                .lineStyle(StrokeStyle(lineWidth: 2, dash: [3, 5]))
+                        }
+                        PointMark(x: .value("Date", projection.horizonDate),
+                                  y: .value(chartUnitLabel, projection.result.horizonValue))
+                            .foregroundStyle(Self.projectionColor)
+                            .symbolSize(36)
+                            .annotation(position: .top, alignment: .trailing) {
+                                Text(Weight.trim(projection.result.horizonValue))
+                                    .font(.caption2.bold().monospacedDigit())
+                                    .foregroundStyle(Self.projectionColor)
+                            }
+                        RuleMark(x: .value("Today", Date.now))
+                            .foregroundStyle(Color.secondary.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("today")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                            }
+                    }
                 }
                 .chartForegroundStyleScale(range: splitByRotation ? Self.rotationPalette : Self.seriesPalette)
+                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
+                .chartYAxis { AxisMarks(position: .leading) }
                 .chartYScale(domain: .automatic(includesZero: false))
                 .chartLegend(Set(points.map(\.series)).count > 1 ? .visible : .hidden)
                 .frame(maxHeight: 280)
@@ -702,6 +884,25 @@ struct ProgressionChartsView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                if let projection {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(projectionSummary(projection))
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(Self.projectionColor)
+                        Text("\(TrendProjection.fitDescription(projection.result.fitQuality)) · fitted from performed sessions — a continuation of the past, not a plan.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .accessibilityElement(children: .combine)
+                } else if let projectionRefusal {
+                    Text(projectionRefusal)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
             }
             if !repRecords.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
