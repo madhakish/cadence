@@ -154,15 +154,39 @@ struct HomeView: View {
                 if !openSessions.isEmpty {
                     Section("Open sessions") {
                         ForEach(openSessions.sorted { $0.date > $1.date }) { open in
+                            let isActiveWorkout = workoutClock.isTracking(sessionID: open.id)
                             Button {
                                 activeSession = open
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Label("Resume session", systemImage: "play.fill").font(.headline)
+                                    Label(
+                                        isActiveWorkout
+                                            ? (workoutClock.isPaused ? "Workout paused" : "Workout in progress")
+                                            : "Open session",
+                                        systemImage: isActiveWorkout
+                                            ? (workoutClock.isPaused ? "pause.fill" : "stopwatch")
+                                            : "arrow.forward"
+                                    )
+                                    .font(.headline)
+                                    if isActiveWorkout, let start = workoutClock.startDate {
+                                        TimelineView(.periodic(from: start, by: 1)) { timeline in
+                                            Text(workoutElapsedLabel(
+                                                from: start,
+                                                to: workoutClock.pausedAt ?? timeline.date
+                                            ))
+                                            .font(.title3.bold().monospacedDigit())
+                                            .foregroundStyle(Theme.accent)
+                                        }
+                                    }
                                     Text(openSessionLabel(open))
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                             }
+                            .accessibilityHint(
+                                Text(isActiveWorkout
+                                    ? "Returns to the workout without changing its timer"
+                                    : "Opens this unfinished session")
+                            )
                             // Swipe alone hid the only way to get rid of an
                             // unwanted open session — an invisible gesture
                             // VoiceOver users never meet either. The visible
@@ -420,6 +444,16 @@ struct HomeView: View {
         case .red: return .red
         case .unknown: return .secondary
         }
+    }
+
+    private func workoutElapsedLabel(from start: Date, to end: Date) -> String {
+        let total = max(0, Int(end.timeIntervalSince(start)))
+        let hours = total / 3_600
+        let minutes = (total % 3_600) / 60
+        let seconds = total % 60
+        return hours > 0
+            ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
+            : String(format: "%d:%02d", minutes, seconds)
     }
 
     private func readinessSummary(_ report: CoachingReport) -> String {

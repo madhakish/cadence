@@ -362,6 +362,17 @@ the plan and logged sets intact.
 A session that was never started reports no start time, so completion writes no
 Health workout rather than inventing a duration.
 
+### INV-BACK-KEEPS-WORKOUT-RUNNING
+*platforms: native · unverifiable*
+
+Back is navigation, not workout state. It saves the open session and returns
+to Today without pausing or ending the workout clock or rest timer. Today
+continues to show the active elapsed clock; pause and end are explicit controls.
+
+> Calling this action Later, then replacing the clock with a play icon and
+> "Resume session," made a running workout look paused even though the timer
+> owner had not changed state.
+
 ### INV-SESSION-ALWAYS-ESCAPABLE
 *platforms: web*
 
