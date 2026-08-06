@@ -151,6 +151,10 @@ const chartRoleOf = (entry, session) => {
 
 // Exported for the invariant test; the chart itself uses it directly.
 export const chartRoleOfForTest = chartRoleOf;
+// The refusal copy has to agree with the engine at every boundary it names, so
+// it is asserted directly rather than through whatever the seed happens to
+// produce on screen.
+export const projectionRefusalForTest = (points, nowT) => projectionRefusal(points, nowT);
 
 // Milliseconds per day. The projection engine works in day offsets so it stays
 // free of dates and timezones; the chart converts at the boundary.
@@ -215,7 +219,11 @@ function renderCharts(panel, sessions, exercises, program) {
           t: new Date(s.date).getTime(), role, rot,
           weight: top ? displayValue(top.weightLb) : null,
           e1rm: estimates.length ? displayValue(Math.max(...estimates)) : null,
-          volume: entries.reduce((sum, entry) => sum + workingVolume(entry), 0) || null,
+          // Tonnage converts at the presentation boundary like every other
+          // charted value. It did not, so a kg lifter's volume axis, caption
+          // and bars were canonical pounds wearing a kg label — and native
+          // (which does convert) drew a different number from the same data.
+          volume: displayValue(entries.reduce((sum, entry) => sum + workingVolume(entry), 0)) || null,
         });
       }
     }
@@ -344,12 +352,18 @@ function projectionRefusal(points, nowT) {
   }
   const days = points.map((p) => p.t / DAY_MS);
   const first = Math.min(...days), last = Math.max(...days);
-  if (last - first < C.TREND_MIN_SPAN_DAYS) {
-    return `Not enough time to project — this lift spans ${Math.round(last - first)} days, and a trend needs ${C.TREND_MIN_SPAN_DAYS}.`;
+  // Compare RAW and floor only for display. Rounding before the comparison
+  // made the message disagree with the engine at the boundary: a 20.6-day span
+  // refused, then explained itself as "spans 21 days, and a trend needs 21".
+  const span = last - first;
+  if (span < C.TREND_MIN_SPAN_DAYS) {
+    return `Not enough time to project — this lift spans ${Math.floor(span)} days, and a trend needs ${C.TREND_MIN_SPAN_DAYS}.`;
   }
-  const idle = Math.round(nowT / DAY_MS - last);
+  // Likewise raw: rounding here let a 35.4-day gap be refused for staleness by
+  // the engine and then explained by the generic fallback below.
+  const idle = nowT / DAY_MS - last;
   if (idle > C.TREND_STALENESS_LIMIT_DAYS) {
-    return `Last trained ${idle} days ago — too long to extend a trend from. Log a session to project again.`;
+    return `Last trained ${Math.floor(idle)} days ago — too long to extend a trend from. Log a session to project again.`;
   }
   return "Not enough history to project from yet.";
 }
