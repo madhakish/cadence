@@ -304,6 +304,9 @@ function defaultSettings() {
     // RETIRED_REST_STAMPS). Absent on pre-bucket stores, so they get the
     // one-shot clear in syncLibrary.
     restSeedStampsCleared: true,
+    // Fresh installs seed vertical pulling as Main already — nothing to
+    // promote. Absent on older stores, so they get the one-shot in syncLibrary.
+    verticalPullMainsPromoted: true,
     seededAt: null,
   };
 }
@@ -437,6 +440,12 @@ export async function ensureSeeded() {
 // (values that merely duplicated the rest buckets and are now 0 in seed.js).
 // Deliberate deviations (180/120/60 accessories) are NOT here — they stay
 // per-exercise. Mirror of Seeder.retiredRestStamps.
+// Names the seed shipped as accessories and now ships as main lifts.
+// "Assisted Pull-up" is deliberately absent — it is a regression toward a
+// pull-up whose progression runs backwards. Mirror of
+// Seeder.verticalPullPromotions.
+const VERTICAL_PULL_PROMOTIONS = ["Pull-ups", "Chin-ups"];
+
 const RETIRED_REST_STAMPS = {
   Deadlift: 300, "Back Squat": 300, "Front Squat": 300, "Overhead Squat": 300,
   "Barbell Bench": 300, "Overhead Press": 300, "Push Press": 300, "Push Jerk": 300,
@@ -543,6 +552,21 @@ export async function syncLibrary() {
       if (cur && cur.defaultRestSeconds === stamp) { cur.defaultRestSeconds = 0; await put("exercises", cur); }
     }
     settings.restSeedStampsCleared = true;
+    await Settings.save(settings);
+  }
+
+  // Vertical pulling became primary work, but the loop above only ever fills
+  // BLANK fields — it never revisits a category — so an already-seeded store
+  // would keep pull-ups as accessories forever and they would never reach the
+  // Main-only chart picker. Mirror of Seeder.promoteVerticalPullMains: promote
+  // only a row still marked exactly what the old seed wrote, and stamp it so a
+  // category set back to Accessory on purpose is never overwritten.
+  if (!settings.verticalPullMainsPromoted) {
+    for (const name of VERTICAL_PULL_PROMOTIONS) {
+      const cur = have.get(name);
+      if (cur && cur.category === "Accessory") { cur.category = "Main"; await put("exercises", cur); }
+    }
+    settings.verticalPullMainsPromoted = true;
     await Settings.save(settings);
   }
 
@@ -1244,11 +1268,14 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       else delete s.restSeedStampsCleared;
       if (cur && cur.loadSemanticsMigrated !== undefined) s.loadSemanticsMigrated = cur.loadSemanticsMigrated;
       else delete s.loadSemanticsMigrated;
+      if (cur && cur.verticalPullMainsPromoted !== undefined) s.verticalPullMainsPromoted = cur.verticalPullMainsPromoted;
+      else delete s.verticalPullMainsPromoted;
     }
     writes.set("settings", [s]);
   } else if (bundle.exercises) {
     const cur = await get("settings", "app");
-    if (cur) writes.set("settings", [{ ...cur, restSeedStampsCleared: false, loadSemanticsMigrated: false }]);
+    if (cur) writes.set("settings", [{ ...cur, restSeedStampsCleared: false, loadSemanticsMigrated: false,
+      verticalPullMainsPromoted: false }]);
   }
 
   const stores = [...writes.keys()];

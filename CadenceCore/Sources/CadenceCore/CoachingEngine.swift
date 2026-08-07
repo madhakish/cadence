@@ -66,7 +66,7 @@ public enum MovementTaxonomy {
     ]
     private static let verticalPull: Set<String> = [
         "Lat Pulldown", "Straight-arm Pulldown", "Pull-ups", "Chin-ups",
-        "Assisted Pull-up",
+        "Assisted Pull-up", "Weighted Pull-up", "Weighted Chin-up",
     ]
     private static let horizontalPull: Set<String> = [
         "Single-arm DB Row", "Chest-supported Row", "Ring Row", "Barbell Row",

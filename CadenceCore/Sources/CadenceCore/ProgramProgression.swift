@@ -732,7 +732,18 @@ public enum ProgramProgression {
         exerciseType: String?, loadBasis: LoadBasis, weightLb: Double, incrementLb: Double
     ) -> Bool {
         // Reps- and duration-progressed work has no load to step.
-        guard !SwapRules.unloadableTypes.contains(exerciseType?.lowercased() ?? "") else { return false }
+        //
+        // An explicit external basis outranks the equipment type, but ONLY for
+        // bodyweight: a weighted pull-up is typed bodyweight while hanging real
+        // plates from a belt, and the type guard alone silently exempted it
+        // from this warning, so a belt slot with a zero increment would never
+        // progress and never say so. Timed and conditioning stay unloadable
+        // whatever they carry — a weight-vest plank still progresses by
+        // duration, which is what the zero increment there means.
+        let type = exerciseType?.lowercased() ?? ""
+        let unloadable = type == "timed" || type == "conditioning"
+            || (type == "bodyweight" && !loadBasis.supportsLoadPR)
+        guard !unloadable else { return false }
         guard loadBasis != .bodyweight else { return false }
         return weightLb > 0 && incrementLb <= 0
     }

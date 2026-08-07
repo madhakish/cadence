@@ -1578,7 +1578,14 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
 //
 // Mirrored 1:1 in CadenceCore ProgramProgression.accessoryCannotProgressLoad.
 export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, incrementLb) {
-  if (UNLOADABLE_TYPES.has(String(exerciseType ?? "").toLowerCase())) return false;
+  // An explicit external basis outranks the equipment type, but ONLY for
+  // bodyweight: a weighted pull-up is typed bodyweight while hanging real
+  // plates from a belt, and the type guard alone silently exempted it from this
+  // warning. Timed and conditioning stay unloadable whatever they carry.
+  const type = String(exerciseType ?? "").toLowerCase();
+  const unloadable = type === "timed" || type === "conditioning"
+    || (type === "bodyweight" && !supportsLoadPR(loadBasis));
+  if (unloadable) return false;
   if (loadBasis === "bodyweight") return false;
   return weightLb > 0 && !(incrementLb > 0);
 }

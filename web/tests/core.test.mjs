@@ -839,6 +839,15 @@ ok(brokenAdvance.weightLb === 75 && brokenAdvance.currentReps === 13,
 ok(C.accessoryCannotProgressLoad("dumbbell", "perImplement", 75, 0), "per-hand dumbbell slot with no increment is flagged");
 ok(C.accessoryCannotProgressLoad("machine", "externalTotal", 120, 0), "machine slot with no increment is flagged");
 ok(!C.accessoryCannotProgressLoad("timed", "externalTotal", 25, 0), "a timed slot progresses by duration, not load");
+// A weighted pull-up is TYPED bodyweight but hangs real plates from a belt.
+// Keying loadability on type alone silently exempted it, so a belt slot with a
+// zero increment never progressed and never warned. Mirrors CadenceCore.
+ok(C.accessoryCannotProgressLoad("bodyweight", "externalTotal", 25, 0),
+  "a belt-loaded bodyweight slot with no increment is flagged");
+ok(!C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0, 0),
+  "an unloaded bodyweight slot has no load to step");
+ok(!C.accessoryCannotProgressLoad("conditioning", "externalTotal", 20, 0),
+  "a loaded carry progresses by distance or duration, not by a load increment");
 ok(!C.accessoryCannotProgressLoad("conditioning", "externalTotal", 25, 0), "conditioning is not load-progressed");
 ok(!C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0, 0), "bodyweight work has no load to add");
 ok(!C.accessoryCannotProgressLoad("barbell", "bodyweight", 45, 0), "an explicit bodyweight basis wins over the equipment label");

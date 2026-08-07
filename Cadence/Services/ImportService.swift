@@ -167,7 +167,7 @@ enum ImportService {
         var mainCompoundRestSeconds: Int?; var olympicRestSeconds: Int?; var mainUpperRestSeconds: Int?; var secondaryRestSeconds: Int?
         var rest: RestDTO?
         var autoStartRest: Bool?; var haptics: Bool?; var gymTagFirstLaunchOfDay: Bool?; var restSeedStampsCleared: Bool?
-        var loadSemanticsMigrated: Bool?
+        var loadSemanticsMigrated: Bool?; var verticalPullMainsPromoted: Bool?
         var seededAt: Date?; var theme: String?
     }
 
@@ -632,6 +632,7 @@ enum ImportService {
                 // next launch's syncLibrary re-inspects the restored records.
                 s.restSeedStampsCleared = false
                 s.loadSemanticsMigrated = false
+                s.verticalPullMainsPromoted = false
             }
 
             try context.save()
@@ -967,6 +968,10 @@ enum ImportService {
         // to equal a retired stamp (Codex). Mirrors web importBundle.
         if restoredExercises { settings.restSeedStampsCleared = st.restSeedStampsCleared ?? false }
         if restoredExercises { settings.loadSemanticsMigrated = st.loadSemanticsMigrated ?? false }
+        // Same reasoning: a restore can write the pre-promotion accessory rows
+        // back, so the one-shot stamp has to be re-armed or the repair is
+        // blocked permanently on a store that now needs it again.
+        if restoredExercises { settings.verticalPullMainsPromoted = st.verticalPullMainsPromoted ?? false }
         // Only accept a known theme; an unknown value would round-trip as
         // garbage on the next export (the UI would silently show Carbon anyway).
         if let v = st.theme, ThemeName(rawValue: v) != nil { settings.themeNameRaw = v }
