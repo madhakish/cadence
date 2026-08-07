@@ -93,8 +93,21 @@ enum Seeder {
             Exercise(name: "Barbell Row", category: .main, type: .barbell, movementGroup: "pull"),
             Exercise(name: "Pendlay Row", category: .main, type: .barbell, movementGroup: "pull"),
             Exercise(name: "T-Bar Row", category: .main, type: .machine, movementGroup: "pull"),
-            Exercise(name: "Pull-ups", category: .accessory, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
-            Exercise(name: "Chin-ups", category: .accessory, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
+            // Vertical pulling is primary upper-body work, so it is charted and
+            // progressed like one. Unloaded and weighted are separate entries
+            // because they disagree about what their number MEANS: a bodyweight
+            // pull-up has no external resistance (no load PR, no tonnage — see
+            // INV-NO-LOAD-WITHOUT-RESISTANCE), while belt weight is real
+            // resistance that must earn both. One entry could only be honest
+            // about one of them, and basis is never guessed from the name.
+            Exercise(name: "Pull-ups", category: .main, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
+            Exercise(name: "Chin-ups", category: .main, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
+            Exercise(name: "Weighted Pull-up", category: .main, type: .bodyweight, movementGroup: "pull",
+                     loadBasis: .externalTotal, defaultRestSeconds: 180),
+            Exercise(name: "Weighted Chin-up", category: .main, type: .bodyweight, movementGroup: "pull",
+                     loadBasis: .externalTotal, defaultRestSeconds: 180),
+            // Assistance is a regression TOWARD a pull-up, and its progression
+            // runs backwards (less assistance is harder), so it stays accessory.
             Exercise(name: "Assisted Pull-up", category: .accessory, type: .machine, movementGroup: "pull",
                      loadBasis: .assisted),
             Exercise(name: "Seated Cable Row", category: .accessory, type: .machine, movementGroup: "pull"),

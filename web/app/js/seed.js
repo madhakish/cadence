@@ -82,8 +82,19 @@ const exercises = [
   ex("Barbell Row", "Main", "barbell", "pull"),
   ex("Pendlay Row", "Main", "barbell", "pull"),
   ex("T-Bar Row", "Main", "machine", "pull"),
-  ex("Pull-ups", "Accessory", "bodyweight", "pull", { defaultRestSeconds: 120 }),
-  ex("Chin-ups", "Accessory", "bodyweight", "pull", { defaultRestSeconds: 120 }),
+  // Vertical pulling is primary upper-body work, so it is charted and
+  // progressed like one. Unloaded and weighted are separate entries because
+  // they disagree about what their number MEANS: a bodyweight pull-up has no
+  // external resistance (no load PR, no tonnage — see
+  // INV-NO-LOAD-WITHOUT-RESISTANCE), while belt weight is real resistance that
+  // must earn both. One entry could only be honest about one of them, and
+  // basis is never guessed from the name.
+  ex("Pull-ups", "Main", "bodyweight", "pull", { defaultRestSeconds: 120 }),
+  ex("Chin-ups", "Main", "bodyweight", "pull", { defaultRestSeconds: 120 }),
+  ex("Weighted Pull-up", "Main", "bodyweight", "pull", { loadBasis: "externalTotal", defaultRestSeconds: 180 }),
+  ex("Weighted Chin-up", "Main", "bodyweight", "pull", { loadBasis: "externalTotal", defaultRestSeconds: 180 }),
+  // Assistance is a regression TOWARD a pull-up, and its progression runs
+  // backwards (less assistance is harder), so it stays accessory.
   ex("Assisted Pull-up", "Accessory", "machine", "pull", { loadBasis: "assisted" }),
   ex("Seated Cable Row", "Accessory", "machine", "pull"),
   ex("One-arm Cable Row", "Accessory", "machine", "pull", { isUnilateral: true }),

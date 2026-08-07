@@ -48,7 +48,7 @@ const completeAll = async (workout) => {
 // ---- privacy-safe first launch ----
 await db.ensureSeeded();
 const seededExercises = await db.Exercises.all();
-ok(seededExercises.length === 141, "seeded 141 exercises");
+ok(seededExercises.length === 143, "seeded 143 exercises");
 ok(["Push-ups", "Pull-ups", "Barbell Row", "Bulgarian Split Squat", "Ab Wheel Rollout", "Row Erg"]
   .every((name) => seededExercises.some((exercise) => exercise.name === name)),
   "comprehensive seed covers common push, pull, lower, core, and conditioning movements");
@@ -76,7 +76,7 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
   ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
-  ok((await db.Exercises.all()).length === 141, "seed repair does not duplicate exercises");
+  ok((await db.Exercises.all()).length === 143, "seed repair does not duplicate exercises");
   ok((await db.Bodyweight.all()).some((entry) => entry.id === weighInId), "seed repair preserves other user stores");
   await db.Sessions.del(sentinelId);
   await db.Bodyweight.del(weighInId);
@@ -268,7 +268,7 @@ for (let i = 0; i < 10; i++) {
   await db.syncLibrary();
   ok((await db.Exercises.byName("Deadlift")).movementGroup === "hinge", "sync backfills a missing movement group");
   ok((await db.Exercises.byName("Deadlift")).defaultRestSeconds === 222, "sync does NOT clobber user edits");
-  ok((await db.Exercises.all()).length === 141, "sync leaves the count whole (no dupes)");
+  ok((await db.Exercises.all()).length === 143, "sync leaves the count whole (no dupes)");
 }
 
 // ---- retired rest stamps: one-shot clear un-freezes the rest buckets ----
@@ -622,7 +622,7 @@ ok(db.BACKUP_SCHEMA_VERSION === 7, `backup schema is pinned at 7 (got ${db.BACKU
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
-ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 141, "export carries the exercise library");
+ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 143, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
 ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
