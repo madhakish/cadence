@@ -88,6 +88,36 @@ reconstruct the program.
 | `incrementLb` | Load added when the range is earned; **0 = bodyweight** (climbs reps indefinitely, `maxReps` advisory) |
 | `revertToExerciseName` | As for lifts |
 
+## Vertical pulling is main work
+
+Pull-ups and chin-ups are **Main**-category exercises, not accessories. That
+is what makes them selectable in the progression charts, eligible for the
+forward projection, and gradeable against the rotation — an accessory is
+excluded from all three.
+
+Unloaded and weighted are **separate library entries**, because they disagree
+about what their number means:
+
+| Exercise | Load basis | Earns load PR / tonnage |
+|---|---|---|
+| `Pull-ups`, `Chin-ups` | `bodyweight` | No — reps and scheme only ([INV-NO-LOAD-WITHOUT-RESISTANCE](invariants.md)) |
+| `Weighted Pull-up`, `Weighted Chin-up` | `externalTotal` | Yes — belt weight is real resistance |
+
+One entry could only be honest about one of them: as bodyweight it would never
+credit real belt weight, and as external resistance an unweighted set would
+record `0 lb` and become eligible for exactly the meaningless PR that invariant
+prevents. Load basis is explicit and never inferred from the exercise name, and
+each set snapshots the basis it was logged under, so old records keep their
+meaning.
+
+`Assisted Pull-up` stays an accessory. It is a regression *toward* a pull-up
+and its progression runs backwards — less assistance is harder.
+
+A main-category exercise does not have to ride the Volume/Load/Peak wave.
+Bodyweight pull-ups suit `doubleProgression` — a rep window at a held load —
+which is one of the styles that builds its own session shape and so carries no
+phase name.
+
 ## Sessions generated from a day
 
 Starting a program day pre-fills one session exercise per lift and
