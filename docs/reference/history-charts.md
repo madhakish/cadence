@@ -33,6 +33,15 @@ the main progression stays visually dominant.
 | Est. 1RM | Best Epley estimate across completed working sets — see [progression rules](progression-rules.md) |
 | Volume | Working tonnage (warm-ups excluded) |
 | **All three** | Weight and est. 1RM as lines; volume as bars behind |
+| Reps | Best completed working set's reps — offered *instead* of the load metrics for a bodyweight lift |
+
+Which metrics are offered depends on what the lift's load **means**. An
+unloaded pull-up has no external resistance, so working weight, est. 1RM and
+tonnage could only ever draw a flat zero — so a lift whose load basis earns no
+load PR ([INV-NO-LOAD-WITHOUT-RESISTANCE](invariants.md)) is offered **Reps**
+and nothing else. `Weighted Pull-up` hangs real plates from a belt, so it keeps
+every load metric. Reps carry no weight unit and never convert between lb
+and kg; a projected rep count is rounded, since a "12.4 rep" set does not exist.
 
 **All three** deliberately does *not* use a second y-axis for volume.
 Working weight and est. 1RM share a unit, so they belong on one axis and the

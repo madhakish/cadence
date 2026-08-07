@@ -518,6 +518,35 @@ ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history
   }
 }
 
+// Promoting pull-ups to Main made them selectable in the charts — but an
+// unloaded pull-up has no external resistance, so working weight, est. 1RM and
+// tonnage can only ever draw a flat zero. The honest series is reps, and the
+// picker must offer that instead of three straight lines at 0.
+{
+  await history.render(host());
+  [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Charts")?.click();
+  await tick();
+  const select = host().querySelector("select");
+  const hasPullUps = select && [...select.options].some((o) => o.value === "Pull-ups");
+  ok(hasPullUps, "a promoted pull-up is selectable in the chart picker");
+  if (hasPullUps) {
+    select.value = "Pull-ups";
+    select.dispatchEvent(new window.Event("change"));
+    await tick();
+    const labels = [...host().querySelectorAll(".seg button")].map((b) => b.textContent);
+    ok(labels.includes("Reps"), `a bodyweight lift is offered Reps (${labels.join(", ")})`);
+    ok(!labels.includes("Working weight") && !labels.includes("Est. 1RM"),
+      "and is NOT offered the load metrics it could only draw as zero");
+    // A loaded lift keeps every load metric and is never offered reps.
+    select.value = "Weighted Pull-up";
+    select.dispatchEvent(new window.Event("change"));
+    await tick();
+    const loadedLabels = [...host().querySelectorAll(".seg button")].map((b) => b.textContent);
+    ok(loadedLabels.includes("Working weight") && !loadedLabels.includes("Reps"),
+      `belt weight is real resistance, so it charts load (${loadedLabels.join(", ")})`);
+  }
+}
+
 // plate calculator overlay
 await plates.openPlateCalculator(); await tick();
 ok(document.querySelector("#overlays .overlay"), "plate calculator opened");
