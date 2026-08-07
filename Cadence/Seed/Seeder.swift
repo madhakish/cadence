@@ -231,6 +231,7 @@ enum Seeder {
             }
         }
         try clearRetiredRestStamps(byName: byName, context: context)
+        try promoteVerticalPullMains(byName: byName, context: context)
         try ensureWorkoutSessionIDs(context: context)
         try normalizeRelationshipAliases(context: context)
         try snapshotLegacyLoadSemantics(context: context)
@@ -264,6 +265,36 @@ enum Seeder {
                 set.prescriptionBlockRaw = PrescriptionBlockKind.conditioning.rawValue
             }
         }
+    }
+
+    /// Names the seed shipped as accessories and now ships as main lifts.
+    /// `Assisted Pull-up` is deliberately absent: it is a regression toward a
+    /// pull-up whose progression runs backwards, so it stays an accessory.
+    static let verticalPullPromotions = ["Pull-ups", "Chin-ups"]
+
+    /// A store seeded before vertical pulling became primary work still holds
+    /// these as accessories, and `seedIfNeeded` never revisits a seeded install
+    /// — so without this the promotion would reach new installs only.
+    ///
+    /// Promotes ONLY a row still marked exactly what the old seed wrote. A
+    /// lifter who has already moved one of these to Main (or deliberately to
+    /// Conditioning) has said something, and the repair does not argue. The
+    /// stamp then makes it one-shot: re-running the promotion every open would
+    /// silently overwrite a category set back to Accessory on purpose, which is
+    /// the same class of bug as an edit that disappears.
+    ///
+    /// The new weighted entries need no special handling — `syncLibrary`
+    /// already inserts any definition the store is missing, and insert-if-absent
+    /// is idempotent on its own.
+    private static func promoteVerticalPullMains(byName: [String: Exercise], context: ModelContext) throws {
+        guard let settings = try context.fetch(FetchDescriptor<AppSettings>()).first,
+              !settings.verticalPullMainsPromoted else { return }
+        for name in verticalPullPromotions {
+            if let current = byName[name], current.categoryRaw == ExerciseCategory.accessory.rawValue {
+                current.categoryRaw = ExerciseCategory.main.rawValue
+            }
+        }
+        settings.verticalPullMainsPromoted = true
     }
 
     private static func clearRetiredRestStamps(byName: [String: Exercise], context: ModelContext) throws {

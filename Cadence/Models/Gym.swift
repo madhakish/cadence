@@ -102,6 +102,10 @@ final class AppSettings {
     /// One-shot snapshot migration for load basis/implement count. Once set,
     /// historical sets no longer inherit later library edits.
     var loadSemanticsMigrated: Bool = false
+    /// One-shot stamp for the repair that promoted seeded pull-ups from
+    /// Accessory to Main. Without it the promotion would re-run on every open
+    /// and silently overwrite a category the lifter set back deliberately.
+    var verticalPullMainsPromoted: Bool = false
     var healthKitEnabled: Bool
     var seededAt: Date?
     /// Selected theme, raw value of `ThemeName` (mirrors web `settings.theme`).
@@ -124,6 +128,7 @@ final class AppSettings {
         // carry the old stamps) run the one-shot clear in syncLibrary.
         self.restSeedStampsCleared = true
         self.loadSemanticsMigrated = false
+        self.verticalPullMainsPromoted = true
         self.healthKitEnabled = false
         self.seededAt = nil
         self.themeNameRaw = "carbon"
