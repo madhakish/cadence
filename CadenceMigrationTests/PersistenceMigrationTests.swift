@@ -909,7 +909,7 @@ final class PersistenceMigrationTests: XCTestCase {
         context.insert(assisted)
         context.insert(CadenceSchemaV6.Gym(name: "Migration Gym"))
         context.insert(CadenceSchemaV6.AppSettings())
-        insertV5Program(context)
+        insertV6Program(context)
         try context.save()
     }
 
@@ -919,6 +919,17 @@ final class PersistenceMigrationTests: XCTestCase {
         let lift = CadenceSchemaV5.ProgramLift(exerciseName: "Back Squat")
         lift.baseWeightLb = 175
         let accessory = CadenceSchemaV5.ProgramAccessory(exerciseName: "Seated Leg Curl")
+        day.program = program; lift.day = day; accessory.day = day
+        day.lifts = [lift]; day.accessories = [accessory]; program.days = [day]
+        context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
+    }
+
+    private func insertV6Program(_ context: ModelContext) {
+        let program = CadenceSchemaV6.Program(name: "Migration Program")
+        let day = CadenceSchemaV6.ProgramDay(name: "Lower", order: 0)
+        let lift = CadenceSchemaV6.ProgramLift(exerciseName: "Back Squat")
+        lift.baseWeightLb = 175
+        let accessory = CadenceSchemaV6.ProgramAccessory(exerciseName: "Seated Leg Curl")
         day.program = program; lift.day = day; accessory.day = day
         day.lifts = [lift]; day.accessories = [accessory]; program.days = [day]
         context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)

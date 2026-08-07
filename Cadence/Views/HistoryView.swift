@@ -692,8 +692,14 @@ struct ProgressionChartsView: View {
         }
     }
 
+    /// Main-role points, or whatever role the lift actually has. A lift that
+    /// only ever occupies complementary slots would otherwise draw a full chart
+    /// beside "0 of 4 sessions so far" — refusing on a role distinction the
+    /// lifter never asked about. Web falls back the same way.
     private var projectionSamplePoints: [Point] {
-        points.filter { $0.role == .main && $0.series.hasPrefix(projectionSeriesPrefix) }
+        let ofMetric = points.filter { $0.series.hasPrefix(projectionSeriesPrefix) }
+        let main = ofMetric.filter { $0.role == .main }
+        return main.isEmpty ? ofMetric : main
     }
 
     private var projection: Projection? {
@@ -720,7 +726,7 @@ struct ProgressionChartsView: View {
     /// forecast and getting an unchanged chart back reads as a broken control,
     /// and the reason is the useful part: the refusal names what the history is
     /// missing.
-    private var projectionRefusal: String? {
+    private func projectionRefusal(given projection: Projection?) -> String? {
         guard horizon != .off, projection == nil else { return nil }
         let samples = projectionSamplePoints
         guard samples.count >= TrendProjection.minimumSamples else {
@@ -729,13 +735,17 @@ struct ProgressionChartsView: View {
         guard let first = samples.map(\.date).min(), let last = samples.map(\.date).max() else {
             return "Not enough history to project from yet."
         }
+        // Compare RAW and truncate only for display. Rounding before the
+        // comparison made the message disagree with the engine at the
+        // boundary: a 20.6-day span refused, then explained itself as
+        // "spans 21 days, and a trend needs 21".
         let span = last.timeIntervalSince(first) / Self.secondsPerDay
         guard span >= TrendProjection.minimumSpanDays else {
-            return "Not enough time to project — this lift spans \(Int(span.rounded())) days, and a trend needs \(Int(TrendProjection.minimumSpanDays))."
+            return "Not enough time to project — this lift spans \(Int(span)) days, and a trend needs \(Int(TrendProjection.minimumSpanDays))."
         }
         let idle = Date.now.timeIntervalSince(last) / Self.secondsPerDay
         if idle > TrendProjection.stalenessLimitDays {
-            return "Last trained \(Int(idle.rounded())) days ago — too long to extend a trend from. Log a session to project again."
+            return "Last trained \(Int(idle)) days ago — too long to extend a trend from. Log a session to project again."
         }
         return "Not enough history to project from yet."
     }
@@ -790,7 +800,11 @@ struct ProgressionChartsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        // Bound ONCE per pass. `projection` re-runs the least-squares fit over
+        // a freshly recomputed `points` on every read, and the body reads it
+        // from five places.
+        let trend = projection
+        return VStack(spacing: 12) {
             Picker("Lift", selection: $selectedLift) {
                 ForEach(mainLifts) { Text($0.name).tag($0.name) }
             }
@@ -830,10 +844,10 @@ struct ProgressionChartsView: View {
                     // plot: RectangleMark's x-only initializer is ambiguous
                     // between two overloads, and the load range is exactly what
                     // the shading should cover anyway.
-                    if let projection, let range = loadRange(including: projection) {
+                    if let trend, let range = loadRange(including: trend) {
                         RectangleMark(
                             xStart: .value("Today", Date.now),
-                            xEnd: .value("Horizon", projection.horizonDate),
+                            xEnd: .value("Horizon", trend.horizonDate),
                             yStart: .value(chartUnitLabel, range.low),
                             yEnd: .value(chartUnitLabel, range.high)
                         )
@@ -886,20 +900,20 @@ struct ProgressionChartsView: View {
                     // scale: joining that scale's domain would renumber every
                     // performed series' colour the moment a horizon was picked.
                     // No point marks either — there is no session to mark.
-                    if let projection {
-                        ForEach(projection.points) { point in
+                    if let trend {
+                        ForEach(trend.points) { point in
                             LineMark(x: .value("Date", point.date),
                                      y: .value(chartUnitLabel, point.value),
                                      series: .value("Series", "Projected"))
                                 .foregroundStyle(Self.projectionColor)
                                 .lineStyle(StrokeStyle(lineWidth: 2, dash: [3, 5]))
                         }
-                        PointMark(x: .value("Date", projection.horizonDate),
-                                  y: .value(chartUnitLabel, projection.result.horizonValue))
+                        PointMark(x: .value("Date", trend.horizonDate),
+                                  y: .value(chartUnitLabel, trend.result.horizonValue))
                             .foregroundStyle(Self.projectionColor)
                             .symbolSize(36)
                             .annotation(position: .top, alignment: .trailing) {
-                                Text(chartValueLabel(projection.result.horizonValue))
+                                Text(chartValueLabel(trend.result.horizonValue))
                                     .font(.caption2.bold().monospacedDigit())
                                     .foregroundStyle(Self.projectionColor)
                             }
@@ -924,20 +938,20 @@ struct ProgressionChartsView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                if let projection {
+                if let trend {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(projectionSummary(projection))
+                        Text(projectionSummary(trend))
                             .font(.callout.weight(.semibold))
                             .foregroundStyle(Self.projectionColor)
-                        Text("\(TrendProjection.fitDescription(projection.result.fitQuality)) · fitted from performed sessions — a continuation of the past, not a plan.")
+                        Text("\(TrendProjection.fitDescription(trend.result.fitQuality)) · fitted from performed sessions — a continuation of the past, not a plan.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
                     .accessibilityElement(children: .combine)
-                } else if let projectionRefusal {
-                    Text(projectionRefusal)
+                } else if let refusal = projectionRefusal(given: trend) {
+                    Text(refusal)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

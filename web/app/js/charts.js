@@ -148,8 +148,12 @@ export function progressionChart({
   // The future, shaded, before anything is drawn on top of it: the region
   // right of today is a different kind of space and should read that way
   // before the eye reaches the dashes.
+  // Same guard the divider uses. Shading is only meaningful when today falls
+  // INSIDE the plotted span; a nowT left of the domain would otherwise wash
+  // the whole plot with no divider to explain what the wash means.
   const nowT = Number.isFinite(projection?.nowT) ? projection.nowT : null;
-  if (nowT !== null && tmax > nowT) {
+  const showsFuture = nowT !== null && tmax > nowT && nowT > tmin;
+  if (showsFuture) {
     const x = xAt(nowT);
     svg.append(el("rect", { class: "future", x: x.toFixed(1), y: padT,
       width: Math.max(0, W - padR - x).toFixed(1), height: H - padT - padB }));
@@ -167,10 +171,13 @@ export function progressionChart({
     svg.append(el("text", { class: "ann", x: W - padR, y: y - 5, "text-anchor": "end" }, `${targetLabel} ${fmtY(targetY)}`));
   }
 
-  // A single wash under the leading line gives the plot depth without adding
-  // a second thing to read. Only the first line gets one — filling every line
-  // would stack translucent layers whose overlaps look like data.
-  if (area && drawn.length && drawn[0].points.length > 1) {
+  // A wash under a LONE line gives the plot depth without adding a second
+  // thing to read. With several lines up there is no "the" line to fill:
+  // shading one of four rotations, or working weight over the volume bars,
+  // reads as a region that means something. Native gates this the same way
+  // (`showsAreaFill`); web filling unconditionally made the two clients draw
+  // different charts from the same data.
+  if (area && drawn.length === 1 && drawn[0].points.length > 1) {
     const pts = [...drawn[0].points].sort((a, b) => a.t - b.t);
     const d = `${pts.map((p, i) => `${i ? "L" : "M"}${xAt(p.t).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ")}`
       + ` L${xAt(pts.at(-1).t).toFixed(1)} ${baseline.toFixed(1)}`
@@ -204,7 +211,7 @@ export function progressionChart({
     svg.append(el("text", { class: "ann", x: W - padR, y: yAt(end.y) - 6, "text-anchor": "end" },
       fmtY(end.y)));
   }
-  if (nowT !== null && tmax > nowT && nowT > tmin) {
+  if (showsFuture) {
     const x = xAt(nowT);
     svg.append(el("line", { class: "now-line", x1: x, y1: padT, x2: x, y2: baseline }));
     svg.append(el("text", { class: "now-lbl", x: x + 3, y: padT + 8 }, "today"));
@@ -225,7 +232,10 @@ export function progressionChart({
       const swatch = document.createElement("i");
       swatch.style.background = item.color || "var(--accent)";
       if (item.bar) { swatch.style.height = "8px"; swatch.style.width = "6px"; swatch.style.opacity = ".55"; }
-      else if (item.dash) { swatch.style.background = "none"; swatch.style.borderTop = `3px dashed ${item.color}`; }
+      // Same accent fallback the solid swatch takes: a missing colour here
+      // produced the literal `3px dashed undefined`, an invalid rule that
+      // dropped the swatch entirely.
+      else if (item.dash) { swatch.style.background = "none"; swatch.style.borderTop = `3px dashed ${item.color || "var(--accent)"}`; }
       span.append(swatch, document.createTextNode(item.label));
       legend.append(span);
     }

@@ -43,6 +43,10 @@ and nothing else. `Weighted Pull-up` hangs real plates from a belt, so it keeps
 every load metric. Reps carry no weight unit and never convert between lb
 and kg; a projected rep count is rounded, since a "12.4 rep" set does not exist.
 
+Every metric — tonnage included — is converted to your display unit at the
+chart boundary. Weights are stored in canonical pounds, so a kg lifter's
+volume axis reads in kilograms like the rest of the chart.
+
 **All three** deliberately does *not* use a second y-axis for volume.
 Working weight and est. 1RM share a unit, so they belong on one axis and the
 **gap between them is the signal** — an est. 1RM climbing while the top set

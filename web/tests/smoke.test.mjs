@@ -507,10 +507,25 @@ ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history
   if (horizonBtn) {
     horizonBtn.click(); await tick();
     const drewIt = host().querySelector("path.projection");
-    const saidWhyNot = [...host().querySelectorAll(".sub, .title")]
-      .some((n) => /project|trained|history/i.test(n.textContent || ""));
-    ok(drewIt || saidWhyNot,
-      "[INV-PROJECTION-REFUSES-THIN-HISTORY] a horizon either projects or explains its refusal");
+    // Match the SENTENCES the refusal actually produces, not a loose keyword.
+    // A /project|trained|history/i sweep matched the control's own "Project
+    // forward" heading, so this passed whether or not anything was explained —
+    // the invariant had no UI coverage at all while appearing to have some.
+    const REFUSALS = [/^Not enough history to project/, /^Not enough time to project/, /^Last trained \d+ days ago/];
+    const said = [...host().querySelectorAll(".sub, .title")]
+      .map((n) => (n.textContent || "").trim())
+      .filter((t) => REFUSALS.some((r) => r.test(t)));
+    // A lift with no charted points at all is its own answer — there is no
+    // chart to project from — so the empty state counts as having responded.
+    const emptyChart = !!host().querySelector(".empty");
+    ok(drewIt || said.length > 0 || emptyChart,
+      "[INV-PROJECTION-REFUSES-THIN-HISTORY] a horizon either projects, refuses, or has no chart at all");
+    // Whichever branch ran, the other must NOT be on screen: a chart showing a
+    // projected line and a refusal at once is the contradiction worth catching.
+    ok(!(drewIt && said.length > 0),
+      "[INV-PROJECTION-REFUSES-THIN-HISTORY] it never both projects and refuses");
+    ok(!said.some((t) => /^Project forward$/.test(t)),
+      "the refusal check cannot be satisfied by the control's own heading");
     // Back to off, so later renders in this file see the default chart.
     [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Off")?.click();
     await tick();
@@ -2527,6 +2542,34 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "[INV-CHART-ROLE-EXCLUDES-EXTRA] accessory work is not main");
   ok(roleOf({ programRole: null }, untagged) === "main",
     "[INV-CHART-ROLE-EXCLUDES-EXTRA] standalone work with no program IS the record for that lift");
+
+  // The refusal copy must agree with the engine at every boundary it names. It
+  // did not: both thresholds were rounded for the message while the engine
+  // compared raw, so a refusal could explain itself with numbers that say it
+  // should have succeeded.
+  const DAY = 86400000;
+  const refuse = hist.projectionRefusalForTest;
+  const pts = (days, now) => ({ points: days.map((d) => ({ t: d * DAY, y: 200 })), now: now * DAY });
+
+  const thin = pts([0, 7, 14], 14);
+  ok(/^Not enough history to project — 3 of 4 sessions so far\.$/.test(refuse(thin.points, thin.now)),
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] too few exposures says how many are missing");
+
+  // 20.6 days refuses; the message must not claim it already spans 21.
+  const shortSpan = pts([0, 7, 14, 20.6], 20.6);
+  const spanMsg = refuse(shortSpan.points, shortSpan.now);
+  ok(/^Not enough time to project — this lift spans 20 days, and a trend needs 21\.$/.test(spanMsg),
+    `[INV-PROJECTION-REFUSES-THIN-HISTORY] a sub-threshold span never reads as meeting it (${spanMsg})`);
+  ok(!/spans 21 days, and a trend needs 21/.test(spanMsg),
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] the span message cannot contradict itself");
+
+  // 35.4 idle days is refused by the engine, so the message must name staleness
+  // rather than falling through to the generic line.
+  const stale = pts([0, 7, 14, 21, 28], 28 + 35.4);
+  ok(C.projectTrend(stale.points.map((p) => ({ day: p.t / DAY, value: p.y })), 90, stale.now / DAY) === null,
+    "the engine refuses a 35.4-day gap");
+  ok(/^Last trained 35 days ago —/.test(refuse(stale.points, stale.now)),
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] the staleness message covers the engine's whole refusal band");
 }
 
 // ---- progression chart: role split + combined metric ----
@@ -2604,6 +2647,39 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   });
   ok(!noProjection.querySelector("path.projection"), "no horizon, no projected line");
   ok(!noProjection.querySelector("line.now-line"), "and no today divider on a chart of the past");
+
+  // The wash is depth for a LONE line. With several up there is no "the" line
+  // to fill, and shading one of them reads as a region that means something —
+  // native gates it the same way, so an ungated web fill drew a different
+  // chart from the same data.
+  ok(noProjection.querySelector("path.area"), "a single line gets the depth wash");
+  const twoLines = progressionChart({ lines: [
+    { key: "a", label: "R1 Volume", color: "#5ba06a", points: history },
+    { key: "b", label: "R3 Peak", color: "#ef4444", points: e1rm },
+  ] });
+  ok(!twoLines.querySelector("path.area"), "several lines get none — no arbitrary one is shaded");
+
+  // Today outside the plotted span must not shade it. Without the divider's
+  // own guard the wash covered the whole plot with nothing to explain it.
+  const nowBeforeStart = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: history }],
+    projection: { label: "Projected", color: "#7aa7d9", nowT: at(0) - 86400000,
+      points: fit.points.map((p) => ({ t: p.day * 86400000, y: p.value })) },
+  });
+  ok(!nowBeforeStart.querySelector("rect.future"),
+    "a today left of the domain shades nothing rather than the whole plot");
+  ok(!nowBeforeStart.querySelector("line.now-line"), "and draws no divider either — the two agree");
+
+  // A dashed legend swatch with no colour rendered `3px dashed undefined`,
+  // an invalid rule that dropped the swatch.
+  const noColor = progressionChart({ lines: [
+    { key: "a", label: "One", color: "#ef4444", points: history },
+    { key: "b", label: "Two", dash: "5 4", points: e1rm },
+  ] });
+  const dashSwatch = [...noColor.querySelectorAll(".chart-legend i")]
+    .find((i) => (i.style.borderTop || "").includes("dashed"));
+  ok(dashSwatch && !/undefined/.test(dashSwatch.style.borderTop),
+    `a colourless dashed swatch falls back to the accent (${dashSwatch?.style.borderTop})`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
