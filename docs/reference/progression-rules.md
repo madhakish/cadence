@@ -118,8 +118,11 @@ bounded by performance instead: two stalls rebuild at 90%.
 Notes:
 - *Below plan* means fewer at-plan working sets than prescribed, with a
   tolerance of **half a rounding step** (kg-entry noise is fine; a full
-  plate step down is a drop). Extra back-off sets beyond the
-  prescription never hurt the grade.
+  plate step down is a drop) — and a load that is the plate-for-plate
+  **kg denomination twin** of the plan counts as at plan regardless of the
+  drift ([INV-PLATES-ARE-THE-CURRENCY](invariants.md)): 2×20 kg a side on a
+  45 bar is the 225 plan, even seven pounds adrift at four pairs. Extra
+  back-off sets beyond the prescription never hurt the grade.
 - Manual weight edits and explicit autoregulation drops grade the same.
 - Heavier than prescribed is always fine.
 
