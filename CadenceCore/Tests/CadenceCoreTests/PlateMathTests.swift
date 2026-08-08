@@ -3,6 +3,51 @@ import XCTest
 
 final class PlateMathTests: XCTestCase {
 
+    // The kg↔lb denomination twins: the plate is the currency, the number is
+    // its label. Mirrors web/tests/core.test.mjs — same stacks, same masses.
+    // [INV-PLATES-ARE-THE-CURRENCY]
+    func testDenominationTwins() {
+        let kg20 = 20 * WeightUnit.lbPerKg
+        XCTAssertEqual(PlateMath.kgTwinSideMassLb(90) ?? 0, 2 * kg20, accuracy: 1e-6,
+                       "90/side is two 45s, twinned to two 20 kg")
+        XCTAssertNil(PlateMath.kgTwinSideMassLb(91), "a non-stack side has no twin")
+        XCTAssertNil(PlateMath.kgTwinSideMassLb(.infinity),
+                     "a non-finite side refuses instead of looping the greedy solver")
+        XCTAssertNil(PlateMath.kgTwinSideMassLb(.nan))
+        XCTAssertFalse(PlateMath.plateEquivalent(targetLb: .infinity, performedLb: 221.37),
+                       "a non-finite target cannot claim equivalence")
+
+        XCTAssertTrue(PlateMath.plateEquivalent(targetLb: 225, performedLb: 221.37),
+                      "the kg stack IS the 225 plan")
+        XCTAssertTrue(PlateMath.plateEquivalent(targetLb: 225, performedLb: kg20 + 4 * kg20),
+                      "a 20 kg bar twins the 45 the same way the plates do")
+        XCTAssertFalse(PlateMath.plateEquivalent(targetLb: 215, performedLb: 221.37),
+                       "an overshoot is not an equivalence")
+        let heavyTwin = 45 + 8 * kg20
+        XCTAssertTrue(PlateMath.plateEquivalent(targetLb: 405, performedLb: heavyTwin),
+                      "a four-pair side twins despite ~7 lb of drift")
+
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 405, achievedLb: heavyTwin), 405,
+                       "the twin stores the programmed number, not the drift")
+
+        // The bar's denomination label, not its converted mass, is what the
+        // twin maths against — and threading it is what lets a 35-class plan
+        // twin at all (the default 45 reads its side stacks wrong).
+        XCTAssertEqual(Bar.bar35lb.labelLb, 35)
+        XCTAssertEqual(Bar.bar20kg.labelLb, 45, "a 20 kg bar labels under the 45")
+        XCTAssertEqual(Bar.bar15kg.labelLb, 35, "a 15 kg bar labels under the 35")
+        let thirtyFiveTwin = 35 + 8 * kg20
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 395, achievedLb: thirtyFiveTwin, barLb: 35), 395,
+                       "a 35-bar plan twins when its own bar is threaded through")
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 395, achievedLb: thirtyFiveTwin), thirtyFiveTwin,
+                       "without the bar the decomposition is wrong and the achieved load stays")
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 405, achievedLb: 380), 380,
+                       "a non-twin unreachable target still stores what the rack can do")
+        // [INV-LOAD-STORED-NEAT] the absolute band is untouched underneath.
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 220, achievedLb: 221.37), 220)
+    }
+
+
     // MARK: - Exact loads
 
     func testExact135UsesOnePlatePerSide() {

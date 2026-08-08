@@ -14,6 +14,29 @@ final class ProgramProgressionTests: XCTestCase {
         ProgramLiftState(baseWeightLb: 175, estimatedMaxLb: 226, stallCount: 0, role: .main, lastIncrementLb: 0)
     }
 
+    // [INV-PLATES-ARE-THE-CURRENCY] The twin stack grades AT plan — closing
+    // the stall trap where a kg gym's honest session read as a below-plan miss.
+    func testTwinStackGradesAtPlan() {
+        XCTAssertFalse(P.belowPlanLoad(actualLb: 221.37, plannedLb: 225, roundingLb: 5))
+        XCTAssertFalse(P.belowPlanWork(weightsLb: [221.37, 221.37, 221.37],
+                                       plannedLb: 225, prescribedSets: 3, roundingLb: 5))
+        XCTAssertTrue(P.belowPlanLoad(actualLb: 210.3, plannedLb: 225, roundingLb: 5),
+                      "a genuinely lighter stack still grades below plan")
+    }
+
+    func testTwinForgivenessIsBarbellOnly() {
+        // 100 kg happens to match a fake "20 kg bar + 2×20 kg plates" reading
+        // of a 225 plan. On a real bar that IS the plan; a machine or dumbbell
+        // has no bar to read, so the same number stays a below-plan miss.
+        let hundredKg = 100 * WeightUnit.lbPerKg
+        XCTAssertFalse(P.belowPlanLoad(actualLb: hundredKg, plannedLb: 225, roundingLb: 5, barLb: 45),
+                       "on the bar, 100 kg is the 225 plan on the bar's own kg twin")
+        XCTAssertTrue(P.belowPlanLoad(actualLb: hundredKg, plannedLb: 225, roundingLb: 5, barLb: nil),
+                      "off the bar, no plate reading exists and the miss stands")
+        XCTAssertTrue(P.belowPlanWork(weightsLb: [hundredKg, hundredKg, hundredKg],
+                                      plannedLb: 225, prescribedSets: 3, roundingLb: 5, barLb: nil))
+    }
+
     // The grade fires at the Peak, whose top set is base-multiplied by design —
     // so the performed weight cannot feed the base directly. Its overshoot
     // RATIO over its own plan can: a lifter whose rack lands them a stack

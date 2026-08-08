@@ -219,9 +219,63 @@ public enum PlateMath {
     /// happens to weigh), and the barbell hint explains the actual plates.
     /// Only a genuinely unreachable target stores the achieved load, so the
     /// log stays honest on sparse racks. Mirrored 1:1 in web/app/js/core.js
+    /// The kg↔lb denomination twins. Lifters switching racks stop going by
+    /// exact numbers and go by plates — a 20 kg plate stands in for a 45, a
+    /// 5 kg pair for a 10 lb pair — not because the masses match (a 10 kg
+    /// plate is 22 lb standing in for a 25) but because the plates are, for
+    /// training purposes, the same object. Below maximal loads the drift is a
+    /// rounding error; the plate is the currency, the number is its label.
+    public static let plateTwinKg: [Double: Double] = [
+        45: 20, 35: 15, 25: 10, 10: 5, 5: 2.5, 2.5: 1.25,
+    ]
+
+    /// The mass, in lb, of the kg-twin stack for one side loaded to `sideLb`
+    /// with standard lb denominations — or nil when `sideLb` is not a clean
+    /// lb stack. Decomposition is GREEDY (biggest plates first): that is the
+    /// stack a lifter actually builds, and it pins down which of several
+    /// equal-total loadings the twins are taken from.
+    public static func kgTwinSideMassLb(_ sideLb: Double) -> Double? {
+        guard sideLb.isFinite, sideLb >= 0 else { return nil }
+        var remaining = sideLb
+        var twinLb = 0.0
+        for plate in [45.0, 35, 25, 10, 5, 2.5] {
+            while remaining >= plate - 1e-9 {
+                remaining -= plate
+                guard let twin = plateTwinKg[plate] else { return nil }
+                twinLb += twin * WeightUnit.lbPerKg
+            }
+        }
+        return abs(remaining) < 1e-6 ? twinLb : nil
+    }
+
+    /// Whether `performedLb` is the plate-for-plate kg twin of the lb-clean
+    /// `targetLb` — same plates, kg denominations, on the same bar or on the
+    /// bar's own twin (a 45 lb bar and a 20 kg bar are the same object in the
+    /// same sense the plates are). This is what makes a kg-gym session read
+    /// as AT its lb plan instead of a below-plan miss that stalls the cycle.
+    public static func plateEquivalent(
+        targetLb: Double, performedLb: Double, barLb: Double = 45
+    ) -> Bool {
+        guard targetLb > barLb, performedLb > 0 else { return false }
+        let side = (targetLb - barLb) / 2
+        guard let twinSide = kgTwinSideMassLb(side) else { return false }
+        let barTwinLb = plateTwinKg[barLb].map { $0 * WeightUnit.lbPerKg } ?? barLb
+        return [barLb + 2 * twinSide, barTwinLb + 2 * twinSide]
+            .contains { abs(performedLb - $0) <= 0.15 }
+    }
+
     /// `storedPrescription`.
-    public static func storedPrescription(targetLb: Double, achievedLb: Double) -> Double {
-        abs(achievedLb - targetLb) <= toleranceLb + 1e-9 ? targetLb : achievedLb
+    public static func storedPrescription(
+        targetLb: Double, achievedLb: Double, barLb: Double = 45
+    ) -> Double {
+        if abs(achievedLb - targetLb) <= toleranceLb + 1e-9 { return targetLb }
+        // Beyond the absolute band, the denomination twin still stores the
+        // canonical number: the flat 2 lb tolerance dies exactly as plates
+        // stack (a four-pair side is ~7 lb adrift), which is precisely where
+        // the lifter says the drift matters least. The plates are the loading
+        // guidance; the number is its label.
+        if plateEquivalent(targetLb: targetLb, performedLb: achievedLb, barLb: barLb) { return targetLb }
+        return achievedLb
     }
 
     /// Resolve a programmed target against the active rack. An explicit gym

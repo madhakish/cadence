@@ -46,6 +46,7 @@ export function achievableWarmups(ramp, workingLb, bar, gym = null) {
     // guidance — the neat theoretical step is what gets stored.
     const weightLb = C.storedPrescription(
       warmup.weightLb, C.solve(warmup.weightLb, bar, plates, 10, collarLb, policy).totalLb,
+      C.barLabelLb(bar),
     );
     const key = weightLb.toFixed(6);
     if (weightLb >= workingLb - 1e-9 || seen.has(key)) continue;
@@ -1188,6 +1189,17 @@ function completedProgramInstructionsMatch(session, day) {
   });
 }
 
+// Twin equivalence is a barbell concept — only total-bar work may read its
+// number as a bar-and-plates stack; everything else grades on the numbers
+// alone (null). The label bar rides along so a 35-class bar twins against its
+// own denomination family. Mirrors SessionCompletion.twinBarLb; native
+// resolves a legacy set's basis through its linked exercise, web sets have
+// carried the basis since creation (older records grade strictly).
+function twinBarLb(se, work) {
+  if (work[0]?.loadBasis !== "totalBar") return null;
+  return C.barLabelLb(se.barId ? C.barById(se.barId) : C.BARS.bar45lb);
+}
+
 function cyclePerf(se, roundingLb) {
   const w = prescribedWork(se);
   const presReps = se.plannedReps ?? (w.length ? Math.max(...w.map((s) => s.reps)) : 0); // ?? not ||: mirrors Swift's nil-coalescing
@@ -1201,7 +1213,8 @@ function cyclePerf(se, roundingLb) {
     completedSets: w.filter((s) => s.reps >= presReps).length,
     anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
     anyDroppedLoad: w.some((s) => !!s.autoregReason),
-    anyBelowPlanLoad: C.belowPlanWork(w.map((s) => s.weightLb), se.plannedWeightLb, se.plannedSets ?? w.length, roundingLb),
+    anyBelowPlanLoad: C.belowPlanWork(w.map((s) => s.weightLb), se.plannedWeightLb, se.plannedSets ?? w.length, roundingLb,
+      twinBarLb(se, w)),
     grindyOrWobbleSets: w.filter((s) => (s.flags || []).some((f) => f === "grindy" || f === "wobble")).length,
     topSetWeightLb: top ? top.weightLb : 0, topSetReps: top ? top.reps : 0,
     // The strength sample's own plan, so the advance can ride a performed
@@ -1216,7 +1229,7 @@ function accPerf(se, roundingLb = 5) {
     minRepsAchieved: w.length ? Math.min(...w.map((s) => s.reps)) : 0,
     anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
     performedAtPlannedLoad: w.every((s) => !C.belowPlanLoad(
-      s.weightLb, s.plannedWeightLb ?? se.plannedWeightLb, roundingLb)),
+      s.weightLb, s.plannedWeightLb ?? se.plannedWeightLb, roundingLb, twinBarLb(se, w))),
     grindyOrWobbleSets: w.filter((s) => (s.flags || []).some((f) => f === "grindy" || f === "wobble")).length,
     bodyFlagSets: w.filter((s) => !!s.bodyFlagSite).length,
   };
@@ -1638,7 +1651,8 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
   // A near-miss clean stack (e.g. kg plates on a lb prescription) stays
   // loading guidance — the neat programmed number is what gets stored.
   return C.storedPrescription(target, C.prescriptionPlateOptions(target, bar, availablePlates(gym), 10,
-    gym.collarWeightLb || 0, gym.loadingPolicy || "closest", phase === 1).selected.totalLb);
+    gym.collarWeightLb || 0, gym.loadingPolicy || "closest", phase === 1).selected.totalLb,
+  C.barLabelLb(bar));
 }
 
 function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
@@ -1765,7 +1779,8 @@ export async function createSessionFromProgramDay(program, day) {
     const rawFallback = C.droppedLoad(weightLb, loadStep, ex?.type === "barbell" ? barLb : 0, dropIncrement);
     const fallbackWeightLb = ex?.type === "barbell" && gym
       ? C.storedPrescription(rawFallback,
-        C.solve(rawFallback, bar, availablePlates(gym), 10, gym.collarWeightLb || 0, "under").totalLb)
+        C.solve(rawFallback, bar, availablePlates(gym), 10, gym.collarWeightLb || 0, "under").totalLb,
+        C.barLabelLb(bar))
       : rawFallback;
     exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek,
       targetWeightLb: plan.weightLb, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps,

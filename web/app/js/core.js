@@ -291,6 +291,12 @@ export const barLb = (b) => toLb(b.value, b.unit);
 export const barId = (b) => `${b.value}-${b.unit}`;
 export const barLabel = (b) => `${trim(b.value)} ${b.unit} bar`;
 export const barById = (id) => ALL_BARS.find((b) => barId(b) === id) || BARS.bar45lb;
+// The lb denomination this bar loads plans under: an lb bar is its own label;
+// a kg bar labels under its lb twin (a 20 kg bar IS the 45 in the same sense
+// the plates are). Twin equivalence maths against this label, never the raw
+// converted mass — 44.09 lb is not a clean lb plan. Mirrors Bar.labelLb.
+export const barLabelLb = (b) => b.unit === "lb" ? b.value
+  : Number(Object.keys(PLATE_TWIN_KG).find((lb) => PLATE_TWIN_KG[lb] === b.value) ?? barLb(b));
 
 export const plateCountLb = (pc) => plateLb(pc.plate) * pc.count;
 export const plateCountLabel = (pc) =>
@@ -313,6 +319,46 @@ export function perSideLabel(perSide) {
 // ---- Plate math ------------------------------------------------------------
 
 export const TOLERANCE_LB = 2.0;
+
+// The kg↔lb denomination twins. Lifters switching racks stop going by exact
+// numbers and go by plates — a 20 kg plate stands in for a 45, a 5 kg pair for
+// a 10 lb pair — not because the masses match (a 10 kg plate is 22 lb standing
+// in for a 25) but because the plates are, for training purposes, the same
+// object. Below maximal loads the drift is a rounding error; the plate is the
+// currency, the number is its label. Mirrored 1:1 in CadenceCore PlateMath.
+export const PLATE_TWIN_KG = { 45: 20, 35: 15, 25: 10, 10: 5, 5: 2.5, 2.5: 1.25 };
+
+// The mass, in lb, of the kg-twin stack for one side loaded to sideLb with
+// standard lb denominations — or null when sideLb is not a clean lb stack.
+// Decomposition is GREEDY (biggest plates first): that is the stack a lifter
+// actually builds, and it pins down which of several equal-total loadings the
+// twins are taken from.
+export function kgTwinSideMassLb(sideLb) {
+  if (!Number.isFinite(sideLb) || sideLb < 0) return null;
+  let remaining = sideLb;
+  let twinLb = 0;
+  for (const plate of [45, 35, 25, 10, 5, 2.5]) {
+    while (remaining >= plate - 1e-9) {
+      remaining -= plate;
+      twinLb += PLATE_TWIN_KG[plate] / KG_PER_LB;
+    }
+  }
+  return Math.abs(remaining) < 1e-6 ? twinLb : null;
+}
+
+// Whether performedLb is the plate-for-plate kg twin of the lb-clean targetLb
+// — same plates, kg denominations, on the same bar or on the bar's own twin
+// (a 45 lb bar and a 20 kg bar are the same object in the same sense the
+// plates are). This is what makes a kg-gym session read as AT its lb plan
+// instead of a below-plan miss that stalls the cycle.
+export function plateEquivalent(targetLb, performedLb, barLb = 45) {
+  if (!(targetLb > barLb) || !(performedLb > 0)) return false;
+  const twinSide = kgTwinSideMassLb((targetLb - barLb) / 2);
+  if (twinSide == null) return false;
+  const barTwinLb = PLATE_TWIN_KG[barLb] != null ? PLATE_TWIN_KG[barLb] / KG_PER_LB : barLb;
+  return [barLb + 2 * twinSide, barTwinLb + 2 * twinSide]
+    .some((candidate) => Math.abs(performedLb - candidate) <= 0.15);
+}
 
 // Branch-and-bound closest per-side load, loaded the way a human loads: within
 // TOLERANCE_LB of the target the fewest plates win, then the fewest distinct
@@ -467,8 +513,15 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
 // weigh), and the barbell hint explains the actual plates. Only a genuinely
 // unreachable target stores the achieved load, so the log stays honest on
 // sparse racks. Mirrored 1:1 in CadenceCore PlateMath.storedPrescription.
-export const storedPrescription = (targetLb, achievedLb) =>
-  (Math.abs(achievedLb - targetLb) <= TOLERANCE_LB + 1e-9 ? targetLb : achievedLb);
+export const storedPrescription = (targetLb, achievedLb, barLb = 45) => {
+  if (Math.abs(achievedLb - targetLb) <= TOLERANCE_LB + 1e-9) return targetLb;
+  // Beyond the absolute band, the denomination twin still stores the canonical
+  // number: the flat 2 lb tolerance dies exactly as plates stack (a four-pair
+  // side is ~7 lb adrift), which is precisely where the lifter says the drift
+  // matters least. The plates are the loading guidance; the number is its label.
+  if (plateEquivalent(targetLb, achievedLb, barLb)) return targetLb;
+  return achievedLb;
+};
 
 // Resolve a programmed target against the active rack and retain the nearest
 // achievable load on each side for the UI. Explicit gym policy wins; closest
@@ -1229,9 +1282,18 @@ export function earnsStandaloneTrackAdvance(performances) {
 // conversions), a full step down is a genuine drop. Applies to manual edits and
 // autoreg drops alike; heavier than planned is always fine; no prescription
 // (null/zero plan) means nothing to compare against.
-export function belowPlanLoad(actualLb, plannedLb, roundingLb = DEFAULT_ROUNDING_LB) {
+export function belowPlanLoad(actualLb, plannedLb, roundingLb = DEFAULT_ROUNDING_LB, barLb = 45) {
   if (plannedLb == null || plannedLb <= 0) return false;
-  return actualLb < plannedLb - roundingLb / 2;
+  if (!(actualLb < plannedLb - roundingLb / 2)) return false;
+  // A stack that is the plate-for-plate kg twin of the plan IS the plan —
+  // heavier bars drift further under their lb label (each 20 kg pair is
+  // 1.8 lb light), and grading that drift as a miss stalled cycles for work
+  // the lifter performed exactly as loaded. The equivalence is a barbell
+  // concept: it invents a bar-and-plates reading of the number, so only
+  // total-bar work may claim it. Machines and dumbbells grade on the
+  // numbers alone (barLb: null).
+  if (barLb == null) return true;
+  return !plateEquivalent(plannedLb, actualLb, barLb);
 }
 
 // Aggregate for a whole lift: the prescription is met when at least
@@ -1239,9 +1301,9 @@ export function belowPlanLoad(actualLb, plannedLb, roundingLb = DEFAULT_ROUNDING
 // prescription are bonus volume — a lighter back-off set after completing the
 // planned work must not fail the cycle. Fewer at-plan sets than prescribed
 // (whole lift performed light, or one prescribed set cut down) is below plan.
-export function belowPlanWork(weightsLb, plannedLb, prescribedSets, roundingLb = DEFAULT_ROUNDING_LB) {
+export function belowPlanWork(weightsLb, plannedLb, prescribedSets, roundingLb = DEFAULT_ROUNDING_LB, barLb = 45) {
   if (plannedLb == null || plannedLb <= 0) return false;
-  const atPlan = weightsLb.filter((w) => !belowPlanLoad(w, plannedLb, roundingLb)).length;
+  const atPlan = weightsLb.filter((w) => !belowPlanLoad(w, plannedLb, roundingLb, barLb)).length;
   return atPlan < prescribedSets;
 }
 

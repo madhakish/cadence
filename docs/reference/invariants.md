@@ -40,12 +40,36 @@ gate rather than being silently absent.
 *platforms: core*
 
 When the closest achievable rack load lands within `PlateMath.toleranceLb` of
-the programmed target, the session stores the **programmed** number, not the
-achieved one. Only a genuinely unreachable target stores what the rack can do.
+the programmed target — or is the plate-for-plate **denomination twin** of it
+(`INV-PLATES-ARE-THE-CURRENCY`) — the session stores the **programmed** number,
+not the achieved one. Only a genuinely unreachable, non-twin target stores what
+the rack can do.
 
 > Rack near-misses used to overwrite the prescription, so a kg clean stack
 > turned 220 lb into 221.4 lb, and the fraction then compounded through the
 > stepper and into progression.
+
+### INV-PLATES-ARE-THE-CURRENCY
+*platforms: core*
+
+A performed load that is the plate-for-plate **kg twin** of its lb plan — the
+greedy stack's plates swapped for their kg denominations (20↔45, 15↔35,
+10↔25, 5↔10, 2.5↔5, 1.25↔2.5), on the same bar or the bar's own twin — IS the
+plan. It grades at plan, never as a below-plan miss, and stores the canonical
+programmed number. The equivalence is a **barbell concept**: it invents a
+bar-and-plates reading of the number, so only total-bar work may claim it —
+machine and dumbbell loads grade on the numbers alone — and it maths against
+the bar's **denomination label** (`Bar.labelLb` / `barLabelLb`: a 35 bar is 35,
+a 20 kg bar is the 45), never the bar's converted mass. A non-twin shortfall
+still grades below plan, and an overshoot is not an equivalence — it belongs to
+`INV-PROGRESSION-RIDES-PERFORMED`.
+
+> Lifters switching racks go by plates, not decimals: 2×20 kg a side on a 45
+> bar is "225" in every sense that matters below a max attempt. The flat 2 lb
+> tolerance died exactly as plates stacked — each 20 kg pair is 1.8 lb light,
+> so a four-pair deadlift was ~7 lb "adrift" — and the app graded honestly
+> loaded sessions as misses, stalling cycles for training that happened
+> exactly as prescribed.
 
 ### INV-COMP-IS-VOLUME
 *platforms: core*

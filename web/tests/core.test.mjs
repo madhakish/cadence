@@ -1899,5 +1899,79 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-PROGRESSION-RIDES-PERFORMED] under plan fails the grade and holds — never advances downward");
 }
 
+// The kg↔lb denomination twins: the plate is the currency, the number is its
+// label. Mirrors CadenceCore PlateMathTests/ProgramProgressionTests — same
+// stacks, same masses.
+{
+  // The greedy decomposition names the stack a lifter actually builds.
+  ok(Math.abs(C.kgTwinSideMassLb(90) - 2 * 20 / C.KG_PER_LB) < 1e-6,
+    "[INV-PLATES-ARE-THE-CURRENCY] 90/side is two 45s, twinned to two 20 kg");
+  ok(C.kgTwinSideMassLb(91) === null,
+    "[INV-PLATES-ARE-THE-CURRENCY] a non-stack side has no twin");
+  ok(C.kgTwinSideMassLb(Infinity) === null,
+    "[INV-PLATES-ARE-THE-CURRENCY] a non-finite side refuses instead of looping the greedy solver");
+  ok(C.kgTwinSideMassLb(NaN) === null,
+    "[INV-PLATES-ARE-THE-CURRENCY] NaN has no twin");
+  ok(C.plateEquivalent(Infinity, 221.37) === false,
+    "[INV-PLATES-ARE-THE-CURRENCY] a non-finite target cannot claim equivalence");
+
+  // The motivating session: a 225 plan loaded as 2×20 kg per side on a 45 bar.
+  ok(C.plateEquivalent(225, 221.37),
+    "[INV-PLATES-ARE-THE-CURRENCY] the kg stack IS the 225 plan");
+  // The same plates on the bar's own twin (20 kg bar) also count.
+  ok(C.plateEquivalent(225, 20 / C.KG_PER_LB + 4 * (20 / C.KG_PER_LB)),
+    "[INV-PLATES-ARE-THE-CURRENCY] a 20 kg bar twins the 45 the same way the plates do");
+  // 221.4 against a 215 plan is an OVERSHOOT, not a twin — that case belongs
+  // to the performed-overshoot advance, not to equivalence.
+  ok(!C.plateEquivalent(215, 221.37),
+    "[INV-PLATES-ARE-THE-CURRENCY] an overshoot is not an equivalence");
+  // The flat 2 lb band dies as plates stack; the twin does not. Four pairs a
+  // side is ~7.3 lb adrift and still the same plates.
+  const heavyTwin = 45 + 8 * (20 / C.KG_PER_LB);
+  ok(C.plateEquivalent(405, heavyTwin),
+    "[INV-PLATES-ARE-THE-CURRENCY] a four-pair side twins despite ~7 lb of drift");
+
+  // Grading: the twin stack is AT plan — this is the stall trap, closed.
+  ok(!C.belowPlanLoad(221.37, 225, 5),
+    "[INV-PLATES-ARE-THE-CURRENCY] the twin stack does not grade below plan");
+  ok(!C.belowPlanWork([221.37, 221.37, 221.37], 225, 3, 5),
+    "[INV-PLATES-ARE-THE-CURRENCY] a twin session keeps its prescribed-set count");
+  ok(C.belowPlanLoad(210.3, 225, 5),
+    "[INV-PLATES-ARE-THE-CURRENCY] a genuinely lighter stack still grades below plan");
+
+  // Storing: the canonical number stays on the card past the absolute band.
+  eq(C.storedPrescription(405, heavyTwin), 405,
+    "[INV-PLATES-ARE-THE-CURRENCY] the twin stores the programmed number, not the drift");
+  eq(C.storedPrescription(405, 380), 380,
+    "[INV-PLATES-ARE-THE-CURRENCY] a non-twin unreachable target still stores what the rack can do");
+  eq(C.storedPrescription(220, 221.37), 220,
+    "[INV-LOAD-STORED-NEAT] the absolute band is untouched underneath");
+
+  // The bar's denomination label, not its converted mass, is what the twin
+  // maths against — and threading it is what lets a 35-class plan twin at all.
+  eq(C.barLabelLb(C.BARS.bar35lb), 35,
+    "[INV-PLATES-ARE-THE-CURRENCY] an lb bar is its own label");
+  eq(C.barLabelLb(C.BARS.bar20kg), 45,
+    "[INV-PLATES-ARE-THE-CURRENCY] a 20 kg bar labels under the 45");
+  eq(C.barLabelLb(C.BARS.bar15kg), 35,
+    "[INV-PLATES-ARE-THE-CURRENCY] a 15 kg bar labels under the 35");
+  const thirtyFiveTwin = 35 + 8 * (20 / C.KG_PER_LB);
+  eq(C.storedPrescription(395, thirtyFiveTwin, 35), 395,
+    "[INV-PLATES-ARE-THE-CURRENCY] a 35-bar plan twins when its own bar is threaded through");
+  eq(C.storedPrescription(395, thirtyFiveTwin), thirtyFiveTwin,
+    "[INV-PLATES-ARE-THE-CURRENCY] without the bar the decomposition is wrong and the achieved load stays");
+
+  // Equivalence is a barbell concept: 100 kg happens to match a fake
+  // "20 kg bar + 2×20 kg plates" reading of a 225 plan. On a real bar that
+  // IS the plan; a machine or dumbbell has no bar to read.
+  const hundredKg = 100 / C.KG_PER_LB;
+  ok(!C.belowPlanLoad(hundredKg, 225, 5, 45),
+    "[INV-PLATES-ARE-THE-CURRENCY] on the bar, 100 kg is the 225 plan on the bar's own kg twin");
+  ok(C.belowPlanLoad(hundredKg, 225, 5, null),
+    "[INV-PLATES-ARE-THE-CURRENCY] off the bar, no plate reading exists and the miss stands");
+  ok(C.belowPlanWork([hundredKg, hundredKg, hundredKg], 225, 3, 5, null),
+    "[INV-PLATES-ARE-THE-CURRENCY] a non-barbell lift graded light stays below plan");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
