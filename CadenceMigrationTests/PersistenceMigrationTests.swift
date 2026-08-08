@@ -105,7 +105,8 @@ final class PersistenceMigrationTests: XCTestCase {
         }
         XCTAssertEqual(try byName("Pull-ups")?.category, .main,
                        "a seeded accessory pull-up is promoted to a main lift")
-        XCTAssertEqual(try byName("Chin-ups")?.category, .main)
+        XCTAssertEqual(try byName("Chin-ups")?.category, .conditioning,
+                       "a category the lifter set themselves is never overwritten — delete the guard and this fails")
         XCTAssertEqual(try byName("Assisted Pull-up")?.category, .accessory,
                        "assistance is a regression toward a pull-up and stays an accessory")
         // syncLibrary inserts any definition the store is missing, so the
@@ -739,8 +740,8 @@ final class PersistenceMigrationTests: XCTestCase {
         let lift = CadenceSchemaV4.ProgramLift(exerciseName: "Back Squat")
         lift.baseWeightLb = 175
         let accessory = CadenceSchemaV4.ProgramAccessory(exerciseName: "Seated Leg Curl")
+        // One side only — same rule the session fixture states; see createV4Store.
         day.program = program; lift.day = day; accessory.day = day
-        day.lifts = [lift]; day.accessories = [accessory]; program.days = [day]
         context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
     }
 
@@ -839,9 +840,9 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     /// The last shape shipped before vertical pulling became primary work.
-    /// It seeds the pull-up rows as ACCESSORIES — the exact state the V7
-    /// repair has to find and promote — plus one the lifter has already moved
-    /// to Main, which the repair must leave exactly where it is.
+    /// Pull-ups is seeded ACCESSORY — the exact state the V7 repair has to
+    /// find and promote — and Chin-ups carries a category the lifter set
+    /// themselves, which the repair must leave exactly where it is.
     private func createV6Store(at url: URL) throws {
         let schema = Schema(versionedSchema: CadenceSchemaV6.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: url)
@@ -877,8 +878,12 @@ final class PersistenceMigrationTests: XCTestCase {
         let pullUps = CadenceSchemaV6.Exercise(
             name: "Pull-ups", categoryRaw: "Accessory", typeRaw: "bodyweight")
         pullUps.movementGroup = "pull"
+        // Deliberately NOT Accessory: the lifter has re-categorized this row,
+        // and the repair must not argue. Main would be indistinguishable from
+        // a promotion, so the fixture uses the one value that tells the guard
+        // apart from its absence.
         let chinUps = CadenceSchemaV6.Exercise(
-            name: "Chin-ups", categoryRaw: "Accessory", typeRaw: "bodyweight")
+            name: "Chin-ups", categoryRaw: "Conditioning", typeRaw: "bodyweight")
         chinUps.movementGroup = "pull"
         let assisted = CadenceSchemaV6.Exercise(
             name: "Assisted Pull-up", categoryRaw: "Accessory", typeRaw: "machine")
@@ -919,8 +924,10 @@ final class PersistenceMigrationTests: XCTestCase {
         let lift = CadenceSchemaV5.ProgramLift(exerciseName: "Back Squat")
         lift.baseWeightLb = 175
         let accessory = CadenceSchemaV5.ProgramAccessory(exerciseName: "Seated Leg Curl")
+        // One side only — same rule the session fixture above states: a store
+        // built with both sides of the inverse assigned would let migration
+        // pass on self-corrupted relationship rows production never writes.
         day.program = program; lift.day = day; accessory.day = day
-        day.lifts = [lift]; day.accessories = [accessory]; program.days = [day]
         context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
     }
 
@@ -930,8 +937,10 @@ final class PersistenceMigrationTests: XCTestCase {
         let lift = CadenceSchemaV6.ProgramLift(exerciseName: "Back Squat")
         lift.baseWeightLb = 175
         let accessory = CadenceSchemaV6.ProgramAccessory(exerciseName: "Seated Leg Curl")
+        // One side only — same rule the session fixture above states: a store
+        // built with both sides of the inverse assigned would let migration
+        // pass on self-corrupted relationship rows production never writes.
         day.program = program; lift.day = day; accessory.day = day
-        day.lifts = [lift]; day.accessories = [accessory]; program.days = [day]
         context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
     }
 }

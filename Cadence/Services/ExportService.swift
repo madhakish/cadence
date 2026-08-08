@@ -181,6 +181,11 @@ enum ExportService {
         /// re-run the retired-rest-stamp clear; absent in old backups → re-run.
         let restSeedStampsCleared: Bool?
         let loadSemanticsMigrated: Bool?
+        /// Same contract as its two siblings: ImportService reads it, so the
+        /// exporter must write it — a bundle without it re-arms the one-shot
+        /// on restore and re-promotes a category set back deliberately. Web
+        /// already exports the field; this keeps native bundles symmetric.
+        let verticalPullMainsPromoted: Bool?
         let seededAt: Date?
         let theme: String?
     }
@@ -585,6 +590,7 @@ enum ExportService {
                                haptics: s.haptics, gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay,
                                restSeedStampsCleared: s.restSeedStampsCleared,
                                loadSemanticsMigrated: s.loadSemanticsMigrated,
+                               verticalPullMainsPromoted: s.verticalPullMainsPromoted,
                                seededAt: s.seededAt, theme: s.themeNameRaw)
             },
             coachingDecisions: coachingDecisions.map { decision in
