@@ -291,6 +291,12 @@ export const barLb = (b) => toLb(b.value, b.unit);
 export const barId = (b) => `${b.value}-${b.unit}`;
 export const barLabel = (b) => `${trim(b.value)} ${b.unit} bar`;
 export const barById = (id) => ALL_BARS.find((b) => barId(b) === id) || BARS.bar45lb;
+// The lb denomination this bar loads plans under: an lb bar is its own label;
+// a kg bar labels under its lb twin (a 20 kg bar IS the 45 in the same sense
+// the plates are). Twin equivalence maths against this label, never the raw
+// converted mass — 44.09 lb is not a clean lb plan. Mirrors Bar.labelLb.
+export const barLabelLb = (b) => b.unit === "lb" ? b.value
+  : Number(Object.keys(PLATE_TWIN_KG).find((lb) => PLATE_TWIN_KG[lb] === b.value) ?? barLb(b));
 
 export const plateCountLb = (pc) => plateLb(pc.plate) * pc.count;
 export const plateCountLabel = (pc) =>
@@ -1282,7 +1288,11 @@ export function belowPlanLoad(actualLb, plannedLb, roundingLb = DEFAULT_ROUNDING
   // A stack that is the plate-for-plate kg twin of the plan IS the plan —
   // heavier bars drift further under their lb label (each 20 kg pair is
   // 1.8 lb light), and grading that drift as a miss stalled cycles for work
-  // the lifter performed exactly as loaded.
+  // the lifter performed exactly as loaded. The equivalence is a barbell
+  // concept: it invents a bar-and-plates reading of the number, so only
+  // total-bar work may claim it. Machines and dumbbells grade on the
+  // numbers alone (barLb: null).
+  if (barLb == null) return true;
   return !plateEquivalent(plannedLb, actualLb, barLb);
 }
 

@@ -299,14 +299,18 @@ public enum ProgramProgression {
     public static func belowPlanLoad(
         actualLb: Double, plannedLb: Double?,
         roundingLb: Double = ProgramEngine.defaultRoundingLb,
-        barLb: Double = 45
+        barLb: Double? = 45
     ) -> Bool {
         guard let planned = plannedLb, planned > 0 else { return false }
         guard actualLb < planned - roundingLb / 2 else { return false }
         // A stack that is the plate-for-plate kg twin of the plan IS the plan
         // — heavier bars drift further under their lb label (each 20 kg pair
         // is 1.8 lb light), and grading that drift as a miss stalled cycles
-        // for work the lifter performed exactly as loaded.
+        // for work the lifter performed exactly as loaded. The equivalence is
+        // a barbell concept: it invents a bar-and-plates reading of the
+        // number, so only total-bar work may claim it. Machines and dumbbells
+        // grade on the numbers alone (barLb: nil).
+        guard let barLb else { return true }
         return !PlateMath.plateEquivalent(targetLb: planned, performedLb: actualLb, barLb: barLb)
     }
 
@@ -319,7 +323,7 @@ public enum ProgramProgression {
     public static func belowPlanWork(
         weightsLb: [Double], plannedLb: Double?, prescribedSets: Int,
         roundingLb: Double = ProgramEngine.defaultRoundingLb,
-        barLb: Double = 45
+        barLb: Double? = 45
     ) -> Bool {
         guard let planned = plannedLb, planned > 0 else { return false }
         let atPlan = weightsLb.filter {

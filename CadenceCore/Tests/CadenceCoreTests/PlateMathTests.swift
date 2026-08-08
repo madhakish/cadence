@@ -29,6 +29,18 @@ final class PlateMathTests: XCTestCase {
 
         XCTAssertEqual(PlateMath.storedPrescription(targetLb: 405, achievedLb: heavyTwin), 405,
                        "the twin stores the programmed number, not the drift")
+
+        // The bar's denomination label, not its converted mass, is what the
+        // twin maths against — and threading it is what lets a 35-class plan
+        // twin at all (the default 45 reads its side stacks wrong).
+        XCTAssertEqual(Bar.bar35lb.labelLb, 35)
+        XCTAssertEqual(Bar.bar20kg.labelLb, 45, "a 20 kg bar labels under the 45")
+        XCTAssertEqual(Bar.bar15kg.labelLb, 35, "a 15 kg bar labels under the 35")
+        let thirtyFiveTwin = 35 + 8 * kg20
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 395, achievedLb: thirtyFiveTwin, barLb: 35), 395,
+                       "a 35-bar plan twins when its own bar is threaded through")
+        XCTAssertEqual(PlateMath.storedPrescription(targetLb: 395, achievedLb: thirtyFiveTwin), thirtyFiveTwin,
+                       "without the bar the decomposition is wrong and the achieved load stays")
         XCTAssertEqual(PlateMath.storedPrescription(targetLb: 405, achievedLb: 380), 380,
                        "a non-twin unreachable target still stores what the rack can do")
         // [INV-LOAD-STORED-NEAT] the absolute band is untouched underneath.

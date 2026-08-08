@@ -56,8 +56,12 @@ A performed load that is the plate-for-plate **kg twin** of its lb plan — the
 greedy stack's plates swapped for their kg denominations (20↔45, 15↔35,
 10↔25, 5↔10, 2.5↔5, 1.25↔2.5), on the same bar or the bar's own twin — IS the
 plan. It grades at plan, never as a below-plan miss, and stores the canonical
-programmed number. A non-twin shortfall still grades below plan, and an
-overshoot is not an equivalence — it belongs to
+programmed number. The equivalence is a **barbell concept**: it invents a
+bar-and-plates reading of the number, so only total-bar work may claim it —
+machine and dumbbell loads grade on the numbers alone — and it maths against
+the bar's **denomination label** (`Bar.labelLb` / `barLabelLb`: a 35 bar is 35,
+a 20 kg bar is the 45), never the bar's converted mass. A non-twin shortfall
+still grades below plan, and an overshoot is not an equivalence — it belongs to
 `INV-PROGRESSION-RIDES-PERFORMED`.
 
 > Lifters switching racks go by plates, not decimals: 2×20 kg a side on a 45

@@ -84,6 +84,14 @@ public struct Bar: Hashable, Codable, Sendable, Identifiable {
     public var id: String { "\(Weight.trim(value, decimals: 2))-\(unit.rawValue)" }
     public var lb: Double { Weight.toLb(value, from: unit) }
     public var label: String { "\(Weight.trim(value)) \(unit.rawValue) bar" }
+    /// The lb denomination this bar loads plans under: an lb bar is its own
+    /// label; a kg bar labels under its lb twin (a 20 kg bar IS the 45 in the
+    /// same sense the plates are). Twin equivalence maths against this label,
+    /// never the raw converted mass — 44.09 lb is not a clean lb plan.
+    public var labelLb: Double {
+        unit == .lb ? value
+            : PlateMath.plateTwinKg.first(where: { $0.value == value })?.key ?? lb
+    }
 
     public static let bar45lb = Bar(value: 45, unit: .lb)
     public static let bar35lb = Bar(value: 35, unit: .lb)

@@ -316,6 +316,15 @@ enum SessionCompletion {
         return lineage.count == 1 ? lineage[0] : nil
     }
 
+    /// Twin equivalence is a barbell concept — only total-bar work may read
+    /// its number as a bar-and-plates stack; everything else grades on the
+    /// numbers alone (nil). The label bar rides along so a 35-class bar twins
+    /// against its own denomination family. Mirrors web `twinBarLb`.
+    private static func twinBarLb(_ entry: SessionExercise, _ work: [SetEntry]) -> Double? {
+        guard work.first?.loadBasis == .totalBar else { return nil }
+        return (entry.barID.map { Bar.by(id: $0) } ?? .bar45lb).labelLb
+    }
+
     private static func cyclePerf(_ entry: SessionExercise, roundingLb: Double) -> CycleLiftPerformance {
         // A primer and optional top single are observable preparation/practice.
         // Only the prescribed work block can earn the cycle progression.
@@ -335,7 +344,8 @@ enum SessionCompletion {
             anyDroppedLoad: w.contains { $0.autoregReason != nil },
             anyBelowPlanLoad: ProgramProgression.belowPlanWork(
                 weightsLb: w.map(\.weightLb), plannedLb: entry.plannedWeightLb,
-                prescribedSets: entry.plannedSets ?? w.count, roundingLb: roundingLb
+                prescribedSets: entry.plannedSets ?? w.count, roundingLb: roundingLb,
+                barLb: twinBarLb(entry, w)
             ),
             grindyOrWobbleSets: w.filter { $0.flags.contains(.grindy) || $0.flags.contains(.wobble) }.count,
             topSetWeightLb: top?.weightLb ?? 0,
@@ -356,7 +366,8 @@ enum SessionCompletion {
                 !ProgramProgression.belowPlanLoad(
                     actualLb: $0.weightLb,
                     plannedLb: $0.plannedWeightLb ?? entry.plannedWeightLb,
-                    roundingLb: roundingLb
+                    roundingLb: roundingLb,
+                    barLb: twinBarLb(entry, w)
                 )
             },
             grindyOrWobbleSets: w.filter { $0.quality == .grindy || $0.quality == .wobble }.count,

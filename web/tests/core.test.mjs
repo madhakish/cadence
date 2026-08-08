@@ -1946,6 +1946,31 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-PLATES-ARE-THE-CURRENCY] a non-twin unreachable target still stores what the rack can do");
   eq(C.storedPrescription(220, 221.37), 220,
     "[INV-LOAD-STORED-NEAT] the absolute band is untouched underneath");
+
+  // The bar's denomination label, not its converted mass, is what the twin
+  // maths against — and threading it is what lets a 35-class plan twin at all.
+  eq(C.barLabelLb(C.BARS.bar35lb), 35,
+    "[INV-PLATES-ARE-THE-CURRENCY] an lb bar is its own label");
+  eq(C.barLabelLb(C.BARS.bar20kg), 45,
+    "[INV-PLATES-ARE-THE-CURRENCY] a 20 kg bar labels under the 45");
+  eq(C.barLabelLb(C.BARS.bar15kg), 35,
+    "[INV-PLATES-ARE-THE-CURRENCY] a 15 kg bar labels under the 35");
+  const thirtyFiveTwin = 35 + 8 * (20 / C.KG_PER_LB);
+  eq(C.storedPrescription(395, thirtyFiveTwin, 35), 395,
+    "[INV-PLATES-ARE-THE-CURRENCY] a 35-bar plan twins when its own bar is threaded through");
+  eq(C.storedPrescription(395, thirtyFiveTwin), thirtyFiveTwin,
+    "[INV-PLATES-ARE-THE-CURRENCY] without the bar the decomposition is wrong and the achieved load stays");
+
+  // Equivalence is a barbell concept: 100 kg happens to match a fake
+  // "20 kg bar + 2×20 kg plates" reading of a 225 plan. On a real bar that
+  // IS the plan; a machine or dumbbell has no bar to read.
+  const hundredKg = 100 / C.KG_PER_LB;
+  ok(!C.belowPlanLoad(hundredKg, 225, 5, 45),
+    "[INV-PLATES-ARE-THE-CURRENCY] on the bar, 100 kg is the 225 plan on the bar's own kg twin");
+  ok(C.belowPlanLoad(hundredKg, 225, 5, null),
+    "[INV-PLATES-ARE-THE-CURRENCY] off the bar, no plate reading exists and the miss stands");
+  ok(C.belowPlanWork([hundredKg, hundredKg, hundredKg], 225, 3, 5, null),
+    "[INV-PLATES-ARE-THE-CURRENCY] a non-barbell lift graded light stays below plan");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

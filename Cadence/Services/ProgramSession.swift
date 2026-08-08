@@ -316,7 +316,8 @@ enum ProgramSession {
         // A near-miss clean stack (e.g. kg plates on a lb prescription) stays
         // loading guidance — the neat programmed number is what gets stored.
         return PlateMath.storedPrescription(
-            targetLb: rounded, achievedLb: options.selected.loadout.totalLb
+            targetLb: rounded, achievedLb: options.selected.loadout.totalLb,
+            barLb: bar.labelLb
         )
     }
 
@@ -335,7 +336,8 @@ enum ProgramSession {
                 policy: gym?.loadingPolicy ?? .closest
             )
             let stored = PlateMath.storedPrescription(
-                targetLb: warmup.weightLb, achievedLb: solution.loadout.totalLb
+                targetLb: warmup.weightLb, achievedLb: solution.loadout.totalLb,
+                barLb: bar.labelLb
             )
             guard stored < workingLb - 1e-9, seen.insert(stored).inserted else { return nil }
             return WarmupSet(weightLb: stored, reps: warmup.reps)
@@ -363,7 +365,7 @@ enum ProgramSession {
             collarLb: gym?.collarWeightLb ?? 0,
             policy: .under
         ).loadout.totalLb
-        return PlateMath.storedPrescription(targetLb: target, achievedLb: achieved)
+        return PlateMath.storedPrescription(targetLb: target, achievedLb: achieved, barLb: bar.labelLb)
     }
 
     private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool,
