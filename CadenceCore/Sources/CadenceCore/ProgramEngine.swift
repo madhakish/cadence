@@ -1048,7 +1048,8 @@ public enum ProgramEngine {
             prescribedSets: plan.sets, prescribedReps: plan.reps,
             completedSets: plan.sets, anyStoppedEarly: false, anyDroppedLoad: false,
             anyBelowPlanLoad: false, grindyOrWobbleSets: 0,
-            topSetWeightLb: plan.weightLb, topSetReps: plan.reps
+            topSetWeightLb: plan.weightLb, topSetReps: plan.reps,
+            plannedTopWeightLb: plan.weightLb
         )
     }
 

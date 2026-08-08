@@ -128,7 +128,14 @@ Notes:
 - **success** → stall count resets; weight increases by the focus
   increment (2.5% strength / 1.5% hypertrophy of the current base),
   floored at plate granularity so a clean cycle always earns at least one
-  loadable step.
+  loadable step. If the peak's top set was performed **above** its own plan
+  by at least the half-step tolerance, the base first rides that overshoot
+  as a ratio — a lifter whose rack lands them a stack over every lb
+  prescription (kg plates) trains ahead of the programmed number, and the
+  increment lands on what the bar actually carried
+  ([INV-PROGRESSION-RIDES-PERFORMED](invariants.md)). Below plan already
+  fails the grade, so the ratio can never move the base down, and a
+  performance with no recorded plan advances exactly as before.
 - **hold / fail** → weight holds, stall count +1.
 - **2 stalls** → automatic deload: base × 0.90 (rounded), stall reset,
   explanatory note in History.
