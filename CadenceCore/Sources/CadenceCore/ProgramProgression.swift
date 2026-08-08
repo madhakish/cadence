@@ -618,9 +618,9 @@ public enum ProgramProgression {
         return ProgressionResult(state: next, grade: grade, note: note)
     }
 
-    /// Style-aware cycle progression, applied at the Peak grade / rollover for
-    /// slots that are NOT per-exposure. Methodology styles use their published
-    /// fixed increments; every other style keeps the proportional rule.
+    /// Style-aware methodology progression. Cycle styles call this at the Peak;
+    /// max effort calls it after every exposure because its exercise rotates
+    /// weekly while the dynamic method alone carries the three-week wave.
     ///
     /// - 5/3/1: +5 lb upper / +10 lb lower to the training max per clean
     ///   cycle; missing the "+" set's minimum resets the TM three cycles back
@@ -679,12 +679,15 @@ public enum ProgramProgression {
         case .maxEffort:
             let grade = gradeCycle(perf)
             var next = state
-            next.estimatedMaxLb = smoothedMax(state, perf: perf)
             var note: String?
             if grade == .success {
+                let made = Swift.max(state.baseWeightLb, perf.topSetWeightLb)
                 next.stallCount = 0
-                next.baseWeightLb = state.baseWeightLb + increment
-                next.lastIncrementLb = increment
+                next.baseWeightLb = Weight.round(made + increment, to: roundingLb)
+                next.lastIncrementLb = next.baseWeightLb - state.baseWeightLb
+                // A real single is already a max-strength observation; Epley
+                // would inflate it by 3.3% merely because reps == 1.
+                next.estimatedMaxLb = Swift.max(state.estimatedMaxLb, perf.topSetWeightLb)
                 note = "Made the top single — next target +\(Weight.trim(increment)) lb. Rotate the variation to keep it moving."
             } else {
                 // Rotation, not accumulation, is this methodology's stall

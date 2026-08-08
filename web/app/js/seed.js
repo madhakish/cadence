@@ -77,6 +77,16 @@ const exercises = [
   ex("Leg Press", "Main", "machine", "squat"),
   ex("Incline Barbell Bench Press", "Main", "barbell", "press"),
   ex("Close-Grip Bench Press", "Main", "barbell", "press"),
+  // Conjugate special exercises are seeded, not template-private, so a
+  // shared/exported Conjugate program resolves on a fresh device.
+  ex("Low Box Squat", "Main", "barbell", "squat", { defaultRestSeconds: 300 }),
+  ex("Front Box Squat", "Main", "barbell", "squat", { defaultRestSeconds: 300 }),
+  ex("Paused Box Squat", "Main", "barbell", "squat", { defaultRestSeconds: 300 }),
+  ex("Floor Press", "Main", "barbell", "press", { defaultRestSeconds: 180 }),
+  ex("Close-Grip Floor Press", "Main", "barbell", "press", { defaultRestSeconds: 180 }),
+  ex("Speed Box Squat", "Main", "barbell", "squat", { defaultRestSeconds: 60 }),
+  ex("Speed Deadlift", "Main", "barbell", "hinge", { defaultRestSeconds: 60 }),
+  ex("Speed Bench Press", "Main", "barbell", "press", { defaultRestSeconds: 60 }),
   ex("Machine Chest Press", "Main", "machine", "press"),
   ex("Landmine Press", "Main", "barbell", "press", { isUnilateral: true }),
   ex("Barbell Row", "Main", "barbell", "pull"),

@@ -1,7 +1,7 @@
 # Program model reference
 
-A **Program** owns training **Days**; each day owns **Lifts**
-(wave-progressed) and **Accessories** (rep-range-progressed). Exactly one
+A **Program** owns training **Days**; each day owns individually prescribed
+**Lifts** and rep-range/duration-progressed **Accessories**. Exactly one
 program is active at a time; program-owned exercises are excluded from
 the standalone "Next up" tracks.
 
@@ -12,7 +12,7 @@ the standalone "Next up" tracks.
 | `name` | Display name |
 | `focus` | `strength` / `hypertrophy` / `maintain` — see table below |
 | `cycleNumber` | Which mesocycle you're on (increments after recovery) |
-| `currentWeek` | Persisted compatibility name for the phase pointer: 1 volume · 2 load · 3 peak · 4 recovery |
+| `currentWeek` | Persisted compatibility name for the style-neutral rotation pointer (1…4); each lift prescription interprets the position itself |
 | `nextDayIndex` | The `order` of the day the Today screen offers next — a day's order value, not its position in the array |
 | `roundingLb` | Default load granularity. Dumbbells use at most 5 lb per-hand steps, and above-base wave rotations stay within one 5 lb rack jump |
 | `isActive` | Drives the Today screen |
@@ -129,7 +129,8 @@ bridges with the last **two** ramp steps only, then goes straight to its
 working sets. A complementary slot ordered first in the day still ramps
 fully, and an explicit per-slot warmup policy always wins.
 
-Roles also shape the prescription itself. A main lift follows the phase wave
+Roles shape the default prescription, not every program. A main lift left on
+`automatic` follows the phase wave
 (5×5 → 5×3 → 3×3 → deload). A complementary lift on the automatic style is
 **volume work, not a second miniature of that wave**: 3×8 at 90% of its base →
 3×8 at 95% → 3×6 at 100% → deload 2×8 at 75% — always 5+ reps, never above

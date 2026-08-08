@@ -1479,27 +1479,30 @@ async function advanceProgram(session, milestones) {
     lift.baseWeightLb = next.weightLb; lift.currentReps = next.currentReps;
     lift.stallCount = next.stallCount; lift.lastIncrementLb = next.weightLb - state.weightLb;
   }
-  // Methodology slots on session-to-session linear progression: novice fives
-  // and the Texas day slots advance their own base after every banked
-  // exposure instead of waiting for a Peak grade. A day that repeats the
-  // same lift+style is still ONE exposure — only the first slot advances
+  // Methodology slots that move per exposure: novice fives and Texas use their
+  // linear rule; max effort sets the next target from the completed top single.
+  // A day that repeats the same lift+style is still ONE exposure — only the
+  // first slot advances
   // (twin sync carries the rest), so duplicates can never double-progress.
-  const advancedLinearSlots = new Set();
+  const advancedExposureSlots = new Set();
   for (const lift of (day.lifts || []).filter((candidate) =>
     C.advancesPerExposure(candidate.prescription)
       && candidate.prescription !== "doubleProgression" && !isRecovery)) {
     const exposureKey = `${lift.exerciseName}|${lift.prescription}`;
-    if (advancedLinearSlots.has(exposureKey)) continue;
+    if (advancedExposureSlots.has(exposureKey)) continue;
     const se = programmedEntry(session, lift);
     if (!se || !prescribedWork(se).length) continue;
-    advancedLinearSlots.add(exposureKey);
+    advancedExposureSlots.add(exposureKey);
     const exercise = exerciseByName.get(lift.exerciseName);
     const loadStep = C.programLoadStep(program.roundingLb, exercise?.type);
     const priorBase = lift.baseWeightLb;
     const priorMax = lift.estimatedMaxLb;
-    const adv = C.advanceLinearLift(lift, cyclePerf(se, loadStep),
-      C.linearRule(lift.prescription, exercise?.movementGroup), loadStep);
-    const deloaded = adv.state.baseWeightLb < lift.baseWeightLb;
+    const perf = cyclePerf(se, loadStep);
+    const adv = lift.prescription === "maxEffort"
+      ? C.advanceProgramLift(lift, perf, program.focus, lift.prescription,
+        exercise?.movementGroup, loadStep)
+      : C.advanceLinearLift(lift, perf,
+        C.linearRule(lift.prescription, exercise?.movementGroup), loadStep);
     lift.baseWeightLb = adv.state.baseWeightLb; lift.estimatedMaxLb = adv.state.estimatedMaxLb;
     lift.stallCount = adv.state.stallCount; lift.lastIncrementLb = adv.state.lastIncrementLb;
     // Non-success outcomes surface their explanation — a silent hold would

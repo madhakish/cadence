@@ -59,7 +59,7 @@ base weight, and estimated max.
 
 **Runtime state** — optional, off by default. `stallCount`, `lastIncrementLb`,
 `lastPeakSingleLb`, the stashed week-3 `pending` peak grade, the cycle-scoped
-`revertToExerciseName` swap marker, and the program's wave position
+`revertToExerciseName` swap marker, and the program's schedule position
 (`cycleNumber`, `currentWeek`, `nextDayIndex`).
 
 **Identity** — optional, off by default. The program's `id` and each slot's
@@ -75,7 +75,7 @@ else.
 Export **with state** when the intent is to hand-edit a file and bring it back
 to the same device. That is the mode that round-trips losslessly.
 
-Wave position is all-or-nothing. A file carrying `cycleNumber` but not
+Schedule position is all-or-nothing. A file carrying `cycleNumber` but not
 `currentWeek` is rejected rather than guessed at, because a half-carried
 position is the difference between a deload and a peak week. `nextDayIndex`
 must name one of the program's day orders — a pointer to a day that isn't

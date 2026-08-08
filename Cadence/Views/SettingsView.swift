@@ -971,17 +971,39 @@ struct ProgramDayEditorView: View {
             ExercisePickerSheetView { name in
                 switch target {
                 case .lift:
+                    let exercise = exercises.first { $0.name == name }
+                    let bootstrap = ProgrammingDefaultsData.recommendation(
+                        exerciseName: name, slotCategory: ExerciseCategory.main.rawValue,
+                        exerciseType: exercise?.typeRaw ?? ExerciseType.dumbbell.rawValue
+                    )
+                    let historyBootstrap = exercise.flatMap { exercise in
+                        try? ProgramTemplates.bootstrapLift(
+                            exercise: exercise, role: .complementary,
+                            focus: day.program?.focus ?? .strength, roundingLb: step,
+                            context: context
+                        )
+                    }
                     let lift = ProgramLift(exerciseName: name, role: .complementary,
-                                           order: day.lifts.count, baseWeightLb: 45, estimatedMaxLb: 52)
+                                           order: day.lifts.count,
+                                           baseWeightLb: historyBootstrap?.baseWeightLb ?? bootstrap.weightLb,
+                                           estimatedMaxLb: historyBootstrap?.estimatedMaxLb ?? bootstrap.estimatedMaxLb)
                     context.insert(lift)
                     day.lifts.append(lift)
                 case .accessory:
                     let type = exercises.first { $0.name == name }?.type
+                    let bootstrap = ProgrammingDefaultsData.recommendation(
+                        exerciseName: name, slotCategory: ExerciseCategory.accessory.rawValue,
+                        exerciseType: type?.rawValue ?? ExerciseType.dumbbell.rawValue
+                    )
+                    let historyBootstrap = exercises.first { $0.name == name }.flatMap { exercise in
+                        try? ProgramTemplates.bootstrapAccessory(exercise: exercise, context: context)
+                    }
                     let acc = ProgramAccessory(exerciseName: name, order: day.accessories.count,
                                                sets: type == .conditioning ? 1 : 3,
                                                minReps: 8, maxReps: 12, currentReps: 8,
                                                targetSeconds: type == .conditioning ? 1_200 : 30,
-                                               weightLb: 0, incrementLb: 0)
+                                               weightLb: historyBootstrap?.weightLb ?? bootstrap.weightLb,
+                                               incrementLb: historyBootstrap?.incrementLb ?? bootstrap.incrementLb)
                     context.insert(acc)
                     day.accessories.append(acc)
                 }
@@ -1089,10 +1111,22 @@ private struct ProgramLiftRow: View {
     }
 
     private var deloadKnobApplies: Bool {
+        resolvedPrescription == .wave || resolvedPrescription == .offsetWave
+    }
+
+    private var resolvedPrescription: PrescriptionStyle {
         let group = exercises.first { $0.name == lift.exerciseName }?.movementGroup
-        let resolved = ProgramEngine.resolvedStyle(lift.prescription, movementGroup: group,
-                                                   role: lift.role, focus: focus)
-        return resolved == .wave || resolved == .offsetWave
+        return ProgramEngine.resolvedStyle(lift.prescription, movementGroup: group,
+                                           role: lift.role, focus: focus)
+    }
+
+    private var baseLabel: String {
+        switch resolvedPrescription {
+        case .maxEffort: return "Current target"
+        case .dynamicEffort: return "Wave step-1 base"
+        case .fiveThreeOne: return "Training max"
+        default: return "Rotation-1 base"
+        }
     }
 
     var body: some View {
@@ -1130,7 +1164,7 @@ private struct ProgramLiftRow: View {
                     Text(policy.name).tag(policy)
                 }
             }
-            Stepper("Rotation-1 base: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))", value: $lift.baseWeightLb, in: 0...1000, step: loadStep)
+            Stepper("\(baseLabel): \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))", value: $lift.baseWeightLb, in: 0...1000, step: loadStep)
             Stepper("Est. 1RM: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.estimatedMaxLb))", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
             if lift.prescription == .offsetWave {
                 Stepper("Load offset: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.loadOffsetLb))",
@@ -1154,7 +1188,8 @@ private struct ProgramLiftRow: View {
                 Text("Current target: \(lift.currentReps) reps · add \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: loadStep)) only after every set reaches the top of the window.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if lift.prescription.advancesPerExposure && lift.prescription != .doubleProgression {
+            if lift.prescription.advancesPerExposure
+                && lift.prescription != .doubleProgression && lift.prescription != .maxEffort {
                 Stepper("Working sets: \(lift.doubleProgressionSets)", value: $lift.doubleProgressionSets, in: 1...10)
                 Text("Sets-across of five. The base moves every banked session; the Est. 1RM above is what the coach derives it from.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -1163,14 +1198,24 @@ private struct ProgramLiftRow: View {
                 Text("The base above is the TRAINING MAX (≈90% of 1RM), not a working weight. The top set each week is as many quality reps as you have.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Toggle("Peak top single", isOn: $lift.peakSingleEnabled)
-            if lift.peakSingleEnabled {
-                Stepper("Last clean single: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.lastPeakSingleLb))",
-                        value: $lift.lastPeakSingleLb, in: 0...1200, step: loadStep)
-                Stepper("Single step: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.peakSingleIncrementLb))",
-                        value: $lift.peakSingleIncrementLb, in: loadStep...25, step: loadStep)
+            if lift.prescription == .maxEffort {
+                Text("The base is today's top-single target. Cadence builds through 90% and a near-max single, then advances the target after this exposure. Swap to a different special variation next week.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
-            Toggle("Phase primer single", isOn: $lift.phasePrimerEnabled)
+            if lift.prescription == .dynamicEffort {
+                Text("The base is wave week 1: 50% for squat/pull or 40% for bench. Speed work waves for three weeks, then resets.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if !resolvedPrescription.buildsOwnSessionShape {
+                Toggle("Peak top single", isOn: $lift.peakSingleEnabled)
+                if lift.peakSingleEnabled {
+                    Stepper("Last clean single: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.lastPeakSingleLb))",
+                            value: $lift.lastPeakSingleLb, in: 0...1200, step: loadStep)
+                    Stepper("Single step: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.peakSingleIncrementLb))",
+                            value: $lift.peakSingleIncrementLb, in: loadStep...25, step: loadStep)
+                }
+                Toggle("Phase primer single", isOn: $lift.phasePrimerEnabled)
+            }
             Stepper("One-tap drop: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.dropIncrementLb)) (0 = automatic)",
                     value: $lift.dropIncrementLb, in: 0...50, step: loadStep)
             Toggle("Coach may add sets", isOn: $lift.capacityManaged)

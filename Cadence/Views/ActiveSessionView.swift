@@ -515,15 +515,15 @@ private struct ExerciseSection: View {
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
     let onWork: (SessionExercise) -> Void
-    /// Remove this exercise from the session (session-only, like a swap — the
-    /// program slot is untouched and just isn't performed today).
+    /// Remove this exercise from the session. Unlike a swap, removal leaves no
+    /// performed entry carrying the program slot identity.
     let onRemove: () -> Void
 
     /// How long a swap outlives this session (issue 20). Session-only is the
-    /// default: the program slot is untouched and simply isn't performed today
-    /// (on a peak day the existing skipped-peak rule applies — the honest
-    /// grade for substituted work). Cycle renames the slot and reverts it at
-    /// the next rollover; program renames it for good.
+    /// default: the program's exercise name is untouched, while today's entry
+    /// keeps the stable slot identity and its prescribed work grades that slot.
+    /// Cycle renames the slot and reverts it at the next rollover; program
+    /// renames it for good.
     enum SwapScope { case session, cycle, program }
 
     /// Same-movement-pattern lifts you can swap in, constrained to the same

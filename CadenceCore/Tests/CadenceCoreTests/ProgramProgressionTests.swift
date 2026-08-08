@@ -421,9 +421,15 @@ final class ProgramProgressionTests: XCTestCase {
 
     func testMaxEffortAddsAfterMadeSinglesAndHoldsOnMisses() {
         let state = ProgramLiftState(baseWeightLb: 315, estimatedMaxLb: 330)
-        let up = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: true), focus: .strength,
+        let madeSingle = CycleLiftPerformance(
+            prescribedSets: 1, prescribedReps: 1, completedSets: 1,
+            anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0,
+            topSetWeightLb: 325, topSetReps: 1
+        )
+        let up = ProgramProgression.advanceProgramLift(state, perf: madeSingle, focus: .strength,
                                                        style: .maxEffort, movementGroup: "press", roundingLb: 5)
-        XCTAssertEqual(up.state.baseWeightLb, 320)
+        XCTAssertEqual(up.state.baseWeightLb, 330, "a heavier made single becomes the anchor before adding the next step")
+        XCTAssertEqual(up.state.estimatedMaxLb, 330, "a single is not inflated through a rep-max formula")
         let miss = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: false), focus: .strength,
                                                          style: .maxEffort, movementGroup: "press", roundingLb: 5)
         XCTAssertEqual(miss.state.baseWeightLb, 315)

@@ -34,6 +34,11 @@ Per day, **+ Add lift** and set:
 - **Est. 1RM** — seeds the training-max ceiling; re-estimated from every
   banked peak.
 
+New slots use the same history-first bootstrap as the bundled templates; with
+no recorded work they fall back to conservative exercise/equipment defaults,
+so a loaded movement is not blank. Treat a fallback as a first-session
+suggestion and correct it in the editor or workout.
+
 A lift can appear on multiple days; each slot progresses independently.
 
 ## Add accessories (rep-range work)
@@ -43,6 +48,10 @@ and **Load step**. Accessories use double progression: earn the top of
 the rep range on all sets → add the load step and reset to min reps.
 **Load step 0 marks bodyweight work** — it climbs reps indefinitely
 instead of adding load.
+
+New loaded accessories reuse their most recent completed working weight or
+receive a conservative starting load and step; bodyweight, band, timed, and
+conditioning work correctly remain at zero pounds.
 
 ## Sanity checklist before day one
 

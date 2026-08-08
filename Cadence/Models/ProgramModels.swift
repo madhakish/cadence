@@ -27,19 +27,19 @@ enum WarmupPolicy: String, Codable, CaseIterable {
     }
 }
 
-/// A structured training plan: ordered days, each pairing a main + complementary
-/// cycle-lift with accessories. The program OWNS the progression state for its
-/// lifts and drives three progression rotations plus recovery (`currentWeek`
-/// is the persisted compatibility name for that phase pointer, not a claim that
-/// every program is calendar-week-bound). Adaptive cross-cycle progression
-/// lives in CadenceCore (`ProgramProgression`).
+/// A structured training plan: ordered days, individually prescribed lifts,
+/// and accessories. The program owns each slot's progression state. Its
+/// `currentWeek` is the persisted compatibility name for a style-neutral
+/// rotation pointer; each prescription interprets that position itself, so a
+/// classic wave, max effort, dynamic effort and rep progression may coexist.
+/// Adaptive progression lives in CadenceCore (`ProgramProgression`).
 @Model
 final class Program {
     @Attribute(.unique) var id: String = UUID().uuidString
     @Attribute(.unique) var name: String
     var focusRaw: String
     var cycleNumber: Int
-    var currentWeek: Int            // 1...4 phase pointer for the whole program
+    var currentWeek: Int            // 1...4 style-neutral rotation pointer
     var nextDayIndex: Int
     var roundingLb: Double
     var isActive: Bool

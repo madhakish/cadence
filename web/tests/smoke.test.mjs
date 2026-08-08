@@ -49,7 +49,7 @@ const completeAll = async (workout) => {
 // ---- privacy-safe first launch ----
 await db.ensureSeeded();
 const seededExercises = await db.Exercises.all();
-ok(seededExercises.length === 143, "seeded 143 exercises");
+ok(seededExercises.length === 151, "seeded 151 exercises");
 ok(["Push-ups", "Pull-ups", "Barbell Row", "Bulgarian Split Squat", "Ab Wheel Rollout", "Row Erg"]
   .every((name) => seededExercises.some((exercise) => exercise.name === name)),
   "comprehensive seed covers common push, pull, lower, core, and conditioning movements");
@@ -77,7 +77,7 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
   ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
-  ok((await db.Exercises.all()).length === 143, "seed repair does not duplicate exercises");
+  ok((await db.Exercises.all()).length === 151, "seed repair does not duplicate exercises");
   ok((await db.Bodyweight.all()).some((entry) => entry.id === weighInId), "seed repair preserves other user stores");
   await db.Sessions.del(sentinelId);
   await db.Bodyweight.del(weighInId);
@@ -269,7 +269,7 @@ for (let i = 0; i < 10; i++) {
   await db.syncLibrary();
   ok((await db.Exercises.byName("Deadlift")).movementGroup === "hinge", "sync backfills a missing movement group");
   ok((await db.Exercises.byName("Deadlift")).defaultRestSeconds === 222, "sync does NOT clobber user edits");
-  ok((await db.Exercises.all()).length === 143, "sync leaves the count whole (no dupes)");
+  ok((await db.Exercises.all()).length === 151, "sync leaves the count whole (no dupes)");
 }
 
 // ---- vertical pulls: migrate old installs once, then respect user edits ----
@@ -757,7 +757,7 @@ ok(db.BACKUP_SCHEMA_VERSION === 7, `backup schema is pinned at 7 (got ${db.BACKU
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
-ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 143, "export carries the exercise library");
+ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 151, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
 ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
@@ -2297,7 +2297,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 
 // ---- program templates: every style instantiates and banks cleanly ----
 {
-  const { PROGRAM_TEMPLATES, createProgramFromTemplate } = await import("../app/js/templates.js");
+  const { PROGRAM_TEMPLATES, createProgramFromTemplate,
+    bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } = await import("../app/js/templates.js");
   ok(PROGRAM_TEMPLATES.length >= 3, "styles on offer: strength, oly, metcon");
 
   // Cross-language parity anchor: the JS templates must equal the shared
@@ -2307,6 +2308,26 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const fixture = JSON.parse(await (await import("node:fs/promises")).readFile(new URL("./fixtures/program-templates.json", import.meta.url), "utf8"));
   ok(JSON.stringify(await normalizedTemplates(), null, 2) === JSON.stringify(fixture, null, 2),
     "templates match the shared parity fixture (regenerate via web/tools/generate-template-fixture.mjs)");
+  const { normalizedProgrammingDefaults } = await import("./programming-defaults-fixture.mjs");
+  const defaultsFixture = JSON.parse(await (await import("node:fs/promises")).readFile(
+    new URL("./fixtures/programming-defaults.json", import.meta.url), "utf8"));
+  ok(JSON.stringify(await normalizedProgrammingDefaults(), null, 2)
+    === JSON.stringify(defaultsFixture, null, 2),
+  "programming defaults match the shared Swift/web parity fixture");
+  const conjugate = PROGRAM_TEMPLATES.find((template) => template.id === "conjugate");
+  ok(conjugate.days.map((day) => day.name).join("|")
+    === "Mon — Max Effort Lower|Wed — Max Effort Upper|Fri — Dynamic Effort Lower|Sun — Dynamic Effort Upper",
+  "conjugate keeps the source weekly schedule");
+  ok(conjugate.days.flatMap((day) => day.lifts)
+    .filter((lift) => lift.prescription === "dynamicEffort")
+    .map((lift) => lift.startFraction).join(",") === "0.5,0.5,0.4",
+  "conjugate starts squat/pull at 50% and speed bench at 40%");
+  ok(conjugate.exercises.filter((exercise) => exercise.name.startsWith("Speed"))
+    .every((exercise) => exercise.defaultRestSeconds === 60),
+  "conjugate speed exercises carry one-minute rest");
+  const sled = conjugate.days[2].accessories.find((accessory) => accessory.exerciseName === "Sled Pull");
+  ok(sled.sets === 4 && sled.targetSeconds === 60 && sled.conditioningEffort === "easy" && sled.targetRPE === 5,
+    "conjugate includes four easy one-minute sled trips");
   const squatBefore = await db.Exercises.byName("Back Squat"); // seeded — must never be overwritten
   for (const t of PROGRAM_TEMPLATES) {
     const id = await createProgramFromTemplate(t);
@@ -2317,6 +2338,28 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
       day.lifts.every((l, i) => l.order === i && l.exerciseName === t.days[dayIndex].lifts[i].exerciseName)
       && day.accessories.every((a, i) => a.order === i && a.exerciseName === t.days[dayIndex].accessories[i].exerciseName)),
       `[INV-TIED-ORDER-IS-AUTHORED] ${t.id}: slots carry the template author's written sequence`);
+    for (const day of prog.days) {
+      for (const lift of day.lifts) {
+        const exercise = await db.Exercises.byName(lift.exerciseName);
+        if (!["bodyweight", "band", "timed", "conditioning"].includes(exercise.type)) {
+          ok(lift.baseWeightLb > 0 && lift.estimatedMaxLb > 0,
+            `${t.id}/${lift.exerciseName}: loaded lift receives a nonblank bootstrap`);
+        }
+      }
+      for (const accessory of day.accessories) {
+        const exercise = await db.Exercises.byName(accessory.exerciseName);
+        if (!["bodyweight", "band", "timed", "conditioning"].includes(exercise.type)) {
+          ok(accessory.weightLb > 0 && accessory.incrementLb > 0,
+            `${t.id}/${accessory.exerciseName}: loaded accessory receives a nonblank bootstrap`);
+        }
+      }
+    }
+    if (t.id === "strength-upper-lower") {
+      const defaults = await import("../app/js/programming-defaults.js");
+      const ytw = defaults.recommendation("Y-T-W Raises", "Accessory", "dumbbell");
+      ok(ytw.weightLb === 5 && ytw.incrementLb === 2.5,
+        "Y-T-W raises have a genuinely light 5 lb per-dumbbell fallback");
+    }
     for (const e of t.exercises) ok(!!(await db.Exercises.byName(e.name)), `${t.id}: library has ${e.name}`);
     // A session from day 0 builds and banks without touching other programs.
     const sess = await db.Sessions.get(await session.createSessionFromProgramDay(prog, prog.days[0]));
@@ -2335,6 +2378,52 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.Programs.del(dupA); await db.Programs.del(dupB);
   const squatAfter = await db.Exercises.byName("Back Squat");
   ok(JSON.stringify(squatAfter) === JSON.stringify(squatBefore), "existing exercises never overwritten by templates");
+
+  // A first-session correction becomes the next template's starting point;
+  // defaults are not sticky user state.
+  const ytwHistoryID = await db.Sessions.save({
+    date: new Date("2035-06-01T10:00:00Z").toISOString(), notes: "", isCompleted: true,
+    completedAt: new Date("2035-06-01T10:30:00Z").toISOString(),
+    exercises: [{ exerciseName: "Y-T-W Raises", sets: [
+      { order: 0, weightLb: 2.5, reps: 12, isWarmup: false, status: "completed", flags: [] },
+    ] }],
+  });
+  const upperLowerFromHistory = await db.Programs.get(await createProgramFromTemplate(
+    PROGRAM_TEMPLATES.find((t) => t.id === "strength-upper-lower")));
+  ok(upperLowerFromHistory.days[0].accessories.find((a) => a.exerciseName === "Y-T-W Raises")?.weightLb === 2.5,
+    "a recorded Y-T-W correction replaces the generic bootstrap in the next program");
+  await db.Programs.del(upperLowerFromHistory.id);
+  await db.Sessions.del(ytwHistoryID);
+
+  // History is global to the lifter, not trapped inside the program that
+  // produced it: a later Oly or conditioning block should pick it up.
+  const snatchHistoryID = await db.Sessions.save({
+    date: new Date("2036-01-01T10:00:00Z").toISOString(), notes: "", isCompleted: true,
+    exercises: [{ exerciseName: "Snatch", sets: [
+      { order: 0, weightLb: 95, reps: 3, isWarmup: false, status: "completed", flags: [] },
+    ] }],
+  });
+  const swingHistoryID = await db.Sessions.save({
+    date: new Date("2036-01-02T10:00:00Z").toISOString(), notes: "", isCompleted: true,
+    exercises: [{ exerciseName: "KB Swing", sets: [
+      { order: 0, weightLb: 40, reps: 15, isWarmup: false, status: "completed", flags: [] },
+    ] }],
+  });
+  const olyFromHistory = await db.Programs.get(await createProgramFromTemplate(
+    PROGRAM_TEMPLATES.find((t) => t.id === "olympic-weightlifting")));
+  const metconFromHistory = await db.Programs.get(await createProgramFromTemplate(
+    PROGRAM_TEMPLATES.find((t) => t.id === "metabolic-conditioning")));
+  ok(olyFromHistory.days[0].lifts[0].baseWeightLb === 60,
+    "an Oly block derives its technique start from Snatch history logged in any program");
+  ok(metconFromHistory.days[0].accessories[0].weightLb === 40,
+    "a conditioning block reuses the latest KB Swing load logged in any program");
+  const customSnatch = await bootstrapLiftFromHistory(await db.Exercises.byName("Snatch"),
+    { role: "complementary", focus: "strength", roundingLb: 5 });
+  const customSwing = await bootstrapAccessoryFromHistory(await db.Exercises.byName("KB Swing"));
+  ok(customSnatch.baseWeightLb === 60 && customSwing.weightLb === 40,
+    "custom-program slots use the same cross-program history bootstrap as templates");
+  await db.Programs.del(olyFromHistory.id); await db.Programs.del(metconFromHistory.id);
+  await db.Sessions.del(snatchHistoryID); await db.Sessions.del(swingHistoryID);
 
   // History-driven starting weights: with a recorded 315×5 squat (e1RM 367.5),
   // a 5/3/1 program must open at TM = floor(0.90 × 367.5 → /5) = 330, and the
@@ -2355,7 +2444,19 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(squatDay.lifts[0].prescription === "fiveThreeOne", "531 slot carries its methodology style");
   ok(squatDay.accessories[0].weightLb === 165, `BBB volume at ~50% of TM (got ${squatDay.accessories[0].weightLb})`);
   await db.Programs.del(p531.id);
-  // No recorded history for a slot → the template's hand-set base stands.
+  const conjugateFromHistory = await db.Programs.get(await createProgramFromTemplate(
+    PROGRAM_TEMPLATES.find((t) => t.id === "conjugate")));
+  const meLower = conjugateFromHistory.days.find((d) => d.name === "Mon — Max Effort Lower");
+  const deLower = conjugateFromHistory.days.find((d) => d.name === "Fri — Dynamic Effort Lower");
+  ok(meLower.lifts[0].exerciseName === "Low Box Squat" && meLower.lifts[0].baseWeightLb === 330,
+    "a special ME squat derives its opening target from Back Squat history");
+  ok(deLower.lifts[0].exerciseName === "Speed Box Squat" && deLower.lifts[0].baseWeightLb === 180,
+    "a special speed squat derives its 50% base from Back Squat history");
+  ok(deLower.accessories.find((a) => a.exerciseName === "Sled Pull")?.targetSeconds === 60,
+    "template conditioning configuration survives instantiation");
+  await db.Programs.del(conjugateFromHistory.id);
+  // No recorded history for a loaded custom slot → the shared type fallback,
+  // not an arbitrary template literal or a blank, supplies a safe base.
   const noHistory = await db.Programs.get(await createProgramFromTemplate({
     id: "test-fallback", name: "Fallback Check", tagline: "", focus: "strength", roundingLb: 5,
     exercises: [],
@@ -2364,7 +2465,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
       stallCount: 0, lastIncrementLb: 0, prescription: "fiveThreeOne", sets: 0, startFraction: 0.90,
     }] }],
   }));
-  ok(noHistory.days[0].lifts[0].baseWeightLb === 40, "no recorded history → template base stands");
+  ok(noHistory.days[0].lifts[0].baseWeightLb === 45,
+    "no recorded history → safe main-barbell default replaces template literal");
   await db.Programs.del(noHistory.id);
   // Twin-slot synchronization: banking Day A's squat must advance Day B's
   // squat slot too — novice weight moves every session, not every other one.
@@ -2476,6 +2578,9 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 
 // ---- multiple programs: create, exclusively activate, delete ----
 {
+  const original = await db.Programs.active();
+  const originalState = JSON.stringify({ cycleNumber: original.cycleNumber,
+    currentWeek: original.currentWeek, nextDayIndex: original.nextDayIndex, days: original.days });
   await db.Programs.save({ name: "Cut Block", focus: "maintain", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, roundingLb: 5, isActive: false, days: [] });
   let all = await db.Programs.all();
   ok(all.length === 2, "second program created");
@@ -2483,6 +2588,12 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   for (const x of all) { x.isActive = x.id === second.id; await db.Programs.save(x); } // exclusive activate
   ok((await db.Programs.active()).name === "Cut Block", "activating switches the active program");
   ok((await db.Programs.all()).filter((p) => p.isActive).length === 1, "exactly one program active");
+  all = await db.Programs.all();
+  for (const x of all) { x.isActive = x.id === original.id; await db.Programs.save(x); }
+  const resumed = await db.Programs.active();
+  ok(resumed.id === original.id && JSON.stringify({ cycleNumber: resumed.cycleNumber,
+    currentWeek: resumed.currentWeek, nextDayIndex: resumed.nextDayIndex, days: resumed.days }) === originalState,
+  "switching away and back preserves the program's independent progression state");
   await db.Programs.del(second.id);
   ok((await db.Programs.all()).length === 1, "program deleted");
 }

@@ -1,8 +1,8 @@
 // Pre-programmed starting points for "+ Add program" (the style picker).
 // Each template is DATA: a focus, days of lifts/accessories, and compatibility
 // definitions that may now also exist in the expanded seed. Instantiation
-// never overwrites an existing library record. Baselines start deliberately
-// light: the docs walk through setting rotation-1 bases before the first session.
+// never overwrites an existing library record. Runtime weights resolve from
+// completed history first, then the separate conservative defaults catalog.
 //
 // Ported 1:1 from CadenceCore/Sources/CadenceCore/ProgramTemplateData.swift;
 // parity is ENFORCED against the shared fixture
@@ -11,14 +11,18 @@
 import { Exercises, Programs, Sessions } from "./db.js";
 import { ex } from "./seed.js";
 import * as C from "./core.js";
+import * as ProgrammingDefaults from "./programming-defaults.js";
 
 const lift = (exercise, role, baseWeightLb, estimatedMaxLb, options = {}) =>
   ({ exerciseName: exercise, role, baseWeightLb, estimatedMaxLb, stallCount: 0, lastIncrementLb: 0,
      prescription: options.prescription || "automatic", sets: options.sets || 0,
-     startFraction: options.startFraction || 0 });
-const acc = (exercise, sets, minReps, maxReps, weightLb = 0, incrementLb = 0, startFraction = 0) =>
+     startFraction: options.startFraction || 0, historyExercise: options.historyExercise || null });
+const acc = (exercise, sets, minReps, maxReps, weightLb = 0, incrementLb = 0,
+  startFraction = 0, options = {}) =>
   ({ exerciseName: exercise, sets, minReps, maxReps, currentReps: minReps, weightLb, incrementLb,
-     stallCount: 0, startFraction });
+     stallCount: 0, startFraction, targetSeconds: options.targetSeconds ?? 30,
+     durationStepSeconds: options.durationStepSeconds ?? 5,
+     conditioningEffort: options.conditioningEffort || "easy", targetRPE: options.targetRPE ?? 0 });
 
 export const PROGRAM_TEMPLATES = [
   {
@@ -195,30 +199,45 @@ export const PROGRAM_TEMPLATES = [
         accessories: [acc("Back Squat", 5, 10, 10, 95, 5, 0.45), acc("Lying Leg Curl", 5, 10, 12, 70, 5)] },
     ],
   },
-  // Westside-style conjugate: max-effort top singles with repetition
-  // accessories, and dynamic-effort speed waves at ~50–60%. Rotate the
-  // max-effort variation with the existing swap gesture — rotation, not
-  // grinding, is the methodology's stall answer. Straight bar weight only;
-  // bands/chains are a coach's call the app does not fake.
+  // Westside conjugate: weekly special-exercise max-effort work, two
+  // repetition-method days, and three-week straight-bar speed waves.
+  // Bands/chains are a coach's call the app does not fake.
   {
     id: "conjugate",
-    name: "Conjugate — Westside-style",
-    tagline: "4 days/wk · max-effort singles + speed work · rotate variations by swapping",
+    name: "Conjugate — Westside",
+    tagline: "Mon/Wed/Fri/Sun · weekly max-effort rotation · 3-week speed waves",
     focus: "strength", roundingLb: 5,
-    exercises: [],
+    exercises: [
+      ex("Low Box Squat", "Main", "barbell", "squat", { defaultRestSeconds: 300 }),
+      ex("Front Box Squat", "Main", "barbell", "squat", { defaultRestSeconds: 300 }),
+      ex("Paused Box Squat", "Main", "barbell", "squat", { defaultRestSeconds: 300 }),
+      ex("Floor Press", "Main", "barbell", "press", { defaultRestSeconds: 180 }),
+      ex("Close-Grip Floor Press", "Main", "barbell", "press", { defaultRestSeconds: 180 }),
+      ex("Speed Box Squat", "Main", "barbell", "squat", { defaultRestSeconds: 60 }),
+      ex("Speed Deadlift", "Main", "barbell", "hinge", { defaultRestSeconds: 60 }),
+      ex("Speed Bench Press", "Main", "barbell", "press", { defaultRestSeconds: 60 }),
+    ],
     days: [
-      { name: "Max Effort Lower",
-        lifts: [lift("Back Squat", "main", 180, 205, { prescription: "maxEffort", startFraction: 0.90 })],
+      { name: "Mon — Max Effort Lower",
+        lifts: [lift("Low Box Squat", "main", 180, 205,
+          { prescription: "maxEffort", startFraction: 0.90, historyExercise: "Back Squat" })],
         accessories: [acc("Nordic Hamstring Curl", 4, 6, 10), acc("Back Extension", 4, 10, 15), acc("Hanging Knee Raise", 4, 10, 15)] },
-      { name: "Max Effort Upper",
-        lifts: [lift("Barbell Bench", "main", 110, 125, { prescription: "maxEffort", startFraction: 0.90 })],
+      { name: "Wed — Max Effort Upper",
+        lifts: [lift("Floor Press", "main", 110, 125,
+          { prescription: "maxEffort", startFraction: 0.90, historyExercise: "Barbell Bench" })],
         accessories: [acc("Skull Crusher", 4, 8, 12, 30, 5), acc("Barbell Row", 4, 8, 12, 95, 5), acc("Face Pulls", 3, 12, 15, 25, 5)] },
-      { name: "Dynamic Effort Lower",
-        lifts: [lift("Back Squat", "main", 95, 205, { prescription: "dynamicEffort", startFraction: 0.50 }),
-                lift("Deadlift", "complementary", 145, 245, { prescription: "dynamicEffort", startFraction: 0.60 })],
-        accessories: [acc("Walking Lunges", 3, 10, 20), acc("Back Extension", 3, 10, 15)] },
-      { name: "Dynamic Effort Upper",
-        lifts: [lift("Barbell Bench", "main", 65, 125, { prescription: "dynamicEffort", startFraction: 0.50 })],
+      { name: "Fri — Dynamic Effort Lower",
+        lifts: [lift("Speed Box Squat", "main", 100, 205,
+          { prescription: "dynamicEffort", startFraction: 0.50, historyExercise: "Back Squat" }),
+        lift("Speed Deadlift", "complementary", 120, 245,
+          { prescription: "dynamicEffort", startFraction: 0.50, historyExercise: "Deadlift" })],
+        accessories: [acc("Nordic Hamstring Curl", 4, 8, 12), acc("Back Extension", 4, 10, 15),
+          acc("Hanging Knee Raise", 4, 10, 15),
+          acc("Sled Pull", 4, 1, 1, 0, 0, 0,
+            { targetSeconds: 60, durationStepSeconds: 5, conditioningEffort: "easy", targetRPE: 5 })] },
+      { name: "Sun — Dynamic Effort Upper",
+        lifts: [lift("Speed Bench Press", "main", 50, 125,
+          { prescription: "dynamicEffort", startFraction: 0.40, historyExercise: "Barbell Bench" })],
         accessories: [acc("Triceps Pushdown", 4, 10, 15, 40, 5), acc("Lat Pulldown", 4, 8, 12, 80, 5), acc("Rear Delt Fly", 3, 12, 15, 15, 5)] },
     ],
   },
@@ -234,49 +253,85 @@ const uniqueName = (base, taken) => {
   return `${base} ${n}`;
 };
 
-/// Best recorded e1RM per exercise from completed, banked working sets — the
-/// lifter's known history, used to compute methodology starting weights.
-async function recordedE1RMs(names) {
+/// Known main-lift capacity plus the most recent completed accessory load.
+/// Only workout history is athlete state; defaults remain pure reference data.
+async function recordedHistory(names) {
   const wanted = new Set(names);
   const best = new Map();
+  const latestWeight = new Map();
+  const latestDate = new Map();
   for (const session of await Sessions.all()) {
     if (!session.isCompleted) continue;
+    const timestamp = new Date(session.completedAt || session.date).getTime();
     for (const entry of session.exercises || []) {
       if (!wanted.has(entry.exerciseName)) continue;
-      for (const set of entry.sets || []) {
-        if (set.isWarmup || set.status !== "completed") continue;
-        if (!(set.weightLb > 0) || !(set.reps >= 1)) continue;
+      const working = (entry.sets || []).filter((set) => !set.isWarmup && set.status === "completed"
+        && set.weightLb > 0 && set.reps >= 1);
+      const sessionWeight = Math.max(0, ...working.map((set) => set.weightLb));
+      if (sessionWeight > 0 && timestamp >= (latestDate.get(entry.exerciseName) ?? -Infinity)) {
+        if (timestamp === latestDate.get(entry.exerciseName)) {
+          latestWeight.set(entry.exerciseName,
+            Math.max(latestWeight.get(entry.exerciseName) || 0, sessionWeight));
+        } else {
+          latestWeight.set(entry.exerciseName, sessionWeight);
+          latestDate.set(entry.exerciseName, timestamp);
+        }
+      }
+      for (const set of working) {
         const sample = C.epleyE1RM(set.weightLb, set.reps);
         if (sample > (best.get(entry.exerciseName) || 0)) best.set(entry.exerciseName, sample);
       }
     }
   }
-  return best;
+  return { bestE1RM: best, latestWeight };
 }
 
 // Round DOWN to the plate step: methodology guidance is to err light when
 // deriving starting weights from an estimated max.
 const floorTo = (x, step) => (step > 0 ? Math.floor(x / step + 1e-9) * step : x);
 
+/// History-aware values for slots added in the custom program editor.
+export async function bootstrapLiftFromHistory(exercise, { role = "complementary",
+  focus = "strength", roundingLb = 5 } = {}) {
+  const fallback = ProgrammingDefaults.recommendation(exercise.name, "Main", exercise.type);
+  const history = await recordedHistory([exercise.name]);
+  const e1RM = history.bestE1RM.get(exercise.name) || 0;
+  if (!(e1RM > 0)) return { baseWeightLb: fallback.weightLb, estimatedMaxLb: fallback.estimatedMaxLb };
+  const style = C.resolvedPrescriptionStyle("automatic", exercise.movementGroup || null, role, focus);
+  return {
+    baseWeightLb: Math.max(fallback.weightLb,
+      floorTo(C.templateStartFraction(style) * e1RM, roundingLb)),
+    estimatedMaxLb: Math.round(e1RM),
+  };
+}
+
+export async function bootstrapAccessoryFromHistory(exercise) {
+  const fallback = ProgrammingDefaults.recommendation(exercise.name, "Accessory", exercise.type);
+  const history = await recordedHistory([exercise.name]);
+  return { weightLb: history.latestWeight.get(exercise.name) || fallback.weightLb,
+    incrementLb: fallback.incrementLb };
+}
+
 /// Instantiate a template: ensure its exercises exist in the library (one
 /// read, never overwriting an existing record), then create the program —
-/// active only when it's the first. Slots with a start fraction derive their
-/// base weight from the lifter's recorded e1RM history; without history the
-/// template's deliberately light hand-set base stands. Returns the new
-/// program's id.
+/// active only when it's the first. Every slot resolves workout history first,
+/// then the shared conservative defaults catalog. Returns the new program id.
 export async function createProgramFromTemplate(template) {
-  const have = new Set((await Exercises.all()).map((e) => e.name));
+  const library = await Exercises.all();
+  const byName = new Map(library.map((e) => [e.name, e]));
   for (const e of template.exercises) {
-    if (!have.has(e.name)) await Exercises.save({ ...e, createdAt: new Date().toISOString() });
+    if (!byName.has(e.name)) {
+      const saved = { ...e, createdAt: new Date().toISOString() };
+      await Exercises.save(saved);
+      byName.set(e.name, saved);
+    }
   }
-  // Only slots with a start fraction consume history; legacy templates skip
-  // the full-store scan entirely.
-  const fractionalNames = template.days.flatMap((d) => [
-    ...(d.lifts || []).filter((l) => (l.startFraction || 0) > 0 || C.defaultStartFraction(l.prescription || "automatic") > 0)
-      .map((l) => l.exerciseName),
-    ...(d.accessories || []).filter((a) => (a.startFraction || 0) > 0).map((a) => a.exerciseName),
+  const historyNames = template.days.flatMap((d) => [
+    ...(d.lifts || []).flatMap((l) => [l.exerciseName, l.historyExercise].filter(Boolean)),
+    ...(d.accessories || []).map((a) => a.exerciseName),
   ]);
-  const known = fractionalNames.length ? await recordedE1RMs(fractionalNames) : new Map();
+  const known = historyNames.length ? await recordedHistory(historyNames)
+    : { bestE1RM: new Map(), latestWeight: new Map() };
   const programs = await Programs.all();
   return Programs.save({
     name: uniqueName(template.name, new Set(programs.map((p) => p.name))),
@@ -290,14 +345,22 @@ export async function createProgramFromTemplate(template) {
       // so template programs were never actually tied — this just says so at
       // the write site instead of relying on the save-path repair.
       lifts: d.lifts.map((l, slotOrder) => {
-        const { startFraction = 0, sets = 0, ...record } = l;
+        const { startFraction = 0, sets = 0, historyExercise = null, ...record } = l;
         record.order = slotOrder;
         record.prescription = l.prescription || "automatic";
         if (sets > 0) record.doubleProgressionSets = sets;
-        const fraction = startFraction || C.defaultStartFraction(record.prescription);
-        const e1RM = known.get(l.exerciseName) || 0;
+        const exercise = byName.get(l.exerciseName) || {};
+        const fallback = ProgrammingDefaults.recommendation(
+          l.exerciseName, "Main", exercise.type || "dumbbell");
+        record.baseWeightLb = fallback.weightLb;
+        record.estimatedMaxLb = fallback.estimatedMaxLb;
+        const resolvedStyle = C.resolvedPrescriptionStyle(record.prescription,
+          exercise.movementGroup || null, l.role, template.focus);
+        const fraction = startFraction || C.templateStartFraction(resolvedStyle);
+        const e1RM = known.bestE1RM.get(historyExercise || l.exerciseName) || 0;
         if (fraction > 0 && e1RM > 0) {
-          record.baseWeightLb = Math.max(45, floorTo(fraction * e1RM, template.roundingLb));
+          record.baseWeightLb = Math.max(fallback.weightLb,
+            floorTo(fraction * e1RM, template.roundingLb));
           record.estimatedMaxLb = Math.round(e1RM);
         }
         return record;
@@ -305,9 +368,17 @@ export async function createProgramFromTemplate(template) {
       accessories: d.accessories.map((a, slotOrder) => {
         const { startFraction = 0, ...record } = a;
         record.order = slotOrder;
-        const e1RM = known.get(a.exerciseName) || 0;
+        const exercise = byName.get(a.exerciseName) || {};
+        const fallback = ProgrammingDefaults.recommendation(
+          a.exerciseName, "Accessory", exercise.type || "dumbbell");
+        record.weightLb = fallback.weightLb;
+        record.incrementLb = a.incrementLb > 0 ? a.incrementLb : fallback.incrementLb;
+        const e1RM = known.bestE1RM.get(a.exerciseName) || 0;
         if (startFraction > 0 && e1RM > 0) {
-          record.weightLb = Math.max(45, floorTo(startFraction * e1RM, template.roundingLb));
+          record.weightLb = Math.max(fallback.weightLb,
+            floorTo(startFraction * e1RM, template.roundingLb));
+        } else if ((known.latestWeight.get(a.exerciseName) || 0) > 0) {
+          record.weightLb = known.latestWeight.get(a.exerciseName);
         }
         return record;
       }),

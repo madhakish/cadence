@@ -18,10 +18,10 @@ one in **Settings → Exercise library**.
 
 For a program exercise, Cadence asks:
 
-- **Just this session** (the default) — the program is untouched. You do
-  the substitute today; the original slot simply isn't performed. On a
-  peak day this means the slot grades as a skipped peak — the honest
-  outcome for substituted work.
+- **Just this session** (the default) — the program's exercise name is
+  untouched, but the performed substitute retains the durable slot identity.
+  Its prescribed work grades that slot. This is the normal weekly-variation
+  workflow for a max-effort slot.
 - **For the rest of this cycle** — the slot is renamed to the substitute
   and **reverts automatically at the next cycle rollover**, with a note
   in History. Progression state (base weight, est. 1RM) carries across.
