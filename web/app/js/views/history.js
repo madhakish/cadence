@@ -327,7 +327,8 @@ function renderCharts(panel, sessions, exercises, program) {
       targetY, targetLabel: "Peak target", projection,
       // Native's showsAreaFill also requires the rotation split to be OFF; a
       // single-rotation history in split mode drew the wash on web only.
-      area: !chartSplit,
+      // (The split is now the "rotations" chart intent.)
+      area: !splitByRotation,
     };
     const metricLabel = chartMetric === "weight" ? "Top working weight"
       : chartMetric === "e1rm" ? "Estimated 1RM"
