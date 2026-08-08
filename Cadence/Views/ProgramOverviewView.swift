@@ -143,10 +143,7 @@ struct ProgramOverviewView: View {
             focus: program.focus,
             prescriptionStyle: lift.prescription,
             configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
-            addedVolumeSets: ProgramProgression.volumeIncrementSets(
-                stallCount: lift.stallCount,
-                maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation
-            )
+            addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program)
         )
     }
 

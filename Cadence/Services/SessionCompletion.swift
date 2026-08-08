@@ -328,12 +328,21 @@ enum SessionCompletion {
         guard let sessions = try? context.fetch(
             FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.isCompleted })
         ) else { return nil }
+        let anchor = session.completedAt ?? session.date
         var best = 0.0
         var bestDate = Date.distantPast
         for candidate in sessions where candidate !== session {
+            // PRIOR means prior: a session banked out of order must not let
+            // later work retroactively pick this cycle's regime.
             let stamp = candidate.completedAt ?? candidate.date
+            guard stamp <= anchor else { continue }
             for entry in candidate.exercises where entry.exercise?.name == exerciseName {
-                for set in entry.workingSets where set.weightLb > 0 && set.reps >= 1 {
+                // Same rep ceiling as strengthSampleIndex: Epley drifts high
+                // past ten reps, and a long back-off set must not become an
+                // inflated lifetime ceiling that misgrades every later cycle.
+                for set in entry.workingSets
+                where set.weightLb > 0 && set.reps >= 1
+                    && set.reps <= ProgramProgression.e1RMSampleRepCeiling {
                     let sample = ProgramProgression.epleyE1RM(weightLb: set.weightLb, reps: set.reps)
                     if sample > best {
                         best = sample
@@ -343,7 +352,6 @@ enum SessionCompletion {
             }
         }
         guard best > 0 else { return nil }
-        let anchor = session.completedAt ?? session.date
         let standing = anchor.timeIntervalSince(bestDate)
             >= ProgramProgression.standingBestDays * 86_400
         return (best, standing)

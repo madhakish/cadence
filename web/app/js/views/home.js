@@ -5,7 +5,7 @@ import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
-import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, reconcileRecoveryBridge } from "./session.js";
+import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
 
 const orderedSlots = (slots = [], roleAwareLegacy = false) => {
   const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
@@ -184,7 +184,7 @@ export async function render(host) {
       const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
         program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
         { ...l, workingSets: l.doubleProgressionSets ?? 3 },
-        C.volumeIncrementSets(l.stallCount ?? 0, program.maximumAddedSetsPerRotation ?? 6));
+        volumeFallbackSets(l, program));
       // Preview the same snapped weight the session will store (secondary barbell lifts).
       const targetWeightLb = plan.weightLb;
       plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main" || C.buildsOwnSessionShape(l.prescription || "automatic"), barLb, program.roundingLb, gym, program.currentWeek);
@@ -319,7 +319,7 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
         const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
           { ...l, workingSets: l.doubleProgressionSets ?? 3 },
-          C.volumeIncrementSets(l.stallCount ?? 0, program.maximumAddedSetsPerRotation ?? 6));
+          volumeFallbackSets(l, program));
         const targetWeightLb = plan.weightLb;
         plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main" || C.buildsOwnSessionShape(l.prescription || "automatic"), barLb, program.roundingLb, gym, program.currentWeek);
         liftCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },

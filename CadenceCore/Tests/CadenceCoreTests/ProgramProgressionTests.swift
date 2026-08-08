@@ -113,11 +113,21 @@ final class ProgramProgressionTests: XCTestCase {
 
     // [INV-NEEDLE-ALWAYS-MOVES]
     func testVolumeFallbackDerivation() {
-        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, maximumAddedSetsPerRotation: 6), 1)
-        XCTAssertEqual(P.volumeIncrementSets(stallCount: 0, maximumAddedSetsPerRotation: 6), 0,
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 0, maximumAddedSetsPerRotation: 6), 1)
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 0, stalledRank: 0, maximumAddedSetsPerRotation: 6), 0,
                        "no stall, no extra volume — a clean grade returns the shape with the jump")
-        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, maximumAddedSetsPerRotation: 0), 0,
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 0, maximumAddedSetsPerRotation: 0), 0,
                        "the added-set governance can turn the fallback off entirely")
+        // The budget is rotation-wide, not per-slot: four stalled lifts under
+        // a budget of one add one set, allocated in stable program order.
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 0, maximumAddedSetsPerRotation: 1), 1,
+                       "the first stalled slot spends the budget")
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 1, maximumAddedSetsPerRotation: 1), 0,
+                       "the second stalled slot finds it spent")
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 3, maximumAddedSetsPerRotation: 6), 1,
+                       "a roomy budget covers every stalled slot")
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: -1, maximumAddedSetsPerRotation: 6), 0,
+                       "a slot outside the stalled ranking carries nothing")
     }
 
     // [INV-NEEDLE-ALWAYS-MOVES]

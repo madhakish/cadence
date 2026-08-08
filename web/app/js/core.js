@@ -1524,7 +1524,14 @@ export function stagedIncrement(baseWeightLb, focus, regime, roundingLb = DEFAUL
   const inc = focusIncrement(baseWeightLb, focus, roundingLb);
   if (!(inc > 0)) return 0;
   if (regime === "rebuild") return Math.ceil(inc / 10) * 10;
-  if (regime === "fine") return Math.max(2.5, Math.round((inc / 2) / 2.5) * 2.5);
+  if (regime === "fine") {
+    // Half the program's own loadable step — the same half-grid the grading
+    // tolerance already treats as met. At 5 lb rounding the banked halves
+    // surface every second cycle; a program whose rack really has change
+    // plates says so with 2.5 lb rounding, and the fine step follows it down.
+    const half = roundingLb / 2;
+    return Math.max(half, Math.round((inc / 2) / half) * half);
+  }
   return inc;
 }
 
@@ -1532,11 +1539,14 @@ export function stagedIncrement(baseWeightLb, focus, regime, roundingLb = DEFAUL
 // needle still moves when the weight cannot. Derived from persisted state
 // alone — the Home card and the created session agree by construction, and a
 // later clean grade resets the stall and returns the volume with the weight
-// jump. Bounded to one set and gated on the program's existing added-set
-// governance (maximumAddedSetsPerRotation zero means no added work, ever).
-// Mirrors ProgramProgression.volumeIncrementSets.
-export function volumeIncrementSets(stallCount, maximumAddedSetsPerRotation) {
-  return stallCount > 0 && maximumAddedSetsPerRotation > 0 ? 1 : 0;
+// jump. maximumAddedSetsPerRotation is the ROTATION-WIDE budget, not a
+// per-slot switch: callers rank this slot among the program's stalled
+// peak-graded slots in stable program order (day order, then slot order) and
+// the first `maximum` ranks receive one set each — four stalled lifts under
+// a budget of one add one set, not four. Zero budget means no added work,
+// ever. Mirrors ProgramProgression.volumeIncrementSets.
+export function volumeIncrementSets(stallCount, stalledRank, maximumAddedSetsPerRotation) {
+  return stallCount > 0 && stalledRank >= 0 && stalledRank < maximumAddedSetsPerRotation ? 1 : 0;
 }
 
 // state: { baseWeightLb, estimatedMaxLb, stallCount, role, lastIncrementLb }

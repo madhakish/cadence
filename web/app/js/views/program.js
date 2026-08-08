@@ -4,6 +4,7 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { Programs, Exercises } from "../db.js";
 import { openAddProgramSheet, programEditor } from "./settings.js";
+import { volumeFallbackSets } from "./session.js";
 
 const ordered = (items = []) => [...items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
   || String(a.exerciseName || a.name || "").localeCompare(String(b.exerciseName || b.name || "")));
@@ -33,7 +34,7 @@ export async function render(host) {
           { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
           lift.prescription || "automatic", lift,
-          C.volumeIncrementSets(lift.stallCount ?? 0, program.maximumAddedSetsPerRotation ?? 6),
+          volumeFallbackSets(lift, program),
         );
         card.append(ui.h("div", { class: "row program-slot" },
           ui.h("div", { class: "lead" },

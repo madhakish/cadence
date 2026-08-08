@@ -436,12 +436,17 @@ when it is not**. A held wave cycle adds one set to the next volume rotation
 (load and peak keep their shapes), derived from the persisted stall alone so
 the Home card and the created session agree by construction; a clean grade
 resets the stall and returns the volume with the weight jump. The stall→deload
-ladder is intact underneath, and `maximumAddedSetsPerRotation = 0` turns the
-fallback off. Increment size stages by headroom to the **logged** prior best:
-a logged drawdown rebuilds in clean 10 lb-class jumps (change plates are
-noise), a **standing** prior best being closed back in on earns change-plate
-increments, and a fresh log rising through its own all-time best never reads
-as at-max — it stays standard.
+ladder is intact underneath. `maximumAddedSetsPerRotation` is honored as the
+**rotation-wide budget** it is: stalled slots rank in stable program order and
+receive one set each until the budget is spent — four stalled lifts under a
+budget of one add one set, not four — and zero turns the fallback off.
+Increment size stages by headroom to the **logged** prior best (rep-ceilinged
+samples logged **before** the graded session, so a long back-off set cannot
+fake a ceiling and out-of-order banking cannot see the future): a logged
+drawdown rebuilds in clean 10 lb-class jumps (change plates are noise), a
+**standing** prior best being closed back in on earns half-step increments at
+the program's own grid (`roundingLb / 2`), and a fresh log rising through its
+own all-time best never reads as at-max — it stays standard.
 
 > The lifter's own rule, layered: "the goal is to move the needle with volume
 > progression or weight progressions … if I can't make a 10# jump the change

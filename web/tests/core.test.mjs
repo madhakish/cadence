@@ -664,10 +664,15 @@ ok(/deloaded/.test(st2.note || ""), "deload note present");
   eq(C.stagedIncrement(221, "strength", "fine", 10), 5, "fine at 10-rounding is a 5 lb pair");
   eq(C.stagedIncrement(300, "maintain", "rebuild", 5), 0, "maintain stays zero in every regime");
 
-  // [INV-NEEDLE-ALWAYS-MOVES] the volume fallback derives from pure state.
-  eq(C.volumeIncrementSets(1, 6), 1, "a held cycle adds one volume set");
-  eq(C.volumeIncrementSets(0, 6), 0, "no stall, no extra volume");
-  eq(C.volumeIncrementSets(1, 0), 0, "the added-set governance can turn the fallback off entirely");
+  // [INV-NEEDLE-ALWAYS-MOVES] the volume fallback derives from pure state,
+  // with the rotation-wide budget allocated by stalled rank.
+  eq(C.volumeIncrementSets(1, 0, 6), 1, "a held cycle adds one volume set");
+  eq(C.volumeIncrementSets(0, 0, 6), 0, "no stall, no extra volume");
+  eq(C.volumeIncrementSets(1, 0, 0), 0, "the added-set governance can turn the fallback off entirely");
+  eq(C.volumeIncrementSets(1, 0, 1), 1, "the first stalled slot spends the budget");
+  eq(C.volumeIncrementSets(1, 1, 1), 0, "the second stalled slot finds it spent — four stalls under a cap of one add one set, not four");
+  eq(C.volumeIncrementSets(1, 3, 6), 1, "a roomy budget covers every stalled slot");
+  eq(C.volumeIncrementSets(1, -1, 6), 0, "a slot outside the stalled ranking carries nothing");
 
   // [INV-NEEDLE-ALWAYS-MOVES] a held cycle moves the needle with volume.
   const heldResult = C.advanceCycleLift(liftState(), { ...cleanPerf, grindyOrWobbleSets: 3 }, "strength", 5,

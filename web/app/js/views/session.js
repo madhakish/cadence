@@ -1210,11 +1210,19 @@ function priorBestE1RM(completedSessions, exerciseName, anchorMs) {
   let best = 0;
   let bestMs = -Infinity;
   for (const candidate of completedSessions) {
+    // PRIOR means prior: a session banked out of order must not let later
+    // work retroactively pick this cycle's regime. An unparseable date fails
+    // the comparison and is skipped rather than poisoning the standing test.
     const stamp = Date.parse(candidate.completedAt || candidate.date);
+    if (!(stamp <= anchorMs)) continue;
     for (const entry of candidate.exercises || []) {
       if (entry.exerciseName !== exerciseName) continue;
       for (const set of entry.sets || []) {
         if (set.isWarmup || set.status !== "completed" || !(set.weightLb > 0) || !(set.reps >= 1)) continue;
+        // Same rep ceiling as strengthSampleIndex: Epley drifts high past
+        // ten reps, and a long back-off set must not become an inflated
+        // lifetime ceiling that misgrades every later cycle.
+        if (set.reps > C.E1RM_SAMPLE_REP_CEILING) continue;
         const sample = C.epleyE1RM(set.weightLb, set.reps);
         if (sample > best) { best = sample; bestMs = stamp; }
       }
@@ -1687,6 +1695,24 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
   C.barLabelLb(bar));
 }
 
+// The volume-fallback sets this lift carries, with the rotation-wide
+// added-set budget allocated deterministically: stalled peak-graded slots in
+// program order (day order, then slot order) receive one set each until
+// maximumAddedSetsPerRotation is spent. Slots whose resolved style ignores
+// the fallback still hold a rank — that spends budget conservatively rather
+// than ever exceeding it. Shared by the session builder and every preview
+// surface so the card and the stored prescription agree. Mirrors
+// ProgramSession.volumeFallbackSets.
+export function volumeFallbackSets(lift, program) {
+  const stalled = [...(program.days || [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .flatMap((day) => orderedProgramSlots(day.lifts || [])
+      .filter((slot) => (slot.stallCount ?? 0) > 0 && !C.advancesPerExposure(slot.prescription)));
+  const rank = stalled.findIndex((slot) => slot.id === lift.id);
+  if (rank < 0) return 0;
+  return C.volumeIncrementSets(lift.stallCount ?? 0, rank, program.maximumAddedSetsPerRotation ?? 6);
+}
+
 function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
   const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
   return [...slots].sort((a, b) => {
@@ -1766,10 +1792,10 @@ export async function createSessionFromProgramDay(program, day) {
       program.roundingLb, ex?.type, ex?.movementGroup, lift.role, program.focus, lift.prescription || "automatic",
       configuration, lift.estimatedMaxLb || 0,
       // A held cycle moves the needle with volume: the stall the grade
-      // recorded adds one set to this volume rotation, gated on the
-      // program's added-set governance. Pure state, so the Home card
+      // recorded adds one set to this volume rotation, with the rotation-wide
+      // budget allocated across stalled slots. Pure state, so the Home card
       // computes the identical count.
-      C.volumeIncrementSets(lift.stallCount ?? 0, program.maximumAddedSetsPerRotation ?? 6),
+      volumeFallbackSets(lift, program),
     );
     const plan = prescription.mainWork;
     // Methodology slots prescribe exact loads (a +5/session contract, TM

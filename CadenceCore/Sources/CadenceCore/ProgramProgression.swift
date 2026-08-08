@@ -569,7 +569,14 @@ public enum ProgramProgression {
         switch regime {
         case .rebuild: return (inc / 10).rounded(.up) * 10
         case .standard: return inc
-        case .fine: return Swift.max(2.5, ((inc / 2) / 2.5).rounded() * 2.5)
+        case .fine:
+            // Half the program's own loadable step — the same half-grid the
+            // grading tolerance already treats as met. At 5 lb rounding the
+            // banked halves surface every second cycle; a program whose rack
+            // really has change plates says so with 2.5 lb rounding, and the
+            // fine step follows it down.
+            let half = roundingLb / 2
+            return Swift.max(half, ((inc / 2) / half).rounded() * half)
         }
     }
 
@@ -577,14 +584,17 @@ public enum ProgramProgression {
     /// needle still moves when the weight cannot. Derived from persisted
     /// state alone — the Home card and the created session agree by
     /// construction, and a later clean grade resets the stall and returns the
-    /// volume with the weight jump. Bounded to one set and gated on the
-    /// program's existing added-set governance (`maximumAddedSetsPerRotation`
-    /// zero means the lifter said no added work, ever).
+    /// volume with the weight jump. `maximumAddedSetsPerRotation` is the
+    /// ROTATION-WIDE budget, not a per-slot switch: callers rank this slot
+    /// among the program's stalled peak-graded slots in stable program order
+    /// (day order, then slot order) and the first `maximum` ranks receive one
+    /// set each — four stalled lifts under a budget of one add one set, not
+    /// four. Zero budget means the lifter said no added work, ever.
     /// Mirrored 1:1 in web/app/js/core.js `volumeIncrementSets`.
     public static func volumeIncrementSets(
-        stallCount: Int, maximumAddedSetsPerRotation: Int
+        stallCount: Int, stalledRank: Int, maximumAddedSetsPerRotation: Int
     ) -> Int {
-        stallCount > 0 && maximumAddedSetsPerRotation > 0 ? 1 : 0
+        stallCount > 0 && stalledRank >= 0 && stalledRank < maximumAddedSetsPerRotation ? 1 : 0
     }
 
     public static func advanceCycleLift(

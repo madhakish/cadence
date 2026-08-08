@@ -92,13 +92,10 @@ enum ProgramSession {
                 configuration: configuration,
                 estimatedMaxLb: lift.estimatedMaxLb,
                 // A held cycle moves the needle with volume: the stall the
-                // grade recorded adds one set to this volume rotation, gated
-                // on the program's added-set governance. Pure state, so the
-                // Home card computes the identical count.
-                addedVolumeSets: ProgramProgression.volumeIncrementSets(
-                    stallCount: lift.stallCount,
-                    maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation
-                )
+                // grade recorded adds one set to this volume rotation, with
+                // the rotation-wide budget allocated across stalled slots.
+                // Pure state, so the Home card computes the identical count.
+                addedVolumeSets: volumeFallbackSets(for: lift, program: program)
             )
             let plan = prescription.mainWork
             // Methodology slots prescribe exact loads (a +5/session contract, TM
@@ -294,6 +291,25 @@ enum ProgramSession {
                 && override.rotation == program.currentWeek
         }?.temporaryAccessoryOverride?.percent
         return value ?? 100
+    }
+
+    /// The volume-fallback sets this lift carries, with the rotation-wide
+    /// added-set budget allocated deterministically: stalled peak-graded
+    /// slots in program order (day order, then slot order) receive one set
+    /// each until `maximumAddedSetsPerRotation` is spent. Slots whose
+    /// resolved style ignores the fallback still hold a rank — that spends
+    /// budget conservatively rather than ever exceeding it. Shared by the
+    /// session builder and every preview surface so the card and the stored
+    /// prescription agree. Mirrors web `volumeFallbackSets`.
+    static func volumeFallbackSets(for lift: ProgramLift, program: Program) -> Int {
+        let stalled = program.orderedDays.flatMap { day in
+            day.orderedLifts.filter { $0.stallCount > 0 && !$0.prescription.advancesPerExposure }
+        }
+        guard let rank = stalled.firstIndex(where: { $0.id == lift.id }) else { return 0 }
+        return ProgramProgression.volumeIncrementSets(
+            stallCount: lift.stallCount, stalledRank: rank,
+            maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation
+        )
     }
 
     /// Secondary/accessory barbell prescriptions snap to a neat bar-loadable

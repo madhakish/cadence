@@ -148,8 +148,10 @@ Notes:
   session agree by construction
   ([INV-NEEDLE-ALWAYS-MOVES](invariants.md)). Load and peak keep their
   shapes; a later clean grade resets the stall and the volume returns with
-  the weight jump; `maximumAddedSetsPerRotation = 0` turns the fallback
-  off entirely.
+  the weight jump. `maximumAddedSetsPerRotation` is the rotation-wide
+  budget: stalled slots rank in stable program order (day order, then slot
+  order) and receive one set each until it is spent; zero turns the
+  fallback off entirely.
 - **2 stalls** → automatic deload: base × 0.90 (rounded), stall reset,
   explanatory note in History.
 - **Peak never banked** → counts as a stall (with the same deload rule).
@@ -166,8 +168,18 @@ being banked:
 - **Standard** (no logged evidence, or inside the normal band): the focus
   increment, untouched — today's behavior.
 - **Fine** (within 2.5% of a **standing** prior best — one that has stood
-  35+ days): the step halves down to change-plate granularity, which is
-  where change plates become the correct tool.
+  35+ days): the step halves down to the program's own half-grid
+  (`roundingLb / 2` — 2.5 lb at the default rounding), which is where
+  change plates become the correct tool. Prescriptions still round at the
+  program's rounding, so at 5 lb rounding the banked halves surface every
+  second cycle; a rack that really has change plates says so by setting
+  the program rounding to 2.5, and both the fine step and every
+  prescription follow it down.
+
+The prior best is sampled with the same rep ceiling as
+`strengthSampleIndex` (Epley drifts high past ten reps) and only from
+sessions completed **before** the one being graded, so a long back-off set
+cannot fake a ceiling and out-of-order banking cannot see the future.
 
 A fresh log rising through its own all-time best never reads as at-max:
 without a standing ceiling the regime stays standard, so a rebuilding
