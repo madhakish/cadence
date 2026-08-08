@@ -49,14 +49,43 @@ export async function render(host) {
   const exMap = new Map(allExercises.map((e) => [e.name, e]));
   const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
   const root = ui.h("div");
+  const todayKey = new Date().toLocaleDateString("en-CA");
+  const primaryOpen = [...openSessions].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  const nextProgramDay = program?.days?.find((day) => day.order === program.nextDayIndex) || program?.days?.[0];
 
-  // Arrival is the first workflow, even though it lasts only seconds: this is
-  // the keychain replacement and must beat all training content to the screen.
+  // Conditional hero: the next physical action always wins the top slot.
+  if (primaryOpen) {
+    const names = (primaryOpen.exercises || []).map((entry) => entry.exerciseName).filter(Boolean);
+    const summary = names.length ? names.slice(0, 2).join(" · ") : "Blank session";
+    root.append(ui.h("div", { class: "card today-hero" },
+      ui.h("button", { class: "btn primary wide", style: { minHeight: "64px", justifyContent: "space-between" },
+        text: `▶︎ Resume workout · ${summary}`, onClick: () => openSession(primaryOpen.id) }),
+      ui.h("button", { class: "btn ghost danger wide", text: "Discard session", onClick: () => {
+        ui.actionSheet("Discard this open session? Completed history and the program are unchanged.", [
+          { label: "Discard session", role: "destructive", onClick: async () => { await Sessions.del(primaryOpen.id); ui.nav.refresh(); } },
+          { label: "Cancel", role: "cancel", onClick: () => {} },
+        ]);
+      } })));
+  } else if (program && nextProgramDay) {
+    root.append(ui.h("div", { class: "card today-hero" },
+      ui.h("button", { class: "row wide", style: { minHeight: "64px", textAlign: "left" },
+        onClick: () => workoutPreview(program, nextProgramDay, { exMap, gym, barLb }) },
+      ui.h("div", { class: "lead" }, ui.h("span", { class: "sub", text: "Next workout" }),
+        ui.h("span", { class: "big", text: nextProgramDay.name }),
+        ui.h("span", { class: "sub", text: `${program.name} · Cycle ${program.cycleNumber}` })),
+      ui.rotation(program.currentWeek)),
+      ui.h("button", { class: "btn primary wide", text: `Start ${nextProgramDay.name}`,
+        onClick: async () => openSession(await createSessionFromProgramDay(program, nextProgramDay)) })));
+  }
+
+  // The keychain replacement is prominent until today's scan, then compact.
+  const gymProminent = !gym?.barcodeImage || localStorage.getItem("cadenceGymTagAutoDay") !== todayKey;
   root.append(ui.h("div", { class: "card gym-tag-hero" },
-    ui.h("button", { class: "btn primary wide", style: { minHeight: "58px", justifyContent: "space-between" },
-      onClick: () => showGymTag(gym) },
-      ui.h("span", { text: "▤  Gym Tag" }),
-      ui.h("span", { class: "sub", text: gym && gym.barcodeImage ? "Ready to scan ›" : "Add barcode ›" }))));
+    ui.h("button", { class: `btn ${gymProminent ? "primary" : "ghost"} wide`,
+      style: { minHeight: "44px", justifyContent: "space-between" },
+      onClick: () => { localStorage.setItem("cadenceGymTagAutoDay", todayKey); showGymTag(gym); } },
+      ui.h("span", { text: gymProminent ? "▤  Gym Tag" : "▤  Scan gym tag" }),
+      gymProminent ? ui.h("span", { class: "sub", text: gym && gym.barcodeImage ? "Ready to scan ›" : "Add barcode ›" }) : null)));
 
   if (recoveryCompletion) {
     root.append(ui.h("div", { class: "card" },
@@ -64,17 +93,16 @@ export async function render(host) {
         ui.h("span", { class: "accent", text: `↻ ${recoveryCompletion.message}` }))));
   }
 
-  const todayKey = new Date().toLocaleDateString("en-CA");
   if (settings.gymTagFirstLaunchOfDay && gym?.barcodeImage
       && localStorage.getItem("cadenceGymTagAutoDay") !== todayKey) {
     localStorage.setItem("cadenceGymTagAutoDay", todayKey);
     queueMicrotask(() => showGymTag(gym));
   }
 
-  if (openSessions.length) {
-    root.append(ui.h("div", { class: "section-title", text: "Open sessions" }));
+  if (openSessions.length > 1) {
+    root.append(ui.h("div", { class: "section-title", text: "Other open sessions" }));
     const openCard = ui.h("div", { class: "card list" });
-    for (const open of openSessions) {
+    for (const open of openSessions.filter((item) => item.id !== primaryOpen.id)) {
       const names = (open.exercises || []).map((entry) => entry.exerciseName).filter(Boolean);
       const summary = names.length ? names.slice(0, 2).join(" · ") : "Blank session";
       openCard.append(ui.h("div", { class: "row" },
@@ -97,43 +125,22 @@ export async function render(host) {
     const handled = new Set(decisions.filter((decision) => (decision.programId || decision.programID) === (program.uuid || program.id))
       .map((decision) => decision.recommendationId || decision.recommendationID));
     const visible = report.recommendations.filter((recommendation) => !handled.has(recommendation.id)).slice(0, 3);
-    root.append(ui.h("div", { class: "section-title", text: "Coach · per rotation" }));
     const latest = report.rotations.at(-1);
-    const coach = ui.h("div", { class: "card" },
-      ui.h("div", { class: "row" },
+    const coach = ui.h("button", { class: "card row wide coach-summary",
+      onClick: () => showCoachDetail({ program, report, visible, latest, allExercises }) },
         ui.h("div", { class: "lead" },
-          ui.h("span", { class: `title readiness-${report.currentReadiness}`, text: report.currentReadiness[0].toUpperCase() + report.currentReadiness.slice(1) }),
+          ui.h("span", { class: `title readiness-${report.currentReadiness}`, text: `Coach · ${report.currentReadiness[0].toUpperCase() + report.currentReadiness.slice(1)}` }),
           ui.h("span", { class: "sub", text: latest?.reasons?.[0] || "Bank program days to establish an output baseline." })),
-        report.greenRotationStreak ? ui.h("span", { class: "pill", text: `${report.greenRotationStreak} green` }) : null));
-    if (latest) coach.append(ui.h("div", { class: "sub mono", text: `${latest.completedWorkingSets}/${latest.plannedWorkingSets} work sets · ${Math.round(latest.conditioningMinutes)} conditioning min` }));
-    for (const recommendation of visible) {
-      coach.append(ui.h("div", { class: "row" },
-        ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: recommendation.title }), ui.h("span", { class: "sub", text: recommendation.explanation })),
-        ui.h("div", { class: "btn-row" },
-          ui.h("button", { class: "btn sm primary", text: "Apply", onClick: async () => {
-            // Keep the rendered program unchanged unless both the program
-            // edit and its audit record commit in one IndexedDB transaction.
-            const proposed = structuredClone(program);
-            let message;
-            try {
-              message = await applyCoachingRecommendation(proposed, recommendation, allExercises);
-            } catch (error) {
-              // A proposal can become unappliable between rendering and tapping
-              // — the library changed, the slot went away. Say so and leave the
-              // program alone rather than failing silently.
-              ui.toast(error?.message || "That change could not be applied.");
-              return;
-            }
-            const decision = coachingDecision(proposed, recommendation, "accepted", latest?.reasons || []);
-            await Programs.saveWithDecision(proposed, decision);
-            ui.toast(message); ui.nav.refresh();
-          } }),
-          ui.h("button", { class: "btn sm ghost", text: "Not now", onClick: async () => {
-            await CoachingDecisions.save(coachingDecision(program, recommendation, "deferred", latest?.reasons || []));
-            ui.nav.refresh();
-          } }))));
-    }
+        ui.h("span", { class: "pill accent", text: `${visible.length} recommendation${visible.length === 1 ? "" : "s"}` }));
     root.append(coach);
+
+    const days = [...program.days].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    root.append(ui.h("div", { class: "day-sequence", role: "status", ariaLabel: `${nextProgramDay?.name || "Next day"} is now` },
+      ...days.flatMap((day, index) => [
+        ui.h("span", { class: day.order === program.nextDayIndex ? "now" : "",
+          text: `${day.order === program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : ""}${day.name}` }),
+        index < days.length - 1 ? document.createTextNode(" → ") : null,
+      ].filter(Boolean))));
   }
 
   // Program — the next scheduled day
@@ -226,6 +233,42 @@ export async function render(host) {
     const id = await createSessionFromTrack(track);
     openSession(id);
   }
+}
+
+function showCoachDetail({ program, report, visible, latest, allExercises }) {
+  ui.sheet({
+    title: "Coach",
+    build: (content, api) => {
+      content.append(ui.h("div", { class: "card" },
+        ui.h("div", { class: `title readiness-${report.currentReadiness}`,
+          text: `${report.currentReadiness[0].toUpperCase() + report.currentReadiness.slice(1)} · per rotation` }),
+        ui.h("div", { class: "sub", text: latest?.reasons?.[0] || "Bank program days to establish an output baseline." }),
+        latest ? ui.h("div", { class: "sub mono", style: { marginTop: "6px" },
+          text: `${latest.completedWorkingSets}/${latest.plannedWorkingSets} work sets · ${Math.round(latest.conditioningMinutes)} conditioning min` }) : null));
+      if (!visible.length) content.append(ui.h("div", { class: "card muted", text: "No pending recommendations." }));
+      for (const recommendation of visible) {
+        content.append(ui.h("div", { class: "card" },
+          ui.h("div", { class: "title", text: recommendation.title }),
+          ui.h("div", { class: "sub", style: { margin: "6px 0 10px" }, text: recommendation.explanation }),
+          ui.h("div", { class: "btn-row" },
+            ui.h("button", { class: "btn primary", text: "Apply", onClick: async () => {
+              const proposed = structuredClone(program);
+              try {
+                const message = await applyCoachingRecommendation(proposed, recommendation, allExercises);
+                await Programs.saveWithDecision(proposed,
+                  coachingDecision(proposed, recommendation, "accepted", latest?.reasons || []));
+                api.close(); ui.toast(message); ui.nav.refresh();
+              } catch (error) {
+                ui.toast(error?.message || "That change could not be applied.");
+              }
+            } }),
+            ui.h("button", { class: "btn ghost", text: "Not now", onClick: async () => {
+              await CoachingDecisions.save(coachingDecision(program, recommendation, "deferred", latest?.reasons || []));
+              api.close(); ui.nav.refresh();
+            } }))));
+      }
+    },
+  });
 }
 
 function showGymTag(gym) {

@@ -9,14 +9,10 @@ struct SettingsView: View {
     @Query private var settingsList: [AppSettings]
     @Query(sort: \Gym.name) private var gyms: [Gym]
     @Query(sort: \LiftTrack.exerciseName) private var tracks: [LiftTrack]
-    @Query private var programs: [Program]
 
     @State private var exportJSON: Data?
     @State private var exportCSV: Data?
     @State private var showImporter = false
-    @State private var showProgramImporter = false
-    @State private var showProgramCreator = false
-    @State private var importProgramAfterCreator = false
     @State private var importAlert: String?
     @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
     @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
@@ -161,29 +157,6 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Program") {
-                    ForEach(programs) { program in
-                        NavigationLink {
-                            ProgramEditorView(program: program)
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text(program.name)
-                                HStack(spacing: 6) {
-                                    RotationGlyph(week: program.currentWeek)
-                                    Text("\(program.focus.rawValue) · \(program.days.count) days · Cycle \(program.cycleNumber)\(program.isActive ? " · active" : "")")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    Button {
-                        showProgramCreator = true
-                    } label: {
-                        Label("Add program", systemImage: "plus")
-                    }
-                }
-
                 Section("Progression (standalone lifts)") {
                     ForEach(tracks) { track in
                         NavigationLink {
@@ -273,22 +246,8 @@ struct SettingsView: View {
         }
         .saveChangesOnDisappear(context, operation: "Saving settings")
         .navigationTitle("Settings")
-            .sheet(isPresented: $showProgramCreator, onDismiss: {
-                guard importProgramAfterCreator else { return }
-                importProgramAfterCreator = false
-                showProgramImporter = true
-            }) {
-                ProgramCreationSheet(existingPrograms: programs) {
-                    importProgramAfterCreator = true
-                    showProgramCreator = false
-                }
-                .presentationDetents([.medium, .large])
-            }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 importAlert = restore(from: result)
-            }
-            .fileImporter(isPresented: $showProgramImporter, allowedContentTypes: [.json]) { result in
-                importAlert = importProgram(from: result)
             }
             .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } })) {
                 Button("OK") { importAlert = nil }
@@ -328,27 +287,6 @@ struct SettingsView: View {
         }
     }
 
-    /// Apply a program file. Unlike `restore`, this needs no checkpoint: the
-    /// import is additive, writes only the program tree, and changes nothing
-    /// at all if the file fails validation or names an exercise the library
-    /// doesn't have.
-    private func importProgram(from result: Result<URL, Error>) -> String {
-        switch result {
-        case .failure(let err):
-            return err.localizedDescription
-        case .success(let url):
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let data = try Data(contentsOf: url)
-                let report = try ProgramImportService.load(data, into: context)
-                return ([report.summary] + report.warnings).joined(separator: "\n\n")
-            } catch {
-                return error.localizedDescription
-            }
-        }
-    }
-
     private func restoreLatestCheckpoint() -> String {
         do {
             guard let data = try BackupCheckpointService.latestData() else { return "No local recovery checkpoint exists." }
@@ -374,7 +312,7 @@ struct SettingsView: View {
 
 /// Three deliberate creation paths. Templates live one level deeper so their
 /// schedule and prescription shape can be inspected before they mutate data.
-private struct ProgramCreationSheet: View {
+struct ProgramCreationSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
 

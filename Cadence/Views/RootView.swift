@@ -20,14 +20,14 @@ struct RootView: View {
                 HomeView(pendingSessionID: $pendingSessionID)
                     .tabItem { Label("Today", systemImage: "figure.strengthtraining.traditional") }
                     .tag(0)
+                ProgramOverviewView()
+                    .tabItem { Label("Program", systemImage: "list.bullet.clipboard") }
+                    .tag(1)
                 HistoryView()
                     .tabItem { Label("History", systemImage: "calendar") }
-                    .tag(1)
+                    .tag(2)
                 BodyView()
                     .tabItem { Label("Body", systemImage: "scalemass") }
-                    .tag(2)
-                InjuryTimelineView()
-                    .tabItem { Label("Signals", systemImage: "bolt.heart") }
                     .tag(3)
                 SettingsView()
                     .tabItem { Label("Settings", systemImage: "gearshape") }
@@ -67,6 +67,8 @@ struct RootView: View {
             } else if url.host == "workout", let id = url.pathComponents.dropFirst().first, !id.isEmpty {
                 selection = 0
                 pendingSessionID = id
+            } else if url.host == "signals" {
+                selection = 3
             }
         }
         .onChange(of: scenePhase) { _, phase in

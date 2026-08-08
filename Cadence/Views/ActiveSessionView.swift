@@ -30,7 +30,11 @@ struct ActiveSessionView: View {
     @State private var bankErrorMessage = ""
     @State private var showIncompleteBankConfirmation = false
 
-    private var currentOrFirst: SessionExercise? { currentEntry ?? session.orderedExercises.first }
+    private var currentOrFirst: SessionExercise? {
+        currentEntry
+            ?? session.orderedExercises.first { $0.plannedWorkingSets.contains { $0.status == .planned } }
+            ?? session.orderedExercises.first
+    }
     private var gym: Gym? {
         gyms.first { $0.id == session.gymID }
             ?? gyms.first { $0.name == session.gymName }
@@ -42,6 +46,20 @@ struct ActiveSessionView: View {
     }
     private var completedSetCount: Int {
         session.orderedExercises.flatMap(\.plannedWorkingSets).filter { $0.status == .completed }.count
+    }
+    private var totalWorkSetCount: Int { session.orderedExercises.flatMap(\.plannedWorkingSets).count }
+    private var currentExerciseNumber: Int {
+        guard let currentOrFirst,
+              let index = session.orderedExercises.firstIndex(where: { $0.persistentModelID == currentOrFirst.persistentModelID })
+        else { return session.orderedExercises.isEmpty ? 0 : 1 }
+        return index + 1
+    }
+    private var workoutName: String {
+        let program = session.programID.flatMap { id in programs.first { $0.id == id } }
+            ?? programs.first { $0.name == session.programName }
+        return session.programDayIndex.flatMap { index in
+            program?.orderedDays.first { $0.order == index }?.name
+        } ?? session.programName ?? "Workout"
     }
     /// The stopwatch origin lives in WorkoutClock (root-scoped), so it survives
     /// leaving this screen — and, via the Live Activity, app relaunch.
@@ -74,6 +92,14 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(min(completedSetCount + 1, max(totalWorkSetCount, 1))) of \(totalWorkSetCount) work sets")
+                        .font(.headline.monospacedDigit())
+                    Text(session.date.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             trainingAtSection
             exerciseSections
 
@@ -132,7 +158,7 @@ struct ActiveSessionView: View {
         // name / default rest without changing which SessionExercise is current.
         .onChange(of: currentOrFirst?.exercise?.name) { pushActivityContext() }
         .onChange(of: currentRestSeconds) { pushActivityContext() }
-        .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
+        .navigationTitle(workoutName)
         .navigationBarTitleDisplayMode(.inline)
         .alert("Couldn't bank the session", isPresented: $showBankError) {
             Button("OK", role: .cancel) {}
@@ -472,6 +498,7 @@ private struct ExerciseSection: View {
     @Environment(RestTimer.self) private var restTimer
 
     @Bindable var entry: SessionExercise
+    @State private var showAllSets = false
     // Passed down from ActiveSessionView (which already queries them) — a
     // per-section @Query would register one redundant fetch per exercise.
     let settings: AppSettings?
@@ -695,8 +722,10 @@ private struct ExerciseSection: View {
                 // yet. Warmups sit quiet (and often go unflagged, so they must
                 // not hold the rail hostage).
                 let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }?.persistentModelID == set.persistentModelID
+                let showLoadout = showAllSets || isCurrent || loadChanges(at: set)
                 VStack(alignment: .leading, spacing: 4) {
                     SetRow(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
+                           compact: !showAllSets && !isCurrent,
                            targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onLogged: {
                         onWork(entry)
                         // Auto-start only if the user opted in (manual is the
@@ -708,11 +737,11 @@ private struct ExerciseSection: View {
                     }, onRemove: { removeSet(set) })
                     // Loadout visualization — plates for barbell lifts, the
                     // rack number for dumbbell lifts. Mirrors web.
-                    if entry.exercise?.type == .barbell && set.weightLb > 0 {
+                    if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
                         BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
                                     bar: effectiveBar, gym: gym,
                                     targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb)
-                    } else if entry.exercise?.type == .dumbbell && set.weightLb > 0 {
+                    } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
                 }
@@ -721,6 +750,13 @@ private struct ExerciseSection: View {
                 let ordered = entry.orderedSets
                 for index in offsets.sorted(by: >) { removeSet(ordered[index], save: false) }
                 PersistenceErrorCenter.shared.save(context, operation: "Deleting the set")
+            }
+
+            if entry.orderedSets.count > 1 {
+                Button(showAllSets ? "Focus current set" : "Show all sets") {
+                    showAllSets.toggle()
+                }
+                .font(.caption.bold())
             }
 
             // The row must never solve a tight fit by wrapping label text
@@ -816,6 +852,17 @@ private struct ExerciseSection: View {
                 Text("Watch: \(site.rawValue.lowercased()) — \(site.watchNote)")
             }
         }
+    }
+
+    private func loadChanges(at set: SetEntry) -> Bool {
+        let ordered = entry.orderedSets
+        guard let index = ordered.firstIndex(where: { $0.persistentModelID == set.persistentModelID }), index > 0 else {
+            return false
+        }
+        let previous = ordered[index - 1]
+        return abs(previous.weightLb - set.weightLb) > 0.001
+            || previous.loadBasis != set.loadBasis
+            || previous.resolvedImplementCount != set.resolvedImplementCount
     }
 
     /// [INV-RUCK-CARRIES-ITS-LOAD] What a new duration-based set starts loaded
@@ -946,6 +993,8 @@ private struct SetRow: View {
     let bar: Bar
     /// The set you're ON (first with no verdict yet) — gets the accent rail.
     let isCurrent: Bool
+    /// Completed/future rows retain every control but give the current set the cockpit.
+    let compact: Bool
     /// The program/track weight this session recommends — the picker anchors here.
     let targetLb: Double?
     var onLogged: () -> Void
@@ -991,7 +1040,7 @@ private struct SetRow: View {
                                                  loadLb: set.weightLb,
                                                  flights: set.flights)
                          : (isTimed ? CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) : weightLabel))
-                        .font(.title3.bold().monospacedDigit())
+                        .font((isCurrent ? Font.title2 : (compact ? Font.callout : Font.title3)).bold().monospacedDigit())
                         .foregroundStyle(set.isWarmup ? .secondary : .primary)
                     HStack(spacing: 6) {
                         if !isCardio && !isTimed {
@@ -1006,6 +1055,13 @@ private struct SetRow: View {
                             Text("tap to adjust hold time")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
+                        }
+                        if !isCardio && !isTimed,
+                           let plannedWeight = set.plannedWeightLb,
+                           let plannedReps = set.plannedReps,
+                           abs(plannedWeight - set.weightLb) > 0.001 || plannedReps != set.reps {
+                            Text("planned \(Weight.trim(plannedWeight))×\(plannedReps)")
+                                .font(.caption2).foregroundStyle(.secondary)
                         }
                         if set.isWarmup {
                             Text(set.prescriptionBlock == .primer ? "primer" : "warmup")
@@ -1039,6 +1095,14 @@ private struct SetRow: View {
             Spacer()
 
             SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onCompleted: onLogged)
+        }
+        .padding(isCurrent ? 12 : 0)
+        .background {
+            if isCurrent {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Theme.accent.opacity(0.10))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.45)))
+            }
         }
         .sheet(isPresented: $showDetail) {
             if isCardio {

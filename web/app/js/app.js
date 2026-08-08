@@ -2,18 +2,18 @@
 import * as ui from "./ui.js";
 import { Settings, Checkpoints, ensureSeeded, syncLibrary } from "./db.js";
 import * as home from "./views/home.js";
+import * as program from "./views/program.js";
 import * as history from "./views/history.js";
 import * as body from "./views/body.js";
-import * as signals from "./views/signals.js";
 import * as settings from "./views/settings.js";
 import { openPlateCalculator } from "./views/plates.js";
 import { openSession } from "./views/session.js";
 
 const TABS = [
   { id: "home", label: "Today", icon: "today", title: "Today", view: home },
+  { id: "program", label: "Program", icon: "program", title: "Program", view: program },
   { id: "history", label: "History", icon: "history", title: "History", view: history },
   { id: "body", label: "Body", icon: "body", title: "Body", view: body },
-  { id: "signals", label: "Signals", icon: "signals", title: "Signals", view: signals },
   { id: "settings", label: "Settings", icon: "settings", title: "Settings", view: settings },
 ];
 

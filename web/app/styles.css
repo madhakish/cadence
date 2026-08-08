@@ -198,6 +198,12 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .flagbtns { display: flex; gap: 6px; margin-left: auto; }
 .flagbtn { width: 44px; height: 44px; border-radius: 9px; border: 0; background: var(--card2); color: var(--muted); font-weight: 700; cursor: pointer; }
 .gym-tag-hero { margin-top: 2px; }
+.today-hero { padding: 10px; }
+.coach-summary { min-height: 58px; text-align: left; }
+.day-sequence { overflow-x: auto; white-space: nowrap; padding: 8px 4px 12px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.day-sequence .now { color: var(--accent); }
+.program-day-card { display: block; text-align: left; margin: 8px 0; }
+.program-slot { padding: 8px 0; }
 .flagbtn.on-clean { background: var(--good); color: #022; }
 .flagbtn.on-grindy, .flagbtn.on-wobble { background: var(--warn); color: #221c00; }
 /* Reps in reserve is an observation, not a verdict — it reads as set, not as
@@ -220,6 +226,16 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .setrow.warm .wt { font-size: 15px; }
 .setrow.current { border-left: 3px solid var(--accent); padding-left: 9px; margin-left: -12px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%); }
+.setrow.current-set-card { margin: 8px -4px; padding: 14px 10px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-left: 4px solid var(--accent); border-radius: 14px; background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
+.setrow.current-set-card .wt { font-size: 24px; min-width: 112px; }
+.setrow.compact { padding-top: 5px; padding-bottom: 5px; color: var(--muted); }
+.setrow.compact .wt { font-size: 15px; }
+.session-progress { margin-bottom: 10px; }
+.rotation-matrix-wrap { overflow-x: auto; }
+.rotation-matrix { display: grid; gap: 8px; align-items: center; min-width: max-content; }
+.rotation-cell { min-width: 64px; min-height: 64px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; }
+.chart-selection { padding: 8px 4px; min-height: 32px; }
+.rep-curve { height: 150px; }
 
 /* rotation-position glyph: equal ticks, current rotation lit. Deliberately not
    a rising wave — the counter is shared by slots whose prescriptions have

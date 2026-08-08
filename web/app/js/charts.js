@@ -97,6 +97,7 @@ export function progressionChart({
   lines = [], bars = null, height = 220, fmtY = (v) => String(Math.round(v)),
   fmtBar = (v) => String(Math.round(v)), targetY = null, targetLabel = "Target",
   projection = null, area = true, caption = null,
+  onSelect = null,
 } = {}) {
   const W = 340, H = height, padL = 40, padT = 16, padB = 26;
   const padR = bars ? 42 : 14;
@@ -194,7 +195,16 @@ export function progressionChart({
       style: `stroke:${stroke}${line.dash ? `;stroke-dasharray:${line.dash}` : ""}`,
     }));
     for (const p of pts) {
-      svg.append(el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y), r: pts.length > 30 ? 1.6 : 2.6, style: `fill:${stroke}` }));
+      const dot = el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y), r: onSelect ? 5 : (pts.length > 30 ? 1.6 : 2.6),
+        style: `fill:${stroke}`, ...(onSelect ? { tabindex: 0, role: "button" } : {}) });
+      if (onSelect) {
+        dot.setAttribute("aria-label", `Select ${tick(p.t)}, ${fmtY(p.y)}`);
+        dot.addEventListener("click", () => onSelect(p));
+        dot.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(p); }
+        });
+      }
+      svg.append(dot);
     }
   }
 

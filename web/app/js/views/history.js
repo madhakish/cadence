@@ -50,22 +50,33 @@ function renderRotations(panel, sessions, exercises, program, checkins) {
   if (!program) { panel.append(ui.empty("📋", "Create a program to group training by rotation.")); return; }
   const report = coachingReport(program, sessions, exMap, checkins);
   if (!report.rotations.length) { panel.append(ui.empty("◌", "Complete program days to establish the first rotation baseline.")); return; }
-  for (const rotation of [...report.rotations].reverse()) {
-    const patternRows = Object.entries(rotation.patternSets || {}).filter(([pattern]) => !C.isConditioningPattern(pattern))
-      .sort(([a], [b]) => C.movementPatternName(a).localeCompare(C.movementPatternName(b)))
-      .map(([pattern, count]) => ui.h("div", { class: "row" },
-        ui.h("span", { class: "sub", text: C.movementPatternName(pattern) }),
-        ui.h("span", { class: "mono", text: String(count) })));
-    panel.append(ui.h("div", { class: "section-title", text: `Cycle ${rotation.key.cycleNumber} · R${rotation.key.rotation}` }),
-      ui.h("div", { class: "card" },
-        ui.h("div", { class: "row" },
-          ui.h("span", { class: `title readiness-${rotation.readiness}`, text: rotation.readiness[0].toUpperCase() + rotation.readiness.slice(1) }),
-          ui.h("span", { class: "mono", text: `${rotation.completedWorkingSets}/${rotation.plannedWorkingSets} sets` })),
-        ...patternRows,
-        ui.h("div", { class: "row" }, ui.h("span", { class: "sub", text: "Conditioning" }),
-          ui.h("span", { class: "mono", text: `${Math.round(rotation.conditioningMinutes)} min` })),
-        rotation.reasons?.[0] ? ui.h("div", { class: "sub", text: rotation.reasons[0] }) : null));
+  const rotationNumbers = [...new Set(report.rotations.map((rotation) => rotation.key.rotation))].sort((a, b) => a - b);
+  const cycleNumbers = [...new Set(report.rotations.map((rotation) => rotation.key.cycleNumber))].sort((a, b) => b - a);
+  const matrix = ui.h("div", { class: "rotation-matrix",
+    style: { gridTemplateColumns: `64px repeat(${rotationNumbers.length}, minmax(64px, 1fr))` } },
+  ui.h("span", { class: "sub", text: "Cycle" }),
+  ...rotationNumbers.map((number) => ui.h("span", { class: "title", text: `R${number}` })));
+  for (const cycle of cycleNumbers) {
+    matrix.append(ui.h("span", { class: "title mono", text: String(cycle) }));
+    for (const number of rotationNumbers) {
+      const rotation = report.rotations.find((item) => item.key.cycleNumber === cycle && item.key.rotation === number);
+      if (!rotation) { matrix.append(ui.h("span")); continue; }
+      matrix.append(ui.h("button", { class: `rotation-cell readiness-${rotation.readiness}`,
+        ariaLabel: `Cycle ${cycle}, rotation ${number}, ${rotation.readiness}, ${rotation.completedWorkingSets} of ${rotation.plannedWorkingSets} sets`,
+        onClick: () => ui.sheet({ title: `Cycle ${cycle} · R${number}`, build: (content) => {
+          content.append(ui.h("div", { class: "card" },
+            ui.h("div", { class: `title readiness-${rotation.readiness}`, text: rotation.readiness[0].toUpperCase() + rotation.readiness.slice(1) }),
+            ui.h("div", { class: "row" }, ui.h("span", { text: "Completed/planned" }), ui.h("span", { class: "mono", text: `${rotation.completedWorkingSets}/${rotation.plannedWorkingSets}` })),
+            ui.h("div", { class: "row" }, ui.h("span", { text: "Conditioning" }), ui.h("span", { class: "mono", text: `${Math.round(rotation.conditioningMinutes)} min` })),
+            ...(rotation.reasons || []).map((reason) => ui.h("div", { class: "sub", text: reason }))));
+        } }) },
+      ui.h("span", { text: rotation.readiness === "red" ? "!" : rotation.readiness === "green" ? "●" : "◐" }),
+      ui.h("span", { class: "mono", text: `${rotation.completedWorkingSets}/${rotation.plannedWorkingSets}` }),
+      ui.h("span", { class: "sub", text: `${Math.round(rotation.conditioningMinutes)}m` })));
+    }
   }
+  panel.append(ui.h("div", { class: "section-title", text: "Cycle matrix" }),
+    ui.h("div", { class: "card rotation-matrix-wrap" }, matrix));
 }
 
 function setLabel(s) { return s.weightLb === 0 ? "BW" : ui.fmtWeight(s.weightLb); }
@@ -164,27 +175,30 @@ const DAY_MS = 86400000;
 // for a session that happened.
 const PROJECTION_COLOR = "#7aa7d9";
 
-let chartEx = null, chartMetric = "weight", chartSplit = false, chartComplementary = false;
+let chartEx = null, chartMetric = "weight", chartIntent = "main";
 let chartHorizon = 0;
 function renderCharts(panel, sessions, exercises, program) {
   const mains = exercises.filter((e) => e.category === "Main").map((e) => e.name).sort();
   if (!mains.length) { panel.append(ui.empty("📈", COPY.emptyHistory)); return; }
-  if (!chartEx || !mains.includes(chartEx)) chartEx = mains[0];
+  if (!chartEx || !mains.includes(chartEx)) {
+    const nextDay = program?.days?.find((day) => day.order === program.nextDayIndex) || program?.days?.[0];
+    const nextMain = nextDay?.lifts?.find((lift) => lift.role === "main")?.exerciseName;
+    const recentMain = [...sessions].sort((a, b) => new Date(b.date) - new Date(a.date))
+      .flatMap((session) => session.exercises || []).find((entry) => mains.includes(entry.exerciseName))?.exerciseName;
+    chartEx = mains.includes(nextMain) ? nextMain : (recentMain || mains[0]);
+  }
 
   panel.append(ui.field("Exercise", (() => { const sel = ui.h("select", {}, ...mains.map((n) => ui.h("option", { value: n, text: n, selected: n === chartEx }))); sel.addEventListener("change", () => { chartEx = sel.value; renderInner(); }); return sel; })()));
   // The metric picker lives in its own slot because WHICH metrics are offered
   // depends on the selected lift, so it has to be rebuilt when that changes.
   const metricSlot = ui.h("div");
   panel.append(metricSlot);
-  // Main only by default — that alone removes the main/complementary sawtooth.
-  panel.append(ui.h("div", { class: "row", style: { padding: "8px 4px" } },
-    ui.h("span", { class: "sub", text: "Show complementary" }),
-    ui.toggle(chartComplementary, (v) => { chartComplementary = v; renderInner(); })));
-  // One line per rotation: compare this cycle's R1 against last cycle's R1
-  // instead of reading a sawtooth.
-  panel.append(ui.h("div", { class: "row", style: { padding: "8px 4px" } },
-    ui.h("span", { class: "sub", text: "Split by rotation" }),
-    ui.toggle(chartSplit, (v) => { chartSplit = v; renderInner(); })));
+  const intentSelect = ui.h("select", {},
+    ui.h("option", { value: "main", text: "Main progression", selected: chartIntent === "main" }),
+    ui.h("option", { value: "roles", text: "Compare program roles", selected: chartIntent === "roles" }),
+    ui.h("option", { value: "rotations", text: "Compare like rotations", selected: chartIntent === "rotations" }));
+  intentSelect.addEventListener("change", () => { chartIntent = intentSelect.value; renderInner(); });
+  panel.append(ui.field("Chart intent", intentSelect));
   // How far past today to extend the fitted trend. Off by default: the chart's
   // job is what happened, and a forecast is something the lifter asks for.
   panel.append(ui.h("div", { class: "sub", style: { padding: "8px 4px 0" }, text: "Project forward" }));
@@ -195,6 +209,8 @@ function renderCharts(panel, sessions, exercises, program) {
   renderInner();
 
   function renderInner() {
+    const showComplementary = chartIntent === "roles";
+    const splitByRotation = chartIntent === "rotations";
     // What the picker offers depends on what this lift's load MEANS. An
     // unloaded pull-up has no external resistance, so working weight, est. 1RM
     // and tonnage can only ever draw a flat zero — the honest series is reps.
@@ -203,7 +219,7 @@ function renderCharts(panel, sessions, exercises, program) {
     const loaded = C.supportsLoadPR((exercises.find((e) => e.name === chartEx) || {}).loadBasis);
     const metricOptions = loaded
       ? [{ value: "weight", label: "Working weight" }, { value: "e1rm", label: "Est. 1RM" },
-        { value: "volume", label: "Volume" }, { value: "all", label: "All three" }]
+        { value: "all", label: "Weight + e1RM" }]
       : [{ value: "reps", label: "Reps" }];
     if (!metricOptions.some((o) => o.value === chartMetric)) chartMetric = metricOptions[0].value;
     ui.clear(metricSlot);
@@ -239,10 +255,11 @@ function renderCharts(panel, sessions, exercises, program) {
           // and bars were canonical pounds wearing a kg label — and native
           // (which does convert) drew a different number from the same data.
           volume: displayValue(entries.reduce((sum, entry) => sum + workingVolume(entry), 0)) || null,
+          reps: performed.length ? Math.max(...performed.map((set) => set.reps || 0)) : null,
         });
       }
     }
-    let roles = chartComplementary ? ["main", "complementary"] : ["main"];
+    let roles = showComplementary ? ["main", "complementary"] : ["main"];
     // A Main-category lift may exist ONLY as added work inside program
     // sessions (a few squats on an upper day) or only as a programmed
     // accessory. Charting nothing at all hides real history behind a role
@@ -253,7 +270,7 @@ function renderCharts(panel, sessions, exercises, program) {
     const visible = rows.filter((r) => roles.includes(r.role));
     const pick = (metric, role) => visible
       .filter((r) => r.role === role && Number.isFinite(r[metric]))
-      .map((r) => ({ t: r.t, y: r[metric], rot: r.rot }));
+      .map((r) => ({ ...r, y: r[metric] }));
     // "Volume" alone keeps a plain line; in the combined view it becomes the
     // background bars so the two comparable load metrics own the axis.
     const series = chartMetric === "all" ? pick("weight", "main") : pick(chartMetric, "main");
@@ -296,9 +313,15 @@ function renderCharts(panel, sessions, exercises, program) {
       : chartMetric === "e1rm" ? "Estimated 1RM"
         : chartMetric === "volume" ? "Working volume"
           : chartMetric === "reps" ? "Best working set"
-            : "Working weight, est. 1RM, and volume";
-    const roleNote = chartComplementary ? " · solid = main, dashed = complementary" : " · main slots only";
-    if (chartSplit) {
+            : "Working weight and est. 1RM";
+    const roleNote = showComplementary ? " · solid = main, dashed = complementary" : " · main slots only";
+    const selection = ui.h("div", { class: "sub mono chart-selection", text: "Tap a point for exact session details." });
+    const onSelect = (point) => {
+      selection.textContent = `${ui.fmtDate(new Date(point.t))} · ${Number.isFinite(point.weight) ? `${C.trim(point.weight)} ${C.primaryUnit(ui.prefs.unitDisplay)}` : "BW"}`
+        + `${Number.isFinite(point.reps) ? ` × ${point.reps}` : ""} · e1RM ${Number.isFinite(point.e1rm) ? C.trim(point.e1rm) : "—"}`
+        + ` · ${point.role} · ${point.rot}`;
+    };
+    if (splitByRotation) {
       // Colour carries the rotation; the dash carries the role, so the two
       // splits compose instead of fighting over the same visual channel.
       const lines = [];
@@ -310,7 +333,7 @@ function renderCharts(panel, sessions, exercises, program) {
             color: ROTATION_COLORS[rot] || "#888", dash: ROLE_DASH[role], points });
         }
       }
-      slot.append(progressionChart({ ...chartOptions, lines,
+      slot.append(progressionChart({ ...chartOptions, lines, onSelect,
         caption: `${metricLabel} per session (${unit})${roleNote}` }));
     } else {
       const lines = [];
@@ -336,10 +359,18 @@ function renderCharts(panel, sessions, exercises, program) {
       }
       // Combined view: tonnage recedes to bars on its own right-hand scale so
       // the two same-unit load lines keep the weight axis to themselves.
-      const bars = chartMetric === "all"
-        ? { label: "Volume", color: "#8B9196", points: pick("volume", "main") } : null;
-      slot.append(progressionChart({ ...chartOptions, lines, bars,
+      slot.append(progressionChart({ ...chartOptions, lines, onSelect,
         caption: `${metricLabel} per session (${unit})${roleNote}` }));
+    }
+    slot.append(selection);
+    if (loaded) {
+      const volumeRole = roles.includes("main") ? "main" : roles[0];
+      const volumePoints = pick("volume", volumeRole);
+      if (volumePoints.length) {
+        slot.append(ui.h("div", { class: "section-title", text: "Working volume" }),
+          progressionChart({ height: 130, lines: [{ key: "volume", label: "Volume", color: "#8B9196", points: volumePoints }],
+            fmtY: C.trim, area: false, onSelect, caption: `Tonnage per session (${unit}) · separate scale` }));
+      }
     }
     // Say what the projection is, or say why there isn't one. Asking for a
     // forecast and getting an unchanged chart back reads as a broken control,
@@ -361,11 +392,45 @@ function renderCharts(panel, sessions, exercises, program) {
       }
     }
     if (records.size) slot.append(ui.h("div", { class: "section-title", text: "Rep PRs" }),
+      repCurve([...records].sort((a, b) => a[0] - b[0])),
       ui.h("div", { class: "row", style: { overflowX: "auto", gap: "12px", borderBottom: "0" } },
         ...[...records].sort((a, b) => a[0] - b[0]).map(([reps, weight]) => ui.h("div", { class: "lead", style: { minWidth: "64px" } },
           ui.h("span", { class: "sub", text: `${reps} rep${reps === 1 ? "" : "s"}` }),
           ui.h("span", { class: "mono title", text: ui.fmtWeight(weight) })))));
   }
+}
+
+function repCurve(records) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "chart rep-curve");
+  svg.setAttribute("viewBox", "0 0 340 150");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Rep PR curve, weight by repetition count");
+  if (!records.length) return svg;
+  const W = 340, H = 150, left = 42, right = 14, top = 14, bottom = 28;
+  const reps = records.map(([count]) => count);
+  const weights = records.map(([, weight]) => C.primaryUnit(ui.prefs.unitDisplay) === "kg" ? C.kgFromLb(weight) : weight);
+  const minRep = Math.min(...reps), maxRep = Math.max(...reps);
+  let minWeight = Math.min(...weights), maxWeight = Math.max(...weights);
+  if (minWeight === maxWeight) { minWeight -= 1; maxWeight += 1; }
+  const x = (rep) => left + (W - left - right) * (maxRep > minRep ? (rep - minRep) / (maxRep - minRep) : 0.5);
+  const y = (weight) => top + (H - top - bottom) * (1 - (weight - minWeight) / (maxWeight - minWeight));
+  const element = (name, attrs = {}, text = null) => {
+    const node = document.createElementNS(NS, name);
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+    if (text != null) node.textContent = text;
+    return node;
+  };
+  svg.append(element("line", { class: "axis", x1: left, y1: H - bottom, x2: W - right, y2: H - bottom }));
+  const path = records.map(([rep], index) => `${index ? "L" : "M"}${x(rep).toFixed(1)} ${y(weights[index]).toFixed(1)}`).join(" ");
+  svg.append(element("path", { class: "line", d: path }));
+  records.forEach(([rep], index) => svg.append(element("circle", { class: "dot", cx: x(rep), cy: y(weights[index]), r: 3 })));
+  svg.append(element("text", { class: "lbl", x: left, y: H - 7 }, `${minRep} reps`));
+  svg.append(element("text", { class: "lbl", x: W - right, y: H - 7, "text-anchor": "end" }, `${maxRep} reps`));
+  svg.append(element("text", { class: "lbl", x: 4, y: y(maxWeight) + 3 }, C.trim(maxWeight)));
+  svg.append(element("text", { class: "lbl", x: 4, y: y(minWeight) + 3 }, C.trim(minWeight)));
+  return svg;
 }
 
 // Why a projection was refused, in the lifter's terms. The engine returns a
