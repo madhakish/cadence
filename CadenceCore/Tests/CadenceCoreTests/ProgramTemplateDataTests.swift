@@ -54,6 +54,20 @@ final class ProgramTemplateDataTests: XCTestCase {
         XCTAssertTrue(template.days.allSatisfy { day in
             day.accessories.contains { ["core", "GHD Sit-up", "Hanging Knee Raise"].contains($0.exercise) }
         }, "each day retains trunk work")
+        // Vertical pulling is main work (issue #126): both upper days program
+        // pull-ups as a LIFT slot on a rep window that earns load, not as an
+        // accessory buried under the press. Mirrored in web smoke tests.
+        let upperDays = template.days.filter { $0.name.hasPrefix("Upper") }
+        XCTAssertEqual(upperDays.count, 2)
+        XCTAssertTrue(upperDays.allSatisfy { day in
+            day.lifts.contains {
+                $0.exercise == "Pull-ups" && $0.prescription == "doubleProgression" && $0.sets == 3
+            }
+        }, "upper/lower trains the vertical pull as programmed lift work on both upper days")
+        // Every template compat record agrees with the seed's category.
+        XCTAssertTrue(ProgramTemplateData.all.allSatisfy { candidate in
+            candidate.exercises.filter { $0.name == "Pull-ups" }.allSatisfy { $0.category == "Main" }
+        }, "template compat records agree with the seed: pull-ups are Main")
     }
 
     func testConjugateTemplateKeepsWeeklyMaxEffortSeparateFromSpeedWaves() throws {

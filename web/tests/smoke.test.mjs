@@ -2354,6 +2354,19 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const sled = conjugate.days[2].accessories.find((accessory) => accessory.exerciseName === "Sled Pull");
   ok(sled.sets === 4 && sled.targetSeconds === 60 && sled.conditioningEffort === "easy" && sled.targetRPE === 5,
     "conjugate includes four easy one-minute sled trips");
+  // Vertical pulling is main work (issue #126): both Upper/Lower upper days
+  // program pull-ups as a LIFT slot on a rep window that earns load, not as
+  // an accessory — and every template compat record agrees with the seed.
+  const upperLower = PROGRAM_TEMPLATES.find((template) => template.id === "strength-upper-lower");
+  const upperDays = upperLower.days.filter((day) => day.name.startsWith("Upper"));
+  ok(upperDays.length === 2
+    && upperDays.every((day) => day.lifts.some((l) =>
+      l.exerciseName === "Pull-ups" && l.prescription === "doubleProgression" && l.sets === 3)),
+  "upper/lower trains the vertical pull as programmed lift work on both upper days");
+  ok(PROGRAM_TEMPLATES.every((template) => (template.exercises || [])
+    .filter((e) => e.name === "Pull-ups").every((e) => e.category === "Main")),
+  "every template compat record agrees with the seed: pull-ups are Main");
+
   const squatBefore = await db.Exercises.byName("Back Squat"); // seeded — must never be overwritten
   for (const t of PROGRAM_TEMPLATES) {
     const id = await createProgramFromTemplate(t);

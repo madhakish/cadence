@@ -31,18 +31,24 @@ export const PROGRAM_TEMPLATES = [
     tagline: "4 days · barbell strength · completion-based A/B wave",
     focus: "strength", roundingLb: 5,
     exercises: [
+      ex("Pull-ups", "Main", "bodyweight", "pull", { defaultRestSeconds: 120 }),
       ex("Back Extension", "Accessory", "bodyweight", "hinge"),
       ex("Hanging Knee Raise", "Accessory", "bodyweight", "core"),
     ],
     // The upper days alternate the two presses (A: overhead emphasis, B:
     // incline emphasis); each day's accessories support THAT press, and every
-    // day carries core work.
+    // day carries core work. Both upper days train the vertical pull as
+    // PROGRAMMED lift work — pull-ups on a rep window that earns load at the
+    // top (double progression into weighted pull-ups) — never as an accessory
+    // buried under the press: pulling is main work (issue #126).
     days: [
-      { name: "Upper A", lifts: [lift("Overhead Press", "main", 65, 95), lift("Incline DB Press", "complementary", 50, 80)],
+      { name: "Upper A", lifts: [lift("Overhead Press", "main", 65, 95), lift("Incline DB Press", "complementary", 50, 80),
+        lift("Pull-ups", "complementary", 0, 0, { prescription: "doubleProgression", sets: 3 })],
         accessories: [acc("DB Overhead Triceps Extension", 3, 8, 12, 20, 5), acc("Y-T-W Raises", 3, 10, 15, 10, 2.5), acc("GHD Sit-up", 3, 8, 15)] },
       { name: "Lower A", lifts: [lift("Back Squat", "main", 135, 205), lift("Romanian Deadlift", "complementary", 95, 165)],
         accessories: [acc("Walking Lunges", 3, 10, 20), acc("Hanging Knee Raise", 3, 8, 15)] },
-      { name: "Upper B", lifts: [lift("Incline DB Press", "main", 50, 80), lift("Overhead Press", "complementary", 65, 95)],
+      { name: "Upper B", lifts: [lift("Incline DB Press", "main", 50, 80), lift("Overhead Press", "complementary", 65, 95),
+        lift("Pull-ups", "complementary", 0, 0, { prescription: "doubleProgression", sets: 3 })],
         accessories: [acc("Dips", 3, 5, 12), acc("Band Pull-aparts", 3, 15, 25), acc("Hanging Knee Raise", 3, 8, 15)] },
       { name: "Lower B", lifts: [lift("Deadlift", "main", 155, 245), lift("Front Squat", "complementary", 95, 155)],
         accessories: [acc("Back Extension", 3, 10, 15), acc("GHD Sit-up", 3, 8, 15)] },
@@ -54,7 +60,10 @@ export const PROGRAM_TEMPLATES = [
     tagline: "3 days · snatch, clean & jerk, strength base",
     focus: "strength", roundingLb: 5,
     exercises: [
-      ex("Pull-ups", "Accessory", "bodyweight", "pull", { defaultRestSeconds: 120 }),
+      // Category mirrors the seed: vertical pulls are Main work (issue #126).
+      // Instantiation never overwrites an existing record; this only shapes
+      // an install where the seed record is somehow missing.
+      ex("Pull-ups", "Main", "bodyweight", "pull", { defaultRestSeconds: 120 }),
       ex("Back Extension", "Accessory", "bodyweight", "hinge"),
       ex("Hanging Knee Raise", "Accessory", "bodyweight", "core"),
     ],
