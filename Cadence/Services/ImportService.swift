@@ -34,7 +34,10 @@ enum ImportService {
     // backup never throws on a missing key.
     private struct Bundle: Decodable {
         var schemaVersion: Int?
-        var sessions: [Session]?; var bodyweight: [Bodyweight]?; var protein: [Protein]?
+        // `protein` was dropped in backup schema 6. Decodable ignores unknown
+        // keys, so a v<=5 bundle's protein array is simply skipped — there is no
+        // longer anywhere in the store to put it.
+        var sessions: [Session]?; var bodyweight: [Bodyweight]?
         var checkIns: [CheckInDTO]?; var milestones: [MilestoneDTO]?; var programs: [ProgramDTO]?
         var tracks: [Track]?; var gyms: [GymDTO]?; var exercises: [ExerciseDef]?; var settings: SettingsDTO?
         var coachingDecisions: [CoachingDecisionDTO]?
@@ -74,10 +77,10 @@ enum ImportService {
         var loadBasis: String?; var implementCount: Int?
         var status: String?
         var enteredUnit: String?; var flags: [String]?; var bodyFlagSite: String?; var bodyFlagNote: String?
-        var durationSeconds: Int?; var distanceMiles: Double?; var inclinePercent: Double?; var autoregReason: String?
+        var durationSeconds: Int?; var distanceMiles: Double?; var flights: Double?
+        var inclinePercent: Double?; var autoregReason: String?
     }
     private struct Bodyweight: Decodable { var date: Date?; var weightLb: Double?; var bodyFatPercent: Double?; var milestoneLabel: String? }
-    private struct Protein: Decodable { var date: Date?; var grams: Double?; var label: String? }
     private struct CheckInDTO: Decodable { var date: Date?; var site: String?; var response: String?; var note: String? }
     private struct MilestoneDTO: Decodable { var date: Date?; var exercise: String?; var kind: String?; var label: String? }
     private struct ProgramDTO: Decodable {
@@ -158,11 +161,13 @@ enum ImportService {
         var secondarySeconds: Int?; var accessorySeconds: Int?
     }
     private struct SettingsDTO: Decodable {
-        var unitDisplay: String?; var proteinTargetGrams: Double?; var accessoryRestSeconds: Int?
+        // `proteinTargetGrams` went with the tracker in schema 6 and is
+        // ignored where old bundles still carry it.
+        var unitDisplay: String?; var birthYear: Int?; var accessoryRestSeconds: Int?
         var mainCompoundRestSeconds: Int?; var olympicRestSeconds: Int?; var mainUpperRestSeconds: Int?; var secondaryRestSeconds: Int?
         var rest: RestDTO?
         var autoStartRest: Bool?; var haptics: Bool?; var gymTagFirstLaunchOfDay: Bool?; var restSeedStampsCleared: Bool?
-        var loadSemanticsMigrated: Bool?
+        var loadSemanticsMigrated: Bool?; var verticalPullMainsPromoted: Bool?
         var seededAt: Date?; var theme: String?
     }
 
@@ -221,6 +226,10 @@ enum ImportService {
         guard BodySite.fromStorage(value) != nil else {
             throw ImportError.invalidData("\(path): unknown body site \(value)")
         }
+    }
+
+    private static func currentYear() -> Int {
+        Calendar.current.component(.year, from: .now)
     }
 
     private static func requireDate(_ value: Date?, _ path: String) throws {
@@ -309,6 +318,7 @@ enum ImportService {
                     try known(set.autoregReason, reasons, "\(setPath).autoregReason")
                     try integer(set.durationSeconds, "\(setPath).durationSeconds", min: 0)
                     try finite(set.distanceMiles, "\(setPath).distanceMiles", min: 0)
+                    try finite(set.flights, "\(setPath).flights", min: 0)
                     try finite(set.inclinePercent, "\(setPath).inclinePercent", min: -100, max: 100)
                 }
             }
@@ -319,10 +329,6 @@ enum ImportService {
             try requireDate(entry.date, "bodyweight[\(i)].date")
             try finite(entry.weightLb, "bodyweight[\(i)].weightLb", required: true, min: 0)
             try finite(entry.bodyFatPercent, "bodyweight[\(i)].bodyFatPercent", min: 0, max: 100)
-        }
-        for (i, entry) in (bundle.protein ?? []).enumerated() {
-            try requireDate(entry.date, "protein[\(i)].date")
-            try finite(entry.grams, "protein[\(i)].grams", required: true, min: 0)
         }
         for (i, entry) in (bundle.checkIns ?? []).enumerated() {
             try requireDate(entry.date, "checkIns[\(i)].date")
@@ -490,7 +496,13 @@ enum ImportService {
         if let settings = bundle.settings {
             try known(settings.unitDisplay, ["lbPrimary", "kgPrimary", "both"], "settings.unitDisplay", required: schemaVersion >= 1)
             try known(settings.theme, ["memento", "carbon", "slate", "system"], "settings.theme", required: schemaVersion >= 1)
-            try finite(settings.proteinTargetGrams, "settings.proteinTargetGrams", min: 0)
+            // 0 is the "not set" sentinel and always valid. Any other year has
+            // to produce a plausible age, so a corrupted field cannot silently
+            // move the lifter across the older-adult protein threshold.
+            if let year = settings.birthYear, year != 0,
+               ProteinGuidance.age(birthYear: year, inYear: currentYear()) == nil {
+                throw ImportError.invalidData("settings.birthYear: \(year) is not a plausible year of birth")
+            }
             for (path, value) in [
                 ("settings.accessoryRestSeconds", settings.accessoryRestSeconds),
                 ("settings.mainCompoundRestSeconds", settings.mainCompoundRestSeconds),
@@ -527,7 +539,7 @@ enum ImportService {
 
         let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
                            bundle.gyms != nil, bundle.exercises != nil, bundle.bodyweight != nil,
-                           bundle.protein != nil, bundle.checkIns != nil, bundle.milestones != nil,
+                           bundle.checkIns != nil, bundle.milestones != nil,
                            bundle.settings != nil, bundle.coachingDecisions != nil].contains(true)
         guard hasAnything else { throw ImportError.notABackup }
         try validate(bundle, schemaVersion: schemaVersion)
@@ -584,10 +596,6 @@ enum ImportService {
                 try context.delete(model: BodyweightEntry.self)
                 for b in bw { context.insert(BodyweightEntry(date: b.date ?? .now, weightLb: b.weightLb ?? 0, bodyFatPercent: b.bodyFatPercent, milestoneLabel: b.milestoneLabel)) }
             }
-            if let pr = bundle.protein {
-                try context.delete(model: ProteinEntry.self)
-                for p in pr { context.insert(ProteinEntry(date: p.date ?? .now, grams: p.grams ?? 0, label: p.label ?? "")) }
-            }
             if let cis = bundle.checkIns {
                 try context.delete(model: CheckIn.self)
                 for c in cis {
@@ -624,6 +632,7 @@ enum ImportService {
                 // next launch's syncLibrary re-inspects the restored records.
                 s.restSeedStampsCleared = false
                 s.loadSemanticsMigrated = false
+                s.verticalPullMainsPromoted = false
             }
 
             try context.save()
@@ -783,10 +792,17 @@ enum ImportService {
         for d in (p.days ?? []) {
             let day = ProgramDay(name: d.name ?? "Day", order: d.order ?? 0)
             prog.days.append(day)
+            // Missing orders take the array position; a day whose slots ALL
+            // tie carries no ordering information either, so the authored
+            // sequence wins there too rather than the alphabetical fallback.
+            let liftOrders = ProgramEngine.authoredSlotOrders(
+                (d.lifts ?? []).enumerated().map { $1.order ?? $0 })
+            let accessoryOrders = ProgramEngine.authoredSlotOrders(
+                (d.accessories ?? []).enumerated().map { $1.order ?? $0 })
             for (slotOrder, l) in (d.lifts ?? []).enumerated() {
                 let lift = ProgramLift(id: adoptSlotID(l.id, seen: &seenSlotIDs, repaired: &repairedSlotIDs),
                                        exerciseName: l.exerciseName ?? "", role: LiftRole(rawValue: l.role ?? "main") ?? .main,
-                                       order: l.order ?? slotOrder,
+                                       order: liftOrders[slotOrder],
                                        prescription: PrescriptionStyle(rawValue: l.prescription ?? "automatic") ?? .automatic,
                                        warmupPolicy: WarmupPolicy(rawValue: l.warmupPolicy ?? "automatic") ?? .automatic,
                                        baseWeightLb: l.baseWeightLb ?? 45, estimatedMaxLb: l.estimatedMaxLb ?? 0,
@@ -817,7 +833,7 @@ enum ImportService {
             }
             for (slotOrder, a) in (d.accessories ?? []).enumerated() {
                 let acc = ProgramAccessory(id: adoptSlotID(a.id, seen: &seenSlotIDs, repaired: &repairedSlotIDs),
-                                           exerciseName: a.exerciseName ?? "", order: a.order ?? slotOrder,
+                                           exerciseName: a.exerciseName ?? "", order: accessoryOrders[slotOrder],
                                            sets: a.sets ?? 3, minReps: a.minReps ?? 8,
                                            maxReps: a.maxReps ?? 12, currentReps: a.currentReps ?? 8,
                                            targetSeconds: a.targetSeconds ?? 30,
@@ -884,6 +900,7 @@ enum ImportService {
                                    bodyFlagSite: BodySite.fromStorage(x.bodyFlagSite),
                                    bodyFlagNote: x.bodyFlagNote,
                                    durationSeconds: x.durationSeconds, distanceMiles: x.distanceMiles,
+                                   flights: x.flights,
                                    inclinePercent: x.inclinePercent,
                                    loadBasis: x.loadBasis.flatMap(LoadBasis.init(rawValue:))
                                        ?? e.name.flatMap { exByName[$0]?.loadBasis },
@@ -925,7 +942,7 @@ enum ImportService {
             let s = AppSettings(); context.insert(s); return s
         }()
         if let v = st.unitDisplay { settings.unitDisplayRaw = v }
-        if let v = st.proteinTargetGrams { settings.proteinTargetGrams = v }
+        if let v = st.birthYear { settings.birthYear = v }
         // Rest buckets arrive flat (native backups) or nested under `rest`
         // (web's canonical shape) — accept both; nested wins when both ride,
         // since the web keeps the legacy flat accessory key merely in sync.
@@ -951,9 +968,18 @@ enum ImportService {
         // to equal a retired stamp (Codex). Mirrors web importBundle.
         if restoredExercises { settings.restSeedStampsCleared = st.restSeedStampsCleared ?? false }
         if restoredExercises { settings.loadSemanticsMigrated = st.loadSemanticsMigrated ?? false }
+        // Same reasoning: a restore can write the pre-promotion accessory rows
+        // back, so the one-shot stamp has to be re-armed or the repair is
+        // blocked permanently on a store that now needs it again.
+        if restoredExercises { settings.verticalPullMainsPromoted = st.verticalPullMainsPromoted ?? false }
         // Only accept a known theme; an unknown value would round-trip as
         // garbage on the next export (the UI would silently show Carbon anyway).
-        if let v = st.theme, ThemeName(rawValue: v) != nil { settings.themeNameRaw = v }
+        // Keep the backup codec platform-neutral. `ThemeName` lives beside the
+        // SwiftUI palette and imports UIKit, while the wire contract is just
+        // these four stable strings (mirrored by web `[data-theme]`).
+        if let v = st.theme, ["memento", "carbon", "slate", "system"].contains(v) {
+            settings.themeNameRaw = v
+        }
         // Keep the install marked seeded so a restore isn't re-seeded over
         // (Seeder.seedIfNeeded gates on seededAt != nil).
         settings.seededAt = st.seededAt ?? settings.seededAt ?? .now

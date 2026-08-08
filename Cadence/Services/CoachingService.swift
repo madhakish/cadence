@@ -251,9 +251,9 @@ enum CoachingService {
             guard let replacement = exercises.first(where: {
                 SwapRules.compatible(
                     currentName: current.name, currentCategory: current.categoryRaw,
-                    currentType: current.typeRaw, currentGroup: current.movementGroup,
+                    currentLoadBasis: current.loadBasis, currentGroup: current.movementGroup,
                     candidateName: $0.name, candidateCategory: $0.categoryRaw,
-                    candidateType: $0.typeRaw, candidateGroup: $0.movementGroup,
+                    candidateLoadBasis: $0.loadBasis, candidateGroup: $0.movementGroup,
                     candidateShelved: $0.isShelved || $0.gateStatus == .shelved
                 )
             }) else {
@@ -326,7 +326,8 @@ enum CoachingService {
 
     private static func preferredExercise(for pattern: MovementPattern, in exercises: [Exercise]) -> Exercise? {
         let preferred: [MovementPattern: [String]] = [
-            .verticalPull: ["Lat Pulldown", "Assisted Pull-up", "Pull-ups"],
+            .verticalPull: ["Lat Pulldown", "Assisted Pull-up", "Pull-ups", "Chin-ups",
+                            "Weighted Pull-up", "Weighted Chin-up"],
             .kneeFlexion: ["Seated Leg Curl", "Lying Leg Curl", "Nordic Hamstring Curl"],
             .shoulderStability: ["Face Pulls", "Band External Rotation", "Y-T-W Raises"],
             .adductor: ["Copenhagen Plank", "Cable Hip Adduction"],

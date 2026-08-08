@@ -14,6 +14,26 @@ final class ProgramProgressionTests: XCTestCase {
         ProgramLiftState(baseWeightLb: 175, estimatedMaxLb: 226, stallCount: 0, role: .main, lastIncrementLb: 0)
     }
 
+    // A weighted pull-up is TYPED bodyweight but hangs real plates from a belt.
+    // Keying loadability on type alone silently exempted it, so a belt slot
+    // with a zero increment never progressed and never warned.
+    // Mirrored in web/tests/core.test.mjs.
+    func testBeltLoadedBodyweightSlotStillWarnsAboutAZeroIncrement() {
+        XCTAssertTrue(P.accessoryCannotProgressLoad(
+            exerciseType: "bodyweight", loadBasis: .externalTotal, weightLb: 25, incrementLb: 0))
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "bodyweight", loadBasis: .bodyweight, weightLb: 0, incrementLb: 0),
+                       "an unloaded bodyweight slot has no load to step")
+        // The narrow part of the fix: a vest still does not make a plank
+        // load-progressed, so timed and conditioning stay unloadable.
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "timed", loadBasis: .externalTotal, weightLb: 25, incrementLb: 0),
+                       "a timed slot progresses by duration even when it carries a vest")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "conditioning", loadBasis: .externalTotal, weightLb: 20, incrementLb: 0),
+                       "a loaded carry progresses by distance or duration")
+    }
+
     func testE1RMMath() {
         XCTAssertEqual(P.epleyE1RM(weightLb: 225, reps: 5), 262.5, accuracy: 1e-9)
         XCTAssertEqual(P.smoothE1RM(prior: 0, sample: 262.5), 262.5, accuracy: 1e-9)
@@ -481,6 +501,165 @@ final class ProgramProgressionTests: XCTestCase {
         let allDup = ProgramProgression.scheduleAdvance(dayOrders: [0, 0], bankedDayOrder: 0)
         XCTAssertEqual(allDup.nextDayOrder, 0)
         XCTAssertTrue(allDup.isLastDay, "an all-duplicate program still closes its rotation")
+    }
+
+    // [INV-RECOVERY-IS-A-BRIDGE]
+    func testRecoveryBridgeSelectsOneAuthoredUpperAndLowerExposure() {
+        let upperLower = [
+            RecoveryDayCandidate(order: 0, mainMovementGroup: "press"),
+            RecoveryDayCandidate(order: 1, mainMovementGroup: "squat"),
+            RecoveryDayCandidate(order: 2, mainMovementGroup: "pull"),
+            RecoveryDayCandidate(order: 3, mainMovementGroup: "hinge"),
+        ]
+        XCTAssertEqual(P.recoveryDayOrders(upperLower), [0, 1],
+                       "the first authored representative of each half forms the bridge")
+
+        let lowerFirst = [
+            RecoveryDayCandidate(order: 2, mainMovementGroup: "hinge"),
+            RecoveryDayCandidate(order: 7, mainMovementGroup: "press"),
+            RecoveryDayCandidate(order: 9, mainMovementGroup: "squat"),
+        ]
+        XCTAssertEqual(P.recoveryDayOrders(lowerFirst), [2, 7],
+                       "sparse authored order and lower-first programs stay authored")
+    }
+
+    func testRecoveryBridgeFallsBackWhenTheProgramIsNotUpperLower() {
+        let olympic = [
+            RecoveryDayCandidate(order: 5, mainMovementGroup: "olympic"),
+            RecoveryDayCandidate(order: 0, mainMovementGroup: "squat"),
+            RecoveryDayCandidate(order: 2, mainMovementGroup: nil),
+        ]
+        XCTAssertEqual(P.recoveryDayOrders(olympic), [0, 2, 5],
+                       "ambiguous programs keep every authored exposure")
+        XCTAssertEqual(P.recoveryDayOrders([]), [])
+    }
+
+    func testRecoveryAdvanceCountsBankedRepresentativesInsteadOfPointerOrder() {
+        let selected = [0, 1]
+        let afterLower = P.recoveryScheduleAdvance(
+            dayOrders: selected, completedDayOrders: [0]
+        )
+        XCTAssertEqual(afterLower.nextDayOrder, 1)
+        XCTAssertFalse(afterLower.isLastDay)
+
+        let upperFirst = P.recoveryScheduleAdvance(
+            dayOrders: selected, completedDayOrders: [1]
+        )
+        XCTAssertEqual(upperFirst.nextDayOrder, 0,
+                       "either recovery exposure may be banked first")
+        XCTAssertFalse(upperFirst.isLastDay)
+
+        let complete = P.recoveryScheduleAdvance(
+            dayOrders: selected, completedDayOrders: [1, 0, 0]
+        )
+        XCTAssertTrue(complete.isLastDay,
+                      "both selected exposures complete recovery exactly once")
+
+        let nonBridge = P.recoveryScheduleAdvance(
+            dayOrders: selected, completedDayOrders: [2]
+        )
+        XCTAssertEqual(nonBridge.nextDayOrder, 0)
+        XCTAssertFalse(nonBridge.isLastDay,
+                       "an omitted full-rotation day cannot complete recovery")
+
+        let empty = P.recoveryScheduleAdvance(dayOrders: [], completedDayOrders: [0])
+        XCTAssertFalse(empty.isLastDay, "an empty bridge fails closed")
+    }
+
+    func testRecoveryBridgeCapIsItsOwnLengthAndExpiryNeedsBankedWork() {
+        let peak = Date(timeIntervalSince1970: 1_000_000)
+
+        XCTAssertNil(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 1,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow - 1)
+        ), "one recovery session inside the window leaves the bridge open")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 2,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(60)
+        ), .sessionLimit, "two recovery sessions are a hard cap regardless of day order")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 1,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow)
+        ), .windowElapsed, "a half-finished bridge expires at exactly seven elapsed days")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 1,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: true,
+            lastHardPhaseCompletion: nil,
+            asOf: peak
+        ), .selectedExposures, "a one-day program may close its selected bridge normally")
+
+        XCTAssertNil(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 1,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: nil,
+            asOf: peak.addingTimeInterval(P.recoveryWindow * 2)
+        ), "missing history never invents an elapsed-time anchor")
+    }
+
+    /// The bridge is bounded from the last hard phase even when no reduced work
+    /// was banked. Otherwise a stale pointer can prescribe Recovery forever.
+    /// Mirrors the same block in web/tests/core.test.mjs.
+    func testAnUnbankedBridgeExpiresFromTheHardPhase() {
+        let peak = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertNil(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 0,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow - 1)
+        ))
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 0,
+            selectedExposureCount: 2,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(P.recoveryWindow)
+        ), .windowElapsed)
+    }
+
+    /// The cap is the bridge's OWN length. A program that is not recognizably
+    /// upper/lower keeps its full authored pass, and a constant two silently
+    /// dropped day three onward — losing exactly the work that fallback exists
+    /// to preserve. Mirrors the same block in web/tests/core.test.mjs.
+    func testTheSessionCapFollowsTheBridgeLength() {
+        let peak = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertNil(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 2,
+            selectedExposureCount: 4,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(60)
+        ), "a four-day authored bridge is not closed by two sessions")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 4,
+            selectedExposureCount: 4,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(60)
+        ), .sessionLimit, "it closes once its own length is banked")
+
+        XCTAssertEqual(P.recoveryBridgeCompletionReason(
+            completedRecoverySessions: 2,
+            selectedExposureCount: 1,
+            selectedExposuresComplete: false,
+            lastHardPhaseCompletion: peak,
+            asOf: peak.addingTimeInterval(60)
+        ), .sessionLimit, "and a degenerate one-day bridge still keeps the two-session floor")
     }
     // [INV-BELOW-PLAN-IS-BELOW-PLAN]
     func testLighterWorkStillGradesBelowPlan() {

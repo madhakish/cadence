@@ -107,6 +107,9 @@ export const MUSCLE_MAP = {
   "Lat Pulldown": { primary: ["lats"], secondary: ["biceps"] },
   "Chin-ups": { primary: ["lats", "biceps"], secondary: ["abs", "forearms"] },
   "Pull-ups": { primary: ["lats"], secondary: ["biceps", "abs", "forearms"] },
+  // Adding a belt loads the same movement — the muscles worked do not change.
+  "Weighted Chin-up": { primary: ["lats", "biceps"], secondary: ["abs", "forearms"] },
+  "Weighted Pull-up": { primary: ["lats"], secondary: ["biceps", "abs", "forearms"] },
   "Face Pulls": { primary: ["delts", "traps"], secondary: ["biceps"] },
   "Band Pull-aparts": { primary: ["delts", "traps"], secondary: [] },
   "Y-T-W Raises": { primary: ["delts", "traps"], secondary: [] },

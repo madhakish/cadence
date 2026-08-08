@@ -19,7 +19,7 @@ const mkSet = (order, w, r, o = {}) => ({
   implementCount: Math.max(1, o.implementCount || C.inferredImplementCount(o.exerciseType)),
   status: "planned",
   flags: [], bodyFlagSite: null, bodyFlagNote: null, durationSeconds: null, distanceMiles: null,
-  inclinePercent: null, autoregReason: null,
+  flights: null, inclinePercent: null, autoregReason: null,
 });
 const loadOptions = (exercise) => ({
   loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
@@ -169,6 +169,10 @@ export async function openSession(id) {
     ? await Programs.byStableId(session.programTag.programId)
       || (await Programs.all()).find((candidate) => candidate.name === session.programTag.programName)
     : null;
+  const sessionDayName = session.programTag
+    ? sessionProgram?.days?.find((day) => day.order === session.programTag.dayIndex)?.name
+    : null;
+  const workoutName = sessionDayName || session.programTag?.programName || "Workout";
   const save = () => Sessions.save(session);
 
   // Program recall is slot-scoped. Same-name main/complementary work on other
@@ -269,8 +273,11 @@ export async function openSession(id) {
   // Exercise AND role must come from the same session entry — pairing
   // exercises[0] with currentSE's (null) role resolved the first lift's rest
   // without its program role (mirrors native currentOrFirst).
-  const currentEntry = () => currentSE || session.exercises[0] || null;
+  const currentEntry = () => currentSE
+    || session.exercises.find((entry) => (entry.sets || []).some((set) => !set.isWarmup && set.status === "planned"))
+    || session.exercises[0] || null;
   const currentExercise = () => exMap.get((currentEntry() || {}).exerciseName);
+  const expandedEntries = new Set();
 
   const rest = makeRestTimer(() => paintBar(), () => onRestDone());
   let restLabel = "";
@@ -325,6 +332,17 @@ export async function openSession(id) {
 
   function renderBody(body) {
     ui.clear(body);
+    session.exercises.sort((a, b) => a.order - b.order);
+    const current = currentEntry();
+    const exerciseNumber = current ? session.exercises.indexOf(current) + 1 : 0;
+    const workSets = session.exercises.flatMap((entry) => (entry.sets || []).filter((set) => !set.isWarmup));
+    // Position, not achievement: a skipped set is resolved and moves the
+    // workout forward, so the ordinal must count it or skipping every set
+    // would read "1 of N" forever. Mirrors the native progress card.
+    const resolvedWork = workSets.filter((set) => set.status === "completed" || set.status === "skipped").length;
+    body.append(ui.h("div", { class: "card session-progress" },
+      ui.h("div", { class: "title mono", text: `Exercise ${exerciseNumber} of ${session.exercises.length} · ${workSets.length === 0 ? 0 : Math.min(resolvedWork + 1, workSets.length)} of ${workSets.length} work sets` }),
+      ui.h("div", { class: "sub", text: ui.fmtDate(session.date) })));
     if (gymOptions.length) {
       const gymSelect = ui.h("select", {}, ...gymOptions.map((g) => ui.h("option", { value: g.id, text: g.name, selected: g.id === gymState.value?.id })));
       gymSelect.addEventListener("change", () => {
@@ -335,7 +353,6 @@ export async function openSession(id) {
       });
       body.append(ui.field("Training at", gymSelect));
     }
-    session.exercises.sort((a, b) => a.order - b.order);
     session.exercises.forEach((se) => body.append(exerciseCard(se, body)));
 
     body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "12px" }, text: "+ Add exercise", onClick: () => pickExercise(body) }));
@@ -352,10 +369,11 @@ export async function openSession(id) {
 
   function exerciseCard(se, body) {
     const ex = exMap.get(se.exerciseName);
+    const phaseLabel = ui.sessionPhaseLabel(se, ex);
     const head = ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
       ui.h("div", { class: "lead" },
         ui.h("span", { class: "title", text: se.exerciseName }),
-        se.phase ? ui.h("span", { class: "sub accent", text: C.phaseLabel(se.phase) }) : null),
+        phaseLabel ? ui.h("span", { class: "sub accent", text: phaseLabel }) : null),
       ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
         ui.h("div", { style: { width: "100px" } },
           ui.seg([{ value: "lb", label: "lb" }, { value: "kg", label: "kg" }], exUnit(se), (u) => { unitByEx[se.exerciseName] = u; renderBody(body); })),
@@ -367,7 +385,23 @@ export async function openSession(id) {
     if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
 
     se.sets.sort((a, b) => a.order - b.order);
-    se.sets.forEach((s) => card.append(setRow(se, s, body)));
+    const showAll = expandedEntries.has(se);
+    const currentSet = se.sets.find((set) => !set.isWarmup && set.status === "planned");
+    se.sets.forEach((s, index) => {
+      const prior = se.sets[index - 1];
+      const loadChange = !!prior && (Math.abs((prior.weightLb || 0) - (s.weightLb || 0)) > 0.001
+        || prior.loadBasis !== s.loadBasis || (prior.implementCount || 1) !== (s.implementCount || 1));
+      card.append(setRow(se, s, body, {
+        compact: !showAll && s !== currentSet,
+        showLoadout: showAll || s === currentSet || loadChange,
+      }));
+    });
+
+    if (se.sets.length > 1) card.append(ui.h("button", { class: "btn sm ghost wide",
+      text: showAll ? "Focus current set" : "Show all sets", onClick: () => {
+        if (showAll) expandedEntries.delete(se); else expandedEntries.add(se);
+        renderBody(body);
+      } }));
 
     card.append(ui.h("div", { class: "btn-row", style: { marginTop: "10px" } },
       ui.h("button", { class: "btn sm", text: "+ Set", onClick: () => { currentSE = se; addSet(se); save(); renderBody(body); } }),
@@ -428,7 +462,7 @@ export async function openSession(id) {
     return sel;
   }
 
-  function setRow(se, s, body) {
+  function setRow(se, s, body, { compact = false, showLoadout = true } = {}) {
     const ex = exMap.get(se.exerciseName);
     const u = setUnit(se, s);
     // Steady-state cardio (type conditioning: Walk/Bike/Ruck…) logs
@@ -438,8 +472,8 @@ export async function openSession(id) {
     const isTimed = ex && ex.type === "timed";
     const wt = isCardio
       ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editCardioSet(se, s, body) },
-          ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent, s.weightLb) }),
-          ui.h("span", { class: "sub", text: isCardio && C.cardioCarriesLoad(se.exerciseName) ? " load · distance · time" : " distance · time · incline" }))
+          ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent, s.weightLb, s.flights) }),
+          ui.h("span", { class: "sub", text: cardioHint(se.exerciseName, s) }))
       : isTimed
         ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editTimedSet(se, s, body) },
           ui.h("span", { class: "wt mono", text: C.cardioDurationLabel(s.durationSeconds || 0) }),
@@ -461,6 +495,10 @@ export async function openSession(id) {
     }
     if (s.autoregReason) tags.append(ui.h("span", { class: "pill warn", text: `↓ ${s.autoregReason}` }));
     if (s.bodyFlagSite) tags.append(ui.h("span", { class: "pill hard", text: "⚡︎" }));
+    if (!isCardio && !isTimed && Number.isFinite(s.plannedWeightLb) && Number.isFinite(s.plannedReps)
+        && (Math.abs(s.plannedWeightLb - s.weightLb) > 0.001 || s.plannedReps !== s.reps)) {
+      tags.append(ui.h("span", { class: "pill", text: `planned ${ui.fmtWeight(s.plannedWeightLb)}×${s.plannedReps}` }));
+    }
 
     const statusButton = ui.h("button", {
       class: `flagbtn${s.status === "completed" ? " on-clean" : ""}`,
@@ -497,7 +535,8 @@ export async function openSession(id) {
     // the accent rail; warmups sit quiet (and often go unflagged, so they
     // must not hold the rail hostage).
     const isCurrent = se.sets.find((x) => !x.isWarmup && x.status === "planned") === s;
-    const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "") + (isCurrent ? " current" : "") }, wt, tags,
+    const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "")
+      + (isCurrent ? " current current-set-card" : "") + (compact ? " compact" : "") }, wt, tags,
       ui.h("div", { class: "flagbtns" }, statusButton,
         (isCardio || isTimed) ? null : qualityButton,
         // Duration and conditioning work has no rep count, so reps-in-reserve
@@ -506,7 +545,7 @@ export async function openSession(id) {
 
     // Loadout visualization — plates for barbell lifts, the rack number for
     // dumbbell lifts. Mirrors native.
-    if (ex && ex.type === "barbell" && s.weightLb > 0) {
+    if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
       const { svg, solution } = barbellSVG(s.weightLb, u, barFor(se), gymState.value);
       const wrap = ui.h("div", { class: "barbell-wrap" }, svg);
       if (solution.isOffTarget) {
@@ -520,7 +559,7 @@ export async function openSession(id) {
       }
       return ui.h("div", {}, row, wrap);
     }
-    if (ex && ex.type === "dumbbell" && s.weightLb > 0) {
+    if (showLoadout && ex && ex.type === "dumbbell" && s.weightLb > 0) {
       return ui.h("div", {}, row, ui.h("div", { class: "barbell-wrap" },
         dumbbellSVG(s.weightLb, u), ui.h("span", { class: "sub", text: u })));
     }
@@ -589,6 +628,7 @@ export async function openSession(id) {
     if (ex && ex.type === "conditioning" && last) {
       // Repeat intervals: carry the last round's cardio prescription forward.
       set.distanceMiles = last.distanceMiles ?? null;
+      set.flights = last.flights ?? null;
       set.durationSeconds = last.durationSeconds ?? null;
       set.inclinePercent = last.inclinePercent ?? null;
     }
@@ -695,23 +735,45 @@ export async function openSession(id) {
     });
   }
 
-  // Cardio (type conditioning) sets: distance / time / speed / incline.
+  // Cardio (type conditioning) sets: distance / time / speed / incline, or
+  // flights / time / pace for a climber. Names the fields the sheet will
+  // actually show, so the row never advertises one the sheet withholds.
+  function cardioHint(exerciseName, s) {
+    return ` ${C.cardioFields(exerciseName, s.flights, s.distanceMiles, s.inclinePercent).label}`;
+  }
+
   // [INV-CARDIO-SOLVES-THE-THIRD] Distance and speed are two views of one
   // relationship, so both are editable and whichever one the lifter is NOT
   // typing into is the one that recomputes. Time is never overwritten — it is
   // the one value a treadmill, a watch, and a ruck plan all agree on.
   // Only distance + duration are stored; speed is always re-derivable.
+  //
+  // [INV-STAIRS-COUNT-FLIGHTS] A climber gets the same pair of fields against
+  // a different yardstick — flights and pace instead of distance and speed.
+  // Which block a movement gets is a property of the movement, except that a
+  // set already holding the other measure keeps its block so history logged
+  // before flights existed stays editable rather than becoming unreachable.
   // Mirrors the native CardioSetSheet.
   function editCardioSet(se, s, body) {
     ui.sheet({
       title: `Log conditioning — ${se.exerciseName}`,
       build: (c, api) => {
-        const distInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "0.05", min: "0", placeholder: "0", value: s.distanceMiles > 0 ? C.trim(s.distanceMiles, 2) : "" });
+        // Captured ONCE, here, from the values as they are when the sheet
+        // opens. The rule reads what is being edited, so re-deriving it later
+        // would let a field delete itself mid-edit: clearing a legacy climb's
+        // distance would take the distance and speed rows with it and leave no
+        // way to retype the number that had just been cleared.
+        const fields = C.cardioFields(se.exerciseName, s.flights, s.distanceMiles, s.inclinePercent);
+        const showFlights = fields.flights;
+        const showDistance = fields.distance;
         const minInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", placeholder: "0", value: s.durationSeconds > 0 ? String(Math.floor(s.durationSeconds / 60)) : "" });
         const secInput = ui.h("input", { type: "number", inputmode: "numeric", min: "0", max: "59", placeholder: "0", value: s.durationSeconds > 0 ? String(s.durationSeconds % 60) : "" });
+        const readSecs = () => (parseInt(minInput.value, 10) || 0) * 60 + (parseInt(secInput.value, 10) || 0);
+        const recomputers = [];
+
+        const distInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "0.05", min: "0", placeholder: "0", value: s.distanceMiles > 0 ? C.trim(s.distanceMiles, 2) : "" });
         const startSpeed = C.cardioSpeedMph(s.distanceMiles, s.durationSeconds);
         const speedInput = ui.h("input", { type: "number", inputmode: "decimal", step: "0.1", min: "0", placeholder: "0", value: startSpeed !== null ? C.trim(startSpeed) : "" });
-        let incline = s.inclinePercent > 0 ? s.inclinePercent : 0;
         // Which of distance/speed is currently computed from the other two.
         // Distance is what gets stored, so it starts as the entered value.
         let derived = "speed";
@@ -721,8 +783,7 @@ export async function openSession(id) {
         let computedMiles = null;
         const distNote = ui.h("span", { class: "sub" });
         const speedNote = ui.h("span", { class: "sub" });
-        const readSecs = () => (parseInt(minInput.value, 10) || 0) * 60 + (parseInt(secInput.value, 10) || 0);
-        const recompute = () => {
+        const recomputeDistance = () => {
           const secs = readSecs();
           if (derived === "distance") {
             const miles = C.cardioDistanceMiles(parseFloat(speedInput.value) || 0, secs);
@@ -740,23 +801,68 @@ export async function openSession(id) {
           distNote.textContent = derived === "distance" ? "calculated" : "";
           speedNote.textContent = derived === "speed" ? "calculated" : "";
         };
-        distInput.addEventListener("input", () => { derived = "speed"; recompute(); });
-        speedInput.addEventListener("input", () => { derived = "distance"; recompute(); });
-        [minInput, secInput].forEach((el) => el.addEventListener("input", recompute));
-        c.append(ui.h("div", { class: "row" },
-          ui.h("span", {}, ui.h("span", { text: "Distance (mi) " }), distNote), distInput));
+
+        const flightInput = ui.h("input", { class: "big-num", type: "number", inputmode: "decimal", step: "1", min: "0", placeholder: "0", value: s.flights > 0 ? C.trim(s.flights, 1) : "" });
+        const startPace = C.cardioFlightPace(s.flights, s.durationSeconds);
+        const paceInput = ui.h("input", { type: "number", inputmode: "decimal", step: "0.1", min: "0", placeholder: "0", value: startPace !== null ? C.trim(startPace) : "" });
+        let flightDerived = "pace";
+        let computedFlights = null;
+        const flightNote = ui.h("span", { class: "sub" });
+        const paceNote = ui.h("span", { class: "sub" });
+        const recomputeFlights = () => {
+          const secs = readSecs();
+          if (flightDerived === "flights") {
+            const solved = C.cardioFlights(parseFloat(paceInput.value) || 0, secs);
+            if (solved !== null) {
+              computedFlights = solved;
+              flightInput.value = C.trim(solved, 1);
+            }
+          } else {
+            computedFlights = null;
+            const pace = C.cardioFlightPace(parseFloat(flightInput.value) || 0, secs);
+            paceInput.value = pace !== null ? C.trim(pace) : "";
+          }
+          flightNote.textContent = flightDerived === "flights" ? "calculated" : "";
+          paceNote.textContent = flightDerived === "pace" ? "calculated" : "";
+        };
+
+        if (showFlights) {
+          flightInput.addEventListener("input", () => { flightDerived = "pace"; recomputeFlights(); });
+          paceInput.addEventListener("input", () => { flightDerived = "flights"; recomputeFlights(); });
+          recomputers.push(recomputeFlights);
+          c.append(ui.h("div", { class: "row" },
+            ui.h("span", {}, ui.h("span", { text: "Flights " }), flightNote), flightInput));
+        }
+        if (showDistance) {
+          distInput.addEventListener("input", () => { derived = "speed"; recomputeDistance(); });
+          speedInput.addEventListener("input", () => { derived = "distance"; recomputeDistance(); });
+          recomputers.push(recomputeDistance);
+          c.append(ui.h("div", { class: "row" },
+            ui.h("span", {}, ui.h("span", { text: "Distance (mi) " }), distNote), distInput));
+        }
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Time" }),
           ui.h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } },
             minInput, ui.h("span", { class: "sub", text: "min" }), secInput, ui.h("span", { class: "sub", text: "sec" }))));
-        c.append(ui.h("div", { class: "row" },
-          ui.h("span", {}, ui.h("span", { text: "Speed (mph) " }), speedNote), speedInput));
-        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Incline" }),
-          ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
+        if (showDistance) {
+          c.append(ui.h("div", { class: "row" },
+            ui.h("span", {}, ui.h("span", { text: "Speed (mph) " }), speedNote), speedInput));
+        }
+        if (showFlights) {
+          c.append(ui.h("div", { class: "row" },
+            ui.h("span", {}, ui.h("span", { text: "Pace (fl/min) " }), paceNote), paceInput));
+        }
+        // A climber's grade is the machine, not a setting, so it gets no
+        // incline row unless a legacy set already carries one.
+        let incline = s.inclinePercent > 0 ? s.inclinePercent : 0;
+        if (fields.incline) {
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Incline" }),
+            ui.stepper(incline, { min: 0, max: 30, step: 0.5, format: (v) => (v > 0 ? `${C.trim(v)}%` : "—"), onChange: (v) => { incline = v; } })));
+        }
         // A ruck is a walk with a pack on — the pack weight is the training
         // variable, so loaded carries keep a load where plain cardio zeroes it.
         // The load is established when the set is created, so the sheet only
         // ever edits what is already there — it never re-defaults.
-        const carries = C.cardioCarriesLoad(se.exerciseName);
+        const carries = fields.load;
         let carryLb = carries ? (s.weightLb || 0) : 0;
         if (carries) {
           c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Load" }),
@@ -766,17 +872,24 @@ export async function openSession(id) {
               onChange: (v) => { carryLb = v; },
             })));
         }
-        recompute();
+        [minInput, secInput].forEach((el) => el.addEventListener("input", () => recomputers.forEach((f) => f())));
+        recomputers.forEach((f) => f());
         c.append(ui.h("button", {
           class: "btn primary wide", style: { marginTop: "10px" }, text: "Done",
           onClick: () => {
             const secs = readSecs();
-            // A derived distance is stored at full precision; a typed one is
-            // taken from the field as entered.
+            // A derived value is stored at full precision; a typed one is taken
+            // from the field as entered.
             const miles = derived === "distance" && computedMiles !== null
               ? computedMiles
               : (parseFloat(distInput.value) || 0);
-            s.distanceMiles = miles > 0 ? miles : null;
+            const flights = flightDerived === "flights" && computedFlights !== null
+              ? computedFlights
+              : (parseFloat(flightInput.value) || 0);
+            // A hidden block never writes: a climber cannot silently acquire a
+            // distance, and a walk cannot acquire a flight count.
+            if (showDistance) s.distanceMiles = miles > 0 ? miles : null;
+            if (showFlights) s.flights = flights > 0 ? flights : null;
             s.durationSeconds = secs > 0 ? secs : null;
             s.inclinePercent = incline > 0 ? incline : null;
             // Unloaded cardio carries no load; a ruck or a sled does.
@@ -891,7 +1004,7 @@ export async function openSession(id) {
     }
   }
 
-  const screen = ui.pushScreen({ title: ui.fmtDate(session.date), build: (b) => renderBody(b) });
+  const screen = ui.pushScreen({ title: workoutName, build: (b) => renderBody(b) });
   screen.el.append(buildBottomBar());
   paintBar();
   const barTick = setInterval(() => {
@@ -1022,7 +1135,10 @@ async function completeSessionInner(session) {
   if (heldStandaloneTracks.length) coachingNotes.push(`Held progression for ${heldStandaloneTracks.sort().join(", ")} — actual work was saved, but the original prescription was not fully met.`);
   if (prog?.program) {
     const nextDay = prog.program.days.find((day) => day.order === prog.program.nextDayIndex) || prog.program.days[0];
-    if (nextDay) coachingNotes.push(`Next: ${nextDay.name} · R${prog.program.currentWeek} ${C.PHASES[prog.program.currentWeek]?.name || "Volume"}.`);
+    // A day is not in a phase — its slots are, and they can disagree. Naming one
+    // phase for the whole day claims a wave over slots that may be linear, 5/3/1
+    // or speed work. Mirrored in SessionCompletion.swift.
+    if (nextDay) coachingNotes.push(`Next: ${nextDay.name} · ${C.rotationLabel(prog.program.currentWeek)}.`);
   }
   return { lines, milestones, coachingNotes };
 }
@@ -1148,6 +1264,147 @@ async function earlyDeloadDecision(program, session, exerciseByName) {
   return decided ? { week: program.currentWeek } : null;
 }
 
+function rollOverRecovery(program, exerciseByName, note) {
+  const allDayOrders = [...new Set(program.days.map((candidate) => candidate.order ?? 0))]
+    .sort((a, b) => a - b);
+  for (const d of program.days) {
+    for (const lift of d.lifts || []) {
+      if (C.advancesPerExposure(lift.prescription)) {
+        // Per-exposure slots already advanced while training. A stale pending
+        // grade left by a later style edit must never apply at rollover.
+        delete lift.pending;
+      } else if (lift.pending) {
+        const p = lift.pending.state;
+        const oldBase = lift.baseWeightLb;
+        lift.baseWeightLb = p.baseWeightLb; lift.estimatedMaxLb = p.estimatedMaxLb;
+        lift.stallCount = p.stallCount; lift.lastIncrementLb = p.lastIncrementLb;
+        if (lift.pending.note) {
+          const presented = lift.pending.note.startsWith("Two cycles without a clean peak")
+            ? `Two cycles without a clean peak — deloaded ${ui.fmtWeight(oldBase)}→${ui.fmtWeight(p.baseWeightLb)} to rebuild.`
+            : lift.pending.note;
+          note(`${lift.exerciseName}: ${presented}`, lift.exerciseName);
+        }
+        delete lift.pending;
+      } else if (!C.buildsOwnSessionShape(lift.prescription || "automatic")) {
+        // Wave-family slots: no banked Peak is a stall toward the rebuild.
+        lift.stallCount = (lift.stallCount || 0) + 1; lift.lastIncrementLb = 0;
+        if (lift.stallCount >= C.STALL_LIMIT) {
+          const old = lift.baseWeightLb;
+          const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
+          lift.baseWeightLb = C.roundTo(old * C.DELOAD_REBUILD_FRACTION, loadStep);
+          lift.stallCount = 0;
+          note(`${lift.exerciseName}: skipped peak — deloaded ${ui.fmtWeight(old)}→${ui.fmtWeight(lift.baseWeightLb)}.`, lift.exerciseName);
+        }
+      } else {
+        lift.lastIncrementLb = 0;
+      }
+      if (lift.revertToExerciseName) {
+        const original = lift.revertToExerciseName;
+        note(`${original}: cycle swap over — slot reverts from ${lift.exerciseName} for the new cycle.`, original);
+        lift.exerciseName = original;
+        delete lift.revertToExerciseName;
+      }
+    }
+    for (const acc of d.accessories || []) {
+      if (acc.revertToExerciseName) {
+        const original = acc.revertToExerciseName;
+        note(`${original}: cycle swap over — slot reverts from ${acc.exerciseName} for the new cycle.`, original);
+        acc.exerciseName = original;
+        delete acc.revertToExerciseName;
+      }
+    }
+  }
+  program.cycleNumber += 1;
+  program.currentWeek = 1;
+  program.nextDayIndex = allDayOrders[0] ?? 0;
+}
+
+function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
+  const stableID = program.uuid || program.id;
+  const cycleSessions = completed.filter((candidate) => candidate.programTag
+    && (candidate.programTag.programId === stableID
+      || (candidate.programTag.programId == null
+        && candidate.programTag.programName === program.name))
+    && candidate.programTag.cycleNumber === program.cycleNumber);
+  const recoverySessions = cycleSessions.filter((candidate) =>
+    candidate.programTag.week === C.DELOAD_WEEK);
+  const recoveryDayOrders = C.recoveryDayOrders(program.days.map((candidate) => {
+    const mainName = (candidate.lifts || []).find((lift) => lift.role === "main")?.exerciseName;
+    return { order: candidate.order ?? 0, mainMovementGroup: exerciseByName.get(mainName)?.movementGroup };
+  }));
+  const selectedComplete = C.recoveryScheduleAdvance(
+    recoveryDayOrders, recoverySessions.map((candidate) => candidate.programTag.dayIndex),
+  ).isLastDay;
+  const hardPhase = cycleSessions.filter((candidate) =>
+    candidate.programTag.week > 0 && candidate.programTag.week < C.DELOAD_WEEK);
+  const peak = hardPhase.filter((candidate) => candidate.programTag.week === C.GRADED_WEEK);
+  // The window is anchored to the last hard phase. A reduced exposure does not
+  // start a fresh seven-day window and silently stretch recovery past the
+  // program's bound.
+  const anchors = peak.length ? peak : hardPhase;
+  const anchorMs = anchors.length
+    ? Math.max(...anchors.map((candidate) => Date.parse(candidate.completedAt || candidate.date)))
+    : null;
+  return {
+    reason: C.recoveryBridgeCompletionReason(
+      recoverySessions.length, recoveryDayOrders.length, selectedComplete, anchorMs, nowMs,
+    ),
+    recoverySessions,
+    recoveryDayOrders,
+  };
+}
+
+// Close stale/already-satisfied Recovery before Today or Start can prescribe
+// another reduced workout. The seven-day threshold only expires the bridge;
+// ordinary progression remains driven by completed cycles.
+export async function reconcileRecoveryBridge(program, completed = null, now = new Date()) {
+  if (!program || program.currentWeek !== C.DELOAD_WEEK) return null;
+  // Never advance the program out from under a workout in progress. The open
+  // session was built against this rotation; rolling the cycle while it is on
+  // screen makes banking it fail the stale-tag guard and land as orphaned
+  // history, and on this client it also let createSessionFromProgramDay open a
+  // SECOND session while the first stayed open. Reconciliation is not urgent —
+  // it runs on the next render once the session is banked or discarded.
+  //
+  // Scoped to THIS PROGRAM'S sessions, deliberately. Blocking on any open
+  // session at all would let one lingering blank session — which Today
+  // explicitly supports keeping around — suppress the session cap and the
+  // expiry window indefinitely, and Start would go on minting stale recovery
+  // prescriptions. That is the indefinite-light-work path this whole mechanism
+  // exists to close. Mirrors SessionCompletion.reconcileRecoveryBridge.
+  const stableID = program.uuid || program.id;
+  const openForThisProgram = (await Sessions.openAll()).some((candidate) => candidate.programTag
+    && (candidate.programTag.programId === stableID
+      || (candidate.programTag.programId == null
+        && candidate.programTag.programName === program.name)));
+  if (openForThisProgram) return null;
+  const [history, exercises] = await Promise.all([
+    completed || Sessions.completed(), Exercises.all(),
+  ]);
+  const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
+  const { reason, recoverySessions } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
+  if (!reason) return null;
+
+  const nextCycle = program.cycleNumber + 1;
+  const banked = recoverySessions.length;
+  const message = reason === "sessionLimit"
+    ? `Recovery complete — ${banked} recovery session${banked === 1 ? "" : "s"} banked. Cycle ${nextCycle} starts at Volume.`
+    : reason === "windowElapsed"
+      ? `Recovery complete — the seven-day recovery window elapsed. Cycle ${nextCycle} starts at Volume.`
+      : `Recovery complete — planned recovery exposures banked. Cycle ${nextCycle} starts at Volume.`;
+  const noteRecords = [];
+  const note = (label, exerciseName) => noteRecords.push({
+    date: iso(now), exerciseName: exerciseName || null, kind: "programNote", label,
+  });
+  rollOverRecovery(program, exerciseByName, note);
+  note(`${program.name}: ${message}`, null);
+  await runAll(["milestones", "programs"], "readwrite", (os) => {
+    for (const record of noteRecords) os("milestones").put(record);
+    os("programs").put(program);
+  });
+  return { program, reason, message };
+}
+
 async function advanceProgram(session, milestones) {
   const tag = session.programTag;
   const program = await Programs.byStableId(tag.programId)
@@ -1156,6 +1413,13 @@ async function advanceProgram(session, milestones) {
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const day = program.days.find((d) => d.order === tag.dayIndex);
   if (!day) return null;
+  const allDayOrders = [...new Set(program.days.map((candidate) => candidate.order ?? 0))]
+    .sort((a, b) => a - b);
+  const recoveryDayOrders = C.recoveryDayOrders(program.days.map((candidate) => {
+    const mainName = (candidate.lifts || []).find((lift) => lift.role === "main")?.exerciseName;
+    return { order: candidate.order ?? 0, mainMovementGroup: exerciseByName.get(mainName)?.movementGroup };
+  }));
+  const isRecovery = tag.week === C.DELOAD_WEEK;
   const note = (label, name) => milestones.push({ kind: "programNote", exercise: name, label, _persist: { exerciseName: name, label } });
   // Program notes become milestones so the explanation shows in History; the
   // caller persists them with the rest of the completion transaction.
@@ -1179,7 +1443,7 @@ async function advanceProgram(session, milestones) {
   }
 
   // Accessories: double progression, evaluated every bank.
-  for (const acc of day.accessories || []) {
+  for (const acc of (day.accessories || []).filter(() => !isRecovery)) {
     const se = programmedEntry(session, { ...acc, role: "accessory" });
     if (!se) continue;
     const completed = prescribedWork(se);
@@ -1200,7 +1464,8 @@ async function advanceProgram(session, milestones) {
     }
   }
   // Lift slots can opt into rep-window progression instead of phase grading.
-  for (const lift of (day.lifts || []).filter((candidate) => candidate.prescription === "doubleProgression")) {
+  for (const lift of (day.lifts || []).filter((candidate) =>
+    candidate.prescription === "doubleProgression" && !isRecovery)) {
     const se = programmedEntry(session, lift);
     if (!se) continue;
     if (!prescribedWork(se).length) continue;
@@ -1221,7 +1486,8 @@ async function advanceProgram(session, milestones) {
   // (twin sync carries the rest), so duplicates can never double-progress.
   const advancedLinearSlots = new Set();
   for (const lift of (day.lifts || []).filter((candidate) =>
-    C.advancesPerExposure(candidate.prescription) && candidate.prescription !== "doubleProgression")) {
+    C.advancesPerExposure(candidate.prescription)
+      && candidate.prescription !== "doubleProgression" && !isRecovery)) {
     const exposureKey = `${lift.exerciseName}|${lift.prescription}`;
     if (advancedLinearSlots.has(exposureKey)) continue;
     const se = programmedEntry(session, lift);
@@ -1258,7 +1524,7 @@ async function advanceProgram(session, milestones) {
       }
     }
   }
-  for (const lift of (day.lifts || []).filter((candidate) => candidate.peakSingleEnabled)) {
+  for (const lift of (day.lifts || []).filter((candidate) => candidate.peakSingleEnabled && !isRecovery)) {
     const se = programmedEntry(session, lift);
     const single = se?.sets.find((set) => set.status === "completed" && set.prescriptionBlock === "topSingle"
       && set.reps >= 1 && !set.autoregReason && !set.bodyFlagSite
@@ -1270,7 +1536,7 @@ async function advanceProgram(session, milestones) {
   // available. Observation only: it can raise the estimate, never lower it,
   // because a submaximal prescription is not evidence of a smaller max. This is
   // what a capped AMRAP on the load rotation feeds.
-  if (tag.week !== C.GRADED_WEEK) {
+  if (tag.week !== C.GRADED_WEEK && !isRecovery) {
     for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
       const se = programmedEntry(session, lift);
       if (!se || !prescribedWork(se).length) continue;
@@ -1296,8 +1562,32 @@ async function advanceProgram(session, milestones) {
   }
 
   // Walk day ORDER values, not array positions (see core scheduleAdvance).
-  const advance = C.scheduleAdvance(program.days.map((d) => d.order ?? 0), tag.dayIndex);
-  const lastDay = advance.isLastDay;
+  // Recovery is set-based: count selected exposures actually banked in this
+  // cycle. That handles either order, manual selection, and an old phase-4
+  // pointer left on a day omitted by the shortened bridge.
+  let advance;
+  let recoveryCompletionReason = null;
+  if (isRecovery) {
+    const completedRecovery = (await Sessions.completed())
+      .filter((candidate) => candidate.programTag
+        && (candidate.programTag.programId === (program.uuid || program.id)
+          || (candidate.programTag.programId == null
+            && candidate.programTag.programName === program.name))
+        && candidate.programTag.cycleNumber === program.cycleNumber
+        && candidate.programTag.week === C.DELOAD_WEEK);
+    if (!completedRecovery.some((candidate) => String(candidate.id) === String(session.id))) {
+      completedRecovery.push(session); // current session is staged, not stored yet
+    }
+    const completedOrders = completedRecovery.map((candidate) => candidate.programTag.dayIndex);
+    advance = C.recoveryScheduleAdvance(recoveryDayOrders, completedOrders);
+    recoveryCompletionReason = C.recoveryBridgeCompletionReason(
+      completedRecovery.length, recoveryDayOrders.length, advance.isLastDay, null,
+      Date.parse(session.completedAt || session.date),
+    );
+  } else {
+    advance = C.scheduleAdvance(allDayOrders, tag.dayIndex);
+  }
+  const lastDay = advance.isLastDay || recoveryCompletionReason !== null;
   program.nextDayIndex = advance.nextDayOrder;
   if (lastDay) {
     if (program.currentWeek < C.DELOAD_WEEK) {
@@ -1314,70 +1604,16 @@ async function advanceProgram(session, milestones) {
           }
         }
         program.currentWeek = C.DELOAD_WEEK;
-        note(`${program.name}: two red rotations in a row — going straight to the deload. Main-lift bases hold.`, null);
+        program.nextDayIndex = recoveryDayOrders[0] ?? allDayOrders[0] ?? 0;
+        note(`${program.name}: two red rotations in a row — going straight to the recovery bridge. Main-lift bases hold.`, null);
       } else {
         program.currentWeek += 1;
+        if (program.currentWeek === C.DELOAD_WEEK) {
+          program.nextDayIndex = recoveryDayOrders[0] ?? allDayOrders[0] ?? 0;
+        }
       }
     } else {
-      // Rollover: apply each lift's pending (or treat a skipped peak as a stall).
-      for (const d of program.days) {
-        for (const lift of d.lifts || []) {
-          if (C.advancesPerExposure(lift.prescription)) {
-            // This slot advanced after each exposure; it has no Peak
-            // pending. Clear any stale one left by a style edit after a
-            // grade — it must never apply months later.
-            delete lift.pending;
-          } else if (lift.pending) {
-            const p = lift.pending.state;
-            const oldBase = lift.baseWeightLb;
-            lift.baseWeightLb = p.baseWeightLb; lift.estimatedMaxLb = p.estimatedMaxLb;
-            lift.stallCount = p.stallCount; lift.lastIncrementLb = p.lastIncrementLb;
-            if (lift.pending.note) {
-              const presented = lift.pending.note.startsWith("Two cycles without a clean peak")
-                ? `Two cycles without a clean peak — deloaded ${ui.fmtWeight(oldBase)}→${ui.fmtWeight(p.baseWeightLb)} to rebuild.`
-                : lift.pending.note;
-              note(`${lift.exerciseName}: ${presented}`, lift.exerciseName);
-            }
-            delete lift.pending;
-          } else if (!C.buildsOwnSessionShape(lift.prescription || "automatic")) {
-            // Wave-family slots: a peak never banked is a stall toward the
-            // 10% rebuild. The methodology cycle styles (5/3/1, max/dynamic
-            // effort) define their own miss rules and simply hold when the
-            // graded week was skipped — a skipped week is not missed reps.
-            lift.stallCount = (lift.stallCount || 0) + 1; lift.lastIncrementLb = 0;
-            if (lift.stallCount >= C.STALL_LIMIT) {
-              const old = lift.baseWeightLb;
-              const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
-              lift.baseWeightLb = C.roundTo(old * C.DELOAD_REBUILD_FRACTION, loadStep);
-              lift.stallCount = 0;
-              note(`${lift.exerciseName}: skipped peak — deloaded ${ui.fmtWeight(old)}→${ui.fmtWeight(lift.baseWeightLb)}.`, lift.exerciseName);
-            }
-          } else {
-            // Methodology cycle styles hold on a skipped graded week, but the
-            // increment record must not keep advertising a bump that never
-            // happened this cycle.
-            lift.lastIncrementLb = 0;
-          }
-          // A cycle-scoped swap ends with the cycle (mirrors native; the swap
-          // gesture is native-only, but this state can arrive via backup).
-          if (lift.revertToExerciseName) {
-            const original = lift.revertToExerciseName;
-            note(`${original}: cycle swap over — slot reverts from ${lift.exerciseName} for the new cycle.`, original);
-            lift.exerciseName = original;
-            delete lift.revertToExerciseName;
-          }
-        }
-        for (const acc of d.accessories || []) {
-          if (acc.revertToExerciseName) {
-            const original = acc.revertToExerciseName;
-            note(`${original}: cycle swap over — slot reverts from ${acc.exerciseName} for the new cycle.`, original);
-            acc.exerciseName = original;
-            delete acc.revertToExerciseName;
-          }
-        }
-      }
-      program.cycleNumber += 1;
-      program.currentWeek = 1;
+      rollOverRecovery(program, exerciseByName, note);
     }
   }
   return { program, noteRecords: flushNotes() };
@@ -1432,6 +1668,13 @@ function sessionTargetsMatch(session, program, day, exMap) {
 }
 
 export async function createSessionFromProgramDay(program, day) {
+  const recovery = await reconcileRecoveryBridge(program);
+  if (recovery) {
+    program = recovery.program;
+    day = program.days.find((candidate) => candidate.order === program.nextDayIndex)
+      || program.days[0];
+    ui.toast(recovery.message);
+  }
   // Resume, don't duplicate — but only a session for THIS day at the current
   // position whose BUILT-FROM plan still matches the current plan (issue 17).
   // A name/program-only match resurrected stale snapshots after a day was
@@ -1528,8 +1771,11 @@ export async function createSessionFromProgramDay(program, day) {
     const ex = exMap.get(acc.exerciseName);
     const weightLb = neat(acc.weightLb, ex, false);
     const isTimed = ex?.type === "timed" || ex?.type === "conditioning";
-    const effectiveSets = acc.capacityManaged === false
+    const ordinarySets = acc.capacityManaged === false
       ? acc.sets : Math.max(1, Math.round(acc.sets * accessoryPercent / 100));
+    // Recovery retains movement familiarity but not a full accessory session.
+    // Banking this exposure cannot advance the slot's rep/load target.
+    const effectiveSets = program.currentWeek === C.DELOAD_WEEK ? 1 : ordinarySets;
     const sets = [];
     for (let i = 0; i < effectiveSets; i += 1) {
       const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : acc.currentReps, {

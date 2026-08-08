@@ -44,6 +44,9 @@ section that matches what you're trying to do.
   and volume PRs are detected
 - [Conditioning](reference/conditioning.md) — distance/time/speed solving,
   loaded carries like rucking, and comparing against Apple Health
+- [Apple Health](reference/apple-health.md) — what Cadence writes and reads,
+  why recovery signals do not drive the program, and why a read never counts
+  Cadence's own writes
 - [Swap rules](reference/swap-rules.md) — which exercises can substitute
   for which, and what each swap scope does
 - [Rest timers](reference/rest-timers.md) — how the rest countdown is

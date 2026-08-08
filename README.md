@@ -23,8 +23,10 @@ no quotes.
   from the gym's actual plate inventory, mixed kg/lb on the same side,
   achieved total shown in both units, warning when off target by > 2 lb.
   Reverse mode: tap in what's on the bar, get the total.
-- **Program engine** — 4-week microcycle per lift (Volume 5×5 → Load 5×3 →
-  Peak 3×3 → Deload 3×5), offset-based strength waves, double progression,
+- **Program engine** — three completed progression rotations per mesocycle
+  (Volume 5×5 → Load 5×3 → Peak 3×3), followed by a two-exposure Recovery
+  bridge (one lower, one upper; main work 2×3), offset-based strength waves,
+  double progression,
   optional primers/top singles, and rotation-first readiness. Each lift keys
   off completed performed work, never the calendar. Rack-aware targets keep
   the theoretical prescription, achieved load, and final performed load

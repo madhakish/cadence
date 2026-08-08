@@ -68,7 +68,16 @@ final class Gym {
 @Model
 final class AppSettings {
     var unitDisplayRaw: String
-    var proteinTargetGrams: Double
+    /// Year of birth, or 0 when the lifter has not said. Only the year, not a
+    /// full date of birth: protein guidance needs age in years and nothing
+    /// finer, and a health app should hold the least personal detail that
+    /// answers the question. 0 means "not set" and suppresses the age-adjusted
+    /// figure rather than assuming a default age.
+    ///
+    /// `proteinTargetGrams` was removed alongside it in schema V5 — with the
+    /// protein tracker gone there is nothing to measure a stored target
+    /// against, so the guidance figure is derived rather than set.
+    var birthYear: Int = 0
     var accessoryRestSeconds: Int
     // The four other configurable rest buckets (seconds). Defaults mirror the
     // old smart values; secondary rests less than a top main. New properties get
@@ -93,6 +102,10 @@ final class AppSettings {
     /// One-shot snapshot migration for load basis/implement count. Once set,
     /// historical sets no longer inherit later library edits.
     var loadSemanticsMigrated: Bool = false
+    /// One-shot stamp for the repair that promoted seeded pull-ups from
+    /// Accessory to Main. Without it the promotion would re-run on every open
+    /// and silently overwrite a category the lifter set back deliberately.
+    var verticalPullMainsPromoted: Bool = false
     var healthKitEnabled: Bool
     var seededAt: Date?
     /// Selected theme, raw value of `ThemeName` (mirrors web `settings.theme`).
@@ -101,7 +114,7 @@ final class AppSettings {
 
     init() {
         self.unitDisplayRaw = UnitDisplay.lbPrimary.rawValue
-        self.proteinTargetGrams = 100
+        self.birthYear = 0
         self.accessoryRestSeconds = 90
         self.mainCompoundRestSeconds = 300
         self.olympicRestSeconds = 240
@@ -115,6 +128,7 @@ final class AppSettings {
         // carry the old stamps) run the one-shot clear in syncLibrary.
         self.restSeedStampsCleared = true
         self.loadSemanticsMigrated = false
+        self.verticalPullMainsPromoted = true
         self.healthKitEnabled = false
         self.seededAt = nil
         self.themeNameRaw = "carbon"

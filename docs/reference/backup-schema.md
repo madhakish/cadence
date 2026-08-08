@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **5**. A missing version means the legacy version-0 shape.
+version **7**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,56 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 7 climbed flights
+
+Version 7 adds one optional per-set field, `flights`, for conditioning a
+machine measures in floors rather than ground covered.
+
+- **`flights`** is a non-negative number on a set object, beside
+  `distanceMiles` and `durationSeconds`. It is the count climbed; the pace in
+  flights per minute is always re-derived from it and the duration, exactly as
+  speed is re-derived from distance and duration. There is no stored pace.
+- The key is **emitted only when set**, like `inclinePercent` and
+  `revertToExerciseName`, so bundles for training that has no flight count
+  re-export byte-for-byte identically to their version-6 form.
+
+The version still has to move even though the field is optional and additive:
+a version-6 importer parses the bundle happily and silently drops the count,
+which is data loss disguised as a clean restore. Moving the version makes it
+fail the gate instead, with "this backup is newer than this app".
+
+No field shapes changed and no field was removed, so a version-6 bundle
+restores under version 7 untouched, with `flights` absent everywhere.
+
+## Version 6 retires protein logging
+
+Version 6 is the first **lossy** boundary in this contract. Every version
+before it added fields; this one removes them.
+
+- **`protein`** — the array of logged servings is gone. A v≤5 bundle still
+  imports, but its protein entries are dropped on the way in, because neither
+  client has anywhere to put them any more.
+- **`settings.proteinTargetGrams`** — gone with the tracker it measured
+  against. Ignored where old bundles still carry it.
+- **`settings.birthYear`** — new. An integer year, or `0` for "not set". Any
+  other value must produce a plausible age (1901-present, at most 120 years),
+  and both importers reject a bundle that fails that check rather than
+  silently moving the lifter across the older-adult protein threshold.
+
+Only the year is stored, not a date of birth. Age in years is all the protein
+guidance needs, and a health app should hold the least personal detail that
+answers its question.
+
+### Why the data goes rather than sits
+
+Serving-level logging only works with a real meal-entry surface, which Cadence
+will never have. Keeping the store as a place stale rows accumulate would be
+worse than removing it, and keeping it in the backup contract would imply a
+restore path for a feature that no longer exists.
+
+**Restoring a v≤5 backup will not bring protein history back.** That is the
+intended behaviour and the reason this ships as a SemVer major.
 
 ## Version 5 effort and AMRAP
 

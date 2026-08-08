@@ -16,7 +16,36 @@ public struct CompletedExerciseKind: Hashable, Codable, Sendable {
     }
 }
 
+/// Which distance quantity a modality's miles belong to. Health keeps foot and
+/// wheel distance in separate types, and the rest either cover no ground or
+/// cover it in water — filing a swim under walking distance would be a lie.
+public enum DistanceBasis: String, Codable, Hashable, Sendable {
+    case foot, wheel
+}
+
 public enum WorkoutClassification {
+
+    /// The distance type a modality contributes to, or nil when it contributes
+    /// none.
+    ///
+    /// Deliberately per-exercise rather than per-session: a session's *overall*
+    /// modality is `.crossTraining` the moment it mixes lifting with anything,
+    /// which is the ordinary case for a strength day that ends with a walk.
+    /// Deriving the distance type from that overall modality would silently
+    /// discard the walk's miles.
+    public static func distanceBasis(_ modality: WorkoutModality) -> DistanceBasis? {
+        switch modality {
+        case .running, .walking, .hiking: return .foot
+        case .cycling: return .wheel
+        case .traditionalStrength, .crossTraining, .rowing, .swimming: return nil
+        }
+    }
+
+    /// The distance basis for a single completed exercise.
+    public static func distanceBasis(for exercise: CompletedExerciseKind) -> DistanceBasis? {
+        distanceBasis(modality(exercise))
+    }
+
     public static func classify(_ exercises: [CompletedExerciseKind]) -> WorkoutModality {
         guard !exercises.isEmpty else { return .traditionalStrength }
         let conditioning = exercises.filter {

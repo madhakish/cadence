@@ -199,7 +199,7 @@ eq(C.resolvedPrescriptionStyle("automatic", "olympic", "main", "strength"), "tec
 let rolePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 0 }, 5,
   "barbell", "hinge", "complementary", "strength", "automatic");
 eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x8@180", "complementary volume avoids a second 5x5");
-for (const [phase, expected] of [[1, "3x8@180"], [2, "3x8@190"], [3, "3x6@200"], [4, "2x8@150"]]) {
+for (const [phase, expected] of [[1, "3x8@180"], [2, "3x8@190"], [3, "3x6@200"], [4, "1x5@150"]]) {
   const p = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: phase, incrementLb: 0 }, 5,
     "barbell", "hinge", "complementary", "strength", "automatic");
   eq(`${p.sets}x${p.reps}@${p.weightLb}`, expected, `complementary phase ${phase} stays volume-oriented`);
@@ -237,7 +237,9 @@ eq(plan.weightLb, 195, "SQ load weight"); eq(plan.sets, 5, "SQ load sets"); eq(p
 plan = C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 1, incrementLb: 10 });
 eq(plan.weightLb, 210, "volume = base"); eq(plan.sets, 5, "vol sets"); eq(plan.reps, 5, "vol reps");
 plan = C.planFor({ cycleNumber: 1, baseWeightLb: 210, nextPhase: 4, incrementLb: 10 });
-eq(plan.weightLb, 165, "deload weight"); eq(plan.sets, 3, "deload sets"); eq(plan.reps, 5, "deload reps");
+eq(plan.weightLb, 165, "recovery weight"); eq(plan.sets, 2, "recovery sets"); eq(plan.reps, 3, "recovery reps");
+eq(C.PHASES[4].name, "Recovery", "phase 4 is presented as recovery, not a fourth training rotation");
+eq(C.portablePhaseLabel(4), "R4 Deload 3×5", "the v7 backup wire label remains backward-compatible");
 ok(plan.weightLb / 210 >= 0.75 && plan.weightLb / 210 <= 0.80, "deload band");
 
 let st = { cycleNumber: 1, baseWeightLb: 210, nextPhase: 1, incrementLb: 10 };
@@ -385,6 +387,70 @@ eq(sa([0, 0, 1], 0), "1", "[INV-SCHEDULE-WALKS-ORDERS] duplicate orders never ad
 eq(sa([0, 1, 1], 1), "0!", "a duplicated last order is still the last day");
 eq(sa([0, 0], 0), "0!", "an all-duplicate program still closes its rotation");
 
+// [INV-RECOVERY-IS-A-BRIDGE] Phase 4 selects structural representatives,
+// never day-name substrings, and preserves authored schedule order.
+eq(C.recoveryDayOrders([
+  { order: 0, mainMovementGroup: "press" }, { order: 1, mainMovementGroup: "squat" },
+  { order: 2, mainMovementGroup: "pull" }, { order: 3, mainMovementGroup: "hinge" },
+]).join(","), "0,1", "recovery keeps one authored upper and one lower exposure");
+eq(C.recoveryDayOrders([
+  { order: 9, mainMovementGroup: "squat" }, { order: 2, mainMovementGroup: "hinge" },
+  { order: 7, mainMovementGroup: "press" },
+]).join(","), "2,7", "lower-first sparse programs retain their authored order");
+eq(C.recoveryDayOrders([
+  { order: 5, mainMovementGroup: "olympic" }, { order: 0, mainMovementGroup: "squat" },
+  { order: 2, mainMovementGroup: null },
+]).join(","), "0,2,5", "ambiguous programs retain their complete authored rotation");
+eq(C.recoveryDayOrders([]).length, 0, "empty recovery candidates stay empty");
+
+// Recovery completion counts selected exposures actually banked in the
+// current cycle. Pointer order cannot make the second-authored day roll early,
+// and an old full-rotation day cannot count as part of the shortened bridge.
+let recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [0]);
+eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "1:false",
+  "banking lower points at the remaining upper exposure");
+recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [1]);
+eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "0:false",
+  "either recovery exposure may be banked first");
+recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [1, 0, 0]);
+eq(recoveryAdvance.isLastDay, true, "both selected exposures complete recovery exactly once");
+recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [2]);
+eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "0:false",
+  "a non-bridge day cannot complete recovery");
+eq(C.recoveryScheduleAdvance([], [0]).isLastDay, false, "an empty bridge fails closed");
+
+// The seven-day value expires Recovery; it does not schedule this cycle-based
+// program. Any two banked recovery sessions are also a hard cap, even when a
+// legacy/manual pointer sent them to non-selected day orders.
+const peakMs = Date.UTC(2042, 0, 1, 12);
+eq(C.recoveryBridgeCompletionReason(1, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS - 1), null,
+  "one recovery session inside the window leaves the bridge open");
+eq(C.recoveryBridgeCompletionReason(2, 2, false, peakMs, peakMs + 60_000), "sessionLimit",
+  "two recovery sessions close the bridge regardless of day order");
+eq(C.recoveryBridgeCompletionReason(1, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "a half-finished bridge expires at exactly seven elapsed days");
+eq(C.recoveryBridgeCompletionReason(1, 2, true, null, peakMs), "selectedExposures",
+  "a short selected bridge may close normally");
+eq(C.recoveryBridgeCompletionReason(1, 2, false, null, peakMs + 2 * C.RECOVERY_WINDOW_MS), null,
+  "missing history never invents an expiry anchor");
+
+// Recovery is a fixed window after Peak, not a timer that starts only when the
+// first reduced workout is banked. Zero workouts is a valid deload choice.
+eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "an unbanked bridge expires at the same seven-day boundary");
+eq(C.recoveryBridgeCompletionReason(0, 2, false, peakMs, peakMs + 40 * C.RECOVERY_WINDOW_MS), "windowElapsed",
+  "a stale hard-phase anchor cannot leave Recovery open indefinitely");
+
+// The cap is the bridge's OWN length. A program that is not recognizably
+// upper/lower keeps its full authored pass, and a constant two silently dropped
+// day three onward — losing exactly the work that fallback exists to preserve.
+eq(C.recoveryBridgeCompletionReason(2, 4, false, peakMs, peakMs + 60_000), null,
+  "a four-day authored bridge is not closed by two sessions");
+eq(C.recoveryBridgeCompletionReason(4, 4, false, peakMs, peakMs + 60_000), "sessionLimit",
+  "it closes once its own length is banked");
+eq(C.recoveryBridgeCompletionReason(2, 1, false, peakMs, peakMs + 60_000), "sessionLimit",
+  "and a degenerate one-day bridge still keeps the two-session floor");
+
 // The top scheme must describe work that was actually performed. Reporting the
 // group minimum across every top-weight set invented schemes nobody did — and
 // those strings are banked as the history baseline.
@@ -465,9 +531,13 @@ eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → not
   const dips = { name: "Dips", category: "Accessory", type: "bodyweight", movementGroup: "press" };
   const chinups = { name: "Chin-ups", category: "Accessory", type: "bodyweight", movementGroup: "pull" };
   const pullups = { name: "Pull-ups", category: "Accessory", type: "bodyweight", movementGroup: "pull" };
+  const weightedPullup = { name: "Weighted Pull-up", category: "Accessory", type: "bodyweight",
+    movementGroup: "pull", loadBasis: "externalTotal" };
 
   eq(C.swapCompatible(backSquat, frontSquat), true, "same tier/pattern/loadability → offered");
   eq(C.swapCompatible(chinups, pullups), true, "bodyweight→bodyweight is fine");
+  eq(C.swapCompatible(weightedPullup, pullups), false,
+    "weighted and unloaded pull-ups cannot carry the same prescription");
   eq(C.swapCompatible(walkingLunges, backSquat), false, "accessory can't jump to a main competition lift");
   eq(C.swapCompatible(dbPress, dips), false, "loaded press can't swap to an unloadable accessory");
   eq(C.swapCompatible(dbPress, bwPress), false, "loadability mismatch alone filters (same tier/group)");
@@ -646,6 +716,54 @@ eq(pres.state.stallCount, 0, "maintain success resets stall");
   ok(viaStyle.weightLb === 235, `planForStyle applies the lower-body peak offset (got ${viaStyle.weightLb})`);
 }
 
+// ---- authored slot order (ProgramEngineTests.swift) ----
+// [INV-TIED-ORDER-IS-AUTHORED] Every order tied → the tie carries no
+// information; the array position the author wrote the slots in is their
+// order. Without this the display fallback hands the day to the alphabet.
+eq(C.authoredSlotOrders([0, 0, 0]).join(","), "0,1,2", "an all-tied day takes authored array order");
+eq(C.authoredSlotOrders([7, 7]).join(","), "0,1", "any shared value is the same degenerate case");
+eq(C.authoredSlotOrders([2, 0, 1]).join(","), "2,0,1", "distinct orders are the author's numbers");
+eq(C.authoredSlotOrders([0, 0, 2]).join(","), "0,0,2", "a partial tie is a real authored ordering, kept verbatim");
+eq(C.authoredSlotOrders([5]).join(","), "5", "a single slot has nothing to disambiguate");
+eq(C.authoredSlotOrders([]).length, 0, "empty in, empty out");
+
+// ---- deload intensity knob (ProgramEngineTests.swift) ----
+// [INV-DELOAD-IS-THE-SLOTS-KNOB]
+{
+  const deload = (config) => C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "wave", config);
+  eq(deload({}).weightLb, 155, "default stays the historical 0.775 — nobody's deload moves uninvited");
+  eq(deload({ deloadMultiplier: 0.85 }).weightLb, 170,
+    "a slot that finds 77.5% unproductively light raises intensity, not volume");
+  eq(`${deload({ deloadMultiplier: 0.85 }).sets}x${deload({ deloadMultiplier: 0.85 }).reps}`, "2x3",
+    "the volume cut is not negotiable through this knob");
+  const peak = C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 3, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "wave",
+    { deloadMultiplier: 0.85 });
+  eq(peak.weightLb, 235, "only the deload listens; working rotations keep the wave shape");
+  const secondary = C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "complementary", "strength", "automatic",
+    { deloadMultiplier: 0.85 });
+  eq(secondary.weightLb, 150, "a complementary slot resolves secondary and keeps its own fixed 0.75 deload");
+  // Zero is "unset", never "lift nothing" — no importer admits a 0, but a
+  // hand-edited store must not plan an empty bar, and both branches must
+  // agree with the native engine's identical guard.
+  eq(deload({ deloadMultiplier: 0 }).weightLb, 155, "a zero multiplier falls back to the table's 0.775 on wave");
+  const offsetZero = C.programPlanFor(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "offsetWave",
+    { loadOffsetLb: 10, peakOffsetLb: 25, deloadMultiplier: 0 });
+  eq(offsetZero.weightLb, 155, "a zero multiplier falls back to 0.775 on offsetWave too");
+  // The knob must survive the whole session builder, not just the plan table:
+  // sessionPrescription is what actually puts the bar weight in front of the
+  // lifter on a rest week.
+  const sessionDeload = C.sessionPrescription(
+    { baseWeightLb: 200, nextPhase: 4, cycleNumber: 1 }, 5, "barbell", "press", "main", "strength", "automatic",
+    { deloadMultiplier: 0.85, phasePrimerEnabled: false });
+  const workBlock = sessionDeload.blocks.find((b) => b.kind === "work");
+  eq(workBlock.weightLb, 170, "the session builder hands the slot's knob to the bar");
+  eq(`${workBlock.sets}x${workBlock.reps}`, "2x3", "and keeps the fixed recovery volume");
+}
+
 // A peak single's seed is a training max, so it follows the program's focus.
 {
   const state = { baseWeightLb: 100, nextPhase: 3, cycleNumber: 1 };
@@ -668,6 +786,27 @@ ok(/35 g per meal/.test(C.proteinSummary(201)), "and the per-meal figure");
 // A heavier lifter gets a proportionally larger target — the old flat 100 g
 // literal was the same for a 130 lb and a 250 lb lifter.
 ok(C.proteinDailyTargetGrams(250) > C.proteinDailyTargetGrams(130), "the target scales with bodyweight");
+
+// Age changes the per-meal threshold and nothing else. The daily figure is
+// already the resistance-training one, so training type does not scale it.
+ok(C.proteinPerMealGrams(201, 40) === 25, "under 65 uses the 0.25 g/kg per-meal threshold");
+ok(C.proteinPerMealGrams(201, 70) === 35, "65+ uses the higher 0.4 g/kg threshold");
+ok(C.proteinPerMealGrams(201, 65) === 35, "65 is the threshold, not one past it");
+ok(C.proteinDailyTargetGrams(201) === 145, "the daily figure does not move with age");
+// An unknown age takes the higher per-dose threshold: eating to it costs a
+// younger lifter nothing, under-dosing an older one is the failure that matters.
+ok(C.proteinMealGramsPerKg(null) === C.PROTEIN_MEAL_G_PER_KG_OLDER, "unknown age is conservative");
+ok(C.proteinPerMealGrams(201, null) === 35, "and yields the older-adult figure");
+ok(C.proteinPerMealRationale(null) === null, "nothing to explain when there is no age");
+ok(/0\.4 g\/kg/.test(C.proteinPerMealRationale(70)), "the rationale names the older threshold");
+ok(/0\.25 g\/kg/.test(C.proteinPerMealRationale(40)), "and the younger one");
+// Age is never guessed from a nonsense birth year.
+ok(C.ageFromBirthYear(1980, 2026) === 46, "a plausible birth year gives an age");
+ok(C.ageFromBirthYear(0, 2026) === null, "unset is not a birth year");
+ok(C.ageFromBirthYear(1899, 2026) === null, "before 1900 is not plausible");
+ok(C.ageFromBirthYear(2030, 2026) === null, "not yet born");
+ok(C.ageFromBirthYear(1901, 2026) === null, "past a plausible lifespan");
+ok(C.ageFromBirthYear(2026, 2026) === 0, "born this year is age zero, not unknown");
 
 // Session spacing is advisory and only speaks when it has something to say.
 ok(C.sessionSpacingShortfall(1, 3) === 2, "one day into a three-day preference is two short");
@@ -704,6 +843,15 @@ ok(brokenAdvance.weightLb === 75 && brokenAdvance.currentReps === 13,
 ok(C.accessoryCannotProgressLoad("dumbbell", "perImplement", 75, 0), "per-hand dumbbell slot with no increment is flagged");
 ok(C.accessoryCannotProgressLoad("machine", "externalTotal", 120, 0), "machine slot with no increment is flagged");
 ok(!C.accessoryCannotProgressLoad("timed", "externalTotal", 25, 0), "a timed slot progresses by duration, not load");
+// A weighted pull-up is TYPED bodyweight but hangs real plates from a belt.
+// Keying loadability on type alone silently exempted it, so a belt slot with a
+// zero increment never progressed and never warned. Mirrors CadenceCore.
+ok(C.accessoryCannotProgressLoad("bodyweight", "externalTotal", 25, 0),
+  "a belt-loaded bodyweight slot with no increment is flagged");
+ok(!C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0, 0),
+  "an unloaded bodyweight slot has no load to step");
+ok(!C.accessoryCannotProgressLoad("conditioning", "externalTotal", 20, 0),
+  "a loaded carry progresses by distance or duration, not by a load increment");
 ok(!C.accessoryCannotProgressLoad("conditioning", "externalTotal", 25, 0), "conditioning is not load-progressed");
 ok(!C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0, 0), "bodyweight work has no load to add");
 ok(!C.accessoryCannotProgressLoad("barbell", "bodyweight", 45, 0), "an explicit bodyweight basis wins over the equipment label");
@@ -846,6 +994,52 @@ for (const mph of [2.5, 3.0, 3.1, 3.5, 4.0, 5.5, 6.0, 7.5]) {
   eq(C.healthComparisonLabel(higher), "Health recorded 2.4 mi · you logged 2 mi", "disagreement names both sides");
   eq(C.healthComparisonLabel(C.healthCompare(2, null)), "Nothing in Health for this session", "one-sided label");
   eq(C.healthComparisonLabel(C.healthCompare(null, null)), "No conditioning distance", "empty label");
+
+  // [INV-HEALTH-IS-A-SECOND-OPINION] A read never counts Cadence's own writes.
+  // Once Cadence writes distance, bodyweight and body fat into Health, every
+  // read would otherwise find them and "confirm" the log against itself.
+  const app = "com.example.cadence";
+  ok(!C.healthSourceIsForeign(app, app),
+    "[INV-HEALTH-IS-A-SECOND-OPINION] our own write is not a second opinion");
+  ok(!C.healthSourceIsForeign("COM.EXAMPLE.CADENCE", app), "bundle ids are not case sensitive");
+  ok(C.healthSourceIsForeign("com.apple.health", app), "another app is a real second opinion");
+  ok(C.healthSourceIsForeign("com.example.cadence.watch", app),
+    "a different bundle is a different source, prefix or not");
+  ok(C.healthSourceIsForeign(null, app), "unattributable counts as foreign");
+  ok(C.healthSourceIsForeign("  ", app), "blank counts as foreign");
+  ok(C.healthSourceIsForeign(app, null),
+    "[INV-HEALTH-IS-A-SECOND-OPINION] not knowing who we are cannot mean owning everything");
+
+  const morning = min(0);
+  const yesterday = new Date(morning.getTime() - 30 * 3600 * 1000);
+  ok(C.healthIsSameWeighIn(197.2, morning, 197.2, morning), "the same weigh-in");
+  ok(C.healthIsSameWeighIn(197.2, morning, 197.3, morning), "a kilogram round-trip is the same weigh-in");
+  ok(!C.healthIsSameWeighIn(197.2, morning, 198.6, morning),
+    "a genuinely different weight the same day stays offerable");
+  ok(!C.healthIsSameWeighIn(197.2, yesterday, 197.2, morning),
+    "yesterday's weight is not a duplicate of today's");
+
+  const stage = (name, from, to) => ({ stage: name, start: min(from), end: min(to) });
+  eq(C.healthAsleepSeconds([
+    stage("inBed", 0, 30), stage("asleepCore", 30, 210), stage("asleepDeep", 210, 270),
+    stage("awake", 270, 290), stage("asleepREM", 290, 380), stage("inBed", 380, 395),
+  ]), 10800 + 3600 + 5400, "sleep is asleep stages only");
+  eq(C.healthAsleepSeconds([]), 0, "no stages is no sleep");
+  eq(C.healthAsleepSeconds([stage("inBed", 0, 480)]), 0,
+    "a night on the mattress with no staging is not eight hours of sleep");
+  eq(C.healthAsleepSeconds([stage("asleepCore", 60, 60)]), 0, "a zero-length stage is no sleep");
+  eq(C.healthAsleepSeconds([stage("asleepCore", 60, 30)]), 0, "an inverted interval is not negative sleep");
+
+  // [INV-HEALTH-IS-A-SECOND-OPINION] The anti-echo filter excludes Cadence,
+  // not third parties, so several foreign sources can stage the same night.
+  // Summing a watch and a sleep app would report sixteen hours for eight.
+  eq(C.healthAsleepSeconds([
+    stage("asleepCore", 0, 240), stage("asleepREM", 240, 480), stage("asleepUnspecified", 10, 470),
+  ]), 480 * 60, "two instruments on one night is one night");
+  eq(C.healthAsleepSeconds([stage("asleepCore", 0, 120), stage("asleepCore", 300, 360)]), 180 * 60,
+    "genuinely disjoint sleep still adds — a nap is not an overlap");
+  eq(C.healthAsleepSeconds([stage("asleepCore", 0, 240), stage("asleepCore", 200, 300)]), 300 * 60,
+    "a longer-running source extends the union, never doubles it");
 }
 
 eq(C.cardioDurationLabel(1350), "22:30", "m:ss");
@@ -871,6 +1065,70 @@ eq(C.cardioSetLabel(null, 1800, null), "30:00", "time only");
 eq(C.cardioSetLabel(2, null, null), "2 mi", "distance only");
 eq(C.cardioSetLabel(0.25, null, null), "0.25 mi", "quarter-mile keeps two decimals");
 eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
+
+// [INV-STAIRS-COUNT-FLIGHTS] a stair climber's belt goes nowhere; the console
+// counts floors, so flights + time are logged and the pace is derived.
+ok(C.cardioClimbsFlights("Stair Climber"), "[INV-STAIRS-COUNT-FLIGHTS] a stair climber counts flights");
+ok(!C.cardioClimbsFlights("Walk"), "a walk covers ground");
+ok(!C.cardioClimbsFlights("Elliptical"), "an elliptical is not a climber");
+ok(!C.cardioClimbsFlights("Ruck"), "a ruck covers ground");
+eq(C.cardioFlightPace(160, 1200), 8.0, "pace from flights + time");
+eq(C.cardioFlightPace(55, 900), 3.7, "rounded to one decimal");
+eq(C.cardioFlightPace(null, 1200), null, "no flights → no pace");
+eq(C.cardioFlightPace(160, null), null, "no time → no pace");
+eq(C.cardioFlightPace(0, 0), null, "zeros → no pace");
+eq(C.cardioFlights(8, 1200), 160, "flights from pace + time");
+eq(C.cardioFlights(7.5, 900), 112.5, "flights from pace + time");
+// Whole flights would put 8.0 and 8.3 floors-per-minute on the same count over
+// a short interval, exactly as two decimals of a mile collapsed 3.0 and 3.1 mph.
+ok(C.cardioFlights(8.0, 30) !== C.cardioFlights(8.3, 30),
+  "a 0.1 fl/min step must survive a thirty-second interval");
+eq(C.cardioFlights(null, 1200), null, "no pace → no flights");
+eq(C.cardioFlights(8, null), null, "no time → no flights");
+eq(C.cardioFlights(0, 0), null, "zeros → no flights");
+eq(C.cardioFlightDurationSeconds(160, 8), 1200, "time from flights + pace");
+eq(C.cardioFlightDurationSeconds(60, 7.5), 480, "time from flights + pace");
+eq(C.cardioFlightDurationSeconds(null, 8), null, "no flights → no time");
+eq(C.cardioFlightDurationSeconds(160, null), null, "no pace → no time");
+eq(C.cardioFlightDurationSeconds(0, 0), null, "zeros → no time");
+// Only the count and the duration are stored, so a count solved from a pace has
+// to read back as the pace that was set on the machine.
+for (const pace of [4.0, 6.0, 7.5, 8.0, 8.3, 10.0, 12.5, 15.0]) {
+  for (const minutes of [1, 2, 5, 10, 15, 20, 30, 45, 60]) {
+    const secs = minutes * 60;
+    const flights = C.cardioFlights(pace, secs);
+    ok(Math.abs(C.cardioFlightPace(flights, secs) - pace) <= 0.001,
+      `${pace} fl/min for ${minutes}m reads back as the same pace`);
+    ok(Math.abs(C.cardioFlightDurationSeconds(flights, pace) - secs) <= 30,
+      `${pace} fl/min over ${flights} flights reads back as the same time`);
+  }
+}
+eq(C.cardioFlightsLabel(170), "170 flights", "whole counts stay whole");
+eq(C.cardioFlightsLabel(1), "1 flight", "one flight is singular");
+eq(C.cardioFlightsLabel(8.46), "8.5 flights", "a solved count keeps the decimal its pace implies");
+eq(C.cardioSetLabel(null, 1200, null, null, 160), "160 flights · 20:00 · 8 fl/min",
+  "[INV-STAIRS-COUNT-FLIGHTS] flights lead, and the pace is derived exactly like mph");
+eq(C.cardioSetLabel(null, null, null, null, 160), "160 flights",
+  "no time → no pace, the same way distance alone shows no mph");
+eq(C.cardioSetLabel(1.5, 1350, null), "1.5 mi · 22:30 · 4 mph",
+  "legacy conditioning is untouched by the flights argument");
+// The editor's rows, its header, and the row's affordance line all read from
+// one rule, so a row can never advertise a field the editor withholds.
+eq(C.cardioFields("Stair Climber", 160, null, null).names.join(","), "flights,time,pace",
+  "[INV-STAIRS-COUNT-FLIGHTS] a climber gets flights and a pace, and no incline");
+eq(C.cardioFields("Stair Climber", 160, null, null).label, "flights · time · pace", "affordance line");
+eq(C.cardioFields("Stair Climber", 160, null, null).headerLabel, "Flights · time · pace", "section header");
+eq(C.cardioFields("Walk", null, 3, null).names.join(","), "distance,time,speed,incline",
+  "a walk covers ground; it has no flight count");
+eq(C.cardioFields("Ruck", null, 3, null).names.join(","), "load,distance,time,speed,incline",
+  "the list names every row the editor shows, load and incline included");
+// A climb logged before flights existed keeps the block it was recorded with —
+// a field that disappears takes the only way to fix the value with it.
+eq(C.cardioFields("Stair Climber", null, 0.75, 6).names.join(","),
+  "flights,distance,time,speed,pace,incline",
+  "[INV-STAIRS-COUNT-FLIGHTS] a pre-flights climb keeps its distance and incline editable");
+eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,time,pace",
+  "an empty climb grows no distance block just because nothing is logged yet");
 
 // ---- RestClock parity (RestClockTests.swift) ----
 {
@@ -1151,9 +1409,9 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   // shipping the percentages without it was the template's one real infidelity.
   const pres531 = C.sessionPrescription(tm(3), 5, "barbell", "squat", "main", "strength", "fiveThreeOne");
   eq(pres531.blocks.map((b) => b.kind).join(","), "ramp,ramp,amrap", "531 ramp precedes the + set");
-  // Wendler's deload has no "+" set.
+  // The recovery bridge has no "+" set and trims the ramp to one set.
   const deload531 = C.sessionPrescription(tm(4), 5, "barbell", "squat", "main", "strength", "fiveThreeOne");
-  eq(deload531.blocks.map((b) => b.kind).join(","), "ramp,ramp,work", "the 531 deload carries no + set");
+  eq(deload531.blocks.map((b) => b.kind).join(","), "ramp,work", "the 531 recovery bridge carries no + set and one ramp");
   // An AMRAP set is graded work. Filtering to "work" alone made it invisible:
   // uncounted for completion, ineligible as the top set, unable to reach the
   // e1RM sample — the entire point of the block.
@@ -1171,7 +1429,7 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   eq(me.blocks.map((b) => b.kind).join(","), "work,backoff", "ME single then backoff");
   eq(me.blocks[1].weightLb, 250, "ME backoff at 80%");
   const meDeload = C.planForStyle({ cycleNumber: 1, baseWeightLb: 315, nextPhase: 4, incrementLb: 0 }, 5, "maxEffort");
-  eq(`${meDeload.weightLb}/${meDeload.sets}x${meDeload.reps}`, "220/3x3", "ME deload is moderate triples");
+  eq(`${meDeload.weightLb}/${meDeload.sets}x${meDeload.reps}`, "220/2x3", "ME recovery is two moderate triples");
 
   // Dynamic effort: movement-pattern schemes and the 3-week wave.
   let de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 150, nextPhase: 2, incrementLb: 0 }, 5, "dynamicEffort", {}, "squat");
@@ -1181,11 +1439,16 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 100, nextPhase: 3, incrementLb: 0 }, 5, "dynamicEffort", {}, "press");
   eq(`${de.weightLb}/${de.sets}x${de.reps}`, "120/9x3", "DE bench wave week 3 (+20%)");
 
-  // Linear fives ignore the phase wave entirely.
-  for (const phase of [1, 2, 3, 4]) {
+  // Linear fives ignore the three progression waves; recovery is the
+  // intentional override and cannot advance the slot when banked.
+  for (const phase of [1, 2, 3]) {
     const lp = C.planForStyle({ cycleNumber: 1, baseWeightLb: 205, nextPhase: phase, incrementLb: 0 }, 5, "linearFives", { workingSets: 3 });
     eq(`${lp.weightLb}/${lp.sets}x${lp.reps}`, "205/3x5", `linearFives constant at phase ${phase}`);
   }
+  const recoveryLinear = C.planForStyle(
+    { cycleNumber: 1, baseWeightLb: 205, nextPhase: 4, incrementLb: 0 }, 5, "linearFives", { workingSets: 3 });
+  eq(`${recoveryLinear.weightLb}/${recoveryLinear.sets}x${recoveryLinear.reps}`, "165/2x3",
+    "linear fives yield to the recovery prescription");
 
   // Style helpers.
   ok(C.advancesPerExposure("texasVolume") && C.advancesPerExposure("linearFives"), "linear styles advance per exposure");
@@ -1308,6 +1571,278 @@ eq(C.cardioSetLabel(null, null, null), "—", "nothing logged yet");
   eq(held.state.stallCount, 1, "no stall accrues for work that was never prescribed");
   eq(held.state.lastIncrementLb, 0, "the increment record stops advertising a bump that did not happen");
   ok(held.note.includes("rotation 2"), "the note says which rotation was cut short");
+}
+
+// ---- Style-aware labels (#105) ---------------------------------------------
+// The rotation counter is shared by every slot; the phase NAMES are a claim
+// about one slot's prescription. Rendering "Peak" against a linear slot asserts
+// something about the engine that is false.
+{
+  ok(C.usesCyclePhases("wave") && C.usesCyclePhases("secondary") && C.usesCyclePhases("hypertrophy"),
+    "the wave family and its volume cousins really do run V/L/P/D");
+  ok(C.usesCyclePhases("technique"), "technique is phase-shaped too — it comes out of the shared table");
+  for (const style of ["linearFives", "texasVolume", "texasLight", "texasIntensity",
+    "doubleProgression", "fiveThreeOne", "maxEffort", "dynamicEffort"]) {
+    ok(!C.usesCyclePhases(style), `[INV-PHASE-NAME-IS-PER-SLOT] ${style} does not use the phase vocabulary`);
+    eq(C.slotPhaseLabel(3, "main", style), null,
+      `[INV-PHASE-NAME-IS-PER-SLOT] ${style} gets no phase label at rotation 3`);
+  }
+
+  eq(C.slotPhaseLabel(3, "main", "wave"), "R3 Peak", "a wave slot still says which phase it is in");
+  eq(C.slotPhaseLabel(4, "complementary", "automatic"), "R4 Recovery",
+    "automatic resolves to secondary on a complementary slot, which is phase-shaped");
+  eq(C.slotPhaseLabel(9, "main", "wave"), null, "an out-of-range rotation labels nothing");
+
+  eq(C.slotBadge("main", "fiveThreeOne"), "Main · 5/3/1", "5/3/1 badge");
+  eq(C.slotBadge("main", "linearFives"), "Main · Linear 5s", "linear badge");
+  eq(C.slotBadge("complementary", "automatic"), "Complementary · Secondary volume",
+    "automatic names the style the engine will actually run, not the placeholder");
+  eq(C.slotBadge("main", "automatic", "olympic"), "Main · Technique", "olympic auto-resolves to technique");
+  eq(C.slotBadge("main", "automatic"), "Main · Wave", "a main strength slot resolves to the wave");
+
+  eq(C.rotationLabel(2), "Rotation 2 of 4",
+    "[INV-PHASE-NAME-IS-PER-SLOT] the program-level indicator is style-neutral");
+  eq(C.rotationLabel(0), "Rotation 1 of 4", "rotation clamps low");
+  eq(C.rotationLabel(7), "Rotation 4 of 4", "rotation clamps high");
+  eq(C.rotationLabel(undefined), "Rotation 1 of 4", "a missing pointer never reads as NaN");
+}
+
+// ---- Exposure preview (#106) -----------------------------------------------
+{
+  // A wave slot walks V/L/P/R off one base, then rolls with the clean-peak bump.
+  const wave = C.exposurePreview({ baseWeightLb: 190, estimatedMaxLb: 250, prescriptionStyle: "wave",
+    movementGroup: "squat", programRoundingLb: 5, exerciseType: "barbell" });
+  eq(wave.length, 4, "four exposures by default");
+  eq(wave.map((e) => e.rotation).join(","), "1,2,3,4", "the wave walks the rotation in order");
+  eq(wave.map((e) => e.prescription.mainWork.weightLb).join(","), "190,210,225,145",
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] the preview reports the engine's own rounded loads");
+  eq(wave[2].phaseName, "R3 Peak", "a wave exposure carries its phase name");
+  ok(wave.every((e) => e.baseWeightLb === 190), "the base holds for a whole cycle, recovery included");
+  ok((wave[2].advanceNote || "").includes("Clean peak"), "the peak exposure explains next cycle's bump");
+
+  // The rounding boundary the issue calls out: two pounds of base apart, and
+  // the peak triple lands a whole plate step apart. This is exactly the class
+  // of defect the preview exists to make visible without a parameter sweep.
+  const at188 = C.exposurePreview({ baseWeightLb: 188, prescriptionStyle: "wave", programRoundingLb: 5 });
+  eq(at188[2].prescription.mainWork.weightLb, 220, "a 188 lb base peaks at 220");
+  eq(wave[2].prescription.mainWork.weightLb, 225, "a 190 lb base peaks at 225 — one plate step for two pounds");
+
+  // A per-exposure slot previews EXPOSURES: the base moves every session and no
+  // phase name is ever attached, but the recovery rotation still holds.
+  const linear = C.exposurePreview({ count: 5, baseWeightLb: 205, prescriptionStyle: "linearFives",
+    movementGroup: "squat", programRoundingLb: 5, configuration: { workingSets: 3 } });
+  eq(linear.map((e) => e.prescription.mainWork.weightLb).join(","), "205,215,225,190,235",
+    "linear fives add 10 per exposure, cut to 80% for the recovery rotation, then resume from the held base");
+  eq(linear.map((e) => e.baseWeightLb).join(","), "205,215,225,235,235",
+    "the base advances per exposure and holds across recovery");
+  ok(linear.every((e) => e.phaseName === null), "no phase name is rendered against a linear slot");
+  ok(linear[3].isRecovery, "the recovery rotation is still flagged — it changes the prescription");
+
+  // 5/3/1 previews its own shape: ramps plus a graded "+" set, never V/L/P.
+  const wendler = C.exposurePreview({ count: 5, baseWeightLb: 200, prescriptionStyle: "fiveThreeOne",
+    movementGroup: "press", programRoundingLb: 5 });
+  eq(wendler.map((e) => e.prescription.mainWork.reps).join(","), "5,3,1,5,5", "5+/3+/1+/deload then round again");
+  ok(wendler.every((e) => e.phaseName === null), "5/3/1 is never labelled Volume/Load/Peak");
+  eq(wendler[0].prescription.blocks.filter((b) => b.kind === "ramp").length, 2, "the ramp sets are previewed");
+  eq(wendler[0].prescription.blocks.at(-1).kind, "amrap", "weeks 1–3 top out on the + set");
+  eq(wendler[3].prescription.blocks.at(-1).kind, "work", "the deload has no + set");
+  eq(wendler[4].baseWeightLb, 205, "a clean cycle adds +5 to an upper-body training max at the rollover");
+  eq(wendler[3].baseWeightLb, 200,
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] and not before — recovery still runs off the old training max");
+
+  // Double progression climbs the rep window before it touches the load.
+  const dp = C.exposurePreview({ count: 4, baseWeightLb: 60, prescriptionStyle: "doubleProgression",
+    exerciseType: "dumbbell", programRoundingLb: 10,
+    configuration: { workingSets: 3, minimumReps: 6, maximumReps: 8, currentReps: 7 } });
+  eq(dp.map((e) => `${e.prescription.mainWork.weightLb}x${e.prescription.mainWork.reps}`).join(","),
+    "60x7,60x8,65x6,50x5", "reps climb to the cap, then load steps and reps drop back");
+  ok(dp.every((e) => e.phaseName === null), "double progression is a rep window, not a phase");
+
+  // A freshly added slot carries no rep-window keys at all. An explicit
+  // `undefined` wins an object spread, so defaulting by spread would have
+  // reached the engine as NaN and previewed a window of nothing.
+  const bare = C.exposurePreview({ count: 2, baseWeightLb: 100, prescriptionStyle: "doubleProgression",
+    programRoundingLb: 5, configuration: { workingSets: undefined, minimumReps: undefined,
+      maximumReps: undefined, currentReps: undefined } });
+  ok(bare.every((e) => Number.isFinite(e.prescription.mainWork.weightLb)
+    && Number.isFinite(e.prescription.mainWork.reps) && e.prescription.mainWork.reps > 0),
+    "a slot with no rep-window fields still previews real numbers");
+  eq(bare[0].prescription.mainWork.reps, 5, "and falls back to the documented 5-rep default");
+
+  // Day B is next, so its synchronized squat advances before Day A appears.
+  // Day A was already banked in R2; its actual next exposure is R3.
+  const twinned = C.exposurePreview({ count: 3, baseWeightLb: 205, rotation: 2,
+    prescriptionStyle: "linearFives", movementGroup: "squat", programRoundingLb: 5,
+    configuration: { workingSets: 3 }, schedule: {
+      targetDayOrder: 0, nextDayOrder: 1, allDayOrders: [0, 1],
+      recoveryDayOrders: [0], synchronizedDayOrders: [0, 1],
+    } });
+  eq(twinned.map((e) => e.rotation).join(","), "3,4,1",
+    "the day pointer determines the slot's next actual rotation");
+  eq(twinned.map((e) => e.baseWeightLb).join(","), "215,235,235",
+    "the earlier twin moves the first load and Recovery holds it");
+
+  const omittedRecovery = C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4,
+    prescriptionStyle: "wave", schedule: {
+      targetDayOrder: 1, nextDayOrder: 0, allDayOrders: [0, 1],
+      recoveryDayOrders: [0], synchronizedDayOrders: [1],
+    } });
+  eq(omittedRecovery.map((e) => e.rotation).join(","), "1,2",
+    "a day omitted from the bridge has no fictional Recovery exposure");
+
+  // A peak banked this cycle already carries an earned base. Recovery still
+  // runs off the OLD one — the pending grade lands at the rollover, not before.
+  const banked = C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4, prescriptionStyle: "wave",
+    programRoundingLb: 5,
+    pendingState: { baseWeightLb: 210, estimatedMaxLb: 260, stallCount: 0, role: "main", lastIncrementLb: 10 } });
+  eq(banked[0].baseWeightLb, 200, "recovery previews off the base the session will actually use");
+  eq(banked[1].baseWeightLb, 210, "and the next cycle picks up the grade already banked at the peak");
+  eq(C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 4, prescriptionStyle: "wave", programRoundingLb: 5 })[1]
+    .baseWeightLb, 200, "with nothing banked the base simply holds");
+
+  // The rollover mirrors rollOverRecovery's THREE branches, not just "apply the
+  // pending". A per-exposure slot already advanced while training, so a stale
+  // grade left by a later style edit is deleted rather than applied.
+  const staleOnLinear = C.exposurePreview({ count: 5, baseWeightLb: 205, prescriptionStyle: "linearFives",
+    movementGroup: "squat", programRoundingLb: 5, configuration: { workingSets: 3 },
+    pendingState: { baseWeightLb: 150, estimatedMaxLb: 200, stallCount: 0, role: "main", lastIncrementLb: 0 } });
+  eq(staleOnLinear.map((e) => e.prescription.mainWork.weightLb).join(","), "205,215,225,190,235",
+    "a linear slot never drops to a phantom graded base at the rollover");
+
+  // And a wave slot that reaches the rollover with no banked peak accrues a
+  // stall toward the rebuild — the preview must show the drop that is coming.
+  const skippedPeak = C.exposurePreview({ count: 3, baseWeightLb: 200, rotation: 4, stallCount: 1,
+    prescriptionStyle: "wave", programRoundingLb: 5 });
+  eq(skippedPeak.map((e) => e.baseWeightLb).join(","), "200,180,180",
+    "a second peak-less cycle rebuilds at 90%, and the preview says so");
+  eq(C.exposurePreview({ count: 3, baseWeightLb: 200, rotation: 4, stallCount: 0,
+    prescriptionStyle: "wave", programRoundingLb: 5 }).map((e) => e.baseWeightLb).join(","), "200,200,200",
+    "the first peak-less cycle only accrues the stall");
+
+  // Contract edges.
+  eq(C.exposurePreview({ baseWeightLb: 100, count: 0 }).length, 0, "a zero count previews nothing");
+  eq(C.exposurePreview({ count: 2, baseWeightLb: 200, rotation: 3, prescriptionStyle: "wave" })
+    .map((e) => e.rotation).join(","), "3,4", "the preview starts from the slot's current rotation");
+}
+
+// The rotation a charted session belongs to. Mirrors CadenceCore
+// ChartRotation.label — same cases, same strings.
+{
+  // The per-entry phase wins where a slot carries one.
+  eq(C.chartRotationLabel(2, 3), "R2 Load",
+    "[INV-CHART-ROTATION-FROM-SESSION] a slot's own phase names its rotation");
+  // Accessory slots and entries logged before per-entry phase capture carry
+  // none, so the session's own rotation tag has to answer — this is the whole
+  // bug: real program work charted as "Untracked".
+  eq(C.chartRotationLabel(null, 3), "R3 Peak",
+    "[INV-CHART-ROTATION-FROM-SESSION] an untagged entry inherits its session's rotation");
+  eq(C.chartRotationLabel(undefined, 1), "R1 Volume",
+    "[INV-CHART-ROTATION-FROM-SESSION] a missing entry phase is not an absent rotation");
+  eq(C.chartRotationLabel(null, 4), "R4 Recovery",
+    "[INV-CHART-ROTATION-FROM-SESSION] rotation 4 is Recovery");
+  // Only a session with no program tag at all is genuinely untracked.
+  eq(C.chartRotationLabel(null, null), "Untracked",
+    "[INV-CHART-ROTATION-FROM-SESSION] a session outside a program is untracked");
+  eq(C.chartRotationLabel(null, undefined), "Untracked",
+    "[INV-CHART-ROTATION-FROM-SESSION] an absent tag is untracked");
+  // A tag outside the rotation vocabulary is not invented into one.
+  eq(C.chartRotationLabel(null, 0), "Untracked",
+    "[INV-CHART-ROTATION-FROM-SESSION] rotation 0 is not a rotation");
+  eq(C.chartRotationLabel(null, 9), "Untracked",
+    "[INV-CHART-ROTATION-FROM-SESSION] a rotation beyond the cycle is not invented");
+
+  // Every label the split view can produce must have a palette entry, or a
+  // rotation silently loses its colour (R4 did, through the Deload rename).
+  const { ROTATION_COLORS } = await import("../app/js/charts.js");
+  const produced = [1, 2, 3, 4].map((r) => C.chartRotationLabel(null, r)).concat(C.UNTRACKED_ROTATION);
+  const uncoloured = produced.filter((label) => !ROTATION_COLORS[label]);
+  eq(uncoloured.join(",") || "none", "none",
+    "[INV-CHART-ROTATION-FROM-SESSION] every rotation label has a chart colour");
+}
+
+// Where a lift is heading, fitted from what was performed. Mirrors CadenceCore
+// TrendProjectionTests — same samples, same numbers.
+{
+  const S = (pairs) => pairs.map(([day, value]) => ({ day, value }));
+  const climb = S([[0, 200], [7, 205], [14, 210], [21, 215], [28, 220]]);
+  const near = (a, b, msg) => ok(Math.abs(a - b) < 0.0001, `${msg} (got ${a})`);
+
+  // A history that climbed 5 lb a week projects 5 lb a week. The line is the
+  // rate the lifter already walked, not a target anyone set.
+  const up = C.projectTrend(climb, 30, 28);
+  near(up.perWeek, 5, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the projection is the performed rate");
+  near(up.fitQuality, 1, "[INV-PROJECTION-DECLARES-ITS-FIT] a clean climb fits perfectly");
+  near(up.horizonDay, 58, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the horizon lands past today");
+  near(up.horizonValue, 241.4285714, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the horizon value follows the fit");
+  // Weekly steps from the last performed session, ending exactly on the
+  // horizon so the line reaches the date the caption names.
+  eq(up.points.map((p) => p.day).join(","), "28,35,42,49,56,58",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] weekly steps ending on the horizon");
+  near(up.points[0].value, 220, "[INV-PROJECTION-DECLARES-ITS-FIT] the line starts at the fitted value");
+  near(up.points.at(-1).value, up.horizonValue, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the last point is the horizon");
+
+  // Bad news is data.
+  const down = C.projectTrend(S([[0, 220], [7, 215], [14, 210], [21, 205], [28, 200]]), 30, 28);
+  near(down.perWeek, -5, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] a decline projects downward");
+  near(down.horizonValue, 178.5714286, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the decline continues");
+
+  // ...but never through the floor.
+  const floor = C.projectTrend(S([[0, 100], [7, 75], [14, 50], [21, 25]]), 90, 21);
+  near(floor.perWeek, -25, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] a steep slide keeps its rate");
+  near(floor.horizonValue, 0, "[INV-PROJECTION-IS-THE-PERFORMED-RATE] no projection below zero");
+  ok(floor.points.every((p) => p.value >= 0),
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] no projected point below zero");
+
+  // Refusals.
+  eq(C.projectTrend(S([[0, 200], [14, 210], [28, 220]]), 30, 28), null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] three exposures is an anecdote");
+  eq(C.projectTrend(S([[0, 200], [3, 205], [7, 210], [10, 215]]), 30, 10), null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] four sessions in ten days say nothing about a month out");
+  eq(C.projectTrend(climb, 30, 70), null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] a lift untouched for six weeks is not extended");
+  ok(C.projectTrend(climb, 30, 63) !== null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] one day inside the staleness limit still projects");
+  eq(C.projectTrend(climb, 0, 28), null,
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] the off horizon projects nothing");
+
+  // A line drawn through noise still has a slope. Reporting how badly it fits
+  // is what stops that slope from reading as a finding.
+  const noisy = C.projectTrend(S([[0, 200], [7, 300], [14, 200], [21, 300]]), 30, 21);
+  near(noisy.perWeek, 20, "[INV-PROJECTION-DECLARES-ITS-FIT] noise still has a slope");
+  near(noisy.fitQuality, 0.2, "[INV-PROJECTION-DECLARES-ITS-FIT] and the fit says how little it means");
+  eq(C.fitDescription(noisy.fitQuality), "very noisy — treat as a guess",
+    "[INV-PROJECTION-DECLARES-ITS-FIT] a poor fit says so in words");
+
+  const flat = C.projectTrend(S([[0, 200], [7, 200], [14, 200], [21, 200]]), 30, 21);
+  near(flat.perWeek, 0, "[INV-PROJECTION-DECLARES-ITS-FIT] a flat history has no rate");
+  near(flat.fitQuality, 1, "[INV-PROJECTION-DECLARES-ITS-FIT] a flat line describes it perfectly");
+  near(flat.horizonValue, 200, "[INV-PROJECTION-DECLARES-ITS-FIT] and projects flat");
+
+  eq(C.fitDescription(1), "steady trend", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band: steady");
+  eq(C.fitDescription(0.75), "steady trend", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band edge: steady");
+  eq(C.fitDescription(0.74), "rough trend", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band: rough");
+  eq(C.fitDescription(0.4), "rough trend", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band edge: rough");
+  eq(C.fitDescription(0.39), "very noisy — treat as a guess", "[INV-PROJECTION-DECLARES-ITS-FIT] fit band: noisy");
+
+  // The chart converts to the display unit before projecting. A linear fit
+  // commutes with that scaling, so kg and lb describe the same line.
+  const kg = C.projectTrend(climb.map((s) => ({ day: s.day, value: C.kgFromLb(s.value) })), 30, 28);
+  near(kg.perWeek, C.kgFromLb(up.perWeek), "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the rate scales with the unit");
+  near(kg.horizonValue, C.kgFromLb(up.horizonValue), "[INV-PROJECTION-IS-THE-PERFORMED-RATE] so does the horizon");
+  near(kg.fitQuality, up.fitQuality, "[INV-PROJECTION-DECLARES-ITS-FIT] the fit is unit-free");
+
+  // Copy always says "at this rate".
+  eq(C.trendSummary(5, "1 month", "241 lb", "lb"), "+5 lb/week · 241 lb in 1 month at this rate",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] the summary hedges the number");
+  eq(C.trendSummary(-2.25, "3 months", "180 lb", "lb"), "−2.3 lb/week · 180 lb in 3 months at this rate",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] a falling rate reads as falling");
+  eq(C.trendSummary(0, "1 month", "200 lb", "lb"), "Holding flat · 200 lb in 1 month at this rate",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] flat says flat");
+  eq(C.trendSummary(0.04, "1 month", "200 lb", "lb"), "Holding flat · 200 lb in 1 month at this rate",
+    "[INV-PROJECTION-IS-THE-PERFORMED-RATE] a rate that rounds away is flat, not a vanishing +0");
+
+  eq(C.TREND_HORIZONS.map((h) => h.value).join(","), "0,30,90", "the horizons are off, one month, three");
+  eq(C.TREND_HORIZONS.map((h) => h.label).join(","), "Off,1 month,3 months", "and say so in words");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -83,6 +83,29 @@ public struct ProgressionResult: Sendable {
     public let note: String?
 }
 
+/// The minimum information needed to choose representative recovery
+/// exposures from an authored program day. `order` is the persisted schedule
+/// address; only the MAIN lift's movement group participates, so an accessory
+/// cannot accidentally turn an upper day into a lower day (or vice versa).
+public struct RecoveryDayCandidate: Hashable, Sendable {
+    public let order: Int
+    public let mainMovementGroup: String?
+
+    public init(order: Int, mainMovementGroup: String?) {
+        self.order = order
+        self.mainMovementGroup = mainMovementGroup
+    }
+}
+
+/// Why a bounded recovery bridge is ready to hand off to the next cycle.
+/// The elapsed-time case is only an expiry guard; it does not make a
+/// cycle-based program advance by calendar weeks.
+public enum RecoveryBridgeCompletionReason: String, Hashable, Sendable {
+    case selectedExposures
+    case sessionLimit
+    case windowElapsed
+}
+
 /// Accessory double-progression state (rep range → weight).
 public struct AccessoryState: Codable, Hashable, Sendable {
     public var sets: Int
@@ -130,11 +153,17 @@ public enum ProgramProgression {
     public static let stallLimit = 2               // 2 consecutive non-success → auto deload
     public static let deloadRebuildFraction = 0.90
 
-    /// The wave's deload rotation. 1–3 are volume, load, and peak.
+    /// Persisted phase value for the recovery bridge. 1–3 are full volume,
+    /// load, and peak rotations; phase 4 is not another complete rotation.
     public static let deloadWeek = 4
-    /// Complete rotations that must be banked since the last deload rotation
+    /// Recovery is deliberately smaller than a full authored rotation.
+    public static let recoverySessionLimit = 2
+    /// Maximum elapsed time after the last hard-phase completion during which
+    /// Cadence may prescribe another recovery workout.
+    public static let recoveryWindow: TimeInterval = 7 * 24 * 60 * 60
+    /// Complete rotations that must be banked since the last recovery bridge
     /// before another early one is allowed. Without a floor a run of red
-    /// rotations turns the recovery deload into the schedule, which is the
+    /// rotations turns recovery into the schedule, which is the
     /// opposite of what it is for.
     ///
     /// Counted in ROTATIONS, not sessions. A session floor silently scales with
@@ -144,18 +173,12 @@ public enum ProgramProgression {
     /// feature outright on half the shipped templates.
     public static let minimumRotationsBetweenDeloads = 2
 
-    /// Whether to cut this cycle short and go straight to the deload rotation.
-    ///
-    /// The survey picture of how lifters actually deload is "every 5–6 weeks,
-    /// or when performance stalls" — so a ceiling and a trigger. Cadence's
-    /// fixed four-rotation wave already deloads well inside that ceiling, and
-    /// a ceiling rule that can never fire is dead code, so only the trigger and
-    /// its floor are implemented here.
+    /// Whether to cut this cycle short and go straight to recovery.
     ///
     /// Persistent red, not a single red: one bad rotation is noise, and the
     /// single-red answer (a temporary accessory-set cut) is already cheaper and
-    /// reversible. Weeks 1 and 2 only — from week 3 the schedule advances into
-    /// the deload by itself, so there is nothing to skip.
+    /// reversible. Rotations 1 and 2 only — from rotation 3 the schedule
+    /// advances into recovery by itself, so there is nothing to skip.
     public static func shouldDeloadEarly(
         currentWeek: Int,
         readiness: ReadinessState,
@@ -203,7 +226,7 @@ public enum ProgramProgression {
         return ProgressionResult(
             state: next,
             grade: .hold,
-            note: "Recovery deload — output stayed red, so the cycle stopped after rotation \(week) and went straight to the deload. The base holds."
+            note: "Recovery bridge — output stayed red, so the cycle stopped after rotation \(week) and went straight to recovery. The base holds."
         )
     }
 
@@ -353,6 +376,87 @@ public enum ProgramProgression {
             return (sorted.first ?? 0, true)
         }
         return (sorted[(position + 1) % sorted.count], position == sorted.count - 1)
+    }
+
+    /// Recovery completion is set-based, not pointer-based. The bridge may be
+    /// banked in either order, and a program upgraded while already in phase 4
+    /// may point at a day omitted by the shortened bridge. Count the selected
+    /// exposures actually banked in this cycle, then choose the first missing
+    /// authored order. Unknown/non-bridge days never count by themselves.
+    /// Mirrored 1:1 in web/app/js/core.js `recoveryScheduleAdvance`.
+    public static func recoveryScheduleAdvance(
+        dayOrders: [Int], completedDayOrders: [Int]
+    ) -> (nextDayOrder: Int, isLastDay: Bool) {
+        let selected = Array(Set(dayOrders)).sorted()
+        guard !selected.isEmpty else { return (0, false) }
+        let completed = Set(completedDayOrders)
+        if let next = selected.first(where: { !completed.contains($0) }) {
+            return (next, false)
+        }
+        return (selected[0], true)
+    }
+
+    /// Decide whether recovery has done its job.
+    ///
+    /// Selected representative exposures still close a short bridge normally.
+    /// Independently, two banked recovery sessions are a hard cap even when
+    /// an old/manual pointer sent those sessions to non-selected day orders.
+    /// Finally, the bridge expires after seven elapsed days from the last Peak
+    /// (or other hard-phase anchor supplied by the persistence edge), so a
+    /// stale Recovery pointer can never prescribe reduced work indefinitely.
+    /// Mirrored 1:1 in web/app/js/core.js `recoveryBridgeCompletionReason`.
+    public static func recoveryBridgeCompletionReason(
+        completedRecoverySessions: Int,
+        selectedExposureCount: Int,
+        selectedExposuresComplete: Bool,
+        lastHardPhaseCompletion: Date?,
+        asOf now: Date
+    ) -> RecoveryBridgeCompletionReason? {
+        if selectedExposuresComplete { return .selectedExposures }
+        // The cap is the BRIDGE'S OWN LENGTH, not a constant two. A program
+        // that is not recognizably upper/lower keeps its full authored pass —
+        // that fallback is deliberate, and capping it at two silently dropped
+        // day three onward for full-body, Olympic and conditioning programs,
+        // which is the work-losing behaviour the fallback exists to prevent.
+        let cap = Swift.max(recoverySessionLimit, selectedExposureCount)
+        if completedRecoverySessions >= cap { return .sessionLimit }
+        // Recovery is a bounded bridge from the last hard phase, not a new
+        // calendar window that starts when reduced work is banked. Otherwise a
+        // first recovery exposure on day six silently extends the bridge to day
+        // thirteen, and an untouched recovery pointer can prescribe reduced
+        // work forever. Manual positioning remains available, but it does not
+        // override the stale-bridge guard implicitly.
+        guard let anchor = lastHardPhaseCompletion,
+              now.timeIntervalSince(anchor) >= recoveryWindow else { return nil }
+        return .windowElapsed
+    }
+
+    /// Select one authored lower and one authored upper exposure for the
+    /// phase-4 recovery bridge.
+    ///
+    /// This is deliberately movement-driven rather than name-driven: "Day A"
+    /// and localized/custom day names are valid, while the main lift already
+    /// carries the structural signal we need. The first authored representative
+    /// of each half is retained and their original schedule order is preserved.
+    ///
+    /// Programs that are not recognizably upper/lower fall back to their full
+    /// authored order. That preserves existing behavior for Olympic, full-body,
+    /// conditioning-only, damaged, and otherwise ambiguous programs instead of
+    /// silently dropping work based on a guess.
+    /// Mirrored 1:1 in web/app/js/core.js `recoveryDayOrders`.
+    public static func recoveryDayOrders(_ candidates: [RecoveryDayCandidate]) -> [Int] {
+        let sorted = candidates.sorted { $0.order < $1.order }
+        let allOrders = Array(Set(sorted.map(\.order))).sorted()
+        let group: (RecoveryDayCandidate) -> String = {
+            $0.mainMovementGroup?.lowercased() ?? ""
+        }
+        guard let lower = sorted.first(where: { ["squat", "hinge"].contains(group($0)) }),
+              let upper = sorted.first(where: { ["press", "pull"].contains(group($0)) }),
+              lower.order != upper.order else {
+            return allOrders
+        }
+        let selected = Set([lower.order, upper.order])
+        return allOrders.filter { selected.contains($0) }
     }
 
     /// Increment = fraction of base, floored at plate granularity.
@@ -628,7 +732,18 @@ public enum ProgramProgression {
         exerciseType: String?, loadBasis: LoadBasis, weightLb: Double, incrementLb: Double
     ) -> Bool {
         // Reps- and duration-progressed work has no load to step.
-        guard !SwapRules.unloadableTypes.contains(exerciseType?.lowercased() ?? "") else { return false }
+        //
+        // An explicit external basis outranks the equipment type, but ONLY for
+        // bodyweight: a weighted pull-up is typed bodyweight while hanging real
+        // plates from a belt, and the type guard alone silently exempted it
+        // from this warning, so a belt slot with a zero increment would never
+        // progress and never say so. Timed and conditioning stay unloadable
+        // whatever they carry — a weight-vest plank still progresses by
+        // duration, which is what the zero increment there means.
+        let type = exerciseType?.lowercased() ?? ""
+        let unloadable = type == "timed" || type == "conditioning"
+            || (type == "bodyweight" && !loadBasis.supportsLoadPR)
+        guard !unloadable else { return false }
         guard loadBasis != .bodyweight else { return false }
         return weightLb > 0 && incrementLb <= 0
     }

@@ -74,6 +74,34 @@ export const advancesPerExposure = (style) =>
 export const buildsOwnSessionShape = (style) =>
   advancesPerExposure(style) || ["fiveThreeOne", "maxEffort", "dynamicEffort"].includes(style);
 
+// Whether the Volume / Load / Peak / Recovery vocabulary actually describes
+// what this style prescribes.
+//
+// The rotation counter advances for every slot — the program is one calendar —
+// but the NAMES on it are a claim about the prescription, and for most styles
+// that claim is false. linearFives and the Texas days move per exposure and
+// never grade at a peak; doubleProgression is a rep window at a held load;
+// fiveThreeOne, maxEffort and dynamicEffort grade at the cycle boundary but
+// with shapes of their own (5+/3+/1+/recovery is not "Volume/Load/Peak").
+//
+// Derived from buildsOwnSessionShape rather than listed again: those are
+// exactly the styles whose plan comes out of their own branch instead of the
+// shared phase-shaped table, so one predicate cannot drift from the other.
+// Mirrored 1:1 in CadenceCore PrescriptionStyle.usesCyclePhases.
+export const usesCyclePhases = (style) => !buildsOwnSessionShape(style);
+
+// Badge-length name for a slot — what the slot actually does, short enough to
+// sit beside the lift name. "automatic" never reaches a badge: slotBadge
+// resolves it first. Mirrored 1:1 in CadenceCore PrescriptionStyle.shortName.
+export const PRESCRIPTION_SHORT_NAMES = {
+  automatic: "Automatic", wave: "Wave", offsetWave: "Wave — offsets",
+  secondary: "Secondary volume", hypertrophy: "Hypertrophy", technique: "Technique",
+  doubleProgression: "Double progression", linearFives: "Linear 5s",
+  texasVolume: "Texas volume", texasLight: "Texas light", texasIntensity: "Texas intensity",
+  fiveThreeOne: "5/3/1", maxEffort: "Max effort", dynamicEffort: "Speed work",
+};
+export const prescriptionShortName = (style) => PRESCRIPTION_SHORT_NAMES[style] || style;
+
 // Starting base weight as a fraction of a known e1RM for history-driven
 // program creation; 0 keeps the template's hand-set base.
 export const defaultStartFraction = (style) => ({
@@ -511,20 +539,180 @@ export function dumbbellWarmupRamp(workingLb, roundingLb = 5) {
   });
 }
 
-// ---- Program engine (4-week cycle) -----------------------------------------
+// ---- Program engine (four-phase mesocycle) ---------------------------------
 
-// phase: 1 volume, 2 load, 3 peak, 4 deload
+// phase: 1 volume, 2 load, 3 peak, 4 short recovery bridge
 export const PHASES = {
   1: { name: "Volume", sets: 5, reps: 5, multiplier: 1.0 },
   2: { name: "Load", sets: 5, reps: 3, multiplier: 1.10 },
   3: { name: "Peak", sets: 3, reps: 3, multiplier: 1.175 },
-  4: { name: "Deload", sets: 3, reps: 5, multiplier: 0.775 },
+  4: { name: "Recovery", sets: 2, reps: 3, multiplier: 0.775 },
 };
 export const phaseNext = (p) => (p >= 4 ? 1 : p + 1);
 export const phaseLabel = (p) => {
   const ph = PHASES[p];
   return `R${p} ${ph.name} ${ph.sets}×${ph.reps}`;
 };
+// Backup schema 7 stores a display label and recovers only the R-number on
+// import. Keep the historical phase-4 wire string byte-stable while the live
+// app presents the redesigned recovery bridge.
+export const portablePhaseLabel = (p) => p === 4 ? "R4 Deload 3×5" : phaseLabel(p);
+
+// The series key for a charted session that belongs to no program rotation.
+export const UNTRACKED_ROTATION = "Untracked";
+
+// Which rotation a charted session belongs to.
+//
+// The rotation is a fact about the SESSION — the program stamps every
+// generated session with the rotation it was built for. Only some entries
+// repeat it: main and complementary slots carry a per-entry phase, accessory
+// slots never have, and entries logged before per-entry phase capture do not
+// either. Reading the entry alone therefore reported real program work as
+// "Untracked", and the same session that History's Rotations tab counted under
+// "Cycle 2 · R3" vanished into the untracked series on Charts.
+//
+// The entry still wins where it exists: a slot re-logged into a later session
+// keeps the rotation it was actually performed in. The session tag is the
+// fallback, and only a session with no program tag at all is untracked.
+//
+// Mirrored 1:1 in CadenceCore ProgramEngine `ChartRotation.label`.
+export function chartRotationLabel(entryPhase, sessionRotation) {
+  const rotation = entryPhase ?? sessionRotation;
+  if (!PHASES[rotation]) return UNTRACKED_ROTATION;
+  return `R${rotation} ${PHASES[rotation].name}`;
+}
+
+// Where a lift is heading, fitted from what was actually performed.
+//
+// The charts stop at today, which is honest but not useful for the question a
+// lifter actually asks — "at this rate, where am I in a month?" — so this fits
+// a least-squares line through the performed points and extends it forward.
+//
+// A projection is a claim about the future, and the whole job here is to keep
+// that claim narrow: it describes the rate the history already shows, it is not
+// a plan and not what the program engine will prescribe (programmed work has
+// its own forward view in exposurePreview, which runs the real engine), it
+// refuses more often than it answers, it reports how well the line actually
+// describes the history, and a downward trend projects downward.
+//
+// Pure in its samples — no dates, no timezones, no unit assumptions. A linear
+// fit commutes with lb→kg scaling, so the projection is the same line either
+// way. Mirrored 1:1 in CadenceCore TrendProjection.
+export const TREND_MIN_SAMPLES = 4;
+export const TREND_MIN_SPAN_DAYS = 21;
+export const TREND_STALENESS_LIMIT_DAYS = 35;
+export const TREND_STEP_DAYS = 7;
+export const TREND_HORIZONS = [
+  { value: 0, label: "Off" },
+  { value: 30, label: "1 month" },
+  { value: 90, label: "3 months" },
+];
+
+export function projectTrend(samples, horizonDays, asOfDay) {
+  const usable = (samples || []).filter((s) => Number.isFinite(s.day) && Number.isFinite(s.value));
+  if (usable.length < TREND_MIN_SAMPLES || !(horizonDays > 0)) return null;
+
+  const days = usable.map((s) => s.day);
+  const first = Math.min(...days), last = Math.max(...days);
+  if (last - first < TREND_MIN_SPAN_DAYS) return null;
+  if (asOfDay - last > TREND_STALENESS_LIMIT_DAYS) return null;
+
+  const n = usable.length;
+  const meanDay = days.reduce((a, b) => a + b, 0) / n;
+  const meanValue = usable.reduce((a, s) => a + s.value, 0) / n;
+  let covariance = 0, dayVariance = 0, valueVariance = 0;
+  for (const s of usable) {
+    const dx = s.day - meanDay, dy = s.value - meanValue;
+    covariance += dx * dy; dayVariance += dx * dx; valueVariance += dy * dy;
+  }
+  // Every exposure on the same day: no rate can be read from it. The span
+  // guard above already rejects this, but the division must not depend on that
+  // ordering to stay safe.
+  if (!(dayVariance > 0)) return null;
+
+  const slope = covariance / dayVariance;
+  const intercept = meanValue - slope * meanDay;
+  const fitted = (day) => Math.max(0, intercept + slope * day);
+
+  // R² against the mean. A flat history is perfectly described by a flat line,
+  // so zero variance is a perfect fit, not a divide-by-zero.
+  let residual = 0;
+  for (const s of usable) {
+    const error = s.value - (intercept + slope * s.day);
+    residual += error * error;
+  }
+  const fitQuality = valueVariance > 0
+    ? Math.max(0, Math.min(1, 1 - residual / valueVariance)) : 1;
+
+  const end = asOfDay + horizonDays;
+  if (!(end > last)) return null;
+  // Starts at the FITTED value on the last performed day, not the performed
+  // one: the gap between the last dot and where the line begins is the fit's
+  // error, and hiding it by anchoring to the final point would dress a fluke
+  // session up as the new baseline.
+  const points = [];
+  for (let day = last; day < end; day += TREND_STEP_DAYS) points.push({ day, value: fitted(day) });
+  points.push({ day: end, value: fitted(end) });
+
+  return { perWeek: slope * 7, fitQuality, points, horizonValue: fitted(end), horizonDay: end };
+}
+
+// One line of plain language for the trend. Deliberately says "at this rate"
+// every time — the number is a continuation of the past, and the copy should
+// never let it read as a promise about the future.
+// Mirrored 1:1 in CadenceCore TrendProjection.summary.
+export function trendSummary(perWeek, horizonLabel, horizonValue, unit) {
+  // Round the MAGNITUDE, then re-apply the sign. Rounding the signed value
+  // splits the two platforms on exact halves — Swift rounds away from zero,
+  // JavaScript toward +∞ — so −2.25/week reads as −2.3 on one and −2.2 on the
+  // other for the same history.
+  const magnitude = Math.round(Math.abs(perWeek) * 10) / 10;
+  if (magnitude === 0) return `Holding flat · ${horizonValue} in ${horizonLabel} at this rate`;
+  const rate = magnitude === Math.round(magnitude) ? magnitude.toFixed(0) : magnitude.toFixed(1);
+  return `${perWeek > 0 ? "+" : "−"}${rate} ${unit}/week · ${horizonValue} in ${horizonLabel} at this rate`;
+}
+
+// How much to trust the line, in a word. Thresholds are deliberately harsh: a
+// projection the lifter should not lean on must not look like one they should.
+// Mirrored 1:1 in CadenceCore TrendProjection.fitDescription.
+export function fitDescription(fitQuality) {
+  if (fitQuality >= 0.75) return "steady trend";
+  if (fitQuality >= 0.4) return "rough trend";
+  return "very noisy — treat as a guess";
+}
+
+// Where the program is in its rotation, said without claiming the rotation is a
+// weight wave. The program-level indicator is shared by slots that have nothing
+// to do with each other's prescriptions, so it can only honestly report
+// position. Mirrored 1:1 in CadenceCore ProgramEngine.rotationLabel.
+// A missing or non-numeric pointer reads as rotation 1 rather than
+// "Rotation NaN of 4" — the Swift mirror takes an Int and cannot express that
+// case, so the coercion lives here to keep the two saying the same thing.
+export const rotationLabel = (rotation) =>
+  `Rotation ${Number.isFinite(rotation) ? Math.min(Math.max(rotation, 1), DELOAD_WEEK) : 1} of ${DELOAD_WEEK}`;
+
+// What a slot does, for the badge beside its name: "Main · 5/3/1",
+// "Complementary · Secondary volume", "Main · Linear 5s". Resolves "automatic"
+// first, so the badge names the style the engine will actually run rather than
+// the placeholder left in the picker.
+// Mirrored 1:1 in CadenceCore ProgramEngine.slotBadge.
+export function slotBadge(role = "main", prescriptionStyle = "automatic",
+  movementGroup = null, focus = "strength") {
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  return `${role === "main" ? "Main" : "Complementary"} · ${prescriptionShortName(style)}`;
+}
+
+// The phase name for a slot, or null where the phase vocabulary does not
+// describe what the slot prescribes. This is the whole of the fix: the phase
+// label is a per-slot fact, not a program-wide one, and a program mixing a wave
+// main lift with a novice linear complementary lift has to be able to say so on
+// one screen. Mirrored 1:1 in CadenceCore ProgramEngine.slotPhaseLabel.
+export function slotPhaseLabel(rotation, role = "main", prescriptionStyle = "automatic",
+  movementGroup = null, focus = "strength") {
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  if (!usesCyclePhases(style) || !PHASES[rotation]) return null;
+  return `R${rotation} ${PHASES[rotation].name}`;
+}
 
 export const DEFAULT_ROUNDING_LB = 5.0;
 
@@ -571,10 +759,12 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
   Object.assign(config, resolvedOffsets(config.loadOffsetLb, config.peakOffsetLb, movementGroup));
   if (["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(style)) {
     // Sets-across at the slot's own base; the base moves per exposure
-    // (advanceLinearLift), so the 4-week phase never shapes the weight.
+    // (advanceLinearLift). Recovery is the sole phase override: advancement
+    // pauses while both load and volume drop, then the normal cadence resumes.
     return {
-      weightLb: roundTo(state.baseWeightLb, roundingLb),
-      sets: Math.max(1, config.workingSets), reps: 5, phase: p, cycleNumber: state.cycleNumber,
+      weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
+      sets: p === 4 ? 2 : Math.max(1, config.workingSets),
+      reps: p === 4 ? 3 : 5, phase: p, cycleNumber: state.cycleNumber,
     };
   }
   if (style === "fiveThreeOne") {
@@ -591,7 +781,7 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     // rotation trades the single for moderate triples.
     if (p === 4) return {
       weightLb: roundTo(state.baseWeightLb * 0.70, roundingLb),
-      sets: 3, reps: 3, phase: p, cycleNumber: state.cycleNumber,
+      sets: 2, reps: 3, phase: p, cycleNumber: state.cycleNumber,
     };
     return {
       weightLb: roundTo(state.baseWeightLb, roundingLb),
@@ -606,7 +796,8 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     const multiplier = { 1: 1.0, 2: 1.10, 3: 1.20, 4: 1.0 }[p];
     return {
       weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
-      sets: scheme[0], reps: scheme[1], phase: p, cycleNumber: state.cycleNumber,
+      sets: p === 4 ? Math.max(2, Math.ceil(scheme[0] / 2)) : scheme[0],
+      reps: scheme[1], phase: p, cycleNumber: state.cycleNumber,
     };
   }
   if (style === "offsetWave") {
@@ -614,39 +805,66 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
       1: state.baseWeightLb,
       2: state.baseWeightLb + config.loadOffsetLb,
       3: state.baseWeightLb + config.peakOffsetLb,
-      4: state.baseWeightLb * config.deloadMultiplier,
+      // Zero is "unset", never "lift nothing" — same rescue as the wave
+      // branch below and as ProgramEngine's plan, so both cores agree even
+      // for a hand-edited store the validators would refuse to import.
+      4: state.baseWeightLb * (config.deloadMultiplier > 0 ? config.deloadMultiplier : 0.775),
     })[p];
     const phase = PHASES[p];
     return { weightLb: roundTo(weight, roundingLb), sets: phase.sets, reps: phase.reps, phase: p, cycleNumber: state.cycleNumber };
   }
   if (style === "doubleProgression") return {
-    weightLb: roundTo(state.baseWeightLb, roundingLb),
-    sets: Math.max(1, config.workingSets),
-    reps: Math.min(Math.max(config.currentReps, config.minimumReps), config.maximumReps),
+    weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
+    sets: p === 4 ? 1 : Math.max(1, config.workingSets),
+    reps: p === 4 ? Math.min(5, Math.max(1, config.minimumReps))
+      : Math.min(Math.max(config.currentReps, config.minimumReps), config.maximumReps),
     phase: p, cycleNumber: state.cycleNumber,
   };
   const byStyle = {
     wave: {
-      1: [5, 5, 1.0], 2: [5, 3, 1.10], 3: [3, 3, 1.175], 4: [3, 5, 0.775],
+      1: [5, 5, 1.0], 2: [5, 3, 1.10], 3: [3, 3, 1.175], 4: [2, 3, 0.775],
     },
     // Complementary work is volume after the day's heavy main — never a second
     // miniature of the main wave. Sets stay at 5+ reps and at or below the
     // slot's base (a 5-rep-calibrated weight; 8s sit ~90%).
     secondary: {
-      1: [3, 8, 0.90], 2: [3, 8, 0.95], 3: [3, 6, 1.0], 4: [2, 8, 0.75],
+      1: [3, 8, 0.90], 2: [3, 8, 0.95], 3: [3, 6, 1.0], 4: [1, 5, 0.75],
     },
     hypertrophy: {
-      1: [4, 10, 1.0], 2: [4, 8, 1.025], 3: [3, 8, 1.05], 4: [2, 10, 0.85],
+      1: [4, 10, 1.0], 2: [4, 8, 1.025], 3: [3, 8, 1.05], 4: [1, 5, 0.80],
     },
     technique: {
-      1: [5, 3, 1.0], 2: [6, 2, 1.05], 3: [6, 1, 1.10], 4: [3, 2, 0.80],
+      1: [5, 3, 1.0], 2: [6, 2, 1.05], 3: [6, 1, 1.10], 4: [2, 2, 0.80],
     },
   };
-  const [sets, reps, multiplier] = (byStyle[style] || byStyle.wave)[p];
+  const table = byStyle[style] || byStyle.wave;
+  const [sets, reps, tableMultiplier] = table[p];
+  // The wave deload's intensity is the slot's own knob (default 0.775, the
+  // historical constant). Volume stays cut either way; a lifter who finds
+  // 77.5% unproductively light raises the intensity, not the set count.
+  // Keyed on the resolved TABLE, not the style string, so an unknown style
+  // falling back to the wave keeps parity with native's `?? .automatic`.
+  const multiplier = table === byStyle.wave && p === 4
+    ? (config.deloadMultiplier > 0 ? config.deloadMultiplier : tableMultiplier)
+    : tableMultiplier;
   return {
     weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
     sets, reps, phase: p, cycleNumber: state.cycleNumber,
   };
+}
+
+// The order a day's slots were AUTHORED in, recovered from an imported
+// payload. Distinct orders pass through verbatim; when every order ties (a
+// hand-written file whose slots all say order: 0, or a backup written before
+// slots carried orders) the tie holds no information and the array position
+// the author wrote the slots in IS their order. Without this a tie falls to
+// the alphabetical display fallback and the alphabet quietly does the
+// lifter's programming. Pure mirror of CadenceCore ProgramEngine.
+export function authoredSlotOrders(orders) {
+  if (orders.length > 1 && orders.every((o) => o === orders[0])) {
+    return orders.map((_, i) => i);
+  }
+  return orders;
 }
 
 export function primerWeight(baseWeightLb, phase, style, roundingLb = DEFAULT_ROUNDING_LB, configuration = {}) {
@@ -688,7 +906,7 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
     // block order puts them before the top set.
     const ramp = {
       1: [[0.65, 5], [0.75, 5]], 2: [[0.70, 3], [0.80, 3]],
-      3: [[0.75, 5], [0.85, 3]], 4: [[0.40, 5], [0.50, 5]],
+      3: [[0.75, 5], [0.85, 3]], 4: [[0.50, 5]],
     }[state.nextPhase];
     for (const [pct, reps] of ramp) {
       blocks.push({ kind: "ramp", weightLb: roundTo(state.baseWeightLb * pct, step), sets: 1, reps });
@@ -866,12 +1084,16 @@ export const QUALITY_FLAG_TOLERANCE = 1;   // ≤1 grindy/wobble set still SUCCE
 export const STALL_LIMIT = 2;              // 2 consecutive non-success → auto deload
 export const DELOAD_REBUILD_FRACTION = 0.90;
 
-// The wave's deload rotation. 1–3 are volume, load, and peak.
+// Persisted phase value for the recovery bridge. 1–3 are complete progression
+// rotations; phase 4 is not another full pass through the program.
 export const DELOAD_WEEK = 4;
-// Complete rotations that must be banked since the last deload rotation before
+// Recovery remains cycle-based. These elapsed days only expire a bridge that
+// would otherwise sit open indefinitely; they do not schedule rotations.
+export const RECOVERY_SESSION_LIMIT = 2;
+export const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+// Complete rotations that must be banked since the last recovery bridge before
 // another early one is allowed. Without a floor a run of red rotations turns
-// the recovery deload into the schedule, which is the opposite of what it is
-// for.
+// recovery into the schedule, which is the opposite of what it is for.
 //
 // Counted in ROTATIONS, not sessions. A session floor silently scales with the
 // split: eight sessions is two rotations of a four-day program but four
@@ -900,18 +1122,12 @@ export function observedMax(prior, sample) {
   return sample > prior ? smoothE1RM(prior, sample) : prior;
 }
 
-// Whether to cut this cycle short and go straight to the deload rotation.
-//
-// The survey picture of how lifters actually deload is "every 5–6 weeks, or
-// when performance stalls" — so a ceiling and a trigger. Cadence's fixed
-// four-rotation wave already deloads well inside that ceiling, and a ceiling
-// rule that can never fire is dead code, so only the trigger and its floor are
-// implemented here.
+// Whether to cut this cycle short and go straight to recovery.
 //
 // Persistent red, not a single red: one bad rotation is noise, and the
 // single-red answer (a temporary accessory-set cut) is already cheaper and
-// reversible. Weeks 1 and 2 only — from week 3 the schedule advances into the
-// deload by itself, so there is nothing to skip.
+// reversible. Rotations 1 and 2 only — from rotation 3 the schedule advances
+// into recovery by itself, so there is nothing to skip.
 export function shouldDeloadEarly(currentWeek, readiness, previousReadiness, rotationsSinceLastDeload) {
   if (!(currentWeek >= 1 && currentWeek < DELOAD_WEEK - 1)) return false;
   if (readiness !== "red" || previousReadiness !== "red") return false;
@@ -932,7 +1148,7 @@ export function recoveryDeloadHold(lift, week) {
       lastIncrementLb: 0,
     },
     grade: "hold",
-    note: `Recovery deload — output stayed red, so the cycle stopped after rotation ${week} and went straight to the deload. The base holds.`,
+    note: `Recovery bridge — output stayed red, so the cycle stopped after rotation ${week} and went straight to recovery. The base holds.`,
   };
 }
 
@@ -1033,23 +1249,19 @@ export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, cu
 }
 
 // ---- Swap rules (issue 20) ----------------------------------------------
-// Mirrors CadenceCore's SwapRules. Exercise types that can't carry a weight
-// prescription — a loaded slot must never be offered an unloadable substitute
-// (Incline DB Press → Dips) or vice versa.
-export const UNLOADABLE_TYPES = new Set(["bodyweight", "timed", "conditioning"]);
-
 // A candidate is offered only when it trains the same movement pattern
 // (non-empty matching group), sits in the same programming tier
 // (Main/Accessory/Conditioning), matches the current lift's loadability,
 // isn't the same exercise, and isn't shelved. `current`/`candidate` are
-// exercise records: { name, category, type, movementGroup, isShelved }.
+// exercise records. Loadability follows the resolved load basis, not equipment
+// type: a weighted pull-up is bodyweight-typed but still carries external load.
 export function swapCompatible(current, candidate) {
   return !!current.movementGroup
     && candidate.movementGroup === current.movementGroup
     && candidate.name !== current.name
     && !candidate.isShelved
     && candidate.category === current.category
-    && UNLOADABLE_TYPES.has(candidate.type) === UNLOADABLE_TYPES.has(current.type);
+    && supportsLoadPR(resolvedLoadBasis(candidate)) === supportsLoadPR(resolvedLoadBasis(current));
 }
 
 // The transactional boundary for banking a session (issue 19), mirroring
@@ -1093,6 +1305,66 @@ export function scheduleAdvance(dayOrders, bankedDayOrder) {
   const position = sorted.indexOf(bankedDayOrder);
   if (position < 0) return { nextDayOrder: sorted.length ? sorted[0] : 0, isLastDay: true };
   return { nextDayOrder: sorted[(position + 1) % sorted.length], isLastDay: position === sorted.length - 1 };
+}
+
+// Recovery completion is set-based, not pointer-based. The bridge can be
+// banked in either order, and an in-flight phase-4 program may still point at
+// an old full-rotation day omitted by the shortened bridge. Only selected
+// exposures actually banked in this cycle count toward completion.
+// Mirrored 1:1 in CadenceCore ProgramProgression.recoveryScheduleAdvance.
+export function recoveryScheduleAdvance(dayOrders, completedDayOrders) {
+  const selected = [...new Set(dayOrders)].sort((a, b) => a - b);
+  if (!selected.length) return { nextDayOrder: 0, isLastDay: false };
+  const completed = new Set(completedDayOrders);
+  const next = selected.find((order) => !completed.has(order));
+  return next === undefined
+    ? { nextDayOrder: selected[0], isLastDay: true }
+    : { nextDayOrder: next, isLastDay: false };
+}
+
+// Why a bounded recovery bridge is ready to hand off to the next cycle.
+// `lastHardPhaseCompletionMs` is normally the final Peak completion; callers
+// may supply the preceding rotation completion when recovery started early.
+// Mirrored 1:1 in CadenceCore ProgramProgression.
+export function recoveryBridgeCompletionReason(
+  completedRecoverySessions,
+  selectedExposureCount,
+  selectedExposuresComplete,
+  lastHardPhaseCompletionMs,
+  nowMs,
+) {
+  if (selectedExposuresComplete) return "selectedExposures";
+  // The cap is the BRIDGE'S OWN LENGTH, not a constant two. A program that is
+  // not recognizably upper/lower keeps its full authored pass — that fallback
+  // is deliberate, and capping it at two silently dropped day three onward for
+  // full-body, Olympic and conditioning programs, which is the work-losing
+  // behaviour the fallback exists to prevent.
+  const cap = Math.max(RECOVERY_SESSION_LIMIT, selectedExposureCount || 0);
+  if (completedRecoverySessions >= cap) return "sessionLimit";
+  // Recovery is a bounded bridge from the last hard phase, not a new calendar
+  // window that starts when reduced work is banked. Otherwise a first recovery
+  // exposure on day six silently extends the bridge to day thirteen, and an
+  // untouched recovery pointer can prescribe reduced work forever.
+  if (Number.isFinite(lastHardPhaseCompletionMs)
+      && nowMs - lastHardPhaseCompletionMs >= RECOVERY_WINDOW_MS) return "windowElapsed";
+  return null;
+}
+
+// Select one authored lower and one authored upper exposure for the phase-4
+// recovery bridge. Only the MAIN lift's movement group is supplied by callers,
+// so accessories cannot reclassify a day. Unrecognizable programs keep their
+// complete authored order: Olympic, full-body, conditioning-only, and damaged
+// programs must not silently lose days because the engine guessed.
+// Mirrored 1:1 in CadenceCore ProgramProgression.recoveryDayOrders.
+export function recoveryDayOrders(candidates) {
+  const sorted = [...candidates].sort((a, b) => a.order - b.order);
+  const allOrders = [...new Set(sorted.map((candidate) => candidate.order))].sort((a, b) => a - b);
+  const group = (candidate) => String(candidate.mainMovementGroup || "").toLowerCase();
+  const lower = sorted.find((candidate) => ["squat", "hinge"].includes(group(candidate)));
+  const upper = sorted.find((candidate) => ["press", "pull"].includes(group(candidate)));
+  if (!lower || !upper || lower.order === upper.order) return allOrders;
+  const selected = new Set([lower.order, upper.order]);
+  return allOrders.filter((order) => selected.has(order));
 }
 
 // Increment = fraction of base, floored at plate granularity.
@@ -1302,7 +1574,14 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
 //
 // Mirrored 1:1 in CadenceCore ProgramProgression.accessoryCannotProgressLoad.
 export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, incrementLb) {
-  if (UNLOADABLE_TYPES.has(String(exerciseType ?? "").toLowerCase())) return false;
+  // An explicit external basis outranks the equipment type, but ONLY for
+  // bodyweight: a weighted pull-up is typed bodyweight while hanging real
+  // plates from a belt, and the type guard alone silently exempted it from this
+  // warning. Timed and conditioning stay unloadable whatever they carry.
+  const type = String(exerciseType ?? "").toLowerCase();
+  const unloadable = type === "timed" || type === "conditioning"
+    || (type === "bodyweight" && !supportsLoadPR(loadBasis));
+  if (unloadable) return false;
   if (loadBasis === "bodyweight") return false;
   return weightLb > 0 && !(incrementLb > 0);
 }
@@ -1317,33 +1596,69 @@ export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, i
 // beats the app's opinion.
 //
 // Returns null when there is nothing useful to say.
-// Bodyweight-derived protein guidance. Advisory, and deliberately outside the
-// programming engine — nothing here feeds progression or readiness. The stored
-// proteinTargetGrams stays whatever the lifter set; this only offers a number
-// to compare it against.
+// Bodyweight- and age-derived protein guidance. Advisory, and deliberately
+// outside the programming engine — nothing here feeds progression or readiness.
+// Since schema V5 there is no tracker and no stored target: this is a figure to
+// aim at, not a number to tick off.
 //
 // 1.6 g/kg/day is the plateau Morton et al. (2018) found for RT-induced
-// fat-free mass gains; 0.4 g/kg/meal is the higher per-dose threshold PROT-AGE
-// recommends for older adults, whose muscle responds less to a given dose.
+// fat-free mass gains. That meta-analysis pooled resistance-training trials, so
+// the training modality is already inside the number — there is no per-session
+// multiplier, because scaling a daily intake by one day's workout is not
+// something the evidence supports.
+//
+// Age is where the answer genuinely changes: Moore et al. (2015) put the
+// per-meal plateau near 0.24 g/kg for younger adults and near 0.40 g/kg for
+// older ones, the higher figure PROT-AGE (Bauer 2013) recommends, because
+// muscle responds less to a given dose with age.
 // Mirrored 1:1 in CadenceCore ProteinGuidance.
 export const PROTEIN_DAILY_G_PER_KG = 1.6;
-export const PROTEIN_MEAL_G_PER_KG = 0.4;
+export const PROTEIN_MEAL_G_PER_KG_YOUNGER = 0.25;
+export const PROTEIN_MEAL_G_PER_KG_OLDER = 0.4;
+export const PROTEIN_OLDER_ADULT_AGE = 65;
 export const PROTEIN_MEALS_PER_DAY = 4;
+
+// Age in whole years, or null when there is no usable birth year. Never
+// guessed — a default age would silently apply the wrong per-meal threshold.
+export function ageFromBirthYear(birthYear, currentYear) {
+  if (!(birthYear > 1900) || !(currentYear >= birthYear)) return null;
+  const years = currentYear - birthYear;
+  return years <= 120 ? years : null;
+}
+
+// Without an age this is the older-adult figure — the conservative direction,
+// since the higher per-dose threshold costs a younger lifter nothing while
+// under-dosing an older one is the failure that matters.
+export function proteinMealGramsPerKg(age) {
+  if (age == null) return PROTEIN_MEAL_G_PER_KG_OLDER;
+  return age >= PROTEIN_OLDER_ADULT_AGE ? PROTEIN_MEAL_G_PER_KG_OLDER : PROTEIN_MEAL_G_PER_KG_YOUNGER;
+}
 
 const proteinGrams = (bodyweightLb, perKg) => {
   if (!(bodyweightLb > 0)) return null;
   return Math.round(kgFromLb(bodyweightLb) * perKg / 5) * 5;
 };
 export const proteinDailyTargetGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_DAILY_G_PER_KG);
-export const proteinPerMealGrams = (bodyweightLb) => proteinGrams(bodyweightLb, PROTEIN_MEAL_G_PER_KG);
+export const proteinPerMealGrams = (bodyweightLb, age = null) =>
+  proteinGrams(bodyweightLb, proteinMealGramsPerKg(age));
 
 // One line of guidance, or null when there is no bodyweight logged — the app
 // never invents one.
-export function proteinSummary(bodyweightLb) {
+export function proteinSummary(bodyweightLb, age = null) {
   const daily = proteinDailyTargetGrams(bodyweightLb);
-  const meal = proteinPerMealGrams(bodyweightLb);
+  const meal = proteinPerMealGrams(bodyweightLb, age);
   if (daily == null || meal == null) return null;
   return `${daily} g/day at ${PROTEIN_DAILY_G_PER_KG} g/kg, about ${meal} g per meal across ${PROTEIN_MEALS_PER_DAY}.`;
+}
+
+// Why the per-meal figure is what it is, or null without an age to explain it.
+export function proteinPerMealRationale(age) {
+  if (age == null) return null;
+  return age >= PROTEIN_OLDER_ADULT_AGE
+    ? `Per-meal figure uses the higher ${PROTEIN_MEAL_G_PER_KG_OLDER} g/kg threshold for adults `
+      + `${PROTEIN_OLDER_ADULT_AGE}+; muscle responds less to a given dose with age.`
+    : `Per-meal figure uses ${PROTEIN_MEAL_G_PER_KG_YOUNGER} g/kg, rising to `
+      + `${PROTEIN_MEAL_G_PER_KG_OLDER} g/kg from ${PROTEIN_OLDER_ADULT_AGE}.`;
 }
 
 // Mirrored 1:1 in CadenceCore ProgramProgression.sessionSpacingShortfall.
@@ -1375,6 +1690,191 @@ export function advanceAccessory(state, perf) {
     next.stallCount = 0;
   }
   return next;
+}
+
+// The next `count` exposures a slot will actually produce.
+//
+// The point of the deterministic engine is that its output can be audited, and
+// a wall of steppers is not an audit. A lifter setting a 190 lb base cannot see
+// that it yields a 225 lb peak triple while 188 yields 220 — the difference
+// between a +10 and a +5 jump, decided entirely by which side of a rounding
+// boundary the multiplication lands on. This turns that into something a human
+// reads at a glance.
+//
+// It runs the SHIPPED engine forward rather than describing it: every
+// prescription comes from sessionPrescription, and every step between exposures
+// comes from the same advanceAccessory / advanceLinearLift / advanceProgramLift
+// calls the banking layer makes. A parallel implementation would be able to
+// disagree with the app, which would make the preview worse than nothing.
+//
+// The walk assumes each exposure is banked exactly as prescribed — a clean
+// success. That is the honest reading of "what will this produce": misses are
+// the lifter's to discover, and a preview that guessed at them would be
+// fiction. Reset and stall state still show, because the slot's CURRENT
+// stallCount is carried in and the engine's own notes come back on each entry.
+//
+// Costs no persisted state. Mirrored 1:1 in CadenceCore
+// ProgramEngine.exposurePreview.
+export function exposurePreview({
+  count = 4, baseWeightLb, estimatedMaxLb = 0, stallCount = 0, cycleNumber = 1, rotation = 1,
+  programRoundingLb = DEFAULT_ROUNDING_LB, exerciseType = null, movementGroup = null,
+  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {},
+  pendingState = null, schedule = null,
+} = {}) {
+  if (!(count > 0) || !(baseWeightLb >= 0)) return [];
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  const step = programLoadStep(programRoundingLb, exerciseType);
+  // Coerce rather than spread-with-defaults: a slot record written before the
+  // rep-window fields existed (and every freshly added lift) carries them as
+  // `undefined`, and an explicit undefined WINS an object spread. That would
+  // reach advanceAccessory as NaN and preview a rep window of nothing.
+  // Same clamps the native side applies in ProgramLift.prescriptionConfiguration,
+  // so both platforms read a malformed slot identically.
+  const config = { ...configuration };
+  const num = (value, fallback) => (Number.isFinite(value) ? value : fallback);
+  config.workingSets = Math.max(1, num(config.workingSets, 3));
+  config.minimumReps = Math.max(1, num(config.minimumReps, 5));
+  config.maximumReps = Math.max(config.minimumReps, num(config.maximumReps, 8));
+  config.currentReps = Math.max(config.minimumReps, num(config.currentReps, config.minimumReps));
+  let state = { baseWeightLb, estimatedMaxLb, stallCount, role, lastIncrementLb: 0 };
+  let cycle = Math.max(1, cycleNumber);
+  let phase = PHASES[rotation] ? rotation : 1;
+  // Graded styles stash the new base at the Peak and apply it at the rollover,
+  // so the recovery rotation still runs off the old base. Mirrors
+  // pendingBaseWeightLb in the banking layer exactly.
+  //
+  // Seeded from the slot's ALREADY-BANKED grade when there is one. Open the
+  // editor during recovery after a peak has been banked and the slot is
+  // carrying an earned new base that the next cycle will use; starting from
+  // null previewed that cycle off the old base and quietly understated every
+  // number the lifter was about to see.
+  let pending = pendingState;
+  const entries = [];
+  // A clean exposure of a plan: every prescribed set made at the prescribed
+  // load, no quality flags, no autoreg drop.
+  const cleanPerformance = (plan) => ({
+    prescribedSets: plan.sets, prescribedReps: plan.reps, completedSets: plan.sets,
+    anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false,
+    grindyOrWobbleSets: 0, topSetWeightLb: plan.weightLb, topSetReps: plan.reps,
+  });
+
+  // A direct core caller may omit schedule context. Treat that as a one-day
+  // program; app surfaces supply the real day pointer and recovery selection.
+  const previewSchedule = schedule || {
+    targetDayOrder: 0, nextDayOrder: 0, allDayOrders: [0],
+    recoveryDayOrders: [0], synchronizedDayOrders: [0],
+  };
+  const uniqueSorted = (values) => [...new Set(values || [])].sort((a, b) => a - b);
+  const allOrders = uniqueSorted(previewSchedule.allDayOrders);
+  const recoveryOrders = uniqueSorted(previewSchedule.recoveryDayOrders);
+  if (!allOrders.includes(previewSchedule.targetDayOrder)) return [];
+  const synchronizedOrders = new Set([
+    ...(previewSchedule.synchronizedDayOrders || []), previewSchedule.targetDayOrder,
+  ]);
+  const activeOrders = () => (phase === DELOAD_WEEK && recoveryOrders.length ? recoveryOrders : allOrders);
+  let orders = activeOrders();
+  let orderIndex = Math.max(0, orders.indexOf(previewSchedule.nextDayOrder));
+  const maxSteps = count * Math.max(1, allOrders.length + recoveryOrders.length) + allOrders.length + 8;
+  let steps = 0;
+
+  while (entries.length < count && orders.length && steps < maxSteps) {
+    steps += 1;
+    const dayOrder = orders[orderIndex];
+    const isTarget = dayOrder === previewSchedule.targetDayOrder;
+    const isSynchronizedDay = synchronizedOrders.has(dayOrder);
+    const cycleState = {
+      cycleNumber: cycle, baseWeightLb: state.baseWeightLb,
+      nextPhase: phase, incrementLb: state.lastIncrementLb,
+    };
+    const prescription = sessionPrescription(
+      cycleState, programRoundingLb, exerciseType, movementGroup,
+      role, focus, style, config, state.estimatedMaxLb,
+    );
+    const work = prescription.mainWork;
+    let note = null;
+
+    if (isTarget && style === "doubleProgression") {
+      // Rep window first, load second — and never on the recovery rotation,
+      // which is non-progressive by contract.
+      if (phase !== DELOAD_WEEK) {
+        const prior = {
+          sets: Math.max(1, config.workingSets),
+          minReps: Math.max(1, config.minimumReps),
+          maxReps: Math.max(config.minimumReps, config.maximumReps),
+          currentReps: Math.max(config.minimumReps, config.currentReps),
+          weightLb: state.baseWeightLb, incrementLb: step, stallCount: state.stallCount,
+        };
+        const next = advanceAccessory(prior, {
+          completedSets: work.sets, minRepsAchieved: work.reps, anyStoppedEarly: false,
+          performedAtPlannedLoad: true, grindyOrWobbleSets: 0, bodyFlagSets: 0,
+        });
+        note = next.weightLb > prior.weightLb
+          ? `Top of the window earned — add ${trim(step)} lb and drop back to ${next.currentReps} reps.`
+          : `Earned the reps — ${next.currentReps} next time at the same load.`;
+        state.lastIncrementLb = next.weightLb - prior.weightLb;
+        state.baseWeightLb = next.weightLb;
+        state.stallCount = next.stallCount;
+        config.currentReps = next.currentReps;
+      }
+    } else if (advancesPerExposure(style) && style !== "doubleProgression" && isSynchronizedDay) {
+      if (phase !== DELOAD_WEEK) {
+        const result = advanceLinearLift(
+          state, cleanPerformance(work), linearRule(style, movementGroup), step,
+        );
+        state = result.state;
+        if (isTarget) note = result.note;
+      } else if (isTarget) {
+        note = "Recovery rotation — the base holds, then the exposure cadence resumes.";
+      }
+    } else if (isTarget && phase === GRADED_WEEK) {
+      const result = advanceProgramLift(state, cleanPerformance(work), focus, style, movementGroup, step);
+      // The grade is banked now; the base lands at the rollover.
+      pending = result.state;
+      note = result.note;
+    }
+
+    if (isTarget) {
+      entries.push({
+        exposureNumber: entries.length + 1,
+        cycleNumber: cycle,
+        rotation: phase,
+        phaseName: slotPhaseLabel(phase, role, style, movementGroup, focus),
+        isRecovery: phase === DELOAD_WEEK,
+        baseWeightLb: cycleState.baseWeightLb,
+        prescription,
+        advanceNote: note,
+      });
+    }
+
+    orderIndex += 1;
+    if (orderIndex >= orders.length) {
+      if (phase === DELOAD_WEEK) {
+        cycle += 1;
+        // Mirror rollOverRecovery exactly, all three branches. Per-exposure
+        // slots discard stale pending grades; graded slots apply a banked
+        // grade; a peak-less wave accrues the real stall/rebuild.
+        if (advancesPerExposure(style)) {
+          pending = null;
+        } else if (pending) {
+          state = pending;
+          pending = null;
+        } else if (usesCyclePhases(style)) {
+          state.stallCount = (state.stallCount || 0) + 1;
+          state.lastIncrementLb = 0;
+          if (state.stallCount >= STALL_LIMIT) {
+            state.baseWeightLb = roundTo(state.baseWeightLb * DELOAD_REBUILD_FRACTION, step);
+            state.stallCount = 0;
+          }
+        }
+        phase = 1;
+      } else {
+        phase += 1;
+      }
+      orders = activeOrders();
+      orderIndex = 0;
+    }
+  }
+  return entries;
 }
 
 // ---- Rest defaults ---------------------------------------------------------
@@ -1458,7 +1958,9 @@ export function restClockFractionRemaining(s, now) {
 // distance = speed × time. Any two give the third, so the logger can accept
 // whichever two the lifter actually knows. Only distance and duration are
 // persisted — speed is always recoverable from them, so there is no third
-// field to store, disagree with itself, or migrate.
+// field to store, disagree with itself, or migrate. Flights repeat that
+// relationship against a yardstick that is not ground covered, and are
+// persisted the same way: the count and the duration, never the pace.
 
 // Miles per hour from distance + duration, rounded to one decimal; null when
 // either half is missing/zero (no speed without both).
@@ -1482,6 +1984,86 @@ export function cardioDistanceMiles(speedMph, durationSeconds) {
 export function cardioDurationSeconds(distanceMiles, speedMph) {
   if (!(distanceMiles > 0) || !(speedMph > 0)) return null;
   return Math.round((distanceMiles / speedMph) * 3600);
+}
+
+// ---- Climbed flights -------------------------------------------------------
+// Conditioning measured in flights climbed, not ground covered. A stair
+// climber's belt goes nowhere, so miles and miles-per-hour describe it with a
+// unit it does not have: the console counts floors, and the training variable
+// is how many and how fast.
+//
+// flights = pace × time, the same solve-the-third rule as distance, with pace
+// in flights per minute rather than miles per hour. Minutes, because a
+// climber's console reads in floors per minute and an hourly rate on a
+// twenty-minute effort is a number nobody checks against the machine.
+export const FLIGHT_CLIMBERS = new Set(["Stair Climber"]);
+
+export const cardioClimbsFlights = (exerciseName) => FLIGHT_CLIMBERS.has(exerciseName);
+
+// Flights per minute from flights + duration, rounded to one decimal; null
+// when either half is missing/zero (no pace without both).
+export function cardioFlightPace(flights, durationSeconds) {
+  if (!(flights > 0) || !(durationSeconds > 0)) return null;
+  return Math.round((flights / (durationSeconds / 60)) * 10) / 10;
+}
+
+// Flights from pace + duration — "twenty minutes at eight floors a minute".
+//
+// Four decimals for the same reason distance is: a pace set on a short
+// interval has to read back as the pace that was set, and rounding to whole
+// flights would collapse neighbouring paces onto one count.
+export function cardioFlights(pacePerMinute, durationSeconds) {
+  if (!(pacePerMinute > 0) || !(durationSeconds > 0)) return null;
+  return Math.round(pacePerMinute * (durationSeconds / 60) * 10000) / 10000;
+}
+
+// Seconds from flights + pace — "sixty floors at eight a minute" as a plan.
+export function cardioFlightDurationSeconds(flights, pacePerMinute) {
+  if (!(flights > 0) || !(pacePerMinute > 0)) return null;
+  return Math.round((flights / pacePerMinute) * 60);
+}
+
+// "170 flights", "1 flight". Trimmed to one decimal: a count entered by hand
+// is whole, but one solved from a pace over a short interval is not, and
+// rounding it away would contradict the pace shown beside it.
+export function cardioFlightsLabel(flights) {
+  const text = trim(flights, 1);
+  return `${text} ${text === "1" ? "flight" : "flights"}`;
+}
+
+// Which fields a conditioning set is edited with. Pure mirror of
+// CadenceCore/CardioFormat.swift (`CardioFields`, `fields`).
+//
+// Decided by the movement AND by what the set already holds: a climb logged in
+// miles before flights existed keeps its distance block, because a field that
+// disappears takes the only way to correct the value with it.
+//
+// One source for the editor's rows, its section header, and the row's
+// affordance line, so a row can never advertise a field the editor withholds.
+export function cardioFields(exerciseName, flights, distanceMiles, inclinePercent) {
+  const climbs = cardioClimbsFlights(exerciseName);
+  const f = {
+    load: cardioCarriesLoad(exerciseName),
+    flights: climbs || flights > 0,
+    distance: !climbs || distanceMiles > 0,
+    // A climber's grade is the machine, not a setting — unless a legacy set
+    // already carries one.
+    incline: !climbs || inclinePercent > 0,
+  };
+  const names = [];
+  if (f.load) names.push("load");
+  if (f.flights) names.push("flights");
+  if (f.distance) names.push("distance");
+  names.push("time");
+  if (f.distance) names.push("speed");
+  if (f.flights) names.push("pace");
+  if (f.incline) names.push("incline");
+  f.names = names;
+  f.label = names.join(" · ");
+  f.headerLabel = names.length
+    ? [names[0][0].toUpperCase() + names[0].slice(1), ...names.slice(1)].join(" · ")
+    : "";
+  return f;
 }
 
 // Conditioning that carries external load. A ruck is a walk with a pack on,
@@ -1512,13 +2094,20 @@ export function cardioDurationLabel(seconds) {
 // Missing halves simply drop out; nothing logged → "—".
 // `loadLb` is the carried weight for a ruck or sled — omitted entirely for
 // unloaded work, which has none.
-export function cardioSetLabel(distanceMiles, durationSeconds, inclinePercent, loadLb = null) {
+//
+// Driven by what the set actually holds rather than by the exercise, so a
+// stair-climber set logged in miles before flights existed still renders the
+// distance it was recorded with instead of reading empty.
+export function cardioSetLabel(distanceMiles, durationSeconds, inclinePercent, loadLb = null, flights = null) {
   const parts = [];
   if (loadLb > 0) parts.push(`${trim(loadLb)} lb`);
+  if (flights > 0) parts.push(cardioFlightsLabel(flights));
   if (distanceMiles > 0) parts.push(`${trim(distanceMiles, 2)} mi`);
   if (durationSeconds > 0) parts.push(cardioDurationLabel(durationSeconds));
   const mph = cardioSpeedMph(distanceMiles, durationSeconds);
   if (mph !== null) parts.push(`${trim(mph)} mph`);
+  const pace = cardioFlightPace(flights, durationSeconds);
+  if (pace !== null) parts.push(`${trim(pace)} fl/min`);
   if (inclinePercent > 0) parts.push(`${trim(inclinePercent)}%`);
   return parts.length ? parts.join(" · ") : "—";
 }
@@ -1559,25 +2148,34 @@ export function healthSampleBelongsToSession(sampleStart, sampleEnd, sessionStar
   return healthOverlapSeconds(sampleStart, sampleEnd, sessionStart, sessionEnd) >= sampleSeconds / 2;
 }
 
+// Compare any two measurements of the same thing. Zero and null are both
+// absence — "Health has nothing to say" is never "Health says zero". Pass
+// toleranceFraction 0 where a flat band is the honest one (a weigh-in does not
+// get looser as the lifter gets heavier).
+export function healthVerdictKind(logged, health, toleranceAbsolute, toleranceFraction = 0) {
+  const l = logged > 0 ? logged : null;
+  const h = health > 0 ? health : null;
+  if (l === null && h === null) return "neither";
+  if (l === null) return "onlyHealth";
+  if (h === null) return "onlyLogged";
+  const allowed = Math.max(toleranceAbsolute, Math.max(l, h) * toleranceFraction);
+  if (Math.abs(h - l) <= allowed + 1e-9) return "agree";
+  return h > l ? "healthHigher" : "loggedHigher";
+}
+
 // Compare a logged conditioning distance against Health's for one session.
 // Returns { kind, loggedMiles, healthMiles, isDiscrepancy, adoptableMiles }.
 export function healthCompare(loggedMiles, healthMiles) {
   const logged = loggedMiles > 0 ? loggedMiles : null;
   const health = healthMiles > 0 ? healthMiles : null;
-  const verdict = (kind, extra) => ({
+  const kind = healthVerdictKind(logged, health, HEALTH_TOLERANCE_MILES, HEALTH_TOLERANCE_FRACTION);
+  return {
     kind,
     loggedMiles: logged,
     healthMiles: health,
     isDiscrepancy: kind === "healthHigher" || kind === "loggedHigher" || kind === "onlyHealth",
     adoptableMiles: kind === "onlyLogged" || kind === "agree" || kind === "neither" ? null : health,
-    ...extra,
-  });
-  if (logged === null && health === null) return verdict("neither");
-  if (logged === null) return verdict("onlyHealth");
-  if (health === null) return verdict("onlyLogged");
-  const allowed = Math.max(HEALTH_TOLERANCE_MILES, Math.max(logged, health) * HEALTH_TOLERANCE_FRACTION);
-  if (Math.abs(health - logged) <= allowed + 1e-9) return verdict("agree");
-  return verdict(health > logged ? "healthHigher" : "loggedHigher");
+  };
 }
 
 // One line stating what each source says. Never phrased as a correction.
@@ -1592,6 +2190,78 @@ export function healthComparisonLabel(verdict) {
     case "onlyLogged": return "Nothing in Health for this session";
     default: return "No conditioning distance";
   }
+}
+
+// [INV-HEALTH-IS-A-SECOND-OPINION] Whether a Health sample came from somewhere
+// other than Cadence itself.
+//
+// Load-bearing, and invisible when wrong. Cadence writes workouts, bodyweight
+// and body fat into Health; without this every read would find those writes and
+// "confirm" the log against a mirror of itself. A cross-check that always
+// agrees is worse than no cross-check, because it looks like corroboration.
+//
+// An unattributable sample counts as foreign: discounting a sample we cannot
+// prove is ours would silently drop a real second opinion, and the other
+// choice fails visibly the first time it offers the lifter their own number.
+export function healthSourceIsForeign(bundleIdentifier, appBundleIdentifier) {
+  const app = (appBundleIdentifier || "").trim();
+  if (!app) return true;
+  const source = (bundleIdentifier || "").trim();
+  if (!source) return true;
+  return source.toLowerCase() !== app.toLowerCase();
+}
+
+// Two weigh-ins closer than this are the same weigh-in. A scale reports to a
+// tenth of a pound and Health round-trips through kilograms, so exact equality
+// would offer an "import" of a weight the lifter just typed.
+export const HEALTH_WEIGH_IN_TOLERANCE_LB = 0.2;
+
+// Whether a Health weigh-in is one Cadence already has: same calendar day and
+// same number. A genuine second weigh-in later the same day is a different
+// weight and stays offerable; yesterday's is a different day, not a duplicate.
+export function healthIsSameWeighIn(loggedLb, loggedDate, healthLb, healthDate) {
+  const a = loggedDate instanceof Date ? loggedDate : new Date(loggedDate);
+  const b = healthDate instanceof Date ? healthDate : new Date(healthDate);
+  if (a.getFullYear() !== b.getFullYear() || a.getMonth() !== b.getMonth()
+      || a.getDate() !== b.getDate()) return false;
+  return Math.abs(loggedLb - healthLb) <= HEALTH_WEIGH_IN_TOLERANCE_LB + 1e-9;
+}
+
+// The HKCategoryValueSleepAnalysis stages that count as sleep. `inBed` is time
+// on the mattress, not time asleep, and `awake` is explicitly not sleep;
+// counting either would inflate a night by hours.
+export const HEALTH_ASLEEP_STAGES = [
+  "asleepUnspecified", "asleepCore", "asleepDeep", "asleepREM",
+];
+
+// Total time actually asleep, from stage samples of { stage, start, end }.
+//
+// Overlapping intervals are MERGED, not added. A watch and a sleep app both
+// staging the same night is ordinary, and the anti-echo filter does not help —
+// it excludes Cadence, not third parties. Summing durations would report ten
+// hours of sleep to someone who slept five, a number wrong enough to discredit
+// every other figure on the screen.
+export function healthAsleepSeconds(stages) {
+  const ms = (v) => (v instanceof Date ? v.getTime() : new Date(v).getTime());
+  const intervals = (stages || [])
+    .filter((s) => HEALTH_ASLEEP_STAGES.includes(s.stage) && ms(s.end) > ms(s.start))
+    .map((s) => [ms(s.start), ms(s.end)])
+    .sort((a, b) => a[0] - b[0]);
+  if (!intervals.length) return 0;
+
+  let total = 0;
+  let [runStart, runEnd] = intervals[0];
+  for (const [start, end] of intervals.slice(1)) {
+    if (start > runEnd) {
+      total += runEnd - runStart;
+      runStart = start;
+      runEnd = end;
+    } else if (end > runEnd) {
+      runEnd = end;
+    }
+  }
+  total += runEnd - runStart;
+  return Math.round(total / 1000);
 }
 
 // ---- Rotation-first coaching ----------------------------------------------
@@ -1622,7 +2292,8 @@ export const isConditioningPattern = (pattern) =>
 
 const PATTERN_NAMES = {
   verticalPress: new Set(["Overhead Press", "Push Press", "Push Jerk", "Split Jerk", "Overhead DB Press", "Seated Upright DB Press", "Arnold Press", "Landmine Press", "KB Press"]),
-  verticalPull: new Set(["Lat Pulldown", "Straight-arm Pulldown", "Pull-ups", "Chin-ups", "Assisted Pull-up"]),
+  verticalPull: new Set(["Lat Pulldown", "Straight-arm Pulldown", "Pull-ups", "Chin-ups", "Assisted Pull-up",
+    "Weighted Pull-up", "Weighted Chin-up"]),
   horizontalPull: new Set(["Single-arm DB Row", "Chest-supported Row", "Ring Row", "Barbell Row", "Pendlay Row", "T-Bar Row", "Seated Cable Row", "One-arm Cable Row", "Bent-over DB Row", "Incline Bench DB Row", "KB Row", "Banded Row"]),
   kneeFlexion: new Set(["Seated Leg Curl", "Lying Leg Curl", "Nordic Hamstring Curl"]),
   hipExtension: new Set(["Back Extension", "Glute Bridge", "Barbell Hip Thrust", "Cable Pull-through"]),

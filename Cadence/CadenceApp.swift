@@ -36,6 +36,12 @@ final class AppBootstrap: ObservableObject {
         errorMessage = nil
         isTemporary = false
         let candidates: [(String, () throws -> ModelContainer)] = [
+            // V6 first: it is the newest shipped checksum, so stores already
+            // carrying the flights addition match here without trying older
+            // fallback ladders first.
+            ("V6 staged migration", { try self.makeContainer(migrationPlan: CadenceV6MigrationPlan.self) }),
+            ("V5 staged migration", { try self.makeContainer(migrationPlan: CadenceV5MigrationPlan.self) }),
+            ("V4 staged migration", { try self.makeContainer(migrationPlan: CadenceV4MigrationPlan.self) }),
             ("V3 staged migration", { try self.makeContainer(migrationPlan: CadenceV3MigrationPlan.self) }),
             ("pre-72 staged migration", { try self.makeContainer(migrationPlan: CadencePre72MigrationPlan.self) }),
             ("72 staged migration", { try self.makeContainer(migrationPlan: Cadence72MigrationPlan.self) }),
@@ -91,7 +97,7 @@ final class AppBootstrap: ObservableObject {
         migrationPlan: Plan.Type,
         isStoredInMemoryOnly: Bool = false
     ) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isStoredInMemoryOnly)
         return try ModelContainer(
             for: schema,
@@ -101,7 +107,7 @@ final class AppBootstrap: ObservableObject {
     }
 
     private func makeUnplannedContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
         let config = ModelConfiguration(schema: schema)
         return try ModelContainer(for: schema, migrationPlan: nil, configurations: config)
     }

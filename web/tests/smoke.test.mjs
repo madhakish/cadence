@@ -20,6 +20,7 @@ const host = () => document.getElementById("view");
 
 const db = await import("../app/js/db.js");
 const home = await import("../app/js/views/home.js");
+const programView = await import("../app/js/views/program.js");
 const history = await import("../app/js/views/history.js");
 const body = await import("../app/js/views/body.js");
 const signals = await import("../app/js/views/signals.js");
@@ -27,6 +28,7 @@ const settings = await import("../app/js/views/settings.js");
 const session = await import("../app/js/views/session.js");
 const plates = await import("../app/js/views/plates.js");
 const barbell = await import("../app/js/barbell.js");
+const ui = await import("../app/js/ui.js");
 const C = await import("../app/js/core.js");
 const coach = await import("../app/js/coaching-adapter.js");
 const completeAll = async (workout) => {
@@ -47,7 +49,7 @@ const completeAll = async (workout) => {
 // ---- privacy-safe first launch ----
 await db.ensureSeeded();
 const seededExercises = await db.Exercises.all();
-ok(seededExercises.length === 141, "seeded 141 exercises");
+ok(seededExercises.length === 143, "seeded 143 exercises");
 ok(["Push-ups", "Pull-ups", "Barbell Row", "Bulgarian Split Squat", "Ab Wheel Rollout", "Row Erg"]
   .every((name) => seededExercises.some((exercise) => exercise.name === name)),
   "comprehensive seed covers common push, pull, lower, core, and conditioning movements");
@@ -71,14 +73,14 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
     date: "2000-01-01T00:00:00.000Z", notes: "Fictional seed-repair sentinel",
     isCompleted: true, gymName: "Main Gym", exercises: [],
   });
-  const proteinId = await db.Protein.add({ date: "2000-01-01T00:00:00.000Z", grams: 10, label: "Fixture sentinel" });
+  const weighInId = await db.Bodyweight.add({ date: "2000-01-01T00:00:00.000Z", weightLb: 199 });
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
   ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
-  ok((await db.Exercises.all()).length === 141, "seed repair does not duplicate exercises");
-  ok((await db.Protein.all()).some((entry) => entry.id === proteinId), "seed repair preserves other user stores");
+  ok((await db.Exercises.all()).length === 143, "seed repair does not duplicate exercises");
+  ok((await db.Bodyweight.all()).some((entry) => entry.id === weighInId), "seed repair preserves other user stores");
   await db.Sessions.del(sentinelId);
-  await db.Protein.del(proteinId);
+  await db.Bodyweight.del(weighInId);
 }
 
 // Explicit fictional state for the remainder of the regression suite. This is
@@ -267,7 +269,35 @@ for (let i = 0; i < 10; i++) {
   await db.syncLibrary();
   ok((await db.Exercises.byName("Deadlift")).movementGroup === "hinge", "sync backfills a missing movement group");
   ok((await db.Exercises.byName("Deadlift")).defaultRestSeconds === 222, "sync does NOT clobber user edits");
-  ok((await db.Exercises.all()).length === 141, "sync leaves the count whole (no dupes)");
+  ok((await db.Exercises.all()).length === 143, "sync leaves the count whole (no dupes)");
+}
+
+// ---- vertical pulls: migrate old installs once, then respect user edits ----
+{
+  const pullups = await db.Exercises.byName("Pull-ups");
+  const chinups = await db.Exercises.byName("Chin-ups");
+  pullups.category = "Accessory";
+  chinups.category = "Accessory";
+  await db.Exercises.save(pullups);
+  await db.Exercises.save(chinups);
+  const settings = await db.Settings.get();
+  delete settings.verticalPullMainsPromoted; // pre-promotion seeded install
+  await db.Settings.save(settings);
+
+  await db.syncLibrary();
+  ok((await db.Exercises.byName("Pull-ups")).category === "Main"
+    && (await db.Exercises.byName("Chin-ups")).category === "Main",
+  "an existing seeded install promotes bodyweight vertical pulls to main lifts");
+  ok((await db.Settings.get()).verticalPullMainsPromoted === true,
+    "the vertical-pull promotion records its one-shot marker");
+
+  pullups.category = "Accessory";
+  await db.Exercises.save(pullups);
+  await db.syncLibrary();
+  ok((await db.Exercises.byName("Pull-ups")).category === "Accessory",
+    "a deliberate post-migration demotion survives later library syncs");
+  pullups.category = "Main";
+  await db.Exercises.save(pullups);
 }
 
 // ---- retired rest stamps: one-shot clear un-freezes the rest buckets ----
@@ -305,6 +335,13 @@ for (let i = 0; i < 10; i++) {
   const day = [...prog.days].sort((a, b) => a.order - b.order)[0]; // Lower A: Back Squat main, Deadlift complementary
   const sid = await session.createSessionFromProgramDay(prog, day);
   await session.openSession(sid); await tick();
+  const logger = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  ok(logger.querySelector(".overlay-head h2")?.textContent === day.name,
+    "the logger title is the workout name, with the date kept in its progress card");
+  ok(logger.querySelector(".session-progress")?.textContent.includes("Exercise 1 of"),
+    "the logger reports exercise and whole-workout set progress");
+  ok(logger.querySelector(".current-set-card") && [...logger.querySelectorAll("button")].some((button) => button.textContent === "Show all sets"),
+    "the current set owns the cockpit while a full-set control remains available");
   const restBtn = [...document.querySelectorAll("#session-bar button")].find((b) => b.textContent.startsWith("Rest "));
   ok(restBtn && restBtn.textContent === "Rest 4:00", `main squat rest follows the bucket stepper (got ${restBtn && restBtn.textContent})`);
   const chips = [...document.querySelectorAll("#overlays .overlay button")].filter((b) => b.textContent.startsWith("⏱"));
@@ -317,9 +354,161 @@ for (let i = 0; i < 10; i++) {
 }
 
 // ---- render every tab without throwing ----
-for (const [name, view] of [["home", home], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
+for (const [name, view] of [["home", home], ["program", programView], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
   try { await view.render(host()); ok(host().childElementCount > 0, `${name} rendered`); }
   catch (e) { ok(false, `${name} threw: ${e.message}`); }
+}
+
+// ---- style-aware labels and the exposure preview render (#105, #106) -------
+// Today used to print a Volume/Load/Peak name against every slot on the screen,
+// including the ones whose prescription never touches a phase. The label is now
+// per-slot, so a program mixing styles has to be able to say so on one screen.
+{
+  const program = await db.Programs.active();
+  const day = program.days.find((d) => d.order === program.nextDayIndex) || program.days[0];
+  const originals = day.lifts.map((l) => l.prescription);
+  day.lifts[0].prescription = "linearFives";
+  if (day.lifts[1]) day.lifts[1].prescription = "wave";
+  program.currentWeek = 3;
+  await db.Programs.save(program);
+  try {
+    await home.render(host());
+    const text = host().textContent;
+    const todayHero = host().querySelector(".today-hero");
+    ok(todayHero && todayHero.parentElement?.firstElementChild === todayHero,
+      "Today leads with the next workout when no session is open");
+    ok(host().querySelector(".coach-summary") && host().querySelector(".day-sequence"),
+      "Today keeps coach and program sequence compact beneath the hero");
+    ok(text.includes("Main · Linear 5s") || text.includes("Complementary · Linear 5s"),
+      "a per-exposure slot is badged with what it actually does");
+    ok(!host().querySelector(".wave"), "the rising wave glyph is gone from the program header");
+    ok(host().querySelector(".rotation"), "a style-neutral rotation indicator took its place");
+
+    // The phase name survives ONLY against the wave slot.
+    const badges = [...host().querySelectorAll(".slot-badge")];
+    ok(badges.length > 0, "every program slot carries a badge");
+    const linearBadge = badges.find((b) => b.textContent.includes("Linear 5s"));
+    ok(linearBadge && !linearBadge.textContent.includes("Peak"),
+      "[INV-PHASE-NAME-IS-PER-SLOT] no phase name is rendered against a slot whose style does not use phases");
+    if (day.lifts[1]) {
+      const waveBadge = badges.find((b) => b.textContent.includes("· Wave"));
+      ok(waveBadge && waveBadge.textContent.includes("R3 Peak"),
+        "a wave slot still says which phase it is in");
+    }
+  } finally {
+    day.lifts.forEach((l, i) => { l.prescription = originals[i]; });
+    program.currentWeek = 1;
+    await db.Programs.save(program);
+  }
+}
+
+// The editor is a wall of inputs; the preview is the only output on it.
+{
+  const program = await db.Programs.active();
+  const day = program.days[0];
+  const lift = day.lifts[0];
+  const exercises = await db.Exercises.all();
+  const exercise = exercises.find((e) => e.name === lift.exerciseName);
+  const prior = { prescription: lift.prescription, base: lift.baseWeightLb };
+  lift.prescription = "wave";
+  lift.baseWeightLb = 190;
+  program.roundingLb = 5;
+  const card = ui.exposurePreview(lift, program, exercise);
+  const text = card.textContent;
+  ok(text.includes("Next 4 exposures"), "the preview names what it is showing");
+  ok(text.includes("R3 Peak"), "a wave slot's exposures carry their phase names");
+  ok(text.includes("225"),
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] a 190 lb base previews its real 225 lb peak triple");
+  ok(text.includes("Base"), "the preview says what the numbers derive from");
+
+  lift.prescription = "fiveThreeOne";
+  const wendlerCard = ui.exposurePreview(lift, program, exercise);
+  const wendler = wendlerCard.textContent;
+  ok(!wendler.includes("Peak") && !wendler.includes("Volume"),
+    "5/3/1 previews exposures, never wave phases");
+  ok(wendler.includes("Session 1"), "phase-independent styles number their exposures");
+  ok(wendler.includes("+ set"), "the graded + set is visible, not hidden behind the top line");
+  ok(wendler.includes("ramp"), "and so are the ramp sets that make up most of the session");
+  ok(wendler.includes("Training max"), "a 5/3/1 base is named as the training max it is");
+  const firstWendlerRow = wendlerCard.querySelector(".row");
+  const mainLoad = firstWendlerRow?.querySelector(".mono")?.textContent;
+  ok(mainLoad && firstWendlerRow.textContent.split(mainLoad).length - 1 === 1,
+    "the 5/3/1 top set is identified without duplicating its load and scheme");
+
+  ok(ui.sessionPhaseLabel({ phase: 3, prescriptionStyle: "linearFives", programRole: "main" }, exercise) === null,
+    "active and history surfaces hide false Peak labels on linear slots");
+  ok(ui.sessionPhaseLabel({ phase: 3, prescriptionStyle: "wave", programRole: "main" }, exercise) === "R3 Peak",
+    "active and history surfaces retain truthful wave phase labels");
+  ok(ui.sessionPhaseLabel({ phase: 3 }, exercise) === C.phaseLabel(3),
+    "legacy sessions without captured style retain their historical label");
+
+  lift.prescription = prior.prescription;
+  lift.baseWeightLb = prior.base;
+  await db.Programs.save(program);
+}
+
+// The preview is the only output on the slot editor, and every control beside
+// it is an input. A stepper that saves without refreshing it leaves the lifter
+// reading the previous walk — which is precisely the 188-vs-190 lb comparison
+// the feature exists to make visible. Drive the real editor DOM, not the
+// component in isolation, because the defect was in the wiring.
+{
+  const program = await db.Programs.active();
+  const day = program.days.find((d) => (d.lifts || []).length) || program.days[0];
+  const lift = day.lifts[0];
+  const priorStyle = lift.prescription;
+  const priorBase = lift.baseWeightLb;
+  lift.prescription = "wave";
+  lift.baseWeightLb = 190;
+  program.roundingLb = 5;
+  await db.Programs.save(program);
+
+  await programView.render(host());
+  const addProgram = [...host().querySelectorAll("button")].find((button) => button.textContent.includes("Add program"));
+  addProgram.click(); await tick();
+  let creator = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  ok(["Start from a template", "Blank program", "Import a program file"]
+    .every((label) => creator.textContent.includes(label)),
+  "Add program exposes three clear creation paths before making a choice");
+  [...creator.querySelectorAll("button")].find((button) => button.textContent.includes("Start from a template")).click();
+  await tick();
+  creator = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  ok(creator.textContent.includes("days ·") && creator.textContent.includes("strength")
+    && creator.textContent.includes("Wave"),
+  "template choices expose days, focus, and dominant prescriptions before selection");
+  [...creator.querySelectorAll("button")].find((button) => button.textContent === "Cancel").click();
+  await tick();
+
+  const progRow = [...host().querySelectorAll(".program-day-card")]
+    .find((row) => row.textContent.includes(day.name));
+  progRow.click(); await tick();
+  const editor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const dayLead = [...editor.querySelectorAll(".lead")].find((el) => el.textContent.includes(day.name));
+  ok(dayLead, "the program editor lists the day");
+  dayLead.click(); await tick();
+
+  const dayEditor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const baseRow = [...dayEditor.querySelectorAll(".row")].find((r) => r.textContent.includes("Rotation-1 base"));
+  ok(baseRow, "the slot editor offers the base stepper");
+  const before = dayEditor.textContent;
+  ok(before.includes("225"), "a 190 lb base previews its 225 lb peak before any edit");
+
+  // One step down: 190 → 185, whose peak rounds to 215 rather than 225.
+  baseRow.querySelector(".stepper button").click(); await tick();
+  const after = dayEditor.textContent;
+  ok(!after.includes("225") || after.includes("215"),
+    "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] stepping the base refreshes the preview instead of leaving a stale walk");
+  ok(after.includes("215"), "and it shows the new base's real peak");
+
+  // Close both overlays and restore.
+  for (const overlay of [...document.querySelectorAll("#overlays .overlay")].reverse()) {
+    overlay.querySelector(".overlay-head button").click(); await tick();
+  }
+  const restored = await db.Programs.active();
+  const restoredLift = (restored.days.find((d) => d.name === day.name) || restored.days[0]).lifts[0];
+  restoredLift.prescription = priorStyle;
+  restoredLift.baseWeightLb = priorBase;
+  await db.Programs.save(restored);
 }
 
 // Today with no active program is the very first screen a new install shows.
@@ -351,6 +540,118 @@ await history.render(host());
 const chartsBtn = [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Charts");
 chartsBtn.click(); await tick();
 ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history charts mode renders");
+const intentLabels = [...host().querySelectorAll("select option")].map((option) => option.textContent);
+ok(["Main progression", "Compare program roles", "Compare like rotations"].every((label) => intentLabels.includes(label)),
+  "history exposes the three explicit chart intents");
+
+// Asking for a projection must always produce an answer. A control that
+// silently changes nothing when the history is too thin reads as broken, so
+// the chart either draws the trend or says why it will not.
+{
+  const horizonBtn = [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "3 months");
+  if (horizonBtn) {
+    horizonBtn.click(); await tick();
+    const drewIt = host().querySelector("path.projection");
+    // Match the SENTENCES the refusal actually produces, not a loose keyword.
+    // A /project|trained|history/i sweep matched the control's own "Project
+    // forward" heading, so this passed whether or not anything was explained —
+    // the invariant had no UI coverage at all while appearing to have some.
+    const REFUSALS = [/^Not enough history to project/, /^Not enough time to project/, /^Last trained \d+ days ago/];
+    const said = [...host().querySelectorAll(".sub, .title")]
+      .map((n) => (n.textContent || "").trim())
+      .filter((t) => REFUSALS.some((r) => r.test(t)));
+    // A lift with no charted points at all is its own answer — there is no
+    // chart to project from — so the empty state counts as having responded.
+    const emptyChart = !!host().querySelector(".empty");
+    ok(drewIt || said.length > 0 || emptyChart,
+      "[INV-PROJECTION-REFUSES-THIN-HISTORY] a horizon either projects, refuses, or has no chart at all");
+    // Whichever branch ran, the other must NOT be on screen: a chart showing a
+    // projected line and a refusal at once is the contradiction worth catching.
+    ok(!(drewIt && said.length > 0),
+      "[INV-PROJECTION-REFUSES-THIN-HISTORY] it never both projects and refuses");
+    ok(!REFUSALS.some((r) => r.test("Project forward")),
+      "the refusal patterns cannot match the control's own heading");
+    // Back to off, so later renders in this file see the default chart.
+    [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Off")?.click();
+    await tick();
+    ok(!host().querySelector("path.projection"), "turning the horizon off removes the projected line");
+  }
+}
+
+// Promoting pull-ups to Main made them selectable in the charts — but an
+// unloaded pull-up has no external resistance, so working weight, est. 1RM and
+// tonnage can only ever draw a flat zero. The honest series is reps, and the
+// picker must offer that instead of three straight lines at 0.
+{
+  // Real logged history, so the assertions below test the chart's DATA path,
+  // not only its labels — a picker that says "Reps" above an empty chart
+  // passed the previous version of this block.
+  const pullDay = (daysAgo, reps) => db.Sessions.save({
+    date: new Date(Date.now() - daysAgo * 86_400_000).toISOString(), notes: "", isCompleted: true,
+    gymName: null, exercises: [{ order: 0, exerciseName: "Pull-ups", notes: "", phase: null,
+      sets: [{ order: 0, weightLb: 0, reps, isWarmup: false, status: "completed" }] }],
+  });
+  const pullIds = [];
+  for (const [daysAgo, reps] of [[28, 5], [21, 6], [14, 7], [7, 8], [0, 9]]) {
+    pullIds.push(await pullDay(daysAgo, reps));
+  }
+  await history.render(host());
+  [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Charts")?.click();
+  await tick();
+  const select = host().querySelector("select");
+  const hasPullUps = select && [...select.options].some((o) => o.value === "Pull-ups");
+  ok(hasPullUps, "a promoted pull-up is selectable in the chart picker");
+  if (hasPullUps) {
+    select.value = "Pull-ups";
+    select.dispatchEvent(new window.Event("change"));
+    await tick();
+    const labels = [...host().querySelectorAll(".seg button")].map((b) => b.textContent);
+    ok(labels.includes("Reps"), `a bodyweight lift is offered Reps (${labels.join(", ")})`);
+    ok(!labels.includes("Working weight") && !labels.includes("Est. 1RM"),
+      "and is NOT offered the load metrics it could only draw as zero");
+    // The metric must have a data source: five logged sessions are five dots.
+    ok(host().querySelectorAll("svg.chart path.line").length >= 1,
+      "the Reps metric draws a line, not a blank chart");
+    ok(host().querySelectorAll("svg.chart circle.dot").length >= 5,
+      `every logged pull-up session charts a point (${host().querySelectorAll("svg.chart circle.dot").length})`);
+    // And it projects: 5 samples over 28 days clears every refusal threshold.
+    [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "3 months")?.click();
+    await tick();
+    ok(host().querySelector("path.projection"),
+      "a rep progression projects like any other metric");
+    ok([...host().querySelectorAll(".title")].some((n) => /reps\/week/.test(n.textContent || "")),
+      "and the projected rate is a rep count, not a load");
+    [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Off")?.click();
+    await tick();
+    // A loaded lift keeps every load metric and is never offered reps.
+    select.value = "Weighted Pull-up";
+    select.dispatchEvent(new window.Event("change"));
+    await tick();
+    const loadedLabels = [...host().querySelectorAll(".seg button")].map((b) => b.textContent);
+    ok(loadedLabels.includes("Working weight") && !loadedLabels.includes("Reps"),
+      `belt weight is real resistance, so it charts load (${loadedLabels.join(", ")})`);
+  }
+  for (const id of pullIds) await db.Sessions.del(id);
+}
+
+// Imported/custom exercises may omit loadBasis. The chart gate must use the
+// same type-based fallback as every set and PR path, not treat a missing raw
+// field as an unloadable lift.
+{
+  const squat = await db.Exercises.byName("Back Squat");
+  const withoutBasis = { ...squat };
+  delete withoutBasis.loadBasis;
+  await db.Exercises.save(withoutBasis);
+  await history.render(host());
+  const select = host().querySelector("select");
+  select.value = "Back Squat";
+  select.dispatchEvent(new window.Event("change"));
+  await tick();
+  const labels = [...host().querySelectorAll(".seg button")].map((b) => b.textContent);
+  ok(labels.includes("Working weight") && labels.includes("Est. 1RM") && !labels.includes("Reps"),
+    `a Main barbell lift with no raw loadBasis still resolves to load metrics (${labels.join(", ")})`);
+  await db.Exercises.save(squat);
+}
 
 // plate calculator overlay
 await plates.openPlateCalculator(); await tick();
@@ -426,10 +727,37 @@ ok(ms.some((m) => m.exerciseName === "Deadlift" && m.kind === "heaviestSet"), "a
 const json = await db.exportJSON();
 const parsed = JSON.parse(json);
 ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the current backup schema");
+// Pinned to a literal, and deliberately meant to fail and be updated by hand.
+// Every other assertion here compares against the constant, so a JS-only bump
+// would drift from BackupContract.currentSchemaVersion in CadenceCore without
+// anything noticing. This is the lockstep the backup docs claim exists.
+ok(db.BACKUP_SCHEMA_VERSION === 7, `backup schema is pinned at 7 (got ${db.BACKUP_SCHEMA_VERSION})`);
+
+// An app must never write a backup it cannot itself restore. A corrupted or
+// out-of-range birthYear is clamped to the not-set sentinel on the way through
+// settings, using the SAME rule the importer validates against — otherwise it
+// would persist, ride out in an export, and be rejected on the way back in.
+{
+  const original = await db.Settings.get();
+  for (const bad of [1850, 3000, 1901, 1958.5, "1958", null]) {
+    await db.Settings.save({ ...original, birthYear: bad });
+    const back = await db.Settings.get();
+    ok(back.birthYear === 0, `an implausible birthYear (${JSON.stringify(bad)}) is clamped to 0, got ${back.birthYear}`);
+    const bundle = JSON.parse(await db.exportJSON());
+    ok(bundle.settings.birthYear === 0, `and never reaches an export (${JSON.stringify(bad)})`);
+  }
+  await db.Settings.save({ ...original, birthYear: 1958 });
+  ok((await db.Settings.get()).birthYear === 1958, "a plausible birth year is kept");
+  const roundTrip = JSON.parse(await db.exportJSON());
+  ok(roundTrip.settings.birthYear === 1958, "and is exported");
+  await db.importBundle(roundTrip);
+  ok((await db.Settings.get()).birthYear === 1958, "and survives a round trip through the importer");
+  await db.Settings.save(original);
+}
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
-ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 141, "export carries the exercise library");
+ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 143, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
 ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
@@ -481,6 +809,45 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// [INV-TIED-ORDER-IS-AUTHORED] A backup whose slots all say order 0 was written in the
+// sequence the author meant — older exports (and native pre-#69 programs)
+// carry exactly that shape. Import stamps array positions so the tie never
+// falls to the alphabetical display fallback; explicit distinct orders are
+// the author's sequence and survive verbatim.
+{
+  const tied = structuredClone(parsed);
+  const program = tied.programs.find((p) => p.name === "Fixture Upper/Lower");
+  const upperA = program.days.find((d) => d.name === "Upper A");
+  const lowerA = program.days.find((d) => d.name === "Lower A");
+  for (const slot of [...upperA.lifts, ...upperA.accessories]) slot.order = 0;
+  lowerA.accessories.forEach((slot, i) => { slot.order = [2, 1, 0][i]; });
+
+  await db.importBundle(tied);
+  const restored = (await db.Programs.all()).find((p) => p.name === "Fixture Upper/Lower");
+  const restoredUpperA = restored.days.find((d) => d.name === "Upper A");
+  const restoredLowerA = restored.days.find((d) => d.name === "Lower A");
+  ok(restoredUpperA.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")
+    === "Incline DB Press:0, Single-arm DB Row:1",
+    `[INV-TIED-ORDER-IS-AUTHORED] tied backup lifts keep authored sequence (got: ${
+      restoredUpperA.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")})`);
+  ok(restoredUpperA.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")
+    === "Face Pulls:0, DB Curls:1, Band Pull-aparts:2",
+    `[INV-TIED-ORDER-IS-AUTHORED] tied backup accessories keep authored sequence (got: ${
+      restoredUpperA.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")})`);
+  ok(restoredLowerA.accessories.map((a) => a.order).join() === "2,1,0",
+    `[INV-TIED-ORDER-IS-AUTHORED] explicit distinct orders survive a backup import verbatim (got: ${
+      restoredLowerA.accessories.map((a) => a.order).join()})`);
+  // Round-trip healing: the next export carries the resolved orders, so a
+  // once-tied backup can never re-tie itself on a future restore.
+  const healed = JSON.parse(await db.exportJSON())
+    .programs.find((p) => p.name === "Fixture Upper/Lower")
+    .days.find((d) => d.name === "Upper A");
+  ok(healed.lifts.map((l) => l.order).join() === "0,1"
+    && healed.accessories.map((a) => a.order).join() === "0,1,2",
+    "[INV-TIED-ORDER-IS-AUTHORED] the repaired orders are what the next backup exports");
+  await db.importBundle(parsed);
+}
+
 // Cross-platform settings: a native backup carries the rest buckets FLAT
 // (mainCompoundRestSeconds…, no nested `rest`) — import must normalize them
 // into settings.rest so the buckets survive an iOS → web restore. A partial
@@ -500,21 +867,46 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed); // restore the canonical settings for later blocks
 }
 
-// restSeedStampsCleared describes the exercise library's migration state, so
-// it must follow the bundle only when the library itself was restored: a
-// settings-only restore keeps the current marker (else the next syncLibrary
-// would re-clear over an untouched library and could eat a user-set rest equal
-// to a retired stamp), while a library restored without settings re-arms it.
+// Library migration markers follow the exercise library, not settings alone.
+// A settings-only restore keeps the current markers; restoring an older
+// library re-arms every repair that depends on those rows.
 {
   ok((await db.Settings.get()).restSeedStampsCleared === true, "marker is set before the partial-restore checks");
   const settingsOnly = { sessions: parsed.sessions, settings: { ...parsed.settings } };
   delete settingsOnly.settings.restSeedStampsCleared; // a pre-migration, exercise-less backup
+  delete settingsOnly.settings.verticalPullMainsPromoted;
   await db.importBundle(settingsOnly);
   ok((await db.Settings.get()).restSeedStampsCleared === true, "settings-only restore keeps the stamp-clear marker");
-  await db.importBundle({ exercises: parsed.exercises });
-  ok((await db.Settings.get()).restSeedStampsCleared === false, "library restore without settings re-arms the stamp check");
+  ok((await db.Settings.get()).verticalPullMainsPromoted === true,
+    "settings-only restore keeps the vertical-pull marker");
+
+  const oldLibrary = parsed.exercises.map((exercise) =>
+    exercise.name === "Pull-ups" ? { ...exercise, category: "Accessory" }
+      // A category the lifter set THEMSELVES — the repair must not argue.
+      // Main would be indistinguishable from a promotion, so the fixture uses
+      // the one value that tells the guard apart from its absence.
+      : exercise.name === "Chin-ups" ? { ...exercise, category: "Conditioning" }
+        : exercise);
+  await db.importBundle({ exercises: oldLibrary });
+  const rearmed = await db.Settings.get();
+  ok(rearmed.restSeedStampsCleared === false, "library restore without settings re-arms the stamp check");
+  ok(rearmed.verticalPullMainsPromoted === false,
+    "library restore without settings re-arms the vertical-pull promotion");
+  await db.syncLibrary();
+  ok((await db.Exercises.byName("Pull-ups")).category === "Main",
+    "library sync promotes vertical pulls restored from an older backup");
+  ok((await db.Exercises.byName("Chin-ups")).category === "Conditioning",
+    "a category the lifter set themselves is never overwritten — delete the guard and this fails");
+  // Re-arm before the full restore: syncLibrary's repair just set both markers
+  // back to true, so without this the assertion below proves a true→true
+  // non-transition and a restore that dropped the bundle's marker would pass.
+  await db.Settings.save({ ...(await db.Settings.get()),
+    restSeedStampsCleared: false, verticalPullMainsPromoted: false });
   await db.importBundle(parsed); // full post-migration bundle restores the marker
-  ok((await db.Settings.get()).restSeedStampsCleared === true, "full post-migration restore carries the marker");
+  ok((await db.Settings.get()).restSeedStampsCleared === true,
+    "full post-migration restore flips the re-armed marker back to true");
+  ok((await db.Settings.get()).verticalPullMainsPromoted === true,
+    "and the vertical-pull marker rides the same restore");
 }
 
 // A backup missing a store's key must leave that store untouched (old-format
@@ -746,6 +1138,121 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     ok(!("speedMph" in saved), "speed is never persisted as a third field");
   }
 
+  // [INV-STAIRS-COUNT-FLIGHTS] A climber's belt goes nowhere. It gets flights
+  // and a flights-per-minute pace where a walk gets miles and mph, and it never
+  // acquires a distance it could not have measured.
+  {
+    const cid = await session.createBlankSession();
+    const c = await db.Sessions.get(cid);
+    c.exercises.push({ order: 0, exerciseName: "Stair Climber", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null,
+      sets: [{ order: 0, weightLb: 0, reps: 1, isWarmup: false, isPerSide: false, enteredUnit: "lb",
+        flags: [], bodyFlagSite: null, bodyFlagNote: null,
+        durationSeconds: 900, distanceMiles: null, flights: 120, autoregReason: null }] });
+    await db.Sessions.save(c);
+    await session.openSession(cid); await tick();
+
+    const climbRow = [...document.querySelectorAll("#overlays .overlay .setrow")]
+      .find((r) => r.textContent.includes("120 flights"));
+    ok(climbRow && climbRow.textContent.includes("120 flights · 15:00 · 8 fl/min"),
+      "[INV-STAIRS-COUNT-FLIGHTS] a climb renders as flights and a pace, not miles and mph");
+
+    climbRow.querySelector("button.ghost").click(); await tick();
+    const sheetEl = [...document.querySelectorAll("#overlays .sheet")].pop();
+    const numbers = [...sheetEl.querySelectorAll("input[type=number]")];
+    const rowLabel = (input) => input.closest(".row")?.textContent || "";
+    const flightField = numbers.find((i) => rowLabel(i).includes("Flights"));
+    const paceField = numbers.find((i) => rowLabel(i).includes("Pace"));
+    ok(flightField && paceField, "the climber sheet offers both flights and pace");
+    ok(!numbers.some((i) => rowLabel(i).includes("Distance")),
+      "[INV-STAIRS-COUNT-FLIGHTS] a climber is offered no distance field at all");
+    ok(paceField.value === "8", "pace opens as the readout derived from 120 flights in 15:00");
+
+    // Setting a pace fills in the count it reaches, and leaves the time alone.
+    paceField.value = "10";
+    paceField.dispatchEvent(new window.Event("input", { bubbles: true }));
+    ok(flightField.value === "150",
+      `[INV-STAIRS-COUNT-FLIGHTS] 10 fl/min for 15:00 fills in 150 flights (got ${flightField.value})`);
+
+    // Typing a count flips the derived side back to pace.
+    flightField.value = "120";
+    flightField.dispatchEvent(new window.Event("input", { bubbles: true }));
+    ok(paceField.value === "8",
+      `[INV-STAIRS-COUNT-FLIGHTS] 120 flights in 15:00 reads back as 8 fl/min (got ${paceField.value})`);
+
+    [...sheetEl.querySelectorAll("button")].find((b) => b.textContent === "Done").click(); await tick();
+    const saved = (await db.Sessions.get(cid)).exercises[0].sets[0];
+    ok(saved.flights === 120 && saved.durationSeconds === 900,
+      "the climb stores flights and duration only");
+    ok(!("pacePerMinute" in saved), "pace is never persisted as a third field");
+    ok(saved.distanceMiles == null,
+      "[INV-STAIRS-COUNT-FLIGHTS] a hidden distance block never writes a distance");
+
+    // The count survives the portable contract, and the key stays off records
+    // that have no flights (the conditional-spread convention).
+    const climbState = await db.Sessions.get(cid);
+    climbState.isCompleted = true;
+    await db.Sessions.save(climbState);
+    const climbBundle = JSON.parse(await db.exportJSON());
+    ok(climbBundle.schemaVersion === 7, "climbed flights ship as backup schema 7");
+    const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
+      .find((e) => e.name === "Stair Climber");
+    ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
+    const noFlights = climbBundle.sessions.flatMap((x) => x.exercises)
+      .find((e) => e.name === "Deadlift").sets[0];
+    ok(!("flights" in noFlights), "sets without flights don't grow the key (byte-stable exports)");
+    await db.Sessions.del(cid);
+  }
+
+  // A climb logged in miles before flights existed keeps its distance and stays
+  // editable — the fields follow the DATA as well as the movement, so history
+  // never disappears behind a measure it was not recorded with.
+  {
+    const lid = await session.createBlankSession();
+    const l = await db.Sessions.get(lid);
+    l.exercises.push({ order: 0, exerciseName: "Stair Climber", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null,
+      sets: [{ order: 0, weightLb: 0, reps: 1, isWarmup: false, isPerSide: false, enteredUnit: "lb",
+        flags: [], bodyFlagSite: null, bodyFlagNote: null,
+        durationSeconds: 1200, distanceMiles: 0.75, autoregReason: null }] });
+    await db.Sessions.save(l);
+    await session.openSession(lid); await tick();
+
+    const legacyRow = [...document.querySelectorAll("#overlays .overlay .setrow")]
+      .find((r) => r.textContent.includes("0.75 mi"));
+    ok(legacyRow && legacyRow.textContent.includes("0.75 mi · 20:00 · 2.3 mph"),
+      "[INV-STAIRS-COUNT-FLIGHTS] a pre-flights climb still renders the distance it holds");
+    legacyRow.querySelector("button.ghost").click(); await tick();
+    const legacySheet = [...document.querySelectorAll("#overlays .sheet")].pop();
+    const legacyRows = [...legacySheet.querySelectorAll("input[type=number]")]
+      .map((i) => i.closest(".row")?.textContent || "");
+    ok(legacyRows.some((t) => t.includes("Distance")),
+      "[INV-STAIRS-COUNT-FLIGHTS] the distance it was logged with stays editable");
+    ok(legacyRows.some((t) => t.includes("Flights")),
+      "and the new measure is offered alongside it");
+
+    // The row's affordance line and the sheet's rows come from one rule, so the
+    // line can neither promise a field the sheet withholds nor — as a
+    // hand-written string did for exactly this legacy case — understate it.
+    const hinted = (legacyRow.textContent.match(/flights|distance|speed|pace|incline|load/g) || []);
+    for (const field of ["flights", "distance", "speed", "pace"]) {
+      ok(hinted.includes(field),
+        `[INV-STAIRS-COUNT-FLIGHTS] the row names "${field}", which its sheet actually shows`);
+    }
+    ok(legacyRows.some((t) => t.includes("Speed")) && legacyRows.some((t) => t.includes("Pace")),
+      "and the sheet does show both readouts the row named");
+    // This climb carries no incline, so neither names one: a legacy DISTANCE
+    // brings its block back, a legacy incline is a separate question.
+    ok(!hinted.includes("incline") && !legacyRows.some((t) => t.includes("Incline")),
+      "[INV-STAIRS-COUNT-FLIGHTS] a climber with no logged incline is offered none");
+
+    [...legacySheet.querySelectorAll("button")].find((b) => b.textContent === "Done").click(); await tick();
+    const legacySaved = (await db.Sessions.get(lid)).exercises[0].sets[0];
+    ok(legacySaved.distanceMiles === 0.75 && legacySaved.flights == null,
+      "opening and closing the sheet converts nothing");
+    await db.Sessions.del(lid);
+  }
+
   // [INV-RUCK-CARRIES-ITS-LOAD] A ruck is born wearing its pack, and the next
   // leg inherits what the last one carried. This is asserted through the real
   // "+ Set" path rather than a hand-built record: the default previously lived
@@ -850,10 +1357,6 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(after === before + 5, `duplicate sections advance the track only once (${before}→${after})`);
 }
 
-// ---- protein add reflects in today's total ----
-await db.Protein.add({ date: new Date().toISOString(), grams: 45, label: "Shake" });
-ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
-
 // ---- program prescription integrity: DB steps, warmups, adjusted targets, slot identity ----
 {
   const name = "Fixture Slot Identity";
@@ -947,24 +1450,40 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.importBundle(parsed);
 }
 
-// A deload rotation must never drag the estimate down.
+// A recovery exposure is observation-free and progression-free.
 {
   const name = "Fixture Deload Observation";
   await db.Programs.save({
     name, focus: "strength", cycleNumber: 1, currentWeek: 4, nextDayIndex: 0,
     roundingLb: 5, isActive: false,
-    days: [{ name: "Lower", order: 0, accessories: [],
-      lifts: [{ exerciseName: "Back Squat", role: "main", prescription: "wave",
-        baseWeightLb: 190, estimatedMaxLb: 221.45, stallCount: 0, lastIncrementLb: 5 }] }],
+    days: [{ name: "Lower", order: 0, accessories: [acc("Walking Lunges", 0, 0)],
+      lifts: [
+        { exerciseName: "Back Squat", role: "main", prescription: "wave",
+          baseWeightLb: 190, estimatedMaxLb: 221.45, stallCount: 0, lastIncrementLb: 5 },
+        { ...cyc("Deadlift", "complementary", 205, 275), prescription: "linearFives", doubleProgressionSets: 3 },
+        { ...cyc("Incline DB Press", "complementary", 45, 55), prescription: "doubleProgression",
+          doubleProgressionSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 5 },
+      ] }],
   });
   let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const before = JSON.parse(JSON.stringify(program.days[0]));
   const deloadId = await session.createSessionFromProgramDay(program, program.days[0]);
   const deload = await db.Sessions.get(deloadId);
+  ok(deload.exercises.find((entry) => entry.programRole === "accessory").plannedSets === 1,
+    "a recovery accessory is reduced to one set");
   for (const set of deload.exercises[0].sets) set.status = "completed";
+  for (const entry of deload.exercises.slice(1)) for (const set of entry.sets) set.status = "completed";
   await session.completeSession(deload);
   program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   ok(program.days[0].lifts[0].estimatedMaxLb === 221.45,
     `light deload work is not evidence the max fell (got ${program.days[0].lifts[0].estimatedMaxLb})`);
+  ok(program.days[0].lifts[1].baseWeightLb === before.lifts[1].baseWeightLb,
+    "recovery cannot advance a per-exposure linear lift");
+  ok(program.days[0].lifts[2].baseWeightLb === before.lifts[2].baseWeightLb
+    && program.days[0].lifts[2].currentReps === before.lifts[2].currentReps,
+  "recovery cannot advance a lift-level rep window");
+  ok(program.days[0].accessories[0].currentReps === before.accessories[0].currentReps,
+    "recovery cannot advance accessory double progression");
 
   await db.importBundle(parsed);
 }
@@ -1220,7 +1739,7 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   await db.Programs.del(prog.id);
 }
 
-// ---- program: bank a full 4-week cycle, assert adaptive progression ----
+// ---- program: bank three full progressions + a two-exposure recovery bridge ----
 {
   const sqTrackBase = (await db.Tracks.byName("Back Squat")).baseWeightLb; // standalone, must not move
   let prog = await db.Programs.active();
@@ -1243,22 +1762,406 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     "complementary work is volume at/below its base, not a heavy mirror of the main wave");
   await completeAll(built); // i=0 banked (Lower A, week 1)
 
-  for (let i = 1; i < 16; i++) {        // remaining of 4 weeks × 4 days
+  const recoveryDays = [];
+  for (let i = 1; i < 14; i++) { // 3 × 4 progression exposures + 2 recovery exposures
     prog = await db.Programs.active();
     const day = prog.days.find((d) => d.order === prog.nextDayIndex);
     const id = await session.createSessionFromProgramDay(prog, day);
     const sess = await db.Sessions.get(id);
+    if (sess.programTag.week === C.DELOAD_WEEK) {
+      recoveryDays.push(day.name);
+      ok(sess.exercises.filter((entry) => entry.programRole === "accessory")
+        .every((entry) => entry.plannedSets === 1),
+      "[INV-RECOVERY-IS-A-BRIDGE] every recovery accessory is reduced to one easy set");
+    }
     await completeAll(sess); // pre-filled working sets at target = a clean cycle
   }
 
   prog = await db.Programs.active();
   ok(prog.cycleNumber === 2, `cycle rolled over (cyc=${prog.cycleNumber})`);
   ok(prog.currentWeek === 1, `wave reset to week 1 (wk=${prog.currentWeek})`);
+  ok(recoveryDays.join(",") === "Lower A,Upper A",
+    `[INV-RECOVERY-IS-A-BRIDGE] phase 4 banks one lower and one upper exposure (${recoveryDays})`);
   const squatMain = prog.days[0].lifts.find((l) => l.role === "main");
   ok(squatMain.baseWeightLb === squatBase0 + 5, `clean cycle bumped squat ${squatBase0}→${squatMain.baseWeightLb}`);
   ok(squatMain.estimatedMaxLb > 204, "e1RM updated from the peak");
   ok(prog.days[1].accessories[0].currentReps > accReps0, "accessory reps progressed (double progression)");
   ok((await db.Tracks.byName("Back Squat")).baseWeightLb === sqTrackBase, "standalone Back Squat track NOT double-advanced");
+}
+
+// ---- in-flight legacy phase 4 accounts for bridge work already banked ----
+{
+  const name = "Fixture In-flight Recovery Bridge";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 2, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Lower B", order: 2, lifts: [cyc("Deadlift", "main", 205, 275)], accessories: [] },
+      { name: "Upper B", order: 3, lifts: [cyc("Overhead Press", "main", 95, 125)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const priorIds = [];
+  for (const [index, dayIndex] of [0, 1].entries()) {
+    priorIds.push(await db.Sessions.save({
+      date: `2042-01-0${index + 1}T12:00:00.000Z`,
+      completedAt: `2042-01-0${index + 1}T13:00:00.000Z`,
+      notes: "Synthetic pre-upgrade recovery exposure", isCompleted: true,
+      programTag: { programId: program.uuid, programName: name,
+        cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex, planNames: [] },
+      exercises: [],
+    }));
+  }
+
+  // The previous release expected all four phase-4 days, so its persisted
+  // pointer can legitimately sit on Lower B even though the new bridge's
+  // Lower A and Upper A representatives are already complete. Today must
+  // reconcile that state before it creates a third recovery workout.
+  const reconciliation = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-01-03T12:00:00.000Z"),
+  );
+  ok(reconciliation?.reason === "selectedExposures",
+    "already-banked bridge representatives are recognized before Start");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1 && program.nextDayIndex === 0,
+    "[INV-RECOVERY-IS-A-BRIDGE] an in-flight old phase-4 pointer rolls over from already-banked bridge exposures");
+
+  for (const id of priorIds) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
+}
+
+// ---- recovery is capped at two sessions and expires after seven days ----
+{
+  const name = "Fixture Bounded Recovery";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 7, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 2, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Lower B", order: 2, lifts: [cyc("Deadlift", "main", 205, 275)], accessories: [] },
+      { name: "Upper B", order: 3, lifts: [cyc("Overhead Press", "main", 95, 125)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const ids = [];
+  ids.push(await db.Sessions.save({
+    date: "2042-02-01T12:00:00.000Z", completedAt: "2042-02-01T13:00:00.000Z",
+    notes: "Synthetic Peak anchor", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 7, week: C.GRADED_WEEK, dayIndex: 3, planNames: [] }, exercises: [],
+  }));
+  for (const [index, dayIndex] of [2, 3].entries()) {
+    ids.push(await db.Sessions.save({
+      date: `2042-02-0${index + 2}T12:00:00.000Z`,
+      completedAt: `2042-02-0${index + 2}T13:00:00.000Z`,
+      notes: "Synthetic non-selected Recovery", isCompleted: true,
+      programTag: { programId: program.uuid, programName: name,
+        cycleNumber: 7, week: C.DELOAD_WEEK, dayIndex, planNames: [] }, exercises: [],
+    }));
+  }
+  const capped = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-02-04T12:00:00.000Z"),
+  );
+  ok(capped?.reason === "sessionLimit",
+    "[INV-RECOVERY-IS-A-BRIDGE] two recovery sessions close the bridge even on non-selected days");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 8 && program.currentWeek === 1 && program.nextDayIndex === 0,
+    "the two-session cap starts the next cycle at Volume day 1");
+  for (const id of ids) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
+}
+
+{
+  const name = "Fixture Expired Recovery";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 4, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const peakID = await db.Sessions.save({
+    date: "2042-03-01T12:00:00.000Z", completedAt: "2042-03-01T13:00:00.000Z",
+    notes: "Synthetic Peak anchor", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 4, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
+  });
+  // The window is fixed to Peak even before reduced work is banked.
+  const beforeBoundary = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-03-08T12:59:59.999Z"),
+  );
+  ok(beforeBoundary === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] Recovery remains available inside seven days of Peak");
+
+  // Banking reduced work does not start a fresh seven-day window.
+  const recoveryID = await db.Sessions.save({
+    date: "2042-03-02T12:00:00.000Z", completedAt: "2042-03-02T13:00:00.000Z",
+    notes: "Synthetic recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 4, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  const inside = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-03-08T12:59:59.999Z"),
+  );
+  ok(inside === null, "Recovery remains available one millisecond before the seven-day boundary");
+  const expired = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-03-08T13:00:00.000Z"),
+  );
+  ok(expired?.reason === "windowElapsed",
+    "[INV-RECOVERY-IS-A-BRIDGE] the bridge expires seven days after Peak, not seven days after reduced work");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 5 && program.currentWeek === 1,
+    "expired Recovery starts the next cycle rather than prescribing stale reduced work");
+  await db.Sessions.del(recoveryID);
+  await db.Sessions.del(peakID);
+  await db.Programs.del(program.id);
+}
+
+{
+  const name = "Fixture Recovery Start Guard";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 2, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const oldPeak = new Date(Date.now() - C.RECOVERY_WINDOW_MS - 60_000);
+  const peakID = await db.Sessions.save({
+    date: oldPeak.toISOString(), completedAt: oldPeak.toISOString(),
+    notes: "Synthetic expired Peak", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
+  });
+  // Half-finished: one recovery exposure banked, then eight days of silence.
+  const staleRecovery = new Date(Date.now() - C.RECOVERY_WINDOW_MS - 30_000);
+  const recoveryID = await db.Sessions.save({
+    date: staleRecovery.toISOString(), completedAt: staleRecovery.toISOString(),
+    notes: "Synthetic stale recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  const createdID = await session.createSessionFromProgramDay(program, program.days[0]);
+  const created = await db.Sessions.get(createdID);
+  ok(created.programTag.cycleNumber === 3 && created.programTag.week === 1,
+    "Start reconciles expired Recovery and creates Volume work in the next cycle");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 3 && program.currentWeek === 1,
+    "Start never creates a stale third recovery prescription");
+  await db.Sessions.del(createdID);
+  await db.Sessions.del(recoveryID);
+  await db.Sessions.del(peakID);
+  await db.Programs.del(program.id);
+}
+
+// Reconciliation must never advance the program out from under a workout in
+// progress: the open session was built against this rotation, so rolling the
+// cycle makes banking it fail the stale-tag guard and land as orphaned history.
+// On this client it also let Start open a SECOND session while the first
+// stayed open.
+{
+  const name = "Fixture Recovery Open Session";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 2, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const stale = new Date(Date.now() - C.RECOVERY_WINDOW_MS - 60_000);
+  const peakID = await db.Sessions.save({
+    date: stale.toISOString(), completedAt: stale.toISOString(),
+    notes: "Synthetic expired Peak", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.GRADED_WEEK, dayIndex: 1, planNames: [] }, exercises: [],
+  });
+  const recoveryID = await db.Sessions.save({
+    date: stale.toISOString(), completedAt: stale.toISOString(),
+    notes: "Synthetic stale recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  // Everything is in place for the bridge to expire — except that a workout is
+  // open right now.
+  const openID = await db.Sessions.save({
+    date: new Date().toISOString(), isCompleted: false, notes: "In progress",
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  const blocked = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(blocked === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] reconciliation holds off while a session is open");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === C.DELOAD_WEEK,
+    "the program the open session was built against is left exactly as it was");
+
+  // Scoped to THIS program. A lingering blank session — which Today explicitly
+  // supports keeping around — must not suppress the cap and the expiry window
+  // indefinitely; that is the indefinite-light-work path this mechanism closes.
+  await db.Sessions.del(openID);
+  const blankID = await db.Sessions.save({
+    date: new Date().toISOString(), isCompleted: false, notes: "Unrelated blank session",
+    exercises: [],
+  });
+  const unrelated = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(unrelated?.reason === "windowElapsed",
+    "an open session belonging to no program never blocks reconciliation");
+  await db.Sessions.del(blankID);
+  // Put the program back into recovery for the final leg of this scenario.
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  program.cycleNumber = 2; program.currentWeek = C.DELOAD_WEEK;
+  await db.Programs.save(program);
+  const openID2 = await db.Sessions.save({
+    date: new Date().toISOString(), isCompleted: false, notes: "In progress",
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 2, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] }, exercises: [],
+  });
+  ok((await session.reconcileRecoveryBridge(program, await db.Sessions.completed())) === null,
+    "but one belonging to this program still does");
+  await db.Sessions.del(openID2);
+
+  // Bank or discard it and the same reconciliation goes through.
+  const allowed = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(allowed?.reason === "windowElapsed", "and runs on the next render once nothing is open");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  await db.Sessions.del(recoveryID);
+  await db.Sessions.del(peakID);
+  await db.Programs.del(program.id);
+}
+
+// A program that is not recognizably upper/lower keeps its FULL authored pass.
+// Capping that at a constant two dropped day three onward — losing exactly the
+// work the fallback exists to preserve.
+{
+  const name = "Fixture Full Pass Recovery";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Full A", order: 0, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full B", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full C", order: 2, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const ids = [];
+  for (const dayIndex of [0, 1]) {
+    ids.push(await db.Sessions.save({
+      date: new Date().toISOString(), completedAt: new Date().toISOString(),
+      notes: "Synthetic recovery exposure", isCompleted: true,
+      programTag: { programId: program.uuid, programName: name,
+        cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex, planNames: [] }, exercises: [],
+    }));
+  }
+  const held = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(held === null,
+    "[INV-RECOVERY-IS-A-BRIDGE] a three-day authored bridge is not closed by two sessions");
+  ids.push(await db.Sessions.save({
+    date: new Date().toISOString(), completedAt: new Date().toISOString(),
+    notes: "Synthetic recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex: 2, planNames: [] }, exercises: [],
+  }));
+  const closed = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
+  ok(closed?.reason === "selectedExposures", "and closes once its own length is banked");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1, "then rolls to the next cycle at Volume");
+  for (const id of ids) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
+}
+
+// Banking is a SECOND call site for the completion rule, and it took the count
+// positionally. A three-day authored bridge must not close at bank time after
+// two exposures either — that is the same truncation, reached the other way.
+{
+  const name = "Fixture Full Pass Bank Time";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Full A", order: 0, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full B", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Full C", order: 2, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const banked = [];
+  for (const dayIndex of [0, 1]) {
+    const day = program.days.find((d) => d.order === dayIndex);
+    const id = await session.createSessionFromProgramDay(program, day);
+    banked.push(id);
+    await completeAll(await db.Sessions.get(id));
+    program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  }
+  ok(program.cycleNumber === 1 && program.currentWeek === C.DELOAD_WEEK,
+    "[INV-RECOVERY-IS-A-BRIDGE] banking two of a three-day bridge does not close it");
+  const lastDay = program.days.find((d) => d.order === 2);
+  const lastID = await session.createSessionFromProgramDay(program, lastDay);
+  banked.push(lastID);
+  await completeAll(await db.Sessions.get(lastID));
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1,
+    "banking the third closes it and starts the next cycle at Volume");
+  for (const id of banked) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
+}
+
+{
+  const name = "Fixture Reused Recovery Name";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.DELOAD_WEEK,
+    nextDayIndex: 0, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const ids = [];
+  for (const [index, dayIndex] of [0, 1].entries()) {
+    ids.push(await db.Sessions.save({
+      date: `2042-04-0${index + 1}T12:00:00.000Z`,
+      completedAt: `2042-04-0${index + 1}T13:00:00.000Z`,
+      notes: "Synthetic session owned by a deleted same-name program", isCompleted: true,
+      programTag: { programId: "deleted-program-stable-id", programName: name,
+        cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex, planNames: [] }, exercises: [],
+    }));
+  }
+  const collision = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-04-03T12:00:00.000Z"),
+  );
+  ok(collision === null,
+    "same-name sessions carrying another stable program ID cannot close Recovery");
+
+  // Name fallback remains valid for genuinely legacy sessions with no ID.
+  for (const [index, dayIndex] of [0, 1].entries()) {
+    ids.push(await db.Sessions.save({
+      date: `2042-04-0${index + 3}T12:00:00.000Z`,
+      completedAt: `2042-04-0${index + 3}T13:00:00.000Z`,
+      notes: "Synthetic legacy same-name Recovery", isCompleted: true,
+      programTag: { programId: null, programName: name,
+        cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex, planNames: [] }, exercises: [],
+    }));
+  }
+  const legacy = await session.reconcileRecoveryBridge(
+    program, await db.Sessions.completed(), new Date("2042-04-05T12:00:00.000Z"),
+  );
+  ok(legacy?.reason === "selectedExposures",
+    "legacy sessions without a stable ID retain the program-name fallback");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  ok(program.cycleNumber === 2 && program.currentWeek === 1,
+    "only the legacy fallback sessions close the reused-name program's Recovery");
+  for (const id of ids) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
 }
 
 // ---- program: a below-plan peak must not grade clean or bump the base (issue 18) ----
@@ -1298,9 +2201,9 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   const graded1 = prog.days.find((d) => d.order === day1.order).lifts.find((l) => l.role === "main");
   ok(graded1.pending && graded1.pending.grade === "success", "at-plan peak with a lighter back-off set still grades clean");
 
-  // Bank the rest of the wave cleanly (2 more peak days + the 4 deload days);
+  // Bank the rest cleanly (2 more peak days + the 2 recovery exposures);
   // rollover applies the stashed grades.
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     const p = await db.Programs.active();
     const day = p.days.find((d) => d.order === p.nextDayIndex);
     const s = await db.Sessions.get(await session.createSessionFromProgramDay(p, day));
@@ -1410,6 +2313,10 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     const prog = await db.Programs.get(id);
     ok(prog && prog.days.length === t.days.length && prog.focus === t.focus, `${t.id}: program created with all days`);
     ok(!prog.isActive, `${t.id}: not activated over the existing program`);
+    ok(prog.days.every((day, dayIndex) =>
+      day.lifts.every((l, i) => l.order === i && l.exerciseName === t.days[dayIndex].lifts[i].exerciseName)
+      && day.accessories.every((a, i) => a.order === i && a.exerciseName === t.days[dayIndex].accessories[i].exerciseName)),
+      `[INV-TIED-ORDER-IS-AUTHORED] ${t.id}: slots carry the template author's written sequence`);
     for (const e of t.exercises) ok(!!(await db.Exercises.byName(e.name)), `${t.id}: library has ${e.name}`);
     // A session from day 0 builds and banks without touching other programs.
     const sess = await db.Sessions.get(await session.createSessionFromProgramDay(prog, prog.days[0]));
@@ -1751,6 +2658,34 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
     "[INV-CHART-ROLE-EXCLUDES-EXTRA] accessory work is not main");
   ok(roleOf({ programRole: null }, untagged) === "main",
     "[INV-CHART-ROLE-EXCLUDES-EXTRA] standalone work with no program IS the record for that lift");
+
+  // The refusal copy must agree with the engine at every boundary it names. It
+  // did not: both thresholds were rounded for the message while the engine
+  // compared raw, so a refusal could explain itself with numbers that say it
+  // should have succeeded.
+  const DAY = 86400000;
+  const refuse = hist.projectionRefusalForTest;
+  const pts = (days, now) => ({ points: days.map((d) => ({ t: d * DAY, y: 200 })), now: now * DAY });
+
+  const thin = pts([0, 7, 14], 14);
+  ok(/^Not enough history to project — 3 of 4 sessions so far\.$/.test(refuse(thin.points, thin.now)),
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] too few exposures says how many are missing");
+
+  // 20.6 days refuses; the message must not claim it already spans 21.
+  const shortSpan = pts([0, 7, 14, 20.6], 20.6);
+  const spanMsg = refuse(shortSpan.points, shortSpan.now);
+  ok(/^Not enough time to project — this lift spans 20 days, and a trend needs 21\.$/.test(spanMsg),
+    `[INV-PROJECTION-REFUSES-THIN-HISTORY] a sub-threshold span never reads as meeting it (${spanMsg})`);
+  ok(!/spans 21 days, and a trend needs 21/.test(spanMsg),
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] the span message cannot contradict itself");
+
+  // 35.4 idle days is refused by the engine, so the message must name staleness
+  // rather than falling through to the generic line.
+  const stale = pts([0, 7, 14, 21, 28], 28 + 35.4);
+  ok(C.projectTrend(stale.points.map((p) => ({ day: p.t / DAY, value: p.y })), 90, stale.now / DAY) === null,
+    "the engine refuses a 35.4-day gap");
+  ok(/^Last trained 35 days ago —/.test(refuse(stale.points, stale.now)),
+    "[INV-PROJECTION-REFUSES-THIN-HISTORY] the staleness message covers the engine's whole refusal band");
 }
 
 // ---- progression chart: role split + combined metric ----
@@ -1793,6 +2728,74 @@ ok((await db.Protein.todayTotal()) >= 45, "protein logged for today");
   ok([...chart.querySelectorAll(".chart-legend span")].length === 4, "every series is named in the legend");
   const empty = progressionChart({ lines: [{ key: "x", points: [] }], bars: null });
   ok(empty.querySelectorAll("path.line").length === 0, "an empty series renders nothing rather than throwing");
+
+  // ---- the projected trend, drawn past today ----
+  // The forecast shares the load axis with the history it continues, but must
+  // be impossible to mistake for performed work at a glance.
+  const history = [[1, 200], [8, 205], [15, 210], [22, 215], [29, 220]].map(([d, y]) => ({ t: at(d), y }));
+  const nowT = at(29);
+  const fit = C.projectTrend(history.map((p) => ({ day: p.t / 86400000, value: p.y })), 30, nowT / 86400000);
+  ok(fit && Math.abs(fit.perWeek - 5) < 0.0001, "the chart's samples fit the rate they were built from");
+  const projected = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: history }],
+    projection: { label: "Projected · 1 month", color: "#7aa7d9", nowT,
+      points: fit.points.map((p) => ({ t: p.day * 86400000, y: p.value })) },
+  });
+  const psvg = projected.querySelector("svg");
+  const proj = psvg.querySelector("path.projection");
+  ok(proj, "the projected trend is drawn");
+  ok((proj.getAttribute("style") || "").includes("#7aa7d9"), "in its own colour, not the history's");
+  ok(psvg.querySelectorAll("path.line").length === 1, "and is not counted as another performed line");
+  ok(psvg.querySelector("line.now-line"), "a today divider separates performed from projected");
+  ok([...psvg.querySelectorAll("text.now-lbl")].some((t) => t.textContent === "today"), "and says so");
+  ok(psvg.querySelector("rect.future"), "the future region is shaded before anything is drawn on it");
+  ok([...projected.querySelectorAll(".chart-legend span")].some((s) => s.textContent.includes("Projected")),
+    "the legend names the projection as projected");
+  // The forecast climbs above every performed point, so a load axis fitted to
+  // the history alone would clip it off the top of the plot.
+  const axis = [...psvg.querySelectorAll("text.lbl")]
+    .filter((t) => +t.getAttribute("x") < 20).map((t) => Number(t.textContent)).filter(Number.isFinite);
+  ok(axis.length > 0 && Math.max(...axis) >= 235,
+    `the load axis grows to hold the projection (${axis.join()})`);
+  // Off means off.
+  const noProjection = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: history }],
+  });
+  ok(!noProjection.querySelector("path.projection"), "no horizon, no projected line");
+  ok(!noProjection.querySelector("line.now-line"), "and no today divider on a chart of the past");
+
+  // The wash is depth for a LONE line. With several up there is no "the" line
+  // to fill, and shading one of them reads as a region that means something —
+  // native gates it the same way, so an ungated web fill drew a different
+  // chart from the same data.
+  ok(noProjection.querySelector("path.area"), "a single line gets the depth wash");
+  const twoLines = progressionChart({ lines: [
+    { key: "a", label: "R1 Volume", color: "#5ba06a", points: history },
+    { key: "b", label: "R3 Peak", color: "#ef4444", points: e1rm },
+  ] });
+  ok(!twoLines.querySelector("path.area"), "several lines get none — no arbitrary one is shaded");
+
+  // Today outside the plotted span must not shade it. Without the divider's
+  // own guard the wash covered the whole plot with nothing to explain it.
+  const nowBeforeStart = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: history }],
+    projection: { label: "Projected", color: "#7aa7d9", nowT: at(0) - 86400000,
+      points: fit.points.map((p) => ({ t: p.day * 86400000, y: p.value })) },
+  });
+  ok(!nowBeforeStart.querySelector("rect.future"),
+    "a today left of the domain shades nothing rather than the whole plot");
+  ok(!nowBeforeStart.querySelector("line.now-line"), "and draws no divider either — the two agree");
+
+  // A dashed legend swatch with no colour rendered `3px dashed undefined`,
+  // an invalid rule that dropped the swatch.
+  const noColor = progressionChart({ lines: [
+    { key: "a", label: "One", color: "#ef4444", points: history },
+    { key: "b", label: "Two", dash: "5 4", points: e1rm },
+  ] });
+  const dashSwatch = [...noColor.querySelectorAll(".chart-legend i")]
+    .find((i) => (i.style.borderTop || "").includes("dashed"));
+  ok(dashSwatch && !/undefined/.test(dashSwatch.style.borderTop),
+    `a colourless dashed swatch falls back to the accent (${dashSwatch?.style.borderTop})`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

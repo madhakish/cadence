@@ -5,11 +5,59 @@ the engine does; this page explains *why*.
 
 ## Why grade only the peak?
 
-Weeks 1–2 build toward week 3; week 4 is recovery. The peak is the only
-week that tests whether the current loading actually fits you, so it's
-the only week that earns a verdict. Grading every session would make the
-program twitchy — reacting to a bad Tuesday — where a wave should react
-to trends.
+The volume and load rotations build toward the third, peak rotation. Recovery
+then bridges into the next mesocycle with only one lower and one upper
+exposure. The peak is the only rotation that tests whether the current loading
+actually fits you, so it is the only one that earns a verdict. Grading every
+session would make the program twitchy where a wave should react to trends.
+
+## Why is recovery not a fourth rotation?
+
+A full A/B pass preserves normal lifting frequency even after load and sets
+fall. That is more training at exactly the point the accumulated-fatigue block
+is supposed to end. Cadence therefore keeps the movement patterns familiar
+with two reduced exposures, collapses accessories to one set, and freezes every
+progression and e1RM side effect. Active work between them—walking, mowing,
+splitting wood, or an easy ruck—does not need to be forced into a calendar week
+or represented as another lifting day.
+
+The bridge is bounded on both axes. It can contain no more than two lifting
+sessions, even if an old pointer chose the wrong A/B days, and it expires seven
+elapsed days after the final Peak exposure. That seven-day window is not a
+programming week: it is simply the point at which the rest period has already
+done its job, so Cadence marks Recovery complete and returns to cycle-driven
+Volume work instead of offering a stale light session.
+
+That reduction is the point. A 2024 controlled study found that inserting a
+week of complete training cessation did not improve hypertrophy and produced
+smaller strength gains than continuous training. A 2026 within-subject study
+found that reducing set volume by roughly two thirds to three quarters and
+cutting frequency preserved hypertrophy and 10RM improvement in untrained men.
+Neither study proves one universal deload for an experienced lifter outside
+those study populations, but together they support keeping a small amount of
+familiar work while cutting the total stress hard. That is what the
+two-exposure bridge does.
+
+- [Coleman et al. 2024 — one-week deload](https://pubmed.ncbi.nlm.nih.gov/38274324/)
+- [Pancar et al. 2026 — reduced-volume/frequency deload](https://www.nature.com/articles/s41598-026-40612-5)
+
+## Why doesn't Cadence rotate complementary lifts on a timer?
+
+Complement selection belongs to the authored program. Same-session squat and
+hinge work with contrasting stress can be perfectly reasonable when technique,
+performance, and recovery remain sound. Acute biomechanics studies can show
+that a trap bar shifts joint moments or that front and back squats distribute
+load differently; they do not establish that every pain-free lifter should
+swap movements at an arbitrary bar weight or every four calendar weeks.
+
+Keep a useful complement through the mesocycle so it can actually progress.
+Reassess it at rollover when performance stalls, setup friction kills
+adherence, or body feedback gives a concrete reason to change it. Cadence does
+not diagnose an old injury, infer pain, or manufacture a variation schedule
+from age alone.
+
+- [Swinton et al. 2011 — straight versus hex-bar deadlift biomechanics](https://pubmed.ncbi.nlm.nih.gov/21659894/)
+- [Gullett et al. 2009 — front versus back squat biomechanics](https://pubmed.ncbi.nlm.nih.gov/19002072/)
 
 ## Why a proportional increment, and why no ceiling?
 
