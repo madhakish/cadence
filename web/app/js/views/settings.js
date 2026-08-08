@@ -680,7 +680,7 @@ async function programDayEditor(p, day) {
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add lift", onClick: () => pickExerciseSheet(async (e) => {
           const bootstrap = await bootstrapLiftFromHistory(e, { role: "complementary",
             focus: p.focus, roundingLb: p.roundingLb });
-          day.lifts.push({ exerciseName: e.name, role: "complementary", order: day.lifts.length, prescription: "automatic", warmupPolicy: "automatic", baseWeightLb: bootstrap.weightLb, estimatedMaxLb: bootstrap.estimatedMaxLb, stallCount: 0, lastIncrementLb: 0 });
+          day.lifts.push({ exerciseName: e.name, role: "complementary", order: day.lifts.length, prescription: "automatic", warmupPolicy: "automatic", baseWeightLb: bootstrap.baseWeightLb, estimatedMaxLb: bootstrap.estimatedMaxLb, stallCount: 0, lastIncrementLb: 0 });
           await Programs.save(p); draw();
         }) }));
 

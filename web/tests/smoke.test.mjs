@@ -500,6 +500,32 @@ for (const [name, view] of [["home", home], ["program", programView], ["history"
     "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] stepping the base refreshes the preview instead of leaving a stale walk");
   ok(after.includes("215"), "and it shows the new base's real peak");
 
+  // Drive the real Add lift picker. The lift bootstrap and accessory
+  // bootstrap intentionally have different shapes; reading `weightLb` here
+  // persisted an undefined main-lift base even though the helper was correct.
+  const addedExercise = await db.Exercises.byName("Barbell Row");
+  const { bootstrapLiftFromHistory } = await import("../app/js/templates.js");
+  const expectedBootstrap = await bootstrapLiftFromHistory(addedExercise,
+    { role: "complementary", focus: program.focus, roundingLb: program.roundingLb });
+  [...dayEditor.querySelectorAll("button")]
+    .find((button) => button.textContent.includes("Add lift")).click();
+  await tick();
+  const picker = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  const pickerSearch = picker.querySelector('input[type="search"]');
+  pickerSearch.value = addedExercise.name;
+  pickerSearch.dispatchEvent(new window.Event("input"));
+  [...picker.querySelectorAll("button")]
+    .find((button) => button.textContent === addedExercise.name).click();
+  await tick();
+  const withAddedLift = await db.Programs.active();
+  const addedDay = withAddedLift.days.find((candidate) => candidate.name === day.name);
+  const addedLift = addedDay.lifts.find((candidate) => candidate.exerciseName === addedExercise.name);
+  ok(addedLift?.baseWeightLb === expectedBootstrap.baseWeightLb
+      && Number.isFinite(addedLift.baseWeightLb),
+  "Add lift persists the history/default bootstrap's finite baseWeightLb");
+  addedDay.lifts = addedDay.lifts.filter((candidate) => candidate !== addedLift);
+  await db.Programs.save(withAddedLift);
+
   // Close both overlays and restore.
   for (const overlay of [...document.querySelectorAll("#overlays .overlay")].reverse()) {
     overlay.querySelector(".overlay-head button").click(); await tick();
