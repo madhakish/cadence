@@ -32,6 +32,35 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(plan.reps, 5)
     }
 
+    // A held cycle's volume fallback lands on the VOLUME rotation only —
+    // load and peak keep their shapes, and complementary styles govern their
+    // own volume. Mirrored in web/tests/core.test.mjs.
+    // [INV-NEEDLE-ALWAYS-MOVES]
+    func testVolumeFallbackAddsASetToTheVolumeRotationOnly() {
+        let volume = CycleState(baseWeightLb: 210, nextPhase: .volume)
+        XCTAssertEqual(ProgramEngine.plan(for: volume, style: .wave, addedVolumeSets: 1).sets, 6,
+                       "the held cycle's needle: 5×5 becomes 6×5 at the same load")
+        XCTAssertEqual(ProgramEngine.plan(for: volume, style: .wave, addedVolumeSets: 0).sets, 5,
+                       "a clean grade returns the shape with the weight jump")
+        XCTAssertEqual(ProgramEngine.plan(for: volume, style: .offsetWave, addedVolumeSets: 1).sets, 6,
+                       "the offset wave is graded family and carries the fallback too")
+        XCTAssertEqual(ProgramEngine.plan(for: volume, style: .secondary, addedVolumeSets: 1).sets, 3,
+                       "complementary styles govern their own volume")
+        let load = CycleState(baseWeightLb: 210, nextPhase: .load)
+        XCTAssertEqual(ProgramEngine.plan(for: load, style: .wave, addedVolumeSets: 1).sets, 5,
+                       "load keeps its shape — the fallback is volume-rotation work")
+        let peak = CycleState(baseWeightLb: 210, nextPhase: .peak)
+        XCTAssertEqual(ProgramEngine.plan(for: peak, style: .wave, addedVolumeSets: 1).sets, 3,
+                       "peak keeps its precision")
+        // The whole pipeline threads it: the stored prescription's main work
+        // matches the card.
+        let prescription = ProgramEngine.sessionPrescription(
+            for: volume, programRoundingLb: 5, exerciseType: "barbell",
+            movementGroup: "hinge", addedVolumeSets: 1
+        )
+        XCTAssertEqual(prescription.mainWork.sets, 6)
+    }
+
     func testRecoveryBridgeCutsVolumeAndLandsIn75To80PercentBand() {
         let state = CycleState(baseWeightLb: 210, nextPhase: .deload)
         let plan = ProgramEngine.plan(for: state)

@@ -4,7 +4,8 @@
      CadenceCore/Sources/CadenceCore/ProgramProgression.swift (tmFraction,
      incrementFraction, qualityFlagTolerance, stallLimit,
      deloadRebuildFraction, recoverySessionLimit, recoveryWindow,
-     belowPlanLoad) ≡ web/app/js/core.js. tmFraction now
+     belowPlanLoad, rebuildHeadroomBand, fineHeadroomBand,
+     standingBestDays) ≡ web/app/js/core.js. tmFraction now
      seeds peak singles and places a new program's base; it no longer caps the
      increment. Update this page
      when tuning them. -->
@@ -141,10 +142,49 @@ Notes:
   ([INV-PROGRESSION-RIDES-PERFORMED](invariants.md)). Below plan already
   fails the grade, so the ratio can never move the base down, and a
   performance with no recorded plan advances exactly as before.
-- **hold / fail** → weight holds, stall count +1.
+- **hold / fail** → weight holds, stall count +1 — and the needle still
+  moves: the next **volume** rotation carries **one added set** at the held
+  load, derived from the persisted stall so the Home card and the created
+  session agree by construction
+  ([INV-NEEDLE-ALWAYS-MOVES](invariants.md)). Load and peak keep their
+  shapes; a later clean grade resets the stall and the volume returns with
+  the weight jump. `maximumAddedSetsPerRotation` is the rotation-wide
+  budget: stalled slots rank in stable program order (day order, then slot
+  order) and receive one set each until it is spent; zero turns the
+  fallback off entirely.
 - **2 stalls** → automatic deload: base × 0.90 (rounded), stall reset,
   explanatory note in History.
 - **Peak never banked** → counts as a stall (with the same deload rule).
+
+### Staged increments (headroom to the logged prior best)
+
+The focus increment is **staged** by where the lifter stands against their
+own log, graded at the peak from the best e1RM recorded before the session
+being banked:
+
+- **Rebuild** (current estimate below 90% of the logged prior best): the
+  increment rounds **up** to the clean 10 lb class — a 5 lb bump needs
+  2.5 lb change plates, which are noise this far from the ceiling.
+- **Standard** (no logged evidence, or inside the normal band): the focus
+  increment, untouched — today's behavior.
+- **Fine** (within 2.5% of a **standing** prior best — one that has stood
+  35+ days): the step halves down to the program's own half-grid
+  (`roundingLb / 2` — 2.5 lb at the default rounding), which is where
+  change plates become the correct tool. Prescriptions still round at the
+  program's rounding, so at 5 lb rounding the banked halves surface every
+  second cycle; a rack that really has change plates says so by setting
+  the program rounding to 2.5, and both the fine step and every
+  prescription follow it down.
+
+The prior best is sampled with the same rep ceiling as
+`strengthSampleIndex` (Epley drifts high past ten reps) and only from
+sessions completed **before** the one being graded, so a long back-off set
+cannot fake a ceiling and out-of-order banking cannot see the future.
+
+A fresh log rising through its own all-time best never reads as at-max:
+without a standing ceiling the regime stays standard, so a rebuilding
+lifter whose old numbers predate the app is never handed change-plate
+increments by mistake.
 
 Est. 1RM updates every graded peak: Epley (weight × (1 + reps/30)),
 smoothed 70% old / 30% new.

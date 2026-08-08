@@ -91,7 +91,10 @@ struct HomeView: View {
             role: lift.role,
             focus: program.focus,
             prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""))
+            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
+            // Same volume-fallback derivation as the created session — the
+            // card and the stored prescription must never disagree.
+            addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program))
     }
 
     private func programPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {

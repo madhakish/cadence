@@ -1200,6 +1200,37 @@ function twinBarLb(se, work) {
   return C.barLabelLb(se.barId ? C.barById(se.barId) : C.BARS.bar45lb);
 }
 
+// The best e1RM logged for the exercise before the session being banked, and
+// whether it is a STANDING best — old enough (35 days) to be a prior ceiling
+// rather than the frontier of a rising log. This is what progressionRegime
+// bands against: a logged drawdown reads rebuild, a standing ceiling being
+// closed back in on reads fine, and a fresh log with no such evidence stays
+// standard. Mirrors SessionCompletion.priorBestE1RM.
+function priorBestE1RM(completedSessions, exerciseName, anchorMs) {
+  let best = 0;
+  let bestMs = -Infinity;
+  for (const candidate of completedSessions) {
+    // PRIOR means prior: a session banked out of order must not let later
+    // work retroactively pick this cycle's regime. An unparseable date fails
+    // the comparison and is skipped rather than poisoning the standing test.
+    const stamp = Date.parse(candidate.completedAt || candidate.date);
+    if (!(stamp <= anchorMs)) continue;
+    for (const entry of candidate.exercises || []) {
+      if (entry.exerciseName !== exerciseName) continue;
+      for (const set of entry.sets || []) {
+        if (set.isWarmup || set.status !== "completed" || !(set.weightLb > 0) || !(set.reps >= 1)) continue;
+        // Same rep ceiling as strengthSampleIndex: Epley drifts high past
+        // ten reps, and a long back-off set must not become an inflated
+        // lifetime ceiling that misgrades every later cycle.
+        if (set.reps > C.E1RM_SAMPLE_REP_CEILING) continue;
+        const sample = C.epleyE1RM(set.weightLb, set.reps);
+        if (sample > best) { best = sample; bestMs = stamp; }
+      }
+    }
+  }
+  return { maxLb: best, standing: best > 0 && anchorMs - bestMs >= C.STANDING_BEST_DAYS * 86400000 };
+}
+
 function cyclePerf(se, roundingLb) {
   const w = prescribedWork(se);
   const presReps = se.plannedReps ?? (w.length ? Math.max(...w.map((s) => s.reps)) : 0); // ?? not ||: mirrors Swift's nil-coalescing
@@ -1569,13 +1600,22 @@ async function advanceProgram(session, milestones) {
   }
 
   // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
+  // Headroom to the lifter's own logged prior best stages the increment; the
+  // added-set governance decides whether a held cycle may fall back to
+  // volume. Mirrors SessionCompletion's graded-week block.
   if (tag.week === C.GRADED_WEEK) {
+    const volumeFallback = (program.maximumAddedSetsPerRotation ?? 6) > 0;
+    const history = (await Sessions.completed())
+      .filter((candidate) => String(candidate.id) !== String(session.id));
+    const anchorMs = Date.parse(session.completedAt || session.date);
     for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
       const se = programmedEntry(session, lift);
       if (se && prescribedWork(se).length) {
         const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(se.exerciseName)?.type);
+        const prior = priorBestE1RM(history, lift.exerciseName, anchorMs);
         lift.pending = C.advanceProgramLift(lift, cyclePerf(se, loadStep), program.focus,
-          lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep);
+          lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep,
+          C.progressionRegime(lift.estimatedMaxLb, prior.maxLb, prior.standing), volumeFallback);
       }
     }
   }
@@ -1653,6 +1693,24 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
   return C.storedPrescription(target, C.prescriptionPlateOptions(target, bar, availablePlates(gym), 10,
     gym.collarWeightLb || 0, gym.loadingPolicy || "closest", phase === 1).selected.totalLb,
   C.barLabelLb(bar));
+}
+
+// The volume-fallback sets this lift carries, with the rotation-wide
+// added-set budget allocated deterministically: stalled peak-graded slots in
+// program order (day order, then slot order) receive one set each until
+// maximumAddedSetsPerRotation is spent. Slots whose resolved style ignores
+// the fallback still hold a rank — that spends budget conservatively rather
+// than ever exceeding it. Shared by the session builder and every preview
+// surface so the card and the stored prescription agree. Mirrors
+// ProgramSession.volumeFallbackSets.
+export function volumeFallbackSets(lift, program) {
+  const stalled = [...(program.days || [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .flatMap((day) => orderedProgramSlots(day.lifts || [])
+      .filter((slot) => (slot.stallCount ?? 0) > 0 && !C.advancesPerExposure(slot.prescription)));
+  const rank = stalled.findIndex((slot) => slot.id === lift.id);
+  if (rank < 0) return 0;
+  return C.volumeIncrementSets(lift.stallCount ?? 0, rank, program.maximumAddedSetsPerRotation ?? 6);
 }
 
 function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
@@ -1733,6 +1791,11 @@ export async function createSessionFromProgramDay(program, day) {
       { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
       program.roundingLb, ex?.type, ex?.movementGroup, lift.role, program.focus, lift.prescription || "automatic",
       configuration, lift.estimatedMaxLb || 0,
+      // A held cycle moves the needle with volume: the stall the grade
+      // recorded adds one set to this volume rotation, with the rotation-wide
+      // budget allocated across stalled slots. Pure state, so the Home card
+      // computes the identical count.
+      volumeFallbackSets(lift, program),
     );
     const plan = prescription.mainWork;
     // Methodology slots prescribe exact loads (a +5/session contract, TM

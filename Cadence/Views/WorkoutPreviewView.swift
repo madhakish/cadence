@@ -31,7 +31,8 @@ struct WorkoutPreviewView: View {
             role: lift.role,
             focus: program.focus,
             prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""))
+            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
+            addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program))
     }
 
     private func plan(for lift: ProgramLift) -> SessionPlan {

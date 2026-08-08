@@ -316,6 +316,47 @@ enum SessionCompletion {
         return lineage.count == 1 ? lineage[0] : nil
     }
 
+    /// The best e1RM logged for this exercise before the session being
+    /// banked, and whether it is a STANDING best — old enough (35 days) to be
+    /// a prior ceiling rather than the frontier of a rising log. This is what
+    /// `progressionRegime` bands against: a logged drawdown reads rebuild, a
+    /// standing ceiling being closed back in on reads fine, and a fresh log
+    /// with no such evidence stays standard. Mirrors web `priorBestE1RM`.
+    private static func priorBestE1RM(
+        for exerciseName: String, excluding session: WorkoutSession, context: ModelContext
+    ) -> (maxLb: Double, standing: Bool)? {
+        guard let sessions = try? context.fetch(
+            FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.isCompleted })
+        ) else { return nil }
+        let anchor = session.completedAt ?? session.date
+        var best = 0.0
+        var bestDate = Date.distantPast
+        for candidate in sessions where candidate !== session {
+            // PRIOR means prior: a session banked out of order must not let
+            // later work retroactively pick this cycle's regime.
+            let stamp = candidate.completedAt ?? candidate.date
+            guard stamp <= anchor else { continue }
+            for entry in candidate.exercises where entry.exercise?.name == exerciseName {
+                // Same rep ceiling as strengthSampleIndex: Epley drifts high
+                // past ten reps, and a long back-off set must not become an
+                // inflated lifetime ceiling that misgrades every later cycle.
+                for set in entry.workingSets
+                where set.weightLb > 0 && set.reps >= 1
+                    && set.reps <= ProgramProgression.e1RMSampleRepCeiling {
+                    let sample = ProgramProgression.epleyE1RM(weightLb: set.weightLb, reps: set.reps)
+                    if sample > best {
+                        best = sample
+                        bestDate = stamp
+                    }
+                }
+            }
+        }
+        guard best > 0 else { return nil }
+        let standing = anchor.timeIntervalSince(bestDate)
+            >= ProgramProgression.standingBestDays * 86_400
+        return (best, standing)
+    }
+
     /// Twin equivalence is a barbell concept — only total-bar work may read
     /// its number as a bar-and-plates stack; everything else grades on the
     /// numbers alone (nil). The label bar rides along so a 35-class bar twins
@@ -882,13 +923,24 @@ enum SessionCompletion {
                 ), !prescribedWork(entry).isEmpty {
                     let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
                                                           exerciseType: entry.exercise?.typeRaw)
+                    // Headroom to the lifter's own logged prior best stages
+                    // the increment; the added-set governance decides whether
+                    // a held cycle may fall back to volume. Mirrored in web
+                    // session.js bankProgramAdvance.
+                    let prior = priorBestE1RM(for: lift.exerciseName, excluding: session, context: context)
                     let result = ProgramProgression.advanceProgramLift(
                         lift.coreState,
                         perf: cyclePerf(entry, roundingLb: loadStep),
                         focus: program.focus,
                         style: lift.prescription,
                         movementGroup: entry.exercise?.movementGroup,
-                        roundingLb: loadStep
+                        roundingLb: loadStep,
+                        regime: ProgramProgression.progressionRegime(
+                            estimatedMaxLb: lift.estimatedMaxLb,
+                            priorBestMaxLb: prior?.maxLb ?? 0,
+                            standingBest: prior?.standing ?? false
+                        ),
+                        volumeFallback: program.maximumAddedSetsPerRotation > 0
                     )
                     lift.pendingBaseWeightLb = result.state.baseWeightLb
                     lift.pendingEstimatedMaxLb = result.state.estimatedMaxLb

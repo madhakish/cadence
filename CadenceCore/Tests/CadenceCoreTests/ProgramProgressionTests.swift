@@ -79,6 +79,82 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(legacy.state.baseWeightLb, 200 + inc, accuracy: 0.0001)
     }
 
+    // The lifter's priority order: the needle moves every cycle — weight when
+    // a clean jump is earnable, volume when it is not. Headroom to the LOGGED
+    // prior best stages the increment; a held cycle falls back to a volume
+    // set instead of a bare hold. Mirrored in web/tests/core.test.mjs.
+    // [INV-NEEDLE-ALWAYS-MOVES]
+    func testProgressionRegimeBands() {
+        XCTAssertEqual(P.progressionRegime(estimatedMaxLb: 300, priorBestMaxLb: 0, standingBest: true), .standard,
+                       "no logged evidence grades standard")
+        XCTAssertEqual(P.progressionRegime(estimatedMaxLb: 300, priorBestMaxLb: 400, standingBest: false), .rebuild,
+                       "a logged drawdown reads rebuild regardless of the best's age")
+        XCTAssertEqual(P.progressionRegime(estimatedMaxLb: 395, priorBestMaxLb: 400, standingBest: true), .fine,
+                       "closing on a standing ceiling reads fine")
+        XCTAssertEqual(P.progressionRegime(estimatedMaxLb: 395, priorBestMaxLb: 400, standingBest: false), .standard,
+                       "a fresh log rising through its own best never reads fine")
+        XCTAssertEqual(P.progressionRegime(estimatedMaxLb: 370, priorBestMaxLb: 400, standingBest: true), .standard,
+                       "inside the normal band nothing changes")
+    }
+
+    // [INV-NEEDLE-ALWAYS-MOVES]
+    func testStagedIncrementByRegime() {
+        XCTAssertEqual(P.stagedIncrement(baseWeightLb: 175, focus: .strength, regime: .standard, roundingLb: 5), 5)
+        XCTAssertEqual(P.stagedIncrement(baseWeightLb: 175, focus: .strength, regime: .rebuild, roundingLb: 5), 10,
+                       "rebuild rounds the 5 lb step up to the clean 10 lb class — no change plates")
+        XCTAssertEqual(P.stagedIncrement(baseWeightLb: 175, focus: .strength, regime: .fine, roundingLb: 5), 2.5,
+                       "fine halves the step down to change-plate granularity")
+        XCTAssertEqual(P.stagedIncrement(baseWeightLb: 221, focus: .strength, regime: .rebuild, roundingLb: 10), 10,
+                       "an increment already in the clean class is untouched")
+        XCTAssertEqual(P.stagedIncrement(baseWeightLb: 221, focus: .strength, regime: .fine, roundingLb: 10), 5)
+        XCTAssertEqual(P.stagedIncrement(baseWeightLb: 300, focus: .maintain, regime: .rebuild, roundingLb: 5), 0,
+                       "maintain stays zero in every regime")
+    }
+
+    // [INV-NEEDLE-ALWAYS-MOVES]
+    func testVolumeFallbackDerivation() {
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 0, maximumAddedSetsPerRotation: 6), 1)
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 0, stalledRank: 0, maximumAddedSetsPerRotation: 6), 0,
+                       "no stall, no extra volume — a clean grade returns the shape with the jump")
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 0, maximumAddedSetsPerRotation: 0), 0,
+                       "the added-set governance can turn the fallback off entirely")
+        // The budget is rotation-wide, not per-slot: four stalled lifts under
+        // a budget of one add one set, allocated in stable program order.
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 0, maximumAddedSetsPerRotation: 1), 1,
+                       "the first stalled slot spends the budget")
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 1, maximumAddedSetsPerRotation: 1), 0,
+                       "the second stalled slot finds it spent")
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: 3, maximumAddedSetsPerRotation: 6), 1,
+                       "a roomy budget covers every stalled slot")
+        XCTAssertEqual(P.volumeIncrementSets(stallCount: 1, stalledRank: -1, maximumAddedSetsPerRotation: 6), 0,
+                       "a slot outside the stalled ranking carries nothing")
+    }
+
+    // [INV-NEEDLE-ALWAYS-MOVES]
+    func testHeldCycleMovesTheNeedleWithVolume() {
+        var held = cleanPerf()
+        held.grindyOrWobbleSets = 3
+        let result = P.advanceCycleLift(liftState(), perf: held, focus: .strength, roundingLb: 5,
+                                        regime: .rebuild, volumeFallback: true)
+        XCTAssertEqual(result.state.stallCount, 1)
+        XCTAssertEqual(result.state.baseWeightLb, 175, "the weight holds; the volume moves")
+        XCTAssertTrue(result.note?.contains("adds a set") == true,
+                      "the note tells the lifter how the cycle still moves")
+        // The stall→deload ladder is intact underneath: a second consecutive
+        // non-success still rebuilds at 90%.
+        var missed = cleanPerf()
+        missed.completedSets = 1
+        let second = P.advanceCycleLift(result.state, perf: missed, focus: .strength, roundingLb: 5,
+                                        regime: .rebuild, volumeFallback: true)
+        XCTAssertEqual(second.state.stallCount, 0)
+        XCTAssertEqual(second.state.baseWeightLb, Weight.round(175 * 0.9, to: 5))
+        // A clean grade in rebuild jumps the clean class from the same state.
+        let clean = P.advanceCycleLift(liftState(), perf: cleanPerf(), focus: .strength, roundingLb: 5,
+                                       regime: .rebuild, volumeFallback: true)
+        XCTAssertEqual(clean.state.baseWeightLb, 185, "175 + the 10 lb clean jump")
+        XCTAssertEqual(clean.state.stallCount, 0)
+    }
+
     // A weighted pull-up is TYPED bodyweight but hangs real plates from a belt.
     // Keying loadability on type alone silently exempted it, so a belt slot
     // with a zero increment never progressed and never warned.
