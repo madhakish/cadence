@@ -1066,9 +1066,10 @@ private struct SetRow: View {
                            let plannedWeight = set.plannedWeightLb,
                            let plannedReps = set.plannedReps,
                            abs(plannedWeight - set.weightLb) > 0.001 || plannedReps != set.reps {
-                            Text("planned \(set.enteredUnit == .kg
+                            let plannedLoad = set.enteredUnit == .kg
                                 ? "\(Weight.trim(Weight.kg(fromLb: plannedWeight))) kg"
-                                : "\(Weight.trim(plannedWeight)) lb")×\(plannedReps)")
+                                : "\(Weight.trim(plannedWeight)) lb"
+                            Text("planned \(plannedLoad)×\(plannedReps)")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         if set.isWarmup {
