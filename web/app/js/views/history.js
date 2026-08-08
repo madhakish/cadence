@@ -216,7 +216,9 @@ function renderCharts(panel, sessions, exercises, program) {
     // and tonnage can only ever draw a flat zero — the honest series is reps.
     // Offering the load metrics anyway is how promoting pull-ups to Main turned
     // a real progression into three straight lines at 0.
-    const loaded = C.supportsLoadPR((exercises.find((e) => e.name === chartEx) || {}).loadBasis);
+    const loaded = C.supportsLoadPR(C.resolvedLoadBasis(
+      exercises.find((e) => e.name === chartEx),
+    ));
     const metricOptions = loaded
       ? [{ value: "weight", label: "Working weight" }, { value: "e1rm", label: "Est. 1RM" },
         { value: "all", label: "Weight + e1RM" }]
@@ -255,6 +257,9 @@ function renderCharts(panel, sessions, exercises, program) {
           // and bars were canonical pounds wearing a kg label — and native
           // (which does convert) drew a different number from the same data.
           volume: displayValue(entries.reduce((sum, entry) => sum + workingVolume(entry), 0)) || null,
+          // Bodyweight lifts chart their best completed work-set rep count.
+          // Without carrying it into the row, the Reps picker filtered every
+          // point out and rendered an empty chart for promoted pull-ups.
           reps: performed.length ? Math.max(...performed.map((set) => set.reps || 0)) : null,
         });
       }

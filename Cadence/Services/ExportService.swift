@@ -181,6 +181,9 @@ enum ExportService {
         /// re-run the retired-rest-stamp clear; absent in old backups → re-run.
         let restSeedStampsCleared: Bool?
         let loadSemanticsMigrated: Bool?
+        /// One-shot vertical-pull promotion marker. It must ride with the
+        /// exercise library or a native backup restore re-arms the migration.
+        let verticalPullMainsPromoted: Bool?
         let seededAt: Date?
         let theme: String?
     }
@@ -585,6 +588,7 @@ enum ExportService {
                                haptics: s.haptics, gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay,
                                restSeedStampsCleared: s.restSeedStampsCleared,
                                loadSemanticsMigrated: s.loadSemanticsMigrated,
+                               verticalPullMainsPromoted: s.verticalPullMainsPromoted,
                                seededAt: s.seededAt, theme: s.themeNameRaw)
             },
             coachingDecisions: coachingDecisions.map { decision in
