@@ -41,7 +41,7 @@ jobs:
       migrations: ${{ steps.paths.outputs.migrations }}
       web: ${{ steps.paths.outputs.web }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:5.10@sha256:ffc42e399ad0cad324f68d58f65e4d5f2c22eb9df73c4dfa249e898d497254b3
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Run unit tests
@@ -88,7 +88,7 @@ jobs:
     name: Web tests (parity + smoke)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -123,7 +123,7 @@ jobs:
     if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Run unit tests (Darwin)
@@ -159,7 +159,7 @@ jobs:
     if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install XcodeGen
@@ -196,7 +196,7 @@ jobs:
     if: needs.changes.outputs.migrations == 'true'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Restore shipped-store fixtures
@@ -205,19 +205,19 @@ jobs:
         with:
           path: ${{ runner.temp }}/cadence-shipped-stores
           key: shipped-stores-v1-v129-d418550-pr72-c2026d8-pr73-11846b8-${{ hashFiles('.github/scripts/generate-shipped-stores.sh') }}
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.shipped-store-cache.outputs.cache-hit != 'true'
         with:
           ref: v1.29.0
           path: shipped/v129
           persist-credentials: false
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.shipped-store-cache.outputs.cache-hit != 'true'
         with:
           ref: c2026d81a61a23b8eb71c30a0ff1ba2e1cd67f85
           path: shipped/pr72
           persist-credentials: false
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.shipped-store-cache.outputs.cache-hit != 'true'
         with:
           ref: 11846b8dbdf88aa227f6d54fbc7a23c1b8ba8fea
@@ -299,7 +299,7 @@ jobs:
       published: ${{ steps.release-state.outputs.published }}
       version: ${{ steps.release-state.outputs.version }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -391,7 +391,7 @@ jobs:
       (needs.release.outputs.published == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_testflight))
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -459,7 +459,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
