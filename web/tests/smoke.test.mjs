@@ -271,6 +271,34 @@ for (let i = 0; i < 10; i++) {
   ok((await db.Exercises.all()).length === 143, "sync leaves the count whole (no dupes)");
 }
 
+// ---- vertical pulls: migrate old installs once, then respect user edits ----
+{
+  const pullups = await db.Exercises.byName("Pull-ups");
+  const chinups = await db.Exercises.byName("Chin-ups");
+  pullups.category = "Accessory";
+  chinups.category = "Accessory";
+  await db.Exercises.save(pullups);
+  await db.Exercises.save(chinups);
+  const settings = await db.Settings.get();
+  delete settings.verticalPullMainsPromoted; // pre-promotion seeded install
+  await db.Settings.save(settings);
+
+  await db.syncLibrary();
+  ok((await db.Exercises.byName("Pull-ups")).category === "Main"
+    && (await db.Exercises.byName("Chin-ups")).category === "Main",
+  "an existing seeded install promotes bodyweight vertical pulls to main lifts");
+  ok((await db.Settings.get()).verticalPullMainsPromoted === true,
+    "the vertical-pull promotion records its one-shot marker");
+
+  pullups.category = "Accessory";
+  await db.Exercises.save(pullups);
+  await db.syncLibrary();
+  ok((await db.Exercises.byName("Pull-ups")).category === "Accessory",
+    "a deliberate post-migration demotion survives later library syncs");
+  pullups.category = "Main";
+  await db.Exercises.save(pullups);
+}
+
 // ---- retired rest stamps: one-shot clear un-freezes the rest buckets ----
 {
   // Simulate a pre-bucket install: the old seed stamped every exercise with a
@@ -776,19 +804,32 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed); // restore the canonical settings for later blocks
 }
 
-// restSeedStampsCleared describes the exercise library's migration state, so
-// it must follow the bundle only when the library itself was restored: a
-// settings-only restore keeps the current marker (else the next syncLibrary
-// would re-clear over an untouched library and could eat a user-set rest equal
-// to a retired stamp), while a library restored without settings re-arms it.
+// Library migration markers follow the exercise library, not settings alone.
+// A settings-only restore keeps the current markers; restoring an older
+// library re-arms every repair that depends on those rows.
 {
   ok((await db.Settings.get()).restSeedStampsCleared === true, "marker is set before the partial-restore checks");
   const settingsOnly = { sessions: parsed.sessions, settings: { ...parsed.settings } };
   delete settingsOnly.settings.restSeedStampsCleared; // a pre-migration, exercise-less backup
+  delete settingsOnly.settings.verticalPullMainsPromoted;
   await db.importBundle(settingsOnly);
   ok((await db.Settings.get()).restSeedStampsCleared === true, "settings-only restore keeps the stamp-clear marker");
-  await db.importBundle({ exercises: parsed.exercises });
-  ok((await db.Settings.get()).restSeedStampsCleared === false, "library restore without settings re-arms the stamp check");
+  ok((await db.Settings.get()).verticalPullMainsPromoted === true,
+    "settings-only restore keeps the vertical-pull marker");
+
+  const oldLibrary = parsed.exercises.map((exercise) =>
+    ["Pull-ups", "Chin-ups"].includes(exercise.name)
+      ? { ...exercise, category: "Accessory" }
+      : exercise);
+  await db.importBundle({ exercises: oldLibrary });
+  const rearmed = await db.Settings.get();
+  ok(rearmed.restSeedStampsCleared === false, "library restore without settings re-arms the stamp check");
+  ok(rearmed.verticalPullMainsPromoted === false,
+    "library restore without settings re-arms the vertical-pull promotion");
+  await db.syncLibrary();
+  ok((await db.Exercises.byName("Pull-ups")).category === "Main"
+    && (await db.Exercises.byName("Chin-ups")).category === "Main",
+  "library sync promotes vertical pulls restored from an older backup");
   await db.importBundle(parsed); // full post-migration bundle restores the marker
   ok((await db.Settings.get()).restSeedStampsCleared === true, "full post-migration restore carries the marker");
 }
