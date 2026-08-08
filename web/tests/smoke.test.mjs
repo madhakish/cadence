@@ -1514,6 +1514,43 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// A bodyweight rep-window LIFT slot progresses by reps alone — its identity
+// carries no external load, so a numeric increment would store weight that
+// history, tonnage, and PR detection all ignore (adding a belt is switching
+// to the Weighted Pull-up identity). A loaded slot still earns the step.
+{
+  const name = "Fixture Bodyweight Rep Window";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Upper", order: 0, accessories: [],
+      lifts: [
+        { exerciseName: "Overhead Press", role: "main", prescription: "wave",
+          baseWeightLb: 95, estimatedMaxLb: 130, stallCount: 0, lastIncrementLb: 0 },
+        { exerciseName: "Pull-ups", role: "complementary", prescription: "doubleProgression",
+          doubleProgressionSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 8,
+          baseWeightLb: 0, estimatedMaxLb: 0, stallCount: 0, lastIncrementLb: 0 },
+        { exerciseName: "Incline DB Press", role: "complementary", prescription: "doubleProgression",
+          doubleProgressionSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 8,
+          baseWeightLb: 45, estimatedMaxLb: 60, stallCount: 0, lastIncrementLb: 0 },
+      ] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const id = await session.createSessionFromProgramDay(program, program.days[0]);
+  const topped = await db.Sessions.get(id);
+  for (const entry of topped.exercises) for (const set of entry.sets) set.status = "completed";
+  await session.completeSession(topped);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const pullups = program.days[0].lifts.find((l) => l.exerciseName === "Pull-ups");
+  const inclineDb = program.days[0].lifts.find((l) => l.exerciseName === "Incline DB Press");
+  ok(pullups.baseWeightLb === 0 && pullups.currentReps === 9,
+    `a bodyweight rep-window lift tops its window by adding reps, never phantom load (got ${pullups.baseWeightLb} @ ${pullups.currentReps})`);
+  ok(inclineDb.baseWeightLb === 50 && inclineDb.currentReps === 5,
+    `a loaded rep-window lift still earns the step and resets the window (got ${inclineDb.baseWeightLb} @ ${inclineDb.currentReps})`);
+
+  await db.importBundle(parsed);
+}
+
 // A 5/3/1 day is ALL amrap and ramp blocks — it has no ordinary `work` set at
 // all. Every gate that asked "is this `work`" therefore answered no, so the
 // session banked as history and the schedule never advanced. The template was
