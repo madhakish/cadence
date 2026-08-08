@@ -4,6 +4,15 @@ This file applies to the entire repository. It is the canonical working guide
 for coding agents and contributors. A more deeply nested `AGENTS.md` may add or
 override instructions for its subtree.
 
+## Engineering doctrine
+
+Before implementing or reviewing code, read and enforce
+[`.agents/torvalds-doctrine.md`](.agents/torvalds-doctrine.md). It is an
+always-on repository instruction, not an opt-in skill. Apply its blunt language
+to code, APIs, data structures, and patches—not to people. Cadence-specific
+persistence, privacy, parity, and userspace rules below remain binding; when two
+rules differ, follow the stricter one.
+
 ## Project in one minute
 
 Cadence is a private, local-first strength-training logbook with two clients:
