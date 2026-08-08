@@ -216,9 +216,12 @@ function renderCharts(panel, sessions, exercises, program) {
     // and tonnage can only ever draw a flat zero — the honest series is reps.
     // Offering the load metrics anyway is how promoting pull-ups to Main turned
     // a real progression into three straight lines at 0.
-    const loaded = C.supportsLoadPR(C.resolvedLoadBasis(
-      exercises.find((e) => e.name === chartEx),
-    ));
+    // Resolved, not raw: loadBasis is optional in the backup contract and
+    // normalizeExercise does not fill it in, so a custom or imported lift with
+    // no explicit basis must infer from its equipment type — exactly what the
+    // native Exercise.loadBasis getter does. Reading the raw field locked such
+    // lifts to the Reps-only picker.
+    const loaded = C.supportsLoadPR(C.resolvedLoadBasis(exercises.find((e) => e.name === chartEx)));
     const metricOptions = loaded
       ? [{ value: "weight", label: "Working weight" }, { value: "e1rm", label: "Est. 1RM" },
         { value: "all", label: "Weight + e1RM" }]
@@ -257,10 +260,11 @@ function renderCharts(panel, sessions, exercises, program) {
           // and bars were canonical pounds wearing a kg label — and native
           // (which does convert) drew a different number from the same data.
           volume: displayValue(entries.reduce((sum, entry) => sum + workingVolume(entry), 0)) || null,
-          // Bodyweight lifts chart their best completed work-set rep count.
-          // Without carrying it into the row, the Reps picker filtered every
-          // point out and rendered an empty chart for promoted pull-ups.
-          reps: performed.length ? Math.max(...performed.map((set) => set.reps || 0)) : null,
+          // The best completed working set's reps: the direct analogue of
+          // "heaviest set" for a lift whose load never changes. Reps are a
+          // count — no unit conversion. Mirrors the native metric == .reps
+          // points builder.
+          reps: performed.length ? Math.max(...performed.map((set) => set.reps || 0)) || null : null,
         });
       }
     }
@@ -295,10 +299,18 @@ function renderCharts(panel, sessions, exercises, program) {
     // the evidence each. Volume projects too — a tonnage trend is a real thing
     // to ask about — so it reads whichever metric is on screen.
     const projectionMetric = chartMetric === "all" ? "weight" : chartMetric;
-    const projectionRole = roles.includes("main") ? "main" : roles[0];
+    // Main-role points, or whatever role the lift actually has. Choosing a
+    // ROLE up front picked "main" whenever the complementary toggle was on,
+    // so a lift held only in complementary slots drew its full chart beside
+    // "0 of 4 sessions so far" — a refusal stating a count that was false on
+    // screen. Mirrors native projectionSamplePoints: fall back to every
+    // visible point of the metric when no main-role points exist.
+    const mainPoints = pick(projectionMetric, "main");
+    const projectionSamples = mainPoints.length
+      ? mainPoints : roles.flatMap((role) => pick(projectionMetric, role));
     const nowT = Date.now();
     const fitted = chartHorizon > 0 ? C.projectTrend(
-      pick(projectionMetric, projectionRole).map((p) => ({ day: p.t / DAY_MS, value: p.y })),
+      projectionSamples.map((p) => ({ day: p.t / DAY_MS, value: p.y })),
       chartHorizon, nowT / DAY_MS,
     ) : null;
     const horizonLabel = (C.TREND_HORIZONS.find((h) => h.value === chartHorizon) || {}).label || "";
@@ -313,6 +325,9 @@ function renderCharts(panel, sessions, exercises, program) {
     const chartOptions = {
       fmtY: (v) => (chartMetric === "reps" ? String(Math.round(v)) : C.trim(v)),
       targetY, targetLabel: "Peak target", projection,
+      // Native's showsAreaFill also requires the rotation split to be OFF; a
+      // single-rotation history in split mode drew the wash on web only.
+      area: !chartSplit,
     };
     const metricLabel = chartMetric === "weight" ? "Top working weight"
       : chartMetric === "e1rm" ? "Estimated 1RM"
@@ -388,7 +403,7 @@ function renderCharts(panel, sessions, exercises, program) {
           ui.h("span", { class: "sub", text: "Fitted from performed sessions — a continuation of the past, not a plan." }))));
     } else if (chartHorizon > 0) {
       slot.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
-        ui.h("span", { class: "sub", text: projectionRefusal(pick(projectionMetric, projectionRole), nowT) })));
+        ui.h("span", { class: "sub", text: projectionRefusal(projectionSamples, nowT) })));
     }
     const records = new Map();
     for (const session of sessions) for (const entry of session.exercises || []) if (entry.exerciseName === chartEx) {

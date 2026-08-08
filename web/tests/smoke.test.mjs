@@ -569,8 +569,8 @@ ok(["Main progression", "Compare program roles", "Compare like rotations"].every
     // projected line and a refusal at once is the contradiction worth catching.
     ok(!(drewIt && said.length > 0),
       "[INV-PROJECTION-REFUSES-THIN-HISTORY] it never both projects and refuses");
-    ok(!said.some((t) => /^Project forward$/.test(t)),
-      "the refusal check cannot be satisfied by the control's own heading");
+    ok(!REFUSALS.some((r) => r.test("Project forward")),
+      "the refusal patterns cannot match the control's own heading");
     // Back to off, so later renders in this file see the default chart.
     [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Off")?.click();
     await tick();
@@ -583,15 +583,18 @@ ok(["Main progression", "Compare program roles", "Compare like rotations"].every
 // tonnage can only ever draw a flat zero. The honest series is reps, and the
 // picker must offer that instead of three straight lines at 0.
 {
-  const pullupHistoryID = await db.Sessions.save({
-    date: "2020-02-01T12:00:00.000Z", completedAt: "2020-02-01T13:00:00.000Z",
-    notes: "Fictional pull-up chart regression", isCompleted: true, gymName: null,
-    exercises: [{ order: 0, exerciseName: "Pull-ups", notes: "", phase: 1,
-      programRole: "main", plannedWeightLb: 0, plannedSets: 1, plannedReps: 8,
-      sets: [{ order: 0, weightLb: 0, reps: 8, isWarmup: false,
-        status: "completed", loadBasis: "bodyweight", implementCount: 1,
-        enteredUnit: "lb", flags: [] }] }],
+  // Real logged history, so the assertions below test the chart's DATA path,
+  // not only its labels — a picker that says "Reps" above an empty chart
+  // passed the previous version of this block.
+  const pullDay = (daysAgo, reps) => db.Sessions.save({
+    date: new Date(Date.now() - daysAgo * 86_400_000).toISOString(), notes: "", isCompleted: true,
+    gymName: null, exercises: [{ order: 0, exerciseName: "Pull-ups", notes: "", phase: null,
+      sets: [{ order: 0, weightLb: 0, reps, isWarmup: false, status: "completed" }] }],
   });
+  const pullIds = [];
+  for (const [daysAgo, reps] of [[28, 5], [21, 6], [14, 7], [7, 8], [0, 9]]) {
+    pullIds.push(await pullDay(daysAgo, reps));
+  }
   await history.render(host());
   [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Charts")?.click();
   await tick();
@@ -606,8 +609,20 @@ ok(["Main progression", "Compare program roles", "Compare like rotations"].every
     ok(labels.includes("Reps"), `a bodyweight lift is offered Reps (${labels.join(", ")})`);
     ok(!labels.includes("Working weight") && !labels.includes("Est. 1RM"),
       "and is NOT offered the load metrics it could only draw as zero");
-    ok(host().querySelectorAll("svg.chart circle.dot").length > 0,
-      "the Reps metric draws the completed pull-up history instead of an empty chart");
+    // The metric must have a data source: five logged sessions are five dots.
+    ok(host().querySelectorAll("svg.chart path.line").length >= 1,
+      "the Reps metric draws a line, not a blank chart");
+    ok(host().querySelectorAll("svg.chart circle.dot").length >= 5,
+      `every logged pull-up session charts a point (${host().querySelectorAll("svg.chart circle.dot").length})`);
+    // And it projects: 5 samples over 28 days clears every refusal threshold.
+    [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "3 months")?.click();
+    await tick();
+    ok(host().querySelector("path.projection"),
+      "a rep progression projects like any other metric");
+    ok([...host().querySelectorAll(".title")].some((n) => /reps\/week/.test(n.textContent || "")),
+      "and the projected rate is a rep count, not a load");
+    [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Off")?.click();
+    await tick();
     // A loaded lift keeps every load metric and is never offered reps.
     select.value = "Weighted Pull-up";
     select.dispatchEvent(new window.Event("change"));
@@ -616,7 +631,7 @@ ok(["Main progression", "Compare program roles", "Compare like rotations"].every
     ok(loadedLabels.includes("Working weight") && !loadedLabels.includes("Reps"),
       `belt weight is real resistance, so it charts load (${loadedLabels.join(", ")})`);
   }
-  await db.Sessions.del(pullupHistoryID);
+  for (const id of pullIds) await db.Sessions.del(id);
 }
 
 // Imported/custom exercises may omit loadBasis. The chart gate must use the
@@ -866,20 +881,32 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "settings-only restore keeps the vertical-pull marker");
 
   const oldLibrary = parsed.exercises.map((exercise) =>
-    ["Pull-ups", "Chin-ups"].includes(exercise.name)
-      ? { ...exercise, category: "Accessory" }
-      : exercise);
+    exercise.name === "Pull-ups" ? { ...exercise, category: "Accessory" }
+      // A category the lifter set THEMSELVES — the repair must not argue.
+      // Main would be indistinguishable from a promotion, so the fixture uses
+      // the one value that tells the guard apart from its absence.
+      : exercise.name === "Chin-ups" ? { ...exercise, category: "Conditioning" }
+        : exercise);
   await db.importBundle({ exercises: oldLibrary });
   const rearmed = await db.Settings.get();
   ok(rearmed.restSeedStampsCleared === false, "library restore without settings re-arms the stamp check");
   ok(rearmed.verticalPullMainsPromoted === false,
     "library restore without settings re-arms the vertical-pull promotion");
   await db.syncLibrary();
-  ok((await db.Exercises.byName("Pull-ups")).category === "Main"
-    && (await db.Exercises.byName("Chin-ups")).category === "Main",
-  "library sync promotes vertical pulls restored from an older backup");
+  ok((await db.Exercises.byName("Pull-ups")).category === "Main",
+    "library sync promotes vertical pulls restored from an older backup");
+  ok((await db.Exercises.byName("Chin-ups")).category === "Conditioning",
+    "a category the lifter set themselves is never overwritten — delete the guard and this fails");
+  // Re-arm before the full restore: syncLibrary's repair just set both markers
+  // back to true, so without this the assertion below proves a true→true
+  // non-transition and a restore that dropped the bundle's marker would pass.
+  await db.Settings.save({ ...(await db.Settings.get()),
+    restSeedStampsCleared: false, verticalPullMainsPromoted: false });
   await db.importBundle(parsed); // full post-migration bundle restores the marker
-  ok((await db.Settings.get()).restSeedStampsCleared === true, "full post-migration restore carries the marker");
+  ok((await db.Settings.get()).restSeedStampsCleared === true,
+    "full post-migration restore flips the re-armed marker back to true");
+  ok((await db.Settings.get()).verticalPullMainsPromoted === true,
+    "and the vertical-pull marker rides the same restore");
 }
 
 // A backup missing a store's key must leave that store untouched (old-format
