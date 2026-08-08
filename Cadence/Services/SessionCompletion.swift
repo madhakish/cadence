@@ -223,8 +223,11 @@ enum SessionCompletion {
            let program = session.programID.flatMap({ id in programs.first { $0.id == id } })
                 ?? programs.first(where: { $0.name == session.programName }),
            let nextDay = program.orderedDays.first(where: { $0.order == program.nextDayIndex }) ?? program.orderedDays.first {
-            let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
-            coachingNotes.append("Next: \(nextDay.name) · R\(program.currentWeek) \(phase.name).")
+            // A day is not in a phase — its slots are, and they can disagree.
+            // Naming one phase for the whole day claims a wave over slots that
+            // may be linear, 5/3/1 or speed work. Position is what a "next up"
+            // note actually knows. Mirrored in web session.js.
+            coachingNotes.append("Next: \(nextDay.name) · \(ProgramEngine.rotationLabel(rotation: program.currentWeek)).")
         }
         return SessionSummary(lines: lines, milestones: allEvents, coachingNotes: coachingNotes)
     }
@@ -468,14 +471,16 @@ enum SessionCompletion {
             .sorted { $0.date > $1.date }
     }
 
-    /// Two rows are enough because two Recovery sessions close the bridge.
+    /// Enough rows to reach the bridge's own cap. That is two for a normal
+    /// upper/lower bridge, but a program keeping its full authored pass has a
+    /// longer one, and fetching only two would report it complete early.
     private static func recentRecoverySessions(
-        for program: Program, context: ModelContext
+        for program: Program, selectedExposureCount: Int, context: ModelContext
     ) throws -> [WorkoutSession] {
         try recentCompletedSessions(
             for: program,
             phase: ProgramProgression.deloadWeek,
-            limit: ProgramProgression.recoverySessionLimit,
+            limit: Swift.max(ProgramProgression.recoverySessionLimit, selectedExposureCount),
             context: context
         )
     }
@@ -524,7 +529,41 @@ enum SessionCompletion {
     ) throws -> RecoveryBridgeReconciliation? {
         guard program.currentWeek == ProgramProgression.deloadWeek else { return nil }
 
-        let recoverySessions = try recentRecoverySessions(for: program, context: context)
+        // Never advance the program out from under a workout in progress. The
+        // open session was built against this rotation; rolling the cycle while
+        // it is on screen makes banking it fail the stale-tag guard and land as
+        // orphaned history. Reconciliation is not urgent — it runs on the next
+        // render once the session is banked or discarded.
+        //
+        // Scoped to THIS PROGRAM'S sessions, deliberately. Blocking on any open
+        // session at all would let one lingering blank session — which Today
+        // explicitly supports keeping around — suppress the session cap and the
+        // expiry window indefinitely, and Start would go on minting stale
+        // recovery prescriptions. That is the indefinite-light-work path this
+        // whole mechanism exists to close.
+        //
+        // Stable-ID and legacy-name matching use separate descriptors for the
+        // same reason `recentCompletedSessions` does: the predicate macro never
+        // has to type-check the combined optional fallback.
+        let stableProgramID = program.id
+        let legacyProgramName = program.name
+        var openByID = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { session in
+                !session.isCompleted && session.programID == stableProgramID
+            }
+        )
+        openByID.fetchLimit = 1
+        guard try context.fetch(openByID).isEmpty else { return nil }
+
+        var openByName = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { session in
+                !session.isCompleted && session.programID == nil
+                    && session.programName == legacyProgramName
+            }
+        )
+        openByName.fetchLimit = 1
+        guard try context.fetch(openByName).isEmpty else { return nil }
+
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
         let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
         let recoveryOrders = ProgramProgression.recoveryDayOrders(
@@ -536,20 +575,24 @@ enum SessionCompletion {
                 )
             }
         )
+        let recoverySessions = try recentRecoverySessions(
+            for: program, selectedExposureCount: recoveryOrders.count, context: context
+        )
         let selectedComplete = ProgramProgression.recoveryScheduleAdvance(
             dayOrders: recoveryOrders,
             completedDayOrders: recoverySessions.compactMap(\.programDayIndex)
         ).isLastDay
-        let immediateReason = ProgramProgression.recoveryBridgeCompletionReason(
+        var reason = ProgramProgression.recoveryBridgeCompletionReason(
             completedRecoverySessions: recoverySessions.count,
+            selectedExposureCount: recoveryOrders.count,
             selectedExposuresComplete: selectedComplete,
             lastHardPhaseCompletion: nil,
             asOf: now
         )
-        var reason = immediateReason
         if reason == nil {
             reason = ProgramProgression.recoveryBridgeCompletionReason(
                 completedRecoverySessions: recoverySessions.count,
+                selectedExposureCount: recoveryOrders.count,
                 selectedExposuresComplete: selectedComplete,
                 lastHardPhaseCompletion: try lastHardPhaseCompletion(for: program, context: context),
                 asOf: now
@@ -558,12 +601,13 @@ enum SessionCompletion {
         guard let reason else { return nil }
 
         let nextCycle = program.cycleNumber + 1
+        let banked = recoverySessions.count
         let message: String
         switch reason {
         case .selectedExposures:
             message = "Recovery complete — planned recovery exposures banked. Cycle \(nextCycle) starts at Volume."
         case .sessionLimit:
-            message = "Recovery complete — two recovery sessions banked. Cycle \(nextCycle) starts at Volume."
+            message = "Recovery complete — \(banked) recovery session\(banked == 1 ? "" : "s") banked. Cycle \(nextCycle) starts at Volume."
         case .windowElapsed:
             message = "Recovery complete — the seven-day recovery window elapsed. Cycle \(nextCycle) starts at Volume."
         }
@@ -841,7 +885,9 @@ enum SessionCompletion {
         let advance: (nextDayOrder: Int, isLastDay: Bool)
         var recoveryCompletionReason: RecoveryBridgeCompletionReason?
         if isRecovery {
-            var completedSessions = try recentRecoverySessions(for: program, context: context)
+            var completedSessions = try recentRecoverySessions(
+                for: program, selectedExposureCount: recoveryDayOrders.count, context: context
+            )
             if !completedSessions.contains(where: { $0.id == session.id }) {
                 completedSessions.append(session)
             }
@@ -851,6 +897,7 @@ enum SessionCompletion {
             )
             recoveryCompletionReason = ProgramProgression.recoveryBridgeCompletionReason(
                 completedRecoverySessions: completedSessions.count,
+                selectedExposureCount: recoveryDayOrders.count,
                 selectedExposuresComplete: advance.isLastDay,
                 lastHardPhaseCompletion: nil,
                 asOf: session.completedAt ?? session.date

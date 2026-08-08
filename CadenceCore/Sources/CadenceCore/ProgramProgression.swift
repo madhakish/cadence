@@ -407,12 +407,25 @@ public enum ProgramProgression {
     /// Mirrored 1:1 in web/app/js/core.js `recoveryBridgeCompletionReason`.
     public static func recoveryBridgeCompletionReason(
         completedRecoverySessions: Int,
+        selectedExposureCount: Int,
         selectedExposuresComplete: Bool,
         lastHardPhaseCompletion: Date?,
         asOf now: Date
     ) -> RecoveryBridgeCompletionReason? {
         if selectedExposuresComplete { return .selectedExposures }
-        if completedRecoverySessions >= recoverySessionLimit { return .sessionLimit }
+        // The cap is the BRIDGE'S OWN LENGTH, not a constant two. A program
+        // that is not recognizably upper/lower keeps its full authored pass —
+        // that fallback is deliberate, and capping it at two silently dropped
+        // day three onward for full-body, Olympic and conditioning programs,
+        // which is the work-losing behaviour the fallback exists to prevent.
+        let cap = Swift.max(recoverySessionLimit, selectedExposureCount)
+        if completedRecoverySessions >= cap { return .sessionLimit }
+        // Recovery is a bounded bridge from the last hard phase, not a new
+        // calendar window that starts when reduced work is banked. Otherwise a
+        // first recovery exposure on day six silently extends the bridge to day
+        // thirteen, and an untouched recovery pointer can prescribe reduced
+        // work forever. Manual positioning remains available, but it does not
+        // override the stale-bridge guard implicitly.
         guard let anchor = lastHardPhaseCompletion,
               now.timeIntervalSince(anchor) >= recoveryWindow else { return nil }
         return .windowElapsed
@@ -719,7 +732,18 @@ public enum ProgramProgression {
         exerciseType: String?, loadBasis: LoadBasis, weightLb: Double, incrementLb: Double
     ) -> Bool {
         // Reps- and duration-progressed work has no load to step.
-        guard !SwapRules.unloadableTypes.contains(exerciseType?.lowercased() ?? "") else { return false }
+        //
+        // An explicit external basis outranks the equipment type, but ONLY for
+        // bodyweight: a weighted pull-up is typed bodyweight while hanging real
+        // plates from a belt, and the type guard alone silently exempted it
+        // from this warning, so a belt slot with a zero increment would never
+        // progress and never say so. Timed and conditioning stay unloadable
+        // whatever they carry — a weight-vest plank still progresses by
+        // duration, which is what the zero increment there means.
+        let type = exerciseType?.lowercased() ?? ""
+        let unloadable = type == "timed" || type == "conditioning"
+            || (type == "bodyweight" && !loadBasis.supportsLoadPR)
+        guard !unloadable else { return false }
         guard loadBasis != .bodyweight else { return false }
         return weightLb > 0 && incrementLb <= 0
     }

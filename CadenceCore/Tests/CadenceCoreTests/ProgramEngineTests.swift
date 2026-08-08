@@ -45,6 +45,24 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertTrue((0.75...0.80).contains(pct), "deload \(pct) outside 75-80% band")
     }
 
+    // [INV-CHART-ROTATION-FROM-SESSION]
+    func testChartRotationFallsBackToTheSessionTag() {
+        // The per-entry phase wins where a slot carries one.
+        XCTAssertEqual(ChartRotation.label(entryPhase: 2, sessionRotation: 3), "R2 Load")
+        // Accessory slots and entries logged before per-entry phase capture
+        // carry none, so the session's own rotation tag has to answer — this
+        // is the whole bug: real program work charted as "Untracked".
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 3), "R3 Peak")
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 1), "R1 Volume")
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 4), "R4 Recovery",
+                       "rotation 4 is Recovery, and the web palette keys off this exact label")
+        // Only a session with no program tag at all is genuinely untracked.
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: nil), "Untracked")
+        // A tag outside the rotation vocabulary is not invented into one.
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 0), "Untracked")
+        XCTAssertEqual(ChartRotation.label(entryPhase: nil, sessionRotation: 9), "Untracked")
+    }
+
     func testPhaseAdvanceWithinCycle() {
         var state = CycleState(cycleNumber: 1, baseWeightLb: 210, nextPhase: .volume, incrementLb: 10)
         state = ProgramEngine.advancing(state, afterCompleting: .volume)
@@ -464,5 +482,241 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertTrue(existing.contains(.offsetWave),
                       "a slot already on it still sees it, so opening the picker cannot silently rewrite the slot")
         XCTAssertEqual(existing.count, PrescriptionStyle.allCases.count)
+    }
+
+    // MARK: - Style-aware labels (#105)
+
+    /// The rotation counter is shared by every slot; the phase NAMES are a
+    /// claim about one slot's prescription. Rendering "Peak" against a linear
+    /// slot asserts something about the engine that is false.
+    /// Mirrors the block in web/tests/core.test.mjs.
+    func testOnlyPhaseShapedStylesCarryPhaseNames() {
+        for style in [PrescriptionStyle.wave, .secondary, .hypertrophy, .technique, .offsetWave] {
+            XCTAssertTrue(style.usesCyclePhases, "\(style) comes out of the shared phase-shaped table")
+        }
+        // [INV-PHASE-NAME-IS-PER-SLOT]
+        for style in [PrescriptionStyle.linearFives, .texasVolume, .texasLight, .texasIntensity,
+                      .doubleProgression, .fiveThreeOne, .maxEffort, .dynamicEffort] {
+            XCTAssertFalse(style.usesCyclePhases, "\(style) does not use the phase vocabulary")
+            XCTAssertNil(ProgramEngine.slotPhaseLabel(rotation: 3, prescriptionStyle: style),
+                         "\(style) must never be labelled with a wave phase")
+        }
+    }
+
+    func testSlotPhaseLabelResolvesAutomaticAndRejectsBadRotations() {
+        XCTAssertEqual(ProgramEngine.slotPhaseLabel(rotation: 3, prescriptionStyle: .wave), "R3 Peak")
+        XCTAssertEqual(
+            ProgramEngine.slotPhaseLabel(rotation: 4, role: .complementary, prescriptionStyle: .automatic),
+            "R4 Recovery",
+            "automatic resolves to secondary on a complementary slot, which is phase-shaped"
+        )
+        XCTAssertNil(ProgramEngine.slotPhaseLabel(rotation: 9, prescriptionStyle: .wave),
+                     "an out-of-range rotation labels nothing")
+    }
+
+    func testSlotBadgeNamesTheStyleTheEngineWillActuallyRun() {
+        XCTAssertEqual(ProgramEngine.slotBadge(role: .main, prescriptionStyle: .fiveThreeOne), "Main · 5/3/1")
+        XCTAssertEqual(ProgramEngine.slotBadge(role: .main, prescriptionStyle: .linearFives), "Main · Linear 5s")
+        XCTAssertEqual(ProgramEngine.slotBadge(role: .complementary, prescriptionStyle: .automatic),
+                       "Complementary · Secondary volume",
+                       "the badge names the resolved style, not the placeholder left in the picker")
+        XCTAssertEqual(ProgramEngine.slotBadge(role: .main, prescriptionStyle: .automatic, movementGroup: "olympic"),
+                       "Main · Technique")
+        XCTAssertEqual(ProgramEngine.slotBadge(role: .main, prescriptionStyle: .automatic), "Main · Wave")
+    }
+
+    func testProgramLevelRotationLabelIsStyleNeutral() {
+        // [INV-PHASE-NAME-IS-PER-SLOT]
+        XCTAssertEqual(ProgramEngine.rotationLabel(rotation: 2), "Rotation 2 of 4")
+        XCTAssertEqual(ProgramEngine.rotationLabel(rotation: 0), "Rotation 1 of 4", "rotation clamps low")
+        XCTAssertEqual(ProgramEngine.rotationLabel(rotation: 7), "Rotation 4 of 4", "rotation clamps high")
+    }
+
+    // MARK: - Exposure preview (#106)
+
+    /// Mirrors the exposure-preview block in web/tests/core.test.mjs. Same
+    /// slot, same numbers, both platforms.
+    func testWaveExposurePreviewWalksOneCycleOffOneBase() {
+        let preview = ProgramEngine.exposurePreview(
+            baseWeightLb: 190, estimatedMaxLb: 250, programRoundingLb: 5,
+            exerciseType: "barbell", movementGroup: "squat", prescriptionStyle: .wave
+        )
+        // [INV-PREVIEW-RUNS-THE-REAL-ENGINE]
+        XCTAssertEqual(preview.count, 4)
+        XCTAssertEqual(preview.map(\.rotation), [1, 2, 3, 4])
+        XCTAssertEqual(preview.map(\.prescription.mainWork.weightLb), [190, 210, 225, 145])
+        XCTAssertEqual(preview[2].phaseName, "R3 Peak")
+        XCTAssertTrue(preview.allSatisfy { $0.baseWeightLb == 190 },
+                      "the base holds for a whole cycle, recovery included")
+        XCTAssertEqual(preview[2].advanceNote?.contains("Clean peak"), true,
+                       "the peak exposure explains next cycle's bump")
+    }
+
+    /// The rounding boundary the issue calls out: two pounds of base apart, and
+    /// the peak triple lands a whole plate step apart. This is exactly the
+    /// class of defect the preview exists to make visible at a glance instead
+    /// of by sweeping parameter pairs.
+    func testExposurePreviewExposesTheRoundingBoundary() {
+        func peak(_ base: Double) -> Double {
+            ProgramEngine.exposurePreview(
+                baseWeightLb: base, programRoundingLb: 5, prescriptionStyle: .wave
+            )[2].prescription.mainWork.weightLb
+        }
+        XCTAssertEqual(peak(188), 220)
+        XCTAssertEqual(peak(190), 225, "one plate step for two pounds of base")
+    }
+
+    func testLinearSlotPreviewsExposuresNotPhases() {
+        let preview = ProgramEngine.exposurePreview(
+            count: 5, baseWeightLb: 205, programRoundingLb: 5, movementGroup: "squat",
+            prescriptionStyle: .linearFives, configuration: .init(workingSets: 3)
+        )
+        XCTAssertEqual(preview.map(\.prescription.mainWork.weightLb), [205, 215, 225, 190, 235],
+                       "add 10 per exposure, cut to 80% for recovery, then resume from the held base")
+        XCTAssertEqual(preview.map(\.baseWeightLb), [205, 215, 225, 235, 235])
+        XCTAssertTrue(preview.allSatisfy { $0.phaseName == nil },
+                      "no phase name is rendered against a linear slot")
+        XCTAssertTrue(preview[3].isRecovery,
+                      "the recovery rotation is still flagged — it changes the prescription")
+    }
+
+    func testFiveThreeOnePreviewsItsOwnShapeAndRollsTheTrainingMax() {
+        let preview = ProgramEngine.exposurePreview(
+            count: 5, baseWeightLb: 200, programRoundingLb: 5, movementGroup: "press",
+            prescriptionStyle: .fiveThreeOne
+        )
+        XCTAssertEqual(preview.map(\.prescription.mainWork.reps), [5, 3, 1, 5, 5])
+        XCTAssertTrue(preview.allSatisfy { $0.phaseName == nil },
+                      "5/3/1 is never labelled Volume/Load/Peak")
+        XCTAssertEqual(preview[0].prescription.blocks.filter({ $0.kind == .ramp }).count, 2)
+        XCTAssertEqual(preview[0].prescription.blocks.last?.kind, .amrap, "weeks 1–3 top out on the + set")
+        XCTAssertEqual(preview[3].prescription.blocks.last?.kind, .work, "the deload has no + set")
+        // [INV-PREVIEW-RUNS-THE-REAL-ENGINE]
+        XCTAssertEqual(preview[3].baseWeightLb, 200,
+                       "recovery still runs off the old training max")
+        XCTAssertEqual(preview[4].baseWeightLb, 205,
+                       "a clean cycle adds +5 to an upper-body training max at the rollover")
+    }
+
+    func testDoubleProgressionClimbsTheRepWindowBeforeTheLoad() {
+        let preview = ProgramEngine.exposurePreview(
+            count: 4, baseWeightLb: 60, programRoundingLb: 10, exerciseType: "dumbbell",
+            prescriptionStyle: .doubleProgression,
+            configuration: .init(workingSets: 3, minimumReps: 6, maximumReps: 8, currentReps: 7)
+        )
+        XCTAssertEqual(preview.map(\.prescription.mainWork.weightLb), [60, 60, 65, 50],
+                       "the load steps only once the top of the window is earned")
+        XCTAssertEqual(preview.map(\.prescription.mainWork.reps), [7, 8, 6, 5],
+                       "reps climb to the cap, then drop back when the load moves")
+        XCTAssertTrue(preview.allSatisfy { $0.phaseName == nil },
+                      "double progression is a rep window, not a phase")
+    }
+
+    /// A slot whose rep window was never configured still previews real
+    /// numbers. Mirrors the same case in web/tests/core.test.mjs, where an
+    /// explicit `undefined` wins an object spread.
+    func testExposurePreviewSurvivesAnUnconfiguredRepWindow() {
+        let preview = ProgramEngine.exposurePreview(
+            count: 2, baseWeightLb: 100, programRoundingLb: 5,
+            prescriptionStyle: .doubleProgression,
+            configuration: .init(workingSets: 0, minimumReps: 0, maximumReps: 0, currentReps: 0)
+        )
+        XCTAssertEqual(preview.count, 2)
+        XCTAssertTrue(preview.allSatisfy { $0.prescription.mainWork.reps > 0 },
+                      "an unconfigured rep window never previews a set of nothing")
+        XCTAssertTrue(preview.allSatisfy { $0.prescription.mainWork.sets >= 1 })
+    }
+
+    /// The pointer sits on Day B, so its synchronized squat advances before
+    /// Day A's first previewed exposure. Day A was already banked in R2; its
+    /// next actual appearance is R3, not another fictional R2 exposure.
+    func testScheduledPreviewHonorsTheDayPointerAndSynchronizedTwins() {
+        let preview = ProgramEngine.exposurePreview(
+            count: 3, baseWeightLb: 205, rotation: 2,
+            programRoundingLb: 5, movementGroup: "squat",
+            prescriptionStyle: .linearFives, configuration: .init(workingSets: 3),
+            schedule: .init(
+                targetDayOrder: 0, nextDayOrder: 1,
+                allDayOrders: [0, 1], recoveryDayOrders: [0],
+                synchronizedDayOrders: [0, 1]
+            )
+        )
+        XCTAssertEqual(preview.map(\.rotation), [3, 4, 1])
+        XCTAssertEqual(preview.map(\.baseWeightLb), [215, 235, 235],
+                       "the twin before Day A moves its first load, while Recovery holds")
+    }
+
+    func testScheduledPreviewSkipsAnOmittedRecoveryDay() {
+        let preview = ProgramEngine.exposurePreview(
+            count: 2, baseWeightLb: 200, rotation: 4, prescriptionStyle: .wave,
+            schedule: .init(
+                targetDayOrder: 1, nextDayOrder: 0,
+                allDayOrders: [0, 1], recoveryDayOrders: [0],
+                synchronizedDayOrders: [1]
+            )
+        )
+        XCTAssertEqual(preview.map(\.rotation), [1, 2],
+                       "a day omitted from the bridge has no fictional Recovery exposure")
+    }
+
+    /// A peak banked this cycle already carries an earned base. Recovery still
+    /// runs off the OLD one — the pending grade lands at the rollover, not
+    /// before. Mirrors the same block in web/tests/core.test.mjs.
+    func testPreviewCarriesTheBankedPendingGradeIntoTheNextCycle() {
+        let pending = ProgramLiftState(baseWeightLb: 210, estimatedMaxLb: 260,
+                                       stallCount: 0, role: .main, lastIncrementLb: 10)
+        let banked = ProgramEngine.exposurePreview(
+            count: 2, baseWeightLb: 200, rotation: 4, programRoundingLb: 5,
+            prescriptionStyle: .wave, pendingState: pending
+        )
+        XCTAssertEqual(banked[0].baseWeightLb, 200,
+                       "recovery previews off the base the session will actually use")
+        XCTAssertEqual(banked[1].baseWeightLb, 210,
+                       "and the next cycle picks up the grade already banked at the peak")
+
+        let unbanked = ProgramEngine.exposurePreview(
+            count: 2, baseWeightLb: 200, rotation: 4, programRoundingLb: 5, prescriptionStyle: .wave
+        )
+        XCTAssertEqual(unbanked[1].baseWeightLb, 200, "with nothing banked the base simply holds")
+    }
+
+    /// The rollover mirrors `rollOverRecovery`'s THREE branches, not just
+    /// "apply the pending". Mirrors the same block in web/tests/core.test.mjs.
+    func testRolloverDropsAStalePendingOnAPerExposureSlot() {
+        let stale = ProgramLiftState(baseWeightLb: 150, estimatedMaxLb: 200,
+                                     stallCount: 0, role: .main, lastIncrementLb: 0)
+        let preview = ProgramEngine.exposurePreview(
+            count: 5, baseWeightLb: 205, programRoundingLb: 5, movementGroup: "squat",
+            prescriptionStyle: .linearFives, configuration: .init(workingSets: 3),
+            pendingState: stale
+        )
+        XCTAssertEqual(preview.map(\.prescription.mainWork.weightLb), [205, 215, 225, 190, 235],
+                       "a linear slot never drops to a phantom graded base at the rollover")
+    }
+
+    func testRolloverShowsTheRebuildAPeaklessWaveSlotIsAboutToTake() {
+        let stalled = ProgramEngine.exposurePreview(
+            count: 3, baseWeightLb: 200, stallCount: 1, rotation: 4,
+            programRoundingLb: 5, prescriptionStyle: .wave
+        )
+        XCTAssertEqual(stalled.map(\.baseWeightLb), [200, 180, 180],
+                       "a second peak-less cycle rebuilds at 90%, and the preview says so")
+
+        let first = ProgramEngine.exposurePreview(
+            count: 3, baseWeightLb: 200, stallCount: 0, rotation: 4,
+            programRoundingLb: 5, prescriptionStyle: .wave
+        )
+        XCTAssertEqual(first.map(\.baseWeightLb), [200, 200, 200],
+                       "the first peak-less cycle only accrues the stall")
+    }
+
+    func testExposurePreviewContractEdges() {
+        XCTAssertTrue(ProgramEngine.exposurePreview(count: 0, baseWeightLb: 100).isEmpty)
+        XCTAssertEqual(
+            ProgramEngine.exposurePreview(count: 2, baseWeightLb: 200, rotation: 3, prescriptionStyle: .wave)
+                .map(\.rotation),
+            [3, 4],
+            "the preview starts from the slot's current rotation"
+        )
     }
 }

@@ -1,9 +1,9 @@
 import Foundation
 
 /// Which lifts a session exercise may be swapped for, and how a swap ends
-/// (issue 20). String-typed so the core stays app-model-agnostic — both apps
-/// pass their exercise record's raw fields. Mirrored as `swapCompatible` /
-/// `UNLOADABLE_TYPES` in web/app/js/core.js.
+/// (issue 20). Primitive fields plus `LoadBasis` keep the core app-model-
+/// agnostic while preserving real load semantics. Mirrored as `swapCompatible` /
+/// `swapCompatible` in web/app/js/core.js.
 ///
 /// Swap semantics (the UI lives in the native app; the web PWA documents
 /// native-only scope for the gesture but honors the resulting state):
@@ -18,19 +18,14 @@ import Foundation
 ///   base/e1RM remain the best available prior.
 public enum SwapRules {
 
-    /// Exercise types that can't carry a weight prescription. A loaded slot
-    /// must never be offered an unloadable substitute (Incline DB Press →
-    /// Dips) or vice versa — the prescription wouldn't survive the swap.
-    public static let unloadableTypes: Set<String> = ["bodyweight", "timed", "conditioning"]
-
     /// A candidate is offered only when it trains the same movement pattern
     /// (non-empty matching group), sits in the same programming tier
     /// (Main/Accessory/Conditioning — no accessory→competition-lift jumps),
     /// matches the current lift's loadability, isn't the same exercise, and
     /// isn't shelved.
     public static func compatible(
-        currentName: String, currentCategory: String, currentType: String, currentGroup: String,
-        candidateName: String, candidateCategory: String, candidateType: String, candidateGroup: String,
+        currentName: String, currentCategory: String, currentLoadBasis: LoadBasis, currentGroup: String,
+        candidateName: String, candidateCategory: String, candidateLoadBasis: LoadBasis, candidateGroup: String,
         candidateShelved: Bool
     ) -> Bool {
         !currentGroup.isEmpty
@@ -38,6 +33,6 @@ public enum SwapRules {
             && candidateName != currentName
             && !candidateShelved
             && candidateCategory == currentCategory
-            && unloadableTypes.contains(candidateType) == unloadableTypes.contains(currentType)
+            && candidateLoadBasis.supportsLoadPR == currentLoadBasis.supportsLoadPR
     }
 }

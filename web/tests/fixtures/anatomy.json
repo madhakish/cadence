@@ -1394,6 +1394,26 @@
         "forearms"
       ]
     },
+    "Weighted Chin-up": {
+      "primary": [
+        "lats",
+        "biceps"
+      ],
+      "secondary": [
+        "abs",
+        "forearms"
+      ]
+    },
+    "Weighted Pull-up": {
+      "primary": [
+        "lats"
+      ],
+      "secondary": [
+        "biceps",
+        "abs",
+        "forearms"
+      ]
+    },
     "Face Pulls": {
       "primary": [
         "delts",

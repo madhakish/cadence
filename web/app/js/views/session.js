@@ -169,6 +169,10 @@ export async function openSession(id) {
     ? await Programs.byStableId(session.programTag.programId)
       || (await Programs.all()).find((candidate) => candidate.name === session.programTag.programName)
     : null;
+  const sessionDayName = session.programTag
+    ? sessionProgram?.days?.find((day) => day.order === session.programTag.dayIndex)?.name
+    : null;
+  const workoutName = sessionDayName || session.programTag?.programName || "Workout";
   const save = () => Sessions.save(session);
 
   // Program recall is slot-scoped. Same-name main/complementary work on other
@@ -269,8 +273,11 @@ export async function openSession(id) {
   // Exercise AND role must come from the same session entry — pairing
   // exercises[0] with currentSE's (null) role resolved the first lift's rest
   // without its program role (mirrors native currentOrFirst).
-  const currentEntry = () => currentSE || session.exercises[0] || null;
+  const currentEntry = () => currentSE
+    || session.exercises.find((entry) => (entry.sets || []).some((set) => !set.isWarmup && set.status === "planned"))
+    || session.exercises[0] || null;
   const currentExercise = () => exMap.get((currentEntry() || {}).exerciseName);
+  const expandedEntries = new Set();
 
   const rest = makeRestTimer(() => paintBar(), () => onRestDone());
   let restLabel = "";
@@ -325,6 +332,17 @@ export async function openSession(id) {
 
   function renderBody(body) {
     ui.clear(body);
+    session.exercises.sort((a, b) => a.order - b.order);
+    const current = currentEntry();
+    const exerciseNumber = current ? session.exercises.indexOf(current) + 1 : 0;
+    const workSets = session.exercises.flatMap((entry) => (entry.sets || []).filter((set) => !set.isWarmup));
+    // Position, not achievement: a skipped set is resolved and moves the
+    // workout forward, so the ordinal must count it or skipping every set
+    // would read "1 of N" forever. Mirrors the native progress card.
+    const resolvedWork = workSets.filter((set) => set.status === "completed" || set.status === "skipped").length;
+    body.append(ui.h("div", { class: "card session-progress" },
+      ui.h("div", { class: "title mono", text: `Exercise ${exerciseNumber} of ${session.exercises.length} · ${workSets.length === 0 ? 0 : Math.min(resolvedWork + 1, workSets.length)} of ${workSets.length} work sets` }),
+      ui.h("div", { class: "sub", text: ui.fmtDate(session.date) })));
     if (gymOptions.length) {
       const gymSelect = ui.h("select", {}, ...gymOptions.map((g) => ui.h("option", { value: g.id, text: g.name, selected: g.id === gymState.value?.id })));
       gymSelect.addEventListener("change", () => {
@@ -335,7 +353,6 @@ export async function openSession(id) {
       });
       body.append(ui.field("Training at", gymSelect));
     }
-    session.exercises.sort((a, b) => a.order - b.order);
     session.exercises.forEach((se) => body.append(exerciseCard(se, body)));
 
     body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "12px" }, text: "+ Add exercise", onClick: () => pickExercise(body) }));
@@ -352,10 +369,11 @@ export async function openSession(id) {
 
   function exerciseCard(se, body) {
     const ex = exMap.get(se.exerciseName);
+    const phaseLabel = ui.sessionPhaseLabel(se, ex);
     const head = ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
       ui.h("div", { class: "lead" },
         ui.h("span", { class: "title", text: se.exerciseName }),
-        se.phase ? ui.h("span", { class: "sub accent", text: C.phaseLabel(se.phase) }) : null),
+        phaseLabel ? ui.h("span", { class: "sub accent", text: phaseLabel }) : null),
       ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
         ui.h("div", { style: { width: "100px" } },
           ui.seg([{ value: "lb", label: "lb" }, { value: "kg", label: "kg" }], exUnit(se), (u) => { unitByEx[se.exerciseName] = u; renderBody(body); })),
@@ -367,7 +385,23 @@ export async function openSession(id) {
     if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
 
     se.sets.sort((a, b) => a.order - b.order);
-    se.sets.forEach((s) => card.append(setRow(se, s, body)));
+    const showAll = expandedEntries.has(se);
+    const currentSet = se.sets.find((set) => !set.isWarmup && set.status === "planned");
+    se.sets.forEach((s, index) => {
+      const prior = se.sets[index - 1];
+      const loadChange = !!prior && (Math.abs((prior.weightLb || 0) - (s.weightLb || 0)) > 0.001
+        || prior.loadBasis !== s.loadBasis || (prior.implementCount || 1) !== (s.implementCount || 1));
+      card.append(setRow(se, s, body, {
+        compact: !showAll && s !== currentSet,
+        showLoadout: showAll || s === currentSet || loadChange,
+      }));
+    });
+
+    if (se.sets.length > 1) card.append(ui.h("button", { class: "btn sm ghost wide",
+      text: showAll ? "Focus current set" : "Show all sets", onClick: () => {
+        if (showAll) expandedEntries.delete(se); else expandedEntries.add(se);
+        renderBody(body);
+      } }));
 
     card.append(ui.h("div", { class: "btn-row", style: { marginTop: "10px" } },
       ui.h("button", { class: "btn sm", text: "+ Set", onClick: () => { currentSE = se; addSet(se); save(); renderBody(body); } }),
@@ -428,7 +462,7 @@ export async function openSession(id) {
     return sel;
   }
 
-  function setRow(se, s, body) {
+  function setRow(se, s, body, { compact = false, showLoadout = true } = {}) {
     const ex = exMap.get(se.exerciseName);
     const u = setUnit(se, s);
     // Steady-state cardio (type conditioning: Walk/Bike/Ruck…) logs
@@ -461,6 +495,10 @@ export async function openSession(id) {
     }
     if (s.autoregReason) tags.append(ui.h("span", { class: "pill warn", text: `↓ ${s.autoregReason}` }));
     if (s.bodyFlagSite) tags.append(ui.h("span", { class: "pill hard", text: "⚡︎" }));
+    if (!isCardio && !isTimed && Number.isFinite(s.plannedWeightLb) && Number.isFinite(s.plannedReps)
+        && (Math.abs(s.plannedWeightLb - s.weightLb) > 0.001 || s.plannedReps !== s.reps)) {
+      tags.append(ui.h("span", { class: "pill", text: `planned ${ui.fmtWeight(s.plannedWeightLb)}×${s.plannedReps}` }));
+    }
 
     const statusButton = ui.h("button", {
       class: `flagbtn${s.status === "completed" ? " on-clean" : ""}`,
@@ -497,7 +535,8 @@ export async function openSession(id) {
     // the accent rail; warmups sit quiet (and often go unflagged, so they
     // must not hold the rail hostage).
     const isCurrent = se.sets.find((x) => !x.isWarmup && x.status === "planned") === s;
-    const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "") + (isCurrent ? " current" : "") }, wt, tags,
+    const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "")
+      + (isCurrent ? " current current-set-card" : "") + (compact ? " compact" : "") }, wt, tags,
       ui.h("div", { class: "flagbtns" }, statusButton,
         (isCardio || isTimed) ? null : qualityButton,
         // Duration and conditioning work has no rep count, so reps-in-reserve
@@ -506,7 +545,7 @@ export async function openSession(id) {
 
     // Loadout visualization — plates for barbell lifts, the rack number for
     // dumbbell lifts. Mirrors native.
-    if (ex && ex.type === "barbell" && s.weightLb > 0) {
+    if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
       const { svg, solution } = barbellSVG(s.weightLb, u, barFor(se), gymState.value);
       const wrap = ui.h("div", { class: "barbell-wrap" }, svg);
       if (solution.isOffTarget) {
@@ -520,7 +559,7 @@ export async function openSession(id) {
       }
       return ui.h("div", {}, row, wrap);
     }
-    if (ex && ex.type === "dumbbell" && s.weightLb > 0) {
+    if (showLoadout && ex && ex.type === "dumbbell" && s.weightLb > 0) {
       return ui.h("div", {}, row, ui.h("div", { class: "barbell-wrap" },
         dumbbellSVG(s.weightLb, u), ui.h("span", { class: "sub", text: u })));
     }
@@ -965,7 +1004,7 @@ export async function openSession(id) {
     }
   }
 
-  const screen = ui.pushScreen({ title: ui.fmtDate(session.date), build: (b) => renderBody(b) });
+  const screen = ui.pushScreen({ title: workoutName, build: (b) => renderBody(b) });
   screen.el.append(buildBottomBar());
   paintBar();
   const barTick = setInterval(() => {
@@ -1096,7 +1135,10 @@ async function completeSessionInner(session) {
   if (heldStandaloneTracks.length) coachingNotes.push(`Held progression for ${heldStandaloneTracks.sort().join(", ")} — actual work was saved, but the original prescription was not fully met.`);
   if (prog?.program) {
     const nextDay = prog.program.days.find((day) => day.order === prog.program.nextDayIndex) || prog.program.days[0];
-    if (nextDay) coachingNotes.push(`Next: ${nextDay.name} · R${prog.program.currentWeek} ${C.PHASES[prog.program.currentWeek]?.name || "Volume"}.`);
+    // A day is not in a phase — its slots are, and they can disagree. Naming one
+    // phase for the whole day claims a wave over slots that may be linear, 5/3/1
+    // or speed work. Mirrored in SessionCompletion.swift.
+    if (nextDay) coachingNotes.push(`Next: ${nextDay.name} · ${C.rotationLabel(prog.program.currentWeek)}.`);
   }
   return { lines, milestones, coachingNotes };
 }
@@ -1296,15 +1338,19 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
   const hardPhase = cycleSessions.filter((candidate) =>
     candidate.programTag.week > 0 && candidate.programTag.week < C.DELOAD_WEEK);
   const peak = hardPhase.filter((candidate) => candidate.programTag.week === C.GRADED_WEEK);
+  // The window is anchored to the last hard phase. A reduced exposure does not
+  // start a fresh seven-day window and silently stretch recovery past the
+  // program's bound.
   const anchors = peak.length ? peak : hardPhase;
   const anchorMs = anchors.length
     ? Math.max(...anchors.map((candidate) => Date.parse(candidate.completedAt || candidate.date)))
     : null;
   return {
     reason: C.recoveryBridgeCompletionReason(
-      recoverySessions.length, selectedComplete, anchorMs, nowMs,
+      recoverySessions.length, recoveryDayOrders.length, selectedComplete, anchorMs, nowMs,
     ),
     recoverySessions,
+    recoveryDayOrders,
   };
 }
 
@@ -1313,16 +1359,36 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
 // ordinary progression remains driven by completed cycles.
 export async function reconcileRecoveryBridge(program, completed = null, now = new Date()) {
   if (!program || program.currentWeek !== C.DELOAD_WEEK) return null;
+  // Never advance the program out from under a workout in progress. The open
+  // session was built against this rotation; rolling the cycle while it is on
+  // screen makes banking it fail the stale-tag guard and land as orphaned
+  // history, and on this client it also let createSessionFromProgramDay open a
+  // SECOND session while the first stayed open. Reconciliation is not urgent —
+  // it runs on the next render once the session is banked or discarded.
+  //
+  // Scoped to THIS PROGRAM'S sessions, deliberately. Blocking on any open
+  // session at all would let one lingering blank session — which Today
+  // explicitly supports keeping around — suppress the session cap and the
+  // expiry window indefinitely, and Start would go on minting stale recovery
+  // prescriptions. That is the indefinite-light-work path this whole mechanism
+  // exists to close. Mirrors SessionCompletion.reconcileRecoveryBridge.
+  const stableID = program.uuid || program.id;
+  const openForThisProgram = (await Sessions.openAll()).some((candidate) => candidate.programTag
+    && (candidate.programTag.programId === stableID
+      || (candidate.programTag.programId == null
+        && candidate.programTag.programName === program.name)));
+  if (openForThisProgram) return null;
   const [history, exercises] = await Promise.all([
     completed || Sessions.completed(), Exercises.all(),
   ]);
   const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
-  const { reason } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
+  const { reason, recoverySessions } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
   if (!reason) return null;
 
   const nextCycle = program.cycleNumber + 1;
+  const banked = recoverySessions.length;
   const message = reason === "sessionLimit"
-    ? `Recovery complete — two recovery sessions banked. Cycle ${nextCycle} starts at Volume.`
+    ? `Recovery complete — ${banked} recovery session${banked === 1 ? "" : "s"} banked. Cycle ${nextCycle} starts at Volume.`
     : reason === "windowElapsed"
       ? `Recovery complete — the seven-day recovery window elapsed. Cycle ${nextCycle} starts at Volume.`
       : `Recovery complete — planned recovery exposures banked. Cycle ${nextCycle} starts at Volume.`;
@@ -1515,7 +1581,7 @@ async function advanceProgram(session, milestones) {
     const completedOrders = completedRecovery.map((candidate) => candidate.programTag.dayIndex);
     advance = C.recoveryScheduleAdvance(recoveryDayOrders, completedOrders);
     recoveryCompletionReason = C.recoveryBridgeCompletionReason(
-      completedRecovery.length, advance.isLastDay, null,
+      completedRecovery.length, recoveryDayOrders.length, advance.isLastDay, null,
       Date.parse(session.completedAt || session.date),
     );
   } else {

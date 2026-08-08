@@ -14,6 +14,7 @@ struct HistoryView: View {
     @Query private var checkIns: [CheckIn]
 
     @State private var view: ViewMode = .rotations
+    @State private var rotationDetail: String?
 
     enum ViewMode: String, CaseIterable {
         case list = "Log"
@@ -39,6 +40,13 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("History")
+            .alert("Rotation details", isPresented: Binding(
+                get: { rotationDetail != nil }, set: { if !$0 { rotationDetail = nil } }
+            )) {
+                Button("OK") { rotationDetail = nil }
+            } message: {
+                Text(rotationDetail ?? "")
+            }
         }
     }
 
@@ -55,23 +63,44 @@ struct HistoryView: View {
                     Text("Working sets and conditioning are separate; warm-ups are excluded.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                ForEach(Array(report.rotations.reversed()), id: \.key) { rotation in
-                    Section("Cycle \(rotation.key.cycleNumber) · R\(rotation.key.rotation)") {
-                        HStack {
-                            Label(rotation.readiness.name, systemImage: readinessIcon(rotation.readiness))
-                                .foregroundStyle(readinessColor(rotation.readiness))
-                            Spacer()
-                            Text("\(rotation.completedWorkingSets)/\(rotation.plannedWorkingSets) sets")
-                                .font(.callout.monospacedDigit())
-                        }
-                        ForEach(rotation.patternSets.keys.sorted { $0.name < $1.name }, id: \.self) { pattern in
-                            if !pattern.isConditioning {
-                                LabeledContent(pattern.name, value: "\(rotation.patternSets[pattern, default: 0])")
+                if !report.rotations.isEmpty {
+                    let rotations = Array(Set(report.rotations.map { $0.key.rotation })).sorted()
+                    let cycles = Dictionary(grouping: report.rotations, by: { $0.key.cycleNumber })
+                    Section("Cycle matrix") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+                                GridRow {
+                                    Text("Cycle").font(.caption.bold()).foregroundStyle(.secondary)
+                                    ForEach(rotations, id: \.self) { Text("R\($0)").font(.caption.bold()) }
+                                }
+                                ForEach(cycles.keys.sorted(by: >), id: \.self) { cycle in
+                                    GridRow {
+                                        Text("\(cycle)").font(.headline.monospacedDigit())
+                                        ForEach(rotations, id: \.self) { number in
+                                            if let rotation = cycles[cycle]?.first(where: { $0.key.rotation == number }) {
+                                                Button {
+                                                    rotationDetail = rotationDetailText(rotation)
+                                                } label: {
+                                                    VStack(spacing: 3) {
+                                                        Image(systemName: readinessIcon(rotation.readiness))
+                                                            .foregroundStyle(readinessColor(rotation.readiness))
+                                                        Text("\(rotation.completedWorkingSets)/\(rotation.plannedWorkingSets)")
+                                                            .font(.caption2.monospacedDigit())
+                                                        Text("\(Int(rotation.conditioningMinutes.rounded()))m")
+                                                            .font(.caption2).foregroundStyle(.secondary)
+                                                    }
+                                                    .frame(minWidth: 54, minHeight: 54)
+                                                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                                                }
+                                                .buttonStyle(.plain)
+                                                .accessibilityLabel("Cycle \(cycle), rotation \(number), \(rotation.readiness.name), \(rotation.completedWorkingSets) of \(rotation.plannedWorkingSets) sets")
+                                            } else {
+                                                Color.clear.frame(width: 54, height: 54)
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                        }
-                        LabeledContent("Conditioning", value: "\(Int(rotation.conditioningMinutes.rounded())) min")
-                        if let reason = rotation.reasons.first {
-                            Text(reason).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -114,6 +143,14 @@ struct HistoryView: View {
         case .red: return .red
         case .unknown: return .gray
         }
+    }
+
+    private func rotationDetailText(_ rotation: RotationAssessment) -> String {
+        let reasons = rotation.reasons.isEmpty ? "No recommendation reasons recorded." : rotation.reasons.joined(separator: "\n")
+        return "Cycle \(rotation.key.cycleNumber) · Rotation \(rotation.key.rotation)\n\n"
+            + "Readiness: \(rotation.readiness.name)\n"
+            + "Completed/planned: \(rotation.completedWorkingSets)/\(rotation.plannedWorkingSets) work sets\n"
+            + "Conditioning: \(Int(rotation.conditioningMinutes.rounded())) min\n\n\(reasons)"
     }
 
     private var sessionList: some View {
@@ -337,8 +374,8 @@ struct SessionDetailView: View {
                 } header: {
                     HStack {
                         Text(entry.exercise?.name ?? "Exercise")
-                        if let phase = entry.phase {
-                            Text(phase.label).foregroundStyle(Theme.accent)
+                        if let phaseLabel = entry.truthfulPhaseLabel {
+                            Text(phaseLabel).foregroundStyle(Theme.accent)
                         }
                     }
                 }
@@ -464,16 +501,26 @@ struct ProgressionChartsView: View {
     // hardcoded exercise name (the library is user data).
     @State private var selectedLift = ""
     @State private var metric: Metric = .topSet
-    @State private var splitByRotation = false
-    /// Main only by default — that alone removes the main/complementary
-    /// sawtooth that made a main lift's progression unreadable.
-    @State private var showComplementary = false
+    @State private var intent: ChartIntent = .mainProgression
+    @State private var selectedDate: Date?
+    /// Off by default: the chart's job is what happened, and a forecast is
+    /// something the lifter asks for rather than something they are handed.
+    @State private var horizon: TrendProjection.Horizon = .off
 
     enum Metric: String, CaseIterable {
         case topSet = "Working weight"
         case estimatedMax = "Est. 1RM"
         case volume = "Volume"
-        case all = "All three"
+        case all = "Weight + e1RM"
+        /// Best completed working set's reps — the direct analogue of
+        /// "heaviest set" for a lift whose load never changes.
+        case reps = "Reps"
+    }
+
+    enum ChartIntent: String, CaseIterable {
+        case mainProgression = "Main progression"
+        case compareRoles = "Compare program roles"
+        case compareRotations = "Compare like rotations"
     }
 
     /// A lift can hold a MAIN slot on one day and a COMPLEMENTARY slot on
@@ -519,6 +566,8 @@ struct ProgressionChartsView: View {
         var id: Int { reps }
     }
 
+    private var showComplementary: Bool { intent == .compareRoles }
+    private var splitByRotation: Bool { intent == .compareRotations }
     private var visibleRoles: [ChartRole] { showComplementary ? [.main, .complementary] : [.main] }
 
     /// Load points (working weight and/or est. 1RM) for the visible roles.
@@ -535,8 +584,13 @@ struct ProgressionChartsView: View {
             for role in visibleRoles {
                 let entries = matching.filter { ChartRole.of($0, in: session) == role }
                 guard !entries.isEmpty else { continue }
-                let phase = entries.compactMap(\.phase).first
-                let rotation = phase.map { "R\($0.rawValue) \($0.name)" } ?? "Untracked"
+                // The session's program tag is the fallback, so accessory
+                // slots and pre-phase-capture entries chart under the rotation
+                // they were actually performed in instead of "Untracked".
+                let rotation = ChartRotation.label(
+                    entryPhase: entries.compactMap(\.phase).first?.rawValue,
+                    sessionRotation: session.programWeek
+                )
                 let suffix = showComplementary ? " (\(role == .main ? "main" : "comp."))" : ""
                 if metric == .topSet || metric == .all, let top = entries.compactMap(\.topSet?.weightLb).max() {
                     result.append(Point(date: session.date, value: shown(top), rotation: rotation,
@@ -550,6 +604,13 @@ struct ProgressionChartsView: View {
                         result.append(Point(date: session.date, value: shown(estimate), rotation: rotation,
                                             role: role, series: "Est. 1RM\(suffix)"))
                     }
+                }
+                // A lift whose load never changes progresses by reps, so the
+                // best completed working set is its "top set".
+                if metric == .reps,
+                   let best = entries.flatMap(\.workingSets).map(\.reps).max(), best > 0 {
+                    result.append(Point(date: session.date, value: Double(best), rotation: rotation,
+                                        role: role, series: "Reps\(suffix)"))
                 }
                 if metric == .volume {
                     let volume = entries.reduce(0) { $0 + $1.workingVolumeLb }
@@ -566,7 +627,6 @@ struct ProgressionChartsView: View {
     /// Tonnage for the combined view. It keeps its own zero-based scale — a
     /// magnitude, not a load — so it can never stretch the weight axis.
     private var volumeBars: [Point] {
-        guard metric == .all else { return [] }
         let display = settingsList.first?.unitDisplay ?? .lbPrimary
         return sessions.compactMap { session -> Point? in
             let entries = session.exercises.filter {
@@ -579,10 +639,26 @@ struct ProgressionChartsView: View {
                          rotation: "", role: .main, series: "Volume")
         }
     }
-    private var chartUnitLabel: String { (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue }
+    /// An unloaded pull-up has no external resistance, so working weight,
+    /// est. 1RM and tonnage can only ever draw a flat zero. Offering the load
+    /// metrics anyway is how promoting pull-ups to Main turned a real
+    /// progression into three straight lines at 0. Mirrors web `metricOptions`.
+    private var selectedIsLoaded: Bool {
+        guard let exercise = mainLifts.first(where: { $0.name == selectedLift }) else { return true }
+        return exercise.loadBasis.supportsLoadPR
+    }
+
+    private var availableMetrics: [Metric] {
+        selectedIsLoaded ? [.topSet, .estimatedMax, .all] : [.reps]
+    }
+
+    /// Reps are a count, not a load: they carry no weight unit and never convert.
+    private var chartUnitLabel: String {
+        metric == .reps ? "reps" : (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue
+    }
 
     private var peakTarget: Double? {
-        guard metric != .volume,
+        guard metric != .volume, metric != .reps,
               let lift = (programs.first(where: \.isActive) ?? programs.first)?.days
                 .flatMap(\.lifts).first(where: { $0.exerciseName == selectedLift }),
               lift.peakSingleEnabled, lift.lastPeakSingleLb > 0 else { return nil }
@@ -621,15 +697,124 @@ struct ProgressionChartsView: View {
         splitByRotation ? "\(point.rotation)|\(point.role.rawValue)" : point.series
     }
 
-    /// Map tonnage onto the load axis so the bars fill the plot without
-    /// touching the y-domain the load lines define.
-    private func scaledVolume(_ value: Double) -> Double {
-        let loads = points.map(\.value)
-        guard let ceiling = loads.max(), let floor = loads.min(),
-              let maxVolume = volumeBars.map(\.value).max(), maxVolume > 0 else { return 0 }
-        let headroom = ceiling - min(floor, ceiling)
-        let base = max(0, floor - headroom * 0.35)
-        return base + (ceiling - base) * 0.82 * (value / maxVolume)
+    // MARK: - Projected trend
+
+    private static let secondsPerDay: TimeInterval = 86_400
+    /// Near enough to the history to read as its continuation, distinct enough
+    /// to never be mistaken for a session that happened.
+    private static let projectionColor = Color(hex: 0x7AA7D9)
+
+    private struct Projection {
+        let result: TrendProjection.Result
+        let points: [Point]
+        let horizonDate: Date
+    }
+
+    /// The projection follows the LIFT, not a rotation: it is fitted from every
+    /// main-role point of the shown metric, so splitting the history into four
+    /// rotation lines does not fit four separate futures through a quarter of
+    /// the evidence each.
+    private var projectionSeriesPrefix: String {
+        switch metric {
+        case .estimatedMax: return "Est. 1RM"
+        case .volume: return "Volume"
+        case .reps: return "Reps"
+        case .topSet, .all: return "Working weight"
+        }
+    }
+
+    /// Main-role points, or whatever role the lift actually has. A lift that
+    /// only ever occupies complementary slots would otherwise draw a full chart
+    /// beside "0 of 4 sessions so far" — refusing on a role distinction the
+    /// lifter never asked about. Web falls back the same way.
+    private var projectionSamplePoints: [Point] {
+        let ofMetric = points.filter { $0.series.hasPrefix(projectionSeriesPrefix) }
+        let main = ofMetric.filter { $0.role == .main }
+        return main.isEmpty ? ofMetric : main
+    }
+
+    private var projection: Projection? {
+        guard horizon != .off else { return nil }
+        let samples = projectionSamplePoints
+        guard let origin = samples.map(\.date).min() else { return nil }
+        let day = { (date: Date) in date.timeIntervalSince(origin) / Self.secondsPerDay }
+        guard let result = TrendProjection.project(
+            samples: samples.map { TrendProjection.Sample(day: day($0.date), value: $0.value) },
+            horizonDays: horizon.days,
+            asOfDay: day(Date.now)
+        ) else { return nil }
+        let date = { (offset: Double) in origin.addingTimeInterval(offset * Self.secondsPerDay) }
+        return Projection(
+            result: result,
+            points: result.points.map {
+                Point(date: date($0.day), value: $0.value, rotation: "", role: .main, series: "Projected")
+            },
+            horizonDate: date(result.horizonDay)
+        )
+    }
+
+    /// Say what the projection is, or say why there isn't one. Asking for a
+    /// forecast and getting an unchanged chart back reads as a broken control,
+    /// and the reason is the useful part: the refusal names what the history is
+    /// missing.
+    private func projectionRefusal(given projection: Projection?) -> String? {
+        guard horizon != .off, projection == nil else { return nil }
+        let samples = projectionSamplePoints
+        guard samples.count >= TrendProjection.minimumSamples else {
+            return "Not enough history to project — \(samples.count) of \(TrendProjection.minimumSamples) sessions so far."
+        }
+        guard let first = samples.map(\.date).min(), let last = samples.map(\.date).max() else {
+            return "Not enough history to project from yet."
+        }
+        // Compare RAW and truncate only for display. Rounding before the
+        // comparison made the message disagree with the engine at the
+        // boundary: a 20.6-day span refused, then explained itself as
+        // "spans 21 days, and a trend needs 21".
+        let span = last.timeIntervalSince(first) / Self.secondsPerDay
+        guard span >= TrendProjection.minimumSpanDays else {
+            return "Not enough time to project — this lift spans \(Int(span)) days, and a trend needs \(Int(TrendProjection.minimumSpanDays))."
+        }
+        let idle = Date.now.timeIntervalSince(last) / Self.secondsPerDay
+        if idle > TrendProjection.stalenessLimitDays {
+            return "Last trained \(Int(idle)) days ago — too long to extend a trend from. Log a session to project again."
+        }
+        return "Not enough history to project from yet."
+    }
+
+    /// The value range every load mark occupies, so the future shading spans
+    /// the plot without depending on the chart's derived domain. Volume bars
+    /// are excluded — they ride their own scale and would drag the band down
+    /// past the load lines it is meant to sit behind.
+    private func loadRange(including projection: Projection) -> (low: Double, high: Double)? {
+        let values = points.map(\.value) + projection.points.map(\.value)
+        guard let low = values.min(), let high = values.max(), high > low else { return nil }
+        return (low, high)
+    }
+
+    /// Values are already in the display unit — the chart converts before it
+    /// builds points, and a linear fit commutes with that scaling — so the
+    /// headline needs the unit appended, not converted again.
+    /// Reps are whole — a projected "12.4 reps" is precision the count does
+    /// not have. Mirrors the web summary's rounding.
+    private func chartValueLabel(_ value: Double) -> String {
+        metric == .reps ? String(Int(value.rounded())) : Weight.trim(value)
+    }
+
+    private func projectionSummary(_ projection: Projection) -> String {
+        TrendProjection.summary(
+            perWeek: projection.result.perWeek,
+            horizonLabel: horizon.label,
+            horizonValue: "\(chartValueLabel(projection.result.horizonValue)) \(chartUnitLabel)",
+            unit: chartUnitLabel
+        )
+    }
+
+    /// A single series, drawn on its own, is the only case where an area fill
+    /// is depth rather than clutter. Rotation split and the combined metric
+    /// both put several lines on the plot, and translucent areas over each
+    /// other read as regions that mean something.
+    private var showsAreaFill: Bool {
+        !splitByRotation && Set(points.map(\.series)).count == 1
     }
 
     private var chartCaption: String {
@@ -638,40 +823,78 @@ struct ProgressionChartsView: View {
         case .topSet: metricLabel = "Top working weight"
         case .estimatedMax: metricLabel = "Estimated 1RM"
         case .volume: metricLabel = "Working volume"
-        case .all: metricLabel = "Working weight, est. 1RM, and volume"
+        case .all: metricLabel = "Working weight and est. 1RM"
+        case .reps: metricLabel = "Best working set"
         }
         let role = showComplementary ? " · solid = main, dashed = complementary" : " · main slots only"
         return "\(metricLabel) per session (\(chartUnitLabel))\(role)"
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        // Bound ONCE per pass. `projection` re-runs the least-squares fit over
+        // a freshly recomputed `points` on every read, and the body reads it
+        // from five places.
+        let trend = projection
+        return VStack(spacing: 12) {
             Picker("Lift", selection: $selectedLift) {
                 ForEach(mainLifts) { Text($0.name).tag($0.name) }
             }
-            .onAppear { if selectedLift.isEmpty { selectedLift = mainLifts.first?.name ?? "" } }
+            .onAppear { if selectedLift.isEmpty { selectedLift = defaultLiftName } }
+            // Switching to a bodyweight lift while a load metric is selected
+            // would otherwise strand the chart on a metric it can only draw
+            // as zero. Mirrors the web picker's clamp.
+            .onChange(of: selectedLift, initial: true) {
+                if !availableMetrics.contains(metric) { metric = availableMetrics[0] }
+            }
             Picker("Metric", selection: $metric) {
-                ForEach(Metric.allCases, id: \.self) { Text($0.rawValue) }
+                ForEach(availableMetrics, id: \.self) { Text($0.rawValue) }
             }
             .pickerStyle(.segmented)
-            // One line per rotation: compare this cycle's R1 against last
-            // cycle's R1 instead of reading a sawtooth.
-            Toggle("Show complementary", isOn: $showComplementary)
-                .font(.callout)
-            Toggle("Split by rotation", isOn: $splitByRotation)
-                .font(.callout)
+            Picker("Chart intent", selection: $intent) {
+                ForEach(ChartIntent.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.menu)
+            // How far past today to extend the fitted trend.
+            Picker("Project forward", selection: $horizon) {
+                ForEach(TrendProjection.Horizon.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("Project forward")
+            .accessibilityHint("Extends the trend fitted from performed sessions past today")
 
             if points.isEmpty {
                 ContentUnavailableView(Copy.emptyHistory, systemImage: "chart.xyaxis.line")
             } else {
                 Chart {
-                    // Tonnage recedes to bars scaled against their own maximum,
-                    // so the two same-unit load lines keep the weight axis to
-                    // themselves and stay comparable.
-                    ForEach(volumeBars) { bar in
-                        BarMark(x: .value("Date", bar.date),
-                                y: .value(chartUnitLabel, scaledVolume(bar.value)))
-                            .foregroundStyle(Color(hex: 0x8B9196).opacity(0.28))
+                    // The future, shaded behind everything: the region right of
+                    // today is a different kind of space and should read that
+                    // way before the eye reaches the dashes.
+                    // The y bounds are spelled out rather than left to span the
+                    // plot: RectangleMark's x-only initializer is ambiguous
+                    // between two overloads, and the load range is exactly what
+                    // the shading should cover anyway.
+                    if let trend, let range = loadRange(including: trend) {
+                        RectangleMark(
+                            xStart: .value("Today", Date.now),
+                            xEnd: .value("Horizon", trend.horizonDate),
+                            yStart: .value(chartUnitLabel, range.low),
+                            yEnd: .value(chartUnitLabel, range.high)
+                        )
+                        .foregroundStyle(Color.secondary.opacity(0.07))
+                    }
+                    // A wash under a lone line gives the plot depth without
+                    // adding a second thing to read. Only when there IS one
+                    // line — stacking translucent areas makes their overlaps
+                    // look like data.
+                    if showsAreaFill {
+                        ForEach(points) { point in
+                            AreaMark(x: .value("Date", point.date),
+                                     y: .value(chartUnitLabel, point.value))
+                                .foregroundStyle(LinearGradient(
+                                    colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.01)],
+                                    startPoint: .top, endPoint: .bottom
+                                ))
+                        }
                     }
                     ForEach(points) { point in
                         LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value),
@@ -692,20 +915,102 @@ struct ProgressionChartsView: View {
                                     .font(.caption2).foregroundStyle(Theme.accent)
                             }
                     }
+                    // The projection last, so it reads as an overlay on the
+                    // history rather than another member of it. Its colour is
+                    // set outright rather than through the foreground-style
+                    // scale: joining that scale's domain would renumber every
+                    // performed series' colour the moment a horizon was picked.
+                    // No point marks either — there is no session to mark.
+                    if let trend {
+                        ForEach(trend.points) { point in
+                            LineMark(x: .value("Date", point.date),
+                                     y: .value(chartUnitLabel, point.value),
+                                     series: .value("Series", "Projected"))
+                                .foregroundStyle(Self.projectionColor)
+                                .lineStyle(StrokeStyle(lineWidth: 2, dash: [3, 5]))
+                        }
+                        PointMark(x: .value("Date", trend.horizonDate),
+                                  y: .value(chartUnitLabel, trend.result.horizonValue))
+                            .foregroundStyle(Self.projectionColor)
+                            .symbolSize(36)
+                            .annotation(position: .top, alignment: .trailing) {
+                                Text(chartValueLabel(trend.result.horizonValue))
+                                    .font(.caption2.bold().monospacedDigit())
+                                    .foregroundStyle(Self.projectionColor)
+                            }
+                        RuleMark(x: .value("Today", Date.now))
+                            .foregroundStyle(Color.secondary.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("today")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                            }
+                    }
                 }
                 .chartForegroundStyleScale(range: splitByRotation ? Self.rotationPalette : Self.seriesPalette)
+                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
+                .chartYAxis { AxisMarks(position: .leading) }
                 .chartYScale(domain: .automatic(includesZero: false))
                 .chartLegend(Set(points.map(\.series)).count > 1 ? .visible : .hidden)
+                .chartXSelection(value: $selectedDate)
                 .frame(maxHeight: 280)
                 .padding(.horizontal)
                 Text(chartCaption)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                if let detail = selectedPointDetail {
+                    Text(detail)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal)
+                        .accessibilityLabel(detail)
+                }
+                if selectedIsLoaded, !volumeBars.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Working volume").font(.caption.bold())
+                        Chart(volumeBars) { bar in
+                            BarMark(x: .value("Date", bar.date), y: .value("Volume", bar.value))
+                                .foregroundStyle(Color(hex: 0x8B9196).opacity(0.55))
+                        }
+                        .chartYAxis { AxisMarks(position: .leading) }
+                        .frame(height: 105)
+                    }
+                    .padding(.horizontal)
+                }
+                if let trend {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(projectionSummary(trend))
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(Self.projectionColor)
+                        Text("\(TrendProjection.fitDescription(trend.result.fitQuality)) · fitted from performed sessions — a continuation of the past, not a plan.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .accessibilityElement(children: .combine)
+                } else if let refusal = projectionRefusal(given: trend) {
+                    Text(refusal)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
             }
             if !repRecords.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Rep PRs").font(.headline)
+                    Chart(repRecords) { record in
+                        LineMark(x: .value("Reps", record.reps),
+                                 y: .value("Weight", displayRepWeight(record.weightLb)))
+                            .foregroundStyle(Theme.accent)
+                        PointMark(x: .value("Reps", record.reps),
+                                  y: .value("Weight", displayRepWeight(record.weightLb)))
+                            .foregroundStyle(Theme.accent)
+                    }
+                    .frame(height: 150)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
                             ForEach(repRecords) { record in
@@ -726,5 +1031,42 @@ struct ProgressionChartsView: View {
             Spacer()
         }
         .padding(.horizontal)
+    }
+
+    private var defaultLiftName: String {
+        if let program = programs.first(where: \.isActive) ?? programs.first,
+           let day = program.orderedDays.first(where: { $0.order == program.nextDayIndex }) ?? program.orderedDays.first,
+           let lift = day.orderedLifts.first(where: { $0.role == .main }),
+           mainLifts.contains(where: { $0.name == lift.exerciseName }) {
+            return lift.exerciseName
+        }
+        for session in sessions.reversed() {
+            if let name = session.orderedExercises.first(where: { $0.exercise?.category == .main })?.exercise?.name {
+                return name
+            }
+        }
+        return mainLifts.first?.name ?? ""
+    }
+
+    private func displayRepWeight(_ lb: Double) -> Double {
+        (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb
+    }
+
+    private var selectedPointDetail: String? {
+        guard let selectedDate,
+              let session = sessions.min(by: {
+                  abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
+              }) else { return nil }
+        let matching = session.exercises.filter { $0.exercise?.name == selectedLift }
+        let entries = matching.filter { visibleRoles.contains(ChartRole.of($0, in: session)) }
+        guard let entry = entries.first,
+              let top = entry.workingSets.max(by: { $0.weightLb < $1.weightLb }) else { return nil }
+        let estimate = entry.workingSets.map {
+            ProgramProgression.epleyE1RM(weightLb: $0.weightLb, reps: $0.reps)
+        }.max() ?? 0
+        let role = ChartRole.of(entry, in: session).rawValue
+        let rotation = ChartRotation.label(entryPhase: entry.phase?.rawValue, sessionRotation: session.programWeek)
+        let display = settingsList.first?.unitDisplay ?? .lbPrimary
+        return "\(session.date.formatted(date: .abbreviated, time: .omitted)) · \(display.format(lb: top.weightLb)) × \(top.reps) · e1RM \(display.format(lb: estimate)) · \(role) · \(rotation)"
     }
 }

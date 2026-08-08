@@ -49,6 +49,7 @@ export const mmss = (sec) => { sec = Math.max(0, Math.round(sec)); return `${Mat
 // ---- icons (inline SVG) ----
 const ICONS = {
   today: '<rect x="2" y="9" width="3" height="6" rx="1"/><rect x="5" y="7" width="2.5" height="10" rx="1"/><rect x="7.3" y="10.8" width="9.4" height="2.4" rx="1"/><rect x="16.5" y="7" width="2.5" height="10" rx="1"/><rect x="19" y="9" width="3" height="6" rx="1"/>',
+  program: '<rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="8" y1="8" x2="17" y2="8" stroke="currentColor" stroke-width="2"/><line x1="8" y1="12" x2="17" y2="12" stroke="currentColor" stroke-width="2"/><line x1="8" y1="16" x2="14" y2="16" stroke="currentColor" stroke-width="2"/>',
   history: '<rect x="3" y="4.5" width="18" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2"/><line x1="8" y1="2.5" x2="8" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="16" y1="2.5" x2="16" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   body: '<rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.6 L14 11.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12.4" r="1.5"/>',
   signals: '<path d="M13 2 L4 14 h5.5 l-1 8 9.5-12 H12 z"/>',
@@ -177,20 +178,150 @@ export function applyTheme(name) {
   if (meta && bg) meta.setAttribute("content", bg);
 }
 
-// ---- Wave-position glyph ----
-// The mesocycle at a glance: Volume / Load / Peak / Recovery as rising bars
-// with recovery dropped low, current phase lit in accent. Mirrors the
-// native WaveGlyph (Cadence/Views/Glyphs.swift).
-export function wave(week) {
-  const heights = [8, 12, 16, 6];
-  const el = h("span", { class: "wave", title: `Rotation ${week} of 4`, role: "img", "aria-label": `Rotation ${week} of 4` });
-  for (let i = 1; i <= 4; i += 1) {
-    const bar = h("i");
-    bar.style.height = `${heights[i - 1]}px`;
-    if (i === week) bar.classList.add("on");
-    el.append(bar);
+// ---- Rotation-position glyph ----
+// Where the program is in its rotation — four equal ticks with the current one
+// lit. Mirrors the native RotationGlyph (Cadence/Views/Glyphs.swift).
+//
+// This replaced a rising-bar "wave" glyph that drew Volume / Load / Peak as
+// climbing and recovery as a drop. That shape is a claim about the
+// prescription, and the program-level indicator is shared by slots that have
+// nothing to do with each other's: a novice linearFives slot and a 5/3/1 slot
+// sit under the same counter and neither one waves. Position is the only thing
+// this indicator actually knows, so it is the only thing it draws.
+export function rotation(week) {
+  // Clamp once, then use it for BOTH the lit tick and the label. rotationLabel
+  // clamps internally, so reading `week` raw for the highlight let a corrupt or
+  // hand-edited pointer announce "Rotation 1 of 4" while no tick was lit — the
+  // sighted and the spoken interface disagreeing about the same value.
+  const current = Number.isFinite(week) ? Math.min(Math.max(week, 1), C.DELOAD_WEEK) : 1;
+  const label = C.rotationLabel(current);
+  const el = h("span", { class: "rotation", title: label, role: "img", "aria-label": label });
+  for (let i = 1; i <= C.DELOAD_WEEK; i += 1) {
+    const tick = h("i");
+    if (i === current) tick.classList.add("on");
+    el.append(tick);
   }
   return el;
+}
+
+// What a program slot actually does — "Main · 5/3/1", "Complementary ·
+// Secondary volume" — plus the current phase, but ONLY where the phase
+// vocabulary describes the slot's prescription. Both strings come from shared
+// core, so native and web cannot label the same slot differently.
+// Mirrors the native SlotPrescriptionBadge (Cadence/Views/Glyphs.swift).
+export function slotBadge(lift, rotationWeek, movementGroup = null, focus = "strength") {
+  const role = lift.role || "main";
+  const style = lift.prescription || "automatic";
+  const badge = C.slotBadge(role, style, movementGroup, focus);
+  const phase = C.slotPhaseLabel(rotationWeek, role, style, movementGroup, focus);
+  const el = h("span", { class: "slot-badge" }, h("span", { class: "sub", text: badge }));
+  if (phase) el.append(h("span", { class: "sub accent", text: phase }));
+  return el;
+}
+
+// Sessions persist the phase for schedule/history reconstruction, even when a
+// slot's prescription does not use phase names. Render that stored value only
+// when the captured prescription style says the label is truthful. Old rows
+// without a captured style keep their legacy label because they cannot be
+// classified safely after the fact.
+export function sessionPhaseLabel(entry, exercise) {
+  if (!entry?.phase) return null;
+  const style = entry.prescriptionStyle || entry.prescriptionStyleRaw;
+  if (!style) return C.phaseLabel(entry.phase);
+  return C.slotPhaseLabel(
+    entry.phase, entry.programRole || "main", style,
+    exercise?.movementGroup ?? null, "strength",
+  );
+}
+
+const BLOCK_LABELS = {
+  warmup: "warm-up", primer: "primer", topSingle: "top single", ramp: "ramp",
+  work: "work", amrap: "+ set", backoff: "back-off", conditioning: "conditioning",
+};
+
+// The next four exposures a program slot will actually produce.
+//
+// The editor is a wall of pickers and steppers: it tells you what values were
+// entered, never what they produce. A lifter setting a 190 lb base cannot see
+// that it yields a 225 lb peak triple while 188 yields 220 — a whole plate step
+// decided by which side of a rounding boundary the multiplication lands on.
+//
+// Every number comes from C.exposurePreview, which runs the shipped engine
+// forward; there is no second implementation that could disagree with the
+// session the lifter eventually starts. It costs no persisted state.
+// Mirrors the native ExposurePreviewView (Cadence/Views/ExposurePreviewView.swift).
+export function exposurePreview(lift, program, exercise, count = 4, schedule = null) {
+  const movementGroup = exercise?.movementGroup ?? null;
+  const style = C.resolvedPrescriptionStyle(lift.prescription || "automatic",
+    movementGroup, lift.role || "main", program.focus);
+  // The slot's own banked-but-unapplied grade, if a peak has already been
+  // graded this cycle. Without it the next-cycle entries preview the old base.
+  //
+  // This client stores it as `lift.pending = { state, note }`; the native slot
+  // spreads the same values across `pendingBaseWeightLb` and friends. Reading
+  // the native field names here made the seeding silently dead on web and left
+  // the two clients previewing different next-cycle bases for the same slot.
+  const pendingState = lift.pending?.state ? { ...lift.pending.state } : null;
+  const entries = C.exposurePreview({
+    count,
+    baseWeightLb: lift.baseWeightLb,
+    estimatedMaxLb: lift.estimatedMaxLb ?? 0,
+    stallCount: lift.stallCount ?? 0,
+    cycleNumber: program.cycleNumber ?? 1,
+    rotation: program.currentWeek ?? 1,
+    programRoundingLb: program.roundingLb,
+    exerciseType: exercise?.type ?? null,
+    movementGroup,
+    role: lift.role || "main",
+    focus: program.focus,
+    prescriptionStyle: lift.prescription || "automatic",
+    configuration: { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+    pendingState,
+    schedule,
+  });
+
+  const card = h("div", { class: "card sub" },
+    h("div", { class: "section-title", text: `Next ${count} exposures` }));
+  for (const entry of entries) {
+    const work = entry.prescription.mainWork;
+    const mainWorkIsAMRAP = entry.prescription.blocks.some((b) => b.kind === "amrap"
+      && Math.abs(b.weightLb - work.weightLb) < 0.001
+      && b.sets === work.sets && b.reps === work.reps);
+    // Phase-independent styles are numbered exposures, not phases — labelling a
+    // linearFives session "Peak" would assert something the engine does not do.
+    const lead = entry.phaseName || `Session ${entry.exposureNumber}`;
+    const row = h("div", { class: "row", style: { borderBottom: "0", padding: "3px 0", display: "block" } },
+      h("div", { style: { display: "flex", gap: "8px", alignItems: "baseline" } },
+        h("span", { class: entry.isRecovery ? "sub warn" : "sub", text: lead, style: { minWidth: "92px" } }),
+        h("span", { class: "mono", text: fmtWeight(work.weightLb) }),
+        h("span", { class: "sub mono", text: `${work.sets}×${work.reps}` }),
+        mainWorkIsAMRAP ? h("span", { class: "sub warn", text: "+ set" }) : null));
+    // Ramps, primers, top singles and the "+" set are real prescribed work. A
+    // preview showing only the top line would hide most of a 5/3/1 session.
+    let removedMainBlock = false;
+    const extras = entry.prescription.blocks.filter((b) => {
+      if (b.kind === "work") return false;
+      if (!removedMainBlock && Math.abs(b.weightLb - work.weightLb) < 0.001
+          && b.sets === work.sets && b.reps === work.reps) {
+        removedMainBlock = true;
+        return false;
+      }
+      return true;
+    });
+    if (extras.length) {
+      row.append(h("div", { class: "sub mono", style: { opacity: "0.7" },
+        text: extras.map((b) => `${BLOCK_LABELS[b.kind] || b.kind} ${fmtWeight(b.weightLb)} ${b.sets}×${b.reps}`).join(" · ") }));
+    }
+    if (entry.advanceNote) row.append(h("div", { class: "sub", text: entry.advanceNote }));
+    card.append(row);
+  }
+  // A 5/3/1 slot's base is a training max, not a working weight, and saying so
+  // is the difference between a preview that explains the prescription and one
+  // that looks wrong.
+  card.append(h("div", { class: "sub", style: { opacity: "0.7", paddingTop: "4px" },
+    text: `${style === "fiveThreeOne" ? "Training max" : "Base"} ${fmtWeight(lift.baseWeightLb)}`
+      + " · assumes each session is completed as prescribed." }));
+  return card;
 }
 
 // Tiny inline sparkline (SVG polyline) for progress-at-a-glance rows; strokes

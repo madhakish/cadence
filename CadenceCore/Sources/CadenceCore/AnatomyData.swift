@@ -116,6 +116,9 @@ public enum AnatomyData {
         "Lat Pulldown": Profile(primary: ["lats"], secondary: ["biceps"]),
         "Chin-ups": Profile(primary: ["lats", "biceps"], secondary: ["abs", "forearms"]),
         "Pull-ups": Profile(primary: ["lats"], secondary: ["biceps", "abs", "forearms"]),
+        // Adding a belt loads the same movement — the muscles worked do not change.
+        "Weighted Chin-up": Profile(primary: ["lats", "biceps"], secondary: ["abs", "forearms"]),
+        "Weighted Pull-up": Profile(primary: ["lats"], secondary: ["biceps", "abs", "forearms"]),
         "Face Pulls": Profile(primary: ["delts", "traps"], secondary: ["biceps"]),
         "Band Pull-aparts": Profile(primary: ["delts", "traps"], secondary: []),
         "Y-T-W Raises": Profile(primary: ["delts", "traps"], secondary: []),

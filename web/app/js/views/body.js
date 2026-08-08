@@ -2,12 +2,24 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { lineChart } from "../charts.js";
-import { Bodyweight, Settings, iso } from "../db.js";
+import { Bodyweight, Settings, Checkins, iso } from "../db.js";
+import * as signals from "./signals.js";
 
 export async function render(host) {
-  const [weights, settings] = await Promise.all([Bodyweight.all(), Settings.get()]);
+  const [weights, settings, checkins] = await Promise.all([Bodyweight.all(), Settings.get(), Checkins.all()]);
   weights.sort((a, b) => new Date(a.date) - new Date(b.date));
   const root = ui.h("div");
+
+  const latestBySite = new Map();
+  for (const checkin of checkins) {
+    const prior = latestBySite.get(checkin.site);
+    if (!prior || new Date(checkin.date) > new Date(prior.date)) latestBySite.set(checkin.site, checkin);
+  }
+  const hardStops = [...latestBySite.values()].filter((item) => /flag|pain|swell|off/i.test(item.response)).length;
+  root.append(ui.h("button", { class: "card row wide", ariaLabel: `Signals${hardStops ? `, ${hardStops} active hard stops` : ""}`,
+    onClick: () => ui.pushScreen({ title: "Signals", build: (body) => { signals.render(body); } }) },
+  ui.h("span", { class: "title", text: "⚡ Signals" }),
+  hardStops ? ui.h("span", { class: "pill hard", text: String(hardStops) }) : ui.h("span", { class: "chev" })));
 
   // Bodyweight
   root.append(ui.h("div", { class: "section-title", text: "Bodyweight" }));
