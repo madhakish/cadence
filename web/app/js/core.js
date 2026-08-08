@@ -1249,23 +1249,19 @@ export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, cu
 }
 
 // ---- Swap rules (issue 20) ----------------------------------------------
-// Mirrors CadenceCore's SwapRules. Exercise types that can't carry a weight
-// prescription — a loaded slot must never be offered an unloadable substitute
-// (Incline DB Press → Dips) or vice versa.
-export const UNLOADABLE_TYPES = new Set(["bodyweight", "timed", "conditioning"]);
-
 // A candidate is offered only when it trains the same movement pattern
 // (non-empty matching group), sits in the same programming tier
 // (Main/Accessory/Conditioning), matches the current lift's loadability,
 // isn't the same exercise, and isn't shelved. `current`/`candidate` are
-// exercise records: { name, category, type, movementGroup, isShelved }.
+// exercise records. Loadability follows the resolved load basis, not equipment
+// type: a weighted pull-up is bodyweight-typed but still carries external load.
 export function swapCompatible(current, candidate) {
   return !!current.movementGroup
     && candidate.movementGroup === current.movementGroup
     && candidate.name !== current.name
     && !candidate.isShelved
     && candidate.category === current.category
-    && UNLOADABLE_TYPES.has(candidate.type) === UNLOADABLE_TYPES.has(current.type);
+    && supportsLoadPR(resolvedLoadBasis(candidate)) === supportsLoadPR(resolvedLoadBasis(current));
 }
 
 // The transactional boundary for banking a session (issue 19), mirroring
@@ -1578,7 +1574,14 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
 //
 // Mirrored 1:1 in CadenceCore ProgramProgression.accessoryCannotProgressLoad.
 export function accessoryCannotProgressLoad(exerciseType, loadBasis, weightLb, incrementLb) {
-  if (UNLOADABLE_TYPES.has(String(exerciseType ?? "").toLowerCase())) return false;
+  // An explicit external basis outranks the equipment type, but ONLY for
+  // bodyweight: a weighted pull-up is typed bodyweight while hanging real
+  // plates from a belt, and the type guard alone silently exempted it from this
+  // warning. Timed and conditioning stay unloadable whatever they carry.
+  const type = String(exerciseType ?? "").toLowerCase();
+  const unloadable = type === "timed" || type === "conditioning"
+    || (type === "bodyweight" && !supportsLoadPR(loadBasis));
+  if (unloadable) return false;
   if (loadBasis === "bodyweight") return false;
   return weightLb > 0 && !(incrementLb > 0);
 }
@@ -2289,7 +2292,8 @@ export const isConditioningPattern = (pattern) =>
 
 const PATTERN_NAMES = {
   verticalPress: new Set(["Overhead Press", "Push Press", "Push Jerk", "Split Jerk", "Overhead DB Press", "Seated Upright DB Press", "Arnold Press", "Landmine Press", "KB Press"]),
-  verticalPull: new Set(["Lat Pulldown", "Straight-arm Pulldown", "Pull-ups", "Chin-ups", "Assisted Pull-up"]),
+  verticalPull: new Set(["Lat Pulldown", "Straight-arm Pulldown", "Pull-ups", "Chin-ups", "Assisted Pull-up",
+    "Weighted Pull-up", "Weighted Chin-up"]),
   horizontalPull: new Set(["Single-arm DB Row", "Chest-supported Row", "Ring Row", "Barbell Row", "Pendlay Row", "T-Bar Row", "Seated Cable Row", "One-arm Cable Row", "Bent-over DB Row", "Incline Bench DB Row", "KB Row", "Banded Row"]),
   kneeFlexion: new Set(["Seated Leg Curl", "Lying Leg Curl", "Nordic Hamstring Curl"]),
   hipExtension: new Set(["Back Extension", "Glute Bridge", "Barbell Hip Thrust", "Cable Pull-through"]),

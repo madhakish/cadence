@@ -477,6 +477,9 @@ struct ProgressionChartsView: View {
         case estimatedMax = "Est. 1RM"
         case volume = "Volume"
         case all = "All three"
+        /// Best completed working set's reps — the direct analogue of
+        /// "heaviest set" for a lift whose load never changes.
+        case reps = "Reps"
     }
 
     /// A lift can hold a MAIN slot on one day and a COMPLEMENTARY slot on
@@ -559,6 +562,13 @@ struct ProgressionChartsView: View {
                                             role: role, series: "Est. 1RM\(suffix)"))
                     }
                 }
+                // A lift whose load never changes progresses by reps, so the
+                // best completed working set is its "top set".
+                if metric == .reps,
+                   let best = entries.flatMap(\.workingSets).map(\.reps).max(), best > 0 {
+                    result.append(Point(date: session.date, value: Double(best), rotation: rotation,
+                                        role: role, series: "Reps\(suffix)"))
+                }
                 if metric == .volume {
                     let volume = entries.reduce(0) { $0 + $1.workingVolumeLb }
                     if volume > 0 {
@@ -587,10 +597,26 @@ struct ProgressionChartsView: View {
                          rotation: "", role: .main, series: "Volume")
         }
     }
-    private var chartUnitLabel: String { (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue }
+    /// An unloaded pull-up has no external resistance, so working weight,
+    /// est. 1RM and tonnage can only ever draw a flat zero. Offering the load
+    /// metrics anyway is how promoting pull-ups to Main turned a real
+    /// progression into three straight lines at 0. Mirrors web `metricOptions`.
+    private var selectedIsLoaded: Bool {
+        guard let exercise = mainLifts.first(where: { $0.name == selectedLift }) else { return true }
+        return exercise.loadBasis.supportsLoadPR
+    }
+
+    private var availableMetrics: [Metric] {
+        selectedIsLoaded ? [.topSet, .estimatedMax, .volume, .all] : [.reps]
+    }
+
+    /// Reps are a count, not a load: they carry no weight unit and never convert.
+    private var chartUnitLabel: String {
+        metric == .reps ? "reps" : (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue
+    }
 
     private var peakTarget: Double? {
-        guard metric != .volume,
+        guard metric != .volume, metric != .reps,
               let lift = (programs.first(where: \.isActive) ?? programs.first)?.days
                 .flatMap(\.lifts).first(where: { $0.exerciseName == selectedLift }),
               lift.peakSingleEnabled, lift.lastPeakSingleLb > 0 else { return nil }
@@ -661,6 +687,7 @@ struct ProgressionChartsView: View {
         switch metric {
         case .estimatedMax: return "Est. 1RM"
         case .volume: return "Volume"
+        case .reps: return "Reps"
         case .topSet, .all: return "Working weight"
         }
     }
@@ -736,11 +763,17 @@ struct ProgressionChartsView: View {
     /// Values are already in the display unit — the chart converts before it
     /// builds points, and a linear fit commutes with that scaling — so the
     /// headline needs the unit appended, not converted again.
+    /// Reps are whole — a projected "12.4 reps" is precision the count does
+    /// not have. Mirrors the web summary's rounding.
+    private func chartValueLabel(_ value: Double) -> String {
+        metric == .reps ? String(Int(value.rounded())) : Weight.trim(value)
+    }
+
     private func projectionSummary(_ projection: Projection) -> String {
         TrendProjection.summary(
             perWeek: projection.result.perWeek,
             horizonLabel: horizon.label,
-            horizonValue: "\(Weight.trim(projection.result.horizonValue)) \(chartUnitLabel)",
+            horizonValue: "\(chartValueLabel(projection.result.horizonValue)) \(chartUnitLabel)",
             unit: chartUnitLabel
         )
     }
@@ -760,6 +793,7 @@ struct ProgressionChartsView: View {
         case .estimatedMax: metricLabel = "Estimated 1RM"
         case .volume: metricLabel = "Working volume"
         case .all: metricLabel = "Working weight, est. 1RM, and volume"
+        case .reps: metricLabel = "Best working set"
         }
         let role = showComplementary ? " · solid = main, dashed = complementary" : " · main slots only"
         return "\(metricLabel) per session (\(chartUnitLabel))\(role)"
@@ -775,8 +809,14 @@ struct ProgressionChartsView: View {
                 ForEach(mainLifts) { Text($0.name).tag($0.name) }
             }
             .onAppear { if selectedLift.isEmpty { selectedLift = mainLifts.first?.name ?? "" } }
+            // Switching to a bodyweight lift while a load metric is selected
+            // would otherwise strand the chart on a metric it can only draw
+            // as zero. Mirrors the web picker's clamp.
+            .onChange(of: selectedLift, initial: true) {
+                if !availableMetrics.contains(metric) { metric = availableMetrics[0] }
+            }
             Picker("Metric", selection: $metric) {
-                ForEach(Metric.allCases, id: \.self) { Text($0.rawValue) }
+                ForEach(availableMetrics, id: \.self) { Text($0.rawValue) }
             }
             .pickerStyle(.segmented)
             // One line per rotation: compare this cycle's R1 against last
@@ -873,7 +913,7 @@ struct ProgressionChartsView: View {
                             .foregroundStyle(Self.projectionColor)
                             .symbolSize(36)
                             .annotation(position: .top, alignment: .trailing) {
-                                Text(Weight.trim(trend.result.horizonValue))
+                                Text(chartValueLabel(trend.result.horizonValue))
                                     .font(.caption2.bold().monospacedDigit())
                                     .foregroundStyle(Self.projectionColor)
                             }

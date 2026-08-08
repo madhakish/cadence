@@ -14,6 +14,26 @@ final class ProgramProgressionTests: XCTestCase {
         ProgramLiftState(baseWeightLb: 175, estimatedMaxLb: 226, stallCount: 0, role: .main, lastIncrementLb: 0)
     }
 
+    // A weighted pull-up is TYPED bodyweight but hangs real plates from a belt.
+    // Keying loadability on type alone silently exempted it, so a belt slot
+    // with a zero increment never progressed and never warned.
+    // Mirrored in web/tests/core.test.mjs.
+    func testBeltLoadedBodyweightSlotStillWarnsAboutAZeroIncrement() {
+        XCTAssertTrue(P.accessoryCannotProgressLoad(
+            exerciseType: "bodyweight", loadBasis: .externalTotal, weightLb: 25, incrementLb: 0))
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "bodyweight", loadBasis: .bodyweight, weightLb: 0, incrementLb: 0),
+                       "an unloaded bodyweight slot has no load to step")
+        // The narrow part of the fix: a vest still does not make a plank
+        // load-progressed, so timed and conditioning stay unloadable.
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "timed", loadBasis: .externalTotal, weightLb: 25, incrementLb: 0),
+                       "a timed slot progresses by duration even when it carries a vest")
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "conditioning", loadBasis: .externalTotal, weightLb: 20, incrementLb: 0),
+                       "a loaded carry progresses by distance or duration")
+    }
+
     func testE1RMMath() {
         XCTAssertEqual(P.epleyE1RM(weightLb: 225, reps: 5), 262.5, accuracy: 1e-9)
         XCTAssertEqual(P.smoothE1RM(prior: 0, sample: 262.5), 262.5, accuracy: 1e-9)

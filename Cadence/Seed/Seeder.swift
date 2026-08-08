@@ -93,8 +93,21 @@ enum Seeder {
             Exercise(name: "Barbell Row", category: .main, type: .barbell, movementGroup: "pull"),
             Exercise(name: "Pendlay Row", category: .main, type: .barbell, movementGroup: "pull"),
             Exercise(name: "T-Bar Row", category: .main, type: .machine, movementGroup: "pull"),
-            Exercise(name: "Pull-ups", category: .accessory, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
-            Exercise(name: "Chin-ups", category: .accessory, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
+            // Vertical pulling is primary upper-body work, so it is charted and
+            // progressed like one. Unloaded and weighted are separate entries
+            // because they disagree about what their number MEANS: a bodyweight
+            // pull-up has no external resistance (no load PR, no tonnage — see
+            // INV-NO-LOAD-WITHOUT-RESISTANCE), while belt weight is real
+            // resistance that must earn both. One entry could only be honest
+            // about one of them, and basis is never guessed from the name.
+            Exercise(name: "Pull-ups", category: .main, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
+            Exercise(name: "Chin-ups", category: .main, type: .bodyweight, movementGroup: "pull", defaultRestSeconds: 120),
+            Exercise(name: "Weighted Pull-up", category: .main, type: .bodyweight, movementGroup: "pull",
+                     loadBasis: .externalTotal, defaultRestSeconds: 180),
+            Exercise(name: "Weighted Chin-up", category: .main, type: .bodyweight, movementGroup: "pull",
+                     loadBasis: .externalTotal, defaultRestSeconds: 180),
+            // Assistance is a regression TOWARD a pull-up, and its progression
+            // runs backwards (less assistance is harder), so it stays accessory.
             Exercise(name: "Assisted Pull-up", category: .accessory, type: .machine, movementGroup: "pull",
                      loadBasis: .assisted),
             Exercise(name: "Seated Cable Row", category: .accessory, type: .machine, movementGroup: "pull"),
@@ -218,6 +231,7 @@ enum Seeder {
             }
         }
         try clearRetiredRestStamps(byName: byName, context: context)
+        try promoteVerticalPullMains(byName: byName, context: context)
         try ensureWorkoutSessionIDs(context: context)
         try normalizeRelationshipAliases(context: context)
         try snapshotLegacyLoadSemantics(context: context)
@@ -251,6 +265,36 @@ enum Seeder {
                 set.prescriptionBlockRaw = PrescriptionBlockKind.conditioning.rawValue
             }
         }
+    }
+
+    /// Names the seed shipped as accessories and now ships as main lifts.
+    /// `Assisted Pull-up` is deliberately absent: it is a regression toward a
+    /// pull-up whose progression runs backwards, so it stays an accessory.
+    static let verticalPullPromotions = ["Pull-ups", "Chin-ups"]
+
+    /// A store seeded before vertical pulling became primary work still holds
+    /// these as accessories, and `seedIfNeeded` never revisits a seeded install
+    /// — so without this the promotion would reach new installs only.
+    ///
+    /// Promotes ONLY a row still marked exactly what the old seed wrote. A
+    /// lifter who has already moved one of these to Main (or deliberately to
+    /// Conditioning) has said something, and the repair does not argue. The
+    /// stamp then makes it one-shot: re-running the promotion every open would
+    /// silently overwrite a category set back to Accessory on purpose, which is
+    /// the same class of bug as an edit that disappears.
+    ///
+    /// The new weighted entries need no special handling — `syncLibrary`
+    /// already inserts any definition the store is missing, and insert-if-absent
+    /// is idempotent on its own.
+    private static func promoteVerticalPullMains(byName: [String: Exercise], context: ModelContext) throws {
+        guard let settings = try context.fetch(FetchDescriptor<AppSettings>()).first,
+              !settings.verticalPullMainsPromoted else { return }
+        for name in verticalPullPromotions {
+            if let current = byName[name], current.categoryRaw == ExerciseCategory.accessory.rawValue {
+                current.categoryRaw = ExerciseCategory.main.rawValue
+            }
+        }
+        settings.verticalPullMainsPromoted = true
     }
 
     private static func clearRetiredRestStamps(byName: [String: Exercise], context: ModelContext) throws {
