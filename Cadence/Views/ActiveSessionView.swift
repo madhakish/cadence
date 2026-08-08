@@ -501,9 +501,9 @@ private struct ExerciseSection: View {
         return allExercises.filter {
             SwapRules.compatible(
                 currentName: cur.name, currentCategory: cur.categoryRaw,
-                currentType: cur.typeRaw, currentGroup: cur.movementGroup,
+                currentLoadBasis: cur.loadBasis, currentGroup: cur.movementGroup,
                 candidateName: $0.name, candidateCategory: $0.categoryRaw,
-                candidateType: $0.typeRaw, candidateGroup: $0.movementGroup,
+                candidateLoadBasis: $0.loadBasis, candidateGroup: $0.movementGroup,
                 candidateShelved: $0.isShelved
             )
         }

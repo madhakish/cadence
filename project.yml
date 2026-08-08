@@ -122,6 +122,11 @@ targets:
     sources:
       - Cadence/Models
       - Cadence/Seed/Seeder.swift
+      # Backup migrations are library migrations too. Compile the real native
+      # codec into this hostless target so round-trip tests exercise production
+      # code instead of a test-only DTO copy.
+      - Cadence/Services/ExportService.swift
+      - Cadence/Services/ImportService.swift
       - CadenceMigrationTests
     dependencies:
       - package: CadenceCore

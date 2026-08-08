@@ -130,6 +130,66 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(pullUps.count, 1, "repair never duplicates a library row")
     }
 
+    /// The V6 fixture itself must be a valid V6 graph. A helper from another
+    /// schema version can compile at the call site but cannot be persisted by
+    /// this container, which would make every downstream V7 assertion theater.
+    func testV6FixtureContainsItsProgramGraphBeforeMigration() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-v6-fixture-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+        try createV6Store(at: storeURL)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV6.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let program = try XCTUnwrap(
+            try container.mainContext.fetch(FetchDescriptor<CadenceSchemaV6.Program>()).first
+        )
+        XCTAssertEqual(program.name, "Migration Program")
+        XCTAssertEqual(program.days.count, 1)
+        XCTAssertEqual(program.days.first?.lifts.first?.exerciseName, "Back Squat")
+        XCTAssertEqual(program.days.first?.accessories.first?.exerciseName, "Seated Leg Curl")
+    }
+
+    /// Native and web backups must agree on every one-shot library stamp. If
+    /// native omits this one, restoring its own post-migration backup promotes
+    /// a pull-up the lifter deliberately moved back to Accessory.
+    func testNativeBackupRoundTripKeepsVerticalPullPromotionStamp() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let source = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let sourceSettings = AppSettings()
+        sourceSettings.verticalPullMainsPromoted = true
+        source.mainContext.insert(sourceSettings)
+        try source.mainContext.save()
+
+        let backup = try ExportService.jsonData(context: source.mainContext)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        let exportedSettings = try XCTUnwrap(json["settings"] as? [String: Any])
+        XCTAssertEqual(exportedSettings["verticalPullMainsPromoted"] as? Bool, true,
+                       "native export carries the one-shot marker")
+
+        let restored = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let restoredSettings = AppSettings()
+        restoredSettings.verticalPullMainsPromoted = false
+        restored.mainContext.insert(restoredSettings)
+        try restored.mainContext.save()
+        try ImportService.load(backup, into: restored.mainContext)
+
+        let roundTripped = try XCTUnwrap(
+            try restored.mainContext.fetch(FetchDescriptor<AppSettings>()).first
+        )
+        XCTAssertTrue(roundTripped.verticalPullMainsPromoted,
+                      "restoring a native backup does not re-arm the promotion")
+    }
+
     /// V5 removes `ProteinEntry` and `proteinTargetGrams`. That is deliberate
     /// and destructive, so the thing worth proving is the blast radius: the
     /// dropped entity takes nothing else with it, and the store still opens.

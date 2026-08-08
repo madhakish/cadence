@@ -531,9 +531,13 @@ eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → not
   const dips = { name: "Dips", category: "Accessory", type: "bodyweight", movementGroup: "press" };
   const chinups = { name: "Chin-ups", category: "Accessory", type: "bodyweight", movementGroup: "pull" };
   const pullups = { name: "Pull-ups", category: "Accessory", type: "bodyweight", movementGroup: "pull" };
+  const weightedPullup = { name: "Weighted Pull-up", category: "Accessory", type: "bodyweight",
+    movementGroup: "pull", loadBasis: "externalTotal" };
 
   eq(C.swapCompatible(backSquat, frontSquat), true, "same tier/pattern/loadability → offered");
   eq(C.swapCompatible(chinups, pullups), true, "bodyweight→bodyweight is fine");
+  eq(C.swapCompatible(weightedPullup, pullups), false,
+    "weighted and unloaded pull-ups cannot carry the same prescription");
   eq(C.swapCompatible(walkingLunges, backSquat), false, "accessory can't jump to a main competition lift");
   eq(C.swapCompatible(dbPress, dips), false, "loaded press can't swap to an unloadable accessory");
   eq(C.swapCompatible(dbPress, bwPress), false, "loadability mismatch alone filters (same tier/group)");

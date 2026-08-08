@@ -617,6 +617,25 @@ ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history
   for (const id of pullIds) await db.Sessions.del(id);
 }
 
+// Imported/custom exercises may omit loadBasis. The chart gate must use the
+// same type-based fallback as every set and PR path, not treat a missing raw
+// field as an unloadable lift.
+{
+  const squat = await db.Exercises.byName("Back Squat");
+  const withoutBasis = { ...squat };
+  delete withoutBasis.loadBasis;
+  await db.Exercises.save(withoutBasis);
+  await history.render(host());
+  const select = host().querySelector("select");
+  select.value = "Back Squat";
+  select.dispatchEvent(new window.Event("change"));
+  await tick();
+  const labels = [...host().querySelectorAll(".seg button")].map((b) => b.textContent);
+  ok(labels.includes("Working weight") && labels.includes("Est. 1RM") && !labels.includes("Reps"),
+    `a Main barbell lift with no raw loadBasis still resolves to load metrics (${labels.join(", ")})`);
+  await db.Exercises.save(squat);
+}
+
 // plate calculator overlay
 await plates.openPlateCalculator(); await tick();
 ok(document.querySelector("#overlays .overlay"), "plate calculator opened");
