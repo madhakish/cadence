@@ -709,15 +709,13 @@ enum ImportService {
         if let v = d.isShelved { e.isShelved = v }
         if let v = d.shelvedNote { e.shelvedNote = v }
         if let v = d.gateStatus, let status = ExerciseGateStatus(rawValue: v) { e.gateStatus = status }
-        // v8 exporters always emit the key (nullable): restore its absence
-        // explicitly so a cleared preference does not survive an import as
-        // stale local state. Older bundles never carry it — leave the local
-        // value alone, the same posture every other pre-existing field takes.
-        if schemaVersion >= 8 {
-            e.stationDenomination = d.stationDenomination.flatMap(WeightUnit.init(rawValue:))
-        } else if let v = d.stationDenomination {
-            e.stationDenomination = WeightUnit(rawValue: v)
-        }
+        // Restore the field's absence explicitly, at EVERY bundle version: a
+        // v8 bundle with the key cleared and a pre-v8 bundle that never knew
+        // stations both describe a world where this lift solves on the gym
+        // inventory, and web restores exactly that by replacing the record
+        // wholesale. Keeping a newer local preference would resurrect a
+        // station configuration the backup does not contain.
+        e.stationDenomination = d.stationDenomination.flatMap(WeightUnit.init(rawValue:))
         if schemaVersion >= 3 {
             e.watchSite = BodySite.fromStorage(d.watchSite)
             e.gateSite = BodySite.fromStorage(d.gateSite)

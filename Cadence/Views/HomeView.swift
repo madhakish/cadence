@@ -340,11 +340,13 @@ struct HomeView: View {
                                 // (a complementary barbell lift is loaded just
                                 // the same as the main).
                                 if plan.weightLb > 0 {
-                                    let type = exercises.first(where: { $0.name == lift.exerciseName })?.type
+                                    let previewExercise = exercises.first(where: { $0.name == lift.exerciseName })
+                                    let type = previewExercise?.type
                                     if type == .barbell {
                                         BarbellView(weightLb: plan.weightLb, unit: entryUnit,
                                                     bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym,
-                                                    targetWeightLb: target.weightLb)
+                                                    targetWeightLb: target.weightLb,
+                                                    stationDenomination: previewExercise?.stationDenomination)
                                     } else if type == .dumbbell {
                                         DumbbellView(weightLb: plan.weightLb, unit: entryUnit)
                                     }

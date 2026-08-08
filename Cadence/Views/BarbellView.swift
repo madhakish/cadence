@@ -43,14 +43,12 @@ struct BarbellView: View {
     /// also repairs legacy empty inventories without erasing an intentional
     /// nonempty/all-disabled bar-only rack.
     private var stationPlates: [Plate] {
-        guard let gym else {
-            return unit == .kg ? Plate.standardKg : Plate.standardLb
-        }
-        // The lift's station preference filters the gym inventory to its own
-        // denomination (falling back to that denomination's standard set).
-        return PlateMath.stationPlates(
-            preference: stationDenomination, gymPlates: gym.availablePlates
-        )
+        // The lift's station preference filters the rack to its own
+        // denomination — applied to the no-gym fallback too, matching web:
+        // a kg-only station stays kg even before any gym is configured.
+        let rack = gym?.availablePlates
+            ?? (unit == .kg ? Plate.standardKg : Plate.standardLb)
+        return PlateMath.stationPlates(preference: stationDenomination, gymPlates: rack)
     }
 
     var body: some View {

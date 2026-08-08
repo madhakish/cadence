@@ -31,9 +31,12 @@ platform beside lb-stocked squat racks.
   stations existed. A set preference filters prescriptions, warmups, and the
   plate hint to that denomination, falling back to that denomination's full
   standard set when the gym stocks none of it.
-- Version-8 exporters always emit the key (nullable), so restoring a bundle
-  with a cleared preference clears it locally too rather than leaving stale
-  state behind.
+- The key may be **absent or null** — the web exporter writes an explicit
+  `null` for a cleared preference while the native encoder omits nil keys —
+  and both mean the same thing. Importers on both clients restore an absent
+  or null key as the cleared preference at **every** bundle version, so a
+  restore never leaves a station configuration behind that the backup does
+  not contain.
 
 The version has to move even though the field is optional and additive: a
 version-7 importer parses the bundle happily and silently drops the
@@ -41,7 +44,9 @@ preference, putting the lifter's kg deadlift station back on lb math after a
 restore. Moving the version makes it fail the gate instead.
 
 No field shapes changed and no field was removed, so a version-7 bundle
-restores under version 8 untouched, with every lift on the gym inventory.
+restores under version 8 untouched, with every lift on the gym inventory —
+including a lift whose local preference was set after the backup was written:
+the restore clears it, because the backup describes a world without it.
 
 ## Version 7 climbed flights
 

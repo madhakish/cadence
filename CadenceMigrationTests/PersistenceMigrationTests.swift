@@ -244,6 +244,46 @@ final class PersistenceMigrationTests: XCTestCase {
                       "restoring a native backup does not re-arm the promotion")
     }
 
+    /// A restore must not leave a station configuration behind that the
+    /// backup does not contain: a pre-v8 bundle never carries the key, and a
+    /// v8 bundle omits it when cleared (the native encoder drops nil keys) —
+    /// both restore as "gym inventory", matching web's wholesale-record
+    /// replacement.
+    func testRestoreClearsAStationPreferenceTheBackupDoesNotContain() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let source = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        source.mainContext.insert(Exercise(name: "Deadlift", category: .main, type: .barbell))
+        source.mainContext.insert(AppSettings())
+        try source.mainContext.save()
+        var bundle = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: try ExportService.jsonData(context: source.mainContext)
+            ) as? [String: Any]
+        )
+        bundle["schemaVersion"] = 7   // the bundle predates stations entirely
+        let preStation = try JSONSerialization.data(withJSONObject: bundle)
+
+        let restored = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let local = Exercise(name: "Deadlift", category: .main, type: .barbell)
+        local.stationDenomination = .kg   // declared AFTER the backup was written
+        restored.mainContext.insert(local)
+        restored.mainContext.insert(AppSettings())
+        try restored.mainContext.save()
+        try ImportService.load(preStation, into: restored.mainContext)
+
+        let deadlift = try XCTUnwrap(
+            try restored.mainContext.fetch(FetchDescriptor<Exercise>()).first { $0.name == "Deadlift" }
+        )
+        XCTAssertNil(deadlift.stationDenomination,
+                     "a restore never resurrects a station configuration the backup does not contain")
+    }
+
     /// V5 removes `ProteinEntry` and `proteinTargetGrams`. That is deliberate
     /// and destructive, so the thing worth proving is the blast radius: the
     /// dropped entity takes nothing else with it, and the store still opens.
