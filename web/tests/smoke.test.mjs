@@ -566,6 +566,15 @@ ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history
 // tonnage can only ever draw a flat zero. The honest series is reps, and the
 // picker must offer that instead of three straight lines at 0.
 {
+  const pullupHistoryID = await db.Sessions.save({
+    date: "2020-02-01T12:00:00.000Z", completedAt: "2020-02-01T13:00:00.000Z",
+    notes: "Fictional pull-up chart regression", isCompleted: true, gymName: null,
+    exercises: [{ order: 0, exerciseName: "Pull-ups", notes: "", phase: 1,
+      programRole: "main", plannedWeightLb: 0, plannedSets: 1, plannedReps: 8,
+      sets: [{ order: 0, weightLb: 0, reps: 8, isWarmup: false,
+        status: "completed", loadBasis: "bodyweight", implementCount: 1,
+        enteredUnit: "lb", flags: [] }] }],
+  });
   await history.render(host());
   [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Charts")?.click();
   await tick();
@@ -580,6 +589,8 @@ ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history
     ok(labels.includes("Reps"), `a bodyweight lift is offered Reps (${labels.join(", ")})`);
     ok(!labels.includes("Working weight") && !labels.includes("Est. 1RM"),
       "and is NOT offered the load metrics it could only draw as zero");
+    ok(host().querySelectorAll("svg.chart circle.dot").length > 0,
+      "the Reps metric draws the completed pull-up history instead of an empty chart");
     // A loaded lift keeps every load metric and is never offered reps.
     select.value = "Weighted Pull-up";
     select.dispatchEvent(new window.Event("change"));
@@ -588,6 +599,26 @@ ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history
     ok(loadedLabels.includes("Working weight") && !loadedLabels.includes("Reps"),
       `belt weight is real resistance, so it charts load (${loadedLabels.join(", ")})`);
   }
+  await db.Sessions.del(pullupHistoryID);
+}
+
+// Imported/custom exercises may omit loadBasis. The chart gate must use the
+// same type-based fallback as every set and PR path, not treat a missing raw
+// field as an unloadable lift.
+{
+  const squat = await db.Exercises.byName("Back Squat");
+  const withoutBasis = { ...squat };
+  delete withoutBasis.loadBasis;
+  await db.Exercises.save(withoutBasis);
+  await history.render(host());
+  const select = host().querySelector("select");
+  select.value = "Back Squat";
+  select.dispatchEvent(new window.Event("change"));
+  await tick();
+  const labels = [...host().querySelectorAll(".seg button")].map((b) => b.textContent);
+  ok(labels.includes("Working weight") && labels.includes("Est. 1RM") && !labels.includes("Reps"),
+    `a Main barbell lift with no raw loadBasis still resolves to load metrics (${labels.join(", ")})`);
+  await db.Exercises.save(squat);
 }
 
 // plate calculator overlay

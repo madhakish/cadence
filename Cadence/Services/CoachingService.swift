@@ -251,9 +251,9 @@ enum CoachingService {
             guard let replacement = exercises.first(where: {
                 SwapRules.compatible(
                     currentName: current.name, currentCategory: current.categoryRaw,
-                    currentType: current.typeRaw, currentGroup: current.movementGroup,
+                    currentLoadBasis: current.loadBasis, currentGroup: current.movementGroup,
                     candidateName: $0.name, candidateCategory: $0.categoryRaw,
-                    candidateType: $0.typeRaw, candidateGroup: $0.movementGroup,
+                    candidateLoadBasis: $0.loadBasis, candidateGroup: $0.movementGroup,
                     candidateShelved: $0.isShelved || $0.gateStatus == .shelved
                 )
             }) else {
