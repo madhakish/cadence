@@ -152,6 +152,41 @@ struct HomeView: View {
                             Label("Discard session", systemImage: "trash").font(.caption)
                         }
                     }
+                    // The hero shows the newest open session, but this screen
+                    // can create more — and an older one (including the one
+                    // the workout clock is timing) must never lose its resume
+                    // and discard controls behind a newer session.
+                    let others = openSessions.filter { $0.id != open.id }.sorted { $0.date > $1.date }
+                    if !others.isEmpty {
+                        Section("Other open sessions") {
+                            ForEach(others) { other in
+                                Button { activeSession = other } label: {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Label(
+                                            workoutClock.isTracking(sessionID: other.id)
+                                                ? (workoutClock.isPaused ? "Workout paused" : "Workout in progress")
+                                                : "Open session",
+                                            systemImage: workoutClock.isTracking(sessionID: other.id) ? "stopwatch" : "arrow.forward"
+                                        )
+                                        .font(.subheadline.bold())
+                                        Text(openSessionLabel(other)).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                                .swipeActions {
+                                    Button(role: .destructive) { discardSession = other } label: {
+                                        Label("Discard", systemImage: "trash")
+                                    }
+                                }
+                                // The swipe alone is invisible to VoiceOver and
+                                // to anyone who doesn't reach for it — the
+                                // visible control is the real affordance.
+                                Button(role: .destructive) { discardSession = other } label: {
+                                    Label("Discard session", systemImage: "trash").font(.caption)
+                                }
+                                .accessibilityHint("Deletes this unfinished session without banking it")
+                            }
+                        }
+                    }
                 } else if let program = activeProgram, let day = nextDay(program) {
                     Section {
                         Button { previewProgramDay(program, fallback: day) } label: {
