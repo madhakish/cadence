@@ -235,7 +235,7 @@ public enum PlateMath {
     /// stack a lifter actually builds, and it pins down which of several
     /// equal-total loadings the twins are taken from.
     public static func kgTwinSideMassLb(_ sideLb: Double) -> Double? {
-        guard sideLb >= 0 else { return nil }
+        guard sideLb.isFinite, sideLb >= 0 else { return nil }
         var remaining = sideLb
         var twinLb = 0.0
         for plate in [45.0, 35, 25, 10, 5, 2.5] {

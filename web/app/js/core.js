@@ -328,7 +328,7 @@ export const PLATE_TWIN_KG = { 45: 20, 35: 15, 25: 10, 10: 5, 5: 2.5, 2.5: 1.25 
 // actually builds, and it pins down which of several equal-total loadings the
 // twins are taken from.
 export function kgTwinSideMassLb(sideLb) {
-  if (!(sideLb >= 0)) return null;
+  if (!Number.isFinite(sideLb) || sideLb < 0) return null;
   let remaining = sideLb;
   let twinLb = 0;
   for (const plate of [45, 35, 25, 10, 5, 2.5]) {

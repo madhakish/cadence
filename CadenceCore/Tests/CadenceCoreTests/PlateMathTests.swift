@@ -11,6 +11,11 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(PlateMath.kgTwinSideMassLb(90) ?? 0, 2 * kg20, accuracy: 1e-6,
                        "90/side is two 45s, twinned to two 20 kg")
         XCTAssertNil(PlateMath.kgTwinSideMassLb(91), "a non-stack side has no twin")
+        XCTAssertNil(PlateMath.kgTwinSideMassLb(.infinity),
+                     "a non-finite side refuses instead of looping the greedy solver")
+        XCTAssertNil(PlateMath.kgTwinSideMassLb(.nan))
+        XCTAssertFalse(PlateMath.plateEquivalent(targetLb: .infinity, performedLb: 221.37),
+                       "a non-finite target cannot claim equivalence")
 
         XCTAssertTrue(PlateMath.plateEquivalent(targetLb: 225, performedLb: 221.37),
                       "the kg stack IS the 225 plan")

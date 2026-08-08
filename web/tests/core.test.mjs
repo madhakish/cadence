@@ -1908,6 +1908,12 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-PLATES-ARE-THE-CURRENCY] 90/side is two 45s, twinned to two 20 kg");
   ok(C.kgTwinSideMassLb(91) === null,
     "[INV-PLATES-ARE-THE-CURRENCY] a non-stack side has no twin");
+  ok(C.kgTwinSideMassLb(Infinity) === null,
+    "[INV-PLATES-ARE-THE-CURRENCY] a non-finite side refuses instead of looping the greedy solver");
+  ok(C.kgTwinSideMassLb(NaN) === null,
+    "[INV-PLATES-ARE-THE-CURRENCY] NaN has no twin");
+  ok(C.plateEquivalent(Infinity, 221.37) === false,
+    "[INV-PLATES-ARE-THE-CURRENCY] a non-finite target cannot claim equivalence");
 
   // The motivating session: a 225 plan loaded as 2×20 kg per side on a 45 bar.
   ok(C.plateEquivalent(225, 221.37),
