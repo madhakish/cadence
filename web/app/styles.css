@@ -202,6 +202,11 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .coach-summary { min-height: 58px; text-align: left; }
 .day-sequence { overflow-x: auto; white-space: nowrap; padding: 8px 4px 12px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .day-sequence .now { color: var(--accent); }
+.readiness-dots { display: inline-flex; gap: 3px; }
+.readiness-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.readiness-dots i.readiness-green { background: var(--good); }
+.readiness-dots i.readiness-yellow { background: var(--warn); }
+.readiness-dots i.readiness-red { background: var(--hard); }
 .program-day-card { display: block; text-align: left; margin: 8px 0; }
 .program-slot { padding: 8px 0; }
 .flagbtn.on-clean { background: var(--good); color: #022; }

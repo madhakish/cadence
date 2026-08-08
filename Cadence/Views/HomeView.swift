@@ -172,6 +172,22 @@ struct HomeView: View {
                     }
                 }
 
+                if let program = activeProgram, !program.orderedDays.isEmpty {
+                    Section {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(program.orderedDays) { day in
+                                    Text("\(day.order == program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : "")\(day.name)")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(day.order == program.nextDayIndex ? Theme.accent : .secondary)
+                                    if day.id != program.orderedDays.last?.id { Text("→").foregroundStyle(.tertiary) }
+                                }
+                            }
+                        }
+                        .accessibilityLabel("Program sequence, \(nextDay(program)?.name ?? "next day") is now")
+                    }
+                }
+
                 // Keychain replacement stays prominent until today's scan, then
                 // collapses to one compact 44-point action.
                 Section {
@@ -213,6 +229,12 @@ struct HomeView: View {
                                     Text("Coach · \(report.currentReadiness.name)").font(.headline)
                                     Text(readinessSummary(report)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                 }
+                                HStack(spacing: 4) {
+                                    ForEach(Array(report.rotations.suffix(4)), id: \.key) { rotation in
+                                        Circle().fill(readinessColor(rotation.readiness)).frame(width: 7, height: 7)
+                                    }
+                                }
+                                .accessibilityLabel("Recent rotation readiness")
                                 Spacer()
                                 let count = visibleRecommendations(report, program: program).count
                                 Text("\(count) recommendation\(count == 1 ? "" : "s")")
@@ -222,21 +244,6 @@ struct HomeView: View {
                         }
                     }
 
-                    if !program.orderedDays.isEmpty {
-                        Section {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 6) {
-                                    ForEach(program.orderedDays) { day in
-                                        Text("\(day.order == program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : "")\(day.name)")
-                                            .font(.caption.bold())
-                                            .foregroundStyle(day.order == program.nextDayIndex ? Theme.accent : .secondary)
-                                        if day.id != program.orderedDays.last?.id { Text("→").foregroundStyle(.tertiary) }
-                                    }
-                                }
-                            }
-                            .accessibilityLabel("Program sequence, \(nextDay(program)?.name ?? "next day") is now")
-                        }
-                    }
                 }
 
                 if let program = activeProgram, let day = nextDay(program) {

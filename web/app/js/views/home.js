@@ -78,6 +78,16 @@ export async function render(host) {
         onClick: async () => openSession(await createSessionFromProgramDay(program, nextProgramDay)) })));
   }
 
+  if (program?.days?.length) {
+    const days = [...program.days].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    root.append(ui.h("div", { class: "day-sequence", role: "status", ariaLabel: `${nextProgramDay?.name || "Next day"} is now` },
+      ...days.flatMap((day, index) => [
+        ui.h("span", { class: day.order === program.nextDayIndex ? "now" : "",
+          text: `${day.order === program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : ""}${day.name}` }),
+        index < days.length - 1 ? document.createTextNode(" → ") : null,
+      ].filter(Boolean))));
+  }
+
   // The keychain replacement is prominent until today's scan, then compact.
   const gymProminent = !gym?.barcodeImage || localStorage.getItem("cadenceGymTagAutoDay") !== todayKey;
   root.append(ui.h("div", { class: "card gym-tag-hero" },
@@ -131,16 +141,10 @@ export async function render(host) {
         ui.h("div", { class: "lead" },
           ui.h("span", { class: `title readiness-${report.currentReadiness}`, text: `Coach · ${report.currentReadiness[0].toUpperCase() + report.currentReadiness.slice(1)}` }),
           ui.h("span", { class: "sub", text: latest?.reasons?.[0] || "Bank program days to establish an output baseline." })),
+        ui.h("span", { class: "readiness-dots", ariaLabel: "Recent rotation readiness" },
+          ...report.rotations.slice(-4).map((rotation) => ui.h("i", { class: `readiness-${rotation.readiness}` }))),
         ui.h("span", { class: "pill accent", text: `${visible.length} recommendation${visible.length === 1 ? "" : "s"}` }));
     root.append(coach);
-
-    const days = [...program.days].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    root.append(ui.h("div", { class: "day-sequence", role: "status", ariaLabel: `${nextProgramDay?.name || "Next day"} is now` },
-      ...days.flatMap((day, index) => [
-        ui.h("span", { class: day.order === program.nextDayIndex ? "now" : "",
-          text: `${day.order === program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : ""}${day.name}` }),
-        index < days.length - 1 ? document.createTextNode(" → ") : null,
-      ].filter(Boolean))));
   }
 
   // Program — the next scheduled day
