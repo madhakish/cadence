@@ -64,7 +64,6 @@ const validFile = () => ({
 const otherDomains = async () => ({
   sessions: (await db.Sessions.all()).length,
   bodyweight: (await db.Bodyweight.all()).length,
-  protein: (await db.Protein.all()).length,
   milestones: (await db.Milestones.all()).length,
   checkIns: (await db.Checkins.all()).length,
   gyms: (await db.Gyms.all()).length,
@@ -200,7 +199,6 @@ const otherDomains = async () => ({
 {
   await db.Bodyweight.add({ date: "2026-07-01T12:00:00.000Z", weightLb: 201 });
   await db.Bodyweight.add({ date: "2026-07-08T12:00:00.000Z", weightLb: 199 });
-  await db.Protein.add({ date: "2026-07-01T12:00:00.000Z", grams: 180 });
   await db.Milestones.add({
     date: "2026-07-01T12:00:00.000Z", exerciseName: "Back Squat", kind: "weight", label: "Fixture PR",
   });
@@ -222,7 +220,6 @@ const otherDomains = async () => ({
   ok(after.sessions === before.sessions, `session count unchanged (${before.sessions} -> ${after.sessions})`);
   ok(after.bodyweight === before.bodyweight, `bodyweight entries unchanged (${before.bodyweight} -> ${after.bodyweight})`);
   ok(after.milestones === before.milestones, `milestone count unchanged (${before.milestones} -> ${after.milestones})`);
-  ok(after.protein === before.protein, "protein entries unchanged");
   ok(after.checkIns === before.checkIns, "check-ins unchanged");
   ok(after.gyms === before.gyms, "gyms unchanged");
   ok(after.exercises === before.exercises, "the exercise library was not added to by a fully-resolvable file");
@@ -524,6 +521,67 @@ const otherDomains = async () => ({
   ok(copied.action === "created", "the additive import of the same file still succeeds");
   const copy = (await db.Programs.all()).find((p) => p.uuid === copied.programId);
   ok(copy.days[0].lifts[0].id !== liveLiftID, "the additive import minted a fresh slot id");
+}
+
+// ---------------------------------------------------------------------------
+// [INV-TIED-ORDER-IS-AUTHORED] A file whose slots all carry the same order was written in
+// the sequence the author meant them to run. Storing the tie verbatim hands
+// display ordering to the alphabetical fallback — Pull-ups drift to the end of
+// the day because P sorts after D, and the alphabet does the programming.
+// The import must stamp array positions instead. Mirrors ProgramImportService.
+// ---------------------------------------------------------------------------
+{
+  const lift = (exerciseName, role) => ({
+    ...validFile().program.days[0].lifts[0], exerciseName, role,
+  });
+  const acc = (exerciseName) => ({
+    ...validFile().program.days[0].accessories[0], exerciseName,
+  });
+
+  const file = validFile();
+  file.program.name = "Fixture Authored Order";
+  file.program.days = [
+    {
+      // Hardest-first authoring, every order tied at 0. Alphabetically this
+      // day reads DB Curls, Face Pulls, Pull-ups — the exact reverse — and
+      // the lift tie would fall to main-first, flipping the authored pair.
+      name: "Tied", order: 0,
+      lifts: [lift("Chest-supported Row", "complementary"), lift("Back Squat", "main")],
+      accessories: [acc("Pull-ups"), acc("Face Pulls"), acc("DB Curls")],
+    },
+    {
+      // Distinct orders are the author's explicit sequence and survive
+      // verbatim — the rescue applies only to the all-tied degenerate case.
+      name: "Explicit", order: 1,
+      lifts: [lift("Back Squat", "main")],
+      accessories: [{ ...acc("Face Pulls"), order: 1 }, { ...acc("DB Curls"), order: 0 }],
+    },
+  ];
+
+  const report = await pf.importProgramFile(file);
+  const created = (await db.Programs.all()).find((p) => p.uuid === report.programId);
+  const tied = created.days.find((d) => d.name === "Tied");
+  const explicit = created.days.find((d) => d.name === "Explicit");
+
+  ok(tied.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")
+    === "Chest-supported Row:0, Back Squat:1",
+    `[INV-TIED-ORDER-IS-AUTHORED] tied lifts keep authored sequence over the main-first fallback (got: ${
+      tied.lifts.map((l) => `${l.exerciseName}:${l.order}`).join(", ")})`);
+  ok(tied.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")
+    === "Pull-ups:0, Face Pulls:1, DB Curls:2",
+    `[INV-TIED-ORDER-IS-AUTHORED] tied accessories keep authored sequence over the alphabet (got: ${
+      tied.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")})`);
+  ok(explicit.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")
+    === "Face Pulls:1, DB Curls:0",
+    `[INV-TIED-ORDER-IS-AUTHORED] explicit distinct orders survive verbatim (got: ${
+      explicit.accessories.map((a) => `${a.exerciseName}:${a.order}`).join(", ")})`);
+
+  // Round trip: the exporter sorts by stored order, so the file this program
+  // now writes carries the authored sequence with the tie resolved.
+  const reexported = JSON.parse(pf.exportProgramText(created));
+  ok(reexported.program.days[0].accessories.map((a) => a.exerciseName).join(", ")
+    === "Pull-ups, Face Pulls, DB Curls",
+    "[INV-TIED-ORDER-IS-AUTHORED] the re-exported file keeps the authored accessory sequence");
 }
 
 // ---------------------------------------------------------------------------

@@ -105,6 +105,17 @@ run does not create another release. Set `full_migrations=true` only when you
 also need to force regeneration/verification of every shipped-store upgrade
 path.
 
+### Release queue
+
+Every push to `main` and manual production dispatch joins the
+`cadence-production-release` concurrency queue before validation begins. The
+queue uses GitHub Actions' maximum pending depth, so a newer commit cannot
+replace an older pending run after that run has already started working toward
+a release. The semantic-release job also uses its own maximum-depth queue as a
+second serialization boundary. GitHub currently caps a concurrency queue at
+100 pending runs; if Cadence ever approaches that limit, stop merging and clear
+the release backlog rather than accepting a skipped production candidate.
+
 The build then appears in **App Store Connect → TestFlight** and the
 **TestFlight app** on your phone (install TestFlight from the App Store and sign
 in with the same Apple ID). Builds last **90 days**.

@@ -67,7 +67,8 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
 }
 
 const PREFERRED_EXERCISES = {
-  verticalPull: ["Lat Pulldown", "Assisted Pull-up", "Pull-ups"],
+  verticalPull: ["Lat Pulldown", "Assisted Pull-up", "Pull-ups", "Chin-ups",
+    "Weighted Pull-up", "Weighted Chin-up"],
   kneeFlexion: ["Seated Leg Curl", "Lying Leg Curl", "Nordic Hamstring Curl"],
   shoulderStability: ["Face Pulls", "Band External Rotation", "Y-T-W Raises"],
   adductor: ["Copenhagen Plank", "Cable Hip Adduction"],

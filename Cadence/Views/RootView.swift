@@ -13,6 +13,7 @@ struct RootView: View {
     @State private var restTimer = RestTimer()
     @State private var workoutClock = WorkoutClock()
     @State private var pendingSessionID: String?
+    @State private var pendingSignals = false
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -20,14 +21,14 @@ struct RootView: View {
                 HomeView(pendingSessionID: $pendingSessionID)
                     .tabItem { Label("Today", systemImage: "figure.strengthtraining.traditional") }
                     .tag(0)
+                ProgramOverviewView()
+                    .tabItem { Label("Program", systemImage: "list.bullet.clipboard") }
+                    .tag(1)
                 HistoryView()
                     .tabItem { Label("History", systemImage: "calendar") }
-                    .tag(1)
-                BodyView()
-                    .tabItem { Label("Body", systemImage: "scalemass") }
                     .tag(2)
-                InjuryTimelineView()
-                    .tabItem { Label("Signals", systemImage: "bolt.heart") }
+                BodyView(pendingSignals: $pendingSignals)
+                    .tabItem { Label("Body", systemImage: "scalemass") }
                     .tag(3)
                 SettingsView()
                     .tabItem { Label("Settings", systemImage: "gearshape") }
@@ -67,6 +68,12 @@ struct RootView: View {
             } else if url.host == "workout", let id = url.pathComponents.dropFirst().first, !id.isEmpty {
                 selection = 0
                 pendingSessionID = id
+            } else if url.host == "signals" {
+                // The link used to land ON the Signals screen; selecting the
+                // tab that merely contains it would strip a navigation level
+                // from every existing shortcut.
+                selection = 3
+                pendingSignals = true
             }
         }
         .onChange(of: scenePhase) { _, phase in

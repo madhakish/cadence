@@ -58,11 +58,15 @@ export function lineChart(series, { height = 200, fmtY = (v) => String(Math.roun
   return svg;
 }
 
-// Rotation → line colour: escalating heat to Peak, muted Deload. Mirrors the
-// native ProgressionChartsView.rotationColors.
+// Rotation → line colour: escalating heat to Peak, muted Recovery. Mirrors the
+// native ProgressionChartsView.rotationPalette.
+//
+// These keys must be the labels `C.chartRotationLabel` produces. Rotation 4 was
+// renamed Deload → Recovery with the recovery bridge; the stale key here meant
+// R4 missed the palette and fell through to the neutral default.
 export const ROTATION_COLORS = {
   "R1 Volume": "#5ba06a", "R2 Load": "#e8b008", "R3 Peak": "#ef4444",
-  "R4 Deload": "#8b9196", "Untracked": "#666b71",
+  "R4 Recovery": "#8b9196", "Untracked": "#666b71",
 };
 
 // Role → line style. A lift can occupy a MAIN slot on one day and a
@@ -84,10 +88,16 @@ export const ROLE_DASH = { main: null, complementary: "5 4" };
 //
 // lines: [{ key, label, color, dash, points: [{ t, y }] }]
 // bars:  { label, points: [{ t, y }], color }   (optional)
+// projection: { label, color, points: [{ t, y }], nowT }   (optional)
+//   The fitted trend extended past today. It shares the load axis with the
+//   lines it continues — a forecast on its own scale would be meaningless —
+//   but it is drawn dashed, thinner, behind a shaded future region and a
+//   "today" divider, so no glance confuses it with performed work.
 export function progressionChart({
   lines = [], bars = null, height = 220, fmtY = (v) => String(Math.round(v)),
   fmtBar = (v) => String(Math.round(v)), targetY = null, targetLabel = "Target",
-  caption = null,
+  projection = null, area = true, caption = null,
+  onSelect = null,
 } = {}) {
   const W = 340, H = height, padL = 40, padT = 16, padB = 26;
   const padR = bars ? 42 : 14;
@@ -97,15 +107,17 @@ export function progressionChart({
 
   const drawn = lines.filter((l) => l.points && l.points.length);
   const barPoints = bars?.points?.filter((p) => Number.isFinite(p.y)) || [];
-  const everyPoint = [...drawn.flatMap((l) => l.points), ...barPoints];
+  const projected = (projection?.points || []).filter((p) => Number.isFinite(p.y) && Number.isFinite(p.t));
+  const everyPoint = [...drawn.flatMap((l) => l.points), ...barPoints, ...projected];
   if (!everyPoint.length) return wrap;
 
   const tmin = Math.min(...everyPoint.map((p) => p.t));
   const tmax = Math.max(...everyPoint.map((p) => p.t));
   const xAt = (t) => padL + (W - padL - padR) * (tmax > tmin ? (t - tmin) / (tmax - tmin) : 0.5);
 
-  // Load axis spans only the load lines; volume must never stretch it.
-  const loadValues = drawn.flatMap((l) => l.points.map((p) => p.y));
+  // Load axis spans the load lines AND the projection that continues them —
+  // a forecast clipped off the top of the plot is worse than none.
+  const loadValues = [...drawn.flatMap((l) => l.points.map((p) => p.y)), ...projected.map((p) => p.y)];
   if (Number.isFinite(targetY)) loadValues.push(targetY);
   let ymin = loadValues.length ? Math.min(...loadValues) : 0;
   let ymax = loadValues.length ? Math.max(...loadValues) : 1;
@@ -134,6 +146,20 @@ export function progressionChart({
     }
   }
 
+  // The future, shaded, before anything is drawn on top of it: the region
+  // right of today is a different kind of space and should read that way
+  // before the eye reaches the dashes.
+  // Same guard the divider uses. Shading is only meaningful when today falls
+  // INSIDE the plotted span; a nowT left of the domain would otherwise wash
+  // the whole plot with no divider to explain what the wash means.
+  const nowT = Number.isFinite(projection?.nowT) ? projection.nowT : null;
+  const showsFuture = nowT !== null && tmax > nowT && nowT > tmin;
+  if (showsFuture) {
+    const x = xAt(nowT);
+    svg.append(el("rect", { class: "future", x: x.toFixed(1), y: padT,
+      width: Math.max(0, W - padR - x).toFixed(1), height: H - padT - padB }));
+  }
+
   for (const v of [ymin + padY, (ymin + ymax) / 2, ymax - padY]) {
     const y = yAt(v);
     svg.append(el("line", { class: "axis", x1: padL, y1: y, x2: W - padR, y2: y, opacity: 0.45 }));
@@ -146,6 +172,20 @@ export function progressionChart({
     svg.append(el("text", { class: "ann", x: W - padR, y: y - 5, "text-anchor": "end" }, `${targetLabel} ${fmtY(targetY)}`));
   }
 
+  // A wash under a LONE line gives the plot depth without adding a second
+  // thing to read. With several lines up there is no "the" line to fill:
+  // shading one of four rotations, or working weight over the volume bars,
+  // reads as a region that means something. Native gates this the same way
+  // (`showsAreaFill`); web filling unconditionally made the two clients draw
+  // different charts from the same data.
+  if (area && drawn.length === 1 && drawn[0].points.length > 1) {
+    const pts = [...drawn[0].points].sort((a, b) => a.t - b.t);
+    const d = `${pts.map((p, i) => `${i ? "L" : "M"}${xAt(p.t).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ")}`
+      + ` L${xAt(pts.at(-1).t).toFixed(1)} ${baseline.toFixed(1)}`
+      + ` L${xAt(pts[0].t).toFixed(1)} ${baseline.toFixed(1)} Z`;
+    svg.append(el("path", { class: "area", d, style: `fill:${drawn[0].color || "var(--accent)"}` }));
+  }
+
   for (const line of drawn) {
     const pts = [...line.points].sort((a, b) => a.t - b.t);
     const d = pts.map((p, i) => `${i ? "L" : "M"}${xAt(p.t).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ");
@@ -155,15 +195,45 @@ export function progressionChart({
       style: `stroke:${stroke}${line.dash ? `;stroke-dasharray:${line.dash}` : ""}`,
     }));
     for (const p of pts) {
-      svg.append(el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y), r: pts.length > 30 ? 1.6 : 2.6, style: `fill:${stroke}` }));
+      const dot = el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y), r: onSelect ? 5 : (pts.length > 30 ? 1.6 : 2.6),
+        style: `fill:${stroke}`, ...(onSelect ? { tabindex: 0, role: "button" } : {}) });
+      if (onSelect) {
+        dot.setAttribute("aria-label", `Select ${tick(p.t)}, ${fmtY(p.y)}`);
+        dot.addEventListener("click", () => onSelect(p));
+        dot.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(p); }
+        });
+      }
+      svg.append(dot);
     }
+  }
+
+  // The projection last, so it reads as an overlay on the history rather than
+  // another member of it. No dots: there is no session to mark.
+  if (projected.length > 1) {
+    const pts = [...projected].sort((a, b) => a.t - b.t);
+    const d = pts.map((p, i) => `${i ? "L" : "M"}${xAt(p.t).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ");
+    svg.append(el("path", { class: "projection", d,
+      style: `stroke:${projection.color || "var(--accent)"}` }));
+    const end = pts.at(-1);
+    svg.append(el("circle", { class: "dot", cx: xAt(end.t), cy: yAt(end.y), r: 2.6,
+      style: `fill:${projection.color || "var(--accent)"};opacity:.95` }));
+    svg.append(el("text", { class: "ann", x: W - padR, y: yAt(end.y) - 6, "text-anchor": "end" },
+      fmtY(end.y)));
+  }
+  if (showsFuture) {
+    const x = xAt(nowT);
+    svg.append(el("line", { class: "now-line", x1: x, y1: padT, x2: x, y2: baseline }));
+    svg.append(el("text", { class: "now-lbl", x: x + 3, y: padT + 8 }, "today"));
   }
 
   svg.append(el("text", { class: "lbl", x: padL, y: H - 6 }, tick(tmin)));
   if (tmax > tmin) svg.append(el("text", { class: "lbl", x: W - padR, y: H - 6, "text-anchor": "end" }, tick(tmax)));
 
   const legendItems = [...drawn.map((l) => ({ label: l.label || l.key, color: l.color, dash: l.dash })),
-    ...(barPoints.length ? [{ label: bars.label || "Volume", color: bars.color, bar: true }] : [])];
+    ...(barPoints.length ? [{ label: bars.label || "Volume", color: bars.color, bar: true }] : []),
+    ...(projected.length > 1
+      ? [{ label: projection.label || "Projected", color: projection.color, dash: "3 5" }] : [])];
   if (legendItems.length > 1) {
     const legend = document.createElement("div");
     legend.className = "chart-legend";
@@ -172,7 +242,10 @@ export function progressionChart({
       const swatch = document.createElement("i");
       swatch.style.background = item.color || "var(--accent)";
       if (item.bar) { swatch.style.height = "8px"; swatch.style.width = "6px"; swatch.style.opacity = ".55"; }
-      else if (item.dash) { swatch.style.background = "none"; swatch.style.borderTop = `3px dashed ${item.color}`; }
+      // Same accent fallback the solid swatch takes: a missing colour here
+      // produced the literal `3px dashed undefined`, an invalid rule that
+      // dropped the swatch entirely.
+      else if (item.dash) { swatch.style.background = "none"; swatch.style.borderTop = `3px dashed ${item.color || "var(--accent)"}`; }
       span.append(swatch, document.createTextNode(item.label));
       legend.append(span);
     }

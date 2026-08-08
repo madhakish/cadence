@@ -30,7 +30,11 @@ struct ActiveSessionView: View {
     @State private var bankErrorMessage = ""
     @State private var showIncompleteBankConfirmation = false
 
-    private var currentOrFirst: SessionExercise? { currentEntry ?? session.orderedExercises.first }
+    private var currentOrFirst: SessionExercise? {
+        currentEntry
+            ?? session.orderedExercises.first { $0.plannedWorkingSets.contains { $0.status == .planned } }
+            ?? session.orderedExercises.first
+    }
     private var gym: Gym? {
         gyms.first { $0.id == session.gymID }
             ?? gyms.first { $0.name == session.gymName }
@@ -42,6 +46,26 @@ struct ActiveSessionView: View {
     }
     private var completedSetCount: Int {
         session.orderedExercises.flatMap(\.plannedWorkingSets).filter { $0.status == .completed }.count
+    }
+    private var totalWorkSetCount: Int { session.orderedExercises.flatMap(\.plannedWorkingSets).count }
+    /// Position, not achievement: a skipped set is resolved and moves the
+    /// workout forward, so the ordinal must count it or skipping every set
+    /// would read "1 of N" forever. Mirrors web session.js.
+    private var resolvedWorkSetCount: Int {
+        session.orderedExercises.flatMap(\.plannedWorkingSets).filter { $0.status != .planned }.count
+    }
+    private var currentExerciseNumber: Int {
+        guard let currentOrFirst,
+              let index = session.orderedExercises.firstIndex(where: { $0.persistentModelID == currentOrFirst.persistentModelID })
+        else { return session.orderedExercises.isEmpty ? 0 : 1 }
+        return index + 1
+    }
+    private var workoutName: String {
+        let program = session.programID.flatMap { id in programs.first { $0.id == id } }
+            ?? programs.first { $0.name == session.programName }
+        return session.programDayIndex.flatMap { index in
+            program?.orderedDays.first { $0.order == index }?.name
+        } ?? session.programName ?? "Workout"
     }
     /// The stopwatch origin lives in WorkoutClock (root-scoped), so it survives
     /// leaving this screen — and, via the Live Activity, app relaunch.
@@ -74,6 +98,14 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(totalWorkSetCount == 0 ? 0 : min(resolvedWorkSetCount + 1, totalWorkSetCount)) of \(totalWorkSetCount) work sets")
+                        .font(.headline.monospacedDigit())
+                    Text(session.date.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             trainingAtSection
             exerciseSections
 
@@ -132,7 +164,7 @@ struct ActiveSessionView: View {
         // name / default rest without changing which SessionExercise is current.
         .onChange(of: currentOrFirst?.exercise?.name) { pushActivityContext() }
         .onChange(of: currentRestSeconds) { pushActivityContext() }
-        .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
+        .navigationTitle(workoutName)
         .navigationBarTitleDisplayMode(.inline)
         .alert("Couldn't bank the session", isPresented: $showBankError) {
             Button("OK", role: .cancel) {}
@@ -151,9 +183,14 @@ struct ActiveSessionView: View {
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Later") {
+                // Navigation only. Leaving the logger must not mutate either
+                // timer; pause/end remain explicit workout-clock controls.
+                Button {
                     if PersistenceErrorCenter.shared.save(context, operation: "Saving the open session") { dismiss() }
+                } label: {
+                    Label("Back", systemImage: "chevron.backward")
                 }
+                .accessibilityHint("Returns to Today while the workout and rest timers keep running")
             }
             // Workout clock controls: pause/resume/reset the stopwatch, or end
             // the workout outright (Live Activity + timers) without banking —
@@ -180,7 +217,7 @@ struct ActiveSessionView: View {
                     Divider()
                     Divider()
                     // The way OUT of a session you never want to keep. Without
-                    // this the only exits were Later (leaves it open), Stop
+                    // this the only exits were Back (leaves it open), Stop
                     // workout clock (stops the clock, leaves it open), and
                     // Bank it (commits it) — so a session started by mistake
                     // could not be got rid of from inside it at all, and the
@@ -467,6 +504,7 @@ private struct ExerciseSection: View {
     @Environment(RestTimer.self) private var restTimer
 
     @Bindable var entry: SessionExercise
+    @State private var showAllSets = false
     // Passed down from ActiveSessionView (which already queries them) — a
     // per-section @Query would register one redundant fetch per exercise.
     let settings: AppSettings?
@@ -496,9 +534,9 @@ private struct ExerciseSection: View {
         return allExercises.filter {
             SwapRules.compatible(
                 currentName: cur.name, currentCategory: cur.categoryRaw,
-                currentType: cur.typeRaw, currentGroup: cur.movementGroup,
+                currentLoadBasis: cur.loadBasis, currentGroup: cur.movementGroup,
                 candidateName: $0.name, candidateCategory: $0.categoryRaw,
-                candidateType: $0.typeRaw, candidateGroup: $0.movementGroup,
+                candidateLoadBasis: $0.loadBasis, candidateGroup: $0.movementGroup,
                 candidateShelved: $0.isShelved
             )
         }
@@ -690,8 +728,10 @@ private struct ExerciseSection: View {
                 // yet. Warmups sit quiet (and often go unflagged, so they must
                 // not hold the rail hostage).
                 let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }?.persistentModelID == set.persistentModelID
+                let showLoadout = showAllSets || isCurrent || loadChanges(at: set)
                 VStack(alignment: .leading, spacing: 4) {
                     SetRow(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
+                           compact: !showAllSets && !isCurrent,
                            targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onLogged: {
                         onWork(entry)
                         // Auto-start only if the user opted in (manual is the
@@ -703,11 +743,11 @@ private struct ExerciseSection: View {
                     }, onRemove: { removeSet(set) })
                     // Loadout visualization — plates for barbell lifts, the
                     // rack number for dumbbell lifts. Mirrors web.
-                    if entry.exercise?.type == .barbell && set.weightLb > 0 {
+                    if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
                         BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
                                     bar: effectiveBar, gym: gym,
                                     targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb)
-                    } else if entry.exercise?.type == .dumbbell && set.weightLb > 0 {
+                    } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
                 }
@@ -716,6 +756,13 @@ private struct ExerciseSection: View {
                 let ordered = entry.orderedSets
                 for index in offsets.sorted(by: >) { removeSet(ordered[index], save: false) }
                 PersistenceErrorCenter.shared.save(context, operation: "Deleting the set")
+            }
+
+            if entry.orderedSets.count > 1 {
+                Button(showAllSets ? "Focus current set" : "Show all sets") {
+                    showAllSets.toggle()
+                }
+                .font(.caption.bold())
             }
 
             // The row must never solve a tight fit by wrapping label text
@@ -758,8 +805,8 @@ private struct ExerciseSection: View {
         } header: {
             HStack {
                 Text(entry.exercise?.name ?? "Exercise")
-                if let phase = entry.phase {
-                    Text(phase.label).foregroundStyle(Theme.accent)
+                if let phaseLabel = entry.truthfulPhaseLabel {
+                    Text(phaseLabel).foregroundStyle(Theme.accent)
                 }
                 if let lastTime {
                     Text(lastTime).textCase(nil)
@@ -811,6 +858,17 @@ private struct ExerciseSection: View {
                 Text("Watch: \(site.rawValue.lowercased()) — \(site.watchNote)")
             }
         }
+    }
+
+    private func loadChanges(at set: SetEntry) -> Bool {
+        let ordered = entry.orderedSets
+        guard let index = ordered.firstIndex(where: { $0.persistentModelID == set.persistentModelID }), index > 0 else {
+            return false
+        }
+        let previous = ordered[index - 1]
+        return abs(previous.weightLb - set.weightLb) > 0.001
+            || previous.loadBasis != set.loadBasis
+            || previous.resolvedImplementCount != set.resolvedImplementCount
     }
 
     /// [INV-RUCK-CARRIES-ITS-LOAD] What a new duration-based set starts loaded
@@ -941,6 +999,8 @@ private struct SetRow: View {
     let bar: Bar
     /// The set you're ON (first with no verdict yet) — gets the accent rail.
     let isCurrent: Bool
+    /// Completed/future rows retain every control but give the current set the cockpit.
+    let compact: Bool
     /// The program/track weight this session recommends — the picker anchors here.
     let targetLb: Double?
     var onLogged: () -> Void
@@ -953,6 +1013,17 @@ private struct SetRow: View {
     /// burpees (category Conditioning, type bodyweight) keeps the lifting row.
     private var isCardio: Bool { exercise?.type == .conditioning }
     private var isTimed: Bool { exercise?.type == .timed }
+
+    /// The affordance line names the fields the sheet will actually show, from
+    /// the same rule the sheet uses, so the row never advertises one the sheet
+    /// withholds — nor understates it, which is what a hand-written string did
+    /// for a climb still holding a legacy distance.
+    private var cardioHint: String {
+        CardioFormat.fields(exerciseName: exercise?.name ?? "",
+                            flights: set.flights,
+                            distanceMiles: set.distanceMiles,
+                            inclinePercent: set.inclinePercent).label
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -972,9 +1043,10 @@ private struct SetRow: View {
                          ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
                                                  durationSeconds: set.durationSeconds,
                                                  inclinePercent: set.inclinePercent,
-                                                 loadLb: set.weightLb)
+                                                 loadLb: set.weightLb,
+                                                 flights: set.flights)
                          : (isTimed ? CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) : weightLabel))
-                        .font(.title3.bold().monospacedDigit())
+                        .font((isCurrent ? Font.title2 : (compact ? Font.callout : Font.title3)).bold().monospacedDigit())
                         .foregroundStyle(set.isWarmup ? .secondary : .primary)
                     HStack(spacing: 6) {
                         if !isCardio && !isTimed {
@@ -982,13 +1054,23 @@ private struct SetRow: View {
                                 .font(.callout.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         } else if isCardio {
-                            Text("tap to log distance · time · incline")
+                            Text("tap to log \(cardioHint)")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         } else {
                             Text("tap to adjust hold time")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
+                        }
+                        if !isCardio && !isTimed,
+                           let plannedWeight = set.plannedWeightLb,
+                           let plannedReps = set.plannedReps,
+                           abs(plannedWeight - set.weightLb) > 0.001 || plannedReps != set.reps {
+                            let plannedLoad = set.enteredUnit == .kg
+                                ? "\(Weight.trim(Weight.kg(fromLb: plannedWeight))) kg"
+                                : "\(Weight.trim(plannedWeight)) lb"
+                            Text("planned \(plannedLoad)×\(plannedReps)")
+                                .font(.caption2).foregroundStyle(.secondary)
                         }
                         if set.isWarmup {
                             Text(set.prescriptionBlock == .primer ? "primer" : "warmup")
@@ -1022,6 +1104,14 @@ private struct SetRow: View {
             Spacer()
 
             SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onCompleted: onLogged)
+        }
+        .padding(isCurrent ? 12 : 0)
+        .background {
+            if isCurrent {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Theme.accent.opacity(0.10))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.45)))
+            }
         }
         .sheet(isPresented: $showDetail) {
             if isCardio {
@@ -1061,6 +1151,9 @@ private struct SetRow: View {
 private struct CardioSetSheet: View {
     /// Which side is currently computed from the other two.
     private enum Derived { case speed, distance }
+    /// The same idea against the climber's yardstick: either the pace is the
+    /// readout, or the count is.
+    private enum FlightDerived { case pace, flights }
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -1073,16 +1166,51 @@ private struct CardioSetSheet: View {
     /// became editable.
     @State private var derived: Derived = .speed
 
-    private var carriesLoad: Bool { CardioFormat.carriesLoad(exerciseName: exerciseName) }
+    /// The count is what gets stored, so flights start as the entered value
+    /// and the pace is the readout.
+    @State private var flightDerived: FlightDerived = .pace
+
+    /// [INV-STAIRS-COUNT-FLIGHTS] Which fields this sheet offers, captured
+    /// ONCE when it opens.
+    ///
+    /// Deliberately state rather than a computed property: the rule reads the
+    /// values being edited, so recomputing it would let a field delete itself
+    /// mid-edit. Stepping a legacy climb's distance to zero would remove the
+    /// distance and speed rows on the spot — and permanently, since reopening
+    /// re-evaluates the same now-false condition — leaving no way to retype the
+    /// number that had just been cleared.
+    @State private var fields: CardioFormat.CardioFields
+
+    init(set: SetEntry, exerciseName: String, onDelete: @escaping () -> Void) {
+        self._set = Bindable(wrappedValue: set)
+        self.exerciseName = exerciseName
+        self.onDelete = onDelete
+        self._fields = State(initialValue: CardioFormat.fields(
+            exerciseName: exerciseName,
+            flights: set.flights,
+            distanceMiles: set.distanceMiles,
+            inclinePercent: set.inclinePercent
+        ))
+    }
+
+    private var carriesLoad: Bool { fields.load }
     private var carryLb: Double { self.set.weightLb }
+
+    private var showsFlights: Bool { fields.flights }
+    private var showsDistance: Bool { fields.distance }
+    private var showsIncline: Bool { fields.incline }
 
     // `self.` keeps the parser from reading `set` as a setter declaration
     // (the type has a property named `set` — see CompileRegressionTests).
     private var miles: Double { self.set.distanceMiles ?? 0 }
     private var secs: Int { self.set.durationSeconds ?? 0 }
     private var incline: Double { self.set.inclinePercent ?? 0 }
+    private var flights: Double { self.set.flights ?? 0 }
     private var mph: Double {
         CardioFormat.speedMph(distanceMiles: self.set.distanceMiles, durationSeconds: self.set.durationSeconds) ?? 0
+    }
+    private var flightPace: Double {
+        CardioFormat.flightPace(flights: self.set.flights, durationSeconds: self.set.durationSeconds) ?? 0
     }
 
     /// Typing a distance makes speed the readout again.
@@ -1102,15 +1230,40 @@ private struct CardioSetSheet: View {
         set.distanceMiles = solved
     }
 
+    /// Typing a count makes the pace the readout again.
+    private func applyFlights(_ value: Double) {
+        set.flights = value > 0 ? value : nil
+        flightDerived = .pace
+    }
+
+    /// Setting a pace computes the count it reaches in the logged time — the
+    /// planned case, "twenty minutes at eight floors a minute".
+    private func applyFlightPace(_ value: Double) {
+        // With no time logged there is nothing to solve against. Assigning the
+        // nil would delete a count the lifter already has, so leave it — and
+        // leave the derived side alone too, because a footer claiming the count
+        // is calculated from a pace nothing stored would simply be untrue.
+        guard let solved = CardioFormat.flights(pacePerMinute: value, durationSeconds: set.durationSeconds)
+        else { return }
+        set.flights = solved
+        flightDerived = .flights
+    }
+
     /// Changing the time holds whichever side the lifter last set. If they
     /// entered a pace, a longer walk means more distance at that same pace;
-    /// if they entered a distance, it means a slower one.
+    /// if they entered a distance, it means a slower one. Flights follow the
+    /// same rule against their own pace.
     private func applyDuration(_ value: Int) {
         let keptSpeed = CardioFormat.speedMph(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds)
+        let keptPace = CardioFormat.flightPace(flights: set.flights, durationSeconds: set.durationSeconds)
         set.durationSeconds = value > 0 ? value : nil
         if derived == .distance, let keptSpeed,
            let solved = CardioFormat.distanceMiles(speedMph: keptSpeed, durationSeconds: set.durationSeconds) {
             set.distanceMiles = solved
+        }
+        if flightDerived == .flights, let keptPace,
+           let solved = CardioFormat.flights(pacePerMinute: keptPace, durationSeconds: set.durationSeconds) {
+            set.flights = solved
         }
     }
 
@@ -1118,26 +1271,19 @@ private struct CardioSetSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Stepper("Distance: \(miles > 0 ? "\(Weight.trim(miles, decimals: 2)) mi" : "—")",
-                            value: Binding(get: { miles }, set: { applyDistance($0) }),
-                            in: 0...100, step: 0.25)
-                    distanceTypeRow
+                    flightCountRow
+                    distanceRows
                     Stepper("Time: \(secs > 0 ? CardioFormat.durationLabel(seconds: secs) : "—")",
                             value: Binding(get: { secs }, set: { applyDuration($0) }),
                             in: 0...36000, step: 60)
-                    Stepper("Speed: \(mph > 0 ? "\(Weight.trim(mph)) mph" : "—")",
-                            value: Binding(get: { mph }, set: { applySpeed($0) }),
-                            in: 0...20, step: 0.1)
-                    Stepper("Incline: \(incline > 0 ? "\(Weight.trim(incline))%" : "—")",
-                            value: Binding(get: { incline }, set: { set.inclinePercent = $0 > 0 ? $0 : nil }),
-                            in: 0...30, step: 0.5)
+                    speedRow
+                    flightPaceRow
+                    inclineRow
                     carryLoadRow
                 } header: {
-                    Text(carriesLoad ? "Load · distance · time · speed" : "Distance · time · speed · incline")
+                    Text(sectionHeader)
                 } footer: {
-                    Text(derived == .distance
-                         ? "Distance is calculated from speed and time."
-                         : "Speed is calculated from distance and time.")
+                    Text(sectionFooter)
                 }
                 Section {
                     Button("Delete set", role: .destructive) {
@@ -1155,6 +1301,97 @@ private struct CardioSetSheet: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Names only the fields this sheet is actually showing — the same list the
+    /// rows are built from, so the two cannot drift.
+    private var sectionHeader: String { fields.headerLabel }
+
+    /// Which value is the readout rather than the entry, so the lifter can see
+    /// which number the other two are driving.
+    private var sectionFooter: String {
+        if showsFlights && !showsDistance {
+            return flightDerived == .flights
+                ? "Flights are calculated from pace and time."
+                : "Pace is calculated from flights and time."
+        }
+        return derived == .distance
+            ? "Distance is calculated from speed and time."
+            : "Speed is calculated from distance and time."
+    }
+
+    /// [INV-STAIRS-COUNT-FLIGHTS] Whole steps: a console reports floors as a
+    /// count, and nobody climbs a third of one on purpose. A count solved from
+    /// a pace still keeps its decimal — the stepper is the entry, not the store.
+    @ViewBuilder
+    private var flightCountRow: some View {
+        if showsFlights {
+            Stepper("Flights: \(flights > 0 ? CardioFormat.flightsLabel(flights) : "—")",
+                    value: Binding(get: { flights }, set: { applyFlights($0) }),
+                    in: 0...2000, step: 1)
+            flightsTypeRow
+        }
+    }
+
+    /// Direct entry for the number on the console. A twenty-minute climb is a
+    /// three-figure count, and reaching it one tap at a time is not a thing
+    /// anyone does mid-workout — the stepper is for nudging, this is for
+    /// logging. Mirrors `distanceTypeRow`, which exists for the same reason.
+    private var flightsTypeRow: some View {
+        HStack {
+            Text("Type flights").foregroundStyle(.secondary)
+            Spacer()
+            TextField("flights", text: Binding(
+                get: { flights == 0 ? "" : Weight.trim(flights, decimals: 1) },
+                set: {
+                    if let v = Double($0.replacingOccurrences(of: ",", with: ".")), v > 0 { applyFlights(v) }
+                    else if $0.isEmpty { applyFlights(0) }
+                }
+            ))
+            .keyboardType(.decimalPad)
+            .multilineTextAlignment(.trailing)
+            .frame(width: 90)
+        }
+        .font(.callout)
+    }
+
+    @ViewBuilder
+    private var flightPaceRow: some View {
+        if showsFlights {
+            Stepper("Pace: \(flightPace > 0 ? "\(Weight.trim(flightPace)) fl/min" : "—")",
+                    value: Binding(get: { flightPace }, set: { applyFlightPace($0) }),
+                    in: 0...60, step: 0.5)
+        }
+    }
+
+    @ViewBuilder
+    private var distanceRows: some View {
+        if showsDistance {
+            Stepper("Distance: \(miles > 0 ? "\(Weight.trim(miles, decimals: 2)) mi" : "—")",
+                    value: Binding(get: { miles }, set: { applyDistance($0) }),
+                    in: 0...100, step: 0.25)
+            distanceTypeRow
+        }
+    }
+
+    @ViewBuilder
+    private var speedRow: some View {
+        if showsDistance {
+            Stepper("Speed: \(mph > 0 ? "\(Weight.trim(mph)) mph" : "—")",
+                    value: Binding(get: { mph }, set: { applySpeed($0) }),
+                    in: 0...20, step: 0.1)
+        }
+    }
+
+    /// A climber's grade is the machine, not a setting, so it gets no incline
+    /// row unless a legacy set already carries one.
+    @ViewBuilder
+    private var inclineRow: some View {
+        if showsIncline {
+            Stepper("Incline: \(incline > 0 ? "\(Weight.trim(incline))%" : "—")",
+                    value: Binding(get: { incline }, set: { set.inclinePercent = $0 > 0 ? $0 : nil }),
+                    in: 0...30, step: 0.5)
         }
     }
 

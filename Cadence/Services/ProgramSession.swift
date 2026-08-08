@@ -192,9 +192,14 @@ enum ProgramSession {
             entry.programSlotID = acc.id
             entry.plannedWeightLb = weightLb
             entry.targetWeightLb = acc.weightLb
-            let effectiveSets = acc.capacityManaged
+            let ordinarySets = acc.capacityManaged
                 ? max(1, Int((Double(acc.sets) * Double(accessoryPercent) / 100).rounded()))
                 : acc.sets
+            // Recovery keeps the authored movements familiar without carrying
+            // a normal accessory session into the bridge. One easy set per
+            // slot is enough exposure; completion deliberately cannot advance
+            // its rep/load target (see SessionCompletion).
+            let effectiveSets = phase == .deload ? 1 : ordinarySets
             entry.plannedSets = effectiveSets
             entry.plannedReps = isTimed ? 1 : acc.currentReps
             entry.plannedDurationSeconds = isTimed ? acc.targetSeconds : nil

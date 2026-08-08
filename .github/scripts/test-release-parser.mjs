@@ -75,6 +75,7 @@ for (const [label, body] of [
 }
 
 const workflow = await readFile(new URL("../workflows/ci.yml", import.meta.url), "utf8");
+const workflowConcurrency = workflow.match(/\nconcurrency:\n(?<block>[\s\S]*?)\n\n# Default every job/)?.groups?.block;
 const releaseJob = workflow.match(/\n  release:\n(?<job>[\s\S]*?)\n  # GitHub release binaries/)?.groups?.job;
 const releaseAssetsJob = workflow.match(/\n  release-assets:\n(?<job>[\s\S]*?)\n  testflight:\n/)?.groups?.job;
 const testflightJob = workflow.match(/\n  testflight:\n(?<job>[\s\S]*?)\n  deploy-web:\n/)?.groups?.job;
@@ -83,7 +84,13 @@ const releaseConfig = JSON.parse(
 );
 const githubPlugin = releaseConfig.plugins.find(([name]) => name === "@semantic-release/github");
 
+assert.ok(workflowConcurrency, "Expected ci.yml to define workflow concurrency");
+assert.match(workflowConcurrency, /'cadence-production-release'/);
+assert.match(workflowConcurrency, /format\('ci-pr-\{0\}-\{1\}'/);
+assert.match(workflowConcurrency, /queue: max/);
+assert.doesNotMatch(workflowConcurrency, /cancel-in-progress/);
 assert.ok(releaseJob, "Expected ci.yml to define release before release-assets");
+assert.match(releaseJob, /concurrency:\n\s+group: semantic-release\n\s+queue: max/);
 assert.match(releaseJob, /if: >-\n\s+always\(\) &&/);
 assert.match(releaseJob, /needs\.core-tests\.result == 'success'/);
 assert.match(releaseJob, /needs\.web-tests\.result == 'success'/);
@@ -115,4 +122,4 @@ assert.match(testflightJob, /needs\.release\.outputs\.published == 'true'/);
 assert.doesNotMatch(testflightJob, /needs:.*release-assets/);
 assert.match(testflightJob, /fetch-depth: 0\n\s+fetch-tags: true/);
 
-console.log(`${cases.length + 37} semantic-release contract assertions passed`);
+console.log(`${cases.length + 43} semantic-release contract assertions passed`);

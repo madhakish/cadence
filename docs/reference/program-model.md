@@ -11,8 +11,8 @@ the standalone "Next up" tracks.
 |---|---|
 | `name` | Display name |
 | `focus` | `strength` / `hypertrophy` / `maintain` — see table below |
-| `cycleNumber` | Which 4-week cycle you're on (increments at rollover) |
-| `currentWeek` | 1 volume · 2 load · 3 peak · 4 rest (deload) |
+| `cycleNumber` | Which mesocycle you're on (increments after recovery) |
+| `currentWeek` | Persisted compatibility name for the phase pointer: 1 volume · 2 load · 3 peak · 4 recovery |
 | `nextDayIndex` | The `order` of the day the Today screen offers next — a day's order value, not its position in the array |
 | `roundingLb` | Default load granularity. Dumbbells use at most 5 lb per-hand steps, and above-base wave rotations stay within one 5 lb rack jump |
 | `isActive` | Drives the Today screen |
@@ -27,7 +27,8 @@ hypertrophy to 78% with 1.5%, maintain never increments.
 ## Lift (per day)
 
 Day `order` values address the rotation: banking a day advances to the next
-day *by order*, and banking the highest-ordered day advances the week. The
+day *by order*, and banking the highest-ordered day advances rotations 1–3. The
+recovery bridge instead walks its selected representative day orders. The
 editors keep orders tidy at `0..n-1`, but nothing else depends on that — a
 gap or a duplicate (possible in a hand-edited or older backup, since orders
 are validated as unique but never as contiguous) still walks correctly.
@@ -38,6 +39,23 @@ refers to, so quietly renumbering days would leave those sessions unable to
 resume and would misattribute their work to the wrong day in history and
 coaching. `nextDayIndex` is likewise validated as *a member of* the day
 orders, not as an array index.
+
+Slot orders *within* a day are gentler: nothing banked points at them — the
+slot `id` is the identity — so they only decide the sequence a day runs in.
+Distinct slot orders survive import verbatim, but when every lift (or every
+accessory) in an imported day carries the same order, the tie is read as "the
+sequence the file was written in is the sequence the author programmed" and
+array positions are stamped instead. Otherwise the tie falls to the
+alphabetical display fallback and an authored hardest-first day quietly runs
+in dictionary order. See
+[Program files](program-file.md) for the rule's authorship.
+
+Resident web stores get the same repair, not just imports: normalization
+stamps an all-tied day at read time and the launch read persists it (older
+databases get it inside the V4 upgrade rewrite). Native legacy stores keep
+their documented main-first fallback instead — SwiftData's to-many
+relationships are unordered, so a pre-#69 store never kept an authored
+sequence to recover.
 
 The ordered day matrix is the prescription source of truth. For example,
 `Lower A: Back Squat/main + Deadlift/complementary` and
@@ -50,11 +68,12 @@ reconstruct the program.
 |---|---|
 | `id` | Stable slot identity; completion uses this rather than exercise name/order |
 | `role` | `main` (one per day, anchors it, rests longest) or `complementary` |
-| `baseWeightLb` | Rotation-1 (volume week) working weight; the wave derives the other weeks |
+| `baseWeightLb` | Rotation-1 volume working weight; the wave derives the other phases |
+| `deloadMultiplier` | Recovery intensity for wave-family styles, as a fraction of `baseWeightLb` (default 0.775, editable 0.50–0.90) — see [Progression rules](progression-rules.md#three-progression-rotations-and-a-recovery-bridge) |
 | `estimatedMaxLb` | Smoothed Epley e1RM; seeds the ceiling, re-estimated from every banked peak |
 | `stallCount` | Consecutive non-clean cycles; 2 triggers an automatic −10% deload |
 | `lastIncrementLb` | What the last rollover added |
-| `pending…` | Week-3 grade stashed until rollover |
+| `pending…` | Rotation-3 grade stashed until rollover |
 | `revertToExerciseName` | Set by a cycle-scoped swap; the slot reverts to this name at rollover |
 
 ## Accessory (per day)
@@ -68,6 +87,36 @@ reconstruct the program.
 | `weightLb` | Current load |
 | `incrementLb` | Load added when the range is earned; **0 = bodyweight** (climbs reps indefinitely, `maxReps` advisory) |
 | `revertToExerciseName` | As for lifts |
+
+## Vertical pulling is main work
+
+Pull-ups and chin-ups are **Main**-category exercises, not accessories. That
+is what makes them selectable in the progression charts, eligible for the
+forward projection, and gradeable against the rotation — an accessory is
+excluded from all three.
+
+Unloaded and weighted are **separate library entries**, because they disagree
+about what their number means:
+
+| Exercise | Load basis | Earns load PR / tonnage |
+|---|---|---|
+| `Pull-ups`, `Chin-ups` | `bodyweight` | No — reps and scheme only ([INV-NO-LOAD-WITHOUT-RESISTANCE](invariants.md)) |
+| `Weighted Pull-up`, `Weighted Chin-up` | `externalTotal` | Yes — belt weight is real resistance |
+
+One entry could only be honest about one of them: as bodyweight it would never
+credit real belt weight, and as external resistance an unweighted set would
+record `0 lb` and become eligible for exactly the meaningless PR that invariant
+prevents. Load basis is explicit and never inferred from the exercise name, and
+each set snapshots the basis it was logged under, so old records keep their
+meaning.
+
+`Assisted Pull-up` stays an accessory. It is a regression *toward* a pull-up
+and its progression runs backwards — less assistance is harder.
+
+A main-category exercise does not have to ride the Volume/Load/Peak wave.
+Bodyweight pull-ups suit `doubleProgression` — a rep window at a held load —
+which is one of the styles that builds its own session shape and so carries no
+phase name.
 
 ## Sessions generated from a day
 
@@ -85,6 +134,32 @@ Roles also shape the prescription itself. A main lift follows the phase wave
 **volume work, not a second miniature of that wave**: 3×8 at 90% of its base →
 3×8 at 95% → 3×6 at 100% → deload 2×8 at 75% — always 5+ reps, never above
 the slot's base weight.
+
+### What the interface may claim about a slot
+
+The rotation counter is program-wide, but the phase **names** are a claim about
+one slot's prescription, and for most styles that claim is false. Cadence
+renders a Volume / Load / Peak / Recovery name only against slots whose style
+comes out of the shared phase-shaped table — the wave family plus `secondary`,
+`hypertrophy` and `technique`. `linearFives`, the three Texas days,
+`doubleProgression`, `fiveThreeOne`, `maxEffort` and `dynamicEffort` build
+their own session shapes and never carry one; the program-level indicator
+reports position (`Rotation 3 of 4`) and nothing more.
+
+Each slot instead carries a badge naming what it actually does — `Main · 5/3/1`,
+`Complementary · Secondary volume`, `Main · Linear 5s`. The badge names the
+**resolved** style, so a slot left on `automatic` advertises the style the
+engine will really run.
+
+Every program slot also previews the next four exposures it will produce: the
+loads, sets and reps, the ramps and "+" sets around the graded work, the base
+or training max they derive from, and what the engine will do to the slot after
+a clean session. The preview is generated by running the shipped engine
+forward, not by a second implementation, and stores nothing. Phase-independent
+styles preview numbered **exposures** rather than pretending to be four phases.
+
+Both surfaces read the same shared-core predicates on native and web, so the
+two clients cannot label the same slot differently.
 
 Complementary/accessory barbell work snaps to a neat bar-loadable weight.
 Plate math against the gym's rack is **loading guidance, not a new

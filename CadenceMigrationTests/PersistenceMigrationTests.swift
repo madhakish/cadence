@@ -37,7 +37,7 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
-    func testShippedV3StoreMigratesToV4WithoutDataLoss() throws {
+    func testShippedV3StoreMigratesToV7WithoutDataLoss() throws {
         try assertMigration(
             createStore: createV3Store,
             migrationPlan: CadenceV3MigrationPlan.self,
@@ -45,8 +45,260 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
+    /// An install that skipped the protein retirement and arrives two versions
+    /// behind, so its store crosses both stages in one open.
+    func testShippedV4StoreMigratesToV7WithoutDataLoss() throws {
+        try assertMigration(
+            createStore: { try self.createV4Store(at: $0) },
+            migrationPlan: CadenceV4MigrationPlan.self,
+            expectsExistingSessionID: true
+        )
+    }
+
+    /// The common case for this upgrade: every install shipped since protein
+    /// logging was retired carries the V5 checksum.
+    func testShippedV5StoreMigratesToV7WithoutDataLoss() throws {
+        try assertMigration(
+            createStore: { try self.createV5Store(at: $0) },
+            migrationPlan: CadenceV5MigrationPlan.self,
+            expectsExistingSessionID: true
+        )
+    }
+
+    /// The common case for THIS upgrade: every install shipped since
+    /// conditioning learned to count flights carries the V6 checksum.
+    func testShippedV6StoreMigratesToV7WithoutDataLoss() throws {
+        try assertMigration(
+            createStore: { try self.createV6Store(at: $0) },
+            migrationPlan: CadenceV6MigrationPlan.self,
+            expectsExistingSessionID: true
+        )
+    }
+
+    /// The whole point of V7: a store seeded while pull-ups were accessories
+    /// must come out the other side with them charted as main lifts, without
+    /// the repair touching anything the lifter decided for themselves.
+    func testV6StorePromotesSeededPullUpsAndLeavesDeliberateCategoriesAlone() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+        try createV6Store(at: storeURL)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
+        let container = try ModelContainer(for: schema, migrationPlan: CadenceV6MigrationPlan.self,
+                                           configurations: configuration)
+        let context = container.mainContext
+
+        // The upgraded store has not been repaired yet — the new column reads
+        // false, which is exactly "this install still needs the promotion".
+        let settingsBefore = try context.fetch(FetchDescriptor<AppSettings>())
+        XCTAssertEqual(settingsBefore.first?.verticalPullMainsPromoted, false,
+                       "a migrated store starts unrepaired")
+
+        try Seeder.syncLibrary(context: context)
+
+        let byName = { (name: String) throws -> Exercise? in
+            try context.fetch(FetchDescriptor<Exercise>()).first { $0.name == name }
+        }
+        XCTAssertEqual(try byName("Pull-ups")?.category, .main,
+                       "a seeded accessory pull-up is promoted to a main lift")
+        XCTAssertEqual(try byName("Chin-ups")?.category, .conditioning,
+                       "a category the lifter set themselves is never overwritten — delete the guard and this fails")
+        XCTAssertEqual(try byName("Assisted Pull-up")?.category, .accessory,
+                       "assistance is a regression toward a pull-up and stays an accessory")
+        // syncLibrary inserts any definition the store is missing, so the
+        // weighted entries arrive on an existing install with no extra step.
+        XCTAssertEqual(try byName("Weighted Pull-up")?.category, .main)
+        XCTAssertEqual(try byName("Weighted Pull-up")?.loadBasis, .externalTotal,
+                       "belt weight is real resistance and must earn load PRs")
+        XCTAssertEqual(try byName("Pull-ups")?.loadBasis, .bodyweight,
+                       "an unloaded pull-up never fakes a 0 lb PR")
+
+        // The lifter disagrees, and says so. The repair must not argue.
+        try byName("Pull-ups")?.categoryRaw = ExerciseCategory.accessory.rawValue
+        try context.save()
+        try Seeder.syncLibrary(context: context)
+        XCTAssertEqual(try byName("Pull-ups")?.category, .accessory,
+                       "the promotion is one-shot — a category set back deliberately is never overwritten")
+
+        // And it stays idempotent: no duplicate rows across repeated opens.
+        try Seeder.syncLibrary(context: context)
+        let pullUps = try context.fetch(FetchDescriptor<Exercise>()).filter { $0.name == "Pull-ups" }
+        XCTAssertEqual(pullUps.count, 1, "repair never duplicates a library row")
+    }
+
+    /// The V6 fixture itself must be a valid V6 graph. A helper from another
+    /// schema version can compile at the call site but cannot be persisted by
+    /// this container, which would make every downstream V7 assertion theater.
+    func testV6FixtureContainsItsProgramGraphBeforeMigration() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-v6-fixture-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+        try createV6Store(at: storeURL)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV6.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let program = try XCTUnwrap(
+            try container.mainContext.fetch(FetchDescriptor<CadenceSchemaV6.Program>()).first
+        )
+        XCTAssertEqual(program.name, "Migration Program")
+        XCTAssertEqual(program.days.count, 1)
+        XCTAssertEqual(program.days.first?.lifts.first?.exerciseName, "Back Squat")
+        XCTAssertEqual(program.days.first?.accessories.first?.exerciseName, "Seated Leg Curl")
+    }
+
+    /// Native and web backups must agree on every one-shot library stamp. If
+    /// native omits this one, restoring its own post-migration backup promotes
+    /// a pull-up the lifter deliberately moved back to Accessory.
+    func testNativeBackupRoundTripKeepsVerticalPullPromotionStamp() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let source = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let sourceSettings = AppSettings()
+        sourceSettings.verticalPullMainsPromoted = true
+        source.mainContext.insert(sourceSettings)
+        try source.mainContext.save()
+
+        let backup = try ExportService.jsonData(context: source.mainContext)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        let exportedSettings = try XCTUnwrap(json["settings"] as? [String: Any])
+        XCTAssertEqual(exportedSettings["verticalPullMainsPromoted"] as? Bool, true,
+                       "native export carries the one-shot marker")
+
+        let restored = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let restoredSettings = AppSettings()
+        restoredSettings.verticalPullMainsPromoted = false
+        restored.mainContext.insert(restoredSettings)
+        try restored.mainContext.save()
+        try ImportService.load(backup, into: restored.mainContext)
+
+        let roundTripped = try XCTUnwrap(
+            try restored.mainContext.fetch(FetchDescriptor<AppSettings>()).first
+        )
+        XCTAssertTrue(roundTripped.verticalPullMainsPromoted,
+                      "restoring a native backup does not re-arm the promotion")
+    }
+
+    /// V5 removes `ProteinEntry` and `proteinTargetGrams`. That is deliberate
+    /// and destructive, so the thing worth proving is the blast radius: the
+    /// dropped entity takes nothing else with it, and the store still opens.
+    func testV5DropsProteinWithoutTakingTheRestOfTheStoreWithIt() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+
+        try createV4Store(at: storeURL, proteinEntries: 12)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
+        let container = try ModelContainer(
+            for: schema, migrationPlan: CadenceV4MigrationPlan.self, configurations: configuration
+        )
+        let context = container.mainContext
+
+        // The neighbours in the same file and the same store.
+        let weights = try context.fetch(FetchDescriptor<BodyweightEntry>())
+        XCTAssertEqual(weights.count, 2, "bodyweight entries were collateral damage")
+        XCTAssertEqual(weights.map(\.weightLb).sorted(), [199, 201])
+        XCTAssertEqual(weights.first { $0.weightLb == 201 }?.bodyFatPercent, 18,
+                       "body fat did not survive alongside the weigh-in")
+        XCTAssertEqual(try context.fetch(FetchDescriptor<CheckIn>()).count, 1,
+                       "check-ins share TrackingModels.swift with the deleted entity")
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Milestone>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutSession>()).count, 1)
+
+        // The settings row loses one field and gains another; everything else
+        // it holds must be untouched.
+        let settings = try XCTUnwrap(try context.fetch(FetchDescriptor<AppSettings>()).first)
+        XCTAssertEqual(settings.birthYear, 0, "an upgraded row takes the not-set default")
+        XCTAssertEqual(settings.accessoryRestSeconds, 75, "an unrelated setting moved")
+        XCTAssertEqual(settings.themeNameRaw, "slate")
+        XCTAssertTrue(settings.healthKitEnabled)
+
+        // And the store keeps working after the upgrade: a birth year set now
+        // survives a reopen, which is what makes the new field real rather than
+        // merely declared.
+        settings.birthYear = 1958
+        try context.save()
+        XCTAssertEqual(ProteinGuidance.age(birthYear: 1958, inYear: 2026), 68)
+        XCTAssertEqual(ProteinGuidance.mealGramsPerKg(age: 68), ProteinGuidance.mealGramsPerKgOlder)
+    }
+
+    /// [INV-STAIRS-COUNT-FLIGHTS] The V5 store predates flights entirely, so
+    /// every conditioning set in it was logged the only way V5 offered —
+    /// distance and time. Adding the column must leave those numbers exactly
+    /// where they were and must not invent a count for them.
+    func testV5ConditioningKeepsItsDistanceAndGainsAnEmptyFlightCount() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+
+        try createV5Store(at: storeURL)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
+        let container = try ModelContainer(
+            for: schema, migrationPlan: CadenceV5MigrationPlan.self, configurations: configuration
+        )
+        let context = container.mainContext
+
+        let session = try XCTUnwrap(try context.fetch(FetchDescriptor<WorkoutSession>()).first)
+        let climb = try XCTUnwrap(
+            session.orderedExercises.first { $0.exercise?.name == "Stair Climber" }?.orderedSets.first)
+        XCTAssertEqual(climb.distanceMiles, 0.75, "a V5 stair-climber set keeps the distance it was logged with")
+        XCTAssertEqual(climb.durationSeconds, 1200)
+        XCTAssertNil(climb.flights, "migration adds the column; it does not fabricate a count")
+        XCTAssertEqual(
+            CardioFormat.setLabel(distanceMiles: climb.distanceMiles,
+                                  durationSeconds: climb.durationSeconds,
+                                  inclinePercent: climb.inclinePercent,
+                                  loadLb: climb.weightLb,
+                                  flights: climb.flights),
+            "0.75 mi · 20:00 · 2.3 mph",
+            "history written before flights still renders what it holds")
+
+        // And the new column accepts a count on the very same row, so the
+        // upgraded store can log the next climb the way the machine reads.
+        climb.flights = 160
+        climb.distanceMiles = nil
+        try context.save()
+
+        // Re-read through a SECOND container on the same file. Fetching again
+        // from the context that wrote it returns the same registered object and
+        // would pass whether or not the column ever reached disk, which is the
+        // only thing this half of the test is for.
+        let reopenedContainer = try ModelContainer(
+            for: schema, migrationPlan: CadenceV5MigrationPlan.self,
+            configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+        )
+        let saved = try XCTUnwrap(
+            try reopenedContainer.mainContext
+                .fetch(FetchDescriptor<WorkoutSession>()).first?
+                .orderedExercises.first { $0.exercise?.name == "Stair Climber" }?
+                .orderedSets.first)
+        XCTAssertEqual(saved.flights, 160, "the new column did not survive a reopen")
+        XCTAssertNil(saved.distanceMiles, "clearing the legacy distance did not persist")
+        XCTAssertEqual(CardioFormat.flightPace(flights: saved.flights,
+                                               durationSeconds: saved.durationSeconds), 8.0)
+    }
+
     func testRelationshipAliasRepairRestoresIndependentLowerBDayAndIsIdempotent() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -122,7 +374,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairDoesNotGuessBetweenIdenticalCollidingSlots() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -163,7 +415,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testMirroredLowerBMatrixRestoresRolesFromItsTaggedProgramDay() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -259,11 +511,15 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     private func openUsingProductionStrategies(storeURL: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
         let configuration = {
             ModelConfiguration("migration", schema: schema, url: storeURL)
         }
         let attempts: [() throws -> ModelContainer] = [
+            { try ModelContainer(for: schema, migrationPlan: CadenceV5MigrationPlan.self,
+                                 configurations: configuration()) },
+            { try ModelContainer(for: schema, migrationPlan: CadenceV4MigrationPlan.self,
+                                 configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadenceV3MigrationPlan.self,
                                  configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadencePre72MigrationPlan.self,
@@ -294,7 +550,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createStore(storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema,
@@ -450,11 +706,11 @@ final class PersistenceMigrationTests: XCTestCase {
         let set = CadenceSchemaV3.SetEntry(order: 0, weightLb: 185, reps: 5)
         let warmup = CadenceSchemaV3.SetEntry(order: 1, weightLb: 95, reps: 5)
         warmup.isWarmup = true
+        // One side only — see the note in createV4Store. This fixture carried
+        // the same aliasing before V4 froze; it proved less than it claimed.
         entry.session = session
-        entry.sets = [set, warmup]
         set.sessionExercise = entry
         warmup.sessionExercise = entry
-        session.exercises = [entry]
 
         context.insert(exercise)
         context.insert(session)
@@ -465,6 +721,88 @@ final class PersistenceMigrationTests: XCTestCase {
         context.insert(CadenceSchemaV3.AppSettings())
         insertV3Program(context)
         try context.save()
+    }
+
+    /// A store at the frozen V4 checksum, carrying the two things V5 removes
+    /// plus enough neighbouring data to notice if the removal overreaches.
+    private func createV4Store(at url: URL, proteinEntries: Int = 3) throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV4.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: url)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+
+        let exercise = CadenceSchemaV4.Exercise(
+            name: "Back Squat", categoryRaw: "Main", typeRaw: "barbell")
+        exercise.movementGroup = "squat"
+        let session = CadenceSchemaV4.WorkoutSession(
+            date: Date(timeIntervalSince1970: 1_700_000_000))
+        session.notes = "V1 training log"
+        session.isCompleted = true
+        let entry = CadenceSchemaV4.SessionExercise(order: 0)
+        entry.exercise = exercise
+        entry.plannedWeightLb = 195
+        entry.plannedSets = 3
+        entry.plannedReps = 5
+        let set = CadenceSchemaV4.SetEntry(order: 0)
+        set.weightLb = 185
+        set.reps = 5
+        let warmup = CadenceSchemaV4.SetEntry(order: 1)
+        warmup.weightLb = 95
+        warmup.reps = 5
+        warmup.isWarmup = true
+        warmup.prescriptionBlockRaw = "warmup"
+        // One side only. Assigning the child inverse AND appending to the
+        // parent collection persists duplicate references, and a fixture built
+        // that way would let this test pass on self-corrupted data rather than
+        // prove ordinary V4 relationships survive the upgrade.
+        entry.session = session
+        set.sessionExercise = entry
+        warmup.sessionExercise = entry
+
+        context.insert(exercise)
+        context.insert(session)
+        context.insert(entry)
+        context.insert(set)
+        context.insert(warmup)
+        context.insert(CadenceSchemaV4.Gym(name: "Migration Gym"))
+
+        // The data V5 destroys, and the data sitting next to it that must not be.
+        for index in 0..<proteinEntries {
+            context.insert(CadenceSchemaV4.ProteinEntry(
+                date: Date(timeIntervalSince1970: 1_700_000_000 + Double(index) * 3600),
+                grams: 40, label: "Retired entry \(index)"))
+        }
+        let heavier = CadenceSchemaV4.BodyweightEntry(
+            date: Date(timeIntervalSince1970: 1_700_000_000), weightLb: 201)
+        heavier.bodyFatPercent = 18
+        context.insert(heavier)
+        context.insert(CadenceSchemaV4.BodyweightEntry(
+            date: Date(timeIntervalSince1970: 1_700_600_000), weightLb: 199))
+        context.insert(CadenceSchemaV4.CheckIn(
+            siteRaw: "Knee", response: "All clear"))
+        context.insert(CadenceSchemaV4.Milestone(
+            kindRaw: "weight", label: "Fixture PR"))
+
+        let settings = CadenceSchemaV4.AppSettings()
+        settings.proteinTargetGrams = 145
+        settings.accessoryRestSeconds = 75
+        settings.themeNameRaw = "slate"
+        settings.healthKitEnabled = true
+        context.insert(settings)
+
+        insertV4Program(context)
+        try context.save()
+    }
+
+    private func insertV4Program(_ context: ModelContext) {
+        let program = CadenceSchemaV4.Program(name: "Migration Program")
+        let day = CadenceSchemaV4.ProgramDay(name: "Lower", order: 0)
+        let lift = CadenceSchemaV4.ProgramLift(exerciseName: "Back Squat")
+        lift.baseWeightLb = 175
+        let accessory = CadenceSchemaV4.ProgramAccessory(exerciseName: "Seated Leg Curl")
+        // One side only — same rule the session fixture states; see createV4Store.
+        day.program = program; lift.day = day; accessory.day = day
+        context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
     }
 
     private func insertV1Program(_ context: ModelContext) {
@@ -497,6 +835,172 @@ final class PersistenceMigrationTests: XCTestCase {
         let accessory = CadenceSchemaV3.ProgramAccessory(exerciseName: "Seated Leg Curl")
         day.program = program; lift.day = day; accessory.day = day
         day.lifts = [lift]; day.accessories = [accessory]; program.days = [day]
+        context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
+    }
+
+    /// The last shape shipped before flights existed. It carries a conditioning
+    /// set alongside the barbell work, because that set is the one the new
+    /// column has to leave alone.
+    private func createV5Store(at url: URL) throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV5.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: url)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+
+        let exercise = CadenceSchemaV5.Exercise(
+            name: "Back Squat", categoryRaw: "Main", typeRaw: "barbell")
+        exercise.movementGroup = "squat"
+        let session = CadenceSchemaV5.WorkoutSession(
+            date: Date(timeIntervalSince1970: 1_700_000_000))
+        session.notes = "V1 training log"
+        session.isCompleted = true
+        let entry = CadenceSchemaV5.SessionExercise(order: 0)
+        entry.exercise = exercise
+        entry.plannedWeightLb = 195
+        entry.plannedSets = 3
+        entry.plannedReps = 5
+        let set = CadenceSchemaV5.SetEntry(order: 0)
+        set.weightLb = 185
+        set.reps = 5
+        let warmup = CadenceSchemaV5.SetEntry(order: 1)
+        warmup.weightLb = 95
+        warmup.reps = 5
+        warmup.isWarmup = true
+        warmup.prescriptionBlockRaw = "warmup"
+        // One side only — see createV4Store. A fixture built with both sides of
+        // the inverse assigned would let this pass on self-corrupted data.
+        entry.session = session
+        set.sessionExercise = entry
+        warmup.sessionExercise = entry
+
+        let climber = CadenceSchemaV5.Exercise(
+            name: "Stair Climber", categoryRaw: "Conditioning", typeRaw: "conditioning")
+        climber.movementGroup = "conditioning"
+        let climbEntry = CadenceSchemaV5.SessionExercise(order: 1)
+        climbEntry.exercise = climber
+        let climbSet = CadenceSchemaV5.SetEntry(order: 0)
+        climbSet.reps = 1
+        climbSet.distanceMiles = 0.75
+        climbSet.durationSeconds = 1200
+        climbEntry.session = session
+        climbSet.sessionExercise = climbEntry
+
+        context.insert(exercise)
+        context.insert(session)
+        context.insert(entry)
+        context.insert(set)
+        context.insert(warmup)
+        context.insert(climber)
+        context.insert(climbEntry)
+        context.insert(climbSet)
+        context.insert(CadenceSchemaV5.Gym(name: "Migration Gym"))
+        context.insert(CadenceSchemaV5.AppSettings())
+        insertV5Program(context)
+        try context.save()
+    }
+
+    /// The last shape shipped before vertical pulling became primary work.
+    /// Pull-ups is seeded ACCESSORY — the exact state the V7 repair has to
+    /// find and promote — and Chin-ups carries a category the lifter set
+    /// themselves, which the repair must leave exactly where it is.
+    private func createV6Store(at url: URL) throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV6.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: url)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+
+        let exercise = CadenceSchemaV6.Exercise(
+            name: "Back Squat", categoryRaw: "Main", typeRaw: "barbell")
+        exercise.movementGroup = "squat"
+        let session = CadenceSchemaV6.WorkoutSession(
+            date: Date(timeIntervalSince1970: 1_700_000_000))
+        session.notes = "V1 training log"
+        session.isCompleted = true
+        let entry = CadenceSchemaV6.SessionExercise(order: 0)
+        entry.exercise = exercise
+        entry.plannedWeightLb = 195
+        entry.plannedSets = 3
+        entry.plannedReps = 5
+        let set = CadenceSchemaV6.SetEntry(order: 0)
+        set.weightLb = 185
+        set.reps = 5
+        let warmup = CadenceSchemaV6.SetEntry(order: 1)
+        warmup.weightLb = 95
+        warmup.reps = 5
+        warmup.isWarmup = true
+        warmup.prescriptionBlockRaw = "warmup"
+        // One side only — see createV4Store. A fixture built with both sides of
+        // the inverse assigned would let this pass on self-corrupted data.
+        entry.session = session
+        set.sessionExercise = entry
+        warmup.sessionExercise = entry
+
+        let pullUps = CadenceSchemaV6.Exercise(
+            name: "Pull-ups", categoryRaw: "Accessory", typeRaw: "bodyweight")
+        pullUps.movementGroup = "pull"
+        // Deliberately NOT Accessory: the lifter has re-categorized this row,
+        // and the repair must not argue. Main would be indistinguishable from
+        // a promotion, so the fixture uses the one value that tells the guard
+        // apart from its absence.
+        let chinUps = CadenceSchemaV6.Exercise(
+            name: "Chin-ups", categoryRaw: "Conditioning", typeRaw: "bodyweight")
+        chinUps.movementGroup = "pull"
+        let assisted = CadenceSchemaV6.Exercise(
+            name: "Assisted Pull-up", categoryRaw: "Accessory", typeRaw: "machine")
+        assisted.movementGroup = "pull"
+
+        let climber = CadenceSchemaV6.Exercise(
+            name: "Stair Climber", categoryRaw: "Conditioning", typeRaw: "conditioning")
+        climber.movementGroup = "conditioning"
+        let climbEntry = CadenceSchemaV6.SessionExercise(order: 1)
+        climbEntry.exercise = climber
+        let climbSet = CadenceSchemaV6.SetEntry(order: 0)
+        climbSet.reps = 1
+        climbSet.distanceMiles = 0.75
+        climbSet.durationSeconds = 1200
+        climbEntry.session = session
+        climbSet.sessionExercise = climbEntry
+
+        context.insert(exercise)
+        context.insert(session)
+        context.insert(entry)
+        context.insert(set)
+        context.insert(warmup)
+        context.insert(climber)
+        context.insert(climbEntry)
+        context.insert(climbSet)
+        context.insert(pullUps)
+        context.insert(chinUps)
+        context.insert(assisted)
+        context.insert(CadenceSchemaV6.Gym(name: "Migration Gym"))
+        context.insert(CadenceSchemaV6.AppSettings())
+        insertV6Program(context)
+        try context.save()
+    }
+
+    private func insertV5Program(_ context: ModelContext) {
+        let program = CadenceSchemaV5.Program(name: "Migration Program")
+        let day = CadenceSchemaV5.ProgramDay(name: "Lower", order: 0)
+        let lift = CadenceSchemaV5.ProgramLift(exerciseName: "Back Squat")
+        lift.baseWeightLb = 175
+        let accessory = CadenceSchemaV5.ProgramAccessory(exerciseName: "Seated Leg Curl")
+        // One side only — same rule the session fixture above states: a store
+        // built with both sides of the inverse assigned would let migration
+        // pass on self-corrupted relationship rows production never writes.
+        day.program = program; lift.day = day; accessory.day = day
+        context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
+    }
+
+    private func insertV6Program(_ context: ModelContext) {
+        let program = CadenceSchemaV6.Program(name: "Migration Program")
+        let day = CadenceSchemaV6.ProgramDay(name: "Lower", order: 0)
+        let lift = CadenceSchemaV6.ProgramLift(exerciseName: "Back Squat")
+        lift.baseWeightLb = 175
+        let accessory = CadenceSchemaV6.ProgramAccessory(exerciseName: "Seated Leg Curl")
+        // One side only — same rule the session fixture above states: a store
+        // built with both sides of the inverse assigned would let migration
+        // pass on self-corrupted relationship rows production never writes.
+        day.program = program; lift.day = day; accessory.day = day
         context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
     }
 }

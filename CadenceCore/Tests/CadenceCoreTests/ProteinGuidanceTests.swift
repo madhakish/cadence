@@ -28,4 +28,41 @@ final class ProteinGuidanceTests: XCTestCase {
         XCTAssertTrue(summary.contains("145 g/day"), summary)
         XCTAssertTrue(summary.contains("35 g per meal"), summary)
     }
+
+    /// Age changes the per-meal threshold and nothing else. The daily figure is
+    /// already the resistance-training one, so training type does not scale it.
+    func testAgeRaisesThePerMealThresholdOnly() {
+        XCTAssertEqual(ProteinGuidance.perMealGrams(bodyweightLb: 201, age: 40), 25)
+        XCTAssertEqual(ProteinGuidance.perMealGrams(bodyweightLb: 201, age: 70), 35)
+        XCTAssertEqual(ProteinGuidance.perMealGrams(bodyweightLb: 201, age: 65), 35,
+                       "65 is the older-adult threshold, not one past it")
+        XCTAssertEqual(ProteinGuidance.dailyTargetGrams(bodyweightLb: 201), 145,
+                       "the daily figure does not move with age")
+    }
+
+    /// An unknown age takes the higher per-dose threshold. Eating to it costs a
+    /// younger lifter nothing; under-dosing an older one is the failure that
+    /// matters.
+    func testUnknownAgeIsConservative() {
+        XCTAssertEqual(ProteinGuidance.mealGramsPerKg(age: nil), ProteinGuidance.mealGramsPerKgOlder)
+        XCTAssertEqual(ProteinGuidance.perMealGrams(bodyweightLb: 201, age: nil), 35)
+        XCTAssertNil(ProteinGuidance.perMealRationale(age: nil),
+                     "nothing to explain when there is no age")
+    }
+
+    func testAgeIsNeverGuessedFromANonsenseBirthYear() {
+        XCTAssertEqual(ProteinGuidance.age(birthYear: 1980, inYear: 2026), 46)
+        XCTAssertNil(ProteinGuidance.age(birthYear: 0, inYear: 2026), "unset is not a birth year")
+        XCTAssertNil(ProteinGuidance.age(birthYear: 1899, inYear: 2026))
+        XCTAssertNil(ProteinGuidance.age(birthYear: 2030, inYear: 2026), "not yet born")
+        XCTAssertNil(ProteinGuidance.age(birthYear: 1901, inYear: 2026), "past a plausible lifespan")
+        XCTAssertEqual(ProteinGuidance.age(birthYear: 2026, inYear: 2026), 0)
+    }
+
+    func testRationaleExplainsWhichThresholdApplies() throws {
+        let older = try XCTUnwrap(ProteinGuidance.perMealRationale(age: 70))
+        XCTAssertTrue(older.contains("0.4 g/kg"), older)
+        let younger = try XCTUnwrap(ProteinGuidance.perMealRationale(age: 40))
+        XCTAssertTrue(younger.contains("0.25 g/kg"), younger)
+    }
 }

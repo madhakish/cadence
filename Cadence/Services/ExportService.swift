@@ -27,6 +27,7 @@ enum ExportService {
         let bodyFlagNote: String?
         let durationSeconds: Int?
         let distanceMiles: Double?
+        let flights: Double?
         let inclinePercent: Double?
         let autoregReason: String?
     }
@@ -80,7 +81,6 @@ enum ExportService {
         let appVersion: String
         let sessions: [ExportSession]
         let bodyweight: [ExportBodyweight]
-        let protein: [ExportProtein]
         let checkIns: [ExportCheckIn]
         let milestones: [ExportMilestone]
         let programs: [ExportProgram]
@@ -165,7 +165,9 @@ enum ExportService {
     /// keys (what native importers of the first bucket release read).
     struct ExportSettings: Codable {
         let unitDisplay: String
-        let proteinTargetGrams: Double
+        /// Year of birth, or 0 when unset. Replaced `proteinTargetGrams` in
+        /// backup schema 6, when protein logging was retired.
+        let birthYear: Int
         let accessoryRestSeconds: Int
         let mainCompoundRestSeconds: Int?
         let olympicRestSeconds: Int?
@@ -179,6 +181,9 @@ enum ExportService {
         /// re-run the retired-rest-stamp clear; absent in old backups → re-run.
         let restSeedStampsCleared: Bool?
         let loadSemanticsMigrated: Bool?
+        /// One-shot vertical-pull promotion marker. It must ride with the
+        /// exercise library or a native backup restore re-arms the migration.
+        let verticalPullMainsPromoted: Bool?
         let seededAt: Date?
         let theme: String?
     }
@@ -188,12 +193,6 @@ enum ExportService {
         let weightLb: Double
         let bodyFatPercent: Double?
         let milestoneLabel: String?
-    }
-
-    struct ExportProtein: Codable {
-        let date: Date
-        let grams: Double
-        let label: String
     }
 
     struct ExportCheckIn: Codable {
@@ -371,9 +370,6 @@ enum ExportService {
         let bodyweight = try context.fetch(
             FetchDescriptor<BodyweightEntry>(sortBy: [SortDescriptor(\.date)])
         )
-        let protein = try context.fetch(
-            FetchDescriptor<ProteinEntry>(sortBy: [SortDescriptor(\.date)])
-        )
         let checkIns = try context.fetch(
             FetchDescriptor<CheckIn>(sortBy: [SortDescriptor(\.date)])
         )
@@ -431,7 +427,7 @@ enum ExportService {
                         ExportExercise(
                             name: entry.exercise?.name ?? "Unknown",
                             notes: entry.notes,
-                            phase: entry.phase?.label,
+                            phase: entry.phase?.portableLabel,
                             role: entry.programRole,
                             programSlotId: entry.programSlotID,
                             barId: entry.barID,
@@ -462,6 +458,7 @@ enum ExportService {
                                     bodyFlagNote: set.bodyFlagNote,
                                     durationSeconds: set.durationSeconds,
                                     distanceMiles: set.distanceMiles,
+                                    flights: set.flights,
                                     inclinePercent: set.inclinePercent,
                                     autoregReason: set.autoregReasonRaw
                                 )
@@ -474,7 +471,6 @@ enum ExportService {
                 ExportBodyweight(date: $0.date, weightLb: $0.weightLb,
                                  bodyFatPercent: $0.bodyFatPercent, milestoneLabel: $0.milestoneLabel)
             },
-            protein: protein.map { ExportProtein(date: $0.date, grams: $0.grams, label: $0.label) },
             checkIns: checkIns.map {
                 ExportCheckIn(date: $0.date, site: $0.site?.rawValue ?? BodySite.knee.rawValue,
                               response: $0.response, note: $0.note)
@@ -572,7 +568,14 @@ enum ExportService {
                                   createdAt: e.createdAt)
             },
             settings: settings.map { s in
-                ExportSettings(unitDisplay: s.unitDisplayRaw, proteinTargetGrams: s.proteinTargetGrams,
+                // Clamped to the not-set sentinel unless it is a plausible
+                // year, using the same rule the importer validates against.
+                // An app must never write a backup it cannot itself restore.
+                ExportSettings(unitDisplay: s.unitDisplayRaw,
+                               birthYear: ProteinGuidance.age(
+                                   birthYear: s.birthYear,
+                                   inYear: Calendar.current.component(.year, from: .now)
+                               ) == nil ? 0 : s.birthYear,
                                accessoryRestSeconds: s.accessoryRestSeconds,
                                mainCompoundRestSeconds: s.mainCompoundRestSeconds, olympicRestSeconds: s.olympicRestSeconds,
                                mainUpperRestSeconds: s.mainUpperRestSeconds, secondaryRestSeconds: s.secondaryRestSeconds,
@@ -585,6 +588,7 @@ enum ExportService {
                                haptics: s.haptics, gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay,
                                restSeedStampsCleared: s.restSeedStampsCleared,
                                loadSemanticsMigrated: s.loadSemanticsMigrated,
+                               verticalPullMainsPromoted: s.verticalPullMainsPromoted,
                                seededAt: s.seededAt, theme: s.themeNameRaw)
             },
             coachingDecisions: coachingDecisions.map { decision in

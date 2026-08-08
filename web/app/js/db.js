@@ -6,8 +6,8 @@ import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 4;
-export const BACKUP_SCHEMA_VERSION = 5;
+const DB_VERSION = 5;
+export const BACKUP_SCHEMA_VERSION = 7;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -15,7 +15,6 @@ const STORES = {
   tracks: { keyPath: "exerciseName" },
   sessions: { keyPath: "id", autoIncrement: true },
   bodyweight: { keyPath: "id", autoIncrement: true },
-  protein: { keyPath: "id", autoIncrement: true },
   checkins: { keyPath: "id", autoIncrement: true },
   milestones: { keyPath: "id", autoIncrement: true },
   programs: { keyPath: "id", autoIncrement: true },
@@ -43,6 +42,7 @@ function open() {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, opts);
       }
       if (event.oldVersion < 4) migrateToV4(req.transaction);
+      if (event.oldVersion < 5) migrateToV5(req.result);
     };
     req.onsuccess = () => {
       if (settled) { req.result.close(); return; }
@@ -79,6 +79,16 @@ function migrateToV4(transaction) {
   rewrite("exercises", normalizeExercise);
   rewrite("programs", normalizeProgram);
   rewrite("sessions", normalizeSession);
+}
+
+// V5 retires protein logging. The store is deleted outright rather than left
+// orphaned: serving-level logging only works with a real meal-entry surface,
+// which this app will never have, so keeping a store nothing writes to would
+// just be a place for stale rows to sit. Protein is advisory now — see
+// core.js proteinSummary. `settings.proteinTargetGrams` goes with it and is
+// dropped by normalizeSettings; `birthYear` replaces it.
+function migrateToV5(db) {
+  if (db.objectStoreNames.contains("protein")) db.deleteObjectStore("protein");
 }
 
 // One transaction over one or more stores. fn receives a store getter and is
@@ -152,7 +162,7 @@ const normalizeProgram = (p) => {
     reliableHistoryStart: p.reliableHistoryStart || null,
     preferredSessionSpacingDays: Number.isInteger(p.preferredSessionSpacingDays) ? p.preferredSessionSpacingDays : 3,
     maximumAddedSetsPerRotation: Number.isInteger(p.maximumAddedSetsPerRotation) ? p.maximumAddedSetsPerRotation : 6,
-    days: (p.days || []).map((day, dayIndex) => ({
+    days: (p.days || []).map((day, dayIndex) => normalizeDaySlotOrders({
       ...day,
       lifts: (day.lifts || []).map((lift, slotIndex) => ({
         ...lift,
@@ -189,6 +199,24 @@ const normalizeProgram = (p) => {
     })),
   };
 };
+// An all-tied day predates authored slot ordering: an explicitly tied file
+// imported before the authored-order fix (pre-#69 native exports carried
+// order 0 on every slot), or a degenerate editor sequence. The tie holds no
+// information, so array position — the authored sequence — is stamped, per
+// kind, exactly as the importers do. Distinct and partially tied orders are
+// the author's numbers and pass through verbatim (core authoredSlotOrders).
+const normalizeDaySlotOrders = (day) => {
+  C.authoredSlotOrders(day.lifts.map((lift) => lift.order))
+    .forEach((order, i) => { day.lifts[i].order = order; });
+  C.authoredSlotOrders(day.accessories.map((accessory) => accessory.order))
+    .forEach((order, i) => { day.accessories[i].order = order; });
+  return day;
+};
+// Detects that normalization repaired a resident store's slot orders, so
+// Programs.all persists the repair once instead of re-deriving it per read.
+const slotOrdersRepaired = (raw, normalized) => (raw.days || []).some((day, dayIndex) =>
+  ["lifts", "accessories"].some((kind) => (day[kind] || []).some((slot, slotIndex) =>
+    slot.order !== normalized.days[dayIndex][kind][slotIndex].order)));
 const normalizeGym = (g) => ({
   ...g,
   id: isPortableUUID(g.id) ? g.id : stableID(`gym:${g.name}`),
@@ -246,7 +274,7 @@ export const localDayKey = (d) => {
   const x = d instanceof Date ? d : new Date(d);
   return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
 };
-export const isToday = (d) => localDayKey(d) === localDayKey(new Date());
+// `isToday` went with the protein tracker — it had no other caller.
 
 // ---- Settings ----
 // get/save both run normalizeSettings, so every consumer sees a COMPLETE
@@ -264,7 +292,7 @@ function defaultSettings() {
   return {
     unitDisplay: "lbPrimary",
     theme: "carbon",
-    proteinTargetGrams: 100,
+    birthYear: 0,
     accessoryRestSeconds: 90, // legacy — superseded by rest.accessorySeconds, kept for old exports
     // Five configurable rest buckets (seconds); secondary rests less than a top main.
     rest: { mainCompoundSeconds: 300, olympicSeconds: 240, mainUpperSeconds: 180, secondarySeconds: 180, accessorySeconds: 90 },
@@ -276,6 +304,9 @@ function defaultSettings() {
     // RETIRED_REST_STAMPS). Absent on pre-bucket stores, so they get the
     // one-shot clear in syncLibrary.
     restSeedStampsCleared: true,
+    // Fresh installs seed vertical pulling as Main already — nothing to
+    // promote. Absent on older stores, so they get the one-shot in syncLibrary.
+    verticalPullMainsPromoted: true,
     seededAt: null,
   };
 }
@@ -324,13 +355,6 @@ export const Bodyweight = {
   add: (e) => put("bodyweight", e),
   del: (id) => del("bodyweight", id),
 };
-export const Protein = {
-  all: () => getAll("protein"),
-  add: (e) => put("protein", e),
-  del: (id) => del("protein", id),
-  async today() { const all = await getAll("protein"); return all.filter((p) => isToday(p.date)); },
-  async todayTotal() { return (await Protein.today()).reduce((s, p) => s + p.grams, 0); },
-};
 export const Checkins = {
   async all() {
     return (await getAll("checkins")).map((entry) => ({
@@ -352,7 +376,7 @@ export const Programs = {
   async all() {
     const all = await getAll("programs");
     const normalized = all.map(normalizeProgram);
-    await Promise.all(normalized.filter((p, i) => p.uuid !== all[i].uuid || !hasPortableProgramSlots(all[i])).map((p) => put("programs", p)));
+    await Promise.all(normalized.filter((p, i) => p.uuid !== all[i].uuid || !hasPortableProgramSlots(all[i]) || slotOrdersRepaired(all[i], p)).map((p) => put("programs", p)));
     return normalized;
   },
   get: (id) => get("programs", id),
@@ -392,7 +416,7 @@ export function workingVolume(sessionExercise) {
     // began storing a weight instead of a forced zero. Keyed on the DATA, like
     // isCardioSet in the history view, so restored history still behaves when
     // the library entry is gone.
-    .filter((s) => !(s.distanceMiles > 0 || s.durationSeconds > 0))
+    .filter((s) => !(s.distanceMiles > 0 || s.flights > 0 || s.durationSeconds > 0))
     .reduce((sum, set) => sum + (C.loadVolume(set) ?? 0), 0);
 }
 // ---- Seeding ----
@@ -416,6 +440,12 @@ export async function ensureSeeded() {
 // (values that merely duplicated the rest buckets and are now 0 in seed.js).
 // Deliberate deviations (180/120/60 accessories) are NOT here — they stay
 // per-exercise. Mirror of Seeder.retiredRestStamps.
+// Names the seed shipped as accessories and now ships as main lifts.
+// "Assisted Pull-up" is deliberately absent — it is a regression toward a
+// pull-up whose progression runs backwards. Mirror of
+// Seeder.verticalPullPromotions.
+const VERTICAL_PULL_PROMOTIONS = ["Pull-ups", "Chin-ups"];
+
 const RETIRED_REST_STAMPS = {
   Deadlift: 300, "Back Squat": 300, "Front Squat": 300, "Overhead Squat": 300,
   "Barbell Bench": 300, "Overhead Press": 300, "Push Press": 300, "Push Jerk": 300,
@@ -525,6 +555,21 @@ export async function syncLibrary() {
     await Settings.save(settings);
   }
 
+  // Vertical pulling became primary work, but the loop above only ever fills
+  // BLANK fields — it never revisits a category — so an already-seeded store
+  // would keep pull-ups as accessories forever and they would never reach the
+  // Main-only chart picker. Mirror of Seeder.promoteVerticalPullMains: promote
+  // only a row still marked exactly what the old seed wrote, and stamp it so a
+  // category set back to Accessory on purpose is never overwritten.
+  if (!settings.verticalPullMainsPromoted) {
+    for (const name of VERTICAL_PULL_PROMOTIONS) {
+      const cur = have.get(name);
+      if (cur && cur.category === "Accessory") { cur.category = "Main"; await put("exercises", cur); }
+    }
+    settings.verticalPullMainsPromoted = true;
+    await Settings.save(settings);
+  }
+
   // One-time snapshot of legacy load meaning. Historical sets must keep the
   // interpretation they had at migration time even if the library definition
   // is edited later (for example, a cable entry changed from stack total to
@@ -565,10 +610,10 @@ export async function exportBundle() {
   });
   const portableSessionID = (session) => isPortableUUID(session.id)
     ? session.id : stableID(`session:${session.id ?? sessionFingerprint(session)}`);
-  const [sessions, bodyweight, protein, checkins, milestones, programs, tracks, gyms, exercises, settings, coachingDecisions] = await Promise.all([
+  const [sessions, bodyweight, checkins, milestones, programs, tracks, gyms, exercises, settings, coachingDecisions] = await Promise.all([
     Sessions.all().then((all) => all.sort((a, b) => new Date(b.date) - new Date(a.date)
       || portableSessionID(a).localeCompare(portableSessionID(b)))),
-    Bodyweight.all(), Protein.all(), Checkins.all(), Milestones.all(), Programs.all(),
+    Bodyweight.all(), Checkins.all(), Milestones.all(), Programs.all(),
     Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(), CoachingDecisions.all(),
   ]);
   const programsById = new Map(programs.flatMap((p) => [[p.id, p], [p.uuid, p]]));
@@ -607,7 +652,7 @@ export async function exportBundle() {
       programTag: exportProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e) => ({
         name: e.exerciseName, notes: e.notes || "",
-        phase: e.phase ? C.phaseLabel(e.phase) : null,
+        phase: e.phase ? C.portablePhaseLabel(e.phase) : null,
         role: e.programRole || null,
         programSlotId: e.programSlotId || null,
         barId: e.barId || null,
@@ -628,16 +673,16 @@ export async function exportBundle() {
           enteredUnit: x.enteredUnit || "lb",
           flags: x.flags || [], bodyFlagSite: normalizeBodySite(x.bodyFlagSite), bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
-          // Key emitted only when set (like revertToExerciseName): stamping
+          // Keys emitted only when set (like revertToExerciseName): stamping
           // null onto every record would break byte-stable re-export of
-          // pre-incline backups.
+          // pre-incline and pre-flights backups.
+          ...(x.flights != null ? { flights: x.flights } : {}),
           ...(x.inclinePercent != null ? { inclinePercent: x.inclinePercent } : {}),
           autoregReason: x.autoregReason || null,
         })),
       })),
     })),
     bodyweight: bodyweight.map((b) => ({ date: iso(b.date), weightLb: b.weightLb, bodyFatPercent: b.bodyFatPercent ?? null, milestoneLabel: b.milestoneLabel || null })),
-    protein: protein.map((p) => ({ date: iso(p.date), grams: p.grams, label: p.label })),
     checkIns: checkins.map((c) => ({ date: iso(c.date), site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })),
     milestones: milestones.map((m) => ({ date: iso(m.date), exercise: m.exerciseName || null, kind: m.kind, label: m.label })),
     programs: programs.map((p) => ({
@@ -754,7 +799,23 @@ function normalizeSettings(s) {
   };
   Object.keys(flat).forEach((k) => flat[k] === undefined && delete flat[k]);
   const rest = { ...C.REST_DEFAULTS, ...flat, ...(s.rest || {}) };
-  return { ...s, rest, accessoryRestSeconds: rest.accessorySeconds,
+  // proteinTargetGrams is dropped rather than carried: backup schema 6 has no
+  // such field, and a settings row that keeps writing it would put it straight
+  // back into every export.
+  const { proteinTargetGrams, ...rest0 } = s;
+  // birthYear is clamped to the not-set sentinel unless it is a plausible
+  // year, using the SAME rule the importer validates against. Merely checking
+  // Number.isInteger would let a corrupted value persist, ride out in an
+  // export, and then be rejected on the way back in — an app must never write
+  // a backup it cannot itself restore. Reverting to 0 also keeps the guidance
+  // on the conservative older-adult threshold rather than a garbage age.
+  // Integer too: the importer validates `integer: true`, and 1958.5 would slip
+  // past a plausibility check alone.
+  const birthYear = Number.isInteger(s.birthYear)
+    && C.ageFromBirthYear(s.birthYear, new Date().getFullYear()) !== null
+    ? s.birthYear : 0;
+  return { ...rest0, rest, accessoryRestSeconds: rest.accessorySeconds,
+    birthYear,
     gymTagFirstLaunchOfDay: s.gymTagFirstLaunchOfDay === true };
 }
 
@@ -899,6 +960,7 @@ export function validateBackup(bundle) {
         enumValue(set.autoregReason, BACKUP_ENUMS.reasons, `${setPath}.autoregReason`);
         numberValue(set.durationSeconds, `${setPath}.durationSeconds`, { integer: true, min: 0 });
         numberValue(set.distanceMiles, `${setPath}.distanceMiles`, { min: 0 });
+        numberValue(set.flights, `${setPath}.flights`, { min: 0 });
         numberValue(set.inclinePercent, `${setPath}.inclinePercent`, { min: -100, max: 100 });
       });
     });
@@ -909,10 +971,6 @@ export function validateBackup(bundle) {
   each(bodyweight, "bodyweight", (entry, path) => {
     dateValue(entry.date, `${path}.date`, true); numberValue(entry.weightLb, `${path}.weightLb`, { required: true, min: 0 });
     numberValue(entry.bodyFatPercent, `${path}.bodyFatPercent`, { min: 0, max: 100 });
-  });
-  const protein = array(bundle, "protein");
-  each(protein, "protein", (entry, path) => {
-    dateValue(entry.date, `${path}.date`, true); numberValue(entry.grams, `${path}.grams`, { required: true, min: 0 });
   });
   const checkIns = array(bundle, "checkIns");
   each(checkIns, "checkIns", (entry, path) => {
@@ -1037,7 +1095,15 @@ export function validateBackup(bundle) {
     const settings = object(bundle.settings, "settings");
     enumValue(settings.unitDisplay, BACKUP_ENUMS.unitDisplay, "settings.unitDisplay", schemaVersion >= 1);
     enumValue(settings.theme, BACKUP_ENUMS.themes, "settings.theme", schemaVersion >= 1);
-    numberValue(settings.proteinTargetGrams, "settings.proteinTargetGrams", { min: 0 });
+    // 0 is the "not set" sentinel and always valid. Any other year has to
+    // produce a plausible age, so a corrupted field cannot silently move the
+    // lifter across the older-adult protein threshold.
+    if (settings.birthYear !== undefined && settings.birthYear !== null && settings.birthYear !== 0) {
+      numberValue(settings.birthYear, "settings.birthYear", { integer: true });
+      if (C.ageFromBirthYear(settings.birthYear, new Date().getFullYear()) === null) {
+        throw new Error(`settings.birthYear: ${settings.birthYear} is not a plausible year of birth`);
+      }
+    }
     dateValue(settings.seededAt, "settings.seededAt");
     for (const key of ["accessoryRestSeconds", "mainCompoundRestSeconds", "olympicRestSeconds", "mainUpperRestSeconds", "secondaryRestSeconds"]) {
       numberValue(settings[key], `settings.${key}`, { integer: true, min: 0, max: 3600 });
@@ -1050,7 +1116,7 @@ export function validateBackup(bundle) {
     }
   }
 
-  if (![sessions, bodyweight, protein, checkIns, milestones, programs, tracks, gyms, exercises, coachingDecisions].some((v) => v !== null) && !("settings" in bundle)) {
+  if (![sessions, bodyweight, checkIns, milestones, programs, tracks, gyms, exercises, coachingDecisions].some((v) => v !== null) && !("settings" in bundle)) {
     throw new Error("Not a Cadence backup");
   }
 }
@@ -1090,6 +1156,8 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
     for (const program of importedPrograms) {
       for (const day of program.days || []) {
         for (const [kind, slots] of [["lift", day.lifts || []], ["accessory", day.accessories || []]]) {
+          // Slot-order ties were already resolved to the authored array
+          // sequence by normalizeProgram above (normalizeDaySlotOrders).
           slots.forEach((slot, index) => {
             if (slot.id && !seen.has(slot.id)) { seen.add(slot.id); return; }
             if (slot.id) repairedSlotIDs += 1;
@@ -1152,6 +1220,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
           implementCount: x.implementCount || C.resolvedImplementCount(exerciseByName.get(e.name)),
           enteredUnit: x.enteredUnit || "lb", flags: x.flags || [], bodyFlagSite: normalizeBodySite(x.bodyFlagSite), bodyFlagNote: x.bodyFlagNote || null,
           durationSeconds: x.durationSeconds ?? null, distanceMiles: x.distanceMiles ?? null,
+          ...(x.flights != null ? { flights: x.flights } : {}),
           ...(x.inclinePercent != null ? { inclinePercent: x.inclinePercent } : {}),
           autoregReason: x.autoregReason || null,
         })),
@@ -1159,7 +1228,8 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
     })));
   }
   if (bundle.bodyweight) writes.set("bodyweight", bundle.bodyweight.map((b) => ({ date: b.date, weightLb: b.weightLb, bodyFatPercent: b.bodyFatPercent ?? null, milestoneLabel: b.milestoneLabel || null })));
-  if (bundle.protein) writes.set("protein", bundle.protein.map((p) => ({ date: p.date, grams: p.grams, label: p.label })));
+  // A v<=5 bundle's `protein` array is ignored: schema 6 removed the store,
+  // so there is nowhere to put it and nothing that would read it back.
   if (bundle.checkIns) writes.set("checkins", bundle.checkIns.map((c) => ({ date: c.date, site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })));
   if (bundle.milestones) writes.set("milestones", bundle.milestones.map((m) => ({ date: m.date, exerciseName: m.exercise || null, kind: m.kind, label: m.label })));
   if (importedPrograms) writes.set("programs", importedPrograms);
@@ -1198,11 +1268,14 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       else delete s.restSeedStampsCleared;
       if (cur && cur.loadSemanticsMigrated !== undefined) s.loadSemanticsMigrated = cur.loadSemanticsMigrated;
       else delete s.loadSemanticsMigrated;
+      if (cur && cur.verticalPullMainsPromoted !== undefined) s.verticalPullMainsPromoted = cur.verticalPullMainsPromoted;
+      else delete s.verticalPullMainsPromoted;
     }
     writes.set("settings", [s]);
   } else if (bundle.exercises) {
     const cur = await get("settings", "app");
-    if (cur) writes.set("settings", [{ ...cur, restSeedStampsCleared: false, loadSemanticsMigrated: false }]);
+    if (cur) writes.set("settings", [{ ...cur, restSeedStampsCleared: false, loadSemanticsMigrated: false,
+      verticalPullMainsPromoted: false }]);
   }
 
   const stores = [...writes.keys()];

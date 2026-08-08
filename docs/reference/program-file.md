@@ -13,7 +13,7 @@ one program and nothing else.
 
 A program file never contains:
 
-`sessions` · `bodyweight` · `protein` · `milestones` · `checkIns` ·
+`sessions` · `bodyweight` · `milestones` · `checkIns` ·
 `coachingDecisions` · `gyms` · `settings` · `tracks` · the exercise library ·
 gate status or re-entry criteria.
 
@@ -185,6 +185,25 @@ One program record. Nothing else.
 Day `order` values are preserved verbatim, gaps included. A day's order is the
 identity every banked session's `programTag.dayIndex` refers to; renumbering
 would misattribute already-logged work.
+
+Slot `order` values within a day are preserved verbatim with one exception:
+when every lift (or every accessory) in a day carries the same order, the tie
+carries no information and the import stamps array positions instead — the
+sequence the slots were written in is the sequence the author programmed.
+Without this, a hand-authored file whose slots all say `"order": 0` falls to
+the alphabetical display fallback, and the alphabet does the programming.
+Distinct orders, gaps included, are the author's explicit sequence and are
+never renumbered. Both importers apply the same rule
+(`ProgramEngine.authoredSlotOrders` / `core.js authoredSlotOrders`), and the
+backup importers apply it too.
+
+One honest edge in the backup case: a program *file* requires every slot's
+`order`, but a backup does not, and a missing backup order is filled with the
+slot's array position before the tie test on both platforms. A hand-edited
+bundle mixing missing and explicit orders can therefore manufacture a full
+tie — `[{"order": 1}, {}]` fills to `[1, 1]` — and the rescue then renumbers
+the one explicitly authored order along with the rest. Both platforms agree
+on the result (array order), and any explicitly distinct file is untouched.
 
 ## Where to find it
 

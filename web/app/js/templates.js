@@ -24,7 +24,7 @@ export const PROGRAM_TEMPLATES = [
   {
     id: "strength-upper-lower",
     name: "Strength — Upper/Lower",
-    tagline: "4 days · barbell strength · A/B split over a 4-week wave",
+    tagline: "4 days · barbell strength · completion-based A/B wave",
     focus: "strength", roundingLb: 5,
     exercises: [
       ex("Back Extension", "Accessory", "bodyweight", "hinge"),
@@ -284,8 +284,14 @@ export async function createProgramFromTemplate(template) {
     nextDayIndex: 0, roundingLb: template.roundingLb, isActive: programs.length === 0,
     days: template.days.map((d, i) => ({
       name: d.name, order: i,
-      lifts: d.lifts.map((l) => {
+      // Slot order is stamped from the template author's written sequence,
+      // matching native instantiate (PR #69). Explicit rather than load-bearing:
+      // normalizeProgram already fills an ABSENT order with the array position,
+      // so template programs were never actually tied — this just says so at
+      // the write site instead of relying on the save-path repair.
+      lifts: d.lifts.map((l, slotOrder) => {
         const { startFraction = 0, sets = 0, ...record } = l;
+        record.order = slotOrder;
         record.prescription = l.prescription || "automatic";
         if (sets > 0) record.doubleProgressionSets = sets;
         const fraction = startFraction || C.defaultStartFraction(record.prescription);
@@ -296,8 +302,9 @@ export async function createProgramFromTemplate(template) {
         }
         return record;
       }),
-      accessories: d.accessories.map((a) => {
+      accessories: d.accessories.map((a, slotOrder) => {
         const { startFraction = 0, ...record } = a;
+        record.order = slotOrder;
         const e1RM = known.get(a.exerciseName) || 0;
         if (startFraction > 0 && e1RM > 0) {
           record.weightLb = Math.max(45, floorTo(startFraction * e1RM, template.roundingLb));

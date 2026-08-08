@@ -19,6 +19,7 @@
 //      exercise resolved. A malformed or partially-resolvable file changes
 //      nothing.
 import { BACKUP_ENUMS, Exercises, Programs } from "./db.js";
+import * as C from "./core.js";
 
 export const PROGRAM_FILE_KIND = "cadence.program";
 export const PROGRAM_SCHEMA_VERSION = 1;
@@ -611,18 +612,28 @@ export async function importProgramFile(file, { preserveIdentity = false } = {})
     // An import never activates itself over a program the lifter is mid-cycle
     // on. The only exception is an empty store, where there is nothing to steal.
     isActive: existing ? !!existing.isActive : programs.length === 0,
-    days: program.days.map((day) => ({
-      name: day.name,
-      order: day.order,
-      lifts: day.lifts.map((lift) => buildSlot(
-        lift, resolved, LIFT_PLAN_FIELDS,
-        { keepIdentity, keepState, extraState: LIFT_STATE_FIELDS },
-      )),
-      accessories: day.accessories.map((accessory) => buildSlot(
-        accessory, resolved, ACCESSORY_PLAN_FIELDS,
-        { keepIdentity, keepState, extraState: ACCESSORY_STATE_FIELDS },
-      )),
-    })),
+    days: program.days.map((day) => {
+      // A file whose slots all say the same order carries no ordering
+      // information beyond the sequence they were written in — keep it, or
+      // the tie falls to the alphabetical display fallback and the alphabet
+      // does the author's programming. Mirrors ProgramImportService.
+      const liftOrders = C.authoredSlotOrders(day.lifts.map((l) => l.order ?? 0));
+      const accessoryOrders = C.authoredSlotOrders(day.accessories.map((a) => a.order ?? 0));
+      return {
+        name: day.name,
+        order: day.order,
+        lifts: day.lifts.map((lift, i) => ({
+          ...buildSlot(lift, resolved, LIFT_PLAN_FIELDS,
+            { keepIdentity, keepState, extraState: LIFT_STATE_FIELDS }),
+          order: liftOrders[i],
+        })),
+        accessories: day.accessories.map((accessory, i) => ({
+          ...buildSlot(accessory, resolved, ACCESSORY_PLAN_FIELDS,
+            { keepIdentity, keepState, extraState: ACCESSORY_STATE_FIELDS }),
+          order: accessoryOrders[i],
+        })),
+      };
+    }),
   };
 
   const id = await Programs.save(record);

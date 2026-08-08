@@ -17,11 +17,12 @@ on:
         default: false
         type: boolean
 
-# A new commit makes older PR validation irrelevant. Never cancel main because a
-# release or TestFlight upload may already be in progress.
+# Every main/workflow-dispatch run is a production release candidate. Queue the
+# complete workflow so no newer run can replace an older pending release after
+# it has spent time in validation. PR runs remain independent and parallel.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}-{1}', github.event.pull_request.number, github.run_id) || 'cadence-production-release' }}
+  queue: max
 
 # Default every job's GITHUB_TOKEN to read-only; jobs that publish elevate
 # themselves explicitly.
@@ -291,7 +292,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: semantic-release
-      cancel-in-progress: false
+      queue: max
     permissions:
       contents: write
     outputs:

@@ -29,8 +29,10 @@ enum WarmupPolicy: String, Codable, CaseIterable {
 
 /// A structured training plan: ordered days, each pairing a main + complementary
 /// cycle-lift with accessories. The program OWNS the progression state for its
-/// lifts and drives one unified 4-week wave (`currentWeek`). Adaptive
-/// cross-cycle progression lives in CadenceCore (`ProgramProgression`).
+/// lifts and drives three progression rotations plus recovery (`currentWeek`
+/// is the persisted compatibility name for that phase pointer, not a claim that
+/// every program is calendar-week-bound). Adaptive cross-cycle progression
+/// lives in CadenceCore (`ProgramProgression`).
 @Model
 final class Program {
     @Attribute(.unique) var id: String = UUID().uuidString
@@ -149,7 +151,7 @@ final class ProgramLift {
     var estimatedMaxLb: Double
     var stallCount: Int
     var lastIncrementLb: Double
-    // Week-3 grade is stashed here and applied at cycle rollover (deload week end).
+    // Rotation-3 grade is stashed here and applied after the recovery bridge.
     var pendingBaseWeightLb: Double?
     var pendingEstimatedMaxLb: Double?
     var pendingStallCount: Int?
