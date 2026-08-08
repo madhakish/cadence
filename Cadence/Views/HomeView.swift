@@ -622,7 +622,7 @@ struct HomeView: View {
             )
             for warmup in ProgramSession.achievableWarmups(
                 theoretical, workingLb: plan.weightLb,
-                gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb
+                gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb, exercise: exercise
             ) {
                 let set = SetEntry(order: entry.sets.count, weightLb: warmup.weightLb, reps: warmup.reps,
                                    isWarmup: true, enteredUnit: entryUnit,

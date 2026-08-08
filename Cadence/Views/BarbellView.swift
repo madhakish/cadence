@@ -18,6 +18,9 @@ struct BarbellView: View {
     /// must match its own answer (which may span both unit systems), and
     /// reverse mode must draw exactly what the user says is on the bar.
     var loadout: Loadout? = nil
+    /// The lift's station plate denomination (v8): the deadlift platform by
+    /// the window stocks only kg plates. nil = the gym inventory.
+    var stationDenomination: WeightUnit? = nil
 
     private static let fill: [String: Color] = [
         "red": Color(hex: 0xD23B3B), "blue": Color(hex: 0x2F6FED), "green": Color(hex: 0x1FAA52),
@@ -43,7 +46,11 @@ struct BarbellView: View {
         guard let gym else {
             return unit == .kg ? Plate.standardKg : Plate.standardLb
         }
-        return gym.availablePlates
+        // The lift's station preference filters the gym inventory to its own
+        // denomination (falling back to that denomination's standard set).
+        return PlateMath.stationPlates(
+            preference: stationDenomination, gymPlates: gym.availablePlates
+        )
     }
 
     var body: some View {

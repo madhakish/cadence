@@ -757,7 +757,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // Every other assertion here compares against the constant, so a JS-only bump
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
-ok(db.BACKUP_SCHEMA_VERSION === 7, `backup schema is pinned at 7 (got ${db.BACKUP_SCHEMA_VERSION})`);
+ok(db.BACKUP_SCHEMA_VERSION === 8, `backup schema is pinned at 8 (got ${db.BACKUP_SCHEMA_VERSION})`);
 
 // An app must never write a backup it cannot itself restore. A corrupted or
 // out-of-range birthYear is clamped to the not-set sentinel on the way through
@@ -1220,7 +1220,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 7, "climbed flights ship as backup schema 7");
+    ok(climbBundle.schemaVersion === 8, "climbed flights ship inside the current backup schema");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -1228,6 +1228,30 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
       .find((e) => e.name === "Deadlift").sets[0];
     ok(!("flights" in noFlights), "sets without flights don't grow the key (byte-stable exports)");
     await db.Sessions.del(cid);
+  }
+
+  // The station preference (v8) survives the portable contract: declared
+  // once on the exercise, exported, and restored — and a pre-v8 bundle has
+  // no key at all, which restores as "gym inventory", exactly what every
+  // lift did before stations existed. [INV-STATION-OWNS-ITS-PLATES]
+  {
+    const deadlift = await db.Exercises.byName("Deadlift");
+    deadlift.stationDenomination = "kg";
+    await db.Exercises.save(deadlift);
+    const stationBundle = JSON.parse(await db.exportJSON());
+    ok(stationBundle.exercises.find((e) => e.name === "Deadlift").stationDenomination === "kg",
+      "export carries the kg deadlift station");
+    deadlift.stationDenomination = null;
+    await db.Exercises.save(deadlift);
+    await db.importBundle(stationBundle);
+    ok((await db.Exercises.byName("Deadlift")).stationDenomination === "kg",
+      "restore returns the kg deadlift station");
+    const preStation = JSON.parse(await db.exportJSON());
+    preStation.schemaVersion = 7;
+    preStation.exercises.forEach((e) => { delete e.stationDenomination; });
+    await db.importBundle(preStation);
+    ok((await db.Exercises.byName("Deadlift")).stationDenomination === null,
+      "a pre-v8 bundle restores every lift onto the gym inventory");
   }
 
   // A climb logged in miles before flights existed keeps its distance and stays

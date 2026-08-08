@@ -8,7 +8,7 @@ final class BackupContractTests: XCTestCase {
     ///
     /// Must stay in lockstep with `BACKUP_SCHEMA_VERSION` in web/app/js/db.js.
     func testCurrentVersionIsPinned() {
-        XCTAssertEqual(BackupContract.currentSchemaVersion, 7)
+        XCTAssertEqual(BackupContract.currentSchemaVersion, 8)
     }
 
     func testCurrentAndLegacyVersionsAreSupported() {
@@ -22,6 +22,8 @@ final class BackupContractTests: XCTestCase {
         XCTAssertTrue(BackupContract.supports(schemaVersion: 5))
         XCTAssertTrue(BackupContract.supports(schemaVersion: 6),
                       "a pre-flights bundle still restores, with no count anywhere")
+        XCTAssertTrue(BackupContract.supports(schemaVersion: 7),
+                      "a pre-station bundle still restores; every lift solves on the gym inventory")
         XCTAssertTrue(BackupContract.supports(schemaVersion: BackupContract.currentSchemaVersion))
     }
 

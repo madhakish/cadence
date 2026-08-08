@@ -299,6 +299,20 @@ export const barById = (id) => ALL_BARS.find((b) => barId(b) === id) || BARS.bar
 export const barLabelLb = (b) => b.unit === "lb" ? b.value
   : Number(Object.keys(PLATE_TWIN_KG).find((lb) => PLATE_TWIN_KG[lb] === b.value) ?? barLb(b));
 
+// The plate inventory a lift's STATION actually stocks. A station preference
+// filters the gym's inventory to that denomination — the deadlift platform by
+// the window has only kg plates, the squat racks only lb — falling back to
+// the full standard set of that denomination when the gym stocks none of it
+// (a preference is a statement about the station, not about the gym's
+// shopping). No preference means the gym inventory, unchanged — exactly what
+// every lift did before stations existed. Mirrors PlateMath.stationPlates.
+export function stationPlates(preference, gymPlates) {
+  if (preference !== "lb" && preference !== "kg") return gymPlates;
+  const stocked = gymPlates.filter((p) => p.unit === preference);
+  if (stocked.length) return stocked;
+  return preference === "kg" ? STANDARD_KG : STANDARD_LB;
+}
+
 export const plateCountLb = (pc) => plateLb(pc.plate) * pc.count;
 export const plateCountLabel = (pc) =>
   pc.count === 1 ? plateLabel(pc.plate) : `${plateLabel(pc.plate)} ×${pc.count}`;

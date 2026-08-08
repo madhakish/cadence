@@ -7,7 +7,7 @@ import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 5;
-export const BACKUP_SCHEMA_VERSION = 7;
+export const BACKUP_SCHEMA_VERSION = 8;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -266,6 +266,10 @@ const normalizeExercise = (exercise) => ({
   reEntryTestWeightLb: Number.isFinite(exercise.reEntryTestWeightLb) ? exercise.reEntryTestWeightLb : 0,
   reEntryTestSets: Number.isInteger(exercise.reEntryTestSets) ? exercise.reEntryTestSets : 3,
   reEntryTestReps: Number.isInteger(exercise.reEntryTestReps) ? exercise.reEntryTestReps : 5,
+  // The plate denomination this lift's STATION stocks; null = the gym
+  // inventory, exactly what every lift did before stations existed (v8).
+  stationDenomination: ["lb", "kg"].includes(exercise.stationDenomination)
+    ? exercise.stationDenomination : null,
 });
 
 // ---- Date helpers ----
@@ -1077,6 +1081,7 @@ export function validateBackup(bundle) {
     enumValue(exercise.loadBasis, BACKUP_ENUMS.loadBases, `${path}.loadBasis`);
     numberValue(exercise.implementCount, `${path}.implementCount`, { integer: true, min: 1, max: 4 });
     numberValue(exercise.defaultRestSeconds, `${path}.defaultRestSeconds`, { integer: true, min: 0, max: 3600 });
+    enumValue(exercise.stationDenomination, BACKUP_ENUMS.units, `${path}.stationDenomination`);
     dateValue(exercise.createdAt, `${path}.createdAt`);
   });
   if (exercises) unique(exercises, (exercise) => exercise.name.trim(), "exercises");

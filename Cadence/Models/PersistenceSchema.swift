@@ -1,20 +1,19 @@
 import SwiftData
 
-/// Current persistence schema. V3, V4, V5, and V6 are frozen in their own
-/// files; every V7 field has a literal migration-safe default and is backfilled
-/// after opening where historical values can be recovered.
+/// Current persistence schema. V3, V4, V5, V6, and V7 are frozen in their own
+/// files; every V8 field has a literal migration-safe default and needs no
+/// backfill.
 ///
-/// V7 adds `AppSettings.verticalPullMainsPromoted`, the one-shot stamp for the
-/// repair that promotes seeded pull-ups from Accessory to Main. It is a new
-/// Bool with a `false` default and no historical value to recover, so the
-/// migration is additive and lossless: an upgraded store gains a column that
-/// reads `false`, which is exactly "this install has not been repaired yet".
-///
-/// The stamp is what keeps the repair a one-shot. Without it the promotion
-/// would re-run on every open and silently overwrite a category the lifter had
-/// deliberately set back to Accessory.
-enum CadenceSchemaV7: VersionedSchema {
-    static var versionIdentifier = Schema.Version(7, 0, 0)
+/// V8 adds `Exercise.stationDenominationRaw`, the per-lift station plate
+/// preference: the deadlift station that stocks only kg plates solves against
+/// the kg inventory while the squat racks keep the gym's lb plates, configured
+/// once on the exercise the same way it already carries its own rest default.
+/// It is a new optional String with a `nil` default and no historical value to
+/// recover — `nil` means "use the gym inventory", which is exactly what every
+/// existing exercise did before the field existed — so the migration is
+/// additive and lossless.
+enum CadenceSchemaV8: VersionedSchema {
+    static var versionIdentifier = Schema.Version(8, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [
@@ -42,7 +41,8 @@ enum CadenceSchemaV7: VersionedSchema {
 /// needs its own path to the current schema.
 enum CadencePre72MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV1.self, CadenceSchemaV3.self, CadenceSchemaV4.self, CadenceSchemaV5.self, CadenceSchemaV6.self, CadenceSchemaV7.self]
+        [CadenceSchemaV1.self, CadenceSchemaV3.self, CadenceSchemaV4.self, CadenceSchemaV5.self,
+         CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
@@ -57,6 +57,8 @@ enum CadencePre72MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV6.self),
             .lightweight(fromVersion: CadenceSchemaV6.self,
                          toVersion: CadenceSchemaV7.self),
+            .lightweight(fromVersion: CadenceSchemaV7.self,
+                         toVersion: CadenceSchemaV8.self),
         ]
     }
 }
@@ -65,7 +67,8 @@ enum CadencePre72MigrationPlan: SchemaMigrationPlan {
 /// That build advertised V1 while writing a different model checksum.
 enum Cadence72MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV2.self, CadenceSchemaV3.self, CadenceSchemaV4.self, CadenceSchemaV5.self, CadenceSchemaV6.self, CadenceSchemaV7.self]
+        [CadenceSchemaV2.self, CadenceSchemaV3.self, CadenceSchemaV4.self, CadenceSchemaV5.self,
+         CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
@@ -80,6 +83,8 @@ enum Cadence72MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV6.self),
             .lightweight(fromVersion: CadenceSchemaV6.self,
                          toVersion: CadenceSchemaV7.self),
+            .lightweight(fromVersion: CadenceSchemaV7.self,
+                         toVersion: CadenceSchemaV8.self),
         ]
     }
 }
@@ -87,7 +92,8 @@ enum Cadence72MigrationPlan: SchemaMigrationPlan {
 /// Normal path for an install already upgraded by PR #73.
 enum CadenceV3MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV3.self, CadenceSchemaV4.self, CadenceSchemaV5.self, CadenceSchemaV6.self, CadenceSchemaV7.self]
+        [CadenceSchemaV3.self, CadenceSchemaV4.self, CadenceSchemaV5.self,
+         CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
@@ -100,6 +106,8 @@ enum CadenceV3MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV6.self),
             .lightweight(fromVersion: CadenceSchemaV6.self,
                          toVersion: CadenceSchemaV7.self),
+            .lightweight(fromVersion: CadenceSchemaV7.self,
+                         toVersion: CadenceSchemaV8.self),
         ]
     }
 }
@@ -108,7 +116,8 @@ enum CadenceV3MigrationPlan: SchemaMigrationPlan {
 /// retirement and arrives here two versions behind.
 enum CadenceV4MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV4.self, CadenceSchemaV5.self, CadenceSchemaV6.self, CadenceSchemaV7.self]
+        [CadenceSchemaV4.self, CadenceSchemaV5.self, CadenceSchemaV6.self,
+         CadenceSchemaV7.self, CadenceSchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
@@ -119,17 +128,18 @@ enum CadenceV4MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV6.self),
             .lightweight(fromVersion: CadenceSchemaV6.self,
                          toVersion: CadenceSchemaV7.self),
+            .lightweight(fromVersion: CadenceSchemaV7.self,
+                         toVersion: CadenceSchemaV8.self),
         ]
     }
 }
 
 /// Path for a store already on V5 — every install shipped since protein
-/// logging was retired, which is the common case for this upgrade. `flights` is
-/// a new optional with no historical value to recover, so SwiftData can add the
-/// column without touching a row.
+/// logging was retired. `flights` is a new optional with no historical value to
+/// recover, so SwiftData can add the column without touching a row.
 enum CadenceV5MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV5.self, CadenceSchemaV6.self, CadenceSchemaV7.self]
+        [CadenceSchemaV5.self, CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
@@ -138,23 +148,44 @@ enum CadenceV5MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV6.self),
             .lightweight(fromVersion: CadenceSchemaV6.self,
                          toVersion: CadenceSchemaV7.self),
+            .lightweight(fromVersion: CadenceSchemaV7.self,
+                         toVersion: CadenceSchemaV8.self),
         ]
     }
 }
 
 /// Path for a store already on V6 — every install shipped since conditioning
-/// learned to count flights, which is the common case for this upgrade.
-/// `verticalPullMainsPromoted` is a new Bool with a literal default, so
-/// SwiftData can add the column without touching a row.
+/// learned to count flights. `verticalPullMainsPromoted` is a new Bool with a
+/// literal default, so SwiftData can add the column without touching a row.
 enum CadenceV6MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV6.self, CadenceSchemaV7.self]
+        [CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
         [
             .lightweight(fromVersion: CadenceSchemaV6.self,
                          toVersion: CadenceSchemaV7.self),
+            .lightweight(fromVersion: CadenceSchemaV7.self,
+                         toVersion: CadenceSchemaV8.self),
+        ]
+    }
+}
+
+/// Path for a store already on V7 — every install shipped since vertical
+/// pulling was promoted to main work, which is the common case for this
+/// upgrade. `stationDenominationRaw` is a new optional with a `nil` default
+/// and no historical value to recover, so SwiftData can add the column
+/// without touching a row.
+enum CadenceV7MigrationPlan: SchemaMigrationPlan {
+    static var schemas: [any VersionedSchema.Type] {
+        [CadenceSchemaV7.self, CadenceSchemaV8.self]
+    }
+
+    static var stages: [MigrationStage] {
+        [
+            .lightweight(fromVersion: CadenceSchemaV7.self,
+                         toVersion: CadenceSchemaV8.self),
         ]
     }
 }

@@ -142,7 +142,7 @@ enum ProgramSession {
                     includeEmptyBar: includesEmptyBarWarmup(for: exercise)
                 )
                 let achievedRamp = achievableWarmups(fullRamp, workingLb: topPreparationLoad,
-                                                     gym: defaultGym, bar: selectedBar)
+                                                     gym: defaultGym, bar: selectedBar, exercise: exercise)
                 let ramp = resolvedWarmup == .short ? Array(achievedRamp.suffix(2)) : achievedRamp
                 for wu in ramp {
                     insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true,
@@ -332,7 +332,10 @@ enum ProgramSession {
                                  barLb: bar.lb, stepLb: stepLb)
         let options = PlateMath.prescriptionOptions(
             targetLb: rounded, bar: bar,
-            plates: gym?.availablePlates ?? Plate.allStandard,
+            plates: PlateMath.stationPlates(
+                preference: exercise?.stationDenomination,
+                gymPlates: gym?.availablePlates ?? Plate.allStandard
+            ),
             collarLb: gym?.collarWeightLb ?? 0,
             policy: gym?.loadingPolicy ?? .closest,
             preferOverOnTie: phase == .volume
@@ -350,12 +353,15 @@ enum ProgramSession {
     /// collapse several targets to one load; never store duplicates or an
     /// extra warmup equal to the working weight.
     static func achievableWarmups(_ ramp: [WarmupSet], workingLb: Double,
-                                  gym: Gym?, bar: Bar) -> [WarmupSet] {
+                                  gym: Gym?, bar: Bar, exercise: Exercise? = nil) -> [WarmupSet] {
         var seen: Set<Double> = []
         return ramp.compactMap { warmup in
             let solution = PlateMath.solve(
                 targetLb: warmup.weightLb, bar: bar,
-                plates: gym?.availablePlates ?? Plate.allStandard,
+                plates: PlateMath.stationPlates(
+                    preference: exercise?.stationDenomination,
+                    gymPlates: gym?.availablePlates ?? Plate.allStandard
+                ),
                 collarLb: gym?.collarWeightLb ?? 0,
                 policy: gym?.loadingPolicy ?? .closest
             )
@@ -385,7 +391,10 @@ enum ProgramSession {
         guard exercise?.type == .barbell else { return target }
         let achieved = PlateMath.solve(
             targetLb: target, bar: bar,
-            plates: gym?.availablePlates ?? Plate.allStandard,
+            plates: PlateMath.stationPlates(
+                preference: exercise?.stationDenomination,
+                gymPlates: gym?.availablePlates ?? Plate.allStandard
+            ),
             collarLb: gym?.collarWeightLb ?? 0,
             policy: .under
         ).loadout.totalLb

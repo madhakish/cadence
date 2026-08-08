@@ -18,11 +18,11 @@ const orderedSlots = (slots = [], roleAwareLegacy = false) => {
   });
 };
 
-const barbellPrescriptionView = (achievedLb, targetLb, unit, gym) => {
+const barbellPrescriptionView = (achievedLb, targetLb, unit, gym, stationDenomination = null) => {
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const wrap = ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
-    barbellSVG(achievedLb, unit, bar, gym).svg);
-  for (const detail of prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym)) {
+    barbellSVG(achievedLb, unit, bar, gym, null, stationDenomination).svg);
+  for (const detail of prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, stationDenomination)) {
     wrap.append(ui.h("span", { class: `sub plate-detail${detail.kind === "target" ? " warn" : ""}`, text: detail.text }));
   }
   return wrap;
@@ -200,6 +200,7 @@ export async function render(host) {
       if (ex && ex.type === "barbell" && plan.weightLb > 0) {
         card.append(barbellPrescriptionView(
           plan.weightLb, targetWeightLb, C.primaryUnit(settings.unitDisplay), gym,
+          ex.stationDenomination ?? null,
         ));
       } else if (ex && ex.type === "dumbbell" && plan.weightLb > 0) {
         card.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
@@ -332,6 +333,7 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
         if (ex && ex.type === "barbell" && plan.weightLb > 0) {
           liftCard.append(barbellPrescriptionView(
             plan.weightLb, targetWeightLb, C.primaryUnit(ui.prefs.unitDisplay), gym,
+            ex.stationDenomination ?? null,
           ));
         } else if (ex && ex.type === "dumbbell" && plan.weightLb > 0) {
           liftCard.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },

@@ -37,7 +37,7 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
-    func testShippedV3StoreMigratesToV7WithoutDataLoss() throws {
+    func testShippedV3StoreMigratesToV8WithoutDataLoss() throws {
         try assertMigration(
             createStore: createV3Store,
             migrationPlan: CadenceV3MigrationPlan.self,
@@ -47,7 +47,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// An install that skipped the protein retirement and arrives two versions
     /// behind, so its store crosses both stages in one open.
-    func testShippedV4StoreMigratesToV7WithoutDataLoss() throws {
+    func testShippedV4StoreMigratesToV8WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV4Store(at: $0) },
             migrationPlan: CadenceV4MigrationPlan.self,
@@ -57,7 +57,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The common case for this upgrade: every install shipped since protein
     /// logging was retired carries the V5 checksum.
-    func testShippedV5StoreMigratesToV7WithoutDataLoss() throws {
+    func testShippedV5StoreMigratesToV8WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV5Store(at: $0) },
             migrationPlan: CadenceV5MigrationPlan.self,
@@ -67,12 +67,66 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The common case for THIS upgrade: every install shipped since
     /// conditioning learned to count flights carries the V6 checksum.
-    func testShippedV6StoreMigratesToV7WithoutDataLoss() throws {
+    func testShippedV6StoreMigratesToV8WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV6Store(at: $0) },
             migrationPlan: CadenceV6MigrationPlan.self,
             expectsExistingSessionID: true
         )
+    }
+
+    /// The common case for THIS upgrade: every install shipped since vertical
+    /// pulling was promoted carries the V7 checksum.
+    func testShippedV7StoreMigratesToV8WithoutDataLoss() throws {
+        try assertMigration(
+            createStore: { try self.createV7Store(at: $0) },
+            migrationPlan: CadenceV7MigrationPlan.self,
+            expectsExistingSessionID: true
+        )
+    }
+
+    /// The whole point of V8: the station column arrives as nil — "use the gym
+    /// inventory", exactly what every lift did before stations existed — the
+    /// one-shot stamps survive the hop, and a preference set after the upgrade
+    /// persists across reopens.
+    func testV7StoreGainsTheStationColumnWithoutTouchingAnything() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+        try createV7Store(at: storeURL)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
+        do {
+            let container = try ModelContainer(for: schema, migrationPlan: CadenceV7MigrationPlan.self,
+                                               configurations: configuration)
+            let context = container.mainContext
+            let squat = try XCTUnwrap(
+                try context.fetch(FetchDescriptor<Exercise>()).first { $0.name == "Back Squat" }
+            )
+            XCTAssertNil(squat.stationDenomination,
+                         "a migrated exercise has no station preference — the gym inventory rule holds")
+            XCTAssertEqual(try context.fetch(FetchDescriptor<AppSettings>()).first?.verticalPullMainsPromoted,
+                           true, "the V7 one-shot stamp survives the V8 hop")
+            // The lifter declares the deadlift station's kg plates once…
+            let deadlift = try XCTUnwrap(
+                try context.fetch(FetchDescriptor<Exercise>()).first { $0.name == "Deadlift" }
+            )
+            deadlift.stationDenomination = .kg
+            try context.save()
+        }
+        // …and it is still there when the store reopens.
+        let reopened = try ModelContainer(
+            for: schema, migrationPlan: CadenceV7MigrationPlan.self,
+            configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+        )
+        let deadlift = try XCTUnwrap(
+            try reopened.mainContext.fetch(FetchDescriptor<Exercise>()).first { $0.name == "Deadlift" }
+        )
+        XCTAssertEqual(deadlift.stationDenomination, .kg,
+                       "the station preference is persisted state, not a runtime guess")
     }
 
     /// The whole point of V7: a store seeded while pull-ups were accessories
@@ -86,7 +140,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV6Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(for: schema, migrationPlan: CadenceV6MigrationPlan.self,
                                            configurations: configuration)
@@ -132,7 +186,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The V6 fixture itself must be a valid V6 graph. A helper from another
     /// schema version can compile at the call site but cannot be persisted by
-    /// this container, which would make every downstream V7 assertion theater.
+    /// this container, which would make every downstream current-schema assertion theater.
     func testV6FixtureContainsItsProgramGraphBeforeMigration() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cadence-v6-fixture-\(UUID().uuidString)", isDirectory: true)
@@ -157,7 +211,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// native omits this one, restoring its own post-migration backup promotes
     /// a pull-up the lifter deliberately moved back to Accessory.
     func testNativeBackupRoundTripKeepsVerticalPullPromotionStamp() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -202,7 +256,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV4Store(at: storeURL, proteinEntries: 12)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV4MigrationPlan.self, configurations: configuration
@@ -250,7 +304,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV5Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV5MigrationPlan.self, configurations: configuration
@@ -298,7 +352,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairRestoresIndependentLowerBDayAndIsIdempotent() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -374,7 +428,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairDoesNotGuessBetweenIdenticalCollidingSlots() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -415,7 +469,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testMirroredLowerBMatrixRestoresRolesFromItsTaggedProgramDay() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -511,7 +565,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     private func openUsingProductionStrategies(storeURL: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
         let configuration = {
             ModelConfiguration("migration", schema: schema, url: storeURL)
         }
@@ -550,7 +604,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createStore(storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema,
@@ -997,6 +1051,88 @@ final class PersistenceMigrationTests: XCTestCase {
         let lift = CadenceSchemaV6.ProgramLift(exerciseName: "Back Squat")
         lift.baseWeightLb = 175
         let accessory = CadenceSchemaV6.ProgramAccessory(exerciseName: "Seated Leg Curl")
+        // One side only — same rule the session fixture above states: a store
+        // built with both sides of the inverse assigned would let migration
+        // pass on self-corrupted relationship rows production never writes.
+        day.program = program; lift.day = day; accessory.day = day
+        context.insert(program); context.insert(day); context.insert(lift); context.insert(accessory)
+    }
+
+    /// A representative store carrying the V7 checksum: the training log the
+    /// V6 fixture writes, plus the promotion stamp V7 introduced (set, as a
+    /// repaired install would have it) and a Deadlift row for the V8 station
+    /// test to claim.
+    private func createV7Store(at url: URL) throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV7.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: url)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+
+        let exercise = CadenceSchemaV7.Exercise(
+            name: "Back Squat", categoryRaw: "Main", typeRaw: "barbell")
+        exercise.movementGroup = "squat"
+        let deadlift = CadenceSchemaV7.Exercise(
+            name: "Deadlift", categoryRaw: "Main", typeRaw: "barbell")
+        deadlift.movementGroup = "hinge"
+        let session = CadenceSchemaV7.WorkoutSession(
+            date: Date(timeIntervalSince1970: 1_700_000_000))
+        session.notes = "V1 training log"
+        session.isCompleted = true
+        let entry = CadenceSchemaV7.SessionExercise(order: 0)
+        entry.exercise = exercise
+        entry.plannedWeightLb = 195
+        entry.plannedSets = 3
+        entry.plannedReps = 5
+        let set = CadenceSchemaV7.SetEntry(order: 0)
+        set.weightLb = 185
+        set.reps = 5
+        let warmup = CadenceSchemaV7.SetEntry(order: 1)
+        warmup.weightLb = 95
+        warmup.reps = 5
+        warmup.isWarmup = true
+        warmup.prescriptionBlockRaw = "warmup"
+        // One side only — see createV4Store. A fixture built with both sides of
+        // the inverse assigned would let this pass on self-corrupted data.
+        entry.session = session
+        set.sessionExercise = entry
+        warmup.sessionExercise = entry
+
+        let climber = CadenceSchemaV7.Exercise(
+            name: "Stair Climber", categoryRaw: "Conditioning", typeRaw: "conditioning")
+        climber.movementGroup = "conditioning"
+        let climbEntry = CadenceSchemaV7.SessionExercise(order: 1)
+        climbEntry.exercise = climber
+        let climbSet = CadenceSchemaV7.SetEntry(order: 0)
+        climbSet.reps = 1
+        climbSet.distanceMiles = 0.75
+        climbSet.durationSeconds = 1200
+        climbEntry.session = session
+        climbSet.sessionExercise = climbEntry
+
+        let settings = CadenceSchemaV7.AppSettings()
+        settings.verticalPullMainsPromoted = true
+
+        context.insert(exercise)
+        context.insert(deadlift)
+        context.insert(session)
+        context.insert(entry)
+        context.insert(set)
+        context.insert(warmup)
+        context.insert(climber)
+        context.insert(climbEntry)
+        context.insert(climbSet)
+        context.insert(CadenceSchemaV7.Gym(name: "Migration Gym"))
+        context.insert(settings)
+        insertV7Program(context)
+        try context.save()
+    }
+
+    private func insertV7Program(_ context: ModelContext) {
+        let program = CadenceSchemaV7.Program(name: "Migration Program")
+        let day = CadenceSchemaV7.ProgramDay(name: "Lower", order: 0)
+        let lift = CadenceSchemaV7.ProgramLift(exerciseName: "Back Squat")
+        lift.baseWeightLb = 175
+        let accessory = CadenceSchemaV7.ProgramAccessory(exerciseName: "Seated Leg Curl")
         // One side only — same rule the session fixture above states: a store
         // built with both sides of the inverse assigned would let migration
         // pass on self-corrupted relationship rows production never writes.
