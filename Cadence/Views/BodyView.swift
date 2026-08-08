@@ -9,6 +9,10 @@ struct BodyView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \BodyweightEntry.date) private var bodyweight: [BodyweightEntry]
     @Query private var settingsList: [AppSettings]
+    @Query private var checkIns: [CheckIn]
+    /// Set by the cadence://signals deep link: Signals lives one level inside
+    /// Body now, and the link's contract is the screen, not the tab.
+    @Binding var pendingSignals: Bool
 
     @AppStorage("healthReadEnabled") private var healthReadEnabled = false
 
@@ -26,7 +30,35 @@ struct BodyView: View {
 
     var body: some View {
         NavigationStack {
+            bodyList
+                .navigationDestination(isPresented: $pendingSignals) { InjuryTimelineView() }
+        }
+    }
+
+    private var bodyList: some View {
             List {
+                Section {
+                    NavigationLink {
+                        InjuryTimelineView()
+                    } label: {
+                        HStack {
+                            Label("Signals", systemImage: "bolt.heart")
+                            Spacer()
+                            if hardStopCount > 0 {
+                                Text("\(hardStopCount)")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Theme.hardStop, in: Capsule())
+                                    .accessibilityLabel("\(hardStopCount) active hard stops")
+                            }
+                        }
+                    }
+                } footer: {
+                    Text("Body-site check-ins and set flags, including anything that should stop training.")
+                }
+
                 Section("Bodyweight") {
                     if bodyweight.count > 1 {
                         Chart {
@@ -83,7 +115,6 @@ struct BodyView: View {
             }
             .task(id: healthReadEnabled) { await refreshHealth() }
         }
-    }
 
     /// Sleep reads as hours and minutes. `CardioFormat.durationLabel` would
     /// render seven hours as "7:24:00", which is a stopwatch, not a night.
@@ -127,6 +158,16 @@ struct BodyView: View {
     }
 
     private var latestWeightLb: Double? { bodyweight.last?.weightLb }
+
+    private var hardStopCount: Int {
+        Dictionary(grouping: checkIns.compactMap { checkIn in
+            checkIn.site.map { ($0, checkIn) }
+        }, by: { $0.0 })
+        .values
+        .compactMap { entries in entries.map { $0.1 }.max(by: { $0.date < $1.date }) }
+        .filter(\.isHardStop)
+        .count
+    }
 
     private var age: Int? {
         guard let birthYear = settings?.birthYear else { return nil }

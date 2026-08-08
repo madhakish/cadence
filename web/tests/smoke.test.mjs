@@ -20,6 +20,7 @@ const host = () => document.getElementById("view");
 
 const db = await import("../app/js/db.js");
 const home = await import("../app/js/views/home.js");
+const programView = await import("../app/js/views/program.js");
 const history = await import("../app/js/views/history.js");
 const body = await import("../app/js/views/body.js");
 const signals = await import("../app/js/views/signals.js");
@@ -334,6 +335,13 @@ for (let i = 0; i < 10; i++) {
   const day = [...prog.days].sort((a, b) => a.order - b.order)[0]; // Lower A: Back Squat main, Deadlift complementary
   const sid = await session.createSessionFromProgramDay(prog, day);
   await session.openSession(sid); await tick();
+  const logger = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  ok(logger.querySelector(".overlay-head h2")?.textContent === day.name,
+    "the logger title is the workout name, with the date kept in its progress card");
+  ok(logger.querySelector(".session-progress")?.textContent.includes("Exercise 1 of"),
+    "the logger reports exercise and whole-workout set progress");
+  ok(logger.querySelector(".current-set-card") && [...logger.querySelectorAll("button")].some((button) => button.textContent === "Show all sets"),
+    "the current set owns the cockpit while a full-set control remains available");
   const restBtn = [...document.querySelectorAll("#session-bar button")].find((b) => b.textContent.startsWith("Rest "));
   ok(restBtn && restBtn.textContent === "Rest 4:00", `main squat rest follows the bucket stepper (got ${restBtn && restBtn.textContent})`);
   const chips = [...document.querySelectorAll("#overlays .overlay button")].filter((b) => b.textContent.startsWith("⏱"));
@@ -346,7 +354,7 @@ for (let i = 0; i < 10; i++) {
 }
 
 // ---- render every tab without throwing ----
-for (const [name, view] of [["home", home], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
+for (const [name, view] of [["home", home], ["program", programView], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
   try { await view.render(host()); ok(host().childElementCount > 0, `${name} rendered`); }
   catch (e) { ok(false, `${name} threw: ${e.message}`); }
 }
@@ -366,6 +374,11 @@ for (const [name, view] of [["home", home], ["history", history], ["body", body]
   try {
     await home.render(host());
     const text = host().textContent;
+    const todayHero = host().querySelector(".today-hero");
+    ok(todayHero && todayHero.parentElement?.firstElementChild === todayHero,
+      "Today leads with the next workout when no session is open");
+    ok(host().querySelector(".coach-summary") && host().querySelector(".day-sequence"),
+      "Today keeps coach and program sequence compact beneath the hero");
     ok(text.includes("Main · Linear 5s") || text.includes("Complementary · Linear 5s"),
       "a per-exposure slot is badged with what it actually does");
     ok(!host().querySelector(".wave"), "the rising wave glyph is gone from the program header");
@@ -450,7 +463,7 @@ for (const [name, view] of [["home", home], ["history", history], ["body", body]
   program.roundingLb = 5;
   await db.Programs.save(program);
 
-  await settings.render(host());
+  await programView.render(host());
   const addProgram = [...host().querySelectorAll("button")].find((button) => button.textContent.includes("Add program"));
   addProgram.click(); await tick();
   let creator = [...document.querySelectorAll("#overlays .sheet")].at(-1);
@@ -466,7 +479,8 @@ for (const [name, view] of [["home", home], ["history", history], ["body", body]
   [...creator.querySelectorAll("button")].find((button) => button.textContent === "Cancel").click();
   await tick();
 
-  const progRow = [...host().querySelectorAll(".row")].find((r) => r.textContent.includes("Cycle"));
+  const progRow = [...host().querySelectorAll(".program-day-card")]
+    .find((row) => row.textContent.includes(day.name));
   progRow.click(); await tick();
   const editor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
   const dayLead = [...editor.querySelectorAll(".lead")].find((el) => el.textContent.includes(day.name));
@@ -526,6 +540,9 @@ await history.render(host());
 const chartsBtn = [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Charts");
 chartsBtn.click(); await tick();
 ok(host().querySelector("svg.chart") || host().querySelector(".empty"), "history charts mode renders");
+const intentLabels = [...host().querySelectorAll("select option")].map((option) => option.textContent);
+ok(["Main progression", "Compare program roles", "Compare like rotations"].every((label) => intentLabels.includes(label)),
+  "history exposes the three explicit chart intents");
 
 // Asking for a projection must always produce an answer. A control that
 // silently changes nothing when the history is too thin reads as broken, so

@@ -36,12 +36,18 @@ struct HomeView: View {
     @State private var discardSession: WorkoutSession?
     @State private var coachingMessage: String?
     @State private var recoveryMessage: String?
+    @State private var showCoachDetail = false
+    @AppStorage("gymTagLastAutoDay") private var gymTagLastShownDay = 0.0
 
     private var settings: AppSettings? { settingsList.first }
     private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
     private var entryUnit: WeightUnit { unitDisplay.primaryUnit }
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
     private var activeProgram: Program? { programs.first { $0.isActive } ?? programs.first }
+    private var todayStamp: Double { Calendar.current.startOfDay(for: .now).timeIntervalSince1970 }
+    private var prominentGymTag: Bool {
+        defaultGym?.barcodeImageData == nil || gymTagLastShownDay != todayStamp
+    }
     private var coachingReport: CoachingReport? {
         guard let program = activeProgram, program.coachEnabled else { return nil }
         return CoachingService.report(
@@ -125,89 +131,119 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Arrival is a real workflow: the membership tag replaces a
-                // physical keychain and must be available before the workout.
+                // The first card is always the next action: resume beats plan.
+                if let open = openSessions.max(by: { $0.date < $1.date }) {
+                    Section {
+                        Button { activeSession = open } label: {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Label("Resume workout", systemImage: "play.fill").font(.title3.bold())
+                                Text(openSessionLabel(open)).font(.caption).foregroundStyle(.secondary)
+                                if workoutClock.isTracking(sessionID: open.id), let start = workoutClock.startDate {
+                                    TimelineView(.periodic(from: start, by: 1)) { timeline in
+                                        Text(workoutElapsedLabel(from: start, to: workoutClock.pausedAt ?? timeline.date))
+                                            .font(.title2.bold().monospacedDigit()).foregroundStyle(Theme.accent)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button(role: .destructive) { discardSession = open } label: {
+                            Label("Discard session", systemImage: "trash").font(.caption)
+                        }
+                    }
+                    // The hero shows the newest open session, but this screen
+                    // can create more — and an older one (including the one
+                    // the workout clock is timing) must never lose its resume
+                    // and discard controls behind a newer session.
+                    let others = openSessions.filter { $0.id != open.id }.sorted { $0.date > $1.date }
+                    if !others.isEmpty {
+                        Section("Other open sessions") {
+                            ForEach(others) { other in
+                                Button { activeSession = other } label: {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Label(
+                                            workoutClock.isTracking(sessionID: other.id)
+                                                ? (workoutClock.isPaused ? "Workout paused" : "Workout in progress")
+                                                : "Open session",
+                                            systemImage: workoutClock.isTracking(sessionID: other.id) ? "stopwatch" : "arrow.forward"
+                                        )
+                                        .font(.subheadline.bold())
+                                        Text(openSessionLabel(other)).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                                .swipeActions {
+                                    Button(role: .destructive) { discardSession = other } label: {
+                                        Label("Discard", systemImage: "trash")
+                                    }
+                                }
+                                // The swipe alone is invisible to VoiceOver and
+                                // to anyone who doesn't reach for it — the
+                                // visible control is the real affordance.
+                                Button(role: .destructive) { discardSession = other } label: {
+                                    Label("Discard session", systemImage: "trash").font(.caption)
+                                }
+                                .accessibilityHint("Deletes this unfinished session without banking it")
+                            }
+                        }
+                    }
+                } else if let program = activeProgram, let day = nextDay(program) {
+                    Section {
+                        Button { previewProgramDay(program, fallback: day) } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Next workout").font(.caption.bold()).foregroundStyle(.secondary)
+                                    Text(day.name).font(.title2.bold())
+                                    Text("\(program.name) · Cycle \(program.cycleNumber)")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                RotationGlyph(week: program.currentWeek)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                        }
+                        Button("Start \(day.name)") { startProgramDay(program, day) }
+                            .buttonStyle(.borderedProminent)
+                    }
+                }
+
+                if let program = activeProgram, !program.orderedDays.isEmpty {
+                    Section {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(program.orderedDays) { day in
+                                    Text("\(day.order == program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : "")\(day.name)")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(day.order == program.nextDayIndex ? Theme.accent : .secondary)
+                                    if day.id != program.orderedDays.last?.id { Text("→").foregroundStyle(.tertiary) }
+                                }
+                            }
+                        }
+                        .accessibilityLabel("Program sequence, \(nextDay(program)?.name ?? "next day") is now")
+                    }
+                }
+
+                // Keychain replacement stays prominent until today's scan, then
+                // collapses to one compact 44-point action.
                 Section {
                     Button {
+                        gymTagLastShownDay = todayStamp
                         showGymCard = true
                     } label: {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 10) {
                             Image(systemName: "barcode.viewfinder")
-                                .font(.title2.bold())
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Gym Tag").font(.headline)
-                                Text(defaultGym?.barcodeImageData == nil
-                                     ? "Add your membership barcode"
-                                     : "Ready to scan · full brightness")
+                            Text(prominentGymTag ? "Gym Tag" : "Scan gym tag").font(.headline)
+                            Spacer()
+                            if prominentGymTag {
+                                Text(defaultGym?.barcodeImageData == nil ? "Add barcode" : "Ready to scan")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption.bold()).foregroundStyle(.tertiary)
                         }
                         .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(prominentGymTag ? Theme.accent : Color(.tertiarySystemFill))
                     .accessibilityHint("Shows the default membership barcode at full brightness")
-                }
-
-                if !openSessions.isEmpty {
-                    Section("Open sessions") {
-                        ForEach(openSessions.sorted { $0.date > $1.date }) { open in
-                            let isActiveWorkout = workoutClock.isTracking(sessionID: open.id)
-                            Button {
-                                activeSession = open
-                            } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Label(
-                                        isActiveWorkout
-                                            ? (workoutClock.isPaused ? "Workout paused" : "Workout in progress")
-                                            : "Open session",
-                                        systemImage: isActiveWorkout
-                                            ? (workoutClock.isPaused ? "pause.fill" : "stopwatch")
-                                            : "arrow.forward"
-                                    )
-                                    .font(.headline)
-                                    if isActiveWorkout, let start = workoutClock.startDate {
-                                        TimelineView(.periodic(from: start, by: 1)) { timeline in
-                                            Text(workoutElapsedLabel(
-                                                from: start,
-                                                to: workoutClock.pausedAt ?? timeline.date
-                                            ))
-                                            .font(.title3.bold().monospacedDigit())
-                                            .foregroundStyle(Theme.accent)
-                                        }
-                                    }
-                                    Text(openSessionLabel(open))
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                            .accessibilityHint(
-                                Text(isActiveWorkout
-                                    ? "Returns to the workout without changing its timer"
-                                    : "Opens this unfinished session")
-                            )
-                            // Swipe alone hid the only way to get rid of an
-                            // unwanted open session — an invisible gesture
-                            // VoiceOver users never meet either. The visible
-                            // button is the real affordance; the swipe stays
-                            // for people who already reach for it.
-                            .swipeActions {
-                                Button(role: .destructive) {
-                                    discardSession = open
-                                } label: {
-                                    Label("Discard", systemImage: "trash")
-                                }
-                            }
-                            Button(role: .destructive) {
-                                discardSession = open
-                            } label: {
-                                Label("Discard session", systemImage: "trash")
-                                    .font(.caption)
-                            }
-                            .accessibilityHint("Deletes this unfinished session without banking it")
-                        }
-                    }
                 }
 
                 if let recoveryMessage {
@@ -220,51 +256,29 @@ struct HomeView: View {
                 }
 
                 if let program = activeProgram, let report = coachingReport {
-                    Section("Coach · per rotation") {
-                        HStack(spacing: 10) {
-                            Circle()
-                                .fill(readinessColor(report.currentReadiness))
-                                .frame(width: 11, height: 11)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(report.currentReadiness.name).font(.headline)
-                                Text(readinessSummary(report))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if report.greenRotationStreak > 0 {
-                                Text("\(report.greenRotationStreak) green")
+                    Section {
+                        Button { showCoachDetail = true } label: {
+                            HStack(spacing: 10) {
+                                Circle().fill(readinessColor(report.currentReadiness)).frame(width: 12, height: 12)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Coach · \(report.currentReadiness.name)").font(.headline)
+                                    Text(readinessSummary(report)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                HStack(spacing: 4) {
+                                    ForEach(Array(report.rotations.suffix(4)), id: \.key) { rotation in
+                                        Circle().fill(readinessColor(rotation.readiness)).frame(width: 7, height: 7)
+                                    }
+                                }
+                                .accessibilityLabel("Recent rotation readiness")
+                                Spacer()
+                                let count = visibleRecommendations(report, program: program).count
+                                Text("\(count) recommendation\(count == 1 ? "" : "s")")
                                     .font(.caption.bold()).foregroundStyle(Theme.accent)
                             }
-                        }
-
-                        if let latest = report.rotations.last {
-                            Text("\(latest.completedWorkingSets)/\(latest.plannedWorkingSets) work sets · \(Int(latest.conditioningMinutes.rounded())) conditioning min")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
-
-                        ForEach(visibleRecommendations(report, program: program).prefix(3)) { recommendation in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(recommendation.title).font(.subheadline.bold())
-                                Text(recommendation.explanation)
-                                    .font(.caption).foregroundStyle(.secondary)
-                                HStack {
-                                    Button("Apply") {
-                                        apply(recommendation, report: report, program: program)
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    Button("Not now") {
-                                        deferRecommendation(recommendation, report: report, program: program)
-                                    }
-                                    .buttonStyle(.bordered)
-                                }
-                            }
-                            .padding(.vertical, 3)
-                        }
-                        if let coachingMessage {
-                            Text(coachingMessage).font(.caption).foregroundStyle(Theme.accent)
+                            .frame(minHeight: Theme.bigTap)
                         }
                     }
+
                 }
 
                 if let program = activeProgram, let day = nextDay(program) {
@@ -402,6 +416,38 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showGymCard) {
                 GymCardView(gym: defaultGym)
+            }
+            .sheet(isPresented: $showCoachDetail) {
+                if let program = activeProgram, let report = coachingReport {
+                    NavigationStack {
+                        List {
+                            Section("\(report.currentReadiness.name) · per rotation") {
+                                Text(readinessSummary(report))
+                                if let latest = report.rotations.last {
+                                    Text("\(latest.completedWorkingSets)/\(latest.plannedWorkingSets) work sets · \(Int(latest.conditioningMinutes.rounded())) conditioning min")
+                                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                }
+                            }
+                            Section("Recommendations") {
+                                ForEach(visibleRecommendations(report, program: program)) { recommendation in
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(recommendation.title).font(.headline)
+                                        Text(recommendation.explanation).font(.caption).foregroundStyle(.secondary)
+                                        HStack {
+                                            Button("Apply") { apply(recommendation, report: report, program: program) }
+                                                .buttonStyle(.borderedProminent)
+                                            Button("Not now") { deferRecommendation(recommendation, report: report, program: program) }
+                                                .buttonStyle(.bordered)
+                                        }
+                                    }
+                                }
+                                if let coachingMessage { Text(coachingMessage).foregroundStyle(Theme.accent) }
+                            }
+                        }
+                        .navigationTitle("Coach")
+                        .toolbar { Button("Done") { showCoachDetail = false } }
+                    }
+                }
             }
             .task {
                 reconcileActiveRecovery()

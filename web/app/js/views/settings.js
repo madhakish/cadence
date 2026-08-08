@@ -124,22 +124,6 @@ export async function render(host) {
   } }));
 
   // Progression
-  // Program
-  root.append(ui.h("div", { class: "section-title", text: "Program" }));
-  const progList = ui.h("div", { class: "card list" });
-  if (!programs.length) progList.append(ui.h("div", { class: "muted", text: "No program." }));
-  for (const p of programs) {
-    progList.append(ui.h("div", { class: "row", onClick: () => programEditor(p) },
-      ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: p.name }),
-        ui.h("span", { class: "sub", style: { display: "flex", alignItems: "center", gap: "6px" } },
-          ui.rotation(p.currentWeek),
-          ui.h("span", { text: `${p.focus} · ${p.days.length} days · Cycle ${p.cycleNumber}${p.isActive ? " · active" : ""}` }))),
-      ui.h("span", { class: "chev" })));
-  }
-  root.append(progList);
-  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add program",
-    onClick: () => openAddProgramSheet(programs) }));
-
   root.append(ui.h("div", { class: "section-title", text: "Progression (standalone lifts)" }));
   const trackList = ui.h("div", { class: "card list" });
   if (!tracks.length) trackList.append(ui.h("div", { class: "muted", text: "No tracked lifts." }));
@@ -247,7 +231,7 @@ function openTemplateSheet() {
   });
 }
 
-function openAddProgramSheet(programs) {
+export function openAddProgramSheet(programs) {
   ui.sheet({
     title: "Add program",
     build: (content, api) => {
@@ -382,7 +366,7 @@ async function activateProgram(p) {
   p.isActive = true;
 }
 
-async function programEditor(p) {
+export async function programEditor(p) {
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const warningsFor = () => {
     const warnings = [];
