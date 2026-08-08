@@ -1070,23 +1070,89 @@
   },
   {
     "id": "conjugate",
-    "name": "Conjugate — Westside-style",
-    "tagline": "4 days/wk · max-effort singles + speed work · rotate variations by swapping",
+    "name": "Conjugate — Westside",
+    "tagline": "Mon/Wed/Fri/Sun · weekly max-effort rotation · 3-week speed waves",
     "focus": "strength",
     "roundingLb": 5,
-    "exercises": [],
+    "exercises": [
+      {
+        "name": "Low Box Squat",
+        "category": "Main",
+        "type": "barbell",
+        "group": "squat",
+        "isUnilateral": false,
+        "rest": 300
+      },
+      {
+        "name": "Front Box Squat",
+        "category": "Main",
+        "type": "barbell",
+        "group": "squat",
+        "isUnilateral": false,
+        "rest": 300
+      },
+      {
+        "name": "Paused Box Squat",
+        "category": "Main",
+        "type": "barbell",
+        "group": "squat",
+        "isUnilateral": false,
+        "rest": 300
+      },
+      {
+        "name": "Floor Press",
+        "category": "Main",
+        "type": "barbell",
+        "group": "press",
+        "isUnilateral": false,
+        "rest": 180
+      },
+      {
+        "name": "Close-Grip Floor Press",
+        "category": "Main",
+        "type": "barbell",
+        "group": "press",
+        "isUnilateral": false,
+        "rest": 180
+      },
+      {
+        "name": "Speed Box Squat",
+        "category": "Main",
+        "type": "barbell",
+        "group": "squat",
+        "isUnilateral": false,
+        "rest": 60
+      },
+      {
+        "name": "Speed Deadlift",
+        "category": "Main",
+        "type": "barbell",
+        "group": "hinge",
+        "isUnilateral": false,
+        "rest": 60
+      },
+      {
+        "name": "Speed Bench Press",
+        "category": "Main",
+        "type": "barbell",
+        "group": "press",
+        "isUnilateral": false,
+        "rest": 60
+      }
+    ],
     "days": [
       {
-        "name": "Max Effort Lower",
+        "name": "Mon — Max Effort Lower",
         "lifts": [
           {
-            "exercise": "Back Squat",
+            "exercise": "Low Box Squat",
             "role": "main",
             "baseWeightLb": 180,
             "estimatedMaxLb": 205,
             "prescription": "maxEffort",
             "sets": 0,
-            "startFraction": 0.9
+            "startFraction": 0.9,
+            "historyExercise": "Back Squat"
           }
         ],
         "accessories": [
@@ -1120,16 +1186,17 @@
         ]
       },
       {
-        "name": "Max Effort Upper",
+        "name": "Wed — Max Effort Upper",
         "lifts": [
           {
-            "exercise": "Barbell Bench",
+            "exercise": "Floor Press",
             "role": "main",
             "baseWeightLb": 110,
             "estimatedMaxLb": 125,
             "prescription": "maxEffort",
             "sets": 0,
-            "startFraction": 0.9
+            "startFraction": 0.9,
+            "historyExercise": "Barbell Bench"
           }
         ],
         "accessories": [
@@ -1163,59 +1230,82 @@
         ]
       },
       {
-        "name": "Dynamic Effort Lower",
+        "name": "Fri — Dynamic Effort Lower",
         "lifts": [
           {
-            "exercise": "Back Squat",
+            "exercise": "Speed Box Squat",
             "role": "main",
-            "baseWeightLb": 95,
+            "baseWeightLb": 100,
             "estimatedMaxLb": 205,
             "prescription": "dynamicEffort",
             "sets": 0,
-            "startFraction": 0.5
+            "startFraction": 0.5,
+            "historyExercise": "Back Squat"
           },
           {
-            "exercise": "Deadlift",
+            "exercise": "Speed Deadlift",
             "role": "complementary",
-            "baseWeightLb": 145,
+            "baseWeightLb": 120,
             "estimatedMaxLb": 245,
             "prescription": "dynamicEffort",
             "sets": 0,
-            "startFraction": 0.6
+            "startFraction": 0.5,
+            "historyExercise": "Deadlift"
           }
         ],
         "accessories": [
           {
-            "exercise": "Walking Lunges",
-            "sets": 3,
-            "minReps": 10,
-            "maxReps": 20,
+            "exercise": "Nordic Hamstring Curl",
+            "sets": 4,
+            "minReps": 8,
+            "maxReps": 12,
             "weightLb": 0,
             "incrementLb": 0,
             "startFraction": 0
           },
           {
             "exercise": "Back Extension",
-            "sets": 3,
+            "sets": 4,
             "minReps": 10,
             "maxReps": 15,
             "weightLb": 0,
             "incrementLb": 0,
             "startFraction": 0
+          },
+          {
+            "exercise": "Hanging Knee Raise",
+            "sets": 4,
+            "minReps": 10,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
+          },
+          {
+            "exercise": "Sled Pull",
+            "sets": 4,
+            "minReps": 1,
+            "maxReps": 1,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0,
+            "targetSeconds": 60,
+            "targetRPE": 5
           }
         ]
       },
       {
-        "name": "Dynamic Effort Upper",
+        "name": "Sun — Dynamic Effort Upper",
         "lifts": [
           {
-            "exercise": "Barbell Bench",
+            "exercise": "Speed Bench Press",
             "role": "main",
-            "baseWeightLb": 65,
+            "baseWeightLb": 50,
             "estimatedMaxLb": 125,
             "prescription": "dynamicEffort",
             "sets": 0,
-            "startFraction": 0.5
+            "startFraction": 0.4,
+            "historyExercise": "Barbell Bench"
           }
         ],
         "accessories": [

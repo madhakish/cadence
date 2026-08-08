@@ -67,12 +67,12 @@ export const selectablePrescriptions = (all, current) =>
   all.filter(([value]) => !RETIRED_PRESCRIPTIONS.includes(value) || value === current);
 
 export const advancesPerExposure = (style) =>
-  ["doubleProgression", "linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(style);
+  ["doubleProgression", "linearFives", "texasVolume", "texasLight", "texasIntensity", "maxEffort"].includes(style);
 
 // Styles that build their own session shape (sets-across, ramps, singles,
 // speed sets) — the generic phase primer and peak-single add-ons never apply.
 export const buildsOwnSessionShape = (style) =>
-  advancesPerExposure(style) || ["fiveThreeOne", "maxEffort", "dynamicEffort"].includes(style);
+  advancesPerExposure(style) || ["fiveThreeOne", "dynamicEffort"].includes(style);
 
 // Whether the Volume / Load / Peak / Recovery vocabulary actually describes
 // what this style prescribes.
@@ -81,8 +81,8 @@ export const buildsOwnSessionShape = (style) =>
 // but the NAMES on it are a claim about the prescription, and for most styles
 // that claim is false. linearFives and the Texas days move per exposure and
 // never grade at a peak; doubleProgression is a rep window at a held load;
-// fiveThreeOne, maxEffort and dynamicEffort grade at the cycle boundary but
-// with shapes of their own (5+/3+/1+/recovery is not "Volume/Load/Peak").
+// fiveThreeOne and dynamicEffort grade at the cycle boundary but with shapes
+// of their own (5+/3+/1+/recovery is not "Volume/Load/Peak").
 //
 // Derived from buildsOwnSessionShape rather than listed again: those are
 // exactly the styles whose plan comes out of their own branch instead of the
@@ -107,6 +107,12 @@ export const prescriptionShortName = (style) => PRESCRIPTION_SHORT_NAMES[style] 
 export const defaultStartFraction = (style) => ({
   linearFives: 0.74, texasVolume: 0.77, texasLight: 0.62, texasIntensity: 0.86,
   fiveThreeOne: 0.90, maxEffort: 0.90, dynamicEffort: 0.50,
+}[style] || 0);
+// Conservative history-derived starting point used only while constructing a
+// new program. Explicit methodology ratios still win.
+export const templateStartFraction = (style) => defaultStartFraction(style) || ({
+  automatic: 0.65, wave: 0.65, offsetWave: 0.65, secondary: 0.55,
+  hypertrophy: 0.50, doubleProgression: 0.50, technique: 0.60,
 }[style] || 0);
 export function resolvedPrescriptionStyle(requested = "automatic", movementGroup = null,
   role = "main", focus = "strength") {
@@ -789,11 +795,14 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     };
   }
   if (style === "dynamicEffort") {
-    // Speed work: base ≈ 50% of the slot's max, waved up over the two middle
-    // rotations, back to the wave floor on deload. Squat pattern takes speed
-    // doubles, hinge takes speed pulls, presses take triples.
-    const scheme = movementGroup === "squat" ? [10, 2] : movementGroup === "hinge" ? [6, 1] : [9, 3];
-    const multiplier = { 1: 1.0, 2: 1.10, 3: 1.20, 4: 1.0 }[p];
+    // Three-week pendulum wave. Straight-bar squat and pull work runs
+    // 50→55→60%; speed bench runs 40→45→50%. The slot base is the first
+    // percentage, so press multipliers are slightly wider.
+    const scheme = movementGroup === "squat" ? [p === 3 ? 10 : 12, 2]
+      : movementGroup === "hinge" ? [6, 1] : [9, 3];
+    const multiplier = p === 2 && movementGroup === "press" ? 1.125
+      : p === 3 && movementGroup === "press" ? 1.25
+        : ({ 1: 1.0, 2: 1.10, 3: 1.20, 4: 1.0 })[p];
     return {
       weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
       sets: p === 4 ? Math.max(2, Math.ceil(scheme[0] / 2)) : scheme[0],
@@ -912,15 +921,24 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
       blocks.push({ kind: "ramp", weightLb: roundTo(state.baseWeightLb * pct, step), sets: 1, reps });
     }
   }
+  if (style === "maxEffort" && state.nextPhase !== 4) {
+    // After ordinary warm-ups, no more than three singles at 90% and above:
+    // opener, near-max, then the day's target. Only the final single grades.
+    let last = -Infinity;
+    for (const pct of [0.90, 0.975]) {
+      const target = roundTo(state.baseWeightLb * pct, step);
+      if (target > last && target < work.weightLb) {
+        blocks.push({ kind: "ramp", weightLb: target, sets: 1, reps: 1 });
+        last = target;
+      }
+    }
+  }
   // 5/3/1's top set is the "+" set — the AMRAP is the progression engine, not a
   // garnish, and shipping the percentages without it was the template's one
   // material infidelity to the published method. Wendler's deload week has no
   // "+" set, so it stays ordinary work.
   const isFiveThreeOnePlusSet = style === "fiveThreeOne" && state.nextPhase !== 4;
   blocks.push({ kind: isFiveThreeOnePlusSet ? "amrap" : "work", weightLb: work.weightLb, sets: work.sets, reps: work.reps });
-  if (style === "maxEffort" && state.nextPhase !== 4) {
-    blocks.push({ kind: "backoff", weightLb: roundTo(state.baseWeightLb * 0.80, step), sets: 3, reps: 3 });
-  }
   return { mainWork: work, blocks };
 }
 
@@ -1412,9 +1430,26 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
   if (grade === "success") {
     next.stallCount = 0;
     const inc = focusIncrement(state.baseWeightLb, focus, roundingLb);
-    next.baseWeightLb = state.baseWeightLb + inc;
+    // Progression rides performed values, not the stale programmed base. The
+    // grade fires at the Peak, whose top set is base-× by design — so the
+    // performed weight cannot feed the base directly; its OVERSHOOT ratio over
+    // its own plan can. A lifter whose rack lands them a stack above plan
+    // every session (kg plates on lb prescriptions) trains ahead of the base,
+    // and advancing the stale number handed them back a fraction of the
+    // increment. Guards: only ABOVE plan, only past the same half-step
+    // tolerance the grade itself uses, never downward. plannedTopWeightLb 0
+    // (legacy callers) keeps the old behavior exactly.
+    let advancedFrom = state.baseWeightLb;
+    if (perf.plannedTopWeightLb > 0
+        && perf.topSetWeightLb - perf.plannedTopWeightLb >= roundingLb / 2) {
+      advancedFrom = Math.max(state.baseWeightLb,
+        state.baseWeightLb * (perf.topSetWeightLb / perf.plannedTopWeightLb));
+    }
+    next.baseWeightLb = advancedFrom + inc;
     next.lastIncrementLb = inc;
-    note = inc > 0 ? `Clean peak — add ${trim(inc)} lb next cycle.` : "Maintaining — holding weight.";
+    note = advancedFrom > state.baseWeightLb
+      ? `Clean peak, performed above plan — base rides the ${trim(advancedFrom - state.baseWeightLb)} lb overshoot, then +${trim(inc)} lb.`
+      : inc > 0 ? `Clean peak — add ${trim(inc)} lb next cycle.` : "Maintaining — holding weight.";
   } else {
     next.stallCount = state.stallCount + 1;
     next.lastIncrementLb = 0;
@@ -1529,12 +1564,16 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
   }
   if (style === "maxEffort") {
     const grade = gradeCycle(perf);
-    const next = { ...state, estimatedMaxLb: smoothedMax(state, perf) };
+    const next = { ...state };
     let note = null;
     if (grade === "success") {
+      const made = Math.max(state.baseWeightLb, perf.topSetWeightLb);
       next.stallCount = 0;
-      next.baseWeightLb = state.baseWeightLb + increment;
-      next.lastIncrementLb = increment;
+      next.baseWeightLb = roundTo(made + increment, roundingLb);
+      next.lastIncrementLb = next.baseWeightLb - state.baseWeightLb;
+      // A real single is already a max-strength observation; Epley would
+      // inflate it by 3.3% merely because reps === 1.
+      next.estimatedMaxLb = Math.max(state.estimatedMaxLb, perf.topSetWeightLb);
       note = `Made the top single — next target +${trim(increment)} lb. Rotate the variation to keep it moving.`;
     } else {
       // Rotation, not accumulation, is this methodology's stall answer — no
@@ -1756,6 +1795,7 @@ export function exposurePreview({
     prescribedSets: plan.sets, prescribedReps: plan.reps, completedSets: plan.sets,
     anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false,
     grindyOrWobbleSets: 0, topSetWeightLb: plan.weightLb, topSetReps: plan.reps,
+      plannedTopWeightLb: plan.weightLb,
   });
 
   // A direct core caller may omit schedule context. Treat that as a one-day
@@ -1818,9 +1858,9 @@ export function exposurePreview({
       }
     } else if (advancesPerExposure(style) && style !== "doubleProgression" && isSynchronizedDay) {
       if (phase !== DELOAD_WEEK) {
-        const result = advanceLinearLift(
-          state, cleanPerformance(work), linearRule(style, movementGroup), step,
-        );
+        const result = style === "maxEffort"
+          ? advanceProgramLift(state, cleanPerformance(work), focus, style, movementGroup, step)
+          : advanceLinearLift(state, cleanPerformance(work), linearRule(style, movementGroup), step);
         state = result.state;
         if (isTarget) note = result.note;
       } else if (isTarget) {

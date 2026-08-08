@@ -88,6 +88,16 @@ enum Seeder {
             Exercise(name: "Leg Press", category: .main, type: .machine, movementGroup: "squat"),
             Exercise(name: "Incline Barbell Bench Press", category: .main, type: .barbell, movementGroup: "press"),
             Exercise(name: "Close-Grip Bench Press", category: .main, type: .barbell, movementGroup: "press"),
+            // Conjugate special exercises are seeded, not template-private, so
+            // a shared/exported Conjugate program resolves on a fresh device.
+            Exercise(name: "Low Box Squat", category: .main, type: .barbell, movementGroup: "squat", defaultRestSeconds: 300),
+            Exercise(name: "Front Box Squat", category: .main, type: .barbell, movementGroup: "squat", defaultRestSeconds: 300),
+            Exercise(name: "Paused Box Squat", category: .main, type: .barbell, movementGroup: "squat", defaultRestSeconds: 300),
+            Exercise(name: "Floor Press", category: .main, type: .barbell, movementGroup: "press", defaultRestSeconds: 180),
+            Exercise(name: "Close-Grip Floor Press", category: .main, type: .barbell, movementGroup: "press", defaultRestSeconds: 180),
+            Exercise(name: "Speed Box Squat", category: .main, type: .barbell, movementGroup: "squat", defaultRestSeconds: 60),
+            Exercise(name: "Speed Deadlift", category: .main, type: .barbell, movementGroup: "hinge", defaultRestSeconds: 60),
+            Exercise(name: "Speed Bench Press", category: .main, type: .barbell, movementGroup: "press", defaultRestSeconds: 60),
             Exercise(name: "Machine Chest Press", category: .main, type: .machine, movementGroup: "press"),
             Exercise(name: "Landmine Press", category: .main, type: .barbell, movementGroup: "press", isUnilateral: true),
             Exercise(name: "Barbell Row", category: .main, type: .barbell, movementGroup: "pull"),

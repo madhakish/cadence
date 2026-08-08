@@ -1,9 +1,9 @@
 # Claude Code instructions for Cadence
 
-Read `AGENTS.md` before making changes. It is the canonical repository guide
-and applies to Claude as well as other coding agents. This file provides the
-Claude-specific startup checklist and repeats the safety contracts that must
-never depend on context or memory.
+Read `AGENTS.md` and `.agents/torvalds-doctrine.md` before making changes. They
+are the canonical repository instructions and apply to Claude as well as other
+coding agents. This file provides the Claude-specific startup checklist and
+repeats the safety contracts that must never depend on context or memory.
 
 ## Repository summary
 

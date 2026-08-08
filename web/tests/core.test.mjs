@@ -1422,22 +1422,22 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(pres531.blocks.map((b) => b.weightLb).join(","), "225,255,285", "531 week-3 ramp 75/85/95%");
   eq(pres531.blocks.map((b) => b.reps).join(","), "5,3,1", "531 week-3 reps 5/3/1");
 
-  // Max effort: top single plus backoff triples; deload trades the single away.
+  // Max effort: no more than three 90%+ singles; recovery trades them away.
   const me = C.sessionPrescription({ cycleNumber: 1, baseWeightLb: 315, nextPhase: 1, incrementLb: 0 },
     5, "barbell", "squat", "main", "strength", "maxEffort");
   eq(me.mainWork.weightLb, 315, "ME top single at the slot target");
-  eq(me.blocks.map((b) => b.kind).join(","), "work,backoff", "ME single then backoff");
-  eq(me.blocks[1].weightLb, 250, "ME backoff at 80%");
+  eq(me.blocks.map((b) => b.kind).join(","), "ramp,ramp,work", "ME opener, near-max and target");
+  eq(me.blocks.map((b) => b.weightLb).join(","), "285,305,315", "ME carries three distinct heavy singles");
   const meDeload = C.planForStyle({ cycleNumber: 1, baseWeightLb: 315, nextPhase: 4, incrementLb: 0 }, 5, "maxEffort");
   eq(`${meDeload.weightLb}/${meDeload.sets}x${meDeload.reps}`, "220/2x3", "ME recovery is two moderate triples");
 
   // Dynamic effort: movement-pattern schemes and the 3-week wave.
   let de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 150, nextPhase: 2, incrementLb: 0 }, 5, "dynamicEffort", {}, "squat");
-  eq(`${de.weightLb}/${de.sets}x${de.reps}`, "165/10x2", "DE squat wave week 2 (+10%)");
+  eq(`${de.weightLb}/${de.sets}x${de.reps}`, "165/12x2", "DE squat week 2 is 12 doubles at 55%");
   de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 185, nextPhase: 1, incrementLb: 0 }, 5, "dynamicEffort", {}, "hinge");
   eq(`${de.sets}x${de.reps}`, "6x1", "DE speed pulls are singles");
   de = C.planForStyle({ cycleNumber: 1, baseWeightLb: 100, nextPhase: 3, incrementLb: 0 }, 5, "dynamicEffort", {}, "press");
-  eq(`${de.weightLb}/${de.sets}x${de.reps}`, "120/9x3", "DE bench wave week 3 (+20%)");
+  eq(`${de.weightLb}/${de.sets}x${de.reps}`, "125/9x3", "DE bench wave reaches 50% from a 40% base");
 
   // Linear fives ignore the three progression waves; recovery is the
   // intentional override and cannot advance the slot when banked.
@@ -1451,12 +1451,30 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "linear fives yield to the recovery prescription");
 
   // Style helpers.
-  ok(C.advancesPerExposure("texasVolume") && C.advancesPerExposure("linearFives"), "linear styles advance per exposure");
+  ok(C.advancesPerExposure("texasVolume") && C.advancesPerExposure("linearFives")
+    && C.advancesPerExposure("maxEffort"), "exposure styles advance on their own cadence");
   ok(!C.advancesPerExposure("fiveThreeOne") && !C.advancesPerExposure("wave"), "wave styles grade at the Peak");
   ok(C.buildsOwnSessionShape("dynamicEffort") && !C.buildsOwnSessionShape("wave"), "own-shape styles skip primers");
   eq(C.defaultStartFraction("fiveThreeOne"), 0.90, "531 TM = 90% of e1RM");
   eq(C.defaultStartFraction("dynamicEffort"), 0.50, "speed work at 50%");
-  eq(C.defaultStartFraction("wave"), 0, "classic wave keeps template bases");
+  eq(C.defaultStartFraction("wave"), 0, "classic wave has no methodology-mandated ratio");
+  eq(C.templateStartFraction("wave"), 0.65, "template wave gets conservative history runway");
+  eq(C.templateStartFraction("secondary"), 0.55, "template secondary work starts below wave work");
+  eq(C.templateStartFraction("fiveThreeOne"), 0.90, "explicit methodology ratio wins in template setup");
+
+  const mePreview = C.exposurePreview({
+    count: 4, baseWeightLb: 315, estimatedMaxLb: 330, programRoundingLb: 5,
+    exerciseType: "barbell", movementGroup: "press", prescriptionStyle: "maxEffort",
+  });
+  eq(mePreview.map((entry) => entry.baseWeightLb).join(","), "315,320,325,330",
+    "ME advances after every exposure, independent of the DE wave");
+  ok(mePreview.every((entry) => entry.phaseName == null), "ME never borrows wave phase names");
+  const dePreview = C.exposurePreview({
+    count: 4, baseWeightLb: 100, estimatedMaxLb: 250, programRoundingLb: 5,
+    exerciseType: "barbell", movementGroup: "press", prescriptionStyle: "dynamicEffort",
+  });
+  eq(dePreview.map((entry) => entry.prescription.mainWork.weightLb).join(","), "100,115,125,100",
+    "DE keeps its own 40/45/50 wave and reset");
 
   // Per-exposure linear progression: +10 lower per session, SS 3-miss deload.
   const rule = C.linearRule("linearFives", "squat");
@@ -1502,8 +1520,10 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(tmSecond.state.stallCount, 0, "the compromised-cycle counter is consumed by the reset");
   const meMiss2 = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);
   eq(meMiss2.state.stallCount, 0, "ME misses never accrue a counter another style could trip over");
-  const meUp = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, cleanTop, "strength", "maxEffort", "press", 5);
-  eq(meUp.state.baseWeightLb, 320, "ME upper target +5 after a made single");
+  const madeSingle = { ...cleanTop, prescribedReps: 1, topSetWeightLb: 325, topSetReps: 1 };
+  const meUp = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, madeSingle, "strength", "maxEffort", "press", 5);
+  eq(meUp.state.baseWeightLb, 330, "ME anchors a heavier made single before adding the next step");
+  eq(meUp.state.estimatedMaxLb, 330, "a single is not inflated through a rep-max formula");
   const meMiss = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);
   eq(meMiss.state.baseWeightLb, 315, "ME missed single holds — rotate instead");
   const deHold = C.advanceProgramLift({ ...tmState, baseWeightLb: 150 }, cleanTop, "strength", "dynamicEffort", "squat", 5);
@@ -1843,6 +1863,40 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
 
   eq(C.TREND_HORIZONS.map((h) => h.value).join(","), "0,30,90", "the horizons are off, one month, three");
   eq(C.TREND_HORIZONS.map((h) => h.label).join(","), "Off,1 month,3 months", "and say so in words");
+}
+
+// The grade fires at the Peak, whose top set is base-multiplied by design — so
+// the performed weight cannot feed the base directly. Its overshoot RATIO over
+// its own plan can. Mirrors CadenceCore ProgramProgressionTests — same
+// numbers, same tolerances.
+{
+  const near = (a, b, msg) => ok(Math.abs(a - b) < 0.0001, `${msg} (got ${a}, want ${b})`);
+  const inc = C.focusIncrement(200, "strength", 5);
+  const state = { baseWeightLb: 200, estimatedMaxLb: 260, stallCount: 0, role: "main", lastIncrementLb: 0 };
+  const perf = (top, planned) => ({
+    prescribedSets: 3, prescribedReps: 3, completedSets: 3, anyStoppedEarly: false,
+    anyDroppedLoad: false, anyBelowPlanLoad: false, grindyOrWobbleSets: 0,
+    topSetWeightLb: top, topSetReps: 3, plannedTopWeightLb: planned ?? 0,
+  });
+
+  const rode = C.advanceCycleLift(state, perf(245, 235), "strength", 5);
+  near(rode.state.baseWeightLb, 200 * (245 / 235) + inc,
+    "[INV-PROGRESSION-RIDES-PERFORMED] ten pounds over plan rides into the base");
+  ok(/above plan/.test(rode.note), "[INV-PROGRESSION-RIDES-PERFORMED] and the note says so");
+
+  near(C.advanceCycleLift(state, perf(237.4, 235), "strength", 5).state.baseWeightLb, 200 + inc,
+    "[INV-PROGRESSION-RIDES-PERFORMED] a sub-half-step overshoot is rack noise, not signal");
+  near(C.advanceCycleLift(state, perf(237.5, 235), "strength", 5).state.baseWeightLb,
+    200 * (237.5 / 235) + inc,
+    "[INV-PROGRESSION-RIDES-PERFORMED] exactly the half step fires");
+  near(C.advanceCycleLift(state, perf(245, null), "strength", 5).state.baseWeightLb, 200 + inc,
+    "[INV-PROGRESSION-RIDES-PERFORMED] a performance with no recorded plan keeps the old advance exactly");
+  // Below plan cannot reach this path at all — it fails the grade first — so
+  // the ratio can never move the base downward.
+  const below = C.advanceCycleLift(state,
+    { ...perf(228, 235), anyBelowPlanLoad: true }, "strength", 5);
+  ok(below.grade === "fail" && below.state.baseWeightLb === 200,
+    "[INV-PROGRESSION-RIDES-PERFORMED] under plan fails the grade and holds — never advances downward");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

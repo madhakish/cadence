@@ -16,11 +16,16 @@ export async function normalizedTemplates() {
         baseWeightLb: l.baseWeightLb, estimatedMaxLb: l.estimatedMaxLb,
         prescription: l.prescription || "automatic", sets: l.sets || 0,
         startFraction: l.startFraction || 0,
+        ...(l.historyExercise ? { historyExercise: l.historyExercise } : {}),
       })),
       accessories: d.accessories.map((a) => ({
         exercise: a.exerciseName, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
         weightLb: a.weightLb, incrementLb: a.incrementLb,
         startFraction: a.startFraction || 0,
+        ...((a.targetSeconds ?? 30) !== 30 ? { targetSeconds: a.targetSeconds } : {}),
+        ...((a.durationStepSeconds ?? 5) !== 5 ? { durationStepSeconds: a.durationStepSeconds } : {}),
+        ...((a.conditioningEffort || "easy") !== "easy" ? { conditioningEffort: a.conditioningEffort } : {}),
+        ...((a.targetRPE ?? 0) !== 0 ? { targetRPE: a.targetRPE } : {}),
       })),
     })),
   }));

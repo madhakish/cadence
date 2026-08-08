@@ -1,12 +1,16 @@
 # Training methodologies
 
-Cadence ships four published barbell methodologies as program styles. Each is
+Cadence ships several published barbell methodologies as composable program
+prescriptions. Each is
 implemented deterministically in the shared core (CadenceCore ↔ `web/app/js/core.js`)
 and initializes itself from your recorded history: when a slot's exercise has
 logged working sets, the program derives its starting weights from your best
 estimated 1RM (Epley: `weight × (1 + reps/30)`), rounding **down** to the plate
-step. With no history, the template's deliberately light hand-set base stands.
-That is what makes program switching cheap — the app already knows your lifts.
+step. Accessories without a prescribed percentage reuse their most recent
+completed working load. With no history, the shared conservative
+[programming defaults](programming-defaults.md) catalog stands in. That is what
+makes program switching cheap — the app already knows your lifts, and an
+unfamiliar movement still does not become a setup form full of blanks.
 
 | Style | Start (× e1RM) | Session shape | Progression |
 | --- | --- | --- | --- |
@@ -15,8 +19,12 @@ That is what makes program switching cheap — the app already knows your lifts.
 | Texas — light day | 0.62 | 2×5 (squat) · 3×5 (press) | same, synced with its twin |
 | Texas — intensity day | 0.86 | 1×5 PR set | same (= +5 lb/week per lift) |
 | 5/3/1 wave | 0.90 (= training max) | 2 ramp sets + top "+" set | +10 lower / +5 upper TM per cycle |
-| Max effort | 0.90 | top single + 3×3 back-off @80% | +10 / +5 after a made single |
-| Dynamic effort | 0.50 (0.60 speed pulls) | speed sets, 3-week wave | holds; wave supplies progression |
+| Max effort | 0.90 from competition-lift history | ~90% single · near-max single · daily target | +10 / +5 after each made exposure |
+| Dynamic effort | 0.50 squat/pull · 0.40 bench | speed sets, independent 3-step loop | holds; its loop supplies progression |
+
+Classic wave, secondary, hypertrophy, technique, and lift-level double
+progression slots also reuse e1RM history when a template is created, at
+conservative fractions of 0.65, 0.55, 0.50, 0.60, and 0.50 respectively.
 
 ## Novice linear progression — 3×5 and 5×5
 
@@ -60,27 +68,32 @@ autoregulated or manual load reduction — apply the same correction, since a
 TM you can only hit at reduced load is set too high. Boring But Big supplies
 5×10 volume at ~50% of the TM.
 
-## Conjugate — Westside-style
+## Conjugate — Westside
 
-Max-effort days work up to a top single at the slot's current target with 3×3
-back-off at 80%; the deload rotation trades the single for 70% triples. A made
-single moves the target +5/+10; a miss holds it — in this methodology you
-**rotate the variation** (use the swap gesture; the swap pools are the
-rotation pools) rather than grind the same bar. Dynamic-effort days wave
-the slot base ×1.0 → ×1.10 → ×1.20 across the three loading rotations: with
-bases at 50% of the max (squat, bench) and 60% (speed pulls), that is
-50→55→60% for the squat and bench patterns and 60→66→72% for pulls — 10×2
-for the squat pattern, 6×1 speed pulls, 9×3 for the bench. Speed sets never update the e1RM estimate —
-a fast double at 55% says nothing about your max. Prescriptions are straight
-bar weight; bands and chains are a coach's call the app does not fake.
+Max effort advances after each weekly exposure and changes to a special
+exercise; it does not wait for or borrow the dynamic wave's third step.
+Dynamic effort owns a 50→55→60% squat/pull loop and a 40→45→50% bench loop.
+The full four-day plan, assistance work, recovery behavior, implementation
+boundaries, and source map are in the
+[Conjugate method implementation](conjugate-method.md).
+
+## Composition is the engine
+
+These are prescriptions, not mutually exclusive program modes. Each lift slot
+stores its own style and configuration, while the program stores the ordered
+days. The editor and standalone program-file format preserve that combination,
+so a custom/imported program may place max effort on one day, dynamic effort on
+another, double progression on assistance, and a classic Cadence wave or 5/3/1
+elsewhere. A pre-baked template is simply a reviewed starting composition.
 
 ## What is deliberately non-canonical
 
 - Starting weights derive from e1RM fractions instead of the books' empirical
   ramp-up sessions; the fractions err light, matching the "start too light"
   doctrine everywhere.
-- Phase-based methodologies ride Cadence's existing four-rotation calendar, so
-  a program's rotation label (R1–R4) is the 5/3/1 week or the DE wave step.
+- Built-in multi-step prescriptions read the program's style-neutral rotation
+  pointer as their own step. They do not inherit the classic wave's
+  Volume/Load/Peak labels or progression rule.
 - Texas Method volume/light/intensity slots move in parallel at the same
   weekly rate rather than recomputing from one shared 5RM; twin A/B slots of
   the same lift are synchronized, so the absolute gaps between day types stay

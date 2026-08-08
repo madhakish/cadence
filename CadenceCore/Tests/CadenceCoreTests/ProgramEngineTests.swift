@@ -375,14 +375,15 @@ final class ProgramEngineTests: XCTestCase {
         }
     }
 
-    func testMaxEffortTopSingleWithBackoffTriplesAndDeload() {
+    func testMaxEffortBuildsThreeHeavySinglesAndRecoveryTriples() {
         let prescription = ProgramEngine.sessionPrescription(
             for: CycleState(baseWeightLb: 315, nextPhase: .volume),
             programRoundingLb: 5, exerciseType: "barbell", movementGroup: "squat",
             prescriptionStyle: .maxEffort)
         XCTAssertEqual(prescription.mainWork.weightLb, 315)
-        XCTAssertEqual(prescription.blocks.map(\.kind), [.work, .backoff])
-        XCTAssertEqual(prescription.blocks.last?.weightLb, 250)
+        XCTAssertEqual(prescription.blocks.map(\.kind), [.ramp, .ramp, .work])
+        XCTAssertEqual(prescription.blocks.map(\.weightLb), [285, 305, 315])
+        XCTAssertEqual(prescription.blocks.map(\.reps), [1, 1, 1])
         let deload = ProgramEngine.plan(for: CycleState(baseWeightLb: 315, nextPhase: .deload),
                                         roundingLb: 5, style: .maxEffort)
         XCTAssertEqual([deload.weightLb, Double(deload.sets), Double(deload.reps)], [220, 2, 3])
@@ -391,13 +392,13 @@ final class ProgramEngineTests: XCTestCase {
     func testDynamicEffortSpeedSchemesByMovementPattern() {
         let squat = ProgramEngine.plan(for: CycleState(baseWeightLb: 150, nextPhase: .load),
                                        roundingLb: 5, style: .dynamicEffort, movementGroup: "squat")
-        XCTAssertEqual([squat.weightLb, Double(squat.sets), Double(squat.reps)], [165, 10, 2])
+        XCTAssertEqual([squat.weightLb, Double(squat.sets), Double(squat.reps)], [165, 12, 2])
         let pull = ProgramEngine.plan(for: CycleState(baseWeightLb: 185, nextPhase: .volume),
                                       roundingLb: 5, style: .dynamicEffort, movementGroup: "hinge")
         XCTAssertEqual([Double(pull.sets), Double(pull.reps)], [6, 1])
         let bench = ProgramEngine.plan(for: CycleState(baseWeightLb: 100, nextPhase: .peak),
                                        roundingLb: 5, style: .dynamicEffort, movementGroup: "press")
-        XCTAssertEqual([bench.weightLb, Double(bench.sets), Double(bench.reps)], [120, 9, 3])
+        XCTAssertEqual([bench.weightLb, Double(bench.sets), Double(bench.reps)], [125, 9, 3])
     }
 
     func testLinearFivesSetsAcrossIgnoreProgressionPhasesButYieldToRecovery() {
@@ -419,6 +420,7 @@ final class ProgramEngineTests: XCTestCase {
     func testMethodologyStyleHelpers() {
         XCTAssertTrue(PrescriptionStyle.texasVolume.advancesPerExposure)
         XCTAssertTrue(PrescriptionStyle.linearFives.advancesPerExposure)
+        XCTAssertTrue(PrescriptionStyle.maxEffort.advancesPerExposure)
         XCTAssertFalse(PrescriptionStyle.fiveThreeOne.advancesPerExposure)
         XCTAssertFalse(PrescriptionStyle.wave.advancesPerExposure)
         XCTAssertTrue(PrescriptionStyle.dynamicEffort.buildsOwnSessionShape)
@@ -426,6 +428,27 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(PrescriptionStyle.fiveThreeOne.defaultStartFraction, 0.90)
         XCTAssertEqual(PrescriptionStyle.dynamicEffort.defaultStartFraction, 0.50)
         XCTAssertEqual(PrescriptionStyle.wave.defaultStartFraction, 0)
+        XCTAssertEqual(PrescriptionStyle.wave.templateStartFraction, 0.65)
+        XCTAssertEqual(PrescriptionStyle.secondary.templateStartFraction, 0.55)
+        XCTAssertEqual(PrescriptionStyle.fiveThreeOne.templateStartFraction, 0.90)
+    }
+
+    func testMaxEffortAdvancesEveryExposureWhileDynamicEffortKeepsItsOwnWave() {
+        let maxEffort = ProgramEngine.exposurePreview(
+            count: 4, baseWeightLb: 315, estimatedMaxLb: 330,
+            programRoundingLb: 5, exerciseType: "barbell", movementGroup: "press",
+            prescriptionStyle: .maxEffort
+        )
+        XCTAssertEqual(maxEffort.map(\.baseWeightLb), [315, 320, 325, 330])
+        XCTAssertTrue(maxEffort.allSatisfy { $0.phaseName == nil })
+
+        let speed = ProgramEngine.exposurePreview(
+            count: 4, baseWeightLb: 100, estimatedMaxLb: 250,
+            programRoundingLb: 5, exerciseType: "barbell", movementGroup: "press",
+            prescriptionStyle: .dynamicEffort
+        )
+        XCTAssertEqual(speed.map { $0.prescription.mainWork.weightLb }, [100, 115, 125, 100])
+        XCTAssertEqual(speed.map(\.baseWeightLb), [100, 100, 100, 100])
     }
 
     /// `offsetWave`'s movement-aware defaults live in one place so both clients

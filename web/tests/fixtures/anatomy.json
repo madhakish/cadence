@@ -1796,6 +1796,85 @@
         "delts"
       ]
     },
+    "Low Box Squat": {
+      "primary": [
+        "glutes",
+        "hamstrings"
+      ],
+      "secondary": [
+        "quads",
+        "lowerback",
+        "adductors"
+      ]
+    },
+    "Front Box Squat": {
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [
+        "hamstrings",
+        "abs"
+      ]
+    },
+    "Paused Box Squat": {
+      "primary": [
+        "glutes",
+        "quads"
+      ],
+      "secondary": [
+        "hamstrings",
+        "lowerback"
+      ]
+    },
+    "Floor Press": {
+      "primary": [
+        "chest",
+        "triceps"
+      ],
+      "secondary": [
+        "delts"
+      ]
+    },
+    "Close-Grip Floor Press": {
+      "primary": [
+        "triceps",
+        "chest"
+      ],
+      "secondary": [
+        "delts"
+      ]
+    },
+    "Speed Box Squat": {
+      "primary": [
+        "glutes",
+        "quads"
+      ],
+      "secondary": [
+        "hamstrings",
+        "lowerback"
+      ]
+    },
+    "Speed Deadlift": {
+      "primary": [
+        "hamstrings",
+        "glutes"
+      ],
+      "secondary": [
+        "lowerback",
+        "traps",
+        "forearms"
+      ]
+    },
+    "Speed Bench Press": {
+      "primary": [
+        "chest",
+        "triceps"
+      ],
+      "secondary": [
+        "delts"
+      ]
+    },
     "Machine Chest Press": {
       "primary": [
         "chest",

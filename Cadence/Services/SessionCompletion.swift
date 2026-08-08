@@ -339,7 +339,10 @@ enum SessionCompletion {
             ),
             grindyOrWobbleSets: w.filter { $0.flags.contains(.grindy) || $0.flags.contains(.wobble) }.count,
             topSetWeightLb: top?.weightLb ?? 0,
-            topSetReps: top?.reps ?? 0
+            topSetReps: top?.reps ?? 0,
+            // The strength sample's own plan, so the advance can ride a
+            // performed overshoot. Per-set plan first; entry plan fallback.
+            plannedTopWeightLb: top.flatMap { $0.plannedWeightLb } ?? entry.plannedWeightLb ?? 0
         )
     }
 
@@ -745,36 +748,44 @@ enum SessionCompletion {
             lift.lastIncrementLb = next.weightLb - prior.weightLb
         }
 
-        // Methodology slots on session-to-session linear progression: novice
-        // fives and the Texas day slots advance their own base after every
-        // banked exposure instead of waiting for a Peak grade. A day that
-        // repeats the same lift+style is still ONE exposure — only the first
+        // Methodology slots that move per exposure: novice fives and Texas
+        // use their linear rule; max effort sets the next target from the
+        // completed top single. A day that repeats the same lift+style is
+        // still ONE exposure — only the first
         // slot advances (twin sync carries the rest), so duplicates can never
         // double-progress.
-        var advancedLinearSlots = Set<String>()
+        var advancedExposureSlots = Set<String>()
         for lift in day.lifts where lift.prescription.advancesPerExposure
             && lift.prescription != .doubleProgression && !isRecovery {
             let exposureKey = "\(lift.exerciseName)|\(lift.prescription.rawValue)"
-            guard !advancedLinearSlots.contains(exposureKey) else { continue }
+            guard !advancedExposureSlots.contains(exposureKey) else { continue }
             // Slot-scoped matching and completed-work gating share the same
             // helpers as the week-3 grading loop — mirrored 1:1 with web.
             guard let entry = programmedEntry(
                 for: lift.id, exerciseName: lift.exerciseName,
                 role: lift.role.rawValue, in: session
             ), !prescribedWork(entry).isEmpty else { continue }
-            advancedLinearSlots.insert(exposureKey)
+            advancedExposureSlots.insert(exposureKey)
             let loadStep = ProgramEngine.loadStep(
                 programRoundingLb: program.roundingLb,
                 exerciseType: entry.exercise?.typeRaw
             )
-            let rule = ProgramProgression.linearRule(for: lift.prescription,
-                                                     movementGroup: entry.exercise?.movementGroup)
             let priorBase = lift.baseWeightLb
             let priorMax = lift.estimatedMaxLb
-            let result = ProgramProgression.advanceLinearLift(
-                lift.coreState, perf: cyclePerf(entry, roundingLb: loadStep),
-                rule: rule, roundingLb: loadStep
-            )
+            let perf = cyclePerf(entry, roundingLb: loadStep)
+            let result = lift.prescription == .maxEffort
+                ? ProgramProgression.advanceProgramLift(
+                    lift.coreState, perf: perf, focus: program.focus,
+                    style: lift.prescription, movementGroup: entry.exercise?.movementGroup,
+                    roundingLb: loadStep
+                )
+                : ProgramProgression.advanceLinearLift(
+                    lift.coreState, perf: perf,
+                    rule: ProgramProgression.linearRule(
+                        for: lift.prescription, movementGroup: entry.exercise?.movementGroup
+                    ),
+                    roundingLb: loadStep
+                )
             lift.baseWeightLb = result.state.baseWeightLb
             lift.estimatedMaxLb = result.state.estimatedMaxLb
             lift.stallCount = result.state.stallCount

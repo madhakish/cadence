@@ -55,4 +55,33 @@ final class ProgramTemplateDataTests: XCTestCase {
             day.accessories.contains { ["core", "GHD Sit-up", "Hanging Knee Raise"].contains($0.exercise) }
         }, "each day retains trunk work")
     }
+
+    func testConjugateTemplateKeepsWeeklyMaxEffortSeparateFromSpeedWaves() throws {
+        let template = try XCTUnwrap(ProgramTemplateData.all.first { $0.id == "conjugate" })
+        XCTAssertEqual(template.days.map(\.name), [
+            "Mon — Max Effort Lower", "Wed — Max Effort Upper",
+            "Fri — Dynamic Effort Lower", "Sun — Dynamic Effort Upper",
+        ])
+
+        let lifts = template.days.flatMap(\.lifts)
+        XCTAssertEqual(lifts.filter { $0.prescription == "maxEffort" }.map(\.exercise),
+                       ["Low Box Squat", "Floor Press"])
+        XCTAssertEqual(lifts.filter { $0.prescription == "dynamicEffort" }.map(\.startFraction),
+                       [0.50, 0.50, 0.40])
+        XCTAssertEqual(lifts.compactMap(\.historyExercise),
+                       ["Back Squat", "Barbell Bench", "Back Squat", "Deadlift", "Barbell Bench"])
+
+        let speedNames = Set(["Speed Box Squat", "Speed Deadlift", "Speed Bench Press"])
+        XCTAssertTrue(template.exercises.filter { speedNames.contains($0.name) }.allSatisfy { $0.rest == 60 })
+        XCTAssertGreaterThanOrEqual(template.exercises.filter { $0.group == "squat" && $0.name != "Speed Box Squat" }.count, 3,
+                                    "the lower max-effort slot ships a weekly special-exercise pool")
+        XCTAssertGreaterThanOrEqual(template.exercises.filter { $0.group == "press" && !$0.name.hasPrefix("Speed") }.count, 2,
+                                    "the upper max-effort slot ships a weekly special-exercise pool")
+
+        let sled = try XCTUnwrap(template.days[2].accessories.first { $0.exercise == "Sled Pull" })
+        XCTAssertEqual(sled.sets, 4)
+        XCTAssertEqual(sled.targetSeconds, 60)
+        XCTAssertEqual(sled.conditioningEffort, "easy")
+        XCTAssertEqual(sled.targetRPE, 5)
+    }
 }

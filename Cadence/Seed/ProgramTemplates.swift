@@ -32,19 +32,17 @@ enum ProgramTemplates {
         }
 
         let existingPrograms = try context.fetch(FetchDescriptor<Program>())
-        // Only slots with a start fraction consume history; legacy templates
-        // skip the full-store scan entirely.
-        let fractionalNames = Set(template.days.flatMap { day in
-            day.lifts.filter { lift in
-                lift.startFraction > 0
-                    || (PrescriptionStyle(rawValue: lift.prescription) ?? .automatic).defaultStartFraction > 0
-            }.map(\.exercise)
-            + day.accessories.filter { $0.startFraction > 0 }.map(\.exercise)
+        let existingByName = Dictionary(uniqueKeysWithValues: existing.map { ($0.name, $0) })
+        let templateByName = Dictionary(uniqueKeysWithValues: template.exercises.map { ($0.name, $0) })
+        let historyNames = Set(template.days.flatMap { day in
+            day.lifts.flatMap { [$0.exercise, $0.historyExercise].compactMap { $0 } }
+                + day.accessories.map(\.exercise)
         })
-        let recordedMaxes = try recordedE1RMs(for: fractionalNames, context: context)
+        let history = try recordedHistory(for: historyNames, context: context)
+        let focus = TrainingFocus(rawValue: template.focus) ?? .strength
         let program = Program(
             name: uniqueProgramName(template.name, existing: existingPrograms.map(\.name)),
-            focus: TrainingFocus(rawValue: template.focus) ?? .strength,
+            focus: focus,
             roundingLb: template.roundingLb,
             isActive: existingPrograms.isEmpty
         )
@@ -57,16 +55,28 @@ enum ProgramTemplates {
             // more than once, which makes editor rows mirror one another.
             program.days.append(day)
             for (slotOrder, l) in d.lifts.enumerated() {
-                var base = l.baseWeightLb
-                var max = l.estimatedMaxLb
+                let exerciseType = existingByName[l.exercise]?.typeRaw
+                    ?? templateByName[l.exercise]?.type ?? ExerciseType.dumbbell.rawValue
+                let movementGroup = existingByName[l.exercise]?.movementGroup
+                    ?? templateByName[l.exercise]?.group ?? ""
+                let fallback = ProgrammingDefaultsData.recommendation(
+                    exerciseName: l.exercise, slotCategory: ExerciseCategory.main.rawValue,
+                    exerciseType: exerciseType
+                )
+                var base = fallback.weightLb
+                var max = fallback.estimatedMaxLb
                 let style = PrescriptionStyle(rawValue: l.prescription) ?? .automatic
-                let fraction = l.startFraction > 0 ? l.startFraction : style.defaultStartFraction
-                if fraction > 0, let e1RM = recordedMaxes[l.exercise], e1RM > 0 {
-                    base = Swift.max(45, floorTo(fraction * e1RM, step: template.roundingLb))
+                let role = LiftRole(rawValue: l.role) ?? .main
+                let resolvedStyle = ProgramEngine.resolvedStyle(
+                    style, movementGroup: movementGroup, role: role, focus: focus
+                )
+                let fraction = l.startFraction > 0 ? l.startFraction : resolvedStyle.templateStartFraction
+                if fraction > 0, let e1RM = history.bestE1RM[l.historyExercise ?? l.exercise], e1RM > 0 {
+                    base = Swift.max(fallback.weightLb, floorTo(fraction * e1RM, step: template.roundingLb))
                     max = (e1RM).rounded()
                 }
                 let lift = ProgramLift(exerciseName: l.exercise,
-                                       role: LiftRole(rawValue: l.role) ?? .main,
+                                       role: role,
                                        order: slotOrder,
                                        baseWeightLb: base, estimatedMaxLb: max)
                 lift.prescription = style
@@ -75,13 +85,27 @@ enum ProgramTemplates {
                 day.lifts.append(lift)
             }
             for (slotOrder, a) in d.accessories.enumerated() {
-                var weight = a.weightLb
-                if a.startFraction > 0, let e1RM = recordedMaxes[a.exercise], e1RM > 0 {
-                    weight = Swift.max(45, floorTo(a.startFraction * e1RM, step: template.roundingLb))
+                let exerciseType = existingByName[a.exercise]?.typeRaw
+                    ?? templateByName[a.exercise]?.type ?? ExerciseType.dumbbell.rawValue
+                let fallback = ProgrammingDefaultsData.recommendation(
+                    exerciseName: a.exercise, slotCategory: ExerciseCategory.accessory.rawValue,
+                    exerciseType: exerciseType
+                )
+                var weight = fallback.weightLb
+                if a.startFraction > 0, let e1RM = history.bestE1RM[a.exercise], e1RM > 0 {
+                    weight = Swift.max(fallback.weightLb,
+                                       floorTo(a.startFraction * e1RM, step: template.roundingLb))
+                } else if let recent = history.latestWeight[a.exercise], recent > 0 {
+                    weight = recent
                 }
+                let increment = a.incrementLb > 0 ? a.incrementLb : fallback.incrementLb
                 let acc = ProgramAccessory(exerciseName: a.exercise, order: slotOrder, sets: a.sets, minReps: a.minReps,
                                            maxReps: a.maxReps, currentReps: a.minReps,
-                                           weightLb: weight, incrementLb: a.incrementLb)
+                                           targetSeconds: a.targetSeconds,
+                                           durationStepSeconds: a.durationStepSeconds,
+                                           weightLb: weight, incrementLb: increment)
+                acc.conditioningEffortRaw = a.conditioningEffort
+                acc.targetRPE = a.targetRPE
                 context.insert(acc)
                 day.accessories.append(acc)
             }
@@ -89,25 +113,80 @@ enum ProgramTemplates {
         return program
     }
 
-    /// Best recorded e1RM per exercise from completed, banked working sets —
-    /// the lifter's known history, used to compute methodology starting
-    /// weights. Mirrors web recordedE1RMs.
-    private static func recordedE1RMs(for names: Set<String>, context: ModelContext) throws -> [String: Double] {
-        guard !names.isEmpty else { return [:] }
-        var best: [String: Double] = [:]
+    private struct HistorySnapshot {
+        var bestE1RM: [String: Double] = [:]
+        var latestWeight: [String: Double] = [:]
+        var latestDate: [String: Date] = [:]
+    }
+
+    /// Known main-lift capacity plus the most recent completed accessory load.
+    /// Only workout history is athlete state; defaults remain pure reference
+    /// data. Mirrors web recordedHistory.
+    private static func recordedHistory(for names: Set<String>, context: ModelContext) throws -> HistorySnapshot {
+        guard !names.isEmpty else { return HistorySnapshot() }
+        var result = HistorySnapshot()
         let sessions = try context.fetch(
             FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.isCompleted })
         )
         for session in sessions {
+            let timestamp = session.completedAt ?? session.date
             for entry in session.exercises {
                 guard let name = entry.exercise?.name, names.contains(name) else { continue }
-                for set in entry.workingSets where set.weightLb > 0 && set.reps >= 1 {
+                let working = entry.workingSets.filter { $0.weightLb > 0 && $0.reps >= 1 }
+                let previousDate = result.latestDate[name] ?? .distantPast
+                if let sessionWeight = working.map(\.weightLb).max(), timestamp >= previousDate {
+                    if timestamp == previousDate {
+                        result.latestWeight[name] = Swift.max(result.latestWeight[name] ?? 0, sessionWeight)
+                    } else {
+                        result.latestWeight[name] = sessionWeight
+                        result.latestDate[name] = timestamp
+                    }
+                }
+                for set in working {
                     let sample = ProgramProgression.epleyE1RM(weightLb: set.weightLb, reps: set.reps)
-                    if sample > best[name] ?? 0 { best[name] = sample }
+                    if sample > result.bestE1RM[name] ?? 0 { result.bestE1RM[name] = sample }
                 }
             }
         }
-        return best
+        return result
+    }
+
+    /// History-aware defaults for a slot added in the custom program editor.
+    /// Template creation uses the same rules above, including its optional
+    /// history alias and explicit methodology fraction.
+    static func bootstrapLift(
+        exercise: Exercise,
+        role: LiftRole,
+        focus: TrainingFocus,
+        roundingLb: Double,
+        context: ModelContext
+    ) throws -> (baseWeightLb: Double, estimatedMaxLb: Double) {
+        let fallback = ProgrammingDefaultsData.recommendation(
+            exerciseName: exercise.name, slotCategory: ExerciseCategory.main.rawValue,
+            exerciseType: exercise.typeRaw
+        )
+        let history = try recordedHistory(for: [exercise.name], context: context)
+        guard let e1RM = history.bestE1RM[exercise.name], e1RM > 0 else {
+            return (fallback.weightLb, fallback.estimatedMaxLb)
+        }
+        let style = ProgramEngine.resolvedStyle(
+            .automatic, movementGroup: exercise.movementGroup, role: role, focus: focus
+        )
+        return (Swift.max(fallback.weightLb,
+                          floorTo(style.templateStartFraction * e1RM, step: roundingLb)),
+                e1RM.rounded())
+    }
+
+    static func bootstrapAccessory(
+        exercise: Exercise,
+        context: ModelContext
+    ) throws -> (weightLb: Double, incrementLb: Double) {
+        let fallback = ProgrammingDefaultsData.recommendation(
+            exerciseName: exercise.name, slotCategory: ExerciseCategory.accessory.rawValue,
+            exerciseType: exercise.typeRaw
+        )
+        let history = try recordedHistory(for: [exercise.name], context: context)
+        return (history.latestWeight[exercise.name] ?? fallback.weightLb, fallback.incrementLb)
     }
 
     /// Round DOWN to the plate step: methodology guidance is to err light when

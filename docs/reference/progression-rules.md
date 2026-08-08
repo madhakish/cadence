@@ -128,7 +128,14 @@ Notes:
 - **success** → stall count resets; weight increases by the focus
   increment (2.5% strength / 1.5% hypertrophy of the current base),
   floored at plate granularity so a clean cycle always earns at least one
-  loadable step.
+  loadable step. If the peak's top set was performed **above** its own plan
+  by at least the half-step tolerance, the base first rides that overshoot
+  as a ratio — a lifter whose rack lands them a stack over every lb
+  prescription (kg plates) trains ahead of the programmed number, and the
+  increment lands on what the bar actually carried
+  ([INV-PROGRESSION-RIDES-PERFORMED](invariants.md)). Below plan already
+  fails the grade, so the ratio can never move the base down, and a
+  performance with no recorded plan advances exactly as before.
 - **hold / fail** → weight holds, stall count +1.
 - **2 stalls** → automatic deload: base × 0.90 (rounded), stall reset,
   explanatory note in History.
@@ -156,23 +163,26 @@ Some prescription styles replace the wave rules above with a
 published methodology's own progression (full details in
 [Training methodologies](training-methodologies.md)):
 
-- **Per-exposure styles** (`linearFives`, the three Texas day styles) act
+- **Per-exposure styles** (`linearFives`, the three Texas day styles, and
+  `maxEffort`) act
   like double progression's schedule: they advance their base after
   every banked exposure that completes as prescribed, never participate
   in Peak grading, and deload after their style's own stall limit of
   *consecutive* misses (3 → −10% novice; 2 → −5% Texas). A grindy but
-  fully completed session holds the weight and breaks the miss chain.
+  fully completed session holds the weight and breaks the miss chain. Max
+  effort uses its own rule instead: a made daily-max single anchors the next
+  +5/+10 target, a miss holds, and the special exercise rotates weekly.
   Slots that repeat the same lift and style across days (novice A/B
   squat, Texas A/B pairs) stay synchronized while they remain in
   lockstep; a manually edited or deliberately diverged slot keeps its
   own progression from then on — re-align it by setting the bases equal.
-- **Cycle styles** (`fiveThreeOne`, `maxEffort`, `dynamicEffort`) still
-  grade at week 3 and apply at rollover, but with fixed increments:
-  +10 lb lower / +5 lb upper for 5/3/1 training maxes and made max-effort
-  singles. A missed 5/3/1 minimum resets the TM three cycles back, and
+- **Multi-step styles** (`fiveThreeOne`, `dynamicEffort`) interpret the
+  style-neutral rotation pointer through their own loops. 5/3/1 grades its
+  third step and applies +10 lb lower / +5 lb upper at rollover. A missed
+  5/3/1 minimum resets the TM three cycles back, and
   two consecutive compromised cycles (reps made only at reduced load)
-  apply the same correction; missed singles and all dynamic-effort work
-  hold. A skipped graded week holds rather than stalling toward the
+  apply the same correction; all dynamic-effort work holds. A skipped graded
+  step holds rather than stalling toward the
   wave-family 10% rebuild. Dynamic-effort sets never update the e1RM
   estimate.
 

@@ -1,0 +1,314 @@
+[
+  {
+    "exerciseName": "Deadlift",
+    "slotCategory": "Main",
+    "exerciseType": "barbell",
+    "weightLb": 65,
+    "estimatedMaxLb": 95,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Snatch",
+    "slotCategory": "Main",
+    "exerciseType": "barbell",
+    "weightLb": 35,
+    "estimatedMaxLb": 55,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Overhead Squat",
+    "slotCategory": "Main",
+    "exerciseType": "barbell",
+    "weightLb": 35,
+    "estimatedMaxLb": 55,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Clean & Jerk",
+    "slotCategory": "Main",
+    "exerciseType": "barbell",
+    "weightLb": 45,
+    "estimatedMaxLb": 65,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Incline DB Press",
+    "slotCategory": "Main",
+    "exerciseType": "dumbbell",
+    "weightLb": 10,
+    "estimatedMaxLb": 20,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Y-T-W Raises",
+    "slotCategory": "Accessory",
+    "exerciseType": "dumbbell",
+    "weightLb": 5,
+    "estimatedMaxLb": 8,
+    "incrementLb": 2.5
+  },
+  {
+    "exerciseName": "Rear Delt Fly",
+    "slotCategory": "Accessory",
+    "exerciseType": "dumbbell",
+    "weightLb": 5,
+    "estimatedMaxLb": 8,
+    "incrementLb": 2.5
+  },
+  {
+    "exerciseName": "DB Overhead Triceps Extension",
+    "slotCategory": "Accessory",
+    "exerciseType": "dumbbell",
+    "weightLb": 5,
+    "estimatedMaxLb": 10,
+    "incrementLb": 2.5
+  },
+  {
+    "exerciseName": "KB Swing",
+    "slotCategory": "Accessory",
+    "exerciseType": "kettlebell",
+    "weightLb": 15,
+    "estimatedMaxLb": 25,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Goblet Squat",
+    "slotCategory": "Accessory",
+    "exerciseType": "kettlebell",
+    "weightLb": 15,
+    "estimatedMaxLb": 25,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Skull Crusher",
+    "slotCategory": "Accessory",
+    "exerciseType": "barbell",
+    "weightLb": 20,
+    "estimatedMaxLb": 30,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Barbell Row",
+    "slotCategory": "Accessory",
+    "exerciseType": "barbell",
+    "weightLb": 45,
+    "estimatedMaxLb": 65,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Snatch Pull",
+    "slotCategory": "Accessory",
+    "exerciseType": "barbell",
+    "weightLb": 45,
+    "estimatedMaxLb": 65,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Clean Pull",
+    "slotCategory": "Accessory",
+    "exerciseType": "barbell",
+    "weightLb": 45,
+    "estimatedMaxLb": 65,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Overhead Press",
+    "slotCategory": "Accessory",
+    "exerciseType": "barbell",
+    "weightLb": 45,
+    "estimatedMaxLb": 65,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Barbell Bench",
+    "slotCategory": "Accessory",
+    "exerciseType": "barbell",
+    "weightLb": 45,
+    "estimatedMaxLb": 65,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Back Squat",
+    "slotCategory": "Accessory",
+    "exerciseType": "barbell",
+    "weightLb": 45,
+    "estimatedMaxLb": 65,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Deadlift",
+    "slotCategory": "Accessory",
+    "exerciseType": "barbell",
+    "weightLb": 65,
+    "estimatedMaxLb": 95,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Face Pulls",
+    "slotCategory": "Accessory",
+    "exerciseType": "machine",
+    "weightLb": 10,
+    "estimatedMaxLb": 20,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Triceps Pushdown",
+    "slotCategory": "Accessory",
+    "exerciseType": "machine",
+    "weightLb": 10,
+    "estimatedMaxLb": 20,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Lat Pulldown",
+    "slotCategory": "Accessory",
+    "exerciseType": "machine",
+    "weightLb": 20,
+    "estimatedMaxLb": 35,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Lying Leg Curl",
+    "slotCategory": "Accessory",
+    "exerciseType": "machine",
+    "weightLb": 20,
+    "estimatedMaxLb": 35,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Main",
+    "exerciseType": "barbell",
+    "weightLb": 45,
+    "estimatedMaxLb": 65,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Main",
+    "exerciseType": "dumbbell",
+    "weightLb": 10,
+    "estimatedMaxLb": 20,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Main",
+    "exerciseType": "kettlebell",
+    "weightLb": 15,
+    "estimatedMaxLb": 25,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Main",
+    "exerciseType": "machine",
+    "weightLb": 20,
+    "estimatedMaxLb": 35,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Main",
+    "exerciseType": "bodyweight",
+    "weightLb": 0,
+    "estimatedMaxLb": 0,
+    "incrementLb": 0
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Main",
+    "exerciseType": "band",
+    "weightLb": 0,
+    "estimatedMaxLb": 0,
+    "incrementLb": 0
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Main",
+    "exerciseType": "timed",
+    "weightLb": 0,
+    "estimatedMaxLb": 0,
+    "incrementLb": 0
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Main",
+    "exerciseType": "conditioning",
+    "weightLb": 0,
+    "estimatedMaxLb": 0,
+    "incrementLb": 0
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Accessory",
+    "exerciseType": "barbell",
+    "weightLb": 20,
+    "estimatedMaxLb": 30,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Accessory",
+    "exerciseType": "dumbbell",
+    "weightLb": 5,
+    "estimatedMaxLb": 10,
+    "incrementLb": 2.5
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Accessory",
+    "exerciseType": "kettlebell",
+    "weightLb": 10,
+    "estimatedMaxLb": 20,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Accessory",
+    "exerciseType": "machine",
+    "weightLb": 10,
+    "estimatedMaxLb": 20,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Accessory",
+    "exerciseType": "bodyweight",
+    "weightLb": 0,
+    "estimatedMaxLb": 0,
+    "incrementLb": 0
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Accessory",
+    "exerciseType": "band",
+    "weightLb": 0,
+    "estimatedMaxLb": 0,
+    "incrementLb": 0
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Accessory",
+    "exerciseType": "timed",
+    "weightLb": 0,
+    "estimatedMaxLb": 0,
+    "incrementLb": 0
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Accessory",
+    "exerciseType": "conditioning",
+    "weightLb": 0,
+    "estimatedMaxLb": 0,
+    "incrementLb": 0
+  },
+  {
+    "exerciseName": null,
+    "slotCategory": "Conditioning",
+    "exerciseType": "conditioning",
+    "weightLb": 0,
+    "estimatedMaxLb": 0,
+    "incrementLb": 0
+  }
+]

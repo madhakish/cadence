@@ -4,7 +4,7 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
 import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
-import { PROGRAM_TEMPLATES, createProgramFromTemplate } from "../templates.js";
+import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, muscleBlurb, figureSVG } from "../anatomy.js";
 import { Sessions } from "../db.js";
@@ -634,7 +634,9 @@ async function programDayEditor(p, day) {
               select.addEventListener("change", async () => { l.warmupPolicy = select.value; await Programs.save(p); });
               return select;
             })()),
-            ui.h("div", { class: "row" }, ui.h("span", { text: "Rotation-1 base" }),
+            ui.h("div", { class: "row" }, ui.h("span", { text: ({
+              maxEffort: "Current target", dynamicEffort: "Wave step-1 base", fiveThreeOne: "Training max",
+            })[C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus)] || "Rotation-1 base" }),
               ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); refresh(); } })),
             l.prescription === "offsetWave" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Load / peak offsets" }),
               ui.h("div", { class: "btn-row" },
@@ -655,14 +657,18 @@ async function programDayEditor(p, day) {
                 ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } }),
                 ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; await Programs.save(p); refresh(); } }),
                 ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; await Programs.save(p); refresh(); } }))) : null,
-            ui.h("div", { class: "row" }, ui.h("span", { text: "Peak top single" }),
-              ui.toggle(!!l.peakSingleEnabled, async (v) => { l.peakSingleEnabled = v; await Programs.save(p); draw(); })),
-            l.peakSingleEnabled ? ui.h("div", { class: "row" }, ui.h("span", { text: "Last clean / step" }),
+            l.prescription === "maxEffort" ? ui.h("div", { class: "sub", text: "The base is today's top-single target. Build through 90% and a near-max single, then rotate to a different special variation next week." }) : null,
+            l.prescription === "dynamicEffort" ? ui.h("div", { class: "sub", text: "The base is wave week 1: 50% for squat/pull or 40% for bench. Speed work waves for three weeks, then resets." }) : null,
+            !C.buildsOwnSessionShape(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
+              ? ui.h("div", { class: "row" }, ui.h("span", { text: "Peak top single" }),
+                ui.toggle(!!l.peakSingleEnabled, async (v) => { l.peakSingleEnabled = v; await Programs.save(p); draw(); })) : null,
+            l.peakSingleEnabled && !C.buildsOwnSessionShape(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus)) ? ui.h("div", { class: "row" }, ui.h("span", { text: "Last clean / step" }),
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.lastPeakSingleLb ?? 0, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.lastPeakSingleLb = v; await Programs.save(p); refresh(); } }),
                 ui.stepper(l.peakSingleIncrementLb ?? 5, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakSingleIncrementLb = v; await Programs.save(p); refresh(); } }))) : null,
-            ui.h("div", { class: "row" }, ui.h("span", { text: "Phase primer single" }),
-              ui.toggle(l.phasePrimerEnabled !== false, async (v) => { l.phasePrimerEnabled = v; await Programs.save(p); refresh(); })),
+            !C.buildsOwnSessionShape(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
+              ? ui.h("div", { class: "row" }, ui.h("span", { text: "Phase primer single" }),
+                ui.toggle(l.phasePrimerEnabled !== false, async (v) => { l.phasePrimerEnabled = v; await Programs.save(p); refresh(); })) : null,
             ui.h("div", { class: "row" }, ui.h("span", { text: "One-tap drop (0 = auto)" }),
               ui.stepper(l.dropIncrementLb ?? 0, { min: 0, max: 50, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.dropIncrementLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
@@ -672,7 +678,9 @@ async function programDayEditor(p, day) {
             preview));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add lift", onClick: () => pickExerciseSheet(async (e) => {
-          day.lifts.push({ exerciseName: e.name, role: "complementary", order: day.lifts.length, prescription: "automatic", warmupPolicy: "automatic", baseWeightLb: 45, estimatedMaxLb: 52, stallCount: 0, lastIncrementLb: 0 });
+          const bootstrap = await bootstrapLiftFromHistory(e, { role: "complementary",
+            focus: p.focus, roundingLb: p.roundingLb });
+          day.lifts.push({ exerciseName: e.name, role: "complementary", order: day.lifts.length, prescription: "automatic", warmupPolicy: "automatic", baseWeightLb: bootstrap.baseWeightLb, estimatedMaxLb: bootstrap.estimatedMaxLb, stallCount: 0, lastIncrementLb: 0 });
           await Programs.save(p); draw();
         }) }));
 
@@ -710,10 +718,11 @@ async function programDayEditor(p, day) {
               ui.stepper(a.incrementLb, { min: 0, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { a.incrementLb = v; await Programs.save(p); } }))));
         }
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add accessory", onClick: () => pickExerciseSheet(async (e) => {
+          const bootstrap = await bootstrapAccessoryFromHistory(e);
           day.accessories.push({ exerciseName: e.name, order: day.accessories.length,
             sets: e.type === "conditioning" ? 1 : 3, minReps: 8, maxReps: 12, currentReps: 8,
             targetSeconds: e.type === "conditioning" ? 1_200 : 30, durationStepSeconds: 5,
-            weightLb: 0, incrementLb: 0, stallCount: 0, capacityManaged: true, maximumSets: 6,
+            weightLb: bootstrap.weightLb, incrementLb: bootstrap.incrementLb, stallCount: 0, capacityManaged: true, maximumSets: 6,
             conditioningEffort: "easy", targetRPE: 0 });
           await Programs.save(p); draw();
         }) }));

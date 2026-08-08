@@ -37,14 +37,19 @@ public enum ProgramTemplateData {
         public let prescription: String
         /// Working sets for sets-across styles (0 = the style's own default).
         public let sets: Int
-        /// Starting base as a fraction of the lifter's recorded e1RM; 0 keeps
-        /// the template's hand-set base. Instantiation uses this to compute
-        /// real starting weights from logged history.
+        /// Starting base as a fraction of the lifter's recorded e1RM; 0 uses
+        /// the resolved prescription's conservative history fraction.
         public let startFraction: Double
+        /// Optional competition lift whose history seeds a new special
+        /// exercise (for example, Speed Box Squat from Back Squat history).
+        /// Template-only; it is never persisted onto the program slot.
+        public let historyExercise: String?
         init(_ exercise: String, _ role: String, _ base: Double, _ max: Double,
-             prescription: String = "automatic", sets: Int = 0, startFraction: Double = 0) {
+             prescription: String = "automatic", sets: Int = 0, startFraction: Double = 0,
+             historyExercise: String? = nil) {
             self.exercise = exercise; self.role = role; self.baseWeightLb = base; self.estimatedMaxLb = max
             self.prescription = prescription; self.sets = sets; self.startFraction = startFraction
+            self.historyExercise = historyExercise
         }
     }
     public struct TemplateAccessory: Codable, Equatable {
@@ -54,14 +59,57 @@ public enum ProgramTemplateData {
         public let maxReps: Int
         public let weightLb: Double
         public let incrementLb: Double
-        /// Starting weight as a fraction of the matching exercise's recorded
-        /// e1RM (e.g. Boring-But-Big volume at ~45% ≈ 50% of the training max).
+        /// Methodology-specific weight as a fraction of recorded e1RM (e.g.
+        /// Boring-But-Big volume at ~45% ≈ 50% of the training max). With no
+        /// history, ProgrammingDefaultsData supplies the bootstrap load.
         public let startFraction: Double
+        public let targetSeconds: Int
+        public let durationStepSeconds: Int
+        public let conditioningEffort: String
+        public let targetRPE: Int
+        private enum CodingKeys: String, CodingKey {
+            case exercise, sets, minReps, maxReps, weightLb, incrementLb, startFraction
+            case targetSeconds, durationStepSeconds, conditioningEffort, targetRPE
+        }
         init(_ exercise: String, _ sets: Int, _ minReps: Int, _ maxReps: Int,
-             weightLb: Double = 0, incrementLb: Double = 0, startFraction: Double = 0) {
+             weightLb: Double = 0, incrementLb: Double = 0, startFraction: Double = 0,
+             targetSeconds: Int = 30, durationStepSeconds: Int = 5,
+             conditioningEffort: String = "easy", targetRPE: Int = 0) {
             self.exercise = exercise; self.sets = sets; self.minReps = minReps
             self.maxReps = maxReps; self.weightLb = weightLb; self.incrementLb = incrementLb
             self.startFraction = startFraction
+            self.targetSeconds = targetSeconds; self.durationStepSeconds = durationStepSeconds
+            self.conditioningEffort = conditioningEffort; self.targetRPE = targetRPE
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            exercise = try c.decode(String.self, forKey: .exercise)
+            sets = try c.decode(Int.self, forKey: .sets)
+            minReps = try c.decode(Int.self, forKey: .minReps)
+            maxReps = try c.decode(Int.self, forKey: .maxReps)
+            weightLb = try c.decode(Double.self, forKey: .weightLb)
+            incrementLb = try c.decode(Double.self, forKey: .incrementLb)
+            startFraction = try c.decode(Double.self, forKey: .startFraction)
+            targetSeconds = try c.decodeIfPresent(Int.self, forKey: .targetSeconds) ?? 30
+            durationStepSeconds = try c.decodeIfPresent(Int.self, forKey: .durationStepSeconds) ?? 5
+            conditioningEffort = try c.decodeIfPresent(String.self, forKey: .conditioningEffort) ?? "easy"
+            targetRPE = try c.decodeIfPresent(Int.self, forKey: .targetRPE) ?? 0
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(exercise, forKey: .exercise)
+            try c.encode(sets, forKey: .sets)
+            try c.encode(minReps, forKey: .minReps)
+            try c.encode(maxReps, forKey: .maxReps)
+            try c.encode(weightLb, forKey: .weightLb)
+            try c.encode(incrementLb, forKey: .incrementLb)
+            try c.encode(startFraction, forKey: .startFraction)
+            if targetSeconds != 30 { try c.encode(targetSeconds, forKey: .targetSeconds) }
+            if durationStepSeconds != 5 { try c.encode(durationStepSeconds, forKey: .durationStepSeconds) }
+            if conditioningEffort != "easy" { try c.encode(conditioningEffort, forKey: .conditioningEffort) }
+            if targetRPE != 0 { try c.encode(targetRPE, forKey: .targetRPE) }
         }
     }
     public struct TemplateDay: Codable, Equatable {
@@ -319,40 +367,56 @@ public enum ProgramTemplateData {
                                           TemplateAccessory("Lying Leg Curl", 5, 10, 12, weightLb: 70, incrementLb: 5)]),
             ]
         ),
-        // Westside-style conjugate: max-effort top singles with repetition
-        // accessories, and dynamic-effort speed waves at ~50–60%. Rotate the
-        // max-effort variation with the existing swap gesture — rotation, not
-        // grinding, is the methodology's stall answer. Straight bar weight
-        // only; bands/chains are a coach's call the app does not fake.
+        // Westside conjugate: weekly special-exercise max-effort work, two
+        // repetition-method days, and three-week straight-bar speed waves.
+        // Bands/chains are a coach's call the app does not fake.
         Template(
             id: "conjugate",
-            name: "Conjugate — Westside-style",
-            tagline: "4 days/wk · max-effort singles + speed work · rotate variations by swapping",
+            name: "Conjugate — Westside",
+            tagline: "Mon/Wed/Fri/Sun · weekly max-effort rotation · 3-week speed waves",
             focus: "strength", roundingLb: 5,
-            exercises: [],
+            exercises: [
+                TemplateExercise("Low Box Squat", "Main", "barbell", "squat", rest: 300),
+                TemplateExercise("Front Box Squat", "Main", "barbell", "squat", rest: 300),
+                TemplateExercise("Paused Box Squat", "Main", "barbell", "squat", rest: 300),
+                TemplateExercise("Floor Press", "Main", "barbell", "press", rest: 180),
+                TemplateExercise("Close-Grip Floor Press", "Main", "barbell", "press", rest: 180),
+                TemplateExercise("Speed Box Squat", "Main", "barbell", "squat", rest: 60),
+                TemplateExercise("Speed Deadlift", "Main", "barbell", "hinge", rest: 60),
+                TemplateExercise("Speed Bench Press", "Main", "barbell", "press", rest: 60),
+            ],
             days: [
-                TemplateDay("Max Effort Lower",
-                            lifts: [TemplateLift("Back Squat", "main", 180, 205,
-                                                 prescription: "maxEffort", startFraction: 0.90)],
+                TemplateDay("Mon — Max Effort Lower",
+                            lifts: [TemplateLift("Low Box Squat", "main", 180, 205,
+                                                 prescription: "maxEffort", startFraction: 0.90,
+                                                 historyExercise: "Back Squat")],
                             accessories: [TemplateAccessory("Nordic Hamstring Curl", 4, 6, 10),
                                           TemplateAccessory("Back Extension", 4, 10, 15),
                                           TemplateAccessory("Hanging Knee Raise", 4, 10, 15)]),
-                TemplateDay("Max Effort Upper",
-                            lifts: [TemplateLift("Barbell Bench", "main", 110, 125,
-                                                 prescription: "maxEffort", startFraction: 0.90)],
+                TemplateDay("Wed — Max Effort Upper",
+                            lifts: [TemplateLift("Floor Press", "main", 110, 125,
+                                                 prescription: "maxEffort", startFraction: 0.90,
+                                                 historyExercise: "Barbell Bench")],
                             accessories: [TemplateAccessory("Skull Crusher", 4, 8, 12, weightLb: 30, incrementLb: 5),
                                           TemplateAccessory("Barbell Row", 4, 8, 12, weightLb: 95, incrementLb: 5),
                                           TemplateAccessory("Face Pulls", 3, 12, 15, weightLb: 25, incrementLb: 5)]),
-                TemplateDay("Dynamic Effort Lower",
-                            lifts: [TemplateLift("Back Squat", "main", 95, 205,
-                                                 prescription: "dynamicEffort", startFraction: 0.50),
-                                    TemplateLift("Deadlift", "complementary", 145, 245,
-                                                 prescription: "dynamicEffort", startFraction: 0.60)],
-                            accessories: [TemplateAccessory("Walking Lunges", 3, 10, 20),
-                                          TemplateAccessory("Back Extension", 3, 10, 15)]),
-                TemplateDay("Dynamic Effort Upper",
-                            lifts: [TemplateLift("Barbell Bench", "main", 65, 125,
-                                                 prescription: "dynamicEffort", startFraction: 0.50)],
+                TemplateDay("Fri — Dynamic Effort Lower",
+                            lifts: [TemplateLift("Speed Box Squat", "main", 100, 205,
+                                                 prescription: "dynamicEffort", startFraction: 0.50,
+                                                 historyExercise: "Back Squat"),
+                                    TemplateLift("Speed Deadlift", "complementary", 120, 245,
+                                                 prescription: "dynamicEffort", startFraction: 0.50,
+                                                 historyExercise: "Deadlift")],
+                            accessories: [TemplateAccessory("Nordic Hamstring Curl", 4, 8, 12),
+                                          TemplateAccessory("Back Extension", 4, 10, 15),
+                                          TemplateAccessory("Hanging Knee Raise", 4, 10, 15),
+                                          TemplateAccessory("Sled Pull", 4, 1, 1,
+                                                            targetSeconds: 60, durationStepSeconds: 5,
+                                                            conditioningEffort: "easy", targetRPE: 5)]),
+                TemplateDay("Sun — Dynamic Effort Upper",
+                            lifts: [TemplateLift("Speed Bench Press", "main", 50, 125,
+                                                 prescription: "dynamicEffort", startFraction: 0.40,
+                                                 historyExercise: "Barbell Bench")],
                             accessories: [TemplateAccessory("Triceps Pushdown", 4, 10, 15, weightLb: 40, incrementLb: 5),
                                           TemplateAccessory("Lat Pulldown", 4, 8, 12, weightLb: 80, incrementLb: 5),
                                           TemplateAccessory("Rear Delt Fly", 3, 12, 15, weightLb: 15, incrementLb: 5)]),

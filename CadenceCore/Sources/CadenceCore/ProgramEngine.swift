@@ -138,7 +138,7 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
     /// being graded once per mesocycle at the Peak.
     public var advancesPerExposure: Bool {
         switch self {
-        case .doubleProgression, .linearFives, .texasVolume, .texasLight, .texasIntensity:
+        case .doubleProgression, .linearFives, .texasVolume, .texasLight, .texasIntensity, .maxEffort:
             return true
         default:
             return false
@@ -149,7 +149,7 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
     /// speed sets). The generic phase primer and peak-single add-ons never
     /// apply to them.
     public var buildsOwnSessionShape: Bool {
-        advancesPerExposure || self == .fiveThreeOne || self == .maxEffort || self == .dynamicEffort
+        advancesPerExposure || self == .fiveThreeOne || self == .dynamicEffort
     }
 
     /// Whether the Volume / Load / Peak / Recovery vocabulary actually
@@ -157,10 +157,11 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
     ///
     /// The rotation counter advances for every slot — the program is one
     /// calendar — but the *names* on it are a claim about the prescription, and
-    /// for most styles that claim is false. `linearFives` and the Texas days
-    /// move per exposure and never grade at a peak; `doubleProgression` is a
-    /// rep window at a held load; `fiveThreeOne`, `maxEffort` and
-    /// `dynamicEffort` grade at the cycle boundary but with shapes of their own
+    /// for most styles that claim is false. `linearFives`, max effort and the
+    /// Texas days move per exposure and never grade at a peak;
+    /// `doubleProgression` is a
+    /// rep window at a held load; `fiveThreeOne` and `dynamicEffort` grade at
+    /// the cycle boundary but with shapes of their own
     /// (5+/3+/1+/recovery is not "Volume/Load/Peak"). Rendering a phase name
     /// against any of them asserts something about the engine that is not true.
     ///
@@ -209,6 +210,21 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
         case .fiveThreeOne: return 0.90
         case .maxEffort: return 0.90
         case .dynamicEffort: return 0.50
+        default: return 0
+        }
+    }
+
+    /// Conservative history-derived starting point used only when building a
+    /// new program. Explicit methodology ratios above still win; the classic
+    /// Cadence styles get enough runway that a new template can reuse a known
+    /// e1RM without starting near the lifter's limit.
+    public var templateStartFraction: Double {
+        if defaultStartFraction > 0 { return defaultStartFraction }
+        switch self {
+        case .automatic, .wave, .offsetWave: return 0.65
+        case .secondary: return 0.55
+        case .hypertrophy, .doubleProgression: return 0.50
+        case .technique: return 0.60
         default: return 0
         }
     }
@@ -596,18 +612,22 @@ public enum ProgramEngine {
                 sets: 1, reps: 1, phase: phase, cycleNumber: state.cycleNumber
             )
         case .dynamicEffort:
-            // Speed work: base ≈ 50% of the slot's max, waved up over the two
-            // middle rotations, back to the wave floor on recovery. Squat pattern
-            // takes speed doubles, hinge takes speed pulls, presses take triples.
+            // Three-week pendulum wave. Straight-bar squat and pull work runs
+            // 50→55→60%; speed bench runs 40→45→50%. The slot base is the
+            // first percentage, so press multipliers are slightly wider.
             let scheme: (sets: Int, reps: Int)
-            if movementGroup == "squat" { scheme = (10, 2) }
-            else if movementGroup == "hinge" { scheme = (6, 1) }
-            else { scheme = (9, 3) }
+            if movementGroup == "squat" {
+                scheme = (phase == .peak ? 10 : 12, 2)
+            } else if movementGroup == "hinge" {
+                scheme = (6, 1)
+            } else {
+                scheme = (9, 3)
+            }
             let multiplier: Double
             switch phase {
             case .volume, .deload: multiplier = 1.0
-            case .load: multiplier = 1.10
-            case .peak: multiplier = 1.20
+            case .load: multiplier = movementGroup == "press" ? 1.125 : 1.10
+            case .peak: multiplier = movementGroup == "press" ? 1.25 : 1.20
             }
             return SessionPlan(
                 weightLb: Weight.round(state.baseWeightLb * multiplier, to: roundingLb),
@@ -742,6 +762,21 @@ public enum ProgramEngine {
                 ))
             }
         }
+        if style == .maxEffort, state.nextPhase != .deload {
+            // After ordinary warm-ups, prescribe no more than three singles at
+            // 90% and above: an opener, a near-max single, then the day's
+            // target. Distinct guards keep light targets from duplicating a
+            // rounded weight. These are ramps; only the final single gates the
+            // next target.
+            var last = -Double.infinity
+            for pct in [0.90, 0.975] {
+                let target = Weight.round(state.baseWeightLb * pct, to: step)
+                if target > last, target < work.weightLb {
+                    blocks.append(PrescriptionBlock(kind: .ramp, weightLb: target, sets: 1, reps: 1))
+                    last = target
+                }
+            }
+        }
         // 5/3/1's top set is the "+" set — the AMRAP is the progression engine,
         // not a garnish, and shipping the percentages without it was the
         // template's one material infidelity to the published method. Wendler's
@@ -751,13 +786,6 @@ public enum ProgramEngine {
             kind: isFiveThreeOnePlusSet ? .amrap : .work,
             weightLb: work.weightLb, sets: work.sets, reps: work.reps
         ))
-        if style == .maxEffort, state.nextPhase != .deload {
-            blocks.append(PrescriptionBlock(
-                kind: .backoff,
-                weightLb: Weight.round(state.baseWeightLb * 0.80, to: step),
-                sets: 3, reps: 3
-            ))
-        }
         return SessionPrescription(mainWork: work, blocks: blocks)
     }
 
@@ -969,11 +997,16 @@ public enum ProgramEngine {
                 }
             } else if style.advancesPerExposure, style != .doubleProgression, isSynchronizedDay {
                 if phase != .deload {
-                    let result = ProgramProgression.advanceLinearLift(
-                        state, perf: cleanPerformance(for: work),
-                        rule: ProgramProgression.linearRule(for: style, movementGroup: movementGroup),
-                        roundingLb: step
-                    )
+                    let result = style == .maxEffort
+                        ? ProgramProgression.advanceProgramLift(
+                            state, perf: cleanPerformance(for: work), focus: focus,
+                            style: style, movementGroup: movementGroup, roundingLb: step
+                        )
+                        : ProgramProgression.advanceLinearLift(
+                            state, perf: cleanPerformance(for: work),
+                            rule: ProgramProgression.linearRule(for: style, movementGroup: movementGroup),
+                            roundingLb: step
+                        )
                     state = result.state
                     if isTarget { note = result.note }
                 } else if isTarget {
@@ -1048,7 +1081,8 @@ public enum ProgramEngine {
             prescribedSets: plan.sets, prescribedReps: plan.reps,
             completedSets: plan.sets, anyStoppedEarly: false, anyDroppedLoad: false,
             anyBelowPlanLoad: false, grindyOrWobbleSets: 0,
-            topSetWeightLb: plan.weightLb, topSetReps: plan.reps
+            topSetWeightLb: plan.weightLb, topSetReps: plan.reps,
+            plannedTopWeightLb: plan.weightLb
         )
     }
 

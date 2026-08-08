@@ -56,6 +56,10 @@ section that matches what you're trying to do.
 - [Training methodologies](reference/training-methodologies.md) — the
   published programs Cadence automates (novice linear, Texas Method,
   5/3/1, conjugate) and how they initialize from your history
+- [Programming defaults](reference/programming-defaults.md) — history-first
+  template setup and conservative no-history loads
+- [Conjugate method](reference/conjugate-method.md) — the reviewed four-day
+  template, independent ME/DE loops, implementation boundaries, and source map
 - [Backup schema](reference/backup-schema.md) — versioning, session state,
   cross-platform program linkage, and compatibility rules
 - [Program file](reference/program-file.md) — moving a single program in and

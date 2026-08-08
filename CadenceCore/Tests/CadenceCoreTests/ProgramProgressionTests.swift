@@ -14,6 +14,48 @@ final class ProgramProgressionTests: XCTestCase {
         ProgramLiftState(baseWeightLb: 175, estimatedMaxLb: 226, stallCount: 0, role: .main, lastIncrementLb: 0)
     }
 
+    // The grade fires at the Peak, whose top set is base-multiplied by design —
+    // so the performed weight cannot feed the base directly. Its overshoot
+    // RATIO over its own plan can: a lifter whose rack lands them a stack
+    // above plan every session (kg plates on lb prescriptions) trains ahead
+    // of the base, and advancing the stale number handed back a fraction of
+    // the increment. Mirrored in web/tests/core.test.mjs.
+    // [INV-PROGRESSION-RIDES-PERFORMED]
+    func testCleanCycleAdvancesFromThePerformedOvershoot() {
+        let inc = P.focusIncrement(baseWeightLb: 200, focus: .strength, roundingLb: 5)
+        let state = ProgramLiftState(baseWeightLb: 200, estimatedMaxLb: 260)
+        func perf(top: Double, planned: Double?) -> CycleLiftPerformance {
+            CycleLiftPerformance(prescribedSets: 3, prescribedReps: 3, completedSets: 3,
+                                 anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0,
+                                 topSetWeightLb: top, topSetReps: 3,
+                                 plannedTopWeightLb: planned ?? 0)
+        }
+
+        // Ten pounds over a 235 plan: the base rides the same ratio, then the
+        // increment lands on top.
+        let rode = P.advanceCycleLift(state, perf: perf(top: 245, planned: 235),
+                                      focus: .strength, roundingLb: 5)
+        XCTAssertEqual(rode.state.baseWeightLb, 200 * (245.0 / 235.0) + inc, accuracy: 0.0001)
+        XCTAssertTrue(rode.note?.contains("above plan") == true)
+
+        // The same half-step tolerance the grade itself uses: 2.4 over is
+        // rack noise, not a training signal.
+        let noise = P.advanceCycleLift(state, perf: perf(top: 237.4, planned: 235),
+                                       focus: .strength, roundingLb: 5)
+        XCTAssertEqual(noise.state.baseWeightLb, 200 + inc, accuracy: 0.0001)
+
+        // Exactly the half step fires.
+        let edge = P.advanceCycleLift(state, perf: perf(top: 237.5, planned: 235),
+                                      focus: .strength, roundingLb: 5)
+        XCTAssertEqual(edge.state.baseWeightLb, 200 * (237.5 / 235.0) + inc, accuracy: 0.0001)
+
+        // A performance with no recorded plan (legacy stores, previews built
+        // before the field existed) keeps the old advance exactly.
+        let legacy = P.advanceCycleLift(state, perf: perf(top: 245, planned: nil),
+                                        focus: .strength, roundingLb: 5)
+        XCTAssertEqual(legacy.state.baseWeightLb, 200 + inc, accuracy: 0.0001)
+    }
+
     // A weighted pull-up is TYPED bodyweight but hangs real plates from a belt.
     // Keying loadability on type alone silently exempted it, so a belt slot
     // with a zero increment never progressed and never warned.
@@ -421,9 +463,15 @@ final class ProgramProgressionTests: XCTestCase {
 
     func testMaxEffortAddsAfterMadeSinglesAndHoldsOnMisses() {
         let state = ProgramLiftState(baseWeightLb: 315, estimatedMaxLb: 330)
-        let up = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: true), focus: .strength,
+        let madeSingle = CycleLiftPerformance(
+            prescribedSets: 1, prescribedReps: 1, completedSets: 1,
+            anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0,
+            topSetWeightLb: 325, topSetReps: 1
+        )
+        let up = ProgramProgression.advanceProgramLift(state, perf: madeSingle, focus: .strength,
                                                        style: .maxEffort, movementGroup: "press", roundingLb: 5)
-        XCTAssertEqual(up.state.baseWeightLb, 320)
+        XCTAssertEqual(up.state.baseWeightLb, 330, "a heavier made single becomes the anchor before adding the next step")
+        XCTAssertEqual(up.state.estimatedMaxLb, 330, "a single is not inflated through a rep-max formula")
         let miss = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: false), focus: .strength,
                                                          style: .maxEffort, movementGroup: "press", roundingLb: 5)
         XCTAssertEqual(miss.state.baseWeightLb, 315)

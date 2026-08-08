@@ -19,7 +19,7 @@ the exercise library.
 
 | Scope | Program slot | Reverts? | Progression state |
 |---|---|---|---|
-| **Just this session** (default) | Untouched | — | Slot ungraded that day; a skipped peak counts as a stall |
+| **Just this session** (default) | Exercise name untouched; substitute keeps the slot id | — | Prescribed substitute work grades the slot |
 | **Rest of this cycle** | Renamed | Automatically at the next rollover, with a History note | Carries across; the week-3 grade banked under the substitute applies to the slot |
 | **Whole program** | Renamed permanently | Never (clears any pending cycle revert) | Carries across |
 
