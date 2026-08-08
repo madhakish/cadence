@@ -1430,9 +1430,26 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
   if (grade === "success") {
     next.stallCount = 0;
     const inc = focusIncrement(state.baseWeightLb, focus, roundingLb);
-    next.baseWeightLb = state.baseWeightLb + inc;
+    // Progression rides performed values, not the stale programmed base. The
+    // grade fires at the Peak, whose top set is base-× by design — so the
+    // performed weight cannot feed the base directly; its OVERSHOOT ratio over
+    // its own plan can. A lifter whose rack lands them a stack above plan
+    // every session (kg plates on lb prescriptions) trains ahead of the base,
+    // and advancing the stale number handed them back a fraction of the
+    // increment. Guards: only ABOVE plan, only past the same half-step
+    // tolerance the grade itself uses, never downward. plannedTopWeightLb 0
+    // (legacy callers) keeps the old behavior exactly.
+    let advancedFrom = state.baseWeightLb;
+    if (perf.plannedTopWeightLb > 0
+        && perf.topSetWeightLb - perf.plannedTopWeightLb >= roundingLb / 2) {
+      advancedFrom = Math.max(state.baseWeightLb,
+        state.baseWeightLb * (perf.topSetWeightLb / perf.plannedTopWeightLb));
+    }
+    next.baseWeightLb = advancedFrom + inc;
     next.lastIncrementLb = inc;
-    note = inc > 0 ? `Clean peak — add ${trim(inc)} lb next cycle.` : "Maintaining — holding weight.";
+    note = advancedFrom > state.baseWeightLb
+      ? `Clean peak, performed above plan — base rides the ${trim(advancedFrom - state.baseWeightLb)} lb overshoot, then +${trim(inc)} lb.`
+      : inc > 0 ? `Clean peak — add ${trim(inc)} lb next cycle.` : "Maintaining — holding weight.";
   } else {
     next.stallCount = state.stallCount + 1;
     next.lastIncrementLb = 0;
@@ -1778,6 +1795,7 @@ export function exposurePreview({
     prescribedSets: plan.sets, prescribedReps: plan.reps, completedSets: plan.sets,
     anyStoppedEarly: false, anyDroppedLoad: false, anyBelowPlanLoad: false,
     grindyOrWobbleSets: 0, topSetWeightLb: plan.weightLb, topSetReps: plan.reps,
+      plannedTopWeightLb: plan.weightLb,
   });
 
   // A direct core caller may omit schedule context. Treat that as a one-day

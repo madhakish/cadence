@@ -14,6 +14,48 @@ final class ProgramProgressionTests: XCTestCase {
         ProgramLiftState(baseWeightLb: 175, estimatedMaxLb: 226, stallCount: 0, role: .main, lastIncrementLb: 0)
     }
 
+    // The grade fires at the Peak, whose top set is base-multiplied by design —
+    // so the performed weight cannot feed the base directly. Its overshoot
+    // RATIO over its own plan can: a lifter whose rack lands them a stack
+    // above plan every session (kg plates on lb prescriptions) trains ahead
+    // of the base, and advancing the stale number handed back a fraction of
+    // the increment. Mirrored in web/tests/core.test.mjs.
+    // [INV-PROGRESSION-RIDES-PERFORMED]
+    func testCleanCycleAdvancesFromThePerformedOvershoot() {
+        let inc = P.focusIncrement(baseWeightLb: 200, focus: .strength, roundingLb: 5)
+        let state = ProgramLiftState(baseWeightLb: 200, estimatedMaxLb: 260)
+        func perf(top: Double, planned: Double?) -> CycleLiftPerformance {
+            CycleLiftPerformance(prescribedSets: 3, prescribedReps: 3, completedSets: 3,
+                                 anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0,
+                                 topSetWeightLb: top, topSetReps: 3,
+                                 plannedTopWeightLb: planned ?? 0)
+        }
+
+        // Ten pounds over a 235 plan: the base rides the same ratio, then the
+        // increment lands on top.
+        let rode = P.advanceCycleLift(state, perf: perf(top: 245, planned: 235),
+                                      focus: .strength, roundingLb: 5)
+        XCTAssertEqual(rode.state.baseWeightLb, 200 * (245.0 / 235.0) + inc, accuracy: 0.0001)
+        XCTAssertTrue(rode.note?.contains("above plan") == true)
+
+        // The same half-step tolerance the grade itself uses: 2.4 over is
+        // rack noise, not a training signal.
+        let noise = P.advanceCycleLift(state, perf: perf(top: 237.4, planned: 235),
+                                       focus: .strength, roundingLb: 5)
+        XCTAssertEqual(noise.state.baseWeightLb, 200 + inc, accuracy: 0.0001)
+
+        // Exactly the half step fires.
+        let edge = P.advanceCycleLift(state, perf: perf(top: 237.5, planned: 235),
+                                      focus: .strength, roundingLb: 5)
+        XCTAssertEqual(edge.state.baseWeightLb, 200 * (237.5 / 235.0) + inc, accuracy: 0.0001)
+
+        // A performance with no recorded plan (legacy stores, previews built
+        // before the field existed) keeps the old advance exactly.
+        let legacy = P.advanceCycleLift(state, perf: perf(top: 245, planned: nil),
+                                        focus: .strength, roundingLb: 5)
+        XCTAssertEqual(legacy.state.baseWeightLb, 200 + inc, accuracy: 0.0001)
+    }
+
     // A weighted pull-up is TYPED bodyweight but hangs real plates from a belt.
     // Keying loadability on type alone silently exempted it, so a belt slot
     // with a zero increment never progressed and never warned.

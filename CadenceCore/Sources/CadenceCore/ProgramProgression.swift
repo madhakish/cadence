@@ -43,10 +43,14 @@ public struct CycleLiftPerformance: Hashable, Sendable {
     public var grindyOrWobbleSets: Int
     public var topSetWeightLb: Double
     public var topSetReps: Int
+    /// What the strength sample was PLANNED at, so the advance can see how far
+    /// above plan it was actually performed. 0 = unknown (legacy callers), and
+    /// the overshoot path stays off.
+    public var plannedTopWeightLb: Double
 
     public init(prescribedSets: Int, prescribedReps: Int, completedSets: Int, anyStoppedEarly: Bool,
                 anyDroppedLoad: Bool, anyBelowPlanLoad: Bool = false, grindyOrWobbleSets: Int,
-                topSetWeightLb: Double, topSetReps: Int) {
+                topSetWeightLb: Double, topSetReps: Int, plannedTopWeightLb: Double = 0) {
         self.prescribedSets = prescribedSets
         self.prescribedReps = prescribedReps
         self.completedSets = completedSets
@@ -56,6 +60,7 @@ public struct CycleLiftPerformance: Hashable, Sendable {
         self.grindyOrWobbleSets = grindyOrWobbleSets
         self.topSetWeightLb = topSetWeightLb
         self.topSetReps = topSetReps
+        self.plannedTopWeightLb = plannedTopWeightLb
     }
 }
 
@@ -510,9 +515,31 @@ public enum ProgramProgression {
         if grade == .success {
             next.stallCount = 0
             let inc = focusIncrement(baseWeightLb: state.baseWeightLb, focus: focus, roundingLb: roundingLb)
-            next.baseWeightLb = state.baseWeightLb + inc
+            // Progression rides performed values, not the stale programmed
+            // base. The grade fires at the Peak, whose top set is base-× by
+            // design — so the performed weight cannot feed the base directly;
+            // its OVERSHOOT ratio over its own plan can. A lifter whose rack
+            // lands them a stack above plan every session (kg plates on lb
+            // prescriptions) trains ahead of the base, and advancing the
+            // stale number handed them back a fraction of the increment.
+            //
+            // Guards: only ABOVE plan (below already fails the grade; equal is
+            // ratio 1), only past the same half-step tolerance the grade
+            // itself uses (float noise and near-misses are not a training
+            // signal), and never downward.
+            var advancedFrom = state.baseWeightLb
+            if perf.plannedTopWeightLb > 0,
+               perf.topSetWeightLb - perf.plannedTopWeightLb >= roundingLb / 2 {
+                advancedFrom = Swift.max(
+                    state.baseWeightLb,
+                    state.baseWeightLb * (perf.topSetWeightLb / perf.plannedTopWeightLb)
+                )
+            }
+            next.baseWeightLb = advancedFrom + inc
             next.lastIncrementLb = inc
-            if inc > 0 {
+            if advancedFrom > state.baseWeightLb {
+                note = "Clean peak, performed above plan — base rides the \(Weight.trim(advancedFrom - state.baseWeightLb)) lb overshoot, then +\(Weight.trim(inc)) lb."
+            } else if inc > 0 {
                 note = "Clean peak — add \(Weight.trim(inc)) lb next cycle."
             } else {
                 note = "Maintaining — holding weight."

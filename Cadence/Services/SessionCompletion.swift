@@ -339,7 +339,10 @@ enum SessionCompletion {
             ),
             grindyOrWobbleSets: w.filter { $0.flags.contains(.grindy) || $0.flags.contains(.wobble) }.count,
             topSetWeightLb: top?.weightLb ?? 0,
-            topSetReps: top?.reps ?? 0
+            topSetReps: top?.reps ?? 0,
+            // The strength sample's own plan, so the advance can ride a
+            // performed overshoot. Per-set plan first; entry plan fallback.
+            plannedTopWeightLb: top.flatMap { $0.plannedWeightLb } ?? entry.plannedWeightLb ?? 0
         )
     }
 

@@ -1204,6 +1204,9 @@ function cyclePerf(se, roundingLb) {
     anyBelowPlanLoad: C.belowPlanWork(w.map((s) => s.weightLb), se.plannedWeightLb, se.plannedSets ?? w.length, roundingLb),
     grindyOrWobbleSets: w.filter((s) => (s.flags || []).some((f) => f === "grindy" || f === "wobble")).length,
     topSetWeightLb: top ? top.weightLb : 0, topSetReps: top ? top.reps : 0,
+    // The strength sample's own plan, so the advance can ride a performed
+    // overshoot. Per-set plan first; the entry plan is the fallback.
+    plannedTopWeightLb: top ? (top.plannedWeightLb ?? se.plannedWeightLb ?? 0) : 0,
   };
 }
 function accPerf(se, roundingLb = 5) {

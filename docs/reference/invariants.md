@@ -388,6 +388,22 @@ opt-ins, both off by default. Opening a set to add a body flag rewrites nothing.
 
 ---
 
+### INV-PROGRESSION-RIDES-PERFORMED
+*platforms: core*
+
+A clean cycle advances the base from what was **performed**, not the stale
+programmed number. The grade fires at the Peak, whose top set is
+base-multiplied by design, so the performed weight feeds the base as its
+overshoot **ratio** over its own plan — only above plan, only past the same
+half-step tolerance the grade uses, and never downward. A performance with no
+recorded plan keeps the old advance exactly.
+
+> A lifter in a kg-plate gym lands a stack above every lb prescription. They
+> pulled 221.4 for the programmed 215 all cycle, graded clean — and the next
+> cycle prescribed 225: the +10 increment applied to a number they had not
+> lifted in a month, handing back +3.6 real. The base now rides what the bar
+> actually carried.
+
 ## Grading
 
 ### INV-BELOW-PLAN-IS-BELOW-PLAN

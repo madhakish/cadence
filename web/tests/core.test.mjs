@@ -1865,5 +1865,39 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(C.TREND_HORIZONS.map((h) => h.label).join(","), "Off,1 month,3 months", "and say so in words");
 }
 
+// The grade fires at the Peak, whose top set is base-multiplied by design — so
+// the performed weight cannot feed the base directly. Its overshoot RATIO over
+// its own plan can. Mirrors CadenceCore ProgramProgressionTests — same
+// numbers, same tolerances.
+{
+  const near = (a, b, msg) => ok(Math.abs(a - b) < 0.0001, `${msg} (got ${a}, want ${b})`);
+  const inc = C.focusIncrement(200, "strength", 5);
+  const state = { baseWeightLb: 200, estimatedMaxLb: 260, stallCount: 0, role: "main", lastIncrementLb: 0 };
+  const perf = (top, planned) => ({
+    prescribedSets: 3, prescribedReps: 3, completedSets: 3, anyStoppedEarly: false,
+    anyDroppedLoad: false, anyBelowPlanLoad: false, grindyOrWobbleSets: 0,
+    topSetWeightLb: top, topSetReps: 3, plannedTopWeightLb: planned ?? 0,
+  });
+
+  const rode = C.advanceCycleLift(state, perf(245, 235), "strength", 5);
+  near(rode.state.baseWeightLb, 200 * (245 / 235) + inc,
+    "[INV-PROGRESSION-RIDES-PERFORMED] ten pounds over plan rides into the base");
+  ok(/above plan/.test(rode.note), "[INV-PROGRESSION-RIDES-PERFORMED] and the note says so");
+
+  near(C.advanceCycleLift(state, perf(237.4, 235), "strength", 5).state.baseWeightLb, 200 + inc,
+    "[INV-PROGRESSION-RIDES-PERFORMED] a sub-half-step overshoot is rack noise, not signal");
+  near(C.advanceCycleLift(state, perf(237.5, 235), "strength", 5).state.baseWeightLb,
+    200 * (237.5 / 235) + inc,
+    "[INV-PROGRESSION-RIDES-PERFORMED] exactly the half step fires");
+  near(C.advanceCycleLift(state, perf(245, null), "strength", 5).state.baseWeightLb, 200 + inc,
+    "[INV-PROGRESSION-RIDES-PERFORMED] a performance with no recorded plan keeps the old advance exactly");
+  // Below plan cannot reach this path at all — it fails the grade first — so
+  // the ratio can never move the base downward.
+  const below = C.advanceCycleLift(state,
+    { ...perf(228, 235), anyBelowPlanLoad: true }, "strength", 5);
+  ok(below.grade === "fail" && below.state.baseWeightLb === 200,
+    "[INV-PROGRESSION-RIDES-PERFORMED] under plan fails the grade and holds — never advances downward");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
