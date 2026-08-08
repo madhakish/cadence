@@ -974,7 +974,12 @@ enum ImportService {
         if restoredExercises { settings.verticalPullMainsPromoted = st.verticalPullMainsPromoted ?? false }
         // Only accept a known theme; an unknown value would round-trip as
         // garbage on the next export (the UI would silently show Carbon anyway).
-        if let v = st.theme, ThemeName(rawValue: v) != nil { settings.themeNameRaw = v }
+        // Keep the backup codec platform-neutral. `ThemeName` lives beside the
+        // SwiftUI palette and imports UIKit, while the wire contract is just
+        // these four stable strings (mirrored by web `[data-theme]`).
+        if let v = st.theme, ["memento", "carbon", "slate", "system"].contains(v) {
+            settings.themeNameRaw = v
+        }
         // Keep the install marked seeded so a restore isn't re-seeded over
         // (Seeder.seedIfNeeded gates on seededAt != nil).
         settings.seededAt = st.seededAt ?? settings.seededAt ?? .now
