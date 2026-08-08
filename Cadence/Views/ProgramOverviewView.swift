@@ -30,11 +30,14 @@ struct ProgramOverviewView: View {
                     Section {
                         ForEach(program.orderedDays) { day in
                             NavigationLink {
-                                ProgramEditorView(program: program)
+                                // The card names a DAY, so it opens that day —
+                                // landing on the whole-program editor made the
+                                // label a lie and cost a navigation hop.
+                                ProgramDayEditorView(day: day, step: program.roundingLb)
                             } label: {
                                 dayCard(program, day)
                             }
-                            .accessibilityHint("Opens \(day.name) in the program editor")
+                            .accessibilityHint("Edits \(day.name)")
                         }
                     } header: {
                         HStack {

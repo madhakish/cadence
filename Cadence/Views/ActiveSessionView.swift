@@ -48,6 +48,12 @@ struct ActiveSessionView: View {
         session.orderedExercises.flatMap(\.plannedWorkingSets).filter { $0.status == .completed }.count
     }
     private var totalWorkSetCount: Int { session.orderedExercises.flatMap(\.plannedWorkingSets).count }
+    /// Position, not achievement: a skipped set is resolved and moves the
+    /// workout forward, so the ordinal must count it or skipping every set
+    /// would read "1 of N" forever. Mirrors web session.js.
+    private var resolvedWorkSetCount: Int {
+        session.orderedExercises.flatMap(\.plannedWorkingSets).filter { $0.status != .planned }.count
+    }
     private var currentExerciseNumber: Int {
         guard let currentOrFirst,
               let index = session.orderedExercises.firstIndex(where: { $0.persistentModelID == currentOrFirst.persistentModelID })
@@ -94,7 +100,7 @@ struct ActiveSessionView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(min(completedSetCount + 1, max(totalWorkSetCount, 1))) of \(totalWorkSetCount) work sets")
+                    Text("Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(totalWorkSetCount == 0 ? 0 : min(resolvedWorkSetCount + 1, totalWorkSetCount)) of \(totalWorkSetCount) work sets")
                         .font(.headline.monospacedDigit())
                     Text(session.date.formatted(date: .abbreviated, time: .omitted))
                         .font(.caption).foregroundStyle(.secondary)
@@ -1060,7 +1066,9 @@ private struct SetRow: View {
                            let plannedWeight = set.plannedWeightLb,
                            let plannedReps = set.plannedReps,
                            abs(plannedWeight - set.weightLb) > 0.001 || plannedReps != set.reps {
-                            Text("planned \(Weight.trim(plannedWeight))×\(plannedReps)")
+                            Text("planned \(set.enteredUnit == .kg
+                                ? "\(Weight.trim(Weight.kg(fromLb: plannedWeight))) kg"
+                                : "\(Weight.trim(plannedWeight)) lb")×\(plannedReps)")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         if set.isWarmup {

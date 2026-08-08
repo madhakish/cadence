@@ -21,7 +21,10 @@ export async function render(host) {
       ui.h("span", { class: "sub", text: `${program.focus} · Cycle ${program.cycleNumber}${program.isActive ? " · active" : ""}` })));
     for (const day of ordered(program.days)) {
       const card = ui.h("button", { class: "card wide program-day-card", onClick: () => programEditor(program),
-        ariaLabel: `${day.name}, edit program day` },
+        // Web has no day-scoped editor entry, so the label promises what the
+        // click actually does — the program editor — rather than a day editor
+        // screen readers would then fail to find.
+        ariaLabel: `${day.name}, opens the program editor` },
       ui.h("div", { class: "row" }, ui.h("span", { class: "title", text: day.name }),
         day.order === program.nextDayIndex ? ui.h("span", { class: "pill accent", text: "Next" }) : null));
       for (const lift of ordered(day.lifts)) {

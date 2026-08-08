@@ -336,9 +336,12 @@ export async function openSession(id) {
     const current = currentEntry();
     const exerciseNumber = current ? session.exercises.indexOf(current) + 1 : 0;
     const workSets = session.exercises.flatMap((entry) => (entry.sets || []).filter((set) => !set.isWarmup));
-    const completedWork = workSets.filter((set) => set.status === "completed").length;
+    // Position, not achievement: a skipped set is resolved and moves the
+    // workout forward, so the ordinal must count it or skipping every set
+    // would read "1 of N" forever. Mirrors the native progress card.
+    const resolvedWork = workSets.filter((set) => set.status === "completed" || set.status === "skipped").length;
     body.append(ui.h("div", { class: "card session-progress" },
-      ui.h("div", { class: "title mono", text: `Exercise ${exerciseNumber} of ${session.exercises.length} · ${Math.min(completedWork + 1, Math.max(workSets.length, 1))} of ${workSets.length} work sets` }),
+      ui.h("div", { class: "title mono", text: `Exercise ${exerciseNumber} of ${session.exercises.length} · ${workSets.length === 0 ? 0 : Math.min(resolvedWork + 1, workSets.length)} of ${workSets.length} work sets` }),
       ui.h("div", { class: "sub", text: ui.fmtDate(session.date) })));
     if (gymOptions.length) {
       const gymSelect = ui.h("select", {}, ...gymOptions.map((g) => ui.h("option", { value: g.id, text: g.name, selected: g.id === gymState.value?.id })));

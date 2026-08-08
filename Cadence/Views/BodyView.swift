@@ -10,6 +10,9 @@ struct BodyView: View {
     @Query(sort: \BodyweightEntry.date) private var bodyweight: [BodyweightEntry]
     @Query private var settingsList: [AppSettings]
     @Query private var checkIns: [CheckIn]
+    /// Set by the cadence://signals deep link: Signals lives one level inside
+    /// Body now, and the link's contract is the screen, not the tab.
+    @Binding var pendingSignals: Bool
 
     @AppStorage("healthReadEnabled") private var healthReadEnabled = false
 
@@ -27,6 +30,12 @@ struct BodyView: View {
 
     var body: some View {
         NavigationStack {
+            bodyList
+                .navigationDestination(isPresented: $pendingSignals) { InjuryTimelineView() }
+        }
+    }
+
+    private var bodyList: some View {
             List {
                 Section {
                     NavigationLink {
@@ -106,7 +115,6 @@ struct BodyView: View {
             }
             .task(id: healthReadEnabled) { await refreshHealth() }
         }
-    }
 
     /// Sleep reads as hours and minutes. `CardioFormat.durationLabel` would
     /// render seven hours as "7:24:00", which is a stopwatch, not a night.
