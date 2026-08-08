@@ -90,7 +90,15 @@ enum ProgramSession {
                 focus: program.focus,
                 prescriptionStyle: lift.prescription,
                 configuration: configuration,
-                estimatedMaxLb: lift.estimatedMaxLb
+                estimatedMaxLb: lift.estimatedMaxLb,
+                // A held cycle moves the needle with volume: the stall the
+                // grade recorded adds one set to this volume rotation, gated
+                // on the program's added-set governance. Pure state, so the
+                // Home card computes the identical count.
+                addedVolumeSets: ProgramProgression.volumeIncrementSets(
+                    stallCount: lift.stallCount,
+                    maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation
+                )
             )
             let plan = prescription.mainWork
             // Methodology slots prescribe exact loads (a +5/session contract, TM

@@ -515,9 +515,82 @@ public enum ProgramProgression {
         return Swift.max(roundingLb, stepped)
     }
 
+    /// Where the lifter stands relative to their own logged capability. The
+    /// regime selects increment size and the failure fallback; the priority
+    /// order it encodes is the lifter's: the needle moves every cycle, with
+    /// weight when a clean jump is earnable and volume when it is not.
+    public enum ProgressionRegime: String, Codable, Sendable {
+        /// Well below a logged prior best — rebuilding. Large clean jumps;
+        /// change plates are noise at this distance from the ceiling.
+        case rebuild
+        /// No usable headroom evidence, or inside the normal band. Today's
+        /// behavior, unchanged.
+        case standard
+        /// At a STANDING prior best — the ceiling is real and old, gains come
+        /// slowly, and change plates are the correct tool.
+        case fine
+    }
+
+    /// Rebuild below 90% of the prior best; fine within 2.5% of it.
+    public static let rebuildHeadroomBand = 0.90
+    public static let fineHeadroomBand = 0.975
+    /// A prior best only counts as a CEILING once it has stood this long.
+    /// A fresh log rises through its own all-time best every cycle — without
+    /// this guard the rebuilding lifter the regime exists for would read as
+    /// at-max and be handed change-plate increments, the exact opposite of
+    /// intent. An old best that current work is closing back in on is the
+    /// real fine-progression signal.
+    public static let standingBestDays = 35.0
+
+    /// Headroom to prior capability, banded. `priorBestMaxLb` is the best
+    /// e1RM in the LOG (callers scan history); zero means no evidence and
+    /// grades standard. Mirrored 1:1 in web/app/js/core.js.
+    public static func progressionRegime(
+        estimatedMaxLb: Double, priorBestMaxLb: Double, standingBest: Bool
+    ) -> ProgressionRegime {
+        guard estimatedMaxLb > 0, priorBestMaxLb > 0 else { return .standard }
+        if estimatedMaxLb < priorBestMaxLb * rebuildHeadroomBand { return .rebuild }
+        if standingBest, estimatedMaxLb >= priorBestMaxLb * fineHeadroomBand { return .fine }
+        return .standard
+    }
+
+    /// The focus increment staged by regime. Rebuild rounds UP to the clean
+    /// 10 lb class — a 5 lb bump needs 2.5 lb change plates, which are noise
+    /// while rebuilding; fine halves the step down to change-plate
+    /// granularity, which is where they become the correct tool. Standard is
+    /// `focusIncrement` untouched. A maintain focus stays 0 in every regime.
+    /// Mirrored 1:1 in web/app/js/core.js `stagedIncrement`.
+    public static func stagedIncrement(
+        baseWeightLb: Double, focus: TrainingFocus, regime: ProgressionRegime,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> Double {
+        let inc = focusIncrement(baseWeightLb: baseWeightLb, focus: focus, roundingLb: roundingLb)
+        guard inc > 0 else { return 0 }
+        switch regime {
+        case .rebuild: return (inc / 10).rounded(.up) * 10
+        case .standard: return inc
+        case .fine: return Swift.max(2.5, ((inc / 2) / 2.5).rounded() * 2.5)
+        }
+    }
+
+    /// Extra sets the next VOLUME rotation carries after a held cycle, so the
+    /// needle still moves when the weight cannot. Derived from persisted
+    /// state alone — the Home card and the created session agree by
+    /// construction, and a later clean grade resets the stall and returns the
+    /// volume with the weight jump. Bounded to one set and gated on the
+    /// program's existing added-set governance (`maximumAddedSetsPerRotation`
+    /// zero means the lifter said no added work, ever).
+    /// Mirrored 1:1 in web/app/js/core.js `volumeIncrementSets`.
+    public static func volumeIncrementSets(
+        stallCount: Int, maximumAddedSetsPerRotation: Int
+    ) -> Int {
+        stallCount > 0 && maximumAddedSetsPerRotation > 0 ? 1 : 0
+    }
+
     public static func advanceCycleLift(
         _ state: ProgramLiftState, perf: CycleLiftPerformance, focus: TrainingFocus,
-        roundingLb: Double = ProgramEngine.defaultRoundingLb
+        roundingLb: Double = ProgramEngine.defaultRoundingLb,
+        regime: ProgressionRegime = .standard, volumeFallback: Bool = false
     ) -> ProgressionResult {
         let grade = gradeCycle(perf)
         let estimatedMaxLb = smoothedMax(state, perf: perf)
@@ -527,7 +600,8 @@ public enum ProgramProgression {
 
         if grade == .success {
             next.stallCount = 0
-            let inc = focusIncrement(baseWeightLb: state.baseWeightLb, focus: focus, roundingLb: roundingLb)
+            let inc = stagedIncrement(baseWeightLb: state.baseWeightLb, focus: focus,
+                                      regime: regime, roundingLb: roundingLb)
             // Progression rides performed values, not the stale programmed
             // base. The grade fires at the Peak, whose top set is base-× by
             // design — so the performed weight cannot feed the base directly;
@@ -565,6 +639,13 @@ public enum ProgramProgression {
                 next.baseWeightLb = Weight.round(old * deloadRebuildFraction, to: roundingLb)
                 next.stallCount = 0
                 note = "Two cycles without a clean peak — deloaded \(Weight.trim(old))→\(Weight.trim(next.baseWeightLb)) lb to rebuild."
+            } else if volumeFallback {
+                // The needle still moves: a held weight adds a volume set
+                // next rotation (volumeIncrementSets derives it from this
+                // stall), so the cycle progresses by volume when it cannot
+                // progress by load.
+                let held = grade == .fail ? "Missed peak work" : "Grindy peak"
+                note = "\(held) — holding the weight; the next volume rotation adds a set so the cycle still moves."
             } else {
                 note = grade == .fail ? "Missed peak work — holding weight, retry the cycle."
                                       : "Grindy peak — holding weight, retry the cycle."
@@ -673,7 +754,8 @@ public enum ProgramProgression {
     public static func advanceProgramLift(
         _ state: ProgramLiftState, perf: CycleLiftPerformance, focus: TrainingFocus,
         style: PrescriptionStyle, movementGroup: String?,
-        roundingLb: Double = ProgramEngine.defaultRoundingLb
+        roundingLb: Double = ProgramEngine.defaultRoundingLb,
+        regime: ProgressionRegime = .standard, volumeFallback: Bool = false
     ) -> ProgressionResult {
         let lower = movementGroup == "squat" || movementGroup == "hinge"
         let increment = lower ? 10.0 : 5.0
@@ -746,7 +828,8 @@ public enum ProgramProgression {
                 note: "Speed work holds — raise this slot when the max-effort lift moves."
             )
         default:
-            return advanceCycleLift(state, perf: perf, focus: focus, roundingLb: roundingLb)
+            return advanceCycleLift(state, perf: perf, focus: focus, roundingLb: roundingLb,
+                                    regime: regime, volumeFallback: volumeFallback)
         }
     }
 

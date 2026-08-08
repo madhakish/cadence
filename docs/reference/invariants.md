@@ -428,6 +428,26 @@ recorded plan keeps the old advance exactly.
 > lifted in a month, handing back +3.6 real. The base now rides what the bar
 > actually carried.
 
+### INV-NEEDLE-ALWAYS-MOVES
+*platforms: core*
+
+The needle moves every cycle: weight when a clean jump is earnable, **volume
+when it is not**. A held wave cycle adds one set to the next volume rotation
+(load and peak keep their shapes), derived from the persisted stall alone so
+the Home card and the created session agree by construction; a clean grade
+resets the stall and returns the volume with the weight jump. The stall→deload
+ladder is intact underneath, and `maximumAddedSetsPerRotation = 0` turns the
+fallback off. Increment size stages by headroom to the **logged** prior best:
+a logged drawdown rebuilds in clean 10 lb-class jumps (change plates are
+noise), a **standing** prior best being closed back in on earns change-plate
+increments, and a fresh log rising through its own all-time best never reads
+as at-max — it stays standard.
+
+> The lifter's own rule, layered: "the goal is to move the needle with volume
+> progression or weight progressions … if I can't make a 10# jump the change
+> should be a volume increment … I'll get there fast and then need change
+> plates to make smaller and smaller gains but we're not there right now."
+
 ## Grading
 
 ### INV-BELOW-PLAN-IS-BELOW-PLAN

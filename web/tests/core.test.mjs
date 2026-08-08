@@ -641,6 +641,59 @@ eq(st2.state.baseWeightLb, 160, "two stalls → −10% deload (175→160)");
 eq(st2.state.stallCount, 0, "deload resets stall");
 ok(/deloaded/.test(st2.note || ""), "deload note present");
 
+// The lifter's priority order: the needle moves every cycle — weight when a
+// clean jump is earnable, volume when it is not. Headroom to the LOGGED prior
+// best stages the increment; a held cycle falls back to a volume set instead
+// of a bare hold. Mirrors ProgramProgressionTests/ProgramEngineTests.
+{
+  // [INV-NEEDLE-ALWAYS-MOVES] regime bands off logged evidence only.
+  eq(C.progressionRegime(300, 0, true), "standard", "no logged evidence grades standard");
+  eq(C.progressionRegime(300, 400, false), "rebuild", "a logged drawdown reads rebuild regardless of the best's age");
+  eq(C.progressionRegime(395, 400, true), "fine", "closing on a standing ceiling reads fine");
+  eq(C.progressionRegime(395, 400, false), "standard",
+    "[INV-NEEDLE-ALWAYS-MOVES] a fresh log rising through its own best never reads fine");
+  eq(C.progressionRegime(370, 400, true), "standard", "inside the normal band nothing changes");
+
+  // [INV-NEEDLE-ALWAYS-MOVES] staged increments.
+  eq(C.stagedIncrement(175, "strength", "standard", 5), 5, "standard is focusIncrement untouched");
+  eq(C.stagedIncrement(175, "strength", "rebuild", 5), 10,
+    "rebuild rounds the 5 lb step up to the clean 10 lb class — no change plates");
+  eq(C.stagedIncrement(175, "strength", "fine", 5), 2.5,
+    "fine halves the step down to change-plate granularity");
+  eq(C.stagedIncrement(221, "strength", "rebuild", 10), 10, "an increment already in the clean class is untouched");
+  eq(C.stagedIncrement(221, "strength", "fine", 10), 5, "fine at 10-rounding is a 5 lb pair");
+  eq(C.stagedIncrement(300, "maintain", "rebuild", 5), 0, "maintain stays zero in every regime");
+
+  // [INV-NEEDLE-ALWAYS-MOVES] the volume fallback derives from pure state.
+  eq(C.volumeIncrementSets(1, 6), 1, "a held cycle adds one volume set");
+  eq(C.volumeIncrementSets(0, 6), 0, "no stall, no extra volume");
+  eq(C.volumeIncrementSets(1, 0), 0, "the added-set governance can turn the fallback off entirely");
+
+  // [INV-NEEDLE-ALWAYS-MOVES] a held cycle moves the needle with volume.
+  const heldResult = C.advanceCycleLift(liftState(), { ...cleanPerf, grindyOrWobbleSets: 3 }, "strength", 5,
+    "rebuild", true);
+  eq(heldResult.state.stallCount, 1, "the stall still counts");
+  eq(heldResult.state.baseWeightLb, 175, "the weight holds; the volume moves");
+  ok(/adds a set/.test(heldResult.note || ""), "the note tells the lifter how the cycle still moves");
+  const secondMiss = C.advanceCycleLift(heldResult.state, { ...cleanPerf, completedSets: 1 }, "strength", 5,
+    "rebuild", true);
+  eq(secondMiss.state.baseWeightLb, 160, "the stall→deload ladder is intact underneath (175→160)");
+  eq(secondMiss.state.stallCount, 0, "deload consumes the counter");
+  const cleanRebuild = C.advanceCycleLift(liftState(), cleanPerf, "strength", 5, "rebuild", true);
+  eq(cleanRebuild.state.baseWeightLb, 185, "a clean rebuild grade jumps the clean class: 175 + 10");
+
+  // [INV-NEEDLE-ALWAYS-MOVES] the fallback lands on the VOLUME rotation only.
+  const volState = { cycleNumber: 1, baseWeightLb: 210, nextPhase: 1, incrementLb: 0 };
+  eq(C.planForStyle(volState, 5, "wave", {}, null, 1).sets, 6, "5×5 becomes 6×5 at the same load");
+  eq(C.planForStyle(volState, 5, "wave", {}, null, 0).sets, 5, "a clean grade returns the shape with the jump");
+  eq(C.planForStyle(volState, 5, "offsetWave", {}, null, 1).sets, 6, "offset wave carries the fallback too");
+  eq(C.planForStyle(volState, 5, "secondary", {}, null, 1).sets, 3, "complementary styles govern their own volume");
+  eq(C.planForStyle({ ...volState, nextPhase: 2 }, 5, "wave", {}, null, 1).sets, 5, "load keeps its shape");
+  eq(C.planForStyle({ ...volState, nextPhase: 3 }, 5, "wave", {}, null, 1).sets, 3, "peak keeps its precision");
+  eq(C.sessionPrescription(volState, 5, "barbell", "hinge", "main", "strength", "automatic", {}, 0, 1).mainWork.sets, 6,
+    "the whole pipeline threads it — the stored prescription matches the card");
+}
+
 // The increment is a fraction of base floored to a loadable step, and nothing
 // else. The old headroom-to-ceiling taper is gone: it produced only 0 or one
 // step across every realistic load, and its cliff was unreachable on the

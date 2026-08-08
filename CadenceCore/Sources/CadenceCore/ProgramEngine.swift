@@ -427,12 +427,13 @@ public enum ProgramEngine {
         role: LiftRole = .main,
         focus: TrainingFocus = .strength,
         prescriptionStyle: PrescriptionStyle = .automatic,
-        configuration: LiftPrescriptionConfiguration = .init()
+        configuration: LiftPrescriptionConfiguration = .init(),
+        addedVolumeSets: Int = 0
     ) -> SessionPlan {
         let step = loadStep(programRoundingLb: programRoundingLb, exerciseType: exerciseType)
         let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
         let raw = plan(for: state, roundingLb: step, style: style, configuration: configuration,
-                       movementGroup: movementGroup)
+                       movementGroup: movementGroup, addedVolumeSets: addedVolumeSets)
         guard exerciseType == "dumbbell", raw.weightLb > state.baseWeightLb else { return raw }
         return SessionPlan(
             weightLb: Swift.min(raw.weightLb, state.baseWeightLb + 5),
@@ -558,9 +559,14 @@ public enum ProgramEngine {
         roundingLb: Double = defaultRoundingLb,
         style: PrescriptionStyle,
         configuration: LiftPrescriptionConfiguration = .init(),
-        movementGroup: String? = nil
+        movementGroup: String? = nil,
+        addedVolumeSets: Int = 0
     ) -> SessionPlan {
         let phase = state.nextPhase
+        // A held cycle's volume fallback: extra sets land on the VOLUME
+        // rotation of the wave-family styles only — load and peak keep their
+        // shapes, and complementary styles govern their own volume.
+        let extraSets = phase == .volume ? Swift.max(0, addedVolumeSets) : 0
         let prescription: (sets: Int, reps: Int, multiplier: Double)
         switch style {
         case .automatic, .wave:
@@ -572,7 +578,7 @@ public enum ProgramEngine {
             // Zero is "unset", never "lift nothing" — mirror core.js's guard
             // inside the shared engine, not only in the app-layer builder, so
             // both cores agree for every caller.
-            prescription = (phase.sets, phase.reps,
+            prescription = (phase.sets + extraSets, phase.reps,
                             phase == .deload
                                 ? (configuration.deloadMultiplier > 0 ? configuration.deloadMultiplier : phase.multiplier)
                                 : phase.multiplier)
@@ -647,7 +653,7 @@ public enum ProgramEngine {
             }
             return SessionPlan(
                 weightLb: Weight.round(weight, to: roundingLb),
-                sets: phase.sets, reps: phase.reps, phase: phase, cycleNumber: state.cycleNumber
+                sets: phase.sets + extraSets, reps: phase.reps, phase: phase, cycleNumber: state.cycleNumber
             )
         case .secondary:
             // Complementary work is volume after the day's heavy main — never
@@ -713,14 +719,16 @@ public enum ProgramEngine {
         focus: TrainingFocus = .strength,
         prescriptionStyle: PrescriptionStyle = .automatic,
         configuration: LiftPrescriptionConfiguration = .init(),
-        estimatedMaxLb: Double = 0
+        estimatedMaxLb: Double = 0,
+        addedVolumeSets: Int = 0
     ) -> SessionPrescription {
         let step = loadStep(programRoundingLb: programRoundingLb, exerciseType: exerciseType)
         let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
         let work = programPlan(
             for: state, programRoundingLb: programRoundingLb, exerciseType: exerciseType,
             movementGroup: movementGroup, role: role, focus: focus,
-            prescriptionStyle: style, configuration: configuration
+            prescriptionStyle: style, configuration: configuration,
+            addedVolumeSets: addedVolumeSets
         )
         var blocks: [PrescriptionBlock] = []
         if configuration.phasePrimerEnabled, !style.buildsOwnSessionShape,

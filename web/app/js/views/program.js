@@ -33,6 +33,7 @@ export async function render(host) {
           { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
           lift.prescription || "automatic", lift,
+          C.volumeIncrementSets(lift.stallCount ?? 0, program.maximumAddedSetsPerRotation ?? 6),
         );
         card.append(ui.h("div", { class: "row program-slot" },
           ui.h("div", { class: "lead" },

@@ -31,14 +31,15 @@ export function programLoadStep(programRoundingLb, exerciseType = null) {
 // jump to 65 lb at Peak. Above-base DB rotations stay within one 5 lb rack
 // jump; barbell/machine waves retain the normal percentages.
 export function programPlanFor(state, programRoundingLb, exerciseType = null, movementGroup = null,
-  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {}) {
+  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {}, addedVolumeSets = 0) {
   const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
   const lower = ["squat", "hinge"].includes(movementGroup);
   const config = { ...configuration,
     loadOffsetLb: configuration.loadOffsetLb > 0 ? configuration.loadOffsetLb : (lower ? 25 : 10),
     peakOffsetLb: configuration.peakOffsetLb > 0 ? configuration.peakOffsetLb : (lower ? 33 : 15),
   };
-  const plan = planForStyle(state, programLoadStep(programRoundingLb, exerciseType), style, config, movementGroup);
+  const plan = planForStyle(state, programLoadStep(programRoundingLb, exerciseType), style, config, movementGroup,
+    addedVolumeSets);
   if (exerciseType !== "dumbbell" || plan.weightLb <= state.baseWeightLb) return plan;
   return { ...plan, weightLb: Math.min(plan.weightLb, state.baseWeightLb + 5) };
 }
@@ -804,8 +805,13 @@ export function resolvedOffsets(loadOffsetLb, peakOffsetLb, movementGroup) {
   };
 }
 
-export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave", configuration = {}, movementGroup = null) {
+export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "wave", configuration = {}, movementGroup = null,
+  addedVolumeSets = 0) {
   const p = state.nextPhase;
+  // A held cycle's volume fallback: extra sets land on the VOLUME rotation of
+  // the wave-family styles only — load and peak keep their shapes, and
+  // complementary styles govern their own volume.
+  const extraSets = p === 1 ? Math.max(0, addedVolumeSets) : 0;
   const config = {
     // Zero is the stored sentinel for "use the movement-aware default";
     // resolvedOffsets below supplies it. Defaulting to 10/15 here would read as
@@ -873,7 +879,7 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
       4: state.baseWeightLb * (config.deloadMultiplier > 0 ? config.deloadMultiplier : 0.775),
     })[p];
     const phase = PHASES[p];
-    return { weightLb: roundTo(weight, roundingLb), sets: phase.sets, reps: phase.reps, phase: p, cycleNumber: state.cycleNumber };
+    return { weightLb: roundTo(weight, roundingLb), sets: phase.sets + extraSets, reps: phase.reps, phase: p, cycleNumber: state.cycleNumber };
   }
   if (style === "doubleProgression") return {
     weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
@@ -911,7 +917,10 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     : tableMultiplier;
   return {
     weightLb: roundTo(state.baseWeightLb * multiplier, roundingLb),
-    sets, reps, phase: p, cycleNumber: state.cycleNumber,
+    // Keyed on the resolved table for the same reason as the multiplier:
+    // only the wave family carries the volume fallback.
+    sets: sets + (table === byStyle.wave ? extraSets : 0),
+    reps, phase: p, cycleNumber: state.cycleNumber,
   };
 }
 
@@ -938,14 +947,16 @@ export function primerWeight(baseWeightLb, phase, style, roundingLb = DEFAULT_RO
 }
 
 export function sessionPrescription(state, programRoundingLb, exerciseType = null, movementGroup = null,
-  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {}, estimatedMaxLb = 0) {
+  role = "main", focus = "strength", prescriptionStyle = "automatic", configuration = {}, estimatedMaxLb = 0,
+  addedVolumeSets = 0) {
   const config = {
     peakSingleEnabled: false, lastPeakSingleLb: 0, peakSingleIncrementLb: 5,
     phasePrimerEnabled: true, ...configuration,
   };
   Object.assign(config, resolvedOffsets(config.loadOffsetLb, config.peakOffsetLb, movementGroup));
   const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
-  const work = programPlanFor(state, programRoundingLb, exerciseType, movementGroup, role, focus, style, config);
+  const work = programPlanFor(state, programRoundingLb, exerciseType, movementGroup, role, focus, style, config,
+    addedVolumeSets);
   const step = programLoadStep(programRoundingLb, exerciseType);
   const blocks = [];
   if (config.phasePrimerEnabled && !buildsOwnSessionShape(style)) {
@@ -1481,9 +1492,57 @@ export function focusIncrement(baseWeightLb, focus, roundingLb = DEFAULT_ROUNDIN
   return Math.max(roundingLb, stepped);
 }
 
+// Where the lifter stands relative to their own logged capability. The regime
+// selects increment size and the failure fallback; the priority order it
+// encodes is the lifter's: the needle moves every cycle, with weight when a
+// clean jump is earnable and volume when it is not.
+// Rebuild below 90% of the prior best; fine within 2.5% of it.
+export const REBUILD_HEADROOM_BAND = 0.90;
+export const FINE_HEADROOM_BAND = 0.975;
+// A prior best only counts as a CEILING once it has stood this long. A fresh
+// log rises through its own all-time best every cycle — without this guard
+// the rebuilding lifter the regime exists for would read as at-max and be
+// handed change-plate increments, the exact opposite of intent.
+export const STANDING_BEST_DAYS = 35;
+
+// Headroom to prior capability, banded: "rebuild" | "standard" | "fine".
+// priorBestMaxLb is the best e1RM in the LOG (callers scan history); zero
+// means no evidence and grades standard. Mirrors ProgramProgression.
+export function progressionRegime(estimatedMaxLb, priorBestMaxLb, standingBest) {
+  if (!(estimatedMaxLb > 0) || !(priorBestMaxLb > 0)) return "standard";
+  if (estimatedMaxLb < priorBestMaxLb * REBUILD_HEADROOM_BAND) return "rebuild";
+  if (standingBest && estimatedMaxLb >= priorBestMaxLb * FINE_HEADROOM_BAND) return "fine";
+  return "standard";
+}
+
+// The focus increment staged by regime. Rebuild rounds UP to the clean 10 lb
+// class — a 5 lb bump needs 2.5 lb change plates, which are noise while
+// rebuilding; fine halves the step down to change-plate granularity, which is
+// where they become the correct tool. Standard is focusIncrement untouched.
+// A maintain focus stays 0 in every regime. Mirrors ProgramProgression.
+export function stagedIncrement(baseWeightLb, focus, regime, roundingLb = DEFAULT_ROUNDING_LB) {
+  const inc = focusIncrement(baseWeightLb, focus, roundingLb);
+  if (!(inc > 0)) return 0;
+  if (regime === "rebuild") return Math.ceil(inc / 10) * 10;
+  if (regime === "fine") return Math.max(2.5, Math.round((inc / 2) / 2.5) * 2.5);
+  return inc;
+}
+
+// Extra sets the next VOLUME rotation carries after a held cycle, so the
+// needle still moves when the weight cannot. Derived from persisted state
+// alone — the Home card and the created session agree by construction, and a
+// later clean grade resets the stall and returns the volume with the weight
+// jump. Bounded to one set and gated on the program's existing added-set
+// governance (maximumAddedSetsPerRotation zero means no added work, ever).
+// Mirrors ProgramProgression.volumeIncrementSets.
+export function volumeIncrementSets(stallCount, maximumAddedSetsPerRotation) {
+  return stallCount > 0 && maximumAddedSetsPerRotation > 0 ? 1 : 0;
+}
+
 // state: { baseWeightLb, estimatedMaxLb, stallCount, role, lastIncrementLb }
 // returns { state, grade, note }
-export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDING_LB) {
+export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDING_LB,
+  regime = "standard", volumeFallback = false) {
   const grade = gradeCycle(perf);
   const estimatedMaxLb = smoothedMax(state, perf);
   const next = { ...state, estimatedMaxLb };
@@ -1491,7 +1550,7 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
 
   if (grade === "success") {
     next.stallCount = 0;
-    const inc = focusIncrement(state.baseWeightLb, focus, roundingLb);
+    const inc = stagedIncrement(state.baseWeightLb, focus, regime, roundingLb);
     // Progression rides performed values, not the stale programmed base. The
     // grade fires at the Peak, whose top set is base-× by design — so the
     // performed weight cannot feed the base directly; its OVERSHOOT ratio over
@@ -1520,6 +1579,12 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
       next.baseWeightLb = roundTo(old * DELOAD_REBUILD_FRACTION, roundingLb);
       next.stallCount = 0;
       note = `Two cycles without a clean peak — deloaded ${trim(old)}→${trim(next.baseWeightLb)} lb to rebuild.`;
+    } else if (volumeFallback) {
+      // The needle still moves: a held weight adds a volume set next rotation
+      // (volumeIncrementSets derives it from this stall), so the cycle
+      // progresses by volume when it cannot progress by load.
+      const held = grade === "fail" ? "Missed peak work" : "Grindy peak";
+      note = `${held} — holding the weight; the next volume rotation adds a set so the cycle still moves.`;
     } else {
       note = grade === "fail" ? "Missed peak work — holding weight, retry the cycle."
                               : "Grindy peak — holding weight, retry the cycle.";
@@ -1584,7 +1649,8 @@ export function advanceLinearLift(state, perf, rule, roundingLb = DEFAULT_ROUNDI
 // Style-aware cycle progression at the Peak grade / rollover. Methodology
 // styles use their published fixed increments; everything else keeps the
 // proportional rule. Mirrors ProgramProgression.advanceProgramLift.
-export function advanceProgramLift(state, perf, focus, style, movementGroup = null, roundingLb = DEFAULT_ROUNDING_LB) {
+export function advanceProgramLift(state, perf, focus, style, movementGroup = null, roundingLb = DEFAULT_ROUNDING_LB,
+  regime = "standard", volumeFallback = false) {
   const lower = ["squat", "hinge"].includes(movementGroup);
   const increment = lower ? 10 : 5;
   if (style === "fiveThreeOne") {
@@ -1653,7 +1719,7 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
       note: "Speed work holds — raise this slot when the max-effort lift moves.",
     };
   }
-  return advanceCycleLift(state, perf, focus, roundingLb);
+  return advanceCycleLift(state, perf, focus, roundingLb, regime, volumeFallback);
 }
 
 // Whether an accessory slot is CARRYING load it can never add to.

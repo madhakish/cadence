@@ -1200,6 +1200,29 @@ function twinBarLb(se, work) {
   return C.barLabelLb(se.barId ? C.barById(se.barId) : C.BARS.bar45lb);
 }
 
+// The best e1RM logged for the exercise before the session being banked, and
+// whether it is a STANDING best — old enough (35 days) to be a prior ceiling
+// rather than the frontier of a rising log. This is what progressionRegime
+// bands against: a logged drawdown reads rebuild, a standing ceiling being
+// closed back in on reads fine, and a fresh log with no such evidence stays
+// standard. Mirrors SessionCompletion.priorBestE1RM.
+function priorBestE1RM(completedSessions, exerciseName, anchorMs) {
+  let best = 0;
+  let bestMs = -Infinity;
+  for (const candidate of completedSessions) {
+    const stamp = Date.parse(candidate.completedAt || candidate.date);
+    for (const entry of candidate.exercises || []) {
+      if (entry.exerciseName !== exerciseName) continue;
+      for (const set of entry.sets || []) {
+        if (set.isWarmup || set.status !== "completed" || !(set.weightLb > 0) || !(set.reps >= 1)) continue;
+        const sample = C.epleyE1RM(set.weightLb, set.reps);
+        if (sample > best) { best = sample; bestMs = stamp; }
+      }
+    }
+  }
+  return { maxLb: best, standing: best > 0 && anchorMs - bestMs >= C.STANDING_BEST_DAYS * 86400000 };
+}
+
 function cyclePerf(se, roundingLb) {
   const w = prescribedWork(se);
   const presReps = se.plannedReps ?? (w.length ? Math.max(...w.map((s) => s.reps)) : 0); // ?? not ||: mirrors Swift's nil-coalescing
@@ -1569,13 +1592,22 @@ async function advanceProgram(session, milestones) {
   }
 
   // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
+  // Headroom to the lifter's own logged prior best stages the increment; the
+  // added-set governance decides whether a held cycle may fall back to
+  // volume. Mirrors SessionCompletion's graded-week block.
   if (tag.week === C.GRADED_WEEK) {
+    const volumeFallback = (program.maximumAddedSetsPerRotation ?? 6) > 0;
+    const history = (await Sessions.completed())
+      .filter((candidate) => String(candidate.id) !== String(session.id));
+    const anchorMs = Date.parse(session.completedAt || session.date);
     for (const lift of (day.lifts || []).filter((candidate) => !C.advancesPerExposure(candidate.prescription))) {
       const se = programmedEntry(session, lift);
       if (se && prescribedWork(se).length) {
         const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(se.exerciseName)?.type);
+        const prior = priorBestE1RM(history, lift.exerciseName, anchorMs);
         lift.pending = C.advanceProgramLift(lift, cyclePerf(se, loadStep), program.focus,
-          lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep);
+          lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep,
+          C.progressionRegime(lift.estimatedMaxLb, prior.maxLb, prior.standing), volumeFallback);
       }
     }
   }
@@ -1733,6 +1765,11 @@ export async function createSessionFromProgramDay(program, day) {
       { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
       program.roundingLb, ex?.type, ex?.movementGroup, lift.role, program.focus, lift.prescription || "automatic",
       configuration, lift.estimatedMaxLb || 0,
+      // A held cycle moves the needle with volume: the stall the grade
+      // recorded adds one set to this volume rotation, gated on the
+      // program's added-set governance. Pure state, so the Home card
+      // computes the identical count.
+      C.volumeIncrementSets(lift.stallCount ?? 0, program.maximumAddedSetsPerRotation ?? 6),
     );
     const plan = prescription.mainWork;
     // Methodology slots prescribe exact loads (a +5/session contract, TM
