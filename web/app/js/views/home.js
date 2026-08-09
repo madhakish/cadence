@@ -69,7 +69,7 @@ export async function render(host) {
   } else if (program && nextProgramDay) {
     root.append(ui.h("div", { class: "card today-hero" },
       ui.h("button", { class: "row wide", style: { minHeight: "64px", textAlign: "left" },
-        onClick: () => workoutPreview(program, nextProgramDay, { exMap, gym, barLb }) },
+        onClick: () => workoutPreview(program, nextProgramDay, { exMap, gym, barLb, completed }) },
       ui.h("div", { class: "lead" }, ui.h("span", { class: "sub", text: "Next workout" }),
         ui.h("span", { class: "big", text: nextProgramDay.name }),
         ui.h("span", { class: "sub", text: `${program.name} · Cycle ${program.cycleNumber}` })),

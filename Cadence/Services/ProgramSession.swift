@@ -323,8 +323,12 @@ enum ProgramSession {
     static func lastVolumePerformedLb(
         for lift: ProgramLift, program: Program, sessions: [WorkoutSession]
     ) -> Double {
+        // The name is a fallback for ID-less legacy sessions only — two
+        // programs can share a display name, and a non-nil foreign ID must
+        // never feed this program's evidence (mirrors the resume filter).
         let mine = sessions
-            .filter { $0.isCompleted && ($0.programID == program.id || $0.programName == program.name) }
+            .filter { $0.isCompleted && ($0.programID == program.id
+                || ($0.programID == nil && $0.programName == program.name)) }
             .sorted { ($0.completedAt ?? $0.date) > ($1.completedAt ?? $1.date) }
         for session in mine {
             if !lift.prescription.advancesPerExposure && session.programWeek != 1 { continue }

@@ -2080,6 +2080,8 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(C.performedLabel(226.87), 230, "[INV-ADVANCE-BUYS-PLATES] 20+20+1.25 kg a side goes by 230");
   eq(C.performedLabel(397.74), 405,
     "[INV-ADVANCE-BUYS-PLATES] four 20 kg pairs drift past one grid step and still find their 405 label");
+  eq(C.performedLabel(838.66), 855,
+    "[INV-ADVANCE-BUYS-PLATES] nine 20 kg pairs drift three grid steps — the window scales with the stack");
   eq(C.performedLabel(225), 225, "[INV-ADVANCE-BUYS-PLATES] a grid-clean load is its own label");
   eq(C.performedLabel(223), 225, "[INV-ADVANCE-BUYS-PLATES] no twin label → the next grid step up, never understating");
   eq(C.performedLabel(0), 0, "no load, no label");

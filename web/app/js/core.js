@@ -325,10 +325,14 @@ export function performedLabel(performedLb, barLb = 45, roundingLb = 5) {
   const nearest = Math.round(performedLb / roundingLb) * roundingLb;
   if (Math.abs(nearest - performedLb) < 1e-6) return performedLb;
   const ceiling = Math.ceil(performedLb / roundingLb) * roundingLb;
-  // Heavy kg stacks drift almost 2 lb per plate pair, so the twin label can
-  // sit a couple of grid steps above the raw mass.
-  for (let step = 0; step <= 2; step += 1) {
-    const label = ceiling + step * roundingLb;
+  // The twin drift scales with the stack — each 20 kg pair is 1.8 lb light
+  // and a 10 kg plate sits 2.95 under its 25 label — so the search window
+  // scales with the load instead of assuming a fixed step count (9×20 kg a
+  // side is 838.7 raw and labels 855, three grid steps up). The heaviest
+  // legal overstatement, an all-10 kg stack labeling as 25s, is ~13.4%, so
+  // 15% bounds every stack; plateEquivalent's 0.15 lb band keeps false
+  // labels out however wide the window.
+  for (let label = ceiling; label <= performedLb * 1.15 + roundingLb; label += roundingLb) {
     if (plateEquivalent(label, performedLb, barLb)) return label;
   }
   return ceiling;
