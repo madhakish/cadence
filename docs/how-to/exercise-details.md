@@ -5,11 +5,13 @@ Exercise library** — to open its detail page.
 
 ## The muscle figure
 
-Two labeled views of a body diagram (front and back) show what the movement
-does: **primary movers in red**, **supporting muscles in blue**. A matching
-key names the exact groups underneath, so the figure does not rely on color
-alone. Known lifts have hand-tuned muscle profiles; anything you
-add yourself falls back to a sensible profile for its movement group
+Two labeled views of a Vitruvian body figure (front and back) show what the
+movement does: **primary movers in red**, **supporting muscles in blue**. The
+human-proportioned silhouettes use curved anatomical regions rather than
+rectangular limb blocks. A matching key names the exact groups underneath, so
+the figure does not rely on color alone. Known lifts have hand-tuned muscle
+profiles; anything you add yourself falls back to a sensible profile for its
+movement group
 (all presses light up shoulders/chest/triceps, and so on). No movement
 group → no figure, so give custom exercises a group in the library.
 

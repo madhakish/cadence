@@ -85,16 +85,41 @@ struct BarbellView: View {
                     let midY = h / 2
                     let shoulder = min(82, max(62, width * 0.24))
                     let rightShoulder = width - shoulder
-                    ctx.fill(Path(roundedRect: CGRect(x: 8, y: midY - 2, width: width - 16, height: 4), cornerRadius: 2),
-                             with: .color(Color(hex: 0x9AA0AA)))
-                    ctx.fill(Path(roundedRect: CGRect(x: 8, y: midY - 3, width: shoulder - 8, height: 6), cornerRadius: 2),
-                             with: .color(Color(hex: 0x7C828C)))
-                    ctx.fill(Path(roundedRect: CGRect(x: rightShoulder, y: midY - 3, width: shoulder - 8, height: 6), cornerRadius: 2),
-                             with: .color(Color(hex: 0x7C828C)))
-                    ctx.fill(Path(roundedRect: CGRect(x: shoulder - 2, y: midY - 9, width: 4, height: 18), cornerRadius: 1),
-                             with: .color(Color(hex: 0x666C75)))
-                    ctx.fill(Path(roundedRect: CGRect(x: rightShoulder - 2, y: midY - 9, width: 4, height: 18), cornerRadius: 1),
-                             with: .color(Color(hex: 0x666C75)))
+                    let shaft = Path(roundedRect: CGRect(x: 8, y: midY - 2, width: width - 16, height: 4), cornerRadius: 2)
+                    let leftSleeve = Path(roundedRect: CGRect(x: 8, y: midY - 3, width: shoulder - 8, height: 6), cornerRadius: 3)
+                    let rightSleeve = Path(roundedRect: CGRect(x: rightShoulder, y: midY - 3,
+                                                              width: shoulder - 8, height: 6), cornerRadius: 3)
+                    let steel = Gradient(colors: [Color(hex: 0x5D626A), Color(hex: 0xD5D8DC), Color(hex: 0x747A83)])
+                    ctx.fill(Path(roundedRect: CGRect(x: 9, y: midY + 3, width: width - 18, height: 5), cornerRadius: 2.5),
+                             with: .color(.black.opacity(0.12)))
+                    ctx.fill(shaft, with: .linearGradient(steel,
+                                                         startPoint: CGPoint(x: 0, y: midY - 2),
+                                                         endPoint: CGPoint(x: 0, y: midY + 2)))
+                    ctx.fill(leftSleeve, with: .linearGradient(steel,
+                                                               startPoint: CGPoint(x: 0, y: midY - 3),
+                                                               endPoint: CGPoint(x: 0, y: midY + 3)))
+                    ctx.fill(rightSleeve, with: .linearGradient(steel,
+                                                                startPoint: CGPoint(x: 0, y: midY - 3),
+                                                                endPoint: CGPoint(x: 0, y: midY + 3)))
+                    let leftCollar = Path(roundedRect: CGRect(x: shoulder - 3, y: midY - 11, width: 6, height: 22), cornerRadius: 2)
+                    let rightCollar = Path(roundedRect: CGRect(x: rightShoulder - 3, y: midY - 11, width: 6, height: 22), cornerRadius: 2)
+                    ctx.fill(leftCollar, with: .linearGradient(steel,
+                                                               startPoint: CGPoint(x: 0, y: midY - 11),
+                                                               endPoint: CGPoint(x: 0, y: midY + 11)))
+                    ctx.fill(rightCollar, with: .linearGradient(steel,
+                                                                startPoint: CGPoint(x: 0, y: midY - 11),
+                                                                endPoint: CGPoint(x: 0, y: midY + 11)))
+
+                    for x in stride(from: shoulder + 14, through: rightShoulder - 14, by: 7) {
+                        var knurl = Path()
+                        knurl.move(to: CGPoint(x: x, y: midY - 1.7))
+                        knurl.addLine(to: CGPoint(x: x + 1.8, y: midY + 1.7))
+                        ctx.stroke(knurl, with: .color(.black.opacity(0.25)), lineWidth: 0.45)
+                    }
+                    ctx.fill(Path(ellipseIn: CGRect(x: 5, y: midY - 3, width: 6, height: 6)),
+                             with: .color(Color(hex: 0x6C727A)))
+                    ctx.fill(Path(ellipseIn: CGRect(x: width - 11, y: midY - 3, width: 6, height: 6)),
+                             with: .color(Color(hex: 0x6C727A)))
 
                     let available = max(30, shoulder - 16)
                     let nominal = CGFloat(plates.count) * (Self.plateW + Self.gap)
@@ -105,15 +130,21 @@ struct BarbellView: View {
                     var rightX = rightShoulder + 6
                     for plate in plates {
                         let tok = plate.colorToken
-                        let plateHeight = (h - 6) * CGFloat(plate.sizeFactor)
+                        let plateHeight = (h - 12) * CGFloat(plate.sizeFactor)
                         let left = Path(roundedRect: CGRect(x: leftX, y: (h - plateHeight) / 2,
-                                                           width: plateWidth, height: plateHeight), cornerRadius: 1.5)
+                                                           width: plateWidth, height: plateHeight), cornerRadius: 2.4)
                         let right = Path(roundedRect: CGRect(x: rightX, y: (h - plateHeight) / 2,
-                                                            width: plateWidth, height: plateHeight), cornerRadius: 1.5)
+                                                            width: plateWidth, height: plateHeight), cornerRadius: 2.4)
                         let fill = Self.fill[tok] ?? Color(hex: 0x888888)
                         let stroke = Self.stroke[tok] ?? .black.opacity(0.3)
                         ctx.fill(left, with: .color(fill)); ctx.stroke(left, with: .color(stroke), lineWidth: 0.75)
                         ctx.fill(right, with: .color(fill)); ctx.stroke(right, with: .color(stroke), lineWidth: 0.75)
+                        for rect in [left.boundingRect, right.boundingRect] {
+                            var shine = Path()
+                            shine.move(to: CGPoint(x: rect.minX + 1, y: rect.minY + 1.2))
+                            shine.addLine(to: CGPoint(x: rect.maxX - 1, y: rect.minY + 1.2))
+                            ctx.stroke(shine, with: .color(.white.opacity(0.28)), lineWidth: 0.65)
+                        }
                         leftX -= plateWidth + gap
                         rightX += plateWidth + gap
                     }
@@ -144,7 +175,7 @@ struct BarbellView: View {
                 }
             }
             .frame(width: presentation == .compactSide ? width : nil,
-                   height: presentation == .compactSide ? Self.height : 64)
+                   height: presentation == .compactSide ? Self.height : 78)
             .frame(maxWidth: presentation == .fullBar ? .infinity : nil)
 
             if solution.isOffTarget {

@@ -145,7 +145,7 @@ struct ExerciseDetailView: View {
             if let profile {
                 Section("Muscles") {
                     AnatomyFigureView(profile: profile)
-                        .frame(maxWidth: 300)
+                        .frame(maxWidth: 420)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }

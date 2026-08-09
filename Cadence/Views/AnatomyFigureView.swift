@@ -1,8 +1,8 @@
 import SwiftUI
 import CadenceCore
 
-/// The stylized front/back muscle figure: primary movers red, supporting
-/// blue, everything else a neutral silhouette. Geometry comes from
+/// The Vitruvian front/back muscle figure: primary movers red, supporting
+/// blue, everything else a neutral anatomical silhouette. Geometry comes from
 /// AnatomyData in CadenceCore (fixture-locked to the web's copy), so both
 /// apps draw the identical figure.
 struct AnatomyFigureView: View {
@@ -48,32 +48,61 @@ struct AnatomyFigureView: View {
 
     private func figure(view: String) -> some View {
         Canvas { ctx, size in
-            let sx = size.width / 100.0
-            let sy = size.height / 220.0
-            func poly(_ pts: [[Double]]) -> Path {
+            let sx = size.width / 210.0
+            let sy = size.height / 224.0
+            func contour(_ pts: [[Double]]) -> Path {
                 var p = Path()
-                guard let first = pts.first, first.count == 2 else { return p }
-                p.move(to: CGPoint(x: first[0] * sx, y: first[1] * sy))
-                for pt in pts.dropFirst() where pt.count == 2 {
-                    p.addLine(to: CGPoint(x: pt[0] * sx, y: pt[1] * sy))
+                let points = pts.compactMap { point -> CGPoint? in
+                    guard point.count == 2 else { return nil }
+                    return CGPoint(x: point[0] * sx, y: point[1] * sy)
+                }
+                guard points.count > 2, let first = points.first, let last = points.last else { return p }
+                func midpoint(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
+                    CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+                }
+                p.move(to: midpoint(last, first))
+                for index in points.indices {
+                    let point = points[index]
+                    let next = points[(index + 1) % points.count]
+                    p.addQuadCurve(to: midpoint(point, next), control: point)
                 }
                 p.closeSubpath()
                 return p
             }
+
+            let orbit = Path(ellipseIn: CGRect(x: 3 * sx, y: 9 * sy, width: 204 * sx, height: 204 * sy))
+            ctx.stroke(orbit, with: .color(Color.primary.opacity(0.14)), lineWidth: 0.7)
+
+            let neutral = Gradient(colors: [Color.primary.opacity(0.15), Color.primary.opacity(0.035)])
             for b in AnatomyData.body {
-                ctx.fill(poly(b), with: .color(.primary.opacity(0.08)))
+                let path = contour(b)
+                ctx.fill(path, with: .linearGradient(neutral,
+                                                     startPoint: CGPoint(x: size.width / 2, y: 0),
+                                                     endPoint: CGPoint(x: size.width / 2, y: size.height)))
+                ctx.stroke(path, with: .color(Color.primary.opacity(0.13)), lineWidth: 0.55)
             }
             for r in AnatomyData.regions where r.view == view {
+                let path = contour(r.points)
                 if profile.primary.contains(r.id) {
-                    ctx.fill(poly(r.points), with: .color(Self.primaryColor.opacity(0.85)))
+                    ctx.fill(path, with: .linearGradient(
+                        Gradient(colors: [Self.primaryColor.opacity(0.96), Self.primaryColor.opacity(0.68)]),
+                        startPoint: CGPoint(x: size.width / 2, y: 0),
+                        endPoint: CGPoint(x: size.width / 2, y: size.height)
+                    ))
+                    ctx.stroke(path, with: .color(Self.primaryColor.opacity(0.9)), lineWidth: 0.55)
                 } else if profile.secondary.contains(r.id) {
-                    ctx.fill(poly(r.points), with: .color(Self.secondaryColor.opacity(0.7)))
+                    ctx.fill(path, with: .linearGradient(
+                        Gradient(colors: [Self.secondaryColor.opacity(0.88), Self.secondaryColor.opacity(0.58)]),
+                        startPoint: CGPoint(x: size.width / 2, y: 0),
+                        endPoint: CGPoint(x: size.width / 2, y: size.height)
+                    ))
+                    ctx.stroke(path, with: .color(Self.secondaryColor.opacity(0.8)), lineWidth: 0.5)
                 } else {
-                    ctx.fill(poly(r.points), with: .color(.primary.opacity(0.06)))
+                    ctx.fill(path, with: .color(Color.primary.opacity(0.035)))
                 }
             }
         }
-        .aspectRatio(100.0 / 220.0, contentMode: .fit)
+        .aspectRatio(210.0 / 224.0, contentMode: .fit)
     }
 }
 

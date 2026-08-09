@@ -1,7 +1,11 @@
 import Foundation
 
+private func mirrorAnatomy(_ points: [[Double]]) -> [[Double]] {
+    points.map { [$0[0] == 105 ? 105 : 210 - $0[0], $0[1]] }
+}
+
 /// Muscle anatomy for the exercise detail view: the stylized two-view figure
-/// geometry (front + back polygon regions) and the exercise → muscles map
+/// geometry (front + back smooth regions) and the exercise → muscles map
 /// (primary movers red, supporting blue — colors are applied app-side).
 /// Ported 1:1 from web/app/js/anatomy.js; parity is ENFORCED against
 /// web/tests/fixtures/anatomy.json by both test suites — regenerate with
@@ -32,51 +36,63 @@ public enum AnatomyData {
         "adductors": "Adductors", "reardelts": "Rear delts",
     ]
 
-    /// Neutral silhouette polygons (both views), coordinate space 100×220.
+    /// Neutral Vitruvian silhouette (both views), coordinate space 210×224.
+    /// Arms and legs reach the construction circle; the renderer rounds these
+    /// control loops into continuous anatomical contours.
     public static let body: [[[Double]]] = [
-        [[46, 4], [54, 4], [59, 9], [59, 17], [54, 22], [46, 22], [41, 17], [41, 9]],
-        [[42, 24], [58, 24], [70, 30], [72, 44], [66, 52], [64, 88], [62, 104], [38, 104], [36, 88], [34, 52], [28, 44], [30, 30]],
-        [[28, 32], [34, 36], [32, 56], [30, 72], [27, 92], [20, 90], [22, 70], [24, 52], [24, 38]],
-        [[72, 32], [66, 36], [68, 56], [70, 72], [73, 92], [80, 90], [78, 70], [76, 52], [76, 38]],
-        [[38, 104], [49, 104], [49, 120], [48, 146], [46, 178], [44, 196], [38, 196], [36, 170], [35, 140], [36, 118]],
-        [[62, 104], [51, 104], [51, 120], [52, 146], [54, 178], [56, 196], [62, 196], [64, 170], [65, 140], [64, 118]],
+        [[105, 6], [113, 8], [118, 14], [118, 23], [113, 30], [105, 33],
+         [97, 30], [92, 23], [92, 14], [97, 8]],
+        [[97, 31], [113, 31], [119, 35], [133, 38], [139, 46], [138, 57],
+         [132, 69], [129, 89], [133, 105], [126, 114], [116, 120], [94, 120],
+         [84, 114], [77, 105], [81, 89], [78, 69], [72, 57], [71, 46], [77, 38], [91, 35]],
+        [[76, 39], [70, 39], [61, 46], [51, 53], [42, 60], [31, 66], [20, 72],
+         [10, 80], [7, 88], [13, 93], [22, 86], [34, 79], [46, 71], [57, 63], [68, 55], [78, 48]],
+        mirrorAnatomy([[76, 39], [70, 39], [61, 46], [51, 53], [42, 60], [31, 66], [20, 72],
+                       [10, 80], [7, 88], [13, 93], [22, 86], [34, 79], [46, 71], [57, 63], [68, 55], [78, 48]]),
+        [[84, 108], [103, 113], [103, 128], [97, 145], [90, 163], [82, 183],
+         [73, 207], [62, 214], [54, 211], [59, 201], [66, 181], [71, 160], [75, 141], [77, 121]],
+        mirrorAnatomy([[84, 108], [103, 113], [103, 128], [97, 145], [90, 163], [82, 183],
+                       [73, 207], [62, 214], [54, 211], [59, 201], [66, 181], [71, 160], [75, 141], [77, 121]]),
     ]
 
     public static let regions: [Region] = [
         // front
-        Region("traps", "front", [[42, 26], [58, 26], [54, 32], [46, 32]]),
-        Region("delts", "front", [[27, 32], [35, 35], [34, 44], [25, 42]]),
-        Region("delts", "front", [[73, 32], [65, 35], [66, 44], [75, 42]]),
-        Region("chest", "front", [[37, 34], [63, 34], [64, 50], [50, 54], [36, 50]]),
-        Region("biceps", "front", [[24, 46], [32, 48], [30, 66], [23, 64]]),
-        Region("biceps", "front", [[76, 46], [68, 48], [70, 66], [77, 64]]),
-        Region("forearms", "front", [[22, 68], [29, 70], [27, 90], [20, 88]]),
-        Region("forearms", "front", [[78, 68], [71, 70], [73, 90], [80, 88]]),
-        Region("obliques", "front", [[36, 54], [41, 56], [42, 86], [37, 84]]),
-        Region("obliques", "front", [[64, 54], [59, 56], [58, 86], [63, 84]]),
-        Region("abs", "front", [[42, 56], [58, 56], [57, 88], [43, 88]]),
-        Region("quads", "front", [[37, 106], [48, 106], [48, 142], [44, 148], [38, 140]]),
-        Region("quads", "front", [[63, 106], [52, 106], [52, 142], [56, 148], [62, 140]]),
-        Region("adductors", "front", [[44, 108], [48, 108], [48, 138], [46, 143], [44, 136]]),
-        Region("adductors", "front", [[56, 108], [52, 108], [52, 138], [54, 143], [56, 136]]),
+        Region("traps", "front", [[92, 33], [118, 33], [122, 38], [114, 47], [105, 50], [96, 47], [88, 38]]),
+        Region("delts", "front", [[75, 39], [85, 38], [91, 44], [88, 53], [79, 58], [69, 54], [69, 46]]),
+        Region("delts", "front", mirrorAnatomy([[75, 39], [85, 38], [91, 44], [88, 53], [79, 58], [69, 54], [69, 46]])),
+        Region("chest", "front", [[84, 44], [103, 47], [103, 65], [94, 68], [82, 63], [77, 53]]),
+        Region("chest", "front", mirrorAnatomy([[84, 44], [103, 47], [103, 65], [94, 68], [82, 63], [77, 53]])),
+        Region("biceps", "front", [[67, 53], [78, 56], [72, 65], [61, 73], [52, 72], [56, 63]]),
+        Region("biceps", "front", mirrorAnatomy([[67, 53], [78, 56], [72, 65], [61, 73], [52, 72], [56, 63]])),
+        Region("forearms", "front", [[49, 70], [57, 76], [45, 83], [33, 90], [22, 97], [14, 92], [24, 84], [37, 77]]),
+        Region("forearms", "front", mirrorAnatomy([[49, 70], [57, 76], [45, 83], [33, 90], [22, 97], [14, 92], [24, 84], [37, 77]])),
+        Region("obliques", "front", [[81, 64], [92, 67], [95, 89], [93, 105], [84, 109], [77, 96]]),
+        Region("obliques", "front", mirrorAnatomy([[81, 64], [92, 67], [95, 89], [93, 105], [84, 109], [77, 96]])),
+        Region("abs", "front", [[94, 66], [116, 66], [120, 87], [117, 106], [105, 113], [93, 106], [90, 87]]),
+        Region("quads", "front", [[80, 112], [101, 117], [99, 137], [92, 159], [82, 177], [73, 171], [74, 151], [77, 132]]),
+        Region("quads", "front", mirrorAnatomy([[80, 112], [101, 117], [99, 137], [92, 159], [82, 177], [73, 171], [74, 151], [77, 132]])),
+        Region("adductors", "front", [[93, 116], [103, 118], [100, 141], [91, 160], [83, 162], [88, 142]]),
+        Region("adductors", "front", mirrorAnatomy([[93, 116], [103, 118], [100, 141], [91, 160], [83, 162], [88, 142]])),
         // back
-        Region("traps", "back", [[50, 24], [60, 30], [50, 46], [40, 30]]),
-        Region("delts", "back", [[27, 32], [35, 35], [34, 44], [25, 42]]),
-        Region("delts", "back", [[73, 32], [65, 35], [66, 44], [75, 42]]),
-        Region("reardelts", "back", [[31, 34], [38, 37], [37, 45], [30, 43]]),
-        Region("reardelts", "back", [[69, 34], [62, 37], [63, 45], [70, 43]]),
-        Region("lats", "back", [[36, 46], [47, 50], [46, 74], [38, 70], [34, 54]]),
-        Region("lats", "back", [[64, 46], [53, 50], [54, 74], [62, 70], [66, 54]]),
-        Region("triceps", "back", [[24, 46], [32, 48], [30, 66], [23, 64]]),
-        Region("triceps", "back", [[76, 46], [68, 48], [70, 66], [77, 64]]),
-        Region("forearms", "back", [[22, 68], [29, 70], [27, 90], [20, 88]]),
-        Region("forearms", "back", [[78, 68], [71, 70], [73, 90], [80, 88]]),
-        Region("lowerback", "back", [[43, 72], [57, 72], [56, 90], [44, 90]]),
-        Region("glutes", "back", [[38, 92], [62, 92], [60, 108], [50, 112], [40, 108]]),
-        Region("hamstrings", "back", [[37, 112], [48, 112], [48, 144], [44, 150], [38, 142]]),
-        Region("hamstrings", "back", [[63, 112], [52, 112], [52, 144], [56, 150], [62, 142]]),
-        Region("calves", "back", [[38, 152], [47, 152], [46, 178], [43, 182], [39, 176]]),
-        Region("calves", "back", [[62, 152], [53, 152], [54, 178], [57, 182], [61, 176]]),
+        Region("traps", "back", [[105, 32], [123, 37], [128, 43], [119, 55], [111, 66],
+                                   [105, 72], [99, 66], [91, 55], [82, 43], [87, 37]]),
+        Region("delts", "back", [[75, 39], [85, 38], [92, 44], [89, 54], [79, 59], [69, 54], [69, 46]]),
+        Region("delts", "back", mirrorAnatomy([[75, 39], [85, 38], [92, 44], [89, 54], [79, 59], [69, 54], [69, 46]])),
+        Region("reardelts", "back", [[78, 40], [91, 43], [93, 50], [85, 57], [76, 54], [71, 48]]),
+        Region("reardelts", "back", mirrorAnatomy([[78, 40], [91, 43], [93, 50], [85, 57], [76, 54], [71, 48]])),
+        Region("lats", "back", [[83, 52], [103, 58], [101, 83], [94, 101], [82, 105], [78, 91], [79, 70]]),
+        Region("lats", "back", mirrorAnatomy([[83, 52], [103, 58], [101, 83], [94, 101], [82, 105], [78, 91], [79, 70]])),
+        Region("triceps", "back", [[67, 53], [78, 57], [72, 68], [60, 77], [51, 73], [56, 63]]),
+        Region("triceps", "back", mirrorAnatomy([[67, 53], [78, 57], [72, 68], [60, 77], [51, 73], [56, 63]])),
+        Region("forearms", "back", [[49, 70], [57, 76], [45, 83], [33, 90], [22, 97], [14, 92], [24, 84], [37, 77]]),
+        Region("forearms", "back", mirrorAnatomy([[49, 70], [57, 76], [45, 83], [33, 90], [22, 97], [14, 92], [24, 84], [37, 77]])),
+        Region("lowerback", "back", [[93, 82], [117, 82], [121, 103], [114, 116], [105, 120], [96, 116], [89, 103]]),
+        Region("glutes", "back", [[80, 104], [103, 108], [103, 126], [94, 136], [80, 133], [76, 120]]),
+        Region("glutes", "back", mirrorAnatomy([[80, 104], [103, 108], [103, 126], [94, 136], [80, 133], [76, 120]])),
+        Region("hamstrings", "back", [[79, 130], [98, 132], [95, 153], [87, 178], [76, 184], [70, 175], [75, 153]]),
+        Region("hamstrings", "back", mirrorAnatomy([[79, 130], [98, 132], [95, 153], [87, 178], [76, 184], [70, 175], [75, 153]])),
+        Region("calves", "back", [[71, 175], [84, 181], [78, 203], [70, 211], [61, 208], [63, 196]]),
+        Region("calves", "back", mirrorAnatomy([[71, 175], [84, 181], [78, 203], [70, 211], [61, 208], [63, 196]])),
     ]
 
     public static let map: [String: Profile] = [
@@ -119,7 +135,7 @@ public enum AnatomyData {
         // Adding a belt loads the same movement — the muscles worked do not change.
         "Weighted Chin-up": Profile(primary: ["lats", "biceps"], secondary: ["abs", "forearms"]),
         "Weighted Pull-up": Profile(primary: ["lats"], secondary: ["biceps", "abs", "forearms"]),
-        "Face Pulls": Profile(primary: ["delts", "traps"], secondary: ["biceps"]),
+        "Face Pulls": Profile(primary: ["reardelts", "traps"], secondary: ["biceps"]),
         "Band Pull-aparts": Profile(primary: ["delts", "traps"], secondary: []),
         "Y-T-W Raises": Profile(primary: ["delts", "traps"], secondary: []),
         "Band External Rotation": Profile(primary: ["delts"], secondary: []),

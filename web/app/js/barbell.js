@@ -49,14 +49,27 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);
 
   if (presentation === "full") {
-    const W = 340, H = 64, midY = H / 2, shoulder = 78, rightShoulder = W - shoulder;
+    const W = 340, H = 78, midY = H / 2, shoulder = 78, rightShoulder = W - shoulder;
     const svg = el("svg", { class: "barbell full", viewBox: `0 0 ${W} ${H}`,
       role: "img", "aria-label": `Barbell: ${C.perSideLabel(solution.perSide)} per side on ${C.barLabel(bar)}` });
-    svg.append(el("rect", { x: 8, y: midY - 2, width: W - 16, height: 4, rx: 2, fill: "#9aa0aa" }));
-    svg.append(el("rect", { x: 8, y: midY - 3, width: shoulder - 8, height: 6, rx: 2, fill: "#7c828c" }));
-    svg.append(el("rect", { x: rightShoulder, y: midY - 3, width: shoulder - 8, height: 6, rx: 2, fill: "#7c828c" }));
-    svg.append(el("rect", { x: shoulder - 2, y: midY - 9, width: 4, height: 18, rx: 1, fill: "#666c75" }));
-    svg.append(el("rect", { x: rightShoulder - 2, y: midY - 9, width: 4, height: 18, rx: 1, fill: "#666c75" }));
+    const defs = el("defs");
+    const steel = el("linearGradient", { id: "cadence-bar-steel", x1: "0", y1: "0", x2: "0", y2: "1" });
+    steel.append(el("stop", { offset: "0", "stop-color": "#5d626a" }),
+      el("stop", { offset: ".48", "stop-color": "#d5d8dc" }),
+      el("stop", { offset: "1", "stop-color": "#747a83" }));
+    defs.append(steel);
+    svg.append(defs);
+    svg.append(el("rect", { class: "barbell-shadow", x: 9, y: midY + 3, width: W - 18, height: 5, rx: 2.5 }));
+    svg.append(el("rect", { x: 8, y: midY - 2, width: W - 16, height: 4, rx: 2, fill: "url(#cadence-bar-steel)" }));
+    svg.append(el("rect", { x: 8, y: midY - 3, width: shoulder - 8, height: 6, rx: 3, fill: "url(#cadence-bar-steel)" }));
+    svg.append(el("rect", { x: rightShoulder, y: midY - 3, width: shoulder - 8, height: 6, rx: 3, fill: "url(#cadence-bar-steel)" }));
+    svg.append(el("rect", { x: shoulder - 3, y: midY - 11, width: 6, height: 22, rx: 2, fill: "url(#cadence-bar-steel)" }));
+    svg.append(el("rect", { x: rightShoulder - 3, y: midY - 11, width: 6, height: 22, rx: 2, fill: "url(#cadence-bar-steel)" }));
+    for (let x = shoulder + 14; x <= rightShoulder - 14; x += 7) {
+      svg.append(el("line", { class: "barbell-knurl", x1: x, y1: midY - 1.7, x2: x + 1.8, y2: midY + 1.7 }));
+    }
+    svg.append(el("circle", { cx: 8, cy: midY, r: 3, fill: "#6c727a" }),
+      el("circle", { cx: W - 8, cy: midY, r: 3, fill: "#6c727a" }));
 
     const available = shoulder - 16;
     const scale = plates.length ? Math.min(1, available / (plates.length * (7 + 1.5))) : 1;
@@ -64,11 +77,16 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     let leftX = shoulder - 6 - plateW, rightX = rightShoulder + 6;
     for (const p of plates) {
       const tok = C.plateColorToken(p);
-      const h = (H - 6) * C.plateSizeFactor(p);
-      for (const x of [leftX, rightX]) svg.append(el("rect", {
-        x, y: (H - h) / 2, width: plateW, height: h, rx: 1.5,
-        fill: FILL[tok] || "#888", stroke: STROKE[tok] || "rgba(0,0,0,0.3)", "stroke-width": 0.75,
-      }));
+      const h = (H - 12) * C.plateSizeFactor(p);
+      for (const x of [leftX, rightX]) {
+        const y = (H - h) / 2;
+        svg.append(el("rect", {
+          class: "barbell-plate", x, y, width: plateW, height: h, rx: 2.4,
+          fill: FILL[tok] || "#888", stroke: STROKE[tok] || "rgba(0,0,0,0.3)", "stroke-width": 0.75,
+        }));
+        svg.append(el("line", { class: "barbell-plate-shine", x1: x + 1, y1: y + 1.2,
+          x2: x + plateW - 1, y2: y + 1.2 }));
+      }
       leftX -= plateW + gap;
       rightX += plateW + gap;
     }

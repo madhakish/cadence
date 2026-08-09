@@ -11,6 +11,28 @@ const el = (name, attrs = {}, text) => {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const tick = (t) => { const d = new Date(t); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
 
+// A clamped Catmull-Rom conversion: it passes through every recorded point
+// without the ugly angular joins, while keeping each segment's controls inside
+// its endpoint range so the curve cannot invent a peak above either workout.
+export function smoothLinePath(points) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+  const clamp = (value, a, b) => Math.max(Math.min(a, b), Math.min(Math.max(a, b), value));
+  let d = `M${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const p0 = points[Math.max(0, index - 1)];
+    const p1 = points[index];
+    const p2 = points[index + 1];
+    const p3 = points[Math.min(points.length - 1, index + 2)];
+    const c1x = clamp(p1[0] + (p2[0] - p0[0]) / 6, p1[0], p2[0]);
+    const c1y = clamp(p1[1] + (p2[1] - p0[1]) / 6, p1[1], p2[1]);
+    const c2x = clamp(p2[0] - (p3[0] - p1[0]) / 6, p1[0], p2[0]);
+    const c2y = clamp(p2[1] - (p3[1] - p1[1]) / 6, p1[1], p2[1]);
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
 // series: [{ t:number(ms), y:number, ann?:string }] — assumed sorted by t.
 export function lineChart(series, { height = 200, fmtY = (v) => String(Math.round(v)), targetY = null, targetLabel = "Target" } = {}) {
   const W = 340, H = height, padL = 40, padR = 14, padT = 16, padB = 24;
@@ -43,7 +65,7 @@ export function lineChart(series, { height = 200, fmtY = (v) => String(Math.roun
   }
 
   // line path
-  const d = series.map((p, i) => `${i ? "L" : "M"}${xAt(i).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ");
+  const d = smoothLinePath(series.map((p, index) => [xAt(index), yAt(p.y)]));
   svg.append(el("path", { class: "line", d }));
 
   // dots + annotations
@@ -182,7 +204,7 @@ export function progressionChart({
   // different charts from the same data.
   if (area && drawn.length === 1 && drawn[0].points.length > 1) {
     const pts = [...drawn[0].points].sort((a, b) => a.t - b.t);
-    const d = `${pts.map((p, i) => `${i ? "L" : "M"}${xAt(p.t).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ")}`
+    const d = `${smoothLinePath(pts.map((p) => [xAt(p.t), yAt(p.y)]))}`
       + ` L${xAt(pts.at(-1).t).toFixed(1)} ${baseline.toFixed(1)}`
       + ` L${xAt(pts[0].t).toFixed(1)} ${baseline.toFixed(1)} Z`;
     svg.append(el("path", { class: "area", d, style: `fill:${drawn[0].color || "var(--accent)"}` }));
@@ -190,7 +212,7 @@ export function progressionChart({
 
   for (const line of drawn) {
     const pts = [...line.points].sort((a, b) => a.t - b.t);
-    const d = pts.map((p, i) => `${i ? "L" : "M"}${xAt(p.t).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ");
+    const d = smoothLinePath(pts.map((p) => [xAt(p.t), yAt(p.y)]));
     const stroke = line.color || "var(--accent)";
     svg.append(el("path", {
       class: "line", d,

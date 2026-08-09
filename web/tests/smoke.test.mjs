@@ -150,6 +150,8 @@ for (const track of [
   const fullPlateRects = [...fullBar.querySelectorAll("rect")].filter((rect) => rect.getAttribute("stroke"));
   ok(fullPlateRects.length > 0 && fullPlateRects.length % 2 === 0,
     "every solved plate is drawn once on each side");
+  ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
+    "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
   await db.Gyms.save(legacyRack);
   await db.syncLibrary();
   ok((await db.Gyms.default()).plateToggles.length === C.ALL_STANDARD.length,
@@ -2701,9 +2703,15 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "blurb reads as expected");
 
   const svg = A.figureSVG(A.muscleProfile("Overhead Press", "press"));
-  ok(svg.querySelectorAll("polygon").length > 30, "figure renders silhouette + regions for both views");
-  ok(svg.querySelectorAll('polygon[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
-  ok(svg.querySelectorAll('polygon[fill="#3a7bd5"]').length >= 1, "supporting muscles highlighted blue");
+  ok(svg.getAttribute("viewBox") === "0 0 430 248" && svg.querySelectorAll("path").length > 30,
+    "figure renders wide human silhouettes and muscle regions for both views");
+  ok(svg.querySelectorAll("circle.anatomy-orbit").length === 2
+    && [...svg.querySelectorAll("path.anatomy-body")].every((path) => path.getAttribute("d").includes("Q")),
+    "the front and back figures use Vitruvian construction circles and curved contours");
+  ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
+    "face pulls highlight rear delts instead of the generic shoulder cap");
+  ok(svg.querySelectorAll('path[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
+  ok(svg.querySelectorAll('path[fill="#3a7bd5"]').length >= 1, "supporting muscles highlighted blue");
   ok([...svg.querySelectorAll("text.anatomy-view-label")].map((node) => node.textContent).join("/") === "Front/Back",
     "the two anatomical views identify their orientation");
   const legend = A.muscleLegend(A.muscleProfile("Overhead Press", "press"));
@@ -3005,7 +3013,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 // base. Drawing both as one line produced a sawtooth between two unrelated
 // progressions; main must stay legible on its own.
 {
-  const { progressionChart, ROLE_DASH } = await import("../app/js/charts.js");
+  const { progressionChart, smoothLinePath, ROLE_DASH } = await import("../app/js/charts.js");
   const at = (day) => new Date(2026, 0, day).getTime();
   const main = [{ t: at(1), y: 225 }, { t: at(8), y: 235 }, { t: at(15), y: 245 }];
   const e1rm = [{ t: at(1), y: 253 }, { t: at(8), y: 264 }, { t: at(15), y: 260 }];
@@ -3022,6 +3030,10 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const svg = chart.querySelector("svg");
   const paths = [...svg.querySelectorAll("path.line")];
   ok(paths.length === 3, "every requested load line is drawn");
+  ok(paths.every((path) => path.getAttribute("d").includes("C")),
+    "performed histories use smooth point-preserving curves instead of chunky angular joins");
+  ok(smoothLinePath([[0, 10], [5, 0], [10, 10]]).endsWith("10.0 10.0"),
+    "the smoothed chart path still passes through the final recorded value");
   ok(paths.filter((p) => (p.getAttribute("style") || "").includes("dasharray")).length === 1,
     "[INV-CHART-SPLITS-BY-ROLE] the complementary line is dashed so main stays visually dominant");
   const bars = [...svg.querySelectorAll("rect.vol-bar")].map((r) => +r.getAttribute("height"));

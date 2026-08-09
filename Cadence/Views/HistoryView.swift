@@ -553,11 +553,9 @@ private struct HistorySetRow: View {
             }
             Spacer(minLength: 4)
             Text(kindLabel)
-                .font(.caption2.bold())
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(Color.secondary.opacity(0.12), in: Capsule())
+                .tracking(0.35)
         }
         .accessibilityElement(children: .combine)
     }
@@ -985,6 +983,7 @@ struct ProgressionChartsView: View {
             ForEach(points) { point in
                 AreaMark(x: .value("Date", point.date),
                          y: .value(chartUnitLabel, point.value))
+                    .interpolationMethod(.monotone)
                     .foregroundStyle(LinearGradient(
                         colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.01)],
                         startPoint: .top, endPoint: .bottom
@@ -995,8 +994,9 @@ struct ProgressionChartsView: View {
             LineMark(x: .value("Date", point.date),
                      y: .value(chartUnitLabel, point.value),
                      series: .value("Series", seriesKey(point)))
+                .interpolationMethod(.monotone)
                 .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
-                .lineStyle(StrokeStyle(lineWidth: 2,
+                .lineStyle(StrokeStyle(lineWidth: 2.25, lineCap: .round, lineJoin: .round,
                                        dash: point.role == .complementary ? [5, 4] : []))
             PointMark(x: .value("Date", point.date),
                       y: .value(chartUnitLabel, point.value))
@@ -1052,13 +1052,17 @@ struct ProgressionChartsView: View {
     private var selectionMarks: some ChartContent {
         if let selected = selectedChartPoints.first {
             RuleMark(x: .value("Selected session", selected.date))
-                .foregroundStyle(Color.primary.opacity(0.4))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                .foregroundStyle(Color.primary.opacity(0.22))
+                .lineStyle(StrokeStyle(lineWidth: 1))
             ForEach(selectedChartPoints) { point in
                 PointMark(x: .value("Selected session", point.date),
                           y: .value(chartUnitLabel, point.value))
+                    .foregroundStyle(Color(.systemBackground))
+                    .symbolSize(96)
+                PointMark(x: .value("Selected session", point.date),
+                          y: .value(chartUnitLabel, point.value))
                     .foregroundStyle(Color.primary)
-                    .symbolSize(105)
+                    .symbolSize(42)
             }
         }
     }
@@ -1194,6 +1198,7 @@ struct ProgressionChartsView: View {
                     Chart(repRecords) { record in
                         LineMark(x: .value("Reps", record.reps),
                                  y: .value("Weight", displayRepWeight(record.weightLb)))
+                            .interpolationMethod(.monotone)
                             .foregroundStyle(Theme.accent)
                         PointMark(x: .value("Reps", record.reps),
                                   y: .value("Weight", displayRepWeight(record.weightLb)))

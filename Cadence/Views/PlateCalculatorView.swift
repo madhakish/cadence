@@ -109,7 +109,7 @@ struct PlateCalculatorView: View {
             Section {
                 BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym,
                             loadout: solution.loadout, presentation: .fullBar)
-                    .frame(height: 68)
+                    .frame(height: 82)
                 Text("Same stack on both sides")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -197,7 +197,7 @@ struct PlateCalculatorView: View {
                 BarbellView(weightLb: total, unit: .lb, bar: bar, gym: gym,
                             loadout: Loadout(bar: bar, perSide: perSide, collarLb: collarLb),
                             presentation: .fullBar)
-                    .frame(height: 68)
+                    .frame(height: 82)
                 Text("Counts are per side and mirrored")
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -120,7 +120,9 @@ Tap or drag across the plot to select an exposure. The selected date stays
 marked on the chart and the detail line reports its performed weight, reps,
 estimated 1RM, program role, and rotation. Web points use a larger invisible
 touch target than the dot they draw, so making the chart finger-friendly does
-not turn the data marks into blobs.
+not turn the data marks into blobs. Performed-series curves pass through every
+recorded point and clamp each segment between its endpoints, so smoothing the
+line cannot invent a higher or lower workout between two real sessions.
 
 ## Completed-session detail
 

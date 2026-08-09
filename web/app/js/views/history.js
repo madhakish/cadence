@@ -1,7 +1,7 @@
 // History — session log (grouped by month), progression charts, milestones.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { lineChart, multiLineChart, progressionChart, ROTATION_COLORS, ROLE_DASH } from "../charts.js";
+import { lineChart, multiLineChart, progressionChart, smoothLinePath, ROTATION_COLORS, ROLE_DASH } from "../charts.js";
 import { Sessions, Milestones, Exercises, Programs, Checkins, topSet, workingVolume } from "../db.js";
 import { coachingReport } from "../coaching-adapter.js";
 
@@ -200,7 +200,7 @@ function openDetail(s, exerciseByName) {
               ui.h("span", { class: "title mono", text: shown.actual }),
               shown.planned ? ui.h("span", { class: "sub mono", text: shown.planned }) : null,
               tags.childElementCount ? tags : null),
-            ui.h("span", { class: "pill", text: shown.kind })));
+            ui.h("span", { class: "history-set-kind", text: shown.kind })));
         }
         if (e.notes) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: e.notes }));
         body.append(card);
@@ -510,7 +510,7 @@ function repCurve(records) {
     return node;
   };
   svg.append(element("line", { class: "axis", x1: left, y1: H - bottom, x2: W - right, y2: H - bottom }));
-  const path = records.map(([rep], index) => `${index ? "L" : "M"}${x(rep).toFixed(1)} ${y(weights[index]).toFixed(1)}`).join(" ");
+  const path = smoothLinePath(records.map(([rep], index) => [x(rep), y(weights[index])]));
   svg.append(element("path", { class: "line", d: path }));
   records.forEach(([rep], index) => svg.append(element("circle", { class: "dot", cx: x(rep), cy: y(weights[index]), r: 3 })));
   svg.append(element("text", { class: "lbl", x: left, y: H - 7 }, `${minRep} reps`));

@@ -59,4 +59,14 @@ final class AnatomyDataTests: XCTestCase {
         XCTAssertEqual(AnatomyData.blurb(AnatomyData.Profile(primary: ["delts"], secondary: ["traps"])),
                        "Primary: Shoulders · Supporting: Traps")
     }
+
+    func testVitruvianGeometryAndRearDeltMapping() {
+        let bodyPoints = AnatomyData.body.flatMap { $0 }
+        XCTAssertEqual(bodyPoints.map { $0[0] }.min(), 7)
+        XCTAssertEqual(bodyPoints.map { $0[0] }.max(), 203)
+        XCTAssertEqual(bodyPoints.map { $0[1] }.max(), 214)
+        XCTAssertTrue(AnatomyData.body.allSatisfy { $0.count >= 10 },
+                      "the silhouette uses curved control loops, not blocky limb rectangles")
+        XCTAssertEqual(AnatomyData.map["Face Pulls"]?.primary, ["reardelts", "traps"])
+    }
 }
