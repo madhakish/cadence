@@ -46,10 +46,19 @@ final class WorkoutClock {
     }
 
     private static func restore(for sessionID: String) -> PersistedClock? {
-        guard let data = UserDefaults.standard.data(forKey: persistenceKey),
-              let record = try? JSONDecoder().decode(PersistedClock.self, from: data),
-              record.sessionID == sessionID,
-              Date().timeIntervalSince(record.start) < persistenceWindow else { return nil }
+        let defaults = UserDefaults.standard
+        guard let data = defaults.data(forKey: persistenceKey) else { return nil }
+        guard let record = try? JSONDecoder().decode(PersistedClock.self, from: data) else {
+            // Corrupt bytes can never become a clock — drop them instead of
+            // re-decoding the same garbage on every open.
+            defaults.removeObject(forKey: persistenceKey)
+            return nil
+        }
+        // A future-dated origin (clock skew, bad bytes) is as unusable as a
+        // stale one: it would restore a "running" stopwatch with negative
+        // elapsed time. Only a start within the last day counts.
+        let age = Date().timeIntervalSince(record.start)
+        guard record.sessionID == sessionID, age >= 0, age < persistenceWindow else { return nil }
         return record
     }
 
@@ -58,6 +67,19 @@ final class WorkoutClock {
     /// clock is never stopped accidentally.
     func isTracking(sessionID candidate: String) -> Bool {
         sessionID == candidate && startDate != nil
+    }
+
+    /// Drop the durable record for a session being discarded before the clock
+    /// re-adopted it (force-quit, then discard from Today). Without this the
+    /// record outlives the session — and a restored backup reuses session IDs,
+    /// so reopening within the day would resurrect a discarded stopwatch.
+    /// Leaves any other session's record alone.
+    static func clearPersisted(for sessionID: String) {
+        let defaults = UserDefaults.standard
+        guard let data = defaults.data(forKey: persistenceKey),
+              let record = try? JSONDecoder().decode(PersistedClock.self, from: data),
+              record.sessionID == sessionID else { return }
+        defaults.removeObject(forKey: persistenceKey)
     }
 
     /// Begin (or continue) the stopwatch for a session. Re-entering the same

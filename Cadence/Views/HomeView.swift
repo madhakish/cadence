@@ -477,6 +477,12 @@ struct HomeView: View {
                     if workoutClock.isTracking(sessionID: session.id) {
                         restTimer.stop()
                         workoutClock.end()
+                    } else {
+                        // After a force-quit the clock has not re-adopted this
+                        // session, so end() never runs — drop its durable
+                        // record too, or restoring a backup that reuses the
+                        // session ID would resurrect the discarded stopwatch.
+                        WorkoutClock.clearPersisted(for: session.id)
                     }
                     context.delete(session)
                     PersistenceErrorCenter.shared.save(context, operation: "Discarding the session")

@@ -242,7 +242,15 @@ struct ActiveSessionView: View {
         .confirmationDialog(discardPrompt, isPresented: $confirmDiscard, titleVisibility: .visible) {
             Button("Discard session", role: .destructive) {
                 restTimer.stop()
-                workoutClock.end()
+                // Same guard Home's discard applies: end() only for the
+                // session that owns the clock, so discarding a session opened
+                // over another running workout never stops that workout's
+                // clock or erases its durable record.
+                if workoutClock.isTracking(sessionID: session.id) {
+                    workoutClock.end()
+                } else {
+                    WorkoutClock.clearPersisted(for: session.id)
+                }
                 context.delete(session)
                 if PersistenceErrorCenter.shared.save(context, operation: "Discarding the session") { dismiss() }
             }

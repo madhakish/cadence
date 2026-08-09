@@ -26,6 +26,42 @@ const loadOptions = (exercise) => ({
   exerciseType: exercise?.type,
 });
 
+// Durable stopwatch record: the origin is mirrored into localStorage (keyed by
+// session) so reloading or relaunching the PWA mid-workout resumes the elapsed
+// clock instead of restarting it at 0:00 — the same durable fallback the
+// native WorkoutClock keeps in UserDefaults. A record older than a day is
+// stale (the same sanity bound the history duration label applies) and must
+// not resurrect last week's stopwatch onto a reopened session. Every helper
+// swallows storage failures (private mode) — the in-memory clock still works.
+const CLOCK_KEY = "cadenceWorkoutClock";
+const CLOCK_WINDOW_MS = 24 * 60 * 60 * 1000;
+function readClockRecord() {
+  try { return JSON.parse(localStorage.getItem(CLOCK_KEY) || "null"); } catch { return null; }
+}
+function writeClockRecord(sessionId, start) {
+  try { localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId, start })); } catch { /* noop */ }
+}
+// Clears only a record the given session owns — discarding one session must
+// never erase another workout's running clock. Exported so Today's discard
+// buttons can clean up too: they delete sessions the logger never opened, and
+// a leftover record would resurrect the discarded stopwatch if a restored
+// backup brought the same session ID back within the day.
+export function clearClockRecord(sessionId) {
+  try {
+    const record = readClockRecord();
+    if (record && String(record.sessionId) === String(sessionId)) localStorage.removeItem(CLOCK_KEY);
+  } catch { /* noop */ }
+}
+function storedClockStart(sessionId) {
+  // A future-dated origin (clock skew, bad bytes) is as unusable as a stale
+  // one: it would paint a "running" stopwatch with negative elapsed time.
+  const record = readClockRecord();
+  const age = record && Number.isFinite(record.start) ? Date.now() - record.start : -1;
+  return record && String(record.sessionId) === String(sessionId)
+    && age >= 0 && age < CLOCK_WINDOW_MS
+    ? record.start : null;
+}
+
 const availablePlates = (gym, exercise = null) => {
   const rack = !gym || !Array.isArray(gym.plateToggles) || !gym.plateToggles.length
     ? C.ALL_STANDARD
@@ -270,37 +306,14 @@ export async function openSession(id) {
 
   // Session stopwatch origin. NULL until the workout is started: opening the
   // logger to read the plan is not the same act as training, and a clock that
-  // starts itself on open reports elapsed time nobody trained. The origin is
-  // mirrored into localStorage (keyed by session) so reloading or relaunching
-  // the PWA mid-workout resumes the elapsed clock instead of restarting it at
-  // 0:00 — the same durable fallback the native WorkoutClock keeps in
-  // UserDefaults. A record older than a day is stale (the same sanity bound
-  // the history duration label applies) and must not resurrect last week's
-  // stopwatch onto a reopened session.
-  const CLOCK_KEY = "cadenceWorkoutClock";
-  const CLOCK_WINDOW_MS = 24 * 60 * 60 * 1000;
-  function readClockRecord() {
-    try { return JSON.parse(localStorage.getItem(CLOCK_KEY) || "null"); } catch { return null; }
-  }
+  // starts itself on open reports elapsed time nobody trained. Restored from
+  // the durable record (see the module-scope helpers) so a relaunch resumes
+  // the running clock instead of restarting it at 0:00.
   function persistClock() {
-    try {
-      if (sessionStart == null) {
-        // Clear only a record this session owns — discarding or resetting an
-        // unstarted session must not erase another workout's running clock.
-        const record = readClockRecord();
-        if (record && String(record.sessionId) === String(session.id)) localStorage.removeItem(CLOCK_KEY);
-      } else {
-        localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: session.id, start: sessionStart }));
-      }
-    } catch { /* storage unavailable (private mode) — the in-memory clock still works */ }
+    if (sessionStart == null) clearClockRecord(session.id);
+    else writeClockRecord(session.id, sessionStart);
   }
-  function restoreClock() {
-    const record = readClockRecord();
-    return record && String(record.sessionId) === String(session.id)
-      && Number.isFinite(record.start) && Date.now() - record.start < CLOCK_WINDOW_MS
-      ? record.start : null;
-  }
-  let sessionStart = restoreClock();
+  let sessionStart = storedClockStart(session.id);
   function startWorkout() { sessionStart = Date.now(); persistClock(); paintBar(); }
   function resetToNotStarted() { sessionStart = null; persistClock(); rest.stop(); paintBar(); }
   let currentSE = null;                       // the exercise you're actively working

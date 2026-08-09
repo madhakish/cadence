@@ -3254,12 +3254,30 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(lastBar().querySelector(".clock").textContent.includes("not started"),
     "[INV-CLOCK-SURVIVES-RELAUNCH] a stale record does not restart the clock");
 
+  // A future-dated record (clock skew, corrupt bytes) is just as unusable —
+  // it would paint a running stopwatch with negative elapsed time.
+  localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: sid, start: Date.now() + 60 * 60 * 1000 }));
+  await session.openSession(sid); await tick();
+  ok(lastBar().querySelector(".clock").textContent.includes("not started"),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a future-dated record does not restart the clock");
+
   // Reset from the owning session clears the record for good.
   localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: sid, start: Date.now() }));
   await session.openSession(sid); await tick();
   lastBar().querySelector("button[aria-label^='Reset this session']").click(); await tick();
   ok(localStorage.getItem(CLOCK_KEY) == null,
     "[INV-CLOCK-SURVIVES-RELAUNCH] reset clears the durable record");
+
+  // Today's discard buttons delete sessions the logger never reopened — the
+  // exported cleanup drops the discarded session's record and ONLY that one,
+  // so a discard can never erase another workout's running clock.
+  localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: sid, start: Date.now() }));
+  session.clearClockRecord(otherId);
+  ok(localStorage.getItem(CLOCK_KEY) != null,
+    "[INV-CLOCK-SURVIVES-RELAUNCH] clearing a different session's record leaves the running clock alone");
+  session.clearClockRecord(sid);
+  ok(localStorage.getItem(CLOCK_KEY) == null,
+    "[INV-CLOCK-SURVIVES-RELAUNCH] discarding from Today clears the discarded session's record");
   await db.Sessions.del(sid); await db.Sessions.del(otherId);
 }
 
