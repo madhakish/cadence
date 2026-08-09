@@ -10,19 +10,20 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 
 // The plate denominations of the chosen unit that exist at this gym. The bar is
 // chosen separately (most bars are 45 lb regardless of which plates you load).
-export function stationPlates(unit, gym) {
-  if (gym && Array.isArray(gym.plateToggles) && gym.plateToggles.length) {
-    return gym.plateToggles.filter((t) => t.enabled).map((t) => ({ value: t.value, unit: t.unit }));
-  }
-  return unit === "kg" ? C.STANDARD_KG : C.STANDARD_LB;
+export function stationPlates(unit, gym, stationDenomination = null) {
+  const rack = gym && Array.isArray(gym.plateToggles) && gym.plateToggles.length
+    ? gym.plateToggles.filter((t) => t.enabled).map((t) => ({ value: t.value, unit: t.unit }))
+    : (unit === "kg" ? C.STANDARD_KG : C.STANDARD_LB);
+  // The lift's station preference (v8) filters the rack to its denomination.
+  return C.stationPlates(stationDenomination, rack);
 }
 
 /// Human-readable explanation when rack-aware snapping changes a prescribed
 /// target. Each line includes total load and the per-side stack.
-export function prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym) {
+export function prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, stationDenomination = null) {
   if (!(targetLb > 0) || Math.abs(targetLb - achievedLb) <= 0.01) return [];
   const options = C.prescriptionPlateOptions(
-    targetLb, bar, stationPlates(unit, gym), 10,
+    targetLb, bar, stationPlates(unit, gym, stationDenomination), 10,
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest",
   );
   const fmt = (lb) => `${C.trim(unit === "kg" ? C.kgFromLb(lb) : lb)} ${unit}`;
@@ -41,8 +42,8 @@ export function prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym) {
 // Pass `preSolved` to DRAW an existing solution (or user-entered stack) instead
 // of re-solving — the plate calculator's hero must match its own answer, which
 // may span both unit systems.
-export function barbellSVG(weightLb, unit, bar, gym, preSolved = null) {
-  const solution = preSolved || C.solve(weightLb, bar, stationPlates(unit, gym), 10,
+export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDenomination = null) {
+  const solution = preSolved || C.solve(weightLb, bar, stationPlates(unit, gym, stationDenomination), 10,
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
   const plates = [];
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);

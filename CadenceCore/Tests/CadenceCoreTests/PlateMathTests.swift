@@ -48,6 +48,33 @@ final class PlateMathTests: XCTestCase {
     }
 
 
+    // A station preference filters the gym inventory to its own denomination,
+    // falling back to that denomination's full standard set when the gym
+    // stocks none of it; no preference is the gym inventory unchanged.
+    // Mirrored in web/tests/core.test.mjs. [INV-STATION-OWNS-ITS-PLATES]
+    func testStationPlates() {
+        let mixed = Plate.allStandard
+        XCTAssertEqual(PlateMath.stationPlates(preference: nil, gymPlates: mixed), mixed,
+                       "no preference is the gym inventory, exactly as before stations existed")
+        XCTAssertEqual(PlateMath.stationPlates(preference: .kg, gymPlates: mixed),
+                       mixed.filter { $0.unit == .kg },
+                       "the kg station sees only the gym's kg plates")
+        XCTAssertEqual(PlateMath.stationPlates(preference: .lb, gymPlates: mixed),
+                       mixed.filter { $0.unit == .lb })
+        XCTAssertEqual(PlateMath.stationPlates(preference: .kg, gymPlates: Plate.standardLb),
+                       Plate.standardKg,
+                       "a kg station in an lb-stocked gym is a statement about the station — standard kg")
+        // The motivating rack: the kg deadlift station prescribes the twin
+        // stack natively, and the twin math stores the canonical number.
+        let solved = PlateMath.solve(
+            targetLb: 235,
+            bar: .bar45lb,
+            plates: PlateMath.stationPlates(preference: .kg, gymPlates: Plate.allStandard)
+        )
+        XCTAssertTrue(solved.loadout.perSide.allSatisfy { $0.plate.unit == .kg },
+                      "every prescribed plate is a kg plate")
+    }
+
     // MARK: - Exact loads
 
     func testExact135UsesOnePlatePerSide() {

@@ -24,8 +24,15 @@
 /// climbed floors. Additive and lossless — but a v6 binary would parse the
 /// bundle happily and silently drop the count, which is data loss disguised as
 /// a clean restore, so the version gate has to refuse it first.
+///
+/// Version 8 adds the per-exercise `stationDenomination` ("lb" / "kg",
+/// optional) — the plate denomination a lift's station stocks, driving which
+/// inventory the solver prescribes against. Additive and lossless — but a v7
+/// binary would parse the bundle happily and silently drop the preference,
+/// putting the lifter's kg deadlift station back on lb math after a restore,
+/// so the version gate has to refuse it first.
 public enum BackupContract {
-    public static let currentSchemaVersion = 7
+    public static let currentSchemaVersion = 8
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

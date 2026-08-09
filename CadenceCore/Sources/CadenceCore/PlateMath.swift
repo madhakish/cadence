@@ -278,6 +278,23 @@ public enum PlateMath {
         return achievedLb
     }
 
+    /// The plate inventory a lift's STATION actually stocks. A station
+    /// preference filters the gym's inventory to that denomination — the
+    /// deadlift platform by the window has only kg plates, the squat racks
+    /// only lb — falling back to the full standard set of that denomination
+    /// when the gym stocks none of it (a preference is a statement about the
+    /// station, not about the gym's shopping). No preference means the gym
+    /// inventory, unchanged — exactly what every lift did before stations
+    /// existed. Mirrored 1:1 in web/app/js/core.js `stationPlates`.
+    public static func stationPlates(
+        preference: WeightUnit?, gymPlates: [Plate]
+    ) -> [Plate] {
+        guard let preference else { return gymPlates }
+        let stocked = gymPlates.filter { $0.unit == preference }
+        if !stocked.isEmpty { return stocked }
+        return preference == .kg ? Plate.standardKg : Plate.standardLb
+    }
+
     /// Resolve a programmed target against the active rack. An explicit gym
     /// policy wins. With the default closest policy, equal misses select the
     /// heavier option on a volume exposure and the lighter option otherwise

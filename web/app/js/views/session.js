@@ -26,17 +26,21 @@ const loadOptions = (exercise) => ({
   exerciseType: exercise?.type,
 });
 
-const availablePlates = (gym) => {
-  if (!gym || !Array.isArray(gym.plateToggles) || !gym.plateToggles.length) return C.ALL_STANDARD;
-  return gym.plateToggles.filter((toggle) => toggle.enabled)
-    .map((toggle) => ({ value: toggle.value, unit: toggle.unit }));
+const availablePlates = (gym, exercise = null) => {
+  const rack = !gym || !Array.isArray(gym.plateToggles) || !gym.plateToggles.length
+    ? C.ALL_STANDARD
+    : gym.plateToggles.filter((toggle) => toggle.enabled)
+      .map((toggle) => ({ value: toggle.value, unit: toggle.unit }));
+  // The lift's station preference (v8) filters the gym rack to its own
+  // denomination — the kg-only deadlift platform beside the lb squat racks.
+  return C.stationPlates(exercise?.stationDenomination ?? null, rack);
 };
 
 // The theoretical ramp describes useful jumps; the stored ramp must describe
 // plates that actually exist. Collapse duplicate/equal-to-working results when
 // a sparse rack maps several targets to the same achievable load.
-export function achievableWarmups(ramp, workingLb, bar, gym = null) {
-  const plates = availablePlates(gym);
+export function achievableWarmups(ramp, workingLb, bar, gym = null, exercise = null) {
+  const plates = availablePlates(gym, exercise);
   const collarLb = gym?.collarWeightLb || 0;
   const policy = gym?.loadingPolicy || "closest";
   const seen = new Set();
@@ -77,7 +81,7 @@ export async function createSessionFromTrack(track) {
   if (ex && ex.type === "barbell") {
     const ramp = achievableWarmups(
       C.warmupRamp(workingLb, barLb, track.roundingLb, includesEmptyBarWarmup(ex.name)),
-      workingLb, bar, gym,
+      workingLb, bar, gym, ex,
     );
     for (const w of ramp) sets.push(mkSet(order++, w.weightLb, w.reps, { warm: true, unit, ...loadOptions(ex) }));
   }
@@ -227,7 +231,7 @@ export async function openSession(id) {
     const fullRamp = ex.type === "barbell"
       ? achievableWarmups(
         C.warmupRamp(workingLb, C.barLb(bar), 5, includesEmptyBarWarmup(ex.name)),
-        workingLb, bar, gymState.value,
+        workingLb, bar, gymState.value, ex,
       )
       : (ex.type === "dumbbell" && se.programRole === "main" ? C.dumbbellWarmupRamp(workingLb, 5) : null);
     if (!fullRamp) return;
@@ -547,7 +551,8 @@ export async function openSession(id) {
     // Loadout visualization — plates for barbell lifts, the rack number for
     // dumbbell lifts. Mirrors native.
     if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
-      const { svg, solution } = barbellSVG(s.weightLb, u, barFor(se), gymState.value);
+      const { svg, solution } = barbellSVG(s.weightLb, u, barFor(se), gymState.value, null,
+        ex?.stationDenomination ?? null);
       const wrap = ui.h("div", { class: "barbell-wrap" }, svg);
       if (solution.isOffTarget) {
         const t = u === "kg" ? C.kgFromLb(solution.totalLb) : solution.totalLb;
@@ -555,6 +560,7 @@ export async function openSession(id) {
       }
       for (const detail of prescriptionPlateDetails(
         s.targetWeightLb ?? se.targetWeightLb, s.weightLb, u, barFor(se), gymState.value,
+        ex?.stationDenomination ?? null,
       )) {
         wrap.append(ui.h("span", { class: `sub plate-detail${detail.kind === "target" ? " warn" : ""}`, text: detail.text }));
       }
@@ -671,7 +677,7 @@ export async function openSession(id) {
         plan.forEach((p) => {
           const x = se.sets[p.index];
           x.weightLb = ex?.type === "barbell" && gymState.value
-            ? C.solve(p.weightLb, bar, availablePlates(gymState.value), 10,
+            ? C.solve(p.weightLb, bar, availablePlates(gymState.value, ex), 10,
               gymState.value.collarWeightLb || 0, "under").totalLb : p.weightLb;
           x.autoregReason = reason;
         });
@@ -1697,7 +1703,7 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
   const bar = C.barById(gym.defaultBarId);
   // A near-miss clean stack (e.g. kg plates on a lb prescription) stays
   // loading guidance — the neat programmed number is what gets stored.
-  return C.storedPrescription(target, C.prescriptionPlateOptions(target, bar, availablePlates(gym), 10,
+  return C.storedPrescription(target, C.prescriptionPlateOptions(target, bar, availablePlates(gym, exercise), 10,
     gym.collarWeightLb || 0, gym.loadingPolicy || "closest", phase === 1).selected.totalLb,
   C.barLabelLb(bar));
 }
@@ -1825,7 +1831,7 @@ export async function createSessionFromProgramDay(program, day) {
       const ramp = achievableWarmups(
         C.warmupRamp(topPreparationLoad, barLb, program.roundingLb,
           includesEmptyBarWarmup(ex.name)),
-        topPreparationLoad, bar, gym,
+        topPreparationLoad, bar, gym, ex,
       );
       for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, prescriptionBlock: "warmup", ...loadOptions(ex) }));
     }
@@ -1849,7 +1855,7 @@ export async function createSessionFromProgramDay(program, day) {
     const rawFallback = C.droppedLoad(weightLb, loadStep, ex?.type === "barbell" ? barLb : 0, dropIncrement);
     const fallbackWeightLb = ex?.type === "barbell" && gym
       ? C.storedPrescription(rawFallback,
-        C.solve(rawFallback, bar, availablePlates(gym), 10, gym.collarWeightLb || 0, "under").totalLb,
+        C.solve(rawFallback, bar, availablePlates(gym, ex), 10, gym.collarWeightLb || 0, "under").totalLb,
         C.barLabelLb(bar))
       : rawFallback;
     exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek,

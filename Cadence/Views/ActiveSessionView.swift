@@ -746,7 +746,8 @@ private struct ExerciseSection: View {
                     if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
                         BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
                                     bar: effectiveBar, gym: gym,
-                                    targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb)
+                                    targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb,
+                                    stationDenomination: entry.exercise?.stationDenomination)
                     } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
@@ -937,7 +938,7 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
             WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
                             roundingLb: ProgramEngine.defaultRoundingLb,
                             includeEmptyBar: ProgramSession.includesEmptyBarWarmup(for: exercise)),
-            workingLb: workingLb, gym: gym, bar: bar)
+            workingLb: workingLb, gym: gym, bar: bar, exercise: exercise)
     } else if exercise.type == .dumbbell && entry.programRole == LiftRole.main.rawValue {
         desired = WarmupRamp.dumbbellRamp(workingLb: workingLb,
                                           roundingLb: ProgramEngine.loadStep(
@@ -1614,7 +1615,8 @@ private struct SetDetailSheet: View {
                     }
 
                     if isBarbell && lb > 0 {
-                        BarbellView(weightLb: lb, unit: unit, bar: bar, gym: gym)
+                        BarbellView(weightLb: lb, unit: unit, bar: bar, gym: gym,
+                                    stationDenomination: exercise?.stationDenomination)
                             .frame(maxWidth: .infinity, alignment: .center)
                     } else if exercise?.type == .dumbbell && lb > 0 {
                         DumbbellView(weightLb: lb, unit: unit)

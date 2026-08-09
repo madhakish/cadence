@@ -149,6 +149,7 @@ enum ImportService {
         var isShelved: Bool?; var shelvedNote: String?; var watchSite: String?; var createdAt: Date?
         var gateStatus: String?; var gateSite: String?; var reEntryCriteria: [String]?; var completedReEntryCriteria: [String]?
         var reEntryTestWeightLb: Double?; var reEntryTestSets: Int?; var reEntryTestReps: Int?
+        var stationDenomination: String?
     }
     private struct CoachingDecisionDTO: Decodable {
         var id: String?; var date: Date?; var programId: String?; var ruleId: String?; var recommendationId: String?
@@ -478,6 +479,7 @@ enum ImportService {
             try integer(exercise.reEntryTestSets, "\(path).reEntryTestSets", min: 1, max: 20)
             try integer(exercise.reEntryTestReps, "\(path).reEntryTestReps", min: 1, max: 100)
             try integer(exercise.defaultRestSeconds, "\(path).defaultRestSeconds", min: 0, max: 3600)
+            try known(exercise.stationDenomination, Set(["lb", "kg"]), "\(path).stationDenomination")
         }
         try unique((bundle.exercises ?? []).map { try requiredText($0.name, "exercises.name") }, "exercises")
 
@@ -677,6 +679,7 @@ enum ImportService {
         e.reEntryTestWeightLb = d.reEntryTestWeightLb ?? 0
         e.reEntryTestSets = d.reEntryTestSets ?? 3
         e.reEntryTestReps = d.reEntryTestReps ?? 5
+        e.stationDenomination = d.stationDenomination.flatMap(WeightUnit.init(rawValue:))
         return e
     }
 
@@ -706,6 +709,13 @@ enum ImportService {
         if let v = d.isShelved { e.isShelved = v }
         if let v = d.shelvedNote { e.shelvedNote = v }
         if let v = d.gateStatus, let status = ExerciseGateStatus(rawValue: v) { e.gateStatus = status }
+        // Restore the field's absence explicitly, at EVERY bundle version: a
+        // v8 bundle with the key cleared and a pre-v8 bundle that never knew
+        // stations both describe a world where this lift solves on the gym
+        // inventory, and web restores exactly that by replacing the record
+        // wholesale. Keeping a newer local preference would resurrect a
+        // station configuration the backup does not contain.
+        e.stationDenomination = d.stationDenomination.flatMap(WeightUnit.init(rawValue:))
         if schemaVersion >= 3 {
             e.watchSite = BodySite.fromStorage(d.watchSite)
             e.gateSite = BodySite.fromStorage(d.gateSite)

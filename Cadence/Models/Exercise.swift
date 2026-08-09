@@ -109,6 +109,13 @@ final class Exercise {
     var reEntryTestWeightLb: Double = 0
     var reEntryTestSets: Int = 3
     var reEntryTestReps: Int = 5
+    /// The plate denomination this lift's STATION stocks — "lb" or "kg" — or
+    /// nil to solve against the gym inventory like every lift always has.
+    /// Stations are real: the deadlift platform by the window carries only kg
+    /// plates while the squat racks carry lb, fixed by exercise, so the
+    /// preference lives here the same way the lift's rest default does.
+    /// (V8; nil default keeps the migration additive.)
+    var stationDenominationRaw: String?
     var createdAt: Date
 
     init(
@@ -169,6 +176,11 @@ final class Exercise {
     var loadBasis: LoadBasis {
         get { LoadBasis(rawValue: loadBasisRaw) ?? LoadSemantics.inferredBasis(exerciseType: typeRaw) }
         set { loadBasisRaw = newValue.rawValue }
+    }
+
+    var stationDenomination: WeightUnit? {
+        get { stationDenominationRaw.flatMap(WeightUnit.init(rawValue:)) }
+        set { stationDenominationRaw = newValue?.rawValue }
     }
 
     var resolvedImplementCount: Int {

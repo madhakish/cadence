@@ -49,6 +49,24 @@ the rack can do.
 > turned 220 lb into 221.4 lb, and the fraction then compounded through the
 > stepper and into progression.
 
+### INV-STATION-OWNS-ITS-PLATES
+*platforms: core*
+
+A lift's station preference (`Exercise.stationDenomination`, v8) filters the
+gym's plate inventory to that denomination for **everything the lift solves**
+— prescriptions, warmups, drop-load fallbacks, and the plate hint — falling
+back to that denomination's full standard set when the gym stocks none of it
+(a preference is a statement about the station, not the gym's shopping). No
+preference is the gym inventory unchanged: exactly what every lift did before
+stations existed, which is why the schema migration and a pre-v8 backup both
+land as `nil`.
+
+> The deadlift platform by the window carries only kg plates while the squat
+> racks carry lb — a stable fact about the gym's stations, fixed by exercise.
+> Configured once, the deadlift prescribes kg stacks natively (221.4 → 232.4 →
+> 243.4…), the performed-based advance rides them without fraction drift, and
+> the denomination twin keeps the canonical number on the card.
+
 ### INV-PLATES-ARE-THE-CURRENCY
 *platforms: core*
 

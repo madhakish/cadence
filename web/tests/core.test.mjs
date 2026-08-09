@@ -2140,5 +2140,26 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-PLATES-ARE-THE-CURRENCY] a non-barbell lift graded light stays below plan");
 }
 
+// A station preference filters the gym inventory to its own denomination,
+// falling back to that denomination's full standard set when the gym stocks
+// none of it; no preference is the gym inventory unchanged. Mirrors
+// PlateMathTests.testStationPlates.
+{
+  const mixed = C.ALL_STANDARD;
+  ok(C.stationPlates(null, mixed) === mixed,
+    "[INV-STATION-OWNS-ITS-PLATES] no preference is the gym inventory, exactly as before stations existed");
+  ok(JSON.stringify(C.stationPlates("kg", mixed)) === JSON.stringify(mixed.filter((p) => p.unit === "kg")),
+    "[INV-STATION-OWNS-ITS-PLATES] the kg station sees only the gym's kg plates");
+  ok(JSON.stringify(C.stationPlates("lb", mixed)) === JSON.stringify(mixed.filter((p) => p.unit === "lb")),
+    "[INV-STATION-OWNS-ITS-PLATES] the lb station sees only the gym's lb plates");
+  ok(C.stationPlates("kg", C.STANDARD_LB) === C.STANDARD_KG,
+    "[INV-STATION-OWNS-ITS-PLATES] a kg station in an lb-stocked gym is a statement about the station");
+  // The motivating rack: the kg deadlift station prescribes the twin stack
+  // natively, and the twin math stores the canonical number.
+  const solved = C.solve(235, C.BARS.bar45lb, C.stationPlates("kg", C.ALL_STANDARD), 10);
+  ok(solved.perSide.every((pc) => pc.plate.unit === "kg"),
+    "[INV-STATION-OWNS-ITS-PLATES] every prescribed plate is a kg plate");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

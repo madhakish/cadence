@@ -147,6 +147,9 @@ enum ExportService {
         let reEntryTestWeightLb: Double
         let reEntryTestSets: Int
         let reEntryTestReps: Int
+        /// v8: the plate denomination this lift's station stocks ("lb"/"kg");
+        /// nil = the gym inventory.
+        let stationDenomination: String?
         let createdAt: Date
     }
 
@@ -565,6 +568,7 @@ enum ExportService {
                                   completedReEntryCriteria: e.completedReEntryCriteria,
                                   reEntryTestWeightLb: e.reEntryTestWeightLb,
                                   reEntryTestSets: e.reEntryTestSets, reEntryTestReps: e.reEntryTestReps,
+                                  stationDenomination: e.stationDenomination?.rawValue,
                                   createdAt: e.createdAt)
             },
             settings: settings.map { s in

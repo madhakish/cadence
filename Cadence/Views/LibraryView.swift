@@ -226,6 +226,21 @@ struct ExerciseDetailView: View {
                         : "Rest: \(exercise.defaultRestSeconds / 60):\(String(format: "%02d", exercise.defaultRestSeconds % 60))",
                     value: $exercise.defaultRestSeconds, in: 0...600, step: 15
                 )
+                if exercise.type == .barbell {
+                    // The station this lift lives at can stock a single plate
+                    // denomination — a kg-only deadlift platform beside lb
+                    // squat racks. The preference rides the exercise the same
+                    // way its rest default does; prescriptions, warmups, and
+                    // the plate hint all solve against the station's plates.
+                    Picker("Station plates", selection: Binding(
+                        get: { exercise.stationDenomination },
+                        set: { exercise.stationDenomination = $0 }
+                    )) {
+                        Text("Gym inventory").tag(WeightUnit?.none)
+                        Text("lb only").tag(WeightUnit?.some(.lb))
+                        Text("kg only").tag(WeightUnit?.some(.kg))
+                    }
+                }
             }
 
             Section("Watch site") {

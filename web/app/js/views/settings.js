@@ -948,6 +948,18 @@ function exerciseDetail(e) {
           // `|| 0`: a raw-imported record can lack the field — an undefined
           // seed would render NaN:NaN and persist NaN on the first tap.
           ui.h("div", { class: "row" }, ui.h("span", { text: "Rest" }), ui.stepper(e.defaultRestSeconds || 0, { min: 0, max: 600, step: 15, format: (v) => (v === 0 ? "Default" : ui.mmss(v)), onChange: async (v) => { e.defaultRestSeconds = v; await Exercises.save(e); } }))));
+        if (e.type === "barbell") {
+          // The station this lift lives at can stock a single plate
+          // denomination — a kg-only deadlift platform beside lb squat racks.
+          // The preference rides the exercise the same way its rest default
+          // does; prescriptions, warmups, and the plate hint all solve
+          // against the station's plates. Mirrors native LibraryView.
+          const stationSel = ui.h("select", {},
+            ...[["", "Gym inventory"], ["lb", "lb only"], ["kg", "kg only"]]
+              .map(([value, text]) => ui.h("option", { value, text, selected: value === (e.stationDenomination || "") })));
+          stationSel.addEventListener("change", async () => { e.stationDenomination = stationSel.value || null; await Exercises.save(e); });
+          body.append(ui.field("Station plates", stationSel));
+        }
         const siteSel = ui.h("select", {}, ui.h("option", { value: "", text: "None", selected: !e.watchSite }), ...BODY_SITES.map((s) => ui.h("option", { value: s, text: s, selected: s === e.watchSite })));
         siteSel.addEventListener("change", async () => { e.watchSite = siteSel.value || null; await Exercises.save(e); });
         body.append(ui.field("Watch site", siteSel));
