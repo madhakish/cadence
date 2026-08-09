@@ -65,13 +65,22 @@ struct AnatomyFigureView: View {
                 .aspectRatio(1, contentMode: .fit)
             if view == "front" {
                 frontHighlights
+                    .blur(radius: 2.1)
                     .blendMode(.multiply)
             } else {
                 backHighlights
+                    .blur(radius: 1.8)
                     .blendMode(.multiply)
             }
         }
         .aspectRatio(1, contentMode: .fit)
+        .compositingGroup()
+        .mask {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.black)
+                .padding(2)
+                .blur(radius: 4)
+        }
     }
 
     private var frontHighlights: some View {

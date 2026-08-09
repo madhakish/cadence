@@ -2730,7 +2730,9 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok([...svg.querySelectorAll("image.anatomy-reference")].map((image) => image.getAttribute("href")).join("/")
     === "assets/vitruvian-front.jpeg/assets/vitruvian-back.jpeg"
     && [...svg.querySelectorAll("image.anatomy-reference")].every((image) => image.dataset.species === "gorilla"
-      && image.dataset.source === "exact-reference" && image === image.parentElement.firstElementChild),
+      && image.dataset.source === "exact-reference" && image === image.parentElement.firstElementChild)
+    && svg.querySelectorAll("g.anatomy-figure-panel").length === 2
+    && svg.querySelectorAll("g.anatomy-highlight-layer").length === 1,
   "the anatomy view uses the exact supplied gorilla drawings beneath the muscle washes");
   ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
     "face pulls highlight rear delts instead of the generic shoulder cap");
@@ -2754,6 +2756,11 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "front asset is byte-for-byte the supplied Vitruvian gorilla drawing");
   ok(sha256(backAsset) === "940bbc7bf72794778d3304d226cf5ca3d265e68985bc0ffa72cb198c743a51f5",
     "back asset is byte-for-byte the supplied matching rear drawing");
+  const anatomyStyles = await readFile(new URL("../app/styles.css", import.meta.url), "utf8");
+  ok(anatomyStyles.includes(".anatomy-figure-panel")
+    && anatomyStyles.includes("mask-image: radial-gradient(ellipse closest-side")
+    && anatomyStyles.includes(".anatomy-highlight-layer { filter: blur(2.1px); }"),
+  "anatomy art feathers into its card and colour washes have softened boundaries");
   const frontTraps = A.VITRUVIAN_FRONT_REGIONS.find((region) => region.id === "traps");
   ok(Math.min(...frontTraps.points.map((point) => point[1])) >= 55
     && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms").length === 4

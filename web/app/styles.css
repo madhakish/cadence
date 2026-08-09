@@ -302,16 +302,27 @@ select.bar-select { width: auto; min-width: 96px; padding: 6px 8px; font-size: 1
 .anatomy-card { text-align: center; padding: 14px; }
 .anatomy-card .section-title { margin-top: 2px; text-align: left; }
 svg.anatomy { width: 100%; max-width: 430px; color: var(--text); overflow: visible; }
+.anatomy-figure-panel {
+  -webkit-mask-image: radial-gradient(ellipse closest-side, #000 94%, rgba(0, 0, 0, .72) 97%, transparent 100%);
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-image: radial-gradient(ellipse closest-side, #000 94%, rgba(0, 0, 0, .72) 97%, transparent 100%);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+}
 .anatomy-reference { opacity: 1; }
+.anatomy-highlight-layer { filter: blur(2.1px); }
 .anatomy-region.primary, .anatomy-region.supporting { stroke-width: .65; mix-blend-mode: multiply; }
 .anatomy-region-mask { pointer-events: none; mix-blend-mode: multiply; }
 .anatomy-region-mask.primary {
   opacity: .50;
-  filter: invert(37%) sepia(70%) saturate(1876%) hue-rotate(335deg) brightness(95%) contrast(84%);
+  filter: invert(37%) sepia(70%) saturate(1876%) hue-rotate(335deg) brightness(95%) contrast(84%) blur(1.8px);
 }
 .anatomy-region-mask.supporting {
   opacity: .32;
-  filter: invert(47%) sepia(74%) saturate(1135%) hue-rotate(180deg) brightness(88%) contrast(91%);
+  filter: invert(47%) sepia(74%) saturate(1135%) hue-rotate(180deg) brightness(88%) contrast(91%) blur(1.8px);
 }
 .anatomy-view-label { fill: var(--muted); font-size: 10px; letter-spacing: .04em; }
 .anatomy-legend { display: grid; gap: 6px; margin-top: 8px; text-align: left; }

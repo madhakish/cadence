@@ -363,6 +363,7 @@ export function figureSVG(profile) {
   svg.setAttribute("aria-label", profile ? muscleBlurb(profile) : "Body diagram");
   for (const [view, dx] of [["front", 0], ["back", 220]]) {
     const g = document.createElementNS(NS, "g");
+    g.setAttribute("class", "anatomy-figure-panel");
     g.setAttribute("transform", `translate(${dx},0)`);
     const image = referenceImage(`assets/vitruvian-${view}.jpeg`);
     image.setAttribute("data-species", "gorilla");
@@ -370,6 +371,7 @@ export function figureSVG(profile) {
     g.append(image);
     if (view === "front") {
       const regions = document.createElementNS(NS, "g");
+      regions.setAttribute("class", "anatomy-highlight-layer");
       for (const r of VITRUVIAN_FRONT_REGIONS) {
         const isP = profile && profile.primary.includes(r.id);
         const isS = profile && !isP && profile.secondary.includes(r.id);
