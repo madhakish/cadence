@@ -274,6 +274,182 @@ final class CoachingEngineTests: XCTestCase {
                        "conditioning slots are never rotated by this rule")
     }
 
+    // MARK: - Adaptive linear stage
+
+    func testRebuiltUpperLinearSlotProposesTriplesForThatSlotOnly() throws {
+        var sessions = greenRotations()
+        for index in sessions.indices where sessions[index].dayIndex == 1 {
+            sessions[index].exercises[0].prescriptionStyle = .linearFives
+            sessions[index].exercises[0].plannedWeightLb = 100
+            sessions[index].exercises[0].sets = (0..<3).map { _ in
+                CoachingSetSnapshot(
+                    actualWeightLb: 100, actualReps: 4,
+                    plannedWeightLb: 100, plannedReps: 5
+                )
+            }
+        }
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "press-a") {
+                $0.prescriptionStyle = .linearFives
+                $0.baseWeightLb = 90
+                $0.workingSets = 3
+                $0.workingReps = 5
+            },
+            sessions: sessions
+        )
+        let suggestion = try XCTUnwrap(report.recommendations.first {
+            if case .useLinearTriples(let slotID, _, _) = $0.change { return slotID == "press-a" }
+            return false
+        })
+        XCTAssertEqual(suggestion.ruleID, "program.slot.linear-triples.v1")
+        XCTAssertTrue(suggestion.explanation.contains("100 to 90 lb"))
+    }
+
+    func testLinearTriplesRequiresHistoricalThreeByFiveEvidence() {
+        var sessions = greenRotations()
+        for index in sessions.indices where sessions[index].dayIndex == 1 {
+            sessions[index].exercises[0].prescriptionStyle = .linearFives
+            sessions[index].exercises[0].plannedSets = 5
+            sessions[index].exercises[0].plannedWeightLb = 100
+            sessions[index].exercises[0].plannedReps = 5
+            sessions[index].exercises[0].sets = (0..<5).map { _ in
+                CoachingSetSnapshot(
+                    actualWeightLb: 100, actualReps: 4,
+                    plannedWeightLb: 100, plannedReps: 5
+                )
+            }
+        }
+
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "press-a") {
+                $0.prescriptionStyle = .linearFives
+                $0.baseWeightLb = 90
+                $0.workingSets = 3
+                $0.workingReps = 5
+            },
+            sessions: sessions
+        )
+        XCTAssertFalse(report.recommendations.contains {
+            if case .useLinearTriples = $0.change { return true }
+            return false
+        }, "failed 5x5 history must not be described as a failed 3x5 prescription")
+    }
+
+    func testLinearTriplesNeedsARebuildAndDoesNotGuessAtLowerBodyTransitions() throws {
+        var sessions = greenRotations()
+        for index in sessions.indices where sessions[index].dayIndex == 1 {
+            sessions[index].exercises[0].prescriptionStyle = .linearFives
+            sessions[index].exercises[0].plannedWeightLb = 100
+            sessions[index].exercises[0].sets = (0..<3).map { _ in
+                CoachingSetSnapshot(
+                    actualWeightLb: 100, actualReps: 4,
+                    plannedWeightLb: 100, plannedReps: 5
+                )
+            }
+        }
+
+        let noRebuild = CoachingEngine.evaluate(
+            program: program(patching: "press-a") {
+                $0.prescriptionStyle = .linearFives
+                $0.baseWeightLb = 100
+                $0.workingSets = 3
+                $0.workingReps = 5
+            }, sessions: sessions
+        )
+        XCTAssertFalse(noRebuild.recommendations.contains {
+            if case .useLinearTriples = $0.change { return true }
+            return false
+        }, "three misses without the load rebuild are not a strategy transition")
+
+        let coachingDisabled = CoachingEngine.evaluate(
+            program: program(patching: "press-a") {
+                $0.prescriptionStyle = .linearFives
+                $0.baseWeightLb = 90
+                $0.workingSets = 3
+                $0.workingReps = 5
+                $0.capacityManaged = false
+            }, sessions: sessions
+        )
+        XCTAssertFalse(coachingDisabled.recommendations.contains {
+            if case .useLinearTriples = $0.change { return true }
+            return false
+        }, "a slot that disallows coached sets must not propose five sets")
+
+        let cappedSets = CoachingEngine.evaluate(
+            program: program(patching: "press-a") {
+                $0.prescriptionStyle = .linearFives
+                $0.baseWeightLb = 90
+                $0.workingSets = 3
+                $0.workingReps = 5
+                $0.maximumSets = 4
+            }, sessions: sessions
+        )
+        XCTAssertFalse(cappedSets.recommendations.contains {
+            if case .useLinearTriples = $0.change { return true }
+            return false
+        }, "a four-set slot cap must not propose five sets")
+
+        var oneMiss = greenRotations()
+        let latestPress = try XCTUnwrap(oneMiss.lastIndex { $0.rotation == 3 && $0.dayIndex == 1 })
+        oneMiss[latestPress].exercises[0].prescriptionStyle = .linearFives
+        oneMiss[latestPress].exercises[0].plannedWeightLb = 100
+        oneMiss[latestPress].exercises[0].sets[0].actualReps = 4
+        let manualReduction = CoachingEngine.evaluate(
+            program: program(patching: "press-a") {
+                $0.prescriptionStyle = .linearFives
+                $0.baseWeightLb = 90
+                $0.workingSets = 3
+                $0.workingReps = 5
+            }, sessions: oneMiss
+        )
+        XCTAssertFalse(manualReduction.recommendations.contains {
+            if case .useLinearTriples = $0.change { return true }
+            return false
+        }, "a manual base reduction after one miss must not masquerade as the three-miss reset")
+
+        var recoveredSessions = sessions
+        var latestSuccess = session(
+            cycle: 1, rotation: 4, day: 1, date: 48 * day, weight: 100
+        )
+        latestSuccess.exercises[0].prescriptionStyle = .linearFives
+        recoveredSessions.append(latestSuccess)
+        let recovered = CoachingEngine.evaluate(
+            program: program(patching: "press-a") {
+                $0.prescriptionStyle = .linearFives
+                $0.baseWeightLb = 90
+                $0.workingSets = 3
+                $0.workingReps = 5
+            }, sessions: recoveredSessions
+        )
+        XCTAssertFalse(recovered.recommendations.contains {
+            if case .useLinearTriples = $0.change { return true }
+            return false
+        }, "a newer success makes an older three-miss run stale")
+
+        for index in sessions.indices where sessions[index].dayIndex == 0 {
+            sessions[index].exercises[0].prescriptionStyle = .linearFives
+            sessions[index].exercises[0].plannedWeightLb = 100
+            sessions[index].exercises[0].sets = (0..<3).map { _ in
+                CoachingSetSnapshot(
+                    actualWeightLb: 100, actualReps: 4,
+                    plannedWeightLb: 100, plannedReps: 5
+                )
+            }
+        }
+        let lower = CoachingEngine.evaluate(
+            program: program(patching: "squat") {
+                $0.prescriptionStyle = .linearFives
+                $0.baseWeightLb = 90
+                $0.workingSets = 3
+                $0.workingReps = 5
+            }, sessions: sessions
+        )
+        XCTAssertFalse(lower.recommendations.contains {
+            if case .useLinearTriples = $0.change { return true }
+            return false
+        }, "squat and pull transitions need authored light-day/frequency semantics")
+    }
+
     private func rotationSlotID(_ recommendation: CoachingRecommendation) -> String? {
         if case .rotateExercise(let slotID, _) = recommendation.change { return slotID }
         return nil

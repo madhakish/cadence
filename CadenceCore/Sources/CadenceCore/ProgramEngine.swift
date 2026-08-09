@@ -123,7 +123,7 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
         case .hypertrophy: return "Hypertrophy"
         case .technique: return "Technique"
         case .doubleProgression: return "Double progression"
-        case .linearFives: return "Linear fives"
+        case .linearFives: return "Linear progression"
         case .texasVolume: return "Texas — volume day"
         case .texasLight: return "Texas — light day"
         case .texasIntensity: return "Texas — intensity day"
@@ -185,7 +185,7 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
         case .hypertrophy: return "Hypertrophy"
         case .technique: return "Technique"
         case .doubleProgression: return "Double progression"
-        case .linearFives: return "Linear 5s"
+        case .linearFives: return "Linear"
         case .texasVolume: return "Texas volume"
         case .texasLight: return "Texas light"
         case .texasIntensity: return "Texas intensity"
@@ -224,7 +224,11 @@ public enum PrescriptionStyle: String, Codable, CaseIterable, Sendable {
         case .automatic, .wave, .offsetWave: return 0.65
         case .secondary: return 0.55
         case .hypertrophy, .doubleProgression: return 0.50
-        case .technique: return 0.60
+        // Classic lifts need enough load to expose real timing and position
+        // without turning a technique block into daily maxing. New Olympic
+        // templates start at ~70%, then the technique prescription builds to
+        // ~75/80% before an easy bridge.
+        case .technique: return 0.70
         default: return 0
         }
     }
@@ -514,7 +518,7 @@ public enum ProgramEngine {
     }
 
     /// What a slot does, for the badge beside its name: `Main · 5/3/1`,
-    /// `Complementary · Secondary volume`, `Main · Linear 5s`.
+    /// `Complementary · Secondary volume`, `Main · Linear`.
     ///
     /// Resolves `automatic` first, so the badge names the style the engine will
     /// actually run rather than the placeholder the lifter left in the picker.
@@ -582,11 +586,19 @@ public enum ProgramEngine {
                             phase == .deload
                                 ? (configuration.deloadMultiplier > 0 ? configuration.deloadMultiplier : phase.multiplier)
                                 : phase.multiplier)
-        case .linearFives, .texasVolume, .texasLight, .texasIntensity:
+        case .linearFives:
             // Sets-across at the slot's own base; the base moves per exposure
             // (advanceLinearLift). Recovery is the only phase that overrides
-            // that contract: it is intentionally non-progressive and trims
-            // both load and volume before the normal exposure cadence resumes.
+            // that contract. `currentReps` is deliberately a two-stage switch:
+            // five is the ordinary linear prescription, while three supports
+            // the explicit 3x5 -> 5x3 coaching transition without inventing a
+            // second persisted strategy or a per-slot phase pointer.
+            prescription = phase == .deload
+                ? (2, 3, 0.80)
+                : (max(1, configuration.workingSets), configuration.currentReps <= 3 ? 3 : 5, 1.0)
+        case .texasVolume, .texasLight, .texasIntensity:
+            // Texas day roles stay sets of five. They share the storage knobs
+            // with linear progression, but not its adaptive triples stage.
             prescription = phase == .deload
                 ? (2, 3, 0.80)
                 : (max(1, configuration.workingSets), 5, 1.0)
@@ -674,11 +686,16 @@ public enum ProgramEngine {
             case .deload: prescription = (1, 5, 0.80)
             }
         case .technique:
+            // A conservative classic-lift build: triples, then doubles, then
+            // crisp singles. Five sets keeps practice volume stable while the
+            // reps fall; each step adds 7.5% of the opening load (~70/75/80%
+            // when a new template is seeded from history). Recovery repeats
+            // easy doubles instead of dropping to the old ~48% of e1RM.
             switch phase {
             case .volume: prescription = (5, 3, 1.0)
-            case .load: prescription = (6, 2, 1.05)
-            case .peak: prescription = (6, 1, 1.10)
-            case .deload: prescription = (2, 2, 0.80)
+            case .load: prescription = (5, 2, 1.075)
+            case .peak: prescription = (5, 1, 1.15)
+            case .deload: prescription = (3, 2, 0.90)
             }
         case .doubleProgression:
             if phase == .deload {
@@ -919,7 +936,9 @@ public enum ProgramEngine {
         config.workingSets = Swift.max(1, config.workingSets)
         config.minimumReps = Swift.max(1, config.minimumReps)
         config.maximumReps = Swift.max(config.minimumReps, config.maximumReps)
-        config.currentReps = Swift.max(config.minimumReps, config.currentReps)
+        config.currentReps = style == .linearFives
+            ? (config.currentReps <= 3 ? 3 : 5)
+            : Swift.max(config.minimumReps, config.currentReps)
         var cycle = Swift.max(1, cycleNumber)
         var phase = CyclePhase(rawValue: rotation) ?? .volume
         // Graded styles stash the new base at the Peak and apply it at the

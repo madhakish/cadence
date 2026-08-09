@@ -4,7 +4,7 @@ Cadence's **Conjugate — Westside** template is a four-day strength program
 derived from the Louie Simmons reference library reviewed for this project. It
 is one pre-baked composition of the engine, not a new universal Cadence cycle.
 Every lift keeps its own prescription, so max effort, dynamic effort, a classic
-Cadence wave, 5/3/1, linear fives, and double progression can still be mixed in
+Cadence wave, 5/3/1, linear progression, and double progression can still be mixed in
 one custom or imported program.
 
 ## Source-backed weekly plan

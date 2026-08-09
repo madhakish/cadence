@@ -18,6 +18,12 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
         pattern: exercise?.movementPattern || C.movementPattern(lift.exerciseName, exercise?.movementGroup),
         plannedSets: plan.sets, role: lift.role, isMain: lift.role === "main", capacityManaged: lift.capacityManaged !== false,
         maximumSets: lift.maximumSets || 6,
+        prescriptionStyle: C.resolvedPrescriptionStyle(
+          lift.prescription || "automatic", exercise?.movementGroup, lift.role, program.focus,
+        ),
+        baseWeightLb: lift.baseWeightLb,
+        workingSets: lift.doubleProgressionSets ?? 3,
+        workingReps: (lift.currentReps ?? 5) <= 3 ? 3 : 5,
         // A graded peak waits in `pending` until the deload ends. Reading only
         // the settled count would hide a stall for a whole cycle — exactly the
         // cycle worth rotating out of. Native splits pending across columns;
@@ -52,6 +58,7 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
           pattern: exercise?.movementPattern || C.movementPattern(entry.exerciseName, exercise?.movementGroup),
           plannedSets: entry.plannedSets ?? (entry.sets || []).filter((set) => !set.isWarmup).length,
           plannedWeightLb: entry.plannedWeightLb ?? null, plannedReps: entry.plannedReps ?? null,
+          prescriptionStyle: entry.prescriptionStyle || null,
           roundingLb: C.programLoadStep(program.roundingLb, exercise?.type),
           sets: (entry.sets || []).map((set) => ({ actualWeightLb: set.weightLb, actualReps: set.reps,
             plannedWeightLb: set.plannedWeightLb ?? entry.plannedWeightLb ?? null,
@@ -168,6 +175,24 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     const old = program.preferredSessionSpacingDays || 3;
     program.preferredSessionSpacingDays = Math.max(2, change.days);
     message = `Preferred spacing: ${old} → ${program.preferredSessionSpacingDays} days.`;
+  } else if (change.type === "useLinearTriples") {
+    const lift = (program.days || []).flatMap((day) => day.lifts || [])
+      .find((slot) => slot.id === change.slotID);
+    if (!lift) throw new Error(`The program slot for ${change.exerciseName} no longer exists.`);
+    if (lift.exerciseName !== change.exerciseName
+        || (lift.prescription || "automatic") !== "linearFives"
+        || lift.capacityManaged === false || (lift.maximumSets || 6) < 5
+        || (lift.doubleProgressionSets ?? 3) !== 3 || (lift.currentReps ?? 5) !== 5
+        || !Number.isFinite(change.expectedBaseWeightLb)
+        || !Number.isFinite(lift.baseWeightLb)
+        || Math.abs(lift.baseWeightLb - change.expectedBaseWeightLb) >= 0.01) {
+      throw new Error(`The program slot for ${change.exerciseName} changed after this recommendation, so triples were not applied.`);
+    }
+    lift.doubleProgressionSets = 5;
+    lift.currentReps = 3;
+    lift.stallCount = 0;
+    delete lift.pending;
+    message = `${change.exerciseName}: 3×5 → 5×3; session-to-session loading stays in place.`;
   }
   return message;
 }
@@ -175,7 +200,9 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
 export function coachingDecision(program, recommendation, action, evidence) {
   const temporary = action === "accepted" && recommendation.change.type === "reduceAccessoryVolume"
     ? temporaryAccessoryValue(100 - recommendation.change.percent, program.cycleNumber, program.currentWeek)
-    : null;
+    : action === "accepted" && recommendation.change.type === "useLinearTriples"
+      ? `linearTriples:slot:${recommendation.change.slotID}:5x3`
+      : null;
   return { id: crypto.randomUUID(), date: iso(new Date()), programId: program.uuid || program.id,
     ruleId: recommendation.ruleID, recommendationId: recommendation.id, action,
     title: recommendation.title, explanation: recommendation.explanation, evidence,

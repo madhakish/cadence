@@ -60,6 +60,8 @@ section that matches what you're trying to do.
   template setup and conservative no-history loads
 - [Conjugate method](reference/conjugate-method.md) — the reviewed four-day
   template, independent ME/DE loops, implementation boundaries, and source map
+- [Olympic weightlifting foundation](reference/olympic-weightlifting.md) — the
+  source-shaped three-day classic-lift, pull, squat, and jerk composition
 - [Backup schema](reference/backup-schema.md) — versioning, session state,
   cross-platform program linkage, and compatibility rules
 - [Program file](reference/program-file.md) — moving a single program in and

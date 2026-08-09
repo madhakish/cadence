@@ -9,7 +9,7 @@ everything in them is editable afterward.
 1. Open **Settings → Programs** and tap **+ Add program**.
 2. Pick a style:
    - **Strength — Upper/Lower** · 4 days · barbell strength A/B split
-   - **Olympic Weightlifting** · 3 days · snatch, clean & jerk, strength base
+   - **Olympic Weightlifting** · 3 days · snatch, jerk, clean & jerk, pulls and squats
    - **Metabolic Conditioning** · 3 days · circuits and engine work
    - **Novice Linear — 3×5 / 5×5** · A/B progression every session
    - **Texas Method** · volume, light, and intensity days

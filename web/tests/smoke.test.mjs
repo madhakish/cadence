@@ -211,6 +211,78 @@ for (const track of [
   ok(refused, "an exercise the library no longer has refuses rather than guessing a replacement");
 }
 
+// An accepted linear-stage recommendation mutates only the proposed slot and
+// leaves an explicit strategy-stage value in the audit record.
+{
+  const original = await db.Programs.active();
+  const proposed = structuredClone(original);
+  const slot = proposed.days.flatMap((day) => day.lifts || [])[0];
+  slot.prescription = "linearFives";
+  slot.doubleProgressionSets = 3;
+  slot.currentReps = 5;
+  slot.stallCount = 0;
+  const recommendation = {
+    id: "linear-triples-recommendation", ruleID: "program.slot.linear-triples.v1",
+    title: "Move to triples", explanation: "Synthetic rebuild evidence",
+    change: {
+      type: "useLinearTriples", slotID: slot.id, exerciseName: slot.exerciseName,
+      expectedBaseWeightLb: slot.baseWeightLb,
+    },
+  };
+
+  const swappedProgram = structuredClone(proposed);
+  const swappedSlot = swappedProgram.days.flatMap((day) => day.lifts || [])
+    .find((candidate) => candidate.id === slot.id);
+  swappedSlot.exerciseName = "Barbell Bench Press";
+  let swappedRefused = false;
+  try { await coach.applyCoachingRecommendation(swappedProgram, recommendation, seededExercises); }
+  catch { swappedRefused = true; }
+  ok(swappedRefused && swappedSlot.doubleProgressionSets === 3 && swappedSlot.currentReps === 5,
+    "a recommendation cannot mutate a different exercise swapped into the same slot");
+
+  const reloadedProgram = structuredClone(proposed);
+  const reloadedSlot = reloadedProgram.days.flatMap((day) => day.lifts || [])
+    .find((candidate) => candidate.id === slot.id);
+  reloadedSlot.baseWeightLb += 5;
+  let reloadedRefused = false;
+  try { await coach.applyCoachingRecommendation(reloadedProgram, recommendation, seededExercises); }
+  catch { reloadedRefused = true; }
+  ok(reloadedRefused && reloadedSlot.doubleProgressionSets === 3 && reloadedSlot.currentReps === 5,
+    "a recommendation cannot overwrite a slot whose base changed after evaluation");
+
+  const lockedProgram = structuredClone(proposed);
+  const lockedSlot = lockedProgram.days.flatMap((day) => day.lifts || [])
+    .find((candidate) => candidate.id === slot.id);
+  lockedSlot.capacityManaged = false;
+  let lockedRefused = false;
+  try { await coach.applyCoachingRecommendation(lockedProgram, recommendation, seededExercises); }
+  catch { lockedRefused = true; }
+  ok(lockedRefused && lockedSlot.doubleProgressionSets === 3 && lockedSlot.currentReps === 5,
+    "a recommendation cannot bypass a slot that now disallows coached set changes");
+
+  const cappedProgram = structuredClone(proposed);
+  const cappedSlot = cappedProgram.days.flatMap((day) => day.lifts || [])
+    .find((candidate) => candidate.id === slot.id);
+  cappedSlot.maximumSets = 4;
+  let cappedRefused = false;
+  try { await coach.applyCoachingRecommendation(cappedProgram, recommendation, seededExercises); }
+  catch { cappedRefused = true; }
+  ok(cappedRefused && cappedSlot.doubleProgressionSets === 3 && cappedSlot.currentReps === 5,
+    "a recommendation cannot bypass a slot whose set cap fell below five");
+
+  const message = await coach.applyCoachingRecommendation(proposed, recommendation, seededExercises);
+  ok(slot.doubleProgressionSets === 5 && slot.currentReps === 3,
+    "accepting the stage change converts only that linear slot to 5x3");
+  ok(message.includes("3×5") && message.includes("5×3"), "the applied result names both prescription shapes");
+  const decision = coach.coachingDecision(proposed, recommendation, "accepted", ["fixture rebuild"]);
+  ok(decision.afterValue === `linearTriples:slot:${slot.id}:5x3`,
+    "the audit record names the accepted strategy stage");
+  let staleRefused = false;
+  try { await coach.applyCoachingRecommendation(proposed, recommendation, seededExercises); }
+  catch { staleRefused = true; }
+  ok(staleRefused, "a stale stage recommendation cannot overwrite a prescription changed since evaluation");
+}
+
 const serviceWorkerSource = await (await import("node:fs/promises")).readFile(
   new URL("../app/sw.js", import.meta.url), "utf8");
 ok(serviceWorkerSource.includes('"js/coaching-adapter.js"'),
@@ -379,7 +451,7 @@ for (const [name, view] of [["home", home], ["program", programView], ["history"
       "Today leads with the next workout when no session is open");
     ok(host().querySelector(".coach-summary") && host().querySelector(".day-sequence"),
       "Today keeps coach and program sequence compact beneath the hero");
-    ok(text.includes("Main · Linear 5s") || text.includes("Complementary · Linear 5s"),
+    ok(text.includes("Main · Linear") || text.includes("Complementary · Linear"),
       "a per-exposure slot is badged with what it actually does");
     ok(!host().querySelector(".wave"), "the rising wave glyph is gone from the program header");
     ok(host().querySelector(".rotation"), "a style-neutral rotation indicator took its place");
@@ -387,7 +459,7 @@ for (const [name, view] of [["home", home], ["program", programView], ["history"
     // The phase name survives ONLY against the wave slot.
     const badges = [...host().querySelectorAll(".slot-badge")];
     ok(badges.length > 0, "every program slot carries a badge");
-    const linearBadge = badges.find((b) => b.textContent.includes("Linear 5s"));
+    const linearBadge = badges.find((b) => b.textContent.includes("Linear"));
     ok(linearBadge && !linearBadge.textContent.includes("Peak"),
       "[INV-PHASE-NAME-IS-PER-SLOT] no phase name is rendered against a slot whose style does not use phases");
     if (day.lifts[1]) {
@@ -2489,14 +2561,16 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     PROGRAM_TEMPLATES.find((t) => t.id === "olympic-weightlifting")));
   const metconFromHistory = await db.Programs.get(await createProgramFromTemplate(
     PROGRAM_TEMPLATES.find((t) => t.id === "metabolic-conditioning")));
-  ok(olyFromHistory.days[0].lifts[0].baseWeightLb === 60,
-    "an Oly block derives its technique start from Snatch history logged in any program");
+  const olySnatch = olyFromHistory.days[0].lifts[0];
+  const olyOverheadSquat = olyFromHistory.days[1].lifts.find((lift) => lift.exerciseName === "Overhead Squat");
+  ok(olySnatch.baseWeightLb === 70 && olyOverheadSquat.baseWeightLb === 70,
+    "an Oly block derives its 70% technique start and aliased variation from global Snatch history");
   ok(metconFromHistory.days[0].accessories[0].weightLb === 40,
     "a conditioning block reuses the latest KB Swing load logged in any program");
   const customSnatch = await bootstrapLiftFromHistory(await db.Exercises.byName("Snatch"),
     { role: "complementary", focus: "strength", roundingLb: 5 });
   const customSwing = await bootstrapAccessoryFromHistory(await db.Exercises.byName("KB Swing"));
-  ok(customSnatch.baseWeightLb === 60 && customSwing.weightLb === 40,
+  ok(customSnatch.baseWeightLb === 70 && customSwing.weightLb === 40,
     "custom-program slots use the same cross-program history bootstrap as templates");
   await db.Programs.del(olyFromHistory.id); await db.Programs.del(metconFromHistory.id);
   await db.Sessions.del(snatchHistoryID); await db.Sessions.del(swingHistoryID);
