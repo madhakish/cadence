@@ -78,6 +78,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Linux cannot COMPILE the app target (SwiftUI/SwiftData), but it can
+      # PARSE it. A bare syntax error in app-target Swift used to survive
+      # every fast job and surface minutes later in all the macOS builds at
+      # once; this catches that class in seconds, in the container this job
+      # already pays for. Parse-only: macros, property wrappers, and Apple
+      # attributes are syntactically valid here even though they cannot
+      # type-check off-Darwin. If app code ever adopts syntax newer than this
+      # container's Swift, bump the container (CadenceCore needs the same).
+      - name: Parse app-target Swift (syntax fail-fast)
+        run: |
+          find Cadence CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
+            | xargs -0 swiftc -parse
       - name: Run unit tests
         working-directory: CadenceCore
         run: swift test
@@ -115,11 +127,15 @@ jobs:
       - name: Verify release-state recovery
         run: bash .github/scripts/test-reconcile-release-state.sh
 
-  # Current app builds are independent and run in parallel. Workflow-only PRs
-  # still exercise them; docs/web-only PRs do not spend macOS runner minutes.
+  # The macOS jobs are the expensive tier, so they sit BEHIND the fast Linux
+  # suites: a red core/web/parse failure costs zero macOS minutes, and every
+  # build that does start already has the cheap proofs behind it. The ~40s of
+  # added green-path latency buys a strictly rising pass rate through the
+  # pipeline. Workflow-only PRs still exercise the builds; docs/web-only PRs
+  # do not spend macOS runner minutes.
   simulator-build:
     name: iOS Simulator build
-    needs: changes
+    needs: [changes, core-tests, web-tests]
     if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
@@ -153,10 +169,18 @@ jobs:
           path: dist/Cadence-simulator.app.zip
           if-no-files-found: error
 
+  # The device build runs on MAIN only: its artifact is consumed there (the
+  # unsigned .ipa attached to the GitHub release), and it still gates the
+  # release through the app-build aggregate. PRs prove the app compiles via
+  # the simulator build — same sources, same Release configuration — so a
+  # second full Xcode build per PR push bought almost nothing. The rare
+  # device-destination-only break now surfaces on main BEFORE the release
+  # gate, where drive-to-green applies, instead of costing every PR push a
+  # duplicate build.
   device-build:
     name: Unsigned device build
-    needs: changes
-    if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
+    needs: [changes, core-tests, web-tests]
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -192,7 +216,7 @@ jobs:
   # immutable source lineage. Current app compilation remains mandatory above.
   migration-tests:
     name: Shipped-store migration tests
-    needs: changes
+    needs: [changes, core-tests, web-tests]
     if: needs.changes.outputs.migrations == 'true'
     runs-on: macos-latest
     steps:
@@ -262,6 +286,10 @@ jobs:
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           NATIVE_REQUIRED: ${{ needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main' }}
+          # The device build is a main-only job (its artifact is consumed by
+          # the release), so it is required exactly there — a PR must not go
+          # red for a job the workflow deliberately skips.
+          DEVICE_REQUIRED: ${{ github.ref == 'refs/heads/main' }}
           MIGRATIONS_REQUIRED: ${{ needs.changes.outputs.migrations == 'true' }}
           SIMULATOR_RESULT: ${{ needs.simulator-build.result }}
           DEVICE_RESULT: ${{ needs.device-build.result }}
@@ -270,6 +298,8 @@ jobs:
           [[ "$CHANGES_RESULT" == "success" ]]
           if [[ "$NATIVE_REQUIRED" == "true" ]]; then
             [[ "$SIMULATOR_RESULT" == "success" ]]
+          fi
+          if [[ "$DEVICE_REQUIRED" == "true" ]]; then
             [[ "$DEVICE_RESULT" == "success" ]]
           fi
           if [[ "$MIGRATIONS_REQUIRED" == "true" ]]; then

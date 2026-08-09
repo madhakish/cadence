@@ -363,17 +363,29 @@ xcodebuild build -project Cadence.xcodeproj -scheme Cadence -destination 'generi
 
 This Linux workspace cannot compile the app target; GitHub Actions is the
 authoritative compiler for SwiftUI/SwiftData changes. Do not claim native
-validation until the macOS migration test, simulator build, and unsigned-device
-build have completed successfully.
+validation for a PR until the simulator build (which carries the Darwin unit
+tests) and, when persistence changed, the macOS migration test have completed
+successfully; the unsigned-device build completes that proof on `main` before
+any release.
 
 ## CI and releases
 
-Pull requests always run Linux CadenceCore tests, web parity/runtime tests, and
-the stable `App build (macOS)` aggregate check. Native validation is
-change-aware behind that aggregate:
+The pipeline is a fail-fast ladder: cheap ubuntu suites first, expensive macOS
+builds only behind them. The Linux CadenceCore job also PARSES all app-target
+Swift (`swiftc -parse`), so a bare syntax error dies in seconds instead of
+minutes later in every macOS build at once.
 
-- current iOS Simulator and unsigned-device builds run in parallel for native,
-  shared-core, project, or CI-workflow changes;
+Pull requests always run Linux CadenceCore tests (with the app-target parse
+gate), web parity/runtime tests, and the stable `App build (macOS)` aggregate
+check. Native validation is change-aware behind that aggregate:
+
+- the macOS jobs start only after the Linux core and web suites pass, so a
+  red fast test costs zero macOS runner minutes;
+- the current iOS Simulator build (Darwin unit tests + full Release compile)
+  runs for native, shared-core, project, or CI-workflow changes;
+- the unsigned-device build runs on `main` only — its artifact is what the
+  GitHub release attaches, and it still gates the release through the
+  aggregate; PRs prove compilation via the simulator build;
 - docs/web-only changes do not consume macOS runners; and
 - the real shipped-store migration suite runs for persistence-affecting paths
   only. Its generic historical stores are cached by immutable shipped lineage,
