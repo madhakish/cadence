@@ -35,7 +35,8 @@ struct HistoryView: View {
                 switch view {
                 case .list: sessionList
                 case .rotations: rotationList
-                case .charts: ProgressionChartsView()
+                case .charts:
+                    ScrollView { ProgressionChartsView() }
                 case .milestones: milestoneList
                 }
             }
@@ -1159,7 +1160,9 @@ struct ProgressionChartsView: View {
                 .chartYScale(domain: .automatic(includesZero: false))
                 .chartLegend(Set(points.map(\.series)).count > 1 ? .visible : .hidden)
                 .chartXSelection(value: $selectedDate)
-                .frame(maxHeight: 280)
+                // Charts have no useful intrinsic height. A maximum alone let
+                // the non-scrolling stack crush this plot down to a flat line.
+                .frame(height: 280)
                 .padding(.horizontal)
                 Text(chartCaption)
                     .font(.caption2)
