@@ -314,7 +314,9 @@ struct SessionDetailView: View {
     }
 
     private var completedWorkSets: [SetEntry] {
-        session.orderedExercises.flatMap(\.workingSets)
+        session.orderedExercises
+            .filter(isStrengthEntry)
+            .flatMap(\.workingSets)
     }
 
     private var workingVolumeLb: Double {
@@ -429,7 +431,8 @@ struct SessionDetailView: View {
     }
 
     private func exerciseSummary(_ entry: SessionExercise) -> String {
-        var parts = ["\(entry.workingSets.count) work set\(entry.workingSets.count == 1 ? "" : "s")"]
+        let setName = isStrengthEntry(entry) ? "work set" : "completed set"
+        var parts = ["\(entry.workingSets.count) \(setName)\(entry.workingSets.count == 1 ? "" : "s")"]
         if entry.exercise?.type != .conditioning, entry.exercise?.type != .timed,
            let top = entry.topSet {
             let load = top.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb)
@@ -439,6 +442,15 @@ struct SessionDetailView: View {
             parts.append("\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: entry.workingVolumeLb)) volume")
         }
         return parts.joined(separator: " · ")
+    }
+
+    private func isStrengthEntry(_ entry: SessionExercise) -> Bool {
+        if let type = entry.exercise?.type {
+            return type != .conditioning && type != .timed
+        }
+        return !entry.workingSets.contains {
+            ($0.distanceMiles ?? 0) > 0 || ($0.flights ?? 0) > 0 || ($0.durationSeconds ?? 0) > 0
+        }
     }
 
     /// [INV-HEALTH-IS-A-SECOND-OPINION] Both numbers, side by side, and an

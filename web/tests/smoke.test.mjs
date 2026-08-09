@@ -49,6 +49,25 @@ const completeAll = async (workout) => {
   }, "barbell");
   ok(unchanged.planned === null && unchanged.kind === "AMRAP",
     "unchanged history stays terse while preserving the set's prescription kind");
+
+  const completed = (count, fields = {}) => Array.from({ length: count }, () => ({
+    status: "completed", isWarmup: false, weightLb: 0, reps: 1, ...fields,
+  }));
+  const exerciseByName = new Map([
+    ["Back Squat", { type: "barbell" }],
+    ["Run-Walk Intervals", { type: "conditioning" }],
+    ["Plank", { type: "timed" }],
+  ]);
+  const mixedSession = { exercises: [
+    { exerciseName: "Back Squat", sets: [...completed(3), { ...completed(1)[0], isWarmup: true }] },
+    { exerciseName: "Run-Walk Intervals", sets: completed(4, { durationSeconds: 60 }) },
+    { exerciseName: "Plank", sets: completed(2, { durationSeconds: 30 }) },
+    // Missing library metadata still has enough stored data to stay out of the
+    // strength count after an exercise is deleted.
+    { exerciseName: "Deleted conditioning", sets: completed(1, { distanceMiles: 1 }) },
+  ] };
+  ok(history.completedStrengthSetCountForTest(mixedSession, exerciseByName) === 3,
+    "session history counts lifting work without relabeling conditioning intervals as work sets");
 }
 
 {
@@ -174,6 +193,18 @@ for (const track of [
   "plate bodies have disc faces, steel hubs, rims, and denomination marks rather than flat blocks");
   ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
     "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
+  const collarsOnly = barbell.barbellSVG(50, "lb", C.BARS.bar45lb, legacyRack,
+    null, null, "full").svg;
+  ok(collarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 2,
+    "a collar-only full bar draws one lock collar on each sleeve");
+  ok(collarsOnly.textContent.includes("bar + collars") && !collarsOnly.textContent.includes("bar only")
+    && collarsOnly.getAttribute("aria-label").includes("with collars, no plates")
+    && !collarsOnly.getAttribute("aria-label").includes("bar only"),
+  "a collar-only load is labeled as bar plus collars visually and accessibly");
+  const compactCollarsOnly = barbell.barbellSVG(50, "lb", C.BARS.bar45lb, legacyRack).svg;
+  ok(compactCollarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 1
+    && compactCollarsOnly.textContent.includes("bar + collars"),
+  "the compact one-sleeve load also shows its collar instead of claiming bar only");
   await db.Gyms.save(legacyRack);
   await db.syncLibrary();
   ok((await db.Gyms.default()).plateToggles.length === C.ALL_STANDARD.length,
@@ -3107,14 +3138,32 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: main }],
     onSelect: (point) => { selected = point; },
   });
-  const hit = selectable.querySelector("circle.chart-hit");
-  ok(hit && +hit.getAttribute("r") >= 14,
-    "chart points keep a thumb-sized hit target without inflating the visible mark");
-  hit?.dispatchEvent(new window.Event("click"));
+  const selectableSVG = selectable.querySelector("svg");
+  const hit = selectable.querySelector("rect.chart-hit");
+  selectableSVG.getBoundingClientRect = () => ({ left: 0, top: 0, width: 340, height: 220,
+    right: 340, bottom: 220 });
+  const firstDot = selectable.querySelector("circle.dot");
+  hit?.dispatchEvent(new window.MouseEvent("click", { bubbles: true,
+    clientX: +firstDot.getAttribute("cx"), clientY: +firstDot.getAttribute("cy") }));
   ok(selected === main[0] && hit?.getAttribute("aria-pressed") === "true",
     "selecting a chart point reports the exact record and exposes selected state");
   ok(selectable.querySelector("line.selection-line") && selectable.querySelector("circle.selection-halo"),
     "selection remains visible on the chart instead of changing only the detail text");
+
+  const dense = Array.from({ length: 40 }, (_, index) => ({ t: at(index + 1), y: 225 }));
+  let denseSelected = null;
+  const denseChart = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: dense }],
+    onSelect: (point) => { denseSelected = point; },
+  });
+  const denseSVG = denseChart.querySelector("svg");
+  denseSVG.getBoundingClientRect = selectableSVG.getBoundingClientRect;
+  const denseHits = denseChart.querySelectorAll("rect.chart-hit");
+  const olderDot = denseChart.querySelectorAll("circle.dot")[5];
+  denseHits[0]?.dispatchEvent(new window.MouseEvent("click", { bubbles: true,
+    clientX: +olderDot.getAttribute("cx"), clientY: +olderDot.getAttribute("cy") }));
+  ok(denseHits.length === 1 && denseSelected === dense[5],
+    "dense flat histories use one plot hit surface and keep older points directly selectable");
 
   // ---- the projected trend, drawn past today ----
   // The forecast shares the load axis with the history it continues, but must

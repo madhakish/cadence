@@ -68,7 +68,7 @@ export async function openPlateCalculator() {
               ui.h("div", { class: "sub centered", text: "Same stack on both sides" })));
           }
           out.append(ui.h("div", { class: "section-title", text: "Per side" }));
-          if (!sol.perSide.length) out.append(ui.h("div", { class: "big", text: "Bar only" }));
+          if (!sol.perSide.length) out.append(ui.h("div", { class: "big", text: sol.collarLb > 0 ? "Bar + collars" : "Bar only" }));
           for (const pc of sol.perSide) {
             out.append(ui.h("div", { class: "row" },
               ui.h("span", { class: "title" + (pc.plate.unit === "kg" ? " accent" : ""), text: C.plateLabel(pc.plate) }),

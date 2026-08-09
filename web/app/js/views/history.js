@@ -85,6 +85,17 @@ function setLabel(s) { return s.weightLb === 0 ? "BW" : ui.fmtWeight(s.weightLb)
 // even if the library entry is gone).
 const isCardioSet = (s) => s.distanceMiles > 0 || s.flights > 0 || s.durationSeconds > 0;
 
+const isStrengthEntry = (entry, exercise) => {
+  if (exercise?.type) return exercise.type !== "conditioning" && exercise.type !== "timed";
+  return !(entry.sets || []).some(isCardioSet);
+};
+
+export const completedStrengthSetCountForTest = (session, exerciseByName) =>
+  (session.exercises || []).reduce((count, entry) => {
+    if (!isStrengthEntry(entry, exerciseByName.get(entry.exerciseName))) return count;
+    return count + (entry.sets || []).filter((set) => !set.isWarmup && set.status === "completed").length;
+  }, 0);
+
 const historySetKind = (set) => {
   if (set.isWarmup || set.prescriptionBlock === "warmup") return "Warm-up";
   return ({ primer: "Primer", topSingle: "Top single", ramp: "Ramp", work: "Work",
@@ -153,8 +164,7 @@ function openDetail(s, exerciseByName) {
   ui.pushScreen({
     title: ui.fmtDate(s.date),
     build: (body) => {
-      const completed = (s.exercises || []).flatMap((entry) => (entry.sets || [])
-        .filter((set) => !set.isWarmup && set.status === "completed"));
+      const completedStrengthSets = completedStrengthSetCountForTest(s, exerciseByName);
       const volume = (s.exercises || []).reduce((sum, entry) => sum + workingVolume(entry), 0);
       const elapsedMinutes = s.completedAt
         ? Math.floor((Date.parse(s.completedAt) - Date.parse(s.date)) / 60000) : 0;
@@ -167,7 +177,7 @@ function openDetail(s, exerciseByName) {
           ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: identity }),
             ui.h("span", { class: "sub", text: [ui.fmtDate(s.date), s.gymName].filter(Boolean).join(" · ") }))),
         ui.h("div", { class: "session-summary" },
-          ui.h("div", { class: "session-stat" }, ui.h("strong", { class: "mono", text: String(completed.length) }), ui.h("span", { text: "work sets" })),
+          ui.h("div", { class: "session-stat" }, ui.h("strong", { class: "mono", text: String(completedStrengthSets) }), ui.h("span", { text: "work sets" })),
           ui.h("div", { class: "session-stat" }, ui.h("strong", { class: "mono", text: volume > 0 ? ui.fmtWeight(volume) : "—" }), ui.h("span", { text: "volume" })),
           duration ? ui.h("div", { class: "session-stat" }, ui.h("strong", { class: "mono", text: duration }), ui.h("span", { text: "duration" })) : null));
       body.append(summary);
@@ -178,7 +188,8 @@ function openDetail(s, exerciseByName) {
         const working = (e.sets || []).filter((set) => !set.isWarmup && set.status === "completed");
         const top = topSet(e);
         const volume = workingVolume(e);
-        const summaryBits = [`${working.length} work set${working.length === 1 ? "" : "s"}`];
+        const setName = isStrengthEntry(e, exercise) ? "work set" : "completed set";
+        const summaryBits = [`${working.length} ${setName}${working.length === 1 ? "" : "s"}`];
         if (top && exercise?.type !== "conditioning" && exercise?.type !== "timed") {
           summaryBits.push(`top ${top.weightLb === 0 ? "BW" : ui.fmtWeight(top.weightLb)}×${top.reps}`);
         }

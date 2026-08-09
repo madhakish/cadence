@@ -122,7 +122,8 @@ struct PlateCalculatorView: View {
             }
             Section("Per side") {
                 if solution.loadout.perSide.isEmpty {
-                    Text("Bar only").font(.title2.bold())
+                    Text(solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+                        .font(.title2.bold())
                 } else {
                     ForEach(solution.loadout.perSide) { pc in
                         HStack {

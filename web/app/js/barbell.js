@@ -111,11 +111,15 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
   const plates = [];
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);
+  const barLabel = C.barLabel(bar);
+  const accessibilityLoad = plates.length
+    ? `${C.perSideLabel(solution.perSide)} per side on ${barLabel}${solution.collarLb > 0 ? ", including collars" : ""}`
+    : solution.collarLb > 0 ? `${barLabel} with collars, no plates` : `${barLabel}, bar only`;
 
   if (presentation === "full") {
     const W = 340, H = 78, midY = H / 2, shoulder = 78, rightShoulder = W - shoulder;
     const svg = el("svg", { class: `barbell full ${plateStyle}`, viewBox: `0 0 ${W} ${H}`,
-      role: "img", "aria-label": `${plateStyle === "bumper" ? "Bumper" : "Steel"} barbell: ${C.perSideLabel(solution.perSide)} per side on ${C.barLabel(bar)}` });
+      role: "img", "aria-label": `${plateStyle === "bumper" ? "Bumper" : "Steel"} barbell: ${accessibilityLoad}` });
     const defs = el("defs");
     const steel = el("linearGradient", { id: "cadence-bar-steel", x1: "0", y1: "0", x2: "0", y2: "1" });
     steel.append(el("stop", { offset: "0", "stop-color": "#5d626a" }),
@@ -160,7 +164,7 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
       leftCursor = leftX - gap;
       rightCursor = rightX + width + gap;
     }
-    if (plates.length && solution.collarLb > 0) {
+    if (solution.collarLb > 0) {
       for (const x of [leftCursor - 3.5, rightCursor]) {
         svg.append(el("rect", { class: "barbell-lock-collar", x, y: midY - 8, width: 3.5, height: 16,
           rx: 1, fill: "url(#cadence-bar-steel)", stroke: "#555b63", "stroke-width": .5 }));
@@ -168,7 +172,7 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     }
     if (!plates.length) {
       const t = el("text", { x: W / 2, y: midY - 9, fill: "#98989f", "font-size": "10", "text-anchor": "middle" });
-      t.textContent = "bar only";
+      t.textContent = solution.collarLb > 0 ? "bar + collars" : "bar only";
       svg.append(t);
     }
     return { svg, solution, bar };
@@ -177,9 +181,10 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
   const H = 34, gap = plateStyle === "bumper" ? 1 : .7, sleeve = 18;
   const widths = plates.map((plate) => plateWidth(plate, plateStyle, .72));
   const stackWidth = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, widths.length - 1) * gap;
-  const W = Math.max(plates.length ? 50 : 74, sleeve + 6 + stackWidth + 5); // bar-only needs room for its label
+  const W = Math.max(plates.length ? 50 : solution.collarLb > 0 ? 96 : 74,
+    sleeve + 6 + stackWidth + 5); // empty sleeves need room for their truthful label
   const svg = el("svg", { class: `barbell ${plateStyle}`, viewBox: `0 0 ${W} ${H}`, height: H, preserveAspectRatio: "xMinYMid meet", role: "img",
-    "aria-label": `${plateStyle === "bumper" ? "Bumper" : "Steel"} barbell: ${C.perSideLabel(solution.perSide)} per side on ${C.barLabel(bar)}` });
+    "aria-label": `${plateStyle === "bumper" ? "Bumper" : "Steel"} barbell: ${accessibilityLoad}` });
   const defs = el("defs");
   const steel = el("linearGradient", { id: "cadence-bar-steel", x1: "0", y1: "0", x2: "0", y2: "1" });
   steel.append(el("stop", { offset: "0", "stop-color": "#5d626a" }),
@@ -198,9 +203,14 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     appendPlate(svg, p, { x, y: (H - h) / 2, width, height: h, side: "right", style: plateStyle });
     x += width + gap;
   }
+  if (solution.collarLb > 0) {
+    svg.append(el("rect", { class: "barbell-lock-collar", x, y: H / 2 - 8, width: 3.5, height: 16,
+      rx: 1, fill: "url(#cadence-bar-steel)", stroke: "#555b63", "stroke-width": .5 }));
+  }
   if (!plates.length) {
-    const t = el("text", { x: sleeve + 7, y: H / 2 + 3.5, fill: "#98989f", "font-size": "10" });
-    t.textContent = "bar only";
+    const t = el("text", { x: solution.collarLb > 0 ? x + 5 : sleeve + 7,
+      y: H / 2 + 3.5, fill: "#98989f", "font-size": "10" });
+    t.textContent = solution.collarLb > 0 ? "bar + collars" : "bar only";
     svg.append(t);
   }
   return { svg, solution, bar };

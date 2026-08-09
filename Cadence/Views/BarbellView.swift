@@ -75,7 +75,8 @@ struct BarbellView: View {
         let compactGap: CGFloat = plateStyle == .bumper ? 1 : 0.7
         let compactWidths = plates.map { drawnPlateWidth($0, scale: 0.72) }
         let compactStackWidth = compactWidths.reduce(0, +) + CGFloat(max(0, plates.count - 1)) * compactGap
-        let width = max(plates.isEmpty ? 74 : 50, Self.sleeve + 11 + compactStackWidth)
+        let emptyWidth: CGFloat = solution.loadout.collarLb > 0 ? 96 : 74
+        let width = max(plates.isEmpty ? emptyWidth : 50, Self.sleeve + 11 + compactStackWidth)
         let theoreticalTarget = targetWeightLb ?? weightLb
         let alternatives = PlateMath.prescriptionOptions(
             targetLb: theoreticalTarget, bar: bar, plates: stationPlates,
@@ -85,6 +86,11 @@ struct BarbellView: View {
             let value = unit == .kg ? Weight.kg(fromLb: lb) : lb
             return "\(Weight.trim(value)) \(unit.rawValue)"
         }
+        let accessibilityLoad = plates.isEmpty
+            ? (solution.loadout.collarLb > 0
+               ? "\(bar.label) with collars, no plates"
+               : "\(bar.label), bar only")
+            : "\(solution.loadout.perSideLabel) per side on \(bar.label)\(solution.loadout.collarLb > 0 ? ", including collars" : "")"
 
         VStack(alignment: .leading, spacing: 2) {
             Canvas { ctx, size in
@@ -190,7 +196,7 @@ struct BarbellView: View {
                         leftCursor = leftRect.minX - gap
                         rightCursor = rightRect.maxX + gap
                     }
-                    if !plates.isEmpty, solution.loadout.collarLb > 0 {
+                    if solution.loadout.collarLb > 0 {
                         for x in [leftCursor - 3.5, rightCursor] {
                             let collar = Path(roundedRect: CGRect(x: x, y: midY - 8, width: 3.5, height: 16), cornerRadius: 1)
                             ctx.fill(collar, with: .linearGradient(steel,
@@ -200,7 +206,8 @@ struct BarbellView: View {
                         }
                     }
                     if plates.isEmpty {
-                        ctx.draw(Text("bar only").font(.system(size: 10)).foregroundStyle(.secondary),
+                        let label = solution.loadout.collarLb > 0 ? "bar + collars" : "bar only"
+                        ctx.draw(Text(label).font(.system(size: 10)).foregroundStyle(.secondary),
                                  at: CGPoint(x: width / 2, y: midY - 9), anchor: .center)
                     }
                 } else {
@@ -218,9 +225,18 @@ struct BarbellView: View {
                         drawPlate(plate, rect: rect, side: "right")
                         x += plateWidth + compactGap
                     }
+                    if solution.loadout.collarLb > 0 {
+                        let collar = Path(roundedRect: CGRect(x: x, y: h / 2 - 8, width: 3.5, height: 16), cornerRadius: 1)
+                        ctx.fill(collar, with: .linearGradient(steel,
+                                                              startPoint: CGPoint(x: x, y: h / 2 - 8),
+                                                              endPoint: CGPoint(x: x, y: h / 2 + 8)))
+                        ctx.stroke(collar, with: .color(Color(hex: 0x555B63)), lineWidth: 0.5)
+                    }
                     if plates.isEmpty {
-                        ctx.draw(Text("bar only").font(.system(size: 10)).foregroundStyle(.secondary),
-                                 at: CGPoint(x: Self.sleeve + 7, y: h / 2), anchor: .leading)
+                        let label = solution.loadout.collarLb > 0 ? "bar + collars" : "bar only"
+                        ctx.draw(Text(label).font(.system(size: 10)).foregroundStyle(.secondary),
+                                 at: CGPoint(x: solution.loadout.collarLb > 0 ? x + 5 : Self.sleeve + 7,
+                                             y: h / 2), anchor: .leading)
                     }
                 }
             }
@@ -254,7 +270,7 @@ struct BarbellView: View {
                 }
             }
         }
-        .accessibilityLabel("Barbell: \(solution.loadout.perSideLabel) per side on \(bar.label)\(solution.loadout.collarLb > 0 ? ", including collars" : "")")
+        .accessibilityLabel("Barbell: \(accessibilityLoad)")
     }
 }
 // Plate colours use the shared Color(hex:) from Theme.swift.

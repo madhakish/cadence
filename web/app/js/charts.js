@@ -127,7 +127,8 @@ export function progressionChart({
   const svg = el("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img" });
   wrap.append(svg);
   const selectionLayer = el("g", { class: "chart-selected" });
-  let selectedHit = null;
+  const selectablePoints = [];
+  let selectedPoint = null;
 
   const drawn = lines.filter((l) => l.points && l.points.length);
   const barPoints = bars?.points?.filter((p) => Number.isFinite(p.y)) || [];
@@ -222,31 +223,7 @@ export function progressionChart({
       const dot = el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y),
         r: pts.length > 30 ? 1.6 : 2.8, style: `fill:${stroke}` });
       svg.append(dot);
-      if (onSelect) {
-        // The visible dot stays precise; a separate transparent 28-point
-        // target makes the chart usable with a thumb without turning every
-        // data mark into a giant blob. Selection is also drawn on the chart,
-        // rather than changing only a sentence below it.
-        const hit = el("circle", { class: "chart-hit", cx: xAt(p.t), cy: yAt(p.y), r: 14,
-          fill: "transparent", tabindex: 0, role: "button", "aria-pressed": "false",
-          "aria-label": `Select ${tick(p.t)}, ${fmtY(p.y)}` });
-        const select = () => {
-          if (selectedHit) selectedHit.setAttribute("aria-pressed", "false");
-          selectedHit = hit;
-          hit.setAttribute("aria-pressed", "true");
-          selectionLayer.replaceChildren(
-            el("line", { class: "selection-line", x1: xAt(p.t), y1: padT,
-              x2: xAt(p.t), y2: baseline }),
-            el("circle", { class: "selection-halo", cx: xAt(p.t), cy: yAt(p.y), r: 7 }),
-          );
-          onSelect(p);
-        };
-        hit.addEventListener("click", select);
-        hit.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(); }
-        });
-        svg.append(hit);
-      }
+      if (onSelect) selectablePoints.push({ point: p, x: xAt(p.t), y: yAt(p.y) });
     }
   }
 
@@ -268,7 +245,49 @@ export function progressionChart({
     svg.append(el("line", { class: "now-line", x1: x, y1: padT, x2: x, y2: baseline }));
     svg.append(el("text", { class: "now-lbl", x: x + 3, y: padT + 8 }, "today"));
   }
-  if (onSelect) svg.append(selectionLayer);
+  if (onSelect && selectablePoints.length) {
+    // One plot-sized interaction surface avoids the bogus pile of overlapping
+    // hit circles that made older points unreachable in dense, flat histories.
+    // The pointer maps to SVG coordinates and selects the genuinely nearest
+    // recorded point; visible dots stay small and exact.
+    const hit = el("rect", { class: "chart-hit", x: padL, y: padT,
+      width: W - padL - padR, height: baseline - padT, fill: "transparent",
+      tabindex: 0, role: "button", "aria-pressed": "false", "aria-label": "Select a chart point" });
+    const select = (candidate) => {
+      selectedPoint = candidate;
+      hit.setAttribute("aria-pressed", "true");
+      hit.setAttribute("aria-label", `Selected ${tick(candidate.point.t)}, ${fmtY(candidate.point.y)}`);
+      selectionLayer.replaceChildren(
+        el("line", { class: "selection-line", x1: candidate.x, y1: padT,
+          x2: candidate.x, y2: baseline }),
+        el("circle", { class: "selection-halo", cx: candidate.x, cy: candidate.y, r: 7 }),
+      );
+      onSelect(candidate.point);
+    };
+    hit.addEventListener("click", (event) => {
+      const bounds = svg.getBoundingClientRect();
+      if (!(bounds.width > 0) || !(bounds.height > 0)) return;
+      const x = (event.clientX - bounds.left) * W / bounds.width;
+      const y = (event.clientY - bounds.top) * H / bounds.height;
+      select(selectablePoints.reduce((nearest, candidate) => {
+        const distance = (candidate.x - x) ** 2 + (candidate.y - y) ** 2;
+        const nearestDistance = (nearest.x - x) ** 2 + (nearest.y - y) ** 2;
+        return distance < nearestDistance ? candidate : nearest;
+      }));
+    });
+    hit.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      const ordered = [...selectablePoints].sort((a, b) => a.point.t - b.point.t || a.y - b.y);
+      let index = selectedPoint ? ordered.indexOf(selectedPoint) : -1;
+      if (event.key === "ArrowLeft") index = Math.max(0, index < 0 ? 0 : index - 1);
+      else if (event.key === "ArrowRight") index = Math.min(ordered.length - 1, index + 1);
+      else if (event.key === "End") index = ordered.length - 1;
+      else if (event.key === "Home" || index < 0) index = 0;
+      select(ordered[index]);
+    });
+    svg.append(hit, selectionLayer);
+  }
 
   svg.append(el("text", { class: "lbl", x: padL, y: H - 6 }, tick(tmin)));
   if (tmax > tmin) svg.append(el("text", { class: "lbl", x: W - padR, y: H - 6, "text-anchor": "end" }, tick(tmax)));
