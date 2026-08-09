@@ -241,16 +241,17 @@ struct ActiveSessionView: View {
         // confirmation says exactly how much would be lost.
         .confirmationDialog(discardPrompt, isPresented: $confirmDiscard, titleVisibility: .visible) {
             Button("Discard session", role: .destructive) {
-                restTimer.stop()
-                // Same guard Home's discard applies: end() only for the
-                // session that owns the clock, so discarding a session opened
-                // over another running workout never stops that workout's
-                // clock or erases its durable record.
-                if workoutClock.isTracking(sessionID: session.id) {
-                    workoutClock.end()
-                } else {
-                    WorkoutClock.clearPersisted(for: session.id)
+                // The rest timer is root-scoped and unowned: stop it unless
+                // the clock says it belongs to ANOTHER running workout —
+                // discarding a stray session must not kill that workout's
+                // rest countdown.
+                if !workoutClock.isRunning || workoutClock.isTracking(sessionID: session.id) {
+                    restTimer.stop()
                 }
+                // Scoped teardown: ends the clock only if this session owns
+                // it, else drops just this session's durable record and any
+                // orphaned activity it left behind.
+                workoutClock.release(sessionID: session.id)
                 context.delete(session)
                 if PersistenceErrorCenter.shared.save(context, operation: "Discarding the session") { dismiss() }
             }
@@ -347,8 +348,13 @@ struct ActiveSessionView: View {
         banking = true
         do {
             summary = try SessionCompletion.finish(session, context: context, startedAt: sessionStart)
-            restTimer.stop()
-            workoutClock.end()
+            // Same scoping as discard: banking a leftover session opened over
+            // another running workout must not stop that workout's clock,
+            // erase its durable record, or kill its rest countdown.
+            if !workoutClock.isRunning || workoutClock.isTracking(sessionID: session.id) {
+                restTimer.stop()
+            }
+            workoutClock.release(sessionID: session.id)
         } catch {
             banking = false
             bankErrorMessage = error.localizedDescription

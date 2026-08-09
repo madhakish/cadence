@@ -5,7 +5,7 @@ import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
-import { clearClockRecord, createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, planningBase, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
+import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, planningBase, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
 
 const orderedSlots = (slots = [], roleAwareLegacy = false) => {
   const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
@@ -63,7 +63,7 @@ export async function render(host) {
         text: `▶︎ Resume workout · ${summary}`, onClick: () => openSession(primaryOpen.id) }),
       ui.h("button", { class: "btn ghost danger wide", text: "Discard session", onClick: () => {
         ui.actionSheet("Discard this open session? Completed history and the program are unchanged.", [
-          { label: "Discard session", role: "destructive", onClick: async () => { await Sessions.del(primaryOpen.id); clearClockRecord(primaryOpen.id); ui.nav.refresh(); } },
+          { label: "Discard session", role: "destructive", onClick: async () => { await Sessions.del(primaryOpen.id); ui.nav.refresh(); } },
           { label: "Cancel", role: "cancel", onClick: () => {} },
         ]);
       } })));
@@ -120,7 +120,7 @@ export async function render(host) {
         ui.h("button", { class: "btn primary", style: { flex: "1" }, text: `▶︎ ${summary} — ${ui.fmtDate(open.date)}`, onClick: () => openSession(open.id) }),
         ui.h("button", { class: "btn ghost danger", "aria-label": `Discard ${summary}`, text: "Discard", onClick: () => {
           ui.actionSheet("Discard this open session? Completed history and the program are unchanged.", [
-            { label: "Discard session", role: "destructive", onClick: async () => { await Sessions.del(open.id); clearClockRecord(open.id); ui.nav.refresh(); } },
+            { label: "Discard session", role: "destructive", onClick: async () => { await Sessions.del(open.id); ui.nav.refresh(); } },
             { label: "Cancel", role: "cancel", onClick: () => {} },
           ]);
         } })));

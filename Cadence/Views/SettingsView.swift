@@ -6,6 +6,8 @@ import CadenceCore
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
+    @Environment(RestTimer.self) private var restTimer
+    @Environment(WorkoutClock.self) private var workoutClock
     @Query private var settingsList: [AppSettings]
     @Query(sort: \Gym.name) private var gyms: [Gym]
     @Query(sort: \LiftTrack.exerciseName) private var tracks: [LiftTrack]
@@ -270,6 +272,14 @@ struct SettingsView: View {
                 // current state locally before replacing any sections.
                 try BackupCheckpointService.create(context: context, reason: "before-import")
                 let s = try ImportService.load(data, into: context)
+                // A restore replaces the sessions store wholesale, and
+                // backups preserve session IDs — a running clock, its
+                // durable record, and any rest countdown all belong to the
+                // pre-import world. Left alive, the record (or a surviving
+                // activity) would graft the old stopwatch onto whatever
+                // restored session reuses the ID.
+                restTimer.stop()
+                workoutClock.end()
                 // syncLibrary right after the restore: a pre-migration backup
                 // re-arms the retired-rest-stamp clear, which otherwise
                 // wouldn't run until the next app launch — leaving the rest
@@ -293,6 +303,10 @@ struct SettingsView: View {
             // Capture the current state too, so this recovery can itself be undone.
             try BackupCheckpointService.create(context: context, reason: "before-checkpoint-restore")
             let s = try ImportService.load(data, into: context)
+            // Same world-reset rule as the JSON import above: the clock,
+            // its record, and any rest countdown died with the replaced store.
+            restTimer.stop()
+            workoutClock.end()
             try Seeder.syncLibrary(context: context)
             return "Restored local checkpoint: \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
         } catch {

@@ -3226,7 +3226,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 // the timer at 0:00 on resume; now it is mirrored into localStorage the way
 // the native WorkoutClock mirrors its clock into UserDefaults.
 {
-  const CLOCK_KEY = "cadenceWorkoutClock";
+  const { CLOCK_KEY, clearClockRecord } = await import("../app/js/workout-clock.js");
   const lastBar = () => [...document.querySelectorAll("#session-bar")].pop();
   const sid = await session.createBlankSession();
   await session.openSession(sid); await tick();
@@ -3268,17 +3268,36 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(localStorage.getItem(CLOCK_KEY) == null,
     "[INV-CLOCK-SURVIVES-RELAUNCH] reset clears the durable record");
 
-  // Today's discard buttons delete sessions the logger never reopened — the
-  // exported cleanup drops the discarded session's record and ONLY that one,
-  // so a discard can never erase another workout's running clock.
+  // The cleanup is ownership-checked: it drops the named session's record
+  // and ONLY that one, so a discard can never erase another workout's
+  // running clock.
   localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: sid, start: Date.now() }));
-  session.clearClockRecord(otherId);
+  clearClockRecord(otherId);
   ok(localStorage.getItem(CLOCK_KEY) != null,
     "[INV-CLOCK-SURVIVES-RELAUNCH] clearing a different session's record leaves the running clock alone");
-  session.clearClockRecord(sid);
+
+  // A PAUSED record is frozen evidence — elapsed is fixed at pausedAt −
+  // start — so wall-clock age does not stale it (native pauses; the shared
+  // core rule decides for both platforms).
+  const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  ok(C.stopwatchRecordUsable(threeDaysAgo, threeDaysAgo + 30 * 60 * 1000, Date.now()),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a paused record outlives the running window");
+
+  // Session deletion clears the record at the persistence choke point, not
+  // just behind the discard buttons — every deletion path is covered.
+  localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: sid, start: Date.now() }));
+  await db.Sessions.del(sid);
   ok(localStorage.getItem(CLOCK_KEY) == null,
-    "[INV-CLOCK-SURVIVES-RELAUNCH] discarding from Today clears the discarded session's record");
-  await db.Sessions.del(sid); await db.Sessions.del(otherId);
+    "[INV-CLOCK-SURVIVES-RELAUNCH] deleting a session clears its durable record");
+  await db.Sessions.del(otherId);
+
+  // Bulk destruction is a world reset: a backup import replaces the sessions
+  // store (and small autoincrement ids collide across installs), so whatever
+  // record exists must not graft its stopwatch onto an imported session.
+  localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: 999999, start: Date.now() }));
+  await db.importBundle(JSON.parse(await db.exportJSON()), { createCheckpoint: false });
+  ok(localStorage.getItem(CLOCK_KEY) == null,
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a backup import clears the pre-import clock record");
 }
 
 // The figure is only honest if every shipped exercise says what it trains.

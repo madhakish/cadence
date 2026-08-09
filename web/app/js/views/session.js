@@ -6,6 +6,7 @@ import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll } from "../db.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
+import { writeClockRecord, clearClockRecord, storedClockStart } from "../workout-clock.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -25,42 +26,6 @@ const loadOptions = (exercise) => ({
   loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
   exerciseType: exercise?.type,
 });
-
-// Durable stopwatch record: the origin is mirrored into localStorage (keyed by
-// session) so reloading or relaunching the PWA mid-workout resumes the elapsed
-// clock instead of restarting it at 0:00 — the same durable fallback the
-// native WorkoutClock keeps in UserDefaults. A record older than a day is
-// stale (the same sanity bound the history duration label applies) and must
-// not resurrect last week's stopwatch onto a reopened session. Every helper
-// swallows storage failures (private mode) — the in-memory clock still works.
-const CLOCK_KEY = "cadenceWorkoutClock";
-const CLOCK_WINDOW_MS = 24 * 60 * 60 * 1000;
-function readClockRecord() {
-  try { return JSON.parse(localStorage.getItem(CLOCK_KEY) || "null"); } catch { return null; }
-}
-function writeClockRecord(sessionId, start) {
-  try { localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId, start })); } catch { /* noop */ }
-}
-// Clears only a record the given session owns — discarding one session must
-// never erase another workout's running clock. Exported so Today's discard
-// buttons can clean up too: they delete sessions the logger never opened, and
-// a leftover record would resurrect the discarded stopwatch if a restored
-// backup brought the same session ID back within the day.
-export function clearClockRecord(sessionId) {
-  try {
-    const record = readClockRecord();
-    if (record && String(record.sessionId) === String(sessionId)) localStorage.removeItem(CLOCK_KEY);
-  } catch { /* noop */ }
-}
-function storedClockStart(sessionId) {
-  // A future-dated origin (clock skew, bad bytes) is as unusable as a stale
-  // one: it would paint a "running" stopwatch with negative elapsed time.
-  const record = readClockRecord();
-  const age = record && Number.isFinite(record.start) ? Date.now() - record.start : -1;
-  return record && String(record.sessionId) === String(sessionId)
-    && age >= 0 && age < CLOCK_WINDOW_MS
-    ? record.start : null;
-}
 
 const availablePlates = (gym, exercise = null) => {
   const rack = !gym || !Array.isArray(gym.plateToggles) || !gym.plateToggles.length
@@ -309,13 +274,9 @@ export async function openSession(id) {
   // starts itself on open reports elapsed time nobody trained. Restored from
   // the durable record (see the module-scope helpers) so a relaunch resumes
   // the running clock instead of restarting it at 0:00.
-  function persistClock() {
-    if (sessionStart == null) clearClockRecord(session.id);
-    else writeClockRecord(session.id, sessionStart);
-  }
   let sessionStart = storedClockStart(session.id);
-  function startWorkout() { sessionStart = Date.now(); persistClock(); paintBar(); }
-  function resetToNotStarted() { sessionStart = null; persistClock(); rest.stop(); paintBar(); }
+  function startWorkout() { sessionStart = Date.now(); writeClockRecord(session.id, sessionStart); paintBar(); }
+  function resetToNotStarted() { sessionStart = null; clearClockRecord(session.id); rest.stop(); paintBar(); }
   let currentSE = null;                       // the exercise you're actively working
   // Exercise AND role must come from the same session entry — pairing
   // exercises[0] with currentSE's (null) role resolved the first lift's rest
@@ -1014,8 +975,7 @@ export async function openSession(id) {
         : `Discard this session and lose ${performed} logged set${performed === 1 ? "" : "s"}?`,
       [
         { label: "Discard session", role: "destructive", onClick: async () => {
-          await Sessions.del(session.id);
-          sessionStart = null; persistClock();
+          await Sessions.del(session.id); // Sessions.del drops the clock record
           rest.stop();
           screen.close();
           ui.nav.refresh();
@@ -1045,7 +1005,8 @@ export async function openSession(id) {
     finishing = true;
     try {
       const summary = await completeSession(session);
-      sessionStart = null; persistClock();
+      sessionStart = null;
+      clearClockRecord(session.id);
       rest.stop();
       showSummary(summary, () => { screen.close(); ui.nav.refresh(); });
     } catch (e) {
