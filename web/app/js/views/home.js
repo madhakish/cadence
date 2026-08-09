@@ -179,13 +179,12 @@ export async function render(host) {
           + ` · you prefer ${program.preferredSessionSpacingDays}. Train anyway if today is the day that works.` }));
     }
     const lifts = orderedSlots(day.lifts, true);
-    const defaultBar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
     for (const l of lifts) {
       const ex = exMap.get(l.exerciseName);
       // planningBase, not the stored base: the card must show the same honest
       // plan the started session will store.
       const plan = C.programPlanFor({ cycleNumber: program.cycleNumber,
-        baseWeightLb: planningBase(l, ex, program, completed, defaultBar),
+        baseWeightLb: planningBase(l, ex, program, completed),
         nextPhase: program.currentWeek, incrementLb: 0 },
         program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
         { ...l, workingSets: l.doubleProgressionSets ?? 3 },
@@ -320,13 +319,12 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
       const liftCard = ui.h("div", { class: "card" });
       const lifts = orderedSlots(day.lifts, true);
       if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No program lifts this day." }));
-      const defaultBar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
       for (const l of lifts) {
         const ex = exMap.get(l.exerciseName);
         // planningBase — the preview and the started session must never
         // disagree.
         const plan = C.programPlanFor({ cycleNumber: program.cycleNumber,
-          baseWeightLb: planningBase(l, ex, program, completed, defaultBar),
+          baseWeightLb: planningBase(l, ex, program, completed),
           nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
           { ...l, workingSets: l.doubleProgressionSets ?? 3 },

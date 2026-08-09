@@ -315,27 +315,47 @@ export function stationPlates(preference, gymPlates) {
 
 // The canonical grid label of a PERFORMED load — the number the stack on the
 // bar goes by, not the number its mass happens to be. A load already on the
-// rounding grid is its own label; a kg stack labels under the nearest grid
-// number whose plate-for-plate twin it is (221.4 → 225, 232.4 → 235, and a
-// four-pair side that drifts past one grid step still finds 405 from 397.7).
-// Only when no twin label exists does it fall back to the next grid step up,
-// so the label never understates the work. Mirrors PlateMath.performedLabel.
+// rounding grid snaps to it exactly (never returns float noise); a kg stack
+// labels CONSTRUCTIVELY: decompose each side into kg denominations (greedy,
+// heaviest first — the stack a lifter actually builds) and read each plate's
+// lb twin label back off the twin table. The label can sit above the raw
+// mass (221.4 → 225, 838.7 → 855: 20 kg pairs run light) or BELOW it
+// (67.05 → 65: a 5 kg pair masses 22.05 but reads 10 a side) — which is why
+// this is a decomposition, not a directional search, and why it carries no
+// window constant that a plate-table edit could silently invalidate. The
+// same bar-or-bar-twin reading plateEquivalent uses applies, and every
+// candidate must survive that same predicate, so labeling and grading can
+// never disagree about a stack. Only when no twin label exists does it fall
+// back to the next grid step up. Mirrors PlateMath.performedLabel.
 export function performedLabel(performedLb, barLb = 45, roundingLb = 5) {
   if (!(performedLb > 0) || !(roundingLb > 0)) return performedLb;
   const nearest = Math.round(performedLb / roundingLb) * roundingLb;
-  if (Math.abs(nearest - performedLb) < 1e-6) return performedLb;
-  const ceiling = Math.ceil(performedLb / roundingLb) * roundingLb;
-  // The twin drift scales with the stack — each 20 kg pair is 1.8 lb light
-  // and a 10 kg plate sits 2.95 under its 25 label — so the search window
-  // scales with the load instead of assuming a fixed step count (9×20 kg a
-  // side is 838.7 raw and labels 855, three grid steps up). The heaviest
-  // legal overstatement, an all-10 kg stack labeling as 25s, is ~13.4%, so
-  // 15% bounds every stack; plateEquivalent's 0.15 lb band keeps false
-  // labels out however wide the window.
-  for (let label = ceiling; label <= performedLb * 1.15 + roundingLb; label += roundingLb) {
+  if (Math.abs(nearest - performedLb) < 1e-6) return nearest;
+  const barTwinLb = PLATE_TWIN_KG[barLb] != null ? PLATE_TWIN_KG[barLb] / KG_PER_LB : barLb;
+  for (const barMass of [barLb, barTwinLb]) {
+    const side = kgSideLabelLb((performedLb - barMass) / 2);
+    if (side == null) continue;
+    const label = barLb + 2 * side;
     if (plateEquivalent(label, performedLb, barLb)) return label;
   }
-  return ceiling;
+  return Math.ceil(performedLb / roundingLb) * roundingLb;
+}
+
+// The lb label of one side's kg stack: greedy decomposition of sideMassLb
+// into kg denominations by their true masses, summed as their lb twin labels
+// — the inverse of kgTwinSideMassLb. Null when the mass is not a clean kg
+// stack. The greedy epsilon absorbs the rounding of stored weights; the
+// remainder bound is half of plateEquivalent's total band, and the caller
+// re-verifies through that predicate anyway. Mirrors PlateMath.kgSideLabelLb.
+export function kgSideLabelLb(sideMassLb) {
+  if (!Number.isFinite(sideMassLb) || sideMassLb < 0) return null;
+  let remaining = sideMassLb;
+  let labelLb = 0;
+  for (const lbLabel of [45, 35, 25, 10, 5, 2.5]) {
+    const mass = PLATE_TWIN_KG[lbLabel] / KG_PER_LB;
+    while (remaining >= mass - 0.05) { remaining -= mass; labelLb += lbLabel; }
+  }
+  return Math.abs(remaining) < 0.075 ? labelLb : null;
 }
 
 export const plateCountLb = (pc) => plateLb(pc.plate) * pc.count;
@@ -1610,20 +1630,24 @@ export function volumeIncrementSets(stallCount, stalledRank, maximumAddedSetsPer
 // earned: label(221.4) + 10 = 235, whose kg twin stack (232.4) is finally a
 // heavier bar. Guards: only a machine-earned advance (lastIncrementLb > 0) is
 // repaired — holds, deloads, and hand-set bases are their own truth; the RAW
-// performed weight must clear the pre-advance base (base − lastIncrement) past
-// the half-step grading tolerance, raw before labeling, because the grid label
-// rounds UP and a ceiling must not manufacture the very margin it is tested
-// for (this is also what keeps a clean lb lifter untouched — their performed
-// weight IS the pre-advance base); capped at one increment above the stored
-// base so overshoots don't compound and the plan holds steady once the bumped
-// exposure is itself banked; floored at the stored base — never downward.
-// Mirrors ProgramProgression.honestBase.
+// performed weight must clear the pre-advance base (base − lastIncrement)
+// past the half-step grading tolerance (raw before labeling, so the label
+// cannot manufacture the very margin it is tested for — a clean lifter's
+// pre-advance exposure IS the pre-advance base) AND sit within one increment
+// above the stored base (further out is a hand-set base or off-program heavy
+// work, both left alone); capped at one increment above the stored base and
+// floored at it — the floor is LOAD-BEARING, since performedLabel can sit
+// below the raw mass (small kg plates outweigh their labels). Evidence must
+// come from a cycle BEFORE the one being planned — callers scope it; the
+// current cycle's own exposure must never feed the repair that produced its
+// plan. Mirrors ProgramProgression.honestBase.
 export function honestBase(baseWeightLb, lastIncrementLb, lastVolumePerformedLb,
   roundingLb = DEFAULT_ROUNDING_LB, barLb = 45) {
   if (!(baseWeightLb > 0) || !(lastIncrementLb > 0) || !(lastVolumePerformedLb > 0)) {
     return baseWeightLb;
   }
-  if (!(lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2)) {
+  if (!(lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2)
+    || !(lastVolumePerformedLb <= baseWeightLb + lastIncrementLb + roundingLb / 2)) {
     return baseWeightLb;
   }
   const label = performedLabel(lastVolumePerformedLb, barLb, roundingLb);
@@ -1672,6 +1696,17 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
   } else {
     next.stallCount = state.stallCount + 1;
     next.lastIncrementLb = 0;
+    // Holding means "repeat the weight the cycle actually ran", and the
+    // volume rotation is where that weight lives. A cycle carried by the
+    // honest-base repair banked its volume work above the stored label;
+    // without this resync, zeroing lastIncrementLb would disarm the repair
+    // while the stale base persists, and the next cycle would re-prescribe
+    // the very plates the repair existed to move past. Only upward, only
+    // from completed volume work (lighter volume never clears the guard),
+    // and the deload math below then operates on the real number.
+    if (performedVolumeLb > next.baseWeightLb + roundingLb / 2) {
+      next.baseWeightLb = performedVolumeLb;
+    }
     if (next.stallCount >= STALL_LIMIT) {
       const old = next.baseWeightLb;
       next.baseWeightLb = roundTo(old * DELOAD_REBUILD_FRACTION, roundingLb);

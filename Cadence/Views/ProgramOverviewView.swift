@@ -136,13 +136,11 @@ struct ProgramOverviewView: View {
     private func plan(_ program: Program, _ lift: ProgramLift, _ exercise: Exercise?) -> SessionPlan {
         // "next" shows the honest plan (planningBase) beside the stored base,
         // so the overview and the Today card can never quote different numbers.
-        let defaultGym = gyms.first { $0.isDefault } ?? gyms.first
         return ProgramEngine.programPlan(
             for: CycleState(
                 cycleNumber: program.cycleNumber,
                 baseWeightLb: ProgramSession.planningBase(
-                    for: lift, exercise: exercise, program: program,
-                    sessions: completedSessions, bar: defaultGym?.defaultBar ?? .bar45lb
+                    for: lift, exercise: exercise, program: program, sessions: completedSessions
                 ),
                 nextPhase: CyclePhase(rawValue: program.currentWeek) ?? .volume, incrementLb: 0
             ),

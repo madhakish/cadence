@@ -110,6 +110,9 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(P.honestBase(baseWeightLb: 300, lastIncrementLb: 10, lastVolumePerformedLb: 221.37,
                                     roundingLb: 5, barLb: 45), 300,
                        "never downward — a base above the log stands")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 200, lastIncrementLb: 10, lastVolumePerformedLb: 221.37,
+                                    roundingLb: 5, barLb: 45), 200,
+                       "evidence more than one increment above the base is a hand-set base or off-program work — left alone")
     }
 
     // The advance-side half: the graded peak rides the cycle's performed
@@ -135,8 +138,14 @@ final class ProgramProgressionTests: XCTestCase {
         let held = P.advanceCycleLift(state, perf: missed, focus: .strength, roundingLb: 5,
                                       regime: .rebuild, performedVolumeLb: 235)
         XCTAssertEqual(held.grade, .fail)
-        XCTAssertEqual(held.state.baseWeightLb, 225,
-                       "a failed grade never rides — lighter work already failed it")
+        XCTAssertEqual(held.state.baseWeightLb, 235,
+                       "a failed grade holds the increment, but the base still resyncs to the volume the cycle actually ran — zeroing lastIncrementLb must not strand the stale label")
+        XCTAssertEqual(held.state.lastIncrementLb, 0)
+        XCTAssertEqual(held.state.stallCount, 1)
+        let lightHold = P.advanceCycleLift(state, perf: missed, focus: .strength, roundingLb: 5,
+                                          regime: .rebuild, performedVolumeLb: 220)
+        XCTAssertEqual(lightHold.state.baseWeightLb, 225,
+                       "lighter volume evidence never drags a held base down")
     }
 
     // The lifter's priority order: the needle moves every cycle — weight when

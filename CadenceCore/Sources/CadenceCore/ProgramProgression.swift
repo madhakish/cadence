@@ -614,19 +614,23 @@ public enum ProgramProgression {
     ///   holds, deloads, and hand-set bases are their own truth.
     /// - The RAW performed weight must clear the pre-advance base
     ///   (`base − lastIncrement`) past the half-step grading tolerance. Raw,
-    ///   before labeling: the grid label rounds UP, and a ceiling must not
-    ///   manufacture the very margin it is being tested for. This is also
-    ///   what keeps a clean lb lifter untouched — their performed weight IS
-    ///   the pre-advance base.
-    /// - Capped at one increment above the stored base — the repair restores
-    ///   the earned jump, it does not compound overshoots (the advance-time
-    ///   ride owns those), and mid-cycle — once the bumped exposure is
-    ///   itself banked — the cap is exactly what holds the plan steady.
-    /// - Floored at the stored base — never downward.
+    ///   before labeling, so the label cannot manufacture the very margin it
+    ///   is being tested for. This is also what keeps a clean lifter
+    ///   untouched — their pre-advance exposure IS the pre-advance base.
+    /// - The RAW performed weight must sit within one increment above the
+    ///   stored base: further out is not the label-advance artifact — it is
+    ///   a hand-set base (possibly from before the editors cleared the flag)
+    ///   or off-program heavy work, and both are left alone.
+    /// - Capped at one increment above the stored base and floored at the
+    ///   stored base. The floor is LOAD-BEARING: performedLabel can sit
+    ///   below the raw mass (small kg plates outweigh their labels), so
+    ///   without it a label deficit could drag the plan under the base.
     ///
-    /// `lastVolumePerformedLb` is the most recent completed volume-rotation
-    /// working weight for the lift (callers read it from the session log);
-    /// zero means no evidence and the stored base stands.
+    /// `lastVolumePerformedLb` is the lift's most recent completed
+    /// volume-rotation working weight from a cycle BEFORE the one being
+    /// planned (callers scope the evidence; the current cycle's own exposure
+    /// must never feed the repair that produced its plan); zero means no
+    /// evidence and the stored base stands.
     /// Mirrored 1:1 in web/app/js/core.js `honestBase`.
     public static func honestBase(
         baseWeightLb: Double, lastIncrementLb: Double, lastVolumePerformedLb: Double,
@@ -635,7 +639,8 @@ public enum ProgramProgression {
         guard baseWeightLb > 0, lastIncrementLb > 0, lastVolumePerformedLb > 0 else {
             return baseWeightLb
         }
-        guard lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2 else {
+        guard lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2,
+              lastVolumePerformedLb <= baseWeightLb + lastIncrementLb + roundingLb / 2 else {
             return baseWeightLb
         }
         let label = PlateMath.performedLabel(lastVolumePerformedLb, barLb: barLb, roundingLb: roundingLb)
@@ -700,6 +705,18 @@ public enum ProgramProgression {
         } else {
             next.stallCount = state.stallCount + 1
             next.lastIncrementLb = 0
+            // Holding means "repeat the weight the cycle actually ran", and
+            // the volume rotation is where that weight lives. A cycle
+            // carried by the honest-base repair banked its volume work above
+            // the stored label; without this resync, zeroing lastIncrementLb
+            // would disarm the repair while the stale base persists, and the
+            // next cycle would re-prescribe the very plates the repair
+            // existed to move past. Only upward, only from completed volume
+            // work (lighter volume never clears the guard), and the deload
+            // math below then operates on the real number.
+            if performedVolumeLb > next.baseWeightLb + roundingLb / 2 {
+                next.baseWeightLb = performedVolumeLb
+            }
             if next.stallCount >= stallLimit {
                 let old = next.baseWeightLb
                 next.baseWeightLb = Weight.round(old * deloadRebuildFraction, to: roundingLb)

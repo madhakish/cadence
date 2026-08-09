@@ -27,8 +27,7 @@ struct WorkoutPreviewView: View {
         // planningBase, not the stored base — the preview and the started
         // session must never disagree.
         let base = ProgramSession.planningBase(
-            for: lift, exercise: exercise, program: program,
-            sessions: completedSessions, bar: defaultGym?.defaultBar ?? .bar45lb
+            for: lift, exercise: exercise, program: program, sessions: completedSessions
         )
         return ProgramEngine.programPlan(
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: base,

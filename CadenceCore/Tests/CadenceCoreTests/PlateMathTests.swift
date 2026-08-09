@@ -360,7 +360,9 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(PlateMath.performedLabel(397.74), 405,
                        "four 20 kg pairs drift past one grid step and still find their 405 label")
         XCTAssertEqual(PlateMath.performedLabel(838.66), 855,
-                       "nine 20 kg pairs drift three grid steps — the window scales with the stack")
+                       "nine 20 kg pairs drift three grid steps up and still find their label")
+        XCTAssertEqual(PlateMath.performedLabel(67.05), 65,
+                       "a 5 kg pair outweighs its 10-a-side label — the true label sits BELOW the raw mass")
         XCTAssertEqual(PlateMath.performedLabel(225), 225,
                        "a grid-clean load is its own label")
         XCTAssertEqual(PlateMath.performedLabel(223), 225,

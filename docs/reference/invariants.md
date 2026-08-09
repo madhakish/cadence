@@ -486,13 +486,33 @@ the number as a bar-and-plates stack, which machines and dumbbells never get):
   they agree by construction): when the log shows the last earned advance
   failed to clear the RAW performed volume weight past the half-step
   tolerance, the plan is rebuilt as the performed stack's canonical grid label
-  (`performedLabel`: 221.4 → 225, twin-aware) plus the earned increment —
-  capped at one increment above the stored base, floored at the stored base,
-  and switched off entirely by a hand-set base (manual base edits clear
-  `lastIncrementLb`; holds and deloads already carry zero).
-- **Advance-time resync**: the graded peak's advance rides the cycle's
-  performed volume exposure (its canonical label) upward, so the stored base
-  stops trailing reality and stall/deload math work from the real number.
+  (`performedLabel`) plus the earned increment. Evidence is CYCLE-SCOPED: the
+  repair reads the volume exposure from **before** the cycle being planned —
+  a cycle's own banked week-1 (performed at the plan the repair produced, or
+  at an honestly advanced base) must never feed the repair again, or every
+  clean lifter's load and peak rotations would inflate by an unearned
+  increment. Evidence is labeled under **the bar its own session used**, is
+  matched slot-and-movement (a rotated variation never inherits the old
+  exercise's log), and is windowed to the prescribed sets (bonus rows stay
+  history-only). The result is capped at one increment above the stored base,
+  floored at the stored base, and the repair stands down entirely for
+  evidence more than one increment above the base or for a hand-set base
+  (manual base edits and coaching rotations clear `lastIncrementLb`; holds
+  and deloads already carry zero).
+- **Canonical labels are constructive**: `performedLabel` decomposes the
+  performed side into kg denominations and reads their lb twin labels back —
+  221.4 → 225, 838.7 → 855, and 67.05 → **65** (a 5 kg pair outweighs its
+  10-a-side label, so the label can sit below the raw mass — no directional
+  search can name that stack, and no search window survives a plate-table
+  edit). Every label must survive `plateEquivalent`, so labeling and grading
+  can never disagree.
+- **Advance-time resync**: the graded advance rides the graded cycle's own
+  performed volume exposure (its canonical label, under its own bar) upward —
+  on **every** grade, not only success. A hold or fail zeroes
+  `lastIncrementLb`, which disarms the repair; without the resync that would
+  strand the stale label and re-prescribe the same plates yet again. Lighter
+  volume evidence never drags a base down, and deload math then operates on
+  the real number.
 
 > "My 5×5 deadlift today still has me at 225 — this should be 235, or 232
 > with kg plates." The 215→225 advance moved the label and zero plates; the

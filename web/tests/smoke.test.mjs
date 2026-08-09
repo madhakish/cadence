@@ -1586,6 +1586,55 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// The repair must read evidence from BEFORE the cycle being planned. A clean
+// lb lifter's own week-1 session (performed exactly at the honestly-advanced
+// base) is NOT proof the advance was stale — feeding it back would inflate
+// the load and peak rotations by a full unearned increment, every cycle.
+{
+  const name = "Fixture Cycle-Scoped Evidence";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 2, currentWeek: 2, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Pull", order: 0, accessories: [],
+      lifts: [{ exerciseName: "Deadlift", role: "main", prescription: "wave",
+        baseWeightLb: 225, estimatedMaxLb: 280, stallCount: 0, lastIncrementLb: 10 }] }],
+  });
+  const program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const slot = program.days[0].lifts[0];
+  const banked = (cycleNumber, week, weightLb, daysAgo) => ({
+    date: db.iso(new Date(Date.now() - daysAgo * 86400000)), notes: "", isCompleted: true,
+    completedAt: db.iso(new Date(Date.now() - daysAgo * 86400000)), gymName: null,
+    programTag: { programId: program.uuid || program.id, programName: name,
+      cycleNumber, week, dayIndex: 0, planNames: ["Deadlift"] },
+    exercises: [{ order: 0, exerciseName: "Deadlift", notes: "", phase: week,
+      programRole: "main", programSlotId: slot.id,
+      plannedWeightLb: weightLb, plannedSets: 5, plannedReps: 5,
+      sets: Array.from({ length: 5 }, (_, index) => ({
+        order: index, weightLb, reps: 5, isWarmup: false, isPerSide: false,
+        enteredUnit: "lb", status: "completed", loadBasis: "totalBar", flags: [],
+        bodyFlagSite: null, autoregReason: null, prescriptionBlock: "work",
+      })) }],
+  });
+  // Last cycle's R1 at 215 (the advance to 225 was honestly earned), and THIS
+  // cycle's R1 performed exactly at the advanced 225.
+  const lastCycleId = await db.Sessions.save(banked(1, 1, 215, 21));
+  const thisCycleId = await db.Sessions.save(banked(2, 1, 225, 3));
+  const builtId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const built = await db.Sessions.get(builtId);
+  const deadlift = built.exercises.find((entry) => entry.exerciseName === "Deadlift");
+  const honest = C.programPlanFor(
+    { cycleNumber: 2, baseWeightLb: 225, nextPhase: 2, incrementLb: 0 },
+    5, "barbell", "hinge", "main", "strength", "wave",
+    { ...slot, workingSets: slot.doubleProgressionSets ?? 3 },
+  ).weightLb;
+  ok(deadlift.targetWeightLb === honest,
+    `[INV-ADVANCE-BUYS-PLATES] a clean lifter's own week-1 bank never inflates the load rotation (got ${deadlift.targetWeightLb}, want ${honest})`);
+  await db.Sessions.del(builtId);
+  await db.Sessions.del(thisCycleId);
+  await db.Sessions.del(lastCycleId);
+  await db.importBundle(parsed);
+}
+
 // A capped AMRAP on the load rotation must reach the engine. Before the gate
 // fix only week 3 touched estimatedMaxLb, so the extra reps were history and
 // nothing else — and the ceiling that reads estimatedMaxLb stayed anchored to

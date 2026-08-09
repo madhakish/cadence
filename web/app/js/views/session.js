@@ -1628,17 +1628,19 @@ async function advanceProgram(session, milestones) {
         const prior = priorBestE1RM(history, lift.exerciseName, anchorMs);
         // The advance rides the cycle's performed volume work so the base
         // resyncs to what was actually lifted (a kg rack lands the volume
-        // rotation off the stored label in either direction). The just-banked
-        // peak is week 3, so the most recent completed volume exposure in the
-        // log is this cycle's own. Total-bar work only — the ride reasons
-        // about the number as a bar-and-plates stack, which machines and
-        // dumbbells must never get. Mirrors SessionCompletion.
-        const volumeBarLb = twinBarLb(se, prescribedWork(se));
+        // rotation off the stored label in either direction). Evidence is
+        // THIS cycle's own volume exposure, labeled under the bar that
+        // session actually used — never the peak session's. Total-bar work
+        // only — the ride reasons about the number as a bar-and-plates
+        // stack, which machines and dumbbells must never get. Mirrors
+        // SessionCompletion.
+        const rideEvidence = twinBarLb(se, prescribedWork(se)) == null ? null
+          : lastVolumeEvidence(lift, program, history, { inCycle: tag.cycleNumber });
         lift.pending = C.advanceProgramLift(lift, cyclePerf(se, loadStep), program.focus,
           lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep,
           C.progressionRegime(lift.estimatedMaxLb, prior.maxLb, prior.standing), volumeFallback,
-          volumeBarLb == null ? 0
-            : C.performedLabel(lastVolumePerformedLb(lift, program, history), volumeBarLb, loadStep));
+          rideEvidence == null ? 0
+            : C.performedLabel(rideEvidence.performedLb, rideEvidence.barLabelLb, loadStep));
       }
     }
   }
@@ -1718,14 +1720,23 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
   C.barLabelLb(bar));
 }
 
-// The most recent completed working weight logged for this slot's
-// base-training exposure: the volume rotation for wave slots (other rotations
-// prescribe multiples of the base, so their weights are not comparable), any
-// exposure for per-exposure styles (their plan is the base every session).
-// Warmups and non-work blocks are excluded; the heaviest completed working
-// set is robust to a lighter back-off. Zero means no evidence. Mirrors
-// ProgramSession.lastVolumePerformedLb.
-export function lastVolumePerformedLb(lift, program, sessions) {
+// The most recent completed base-training exposure for this slot: the volume
+// rotation for wave slots (other rotations prescribe multiples of the base,
+// so their weights are not comparable), any exposure for per-exposure styles
+// (their plan is the base every session). For wave slots the caller scopes
+// the CYCLE: planning reads evidence from before the cycle being planned
+// (beforeCycle) so a cycle's own possibly-repaired exposure can never feed
+// the repair that produced it, while the graded advance reads exactly the
+// graded cycle's own volume work (inCycle). Entry matching goes through
+// programmedEntry (slot ID + role, lineage fallback) plus a same-movement
+// check, so a coaching rotation's renamed slot never inherits the old
+// exercise's evidence; set selection goes through prescribedWork
+// (planned-set window, completed, non-warmup), so user-added bonus rows stay
+// history-only on both clients. Returns the heaviest qualifying working
+// weight and the BAR IT WAS LIFTED UNDER — the label the twin math must use,
+// not whatever bar today's gym defaults to. Null means no evidence. Mirrors
+// ProgramSession.lastVolumeEvidence.
+export function lastVolumeEvidence(lift, program, sessions, { beforeCycle = null, inCycle = null } = {}) {
   const id = program.uuid || program.id;
   const mine = sessions
     .filter((s) => s.isCompleted && s.programTag
@@ -1733,13 +1744,19 @@ export function lastVolumePerformedLb(lift, program, sessions) {
         || (s.programTag.programId == null && s.programTag.programName === program.name)))
     .sort((a, b) => Date.parse(b.completedAt || b.date) - Date.parse(a.completedAt || a.date));
   for (const session of mine) {
-    if (!C.advancesPerExposure(lift.prescription) && session.programTag.week !== 1) continue;
+    if (!C.advancesPerExposure(lift.prescription)) {
+      if (session.programTag.week !== 1) continue;
+      if (beforeCycle != null && (session.programTag.cycleNumber ?? 0) >= beforeCycle) continue;
+      if (inCycle != null && session.programTag.cycleNumber !== inCycle) continue;
+    }
     const entry = programmedEntry(session, lift);
-    if (!entry) continue;
+    if (!entry || entry.exerciseName !== lift.exerciseName) continue;
     const top = Math.max(0, ...prescribedWork(entry).map((set) => set.weightLb || 0));
-    if (top > 0) return top;
+    if (top > 0) {
+      return { performedLb: top, barLabelLb: C.barLabelLb(entry.barId ? C.barById(entry.barId) : C.BARS.bar45lb) };
+    }
   }
-  return 0;
+  return null;
 }
 
 // The base every planning surface builds the cycle state from: the stored
@@ -1750,10 +1767,14 @@ export function lastVolumePerformedLb(lift, program, sessions) {
 // and dumbbells must never get. Shared by the session builder, the resume
 // comparison, and every preview surface so the card, the preview, and the
 // stored prescription agree by construction. Mirrors ProgramSession.planningBase.
-export function planningBase(lift, exercise, program, sessions, bar) {
+export function planningBase(lift, exercise, program, sessions) {
   if (!exercise || C.resolvedLoadBasis(exercise) !== "totalBar") return lift.baseWeightLb;
+  const evidence = lastVolumeEvidence(lift, program, sessions, {
+    beforeCycle: C.advancesPerExposure(lift.prescription) ? null : program.cycleNumber,
+  });
+  if (!evidence) return lift.baseWeightLb;
   return C.honestBase(lift.baseWeightLb, lift.lastIncrementLb ?? 0,
-    lastVolumePerformedLb(lift, program, sessions), program.roundingLb, C.barLabelLb(bar));
+    evidence.performedLb, program.roundingLb, evidence.barLabelLb);
 }
 
 // The volume-fallback sets this lift carries, with the rotation-wide
@@ -1785,14 +1806,14 @@ function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
   });
 }
 
-function sessionTargetsMatch(session, program, day, exMap, allSessions, bar) {
+function sessionTargetsMatch(session, program, day, exMap, allSessions) {
   return orderedProgramSlots(day.lifts, true).every((lift) => {
     const exercise = exMap.get(lift.exerciseName);
     // The same honest base the builder plans from — an open session built
     // from the stale label must not resume once the repair raises the plan.
     const expected = C.programPlanFor(
       { cycleNumber: program.cycleNumber,
-        baseWeightLb: planningBase(lift, exercise, program, allSessions, bar),
+        baseWeightLb: planningBase(lift, exercise, program, allSessions),
         nextPhase: program.currentWeek, incrementLb: 0 },
       program.roundingLb, exercise?.type, exercise?.movementGroup,
       lift.role, program.focus, lift.prescription || "automatic",
@@ -1839,7 +1860,7 @@ export async function createSessionFromProgramDay(program, day) {
     && C.canResumeSession(s.programTag.cycleNumber, s.programTag.week, s.programTag.dayIndex,
       program.cycleNumber, program.currentWeek, day.order,
       s.programTag.planNames || [], dayNames)
-    && sessionTargetsMatch(s, program, day, exMap, allSessions, bar));
+    && sessionTargetsMatch(s, program, day, exMap, allSessions));
   if (openForDay) return openForDay.id;
   const unit = C.primaryUnit(settings.unitDisplay);
   const neat = (weightLb, ex, isMain, phase = null) =>
@@ -1855,7 +1876,7 @@ export async function createSessionFromProgramDay(program, day) {
     const configuration = { ...lift, workingSets: lift.doubleProgressionSets ?? 3 };
     const prescription = C.sessionPrescription(
       { cycleNumber: program.cycleNumber,
-        baseWeightLb: planningBase(lift, ex, program, allSessions, bar),
+        baseWeightLb: planningBase(lift, ex, program, allSessions),
         nextPhase: program.currentWeek, incrementLb: 0 },
       program.roundingLb, ex?.type, ex?.movementGroup, lift.role, program.focus, lift.prescription || "automatic",
       configuration, lift.estimatedMaxLb || 0,

@@ -280,36 +280,59 @@ public enum PlateMath {
 
     /// The canonical grid label of a PERFORMED load — the number the stack on
     /// the bar goes by, not the number its mass happens to be. A load already
-    /// on the rounding grid is its own label; a kg stack labels under the
-    /// nearest grid number whose plate-for-plate twin it is (221.4 → 225,
-    /// 232.4 → 235, and a four-pair side that drifts past one grid step still
-    /// finds 405 from 397.7). Only when no twin label exists does it fall
-    /// back to the next grid step up, so the label never understates the
-    /// work. Mirrored 1:1 in web/app/js/core.js `performedLabel`.
+    /// on the rounding grid snaps to it exactly (never returns float noise);
+    /// a kg stack labels CONSTRUCTIVELY: decompose each side into kg
+    /// denominations (greedy, heaviest first — the stack a lifter actually
+    /// builds) and read each plate's lb twin label back off the twin table.
+    /// The label can sit above the raw mass (221.4 → 225, 838.7 → 855: 20 kg
+    /// pairs run light) or BELOW it (67.05 → 65: a 5 kg pair masses 22.05
+    /// but reads 10 a side) — which is why this is a decomposition, not a
+    /// directional search, and why it carries no window constant that a
+    /// plate-table edit could silently invalidate. The same bar-or-bar-twin
+    /// reading `plateEquivalent` uses applies, and every candidate must
+    /// survive that same predicate, so labeling and grading can never
+    /// disagree about a stack. Only when no twin label exists does it fall
+    /// back to the next grid step up. Mirrored 1:1 in web/app/js/core.js
+    /// `performedLabel`.
     public static func performedLabel(
         _ performedLb: Double, barLb: Double = 45,
         roundingLb: Double = ProgramEngine.defaultRoundingLb
     ) -> Double {
         guard performedLb > 0, roundingLb > 0 else { return performedLb }
         let nearest = (performedLb / roundingLb).rounded() * roundingLb
-        if abs(nearest - performedLb) < 1e-6 { return performedLb }
-        let ceiling = (performedLb / roundingLb).rounded(.up) * roundingLb
-        // The twin drift scales with the stack — each 20 kg pair is 1.8 lb
-        // light and a 10 kg plate sits 2.95 under its 25 label — so the
-        // search window scales with the load instead of assuming a fixed
-        // step count (9×20 kg a side is 838.7 raw and labels 855, three grid
-        // steps up). The heaviest legal overstatement, an all-10 kg stack
-        // labeling as 25s, is ~13.4%, so 15% bounds every stack;
-        // plateEquivalent's 0.15 lb band keeps false labels out however wide
-        // the window.
-        var label = ceiling
-        while label <= performedLb * 1.15 + roundingLb {
-            if plateEquivalent(targetLb: label, performedLb: performedLb, barLb: barLb) {
-                return label
+        if abs(nearest - performedLb) < 1e-6 { return nearest }
+        let barTwinLb = plateTwinKg[barLb].map { $0 * WeightUnit.lbPerKg } ?? barLb
+        for barMass in [barLb, barTwinLb] {
+            if let side = kgSideLabelLb((performedLb - barMass) / 2) {
+                let label = barLb + 2 * side
+                if plateEquivalent(targetLb: label, performedLb: performedLb, barLb: barLb) {
+                    return label
+                }
             }
-            label += roundingLb
         }
-        return ceiling
+        return (performedLb / roundingLb).rounded(.up) * roundingLb
+    }
+
+    /// The lb label of one side's kg stack: greedy decomposition of
+    /// `sideMassLb` into kg denominations by their true masses, summed as
+    /// their lb twin labels — the inverse of `kgTwinSideMassLb`. Nil when
+    /// the mass is not a clean kg stack. The greedy epsilon absorbs the
+    /// rounding of stored weights; the remainder bound is half of
+    /// `plateEquivalent`'s total band, and the caller re-verifies through
+    /// that predicate anyway.
+    static func kgSideLabelLb(_ sideMassLb: Double) -> Double? {
+        guard sideMassLb.isFinite, sideMassLb >= 0 else { return nil }
+        var remaining = sideMassLb
+        var labelLb = 0.0
+        for lbLabel in [45.0, 35, 25, 10, 5, 2.5] {
+            guard let kg = plateTwinKg[lbLabel] else { return nil }
+            let mass = kg * WeightUnit.lbPerKg
+            while remaining >= mass - 0.05 {
+                remaining -= mass
+                labelLb += lbLabel
+            }
+        }
+        return abs(remaining) < 0.075 ? labelLb : nil
     }
 
     /// The plate inventory a lift's STATION actually stocks. A station

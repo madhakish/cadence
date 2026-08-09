@@ -86,8 +86,7 @@ struct HomeView: View {
         // planningBase, not the stored base: the card must show the same
         // honest plan the started session will store.
         let base = ProgramSession.planningBase(
-            for: lift, exercise: exercise, program: program,
-            sessions: completedSessions, bar: defaultGym?.defaultBar ?? .bar45lb
+            for: lift, exercise: exercise, program: program, sessions: completedSessions
         )
         return ProgramEngine.programPlan(
             for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: base, nextPhase: phase, incrementLb: 0),

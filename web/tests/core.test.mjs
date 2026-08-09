@@ -2081,7 +2081,9 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(C.performedLabel(397.74), 405,
     "[INV-ADVANCE-BUYS-PLATES] four 20 kg pairs drift past one grid step and still find their 405 label");
   eq(C.performedLabel(838.66), 855,
-    "[INV-ADVANCE-BUYS-PLATES] nine 20 kg pairs drift three grid steps — the window scales with the stack");
+    "[INV-ADVANCE-BUYS-PLATES] nine 20 kg pairs drift three grid steps up and still find their label");
+  eq(C.performedLabel(67.05), 65,
+    "[INV-ADVANCE-BUYS-PLATES] a 5 kg pair outweighs its 10-a-side label — the true label sits BELOW the raw mass");
   eq(C.performedLabel(225), 225, "[INV-ADVANCE-BUYS-PLATES] a grid-clean load is its own label");
   eq(C.performedLabel(223), 225, "[INV-ADVANCE-BUYS-PLATES] no twin label → the next grid step up, never understating");
   eq(C.performedLabel(0), 0, "no load, no label");
@@ -2100,6 +2102,8 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-ADVANCE-BUYS-PLATES] raw compare: 101.9 does not clear 102.5, and its 105 ceiling must not pretend it does");
   eq(C.honestBase(300, 10, 221.37, 5, 45), 300,
     "[INV-ADVANCE-BUYS-PLATES] never downward — a base above the log stands");
+  eq(C.honestBase(200, 10, 221.37, 5, 45), 200,
+    "[INV-ADVANCE-BUYS-PLATES] evidence more than one increment above the base is a hand-set base or off-program work — left alone");
 
   const state = { baseWeightLb: 225, estimatedMaxLb: 280, stallCount: 0, role: "main", lastIncrementLb: 0 };
   const clean = {
@@ -2114,8 +2118,12 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     225 + inc, "[INV-ADVANCE-BUYS-PLATES] a volume label equal to the base changes nothing");
   const held = C.advanceCycleLift(state, { ...clean, anyBelowPlanLoad: true },
     "strength", 5, "rebuild", false, 235);
-  ok(held.grade === "fail" && held.state.baseWeightLb === 225,
-    "[INV-ADVANCE-BUYS-PLATES] a failed grade never rides — lighter work already failed it");
+  ok(held.grade === "fail" && held.state.baseWeightLb === 235
+    && held.state.lastIncrementLb === 0 && held.state.stallCount === 1,
+    "[INV-ADVANCE-BUYS-PLATES] a failed grade holds the increment, but the base still resyncs to the volume the cycle actually ran");
+  ok(C.advanceCycleLift(state, { ...clean, anyBelowPlanLoad: true },
+    "strength", 5, "rebuild", false, 220).state.baseWeightLb === 225,
+    "[INV-ADVANCE-BUYS-PLATES] lighter volume evidence never drags a held base down");
 }
 
 // The kg↔lb denomination twins: the plate is the currency, the number is its
