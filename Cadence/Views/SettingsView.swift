@@ -578,7 +578,13 @@ struct ProgramEditorView: View {
                 messages.append("\(day.name) has no main lift.")
             }
             for lift in day.orderedLifts {
-                if lift.baseWeightLb <= 0 { messages.append("\(lift.exerciseName) needs a rotation-1 base weight.") }
+                // A bodyweight lift's base IS zero — pull-ups start unloaded
+                // by design, so the missing-base warning would fire forever
+                // on a slot that is configured exactly right.
+                if lift.baseWeightLb <= 0,
+                   exerciseByName[lift.exerciseName]?.loadBasis != .bodyweight {
+                    messages.append("\(lift.exerciseName) needs a rotation-1 base weight.")
+                }
                 if lift.estimatedMaxLb > 0, lift.baseWeightLb > lift.estimatedMaxLb {
                     messages.append("\(lift.exerciseName)'s base is above its estimated 1RM.")
                 } else if lift.estimatedMaxLb > 0, program.focus.tmFraction > 0,

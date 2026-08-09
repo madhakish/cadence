@@ -16,13 +16,17 @@ sets × rep-range (+load step where loaded). See [Programming defaults](programm
 
 The upper days alternate the two presses — A has the overhead emphasis,
 B the incline — and each day's accessories support that day's press.
-Every day carries core work.
+Every day carries core work, and both upper days train the vertical pull
+as programmed lift work: Pull-ups on double progression (3 sets, 5–8 rep
+window), starting at bodyweight and progressing by reps — moving to added
+load is switching the slot to the Weighted Pull-up identity, not a load
+step on this one.
 
 | Day | Main | Complementary | Accessories |
 |---|---|---|---|
-| Upper A | Overhead Press (45 / e1RM 65) | Incline DB Press (10/20) | DB Overhead Triceps Extension 3×8–12 @5 (+5) · Y-T-W Raises 3×10–15 @5 (+2.5) · GHD Sit-up 3×8–15 |
+| Upper A | Overhead Press (45 / e1RM 65) | Incline DB Press (10/20) · Pull-ups 3×5–8 (double progression, bodyweight) | DB Overhead Triceps Extension 3×8–12 @5 (+5) · Y-T-W Raises 3×10–15 @5 (+2.5) · GHD Sit-up 3×8–15 |
 | Lower A | Back Squat (45/65) | Romanian Deadlift (45/65) | Walking Lunges 3×10–20 · Hanging Knee Raise 3×8–15 |
-| Upper B | Incline DB Press (10/20) | Overhead Press (45/65) | Dips 3×5–12 · Band Pull-aparts 3×15–25 · Hanging Knee Raise 3×8–15 |
+| Upper B | Incline DB Press (10/20) | Overhead Press (45/65) · Pull-ups 3×5–8 (double progression, bodyweight) | Dips 3×5–12 · Band Pull-aparts 3×15–25 · Hanging Knee Raise 3×8–15 |
 | Lower B | Deadlift (65/95) | Front Squat (45/65) | Back Extension 3×10–15 · GHD Sit-up 3×8–15 |
 
 ## Olympic Weightlifting

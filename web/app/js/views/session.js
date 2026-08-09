@@ -1516,11 +1516,18 @@ async function advanceProgram(session, milestones) {
     const se = programmedEntry(session, lift);
     if (!se) continue;
     if (!prescribedWork(se).length) continue;
-    const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(lift.exerciseName)?.type);
+    const liftExercise = exerciseByName.get(lift.exerciseName);
+    const loadStep = C.programLoadStep(program.roundingLb, liftExercise?.type);
+    // A bodyweight-basis slot progresses by reps alone — its identity carries
+    // no external load, so a numeric increment would store weight that
+    // history, tonnage, and PR detection all ignore. Adding a belt is
+    // switching to the weighted identity (Weighted Pull-up), not
+    // incrementing this one. Mirrors SessionCompletion.
+    const increment = liftExercise && C.resolvedLoadBasis(liftExercise) === "bodyweight" ? 0 : loadStep;
     const state = {
       sets: lift.doubleProgressionSets || 3, minReps: lift.minimumReps || 5,
       maxReps: lift.maximumReps || 8, currentReps: lift.currentReps || lift.minimumReps || 5,
-      weightLb: lift.baseWeightLb, incrementLb: loadStep, stallCount: lift.stallCount || 0,
+      weightLb: lift.baseWeightLb, incrementLb: increment, stallCount: lift.stallCount || 0,
     };
     const next = C.advanceAccessory(state, accPerf(se, loadStep));
     lift.baseWeightLb = next.weightLb; lift.currentReps = next.currentReps;
