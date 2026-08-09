@@ -35,8 +35,7 @@ struct HistoryView: View {
                 switch view {
                 case .list: sessionList
                 case .rotations: rotationList
-                case .charts:
-                    ScrollView { ProgressionChartsView() }
+                case .charts: ProgressionChartsView()
                 case .milestones: milestoneList
                 }
             }
@@ -648,12 +647,19 @@ struct ProgressionChartsView: View {
     // Defaults to the first main lift in the library on appear — no
     // hardcoded exercise name (the library is user data).
     @State private var selectedLift = ""
+    @State private var plot: Plot = .progression
     @State private var metric: Metric = .topSet
     @State private var intent: ChartIntent = .mainProgression
     @State private var selectedDate: Date?
     /// Off by default: the chart's job is what happened, and a forecast is
     /// something the lifter asks for rather than something they are handed.
     @State private var horizon: TrendProjection.Horizon = .off
+
+    enum Plot: String, CaseIterable {
+        case progression = "Progression"
+        case volume = "Volume"
+        case repPRs = "Rep PRs"
+    }
 
     enum Metric: String, CaseIterable {
         case topSet = "Working weight"
@@ -1094,10 +1100,9 @@ struct ProgressionChartsView: View {
     }
 
     var body: some View {
-        // Bound ONCE per pass. `projection` re-runs the least-squares fit over
-        // a freshly recomputed `points` on every read, and the body reads it
-        // from five places.
-        let trend = projection
+        // Fit only while the progression plot is visible. Volume and rep PRs
+        // are recorded views, not alternate canvases for a hidden forecast.
+        let trend = plot == .progression ? projection : nil
         return VStack(spacing: 12) {
             Picker("Lift", selection: $selectedLift) {
                 ForEach(mainLifts) { Text($0.name).tag($0.name) }
@@ -1110,136 +1115,152 @@ struct ProgressionChartsView: View {
                 selectedDate = nil
                 if !availableMetrics.contains(metric) { metric = availableMetrics[0] }
             }
-            Picker("Metric", selection: $metric) {
-                ForEach(availableMetrics, id: \.self) { Text($0.rawValue) }
+            Picker("Plot", selection: $plot) {
+                ForEach(Plot.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
-            .onChange(of: metric) { selectedDate = nil }
-            Picker("Chart intent", selection: $intent) {
-                ForEach(ChartIntent.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.menu)
-            // How far past today to extend the fitted trend.
-            Picker("Project forward", selection: $horizon) {
-                ForEach(TrendProjection.Horizon.allCases, id: \.self) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityLabel("Project forward")
-            .accessibilityHint("Extends the trend fitted from performed sessions past today")
+            .onChange(of: plot) { selectedDate = nil }
 
-            if points.isEmpty {
-                ContentUnavailableView(Copy.emptyHistory, systemImage: "chart.xyaxis.line")
-            } else {
-                Chart {
-                    // The future, shaded behind everything: the region right of
-                    // today is a different kind of space and should read that
-                    // way before the eye reaches the dashes.
-                    // The y bounds are spelled out rather than left to span the
-                    // plot: RectangleMark's x-only initializer is ambiguous
-                    // between two overloads, and the load range is exactly what
-                    // the shading should cover anyway.
-                    futureBand(trend)
-                    // A wash under a lone line gives the plot depth without
-                    // adding a second thing to read. Only when there IS one
-                    // line — stacking translucent areas makes their overlaps
-                    // look like data.
-                    performedMarks
-                    peakTargetMark
-                    // The projection last, so it reads as an overlay on the
-                    // history rather than another member of it. Its colour is
-                    // set outright rather than through the foreground-style
-                    // scale: joining that scale's domain would renumber every
-                    // performed series' colour the moment a horizon was picked.
-                    // No point marks either — there is no session to mark.
-                    projectionMarks(trend)
-                    selectionMarks
+            if plot == .progression {
+                Picker("Metric", selection: $metric) {
+                    ForEach(availableMetrics, id: \.self) { Text($0.rawValue) }
                 }
-                .chartForegroundStyleScale(range: splitByRotation ? Self.rotationPalette : Self.seriesPalette)
-                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
-                .chartYAxis { AxisMarks(position: .leading) }
-                .chartYScale(domain: .automatic(includesZero: false))
-                .chartLegend(Set(points.map(\.series)).count > 1 ? .visible : .hidden)
-                .chartXSelection(value: $selectedDate)
-                // Charts have no useful intrinsic height. A maximum alone let
-                // the non-scrolling stack crush this plot down to a flat line.
-                .frame(height: 280)
-                .padding(.horizontal)
-                Text(chartCaption)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                if let detail = selectedPointDetail {
-                    Text(detail)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-                        .accessibilityLabel(detail)
+                .pickerStyle(.segmented)
+                .onChange(of: metric) { selectedDate = nil }
+                Picker("Chart intent", selection: $intent) {
+                    ForEach(ChartIntent.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
-                if selectedIsLoaded, !volumeBars.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Working volume").font(.caption.bold())
-                        Chart(volumeBars) { bar in
-                            BarMark(x: .value("Date", bar.date), y: .value("Volume", bar.value))
-                                .foregroundStyle(Color(hex: 0x8B9196).opacity(0.55))
-                        }
-                        .chartYAxis { AxisMarks(position: .leading) }
-                        .frame(height: 105)
-                    }
-                    .padding(.horizontal)
+                .pickerStyle(.menu)
+                Picker("Project forward", selection: $horizon) {
+                    ForEach(TrendProjection.Horizon.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
-                if let trend {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(projectionSummary(trend))
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(Self.projectionColor)
-                        Text("\(TrendProjection.fitDescription(trend.result.fitQuality)) · fitted from performed sessions — a continuation of the past, not a plan.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .accessibilityElement(children: .combine)
-                } else if let refusal = projectionRefusal(given: trend) {
-                    Text(refusal)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("Project forward")
+                .accessibilityHint("Extends the trend fitted from performed sessions past today")
             }
-            if !repRecords.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Rep PRs").font(.headline)
-                    Chart(repRecords) { record in
-                        LineMark(x: .value("Reps", record.reps),
-                                 y: .value("Weight", displayRepWeight(record.weightLb)))
-                            .interpolationMethod(.monotone)
-                            .foregroundStyle(Theme.accent)
-                        PointMark(x: .value("Reps", record.reps),
-                                  y: .value("Weight", displayRepWeight(record.weightLb)))
-                            .foregroundStyle(Theme.accent)
-                    }
-                    .frame(height: 150)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(repRecords) { record in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(record.reps) rep\(record.reps == 1 ? "" : "s")")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                    Text((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: record.weightLb))
-                                        .font(.callout.bold().monospacedDigit())
-                                }
-                                .padding(10)
-                                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal)
+
+            switch plot {
+            case .progression: progressionPlot(trend)
+            case .volume: volumePlot
+            case .repPRs: repPRPlot
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
         .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func progressionPlot(_ trend: Projection?) -> some View {
+        if points.isEmpty {
+            ContentUnavailableView(Copy.emptyHistory, systemImage: "chart.xyaxis.line")
+        } else {
+            Chart {
+                futureBand(trend)
+                performedMarks
+                peakTargetMark
+                projectionMarks(trend)
+                selectionMarks
+            }
+            .chartForegroundStyleScale(range: splitByRotation ? Self.rotationPalette : Self.seriesPalette)
+            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
+            .chartYAxis { AxisMarks(position: .leading) }
+            .chartYScale(domain: .automatic(includesZero: false))
+            .chartLegend(Set(points.map(\.series)).count > 1 ? .visible : .hidden)
+            .chartXSelection(value: $selectedDate)
+            .frame(minHeight: 220, idealHeight: 280, maxHeight: .infinity)
+            .layoutPriority(1)
+            .padding(.horizontal)
+            Text(chartCaption)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            if let detail = selectedPointDetail {
+                Text(detail)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .accessibilityLabel(detail)
+            }
+            if let trend {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(projectionSummary(trend))
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Self.projectionColor)
+                    Text("\(TrendProjection.fitDescription(trend.result.fitQuality)) · fitted from performed sessions — a continuation of the past, not a plan.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .accessibilityElement(children: .combine)
+            } else if let refusal = projectionRefusal(given: trend) {
+                Text(refusal)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var volumePlot: some View {
+        if volumeBars.isEmpty {
+            ContentUnavailableView("No volume history", systemImage: "chart.bar.xaxis")
+        } else {
+            Chart(volumeBars) { bar in
+                BarMark(x: .value("Date", bar.date), y: .value("Volume", bar.value))
+                    .foregroundStyle(Color(hex: 0x8B9196).opacity(0.55))
+            }
+            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
+            .chartYAxis { AxisMarks(position: .leading) }
+            .frame(minHeight: 260, idealHeight: 340, maxHeight: .infinity)
+            .layoutPriority(1)
+            .padding(.horizontal)
+            Text("Working volume per session (\(chartUnitLabel)) · main slots only")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    @ViewBuilder
+    private var repPRPlot: some View {
+        if repRecords.isEmpty {
+            ContentUnavailableView("No rep PRs", systemImage: "chart.line.uptrend.xyaxis")
+        } else {
+            Chart(repRecords) { record in
+                LineMark(x: .value("Reps", record.reps),
+                         y: .value("Weight", displayRepWeight(record.weightLb)))
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(Theme.accent)
+                PointMark(x: .value("Reps", record.reps),
+                          y: .value("Weight", displayRepWeight(record.weightLb)))
+                    .foregroundStyle(Theme.accent)
+            }
+            .chartYAxis { AxisMarks(position: .leading) }
+            .frame(minHeight: 240, idealHeight: 300, maxHeight: .infinity)
+            .layoutPriority(1)
+            Text("Best completed working set at each rep count")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(repRecords) { record in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(record.reps) rep\(record.reps == 1 ? "" : "s")")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Text((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: record.weightLb))
+                                .font(.callout.bold().monospacedDigit())
+                        }
+                        .padding(10)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
     }
 
     private var defaultLiftName: String {
