@@ -16,10 +16,17 @@ on:
         required: false
         default: false
         type: boolean
+      verify_signed_artifact:
+        description: Build, sign, seal, and cache the IPA without publishing it
+        required: false
+        default: false
+        type: boolean
 
-# Every main/workflow-dispatch run is a production release candidate. Queue the
-# complete workflow so no newer run can replace an older pending release after
-# it has spent time in validation. PR runs remain independent and parallel.
+# Queue every main/workflow-dispatch release candidate so a newer run cannot
+# replace one that has already spent time in validation. PR runs use a unique
+# group so a new head can start immediately; the first job then cancels older
+# runs for that PR through the Actions API. GitHub rejects queue:max combined
+# with cancel-in-progress:true, even when the latter is conditional.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}-{1}', github.event.pull_request.number, github.run_id) || 'cadence-production-release' }}
   queue: max
@@ -36,6 +43,10 @@ jobs:
   changes:
     name: Preflight + classify
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
     outputs:
       native: ${{ steps.paths.outputs.native }}
       migrations: ${{ steps.paths.outputs.migrations }}
@@ -45,6 +56,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Cancel stale runs for this PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          WORKFLOW_FILE: ci.yml
+          PR_HEAD_REF: ${{ github.head_ref }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          CURRENT_RUN_NUMBER: ${{ github.run_number }}
+        run: bash .github/scripts/cancel-stale-pr-runs.sh
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
@@ -69,9 +90,14 @@ jobs:
             -path web/node_modules -prune -o \
             -type f \( -name '*.js' -o -name '*.mjs' \) -print0)
 
+          ruby -c fastlane/Fastfile >/dev/null
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.parse_file(path) }' .github/workflows/*.yml
+
           test ! -e Cadence.xcodeproj
+          bash .github/scripts/test-cancel-stale-pr-runs.sh
           bash .github/scripts/test-classify-ci-paths.sh
           bash .github/scripts/test-ci-topology.sh
+          bash .github/scripts/test-fastlane-phases.sh
           bash .github/scripts/test-verify-native-jobs.sh
       - name: Classify changed paths
         id: paths
@@ -80,8 +106,14 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FULL_MIGRATIONS: ${{ inputs.full_migrations || 'false' }}
+          FORCE_TESTFLIGHT: ${{ inputs.force_testflight || 'false' }}
+          VERIFY_SIGNED_ARTIFACT: ${{ inputs.verify_signed_artifact || 'false' }}
         run: |
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$FORCE_TESTFLIGHT" == "true" && "$VERIFY_SIGNED_ARTIFACT" == "true" ]]; then
+              echo "force_testflight and verify_signed_artifact are mutually exclusive" >&2
+              exit 1
+            fi
             {
               echo "native=true"
               echo "migrations=$FULL_MIGRATIONS"
@@ -102,6 +134,7 @@ jobs:
     name: CadenceCore tests (Linux)
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     container: swift:5.10@sha256:ffc42e399ad0cad324f68d58f65e4d5f2c22eb9df73c4dfa249e898d497254b3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -129,6 +162,12 @@ jobs:
     name: Web tests (parity + smoke)
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      simulator-build-required: ${{ steps.release-plan.outputs.simulator-build-required }}
+      store-build-required: ${{ steps.release-plan.outputs.store-build-required }}
+      release-artifact-source: ${{ steps.release-plan.outputs.artifact-source }}
+      release-version: ${{ steps.release-plan.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -137,7 +176,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            .github/release/package-lock.json
       - name: Install pinned test deps
         working-directory: web
         run: npm ci
@@ -147,10 +188,21 @@ jobs:
       - name: Install pinned release parser
         working-directory: .github/release
         run: npm ci
-      - name: Verify semantic-version breaking markers
-        run: node .github/scripts/test-release-parser.mjs
+      - name: Verify release parsing and planning
+        run: |
+          node .github/scripts/test-release-parser.mjs
+          node .github/scripts/test-plan-release.mjs
       - name: Verify release-state recovery
         run: bash .github/scripts/test-reconcile-release-state.sh
+      - name: Fetch release history
+        if: github.ref == 'refs/heads/main'
+        run: git fetch --force --tags --prune --unshallow
+      - name: Plan release artifacts
+        id: release-plan
+        env:
+          RELEASE_CANDIDATE: ${{ github.ref == 'refs/heads/main' }}
+          VERIFY_SIGNED_ARTIFACT: ${{ inputs.verify_signed_artifact || 'false' }}
+        run: node .github/scripts/plan-release.mjs
 
   # The macOS jobs are the expensive tier, so they sit BEHIND the fast Linux
   # suites: a red core/web/parse failure costs zero macOS minutes, and every
@@ -158,14 +210,16 @@ jobs:
   # added green-path latency buys a strictly rising pass rate through the
   # pipeline. Workflow-only PRs still exercise the builds; docs/web-only PRs
   # do not spend macOS runner minutes.
-  # The simulator artifact is a release download, so build it on main where it
-  # is consumed. PRs compile the production device target below instead: it is
-  # both faster and the stricter pre-merge proof for the app users install.
+  # The simulator download and signed App Store IPA are release artifacts.
+  # Build them only when the pinned semantic-release analyzer finds a pending
+  # release. Already-tagged retries reuse the published IPA; docs:/ci:/test:
+  # pushes build nothing. PRs compile one unsigned production-device target.
   simulator-build:
     name: iOS Simulator build
     needs: [changes, core-tests, web-tests]
-    if: github.ref == 'refs/heads/main'
+    if: needs.web-tests.outputs.simulator-build-required == 'true'
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -194,18 +248,15 @@ jobs:
           path: dist/Cadence-simulator.app.zip
           if-no-files-found: error
 
-  # PRs compile one iOS target: the production device SDK. Its recent compile
-  # was materially faster than the simulator path and it catches device-only
-  # SDK, linker, architecture, and project-setting errors before merge. On main
-  # it also produces the unsigned release artifact.
+  # PRs compile one iOS target: the production device SDK. It catches
+  # device-only SDK, linker, architecture, and project-setting errors before
+  # merge. Main builds the signed distributable once in store-build instead.
   device-build:
     name: Unsigned device build
     needs: [changes, core-tests, web-tests]
-    if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.native == 'true'
     runs-on: macos-latest
-    concurrency:
-      group: ${{ github.event_name == 'pull_request' && format('device-pr-{0}', github.event.pull_request.number) || format('device-run-{0}', github.run_id) }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -238,6 +289,79 @@ jobs:
           path: dist/Cadence-unsigned.ipa
           if-no-files-found: error
 
+  # Build, sign, and seal the App Store IPA once. Semantic release and every
+  # publisher sit behind this job; TestFlight only downloads and promotes the
+  # immutable workflow artifact. Its SHA-256, version, bundle IDs, embedded
+  # widget, and code signatures are checked both here and before upload.
+  store-build:
+    name: Signed release artifact
+    needs: [changes, core-tests, web-tests]
+    if: needs.web-tests.outputs.store-build-required == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run unit tests (Darwin)
+        working-directory: CadenceCore
+        run: swift test
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+      - name: Select the latest stable Xcode
+        run: |
+          LATEST="$(python3 -c '
+          import glob, re
+          apps = [a for a in glob.glob("/Applications/Xcode_*.app")
+                  if not re.search(r"beta|release[_ .-]?candidate", a, re.I)]
+          def ver(a):
+              m = re.search(r"Xcode_([0-9][0-9.]*)", a)
+              return [int(x) for x in m.group(1).strip(".").split(".")] if m else [0]
+          print(max(apps, key=ver) if apps else "")
+          ')"
+          if [[ -z "$LATEST" ]]; then echo "No stable Xcode found on runner" >&2; exit 1; fi
+          echo "Selecting $LATEST"
+          sudo xcode-select --switch "$LATEST/Contents/Developer"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Build signed release artifact
+        env:
+          APP_VERSION: ${{ needs.web-tests.outputs.release-version }}
+          APP_IDENTIFIER: ${{ vars.APP_IDENTIFIER || 'com.madhakish.Cadence' }}
+          DEVELOPER_TEAM_ID: ${{ secrets.DEVELOPER_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_READONLY: ${{ vars.MATCH_READONLY }}
+        run: bundle exec fastlane build_beta
+      - name: Seal and verify signed release artifact
+        env:
+          EXPECTED_VERSION: ${{ needs.web-tests.outputs.release-version }}
+          APP_IDENTIFIER: ${{ vars.APP_IDENTIFIER || 'com.madhakish.Cadence' }}
+          IPA_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa
+          CHECKSUM_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa.sha256
+        run: |
+          (cd dist && shasum -a 256 Cadence-store.ipa > Cadence-store.ipa.sha256)
+          printf '%s\n' "$EXPECTED_VERSION" > dist/Cadence-store.version
+          bash .github/scripts/verify-release-artifact.sh
+      - name: Cache immutable signed artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Cadence-store
+          path: |
+            dist/Cadence-store.ipa
+            dist/Cadence-store.ipa.sha256
+            dist/Cadence-store.version
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+
   # Rebuilding three historical apps is the expensive safety proof. Run it
   # only when persistence can change, and cache the generic shipped stores by
   # immutable source lineage. Current app compilation remains mandatory above.
@@ -246,9 +370,7 @@ jobs:
     needs: [changes, core-tests, web-tests]
     if: needs.changes.outputs.migrations == 'true'
     runs-on: macos-latest
-    concurrency:
-      group: ${{ github.event_name == 'pull_request' && format('migrations-pr-{0}', github.event.pull_request.number) || format('migrations-run-{0}', github.run_id) }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -308,21 +430,26 @@ jobs:
   # macOS jobs to be split, parallel, and conditionally skipped.
   app-build:
     name: App build (macOS)
-    needs: [changes, simulator-build, device-build, migration-tests]
+    needs: [changes, core-tests, web-tests, simulator-build, device-build, store-build, migration-tests]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Verify required native jobs
+      - name: Verify required CI jobs
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
-          DEVICE_REQUIRED: ${{ needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main' }}
-          SIMULATOR_REQUIRED: ${{ github.ref == 'refs/heads/main' }}
+          CORE_RESULT: ${{ needs.core-tests.result }}
+          WEB_RESULT: ${{ needs.web-tests.result }}
+          DEVICE_REQUIRED: ${{ github.event_name == 'pull_request' && needs.changes.outputs.native == 'true' }}
+          SIMULATOR_REQUIRED: ${{ needs.web-tests.outputs.simulator-build-required == 'true' }}
+          STORE_REQUIRED: ${{ needs.web-tests.outputs.store-build-required == 'true' }}
           MIGRATIONS_REQUIRED: ${{ needs.changes.outputs.migrations == 'true' }}
           SIMULATOR_RESULT: ${{ needs.simulator-build.result }}
           DEVICE_RESULT: ${{ needs.device-build.result }}
+          STORE_RESULT: ${{ needs.store-build.result }}
           MIGRATION_RESULT: ${{ needs.migration-tests.result }}
         run: bash .github/scripts/verify-native-jobs.sh
 
@@ -338,8 +465,10 @@ jobs:
       needs.web-tests.result == 'success' &&
       needs.app-build.result == 'success' &&
       github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      !(github.event_name == 'workflow_dispatch' && inputs.verify_signed_artifact)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     concurrency:
       group: semantic-release
       queue: max
@@ -375,26 +504,28 @@ jobs:
           SEMANTIC_RELEASE_OUTCOME: ${{ steps.semantic-release-command.outcome }}
         run: bash .github/scripts/reconcile-release-state.sh
 
-  # GitHub release binaries are useful downloads but are not the signed app
-  # publishing path. Upload them independently with retries so an
-  # uploads.github.com outage can fail visibly without suppressing TestFlight.
+  # GitHub and TestFlight independently promote the same signed IPA. Neither
+  # publisher can rebuild it, and a GitHub upload outage cannot suppress the
+  # TestFlight promotion.
   release-assets:
     name: GitHub release assets
-    needs: release
+    needs: [release, web-tests, store-build]
     if: >-
       always() &&
       !cancelled() &&
       needs.release.outputs.published == 'true' &&
+      needs.web-tests.outputs.release-artifact-source == 'build' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - name: Download unsigned device artifact
+      - name: Download signed store artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: Cadence-device
+          name: Cadence-store
           path: dist
       - name: Download simulator artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -406,7 +537,12 @@ jobs:
           VERSION: ${{ needs.release.outputs.version }}
         run: |
           mkdir -p release-assets
-          cp dist/Cadence-unsigned.ipa "release-assets/Cadence-$VERSION-unsigned.ipa"
+          test "$(cat dist/Cadence-store.version)" = "$VERSION"
+          expected="$(awk 'NF { print $1; exit }' dist/Cadence-store.ipa.sha256)"
+          actual="$(shasum -a 256 dist/Cadence-store.ipa | awk '{ print $1 }')"
+          test "$actual" = "$expected"
+          cp dist/Cadence-store.ipa "release-assets/Cadence-$VERSION-store.ipa"
+          (cd release-assets && shasum -a 256 "Cadence-$VERSION-store.ipa" > "Cadence-$VERSION-store.ipa.sha256")
           cp dist/Cadence-simulator.app.zip "release-assets/Cadence-$VERSION-simulator.app.zip"
       - name: Upload GitHub release assets with retry
         env:
@@ -416,7 +552,8 @@ jobs:
         run: |
           for attempt in 1 2 3 4 5; do
             if gh release upload "$TAG" \
-              "release-assets/Cadence-${TAG#v}-unsigned.ipa#Unsigned device build (re-sign to sideload)" \
+              "release-assets/Cadence-${TAG#v}-store.ipa#App Store signed build (exact TestFlight artifact)" \
+              "release-assets/Cadence-${TAG#v}-store.ipa.sha256#SHA-256 for the promoted TestFlight artifact" \
               "release-assets/Cadence-${TAG#v}-simulator.app.zip#iOS Simulator app" \
               --clobber; then
               exit 0
@@ -431,15 +568,17 @@ jobs:
           exit 1
 
   testflight:
-    name: TestFlight (fastlane)
-    needs: release
+    name: TestFlight promotion
+    needs: [release, web-tests, store-build]
     if: >-
       always() &&
       !cancelled() &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      (needs.release.outputs.published == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_testflight))
+      ((needs.release.outputs.published == 'true' && needs.web-tests.outputs.release-artifact-source == 'build') ||
+       (github.event_name == 'workflow_dispatch' && inputs.force_testflight))
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -456,40 +595,45 @@ jobs:
             version="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.1.0)"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Download artifact built by this workflow
+        if: needs.web-tests.outputs.release-artifact-source == 'build'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Cadence-store
+          path: dist
+      - name: Download published artifact for explicit recovery
+        if: needs.web-tests.outputs.release-artifact-source != 'build'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          mkdir -p dist/recovery
+          gh release download "v$VERSION" \
+            --pattern "Cadence-$VERSION-store.ipa" \
+            --pattern "Cadence-$VERSION-store.ipa.sha256" \
+            --dir dist/recovery
+          cp "dist/recovery/Cadence-$VERSION-store.ipa" dist/Cadence-store.ipa
+          cp "dist/recovery/Cadence-$VERSION-store.ipa.sha256" dist/Cadence-store.ipa.sha256
+      - name: Verify immutable artifact before promotion
+        env:
+          EXPECTED_VERSION: ${{ steps.ver.outputs.version }}
+          APP_IDENTIFIER: ${{ vars.APP_IDENTIFIER || 'com.madhakish.Cadence' }}
+          IPA_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa
+          CHECKSUM_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa.sha256
+        run: bash .github/scripts/verify-release-artifact.sh
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
-      - name: Select the latest stable Xcode
-        run: |
-          LATEST="$(python3 -c '
-          import glob, re
-          apps = [a for a in glob.glob("/Applications/Xcode_*.app")
-                  if not re.search(r"beta|release[_ .-]?candidate", a, re.I)]
-          def ver(a):
-              m = re.search(r"Xcode_([0-9][0-9.]*)", a)
-              return [int(x) for x in m.group(1).strip(".").split(".")] if m else [0]
-          print(max(apps, key=ver) if apps else "")
-          ')"
-          if [[ -z "$LATEST" ]]; then echo "No stable Xcode found on runner" >&2; exit 1; fi
-          echo "Selecting $LATEST"
-          sudo xcode-select --switch "$LATEST/Contents/Developer"
-          xcodebuild -version
-      - name: Install XcodeGen
-        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
-      - name: Build & upload to TestFlight
+      - name: Promote cached artifact to TestFlight
         env:
-          APP_VERSION: ${{ steps.ver.outputs.version }}
-          APP_IDENTIFIER: ${{ vars.APP_IDENTIFIER }}
-          DEVELOPER_TEAM_ID: ${{ secrets.DEVELOPER_TEAM_ID }}
+          IPA_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa
+          APP_IDENTIFIER: ${{ vars.APP_IDENTIFIER || 'com.madhakish.Cadence' }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
-          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
-          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          MATCH_READONLY: ${{ vars.MATCH_READONLY }}
-        run: bundle exec fastlane beta
+        run: bundle exec fastlane upload_beta
 
   # Deploy Pages from the already-passing web test job instead of launching a
   # second workflow that repeats npm install and the entire test suite.
@@ -498,6 +642,7 @@ jobs:
     needs: [changes, web-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     concurrency:
       group: pages
       cancel-in-progress: true

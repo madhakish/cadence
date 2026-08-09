@@ -26,13 +26,23 @@ require_job_result() {
   esac
 }
 
-if [[ "${CHANGES_RESULT:-}" != "success" ]]; then
-  echo "preflight + classify must succeed, got '${CHANGES_RESULT:-unset}'" >&2
-  exit 1
-fi
+require_success() {
+  local label="$1"
+  local result="$2"
+
+  if [[ "$result" != "success" ]]; then
+    echo "$label must succeed, got '$result'" >&2
+    return 1
+  fi
+}
+
+require_success "preflight + classify" "${CHANGES_RESULT:-unset}"
+require_success "CadenceCore tests (Linux)" "${CORE_RESULT:-unset}"
+require_success "Web tests (parity + smoke)" "${WEB_RESULT:-unset}"
 
 require_job_result "unsigned device build" "${DEVICE_REQUIRED:-}" "${DEVICE_RESULT:-}"
 require_job_result "iOS Simulator build" "${SIMULATOR_REQUIRED:-}" "${SIMULATOR_RESULT:-}"
+require_job_result "signed release artifact" "${STORE_REQUIRED:-}" "${STORE_RESULT:-}"
 require_job_result "shipped-store migration tests" "${MIGRATIONS_REQUIRED:-}" "${MIGRATION_RESULT:-}"
 
-echo "Required native jobs passed"
+echo "Required CI jobs passed"

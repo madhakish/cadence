@@ -8,12 +8,16 @@ scenarios=0
 run_gate() {
   env \
     CHANGES_RESULT="$1" \
-    DEVICE_REQUIRED="$2" \
-    DEVICE_RESULT="$3" \
-    SIMULATOR_REQUIRED="$4" \
-    SIMULATOR_RESULT="$5" \
-    MIGRATIONS_REQUIRED="$6" \
-    MIGRATION_RESULT="$7" \
+    CORE_RESULT="$2" \
+    WEB_RESULT="$3" \
+    DEVICE_REQUIRED="$4" \
+    DEVICE_RESULT="$5" \
+    SIMULATOR_REQUIRED="$6" \
+    SIMULATOR_RESULT="$7" \
+    STORE_REQUIRED="$8" \
+    STORE_RESULT="$9" \
+    MIGRATIONS_REQUIRED="${10}" \
+    MIGRATION_RESULT="${11}" \
     bash "$gate"
 }
 
@@ -38,29 +42,39 @@ expect_fail() {
 }
 
 expect_pass "documentation PR" \
-  success false skipped false skipped false skipped
+  success success success false skipped false skipped false skipped false skipped
 expect_pass "native PR" \
-  success true success false skipped false skipped
+  success success success true success false skipped false skipped false skipped
 expect_pass "persistence PR" \
-  success true success false skipped true success
-expect_pass "main push" \
-  success true success true success false skipped
-expect_pass "full-migration main run" \
-  success true success true success true success
+  success success success true success false skipped false skipped true success
+expect_pass "non-release main push" \
+  success success success false skipped false skipped false skipped false skipped
+expect_pass "release-producing main push" \
+  success success success false skipped true success true success false skipped
+expect_pass "full-migration non-release dispatch" \
+  success success success false skipped false skipped false skipped true success
+expect_pass "full-migration release dispatch" \
+  success success success false skipped true success true success true success
 
 expect_fail "failed preflight" \
-  failure false skipped false skipped false skipped
+  failure success success false skipped false skipped false skipped false skipped
+expect_fail "failed core suite with no native work" \
+  success failure success false skipped false skipped false skipped false skipped
+expect_fail "failed web suite with no native work" \
+  success success failure false skipped false skipped false skipped false skipped
 expect_fail "required device build failed" \
-  success true failure false skipped false skipped
+  success success success true failure false skipped false skipped false skipped
 expect_fail "required device build skipped" \
-  success true skipped false skipped false skipped
+  success success success true skipped false skipped false skipped false skipped
 expect_fail "unexpected device build ran" \
-  success false success false skipped false skipped
+  success success success false success false skipped false skipped false skipped
 expect_fail "required simulator build failed" \
-  success true success true failure false skipped
+  success success success false skipped true failure true success false skipped
+expect_fail "required signed artifact skipped" \
+  success success success false skipped true success true skipped false skipped
 expect_fail "required migration tests skipped" \
-  success true success false skipped true skipped
+  success success success false skipped false skipped false skipped true skipped
 expect_fail "invalid requirement value" \
-  success required success false skipped false skipped
+  success success success required success false skipped false skipped false skipped
 
-echo "Native job aggregate contract tests passed ($scenarios scenarios)"
+echo "CI job aggregate contract tests passed ($scenarios scenarios)"
