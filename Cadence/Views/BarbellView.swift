@@ -7,6 +7,11 @@ import CadenceCore
 /// denominations; the bar is chosen separately (most bars are 45 lb whichever
 /// plates you load).
 struct BarbellView: View {
+    enum Presentation: Equatable {
+        case compactSide
+        case fullBar
+    }
+
     let weightLb: Double
     let unit: WeightUnit
     let bar: Bar
@@ -21,6 +26,10 @@ struct BarbellView: View {
     /// The lift's station plate denomination (v8): the deadlift platform by
     /// the window stocks only kg plates. nil = the gym inventory.
     var stationDenomination: WeightUnit? = nil
+    /// Compact set rows need one side only. The calculator has room to show
+    /// the complete, mirrored bar so the loading answer cannot be mistaken for
+    /// a count across both sides.
+    var presentation: Presentation = .compactSide
 
     private static let fill: [String: Color] = [
         "red": Color(hex: 0xD23B3B), "blue": Color(hex: 0x2F6FED), "green": Color(hex: 0x1FAA52),
@@ -69,29 +78,74 @@ struct BarbellView: View {
         }
 
         VStack(alignment: .leading, spacing: 2) {
-            Canvas { ctx, _ in
-                let h = Self.height
-                // bar shaft + sleeve face
-                ctx.fill(Path(roundedRect: CGRect(x: 0, y: h / 2 - 1.5, width: Self.sleeve + 4, height: 3), cornerRadius: 1.5),
-                         with: .color(Color(hex: 0x9AA0AA)))
-                ctx.fill(Path(roundedRect: CGRect(x: Self.sleeve, y: h / 2 - 6, width: 3, height: 12), cornerRadius: 1),
-                         with: .color(Color(hex: 0x7C828C)))
+            Canvas { ctx, size in
+                let h = presentation == .fullBar ? size.height : Self.height
+                if presentation == .fullBar {
+                    let width = max(240, size.width)
+                    let midY = h / 2
+                    let shoulder = min(82, max(62, width * 0.24))
+                    let rightShoulder = width - shoulder
+                    ctx.fill(Path(roundedRect: CGRect(x: 8, y: midY - 2, width: width - 16, height: 4), cornerRadius: 2),
+                             with: .color(Color(hex: 0x9AA0AA)))
+                    ctx.fill(Path(roundedRect: CGRect(x: 8, y: midY - 3, width: shoulder - 8, height: 6), cornerRadius: 2),
+                             with: .color(Color(hex: 0x7C828C)))
+                    ctx.fill(Path(roundedRect: CGRect(x: rightShoulder, y: midY - 3, width: shoulder - 8, height: 6), cornerRadius: 2),
+                             with: .color(Color(hex: 0x7C828C)))
+                    ctx.fill(Path(roundedRect: CGRect(x: shoulder - 2, y: midY - 9, width: 4, height: 18), cornerRadius: 1),
+                             with: .color(Color(hex: 0x666C75)))
+                    ctx.fill(Path(roundedRect: CGRect(x: rightShoulder - 2, y: midY - 9, width: 4, height: 18), cornerRadius: 1),
+                             with: .color(Color(hex: 0x666C75)))
 
-                var x = Self.sleeve + 5
-                for plate in plates {
-                    let tok = plate.colorToken
-                    let ph = (h - 4) * CGFloat(plate.sizeFactor)
-                    let rect = Path(roundedRect: CGRect(x: x, y: (h - ph) / 2, width: Self.plateW, height: ph), cornerRadius: 1.5)
-                    ctx.fill(rect, with: .color(Self.fill[tok] ?? Color(hex: 0x888888)))
-                    ctx.stroke(rect, with: .color(Self.stroke[tok] ?? .black.opacity(0.3)), lineWidth: 0.75)
-                    x += Self.plateW + Self.gap
-                }
-                if plates.isEmpty {
-                    ctx.draw(Text("bar only").font(.system(size: 10)).foregroundStyle(.secondary),
-                             at: CGPoint(x: Self.sleeve + 7, y: h / 2), anchor: .leading)
+                    let available = max(30, shoulder - 16)
+                    let nominal = CGFloat(plates.count) * (Self.plateW + Self.gap)
+                    let scale = nominal > 0 ? min(1, available / nominal) : 1
+                    let plateWidth = max(3.5, Self.plateW * scale)
+                    let gap = max(0.8, Self.gap * scale)
+                    var leftX = shoulder - 6 - plateWidth
+                    var rightX = rightShoulder + 6
+                    for plate in plates {
+                        let tok = plate.colorToken
+                        let plateHeight = (h - 6) * CGFloat(plate.sizeFactor)
+                        let left = Path(roundedRect: CGRect(x: leftX, y: (h - plateHeight) / 2,
+                                                           width: plateWidth, height: plateHeight), cornerRadius: 1.5)
+                        let right = Path(roundedRect: CGRect(x: rightX, y: (h - plateHeight) / 2,
+                                                            width: plateWidth, height: plateHeight), cornerRadius: 1.5)
+                        let fill = Self.fill[tok] ?? Color(hex: 0x888888)
+                        let stroke = Self.stroke[tok] ?? .black.opacity(0.3)
+                        ctx.fill(left, with: .color(fill)); ctx.stroke(left, with: .color(stroke), lineWidth: 0.75)
+                        ctx.fill(right, with: .color(fill)); ctx.stroke(right, with: .color(stroke), lineWidth: 0.75)
+                        leftX -= plateWidth + gap
+                        rightX += plateWidth + gap
+                    }
+                    if plates.isEmpty {
+                        ctx.draw(Text("bar only").font(.system(size: 10)).foregroundStyle(.secondary),
+                                 at: CGPoint(x: width / 2, y: midY - 9), anchor: .center)
+                    }
+                } else {
+                    // bar shaft + sleeve face
+                    ctx.fill(Path(roundedRect: CGRect(x: 0, y: h / 2 - 1.5, width: Self.sleeve + 4, height: 3), cornerRadius: 1.5),
+                             with: .color(Color(hex: 0x9AA0AA)))
+                    ctx.fill(Path(roundedRect: CGRect(x: Self.sleeve, y: h / 2 - 6, width: 3, height: 12), cornerRadius: 1),
+                             with: .color(Color(hex: 0x7C828C)))
+
+                    var x = Self.sleeve + 5
+                    for plate in plates {
+                        let tok = plate.colorToken
+                        let ph = (h - 4) * CGFloat(plate.sizeFactor)
+                        let rect = Path(roundedRect: CGRect(x: x, y: (h - ph) / 2, width: Self.plateW, height: ph), cornerRadius: 1.5)
+                        ctx.fill(rect, with: .color(Self.fill[tok] ?? Color(hex: 0x888888)))
+                        ctx.stroke(rect, with: .color(Self.stroke[tok] ?? .black.opacity(0.3)), lineWidth: 0.75)
+                        x += Self.plateW + Self.gap
+                    }
+                    if plates.isEmpty {
+                        ctx.draw(Text("bar only").font(.system(size: 10)).foregroundStyle(.secondary),
+                                 at: CGPoint(x: Self.sleeve + 7, y: h / 2), anchor: .leading)
+                    }
                 }
             }
-            .frame(width: width, height: Self.height)
+            .frame(width: presentation == .compactSide ? width : nil,
+                   height: presentation == .compactSide ? Self.height : 64)
+            .frame(maxWidth: presentation == .fullBar ? .infinity : nil)
 
             if solution.isOffTarget {
                 let total = unit == .kg ? Weight.kg(fromLb: solution.loadout.totalLb) : solution.loadout.totalLb

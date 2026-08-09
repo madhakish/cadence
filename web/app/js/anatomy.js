@@ -277,7 +277,7 @@ const poly = (points, fill, stroke, opacity) => {
 /// supporting blue, everything else neutral outline.
 export function figureSVG(profile) {
   const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", "0 0 210 220");
+  svg.setAttribute("viewBox", "0 0 210 238");
   svg.setAttribute("class", "anatomy");
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label", profile ? muscleBlurb(profile) : "Body diagram");
@@ -295,5 +295,38 @@ export function figureSVG(profile) {
     }
     svg.append(g);
   }
+  for (const [label, x] of [["Front", 50], ["Back", 155]]) {
+    const text = document.createElementNS(NS, "text");
+    text.setAttribute("class", "anatomy-view-label");
+    text.setAttribute("x", String(x));
+    text.setAttribute("y", "234");
+    text.setAttribute("text-anchor", "middle");
+    text.textContent = label;
+    svg.append(text);
+  }
   return svg;
+}
+
+/// Visible muscle grouping for the exercise detail. The body colours are much
+/// faster to scan when their exact names sit beside the same colour key.
+export function muscleLegend(profile) {
+  const wrap = document.createElement("div");
+  wrap.className = "anatomy-legend";
+  if (!profile) return wrap;
+  const row = (role, ids) => {
+    const line = document.createElement("div");
+    line.className = `muscle-key ${role}`;
+    line.dataset.role = role;
+    const dot = document.createElement("i");
+    dot.setAttribute("aria-hidden", "true");
+    const label = document.createElement("strong");
+    label.textContent = role === "primary" ? "Primary" : "Supporting";
+    const names = document.createElement("span");
+    names.textContent = ids.map((id) => MUSCLE_NAMES[id] || id).join(", ");
+    line.append(dot, label, names);
+    return line;
+  };
+  wrap.append(row("primary", profile.primary));
+  if (profile.secondary.length) wrap.append(row("supporting", profile.secondary));
+  return wrap;
 }

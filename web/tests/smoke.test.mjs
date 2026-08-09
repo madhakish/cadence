@@ -37,6 +37,21 @@ const completeAll = async (workout) => {
 };
 
 {
+  const adjusted = history.historySetPresentationForTest({
+    weightLb: 215, reps: 3, plannedWeightLb: 225, plannedReps: 5,
+    status: "completed", isWarmup: false, isPerSide: false, prescriptionBlock: "work",
+  }, "barbell");
+  ok(adjusted.actual.includes("215") && adjusted.planned?.includes("225") && adjusted.planned.includes("5"),
+    "completed-history rows keep performed work primary and expose a changed prescription");
+  const unchanged = history.historySetPresentationForTest({
+    weightLb: 225, reps: 5, plannedWeightLb: 225, plannedReps: 5,
+    status: "completed", isWarmup: false, isPerSide: false, prescriptionBlock: "amrap",
+  }, "barbell");
+  ok(unchanged.planned === null && unchanged.kind === "AMRAP",
+    "unchanged history stays terse while preserving the set's prescription kind");
+}
+
+{
   const program = { id: "temporary-program", cycleNumber: 2, currentWeek: 3 };
   const decision = { programId: program.id, action: "accepted", date: new Date().toISOString(),
     afterValue: coach.temporaryAccessoryValue(75, 2, 3) };
@@ -129,6 +144,12 @@ for (const track of [
     "nonempty all-disabled inventory remains an intentional bar-only rack");
   ok(barbell.stationPlates("lb", barOnlyRack).length === 0,
     "bar-only intent survives in the loadout renderer");
+  const fullBar = barbell.barbellSVG(135, "lb", C.BARS.bar45lb, legacyRack, null, null, "full").svg;
+  ok(fullBar.classList.contains("full") && fullBar.querySelectorAll("rect").length > 6,
+    "plate calculator can render the solved load across the complete mirrored bar");
+  const fullPlateRects = [...fullBar.querySelectorAll("rect")].filter((rect) => rect.getAttribute("stroke"));
+  ok(fullPlateRects.length > 0 && fullPlateRects.length % 2 === 0,
+    "every solved plate is drawn once on each side");
   await db.Gyms.save(legacyRack);
   await db.syncLibrary();
   ok((await db.Gyms.default()).plateToggles.length === C.ALL_STANDARD.length,
@@ -2683,6 +2704,12 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(svg.querySelectorAll("polygon").length > 30, "figure renders silhouette + regions for both views");
   ok(svg.querySelectorAll('polygon[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
   ok(svg.querySelectorAll('polygon[fill="#3a7bd5"]').length >= 1, "supporting muscles highlighted blue");
+  ok([...svg.querySelectorAll("text.anatomy-view-label")].map((node) => node.textContent).join("/") === "Front/Back",
+    "the two anatomical views identify their orientation");
+  const legend = A.muscleLegend(A.muscleProfile("Overhead Press", "press"));
+  ok(legend.querySelector('[data-role="primary"]')?.textContent.includes("Shoulders, Triceps")
+    && legend.querySelector('[data-role="supporting"]')?.textContent.includes("Traps, Abs"),
+    "the visual key names the exact primary and supporting muscle groups");
 }
 
 // ---- program: a cycle-scoped swap reverts at rollover (issue 20) ----
@@ -3013,6 +3040,20 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok([...chart.querySelectorAll(".chart-legend span")].length === 4, "every series is named in the legend");
   const empty = progressionChart({ lines: [{ key: "x", points: [] }], bars: null });
   ok(empty.querySelectorAll("path.line").length === 0, "an empty series renders nothing rather than throwing");
+
+  let selected = null;
+  const selectable = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: main }],
+    onSelect: (point) => { selected = point; },
+  });
+  const hit = selectable.querySelector("circle.chart-hit");
+  ok(hit && +hit.getAttribute("r") >= 14,
+    "chart points keep a thumb-sized hit target without inflating the visible mark");
+  hit?.dispatchEvent(new window.Event("click"));
+  ok(selected === main[0] && hit?.getAttribute("aria-pressed") === "true",
+    "selecting a chart point reports the exact record and exposes selected state");
+  ok(selectable.querySelector("line.selection-line") && selectable.querySelector("circle.selection-halo"),
+    "selection remains visible on the chart instead of changing only the detail text");
 
   // ---- the projected trend, drawn past today ----
   // The forecast shares the load axis with the history it continues, but must

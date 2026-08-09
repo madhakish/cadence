@@ -42,15 +42,48 @@ export function prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, s
 // Pass `preSolved` to DRAW an existing solution (or user-entered stack) instead
 // of re-solving — the plate calculator's hero must match its own answer, which
 // may span both unit systems.
-export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDenomination = null) {
+export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDenomination = null, presentation = "compact") {
   const solution = preSolved || C.solve(weightLb, bar, stationPlates(unit, gym, stationDenomination), 10,
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
   const plates = [];
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);
 
+  if (presentation === "full") {
+    const W = 340, H = 64, midY = H / 2, shoulder = 78, rightShoulder = W - shoulder;
+    const svg = el("svg", { class: "barbell full", viewBox: `0 0 ${W} ${H}`,
+      role: "img", "aria-label": `Barbell: ${C.perSideLabel(solution.perSide)} per side on ${C.barLabel(bar)}` });
+    svg.append(el("rect", { x: 8, y: midY - 2, width: W - 16, height: 4, rx: 2, fill: "#9aa0aa" }));
+    svg.append(el("rect", { x: 8, y: midY - 3, width: shoulder - 8, height: 6, rx: 2, fill: "#7c828c" }));
+    svg.append(el("rect", { x: rightShoulder, y: midY - 3, width: shoulder - 8, height: 6, rx: 2, fill: "#7c828c" }));
+    svg.append(el("rect", { x: shoulder - 2, y: midY - 9, width: 4, height: 18, rx: 1, fill: "#666c75" }));
+    svg.append(el("rect", { x: rightShoulder - 2, y: midY - 9, width: 4, height: 18, rx: 1, fill: "#666c75" }));
+
+    const available = shoulder - 16;
+    const scale = plates.length ? Math.min(1, available / (plates.length * (7 + 1.5))) : 1;
+    const plateW = Math.max(3.5, 7 * scale), gap = Math.max(0.8, 1.5 * scale);
+    let leftX = shoulder - 6 - plateW, rightX = rightShoulder + 6;
+    for (const p of plates) {
+      const tok = C.plateColorToken(p);
+      const h = (H - 6) * C.plateSizeFactor(p);
+      for (const x of [leftX, rightX]) svg.append(el("rect", {
+        x, y: (H - h) / 2, width: plateW, height: h, rx: 1.5,
+        fill: FILL[tok] || "#888", stroke: STROKE[tok] || "rgba(0,0,0,0.3)", "stroke-width": 0.75,
+      }));
+      leftX -= plateW + gap;
+      rightX += plateW + gap;
+    }
+    if (!plates.length) {
+      const t = el("text", { x: W / 2, y: midY - 9, fill: "#98989f", "font-size": "10", "text-anchor": "middle" });
+      t.textContent = "bar only";
+      svg.append(t);
+    }
+    return { svg, solution, bar };
+  }
+
   const H = 30, plateW = 7, gap = 1.5, sleeve = 18;
   const W = Math.max(plates.length ? 46 : 74, sleeve + 6 + plates.length * (plateW + gap) + 4); // bar-only needs room for its label
-  const svg = el("svg", { class: "barbell", viewBox: `0 0 ${W} ${H}`, height: H, preserveAspectRatio: "xMinYMid meet", role: "img" });
+  const svg = el("svg", { class: "barbell", viewBox: `0 0 ${W} ${H}`, height: H, preserveAspectRatio: "xMinYMid meet", role: "img",
+    "aria-label": `Barbell: ${C.perSideLabel(solution.perSide)} per side on ${C.barLabel(bar)}` });
 
   // bar shaft + sleeve face
   svg.append(el("rect", { x: 0, y: H / 2 - 1.5, width: sleeve + 4, height: 3, rx: 1.5, fill: "#9aa0aa" }));

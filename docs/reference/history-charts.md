@@ -113,3 +113,19 @@ a tonnage axis has no meaningful load target.
 Below the chart: the heaviest completed set at each rep count from 1 to 12.
 This is a lifetime best per rep, not a per-session series, so it never
 moves down.
+
+## Inspecting a point
+
+Tap or drag across the plot to select an exposure. The selected date stays
+marked on the chart and the detail line reports its performed weight, reps,
+estimated 1RM, program role, and rotation. Web points use a larger invisible
+touch target than the dot they draw, so making the chart finger-friendly does
+not turn the data marks into blobs.
+
+## Completed-session detail
+
+Opening a session starts with the work-set count, performed volume, and honest
+elapsed time when completion timestamps exist. Each exercise names its top set
+and volume. Set rows lead with what was actually performed; the original plan
+appears underneath only when load, reps, or duration changed. Skipped and
+unperformed sets say so explicitly, and AMRAP rep floors retain the `+`.

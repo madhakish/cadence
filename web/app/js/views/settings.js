@@ -6,7 +6,7 @@ import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
 import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
-import { muscleProfile, muscleBlurb, figureSVG } from "../anatomy.js";
+import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
 import { Sessions } from "../db.js";
 
 // Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
@@ -900,8 +900,8 @@ function exerciseDetail(e) {
         if (profile) {
           const svg = figureSVG(profile);
           svg.style.maxWidth = "280px"; svg.style.width = "100%";
-          body.append(ui.h("div", { class: "card", style: { textAlign: "center", padding: "12px" } },
-            svg, ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: muscleBlurb(profile) })));
+          body.append(ui.h("div", { class: "card anatomy-card" },
+            ui.h("div", { class: "section-title", text: "Muscles" }), svg, muscleLegend(profile)));
         }
         const insightWrap = ui.h("div", {});
         body.append(insightWrap);

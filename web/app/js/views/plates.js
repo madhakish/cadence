@@ -58,7 +58,9 @@ export async function openPlateCalculator() {
           // The answer, drawn: the loaded bar itself, big — the SAME solution
           // as the list below (which may pick the other unit system).
           if (targetLb > 0) {
-            out.append(ui.h("div", { class: "barbell-hero" }, barbellSVG(targetLb, unit, bar, gym, sol).svg));
+            out.append(ui.h("div", { class: "barbell-hero full" },
+              barbellSVG(targetLb, unit, bar, gym, sol, null, "full").svg,
+              ui.h("div", { class: "sub centered", text: "Same stack on both sides" })));
           }
           out.append(ui.h("div", { class: "section-title", text: "Per side" }));
           if (!sol.perSide.length) out.append(ui.h("div", { class: "big", text: "Bar only" }));
@@ -94,7 +96,8 @@ export async function openPlateCalculator() {
           const totalLb = C.totalOnBar(bar, perSide, collarLb);
           // Draw exactly what the user says is on the bar — never re-solve it.
           ui.clear(hero);
-          hero.append(barbellSVG(totalLb, "lb", bar, gym, { perSide, totalLb, collarLb }).svg);
+          hero.append(barbellSVG(totalLb, "lb", bar, gym, { perSide, totalLb, collarLb }, null, "full").svg,
+            ui.h("div", { class: "sub centered", text: "Counts are per side and mirrored" }));
           total.textContent = C.both(totalLb);
           sub.textContent = `total on ${C.barLabel(bar)}${collarLb ? ` + ${C.trim(collarLb)} lb collars` : ""}`;
         };

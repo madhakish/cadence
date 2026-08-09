@@ -12,11 +12,38 @@ struct AnatomyFigureView: View {
     private static let secondaryColor = Color(red: 0.227, green: 0.482, blue: 0.835) // #3a7bd5
 
     var body: some View {
-        HStack(spacing: 10) {
-            figure(view: "front")
-            figure(view: "back")
+        VStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                labeledFigure(view: "front", label: "Front")
+                labeledFigure(view: "back", label: "Back")
+            }
+            muscleLine("Primary", ids: profile.primary, color: Self.primaryColor)
+            if !profile.secondary.isEmpty {
+                muscleLine("Supporting", ids: profile.secondary, color: Self.secondaryColor)
+            }
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(AnatomyData.blurb(profile))
+    }
+
+    private func labeledFigure(view: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            figure(view: view)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func muscleLine(_ label: String, ids: [String], color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label).fontWeight(.semibold)
+            Text(ids.map { AnatomyData.muscleNames[$0] ?? $0 }.joined(separator: ", "))
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func figure(view: String) -> some View {

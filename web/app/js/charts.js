@@ -104,6 +104,8 @@ export function progressionChart({
   const wrap = document.createElement("div");
   const svg = el("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img" });
   wrap.append(svg);
+  const selectionLayer = el("g", { class: "chart-selected" });
+  let selectedHit = null;
 
   const drawn = lines.filter((l) => l.points && l.points.length);
   const barPoints = bars?.points?.filter((p) => Number.isFinite(p.y)) || [];
@@ -195,16 +197,34 @@ export function progressionChart({
       style: `stroke:${stroke}${line.dash ? `;stroke-dasharray:${line.dash}` : ""}`,
     }));
     for (const p of pts) {
-      const dot = el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y), r: onSelect ? 5 : (pts.length > 30 ? 1.6 : 2.6),
-        style: `fill:${stroke}`, ...(onSelect ? { tabindex: 0, role: "button" } : {}) });
-      if (onSelect) {
-        dot.setAttribute("aria-label", `Select ${tick(p.t)}, ${fmtY(p.y)}`);
-        dot.addEventListener("click", () => onSelect(p));
-        dot.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(p); }
-        });
-      }
+      const dot = el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y),
+        r: pts.length > 30 ? 1.6 : 2.8, style: `fill:${stroke}` });
       svg.append(dot);
+      if (onSelect) {
+        // The visible dot stays precise; a separate transparent 28-point
+        // target makes the chart usable with a thumb without turning every
+        // data mark into a giant blob. Selection is also drawn on the chart,
+        // rather than changing only a sentence below it.
+        const hit = el("circle", { class: "chart-hit", cx: xAt(p.t), cy: yAt(p.y), r: 14,
+          fill: "transparent", tabindex: 0, role: "button", "aria-pressed": "false",
+          "aria-label": `Select ${tick(p.t)}, ${fmtY(p.y)}` });
+        const select = () => {
+          if (selectedHit) selectedHit.setAttribute("aria-pressed", "false");
+          selectedHit = hit;
+          hit.setAttribute("aria-pressed", "true");
+          selectionLayer.replaceChildren(
+            el("line", { class: "selection-line", x1: xAt(p.t), y1: padT,
+              x2: xAt(p.t), y2: baseline }),
+            el("circle", { class: "selection-halo", cx: xAt(p.t), cy: yAt(p.y), r: 7 }),
+          );
+          onSelect(p);
+        };
+        hit.addEventListener("click", select);
+        hit.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(); }
+        });
+        svg.append(hit);
+      }
     }
   }
 
@@ -226,6 +246,7 @@ export function progressionChart({
     svg.append(el("line", { class: "now-line", x1: x, y1: padT, x2: x, y2: baseline }));
     svg.append(el("text", { class: "now-lbl", x: x + 3, y: padT + 8 }, "today"));
   }
+  if (onSelect) svg.append(selectionLayer);
 
   svg.append(el("text", { class: "lbl", x: padL, y: H - 6 }, tick(tmin)));
   if (tmax > tmin) svg.append(el("text", { class: "lbl", x: W - padR, y: H - 6, "text-anchor": "end" }, tick(tmax)));
