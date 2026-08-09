@@ -10,6 +10,9 @@ struct ProgramOverviewView: View {
     @Query private var programs: [Program]
     @Query private var exercises: [Exercise]
     @Query private var settingsList: [AppSettings]
+    @Query private var gyms: [Gym]
+    @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted })
+    private var completedSessions: [WorkoutSession]
 
     @State private var showCreator = false
     @State private var showImporter = false
@@ -131,9 +134,14 @@ struct ProgramOverviewView: View {
     }
 
     private func plan(_ program: Program, _ lift: ProgramLift, _ exercise: Exercise?) -> SessionPlan {
-        ProgramEngine.programPlan(
+        // "next" shows the honest plan (planningBase) beside the stored base,
+        // so the overview and the Today card can never quote different numbers.
+        return ProgramEngine.programPlan(
             for: CycleState(
-                cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb,
+                cycleNumber: program.cycleNumber,
+                baseWeightLb: ProgramSession.planningBase(
+                    for: lift, exercise: exercise, program: program, sessions: completedSessions
+                ),
                 nextPhase: CyclePhase(rawValue: program.currentWeek) ?? .volume, incrementLb: 0
             ),
             programRoundingLb: program.roundingLb,

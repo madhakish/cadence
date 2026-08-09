@@ -644,7 +644,10 @@ async function programDayEditor(p, day) {
             ui.h("div", { class: "row" }, ui.h("span", { text: ({
               maxEffort: "Current target", dynamicEffort: "Wave step-1 base", fiveThreeOne: "Training max",
             })[C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus)] || "Rotation-1 base" }),
-              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; await Programs.save(p); refresh(); } })),
+              // A hand-set base is its own truth: clearing the last earned
+              // increment switches off the honest-base repair (planningBase)
+              // for this slot until the next machine advance re-earns it.
+              ui.stepper(l.baseWeightLb, { min: 0, max: 1000, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.baseWeightLb = v; l.lastIncrementLb = 0; await Programs.save(p); refresh(); } })),
             l.prescription === "offsetWave" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Load / peak offsets" }),
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.loadOffsetLb ?? 0, { min: 0, max: 100, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.loadOffsetLb = v; await Programs.save(p); refresh(); } }),

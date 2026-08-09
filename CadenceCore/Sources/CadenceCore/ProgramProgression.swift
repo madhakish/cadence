@@ -597,10 +597,61 @@ public enum ProgramProgression {
         stallCount > 0 && stalledRank >= 0 && stalledRank < maximumAddedSetsPerRotation ? 1 : 0
     }
 
+    /// The base a cycle is honestly planned from: the stored base, repaired
+    /// upward when the log proves the last earned advance failed to clear
+    /// what was actually lifted.
+    ///
+    /// The trap is an advance computed in LABEL space: 215 + 10 = 225, but in
+    /// a kg rack both numbers solve to the identical 2×20 kg stack — the
+    /// label moved and the plates did not, and the lifter repeats the same
+    /// bar for a third cycle while the app reports progress. The honest base
+    /// is the canonical label of the last performed volume exposure plus the
+    /// increment that advance earned: label(221.4) + 10 = 235, whose kg twin
+    /// stack (232.4) is finally a heavier bar.
+    ///
+    /// Guards, in order:
+    /// - `lastIncrementLb > 0` — only a machine-earned advance is repaired;
+    ///   holds, deloads, and hand-set bases are their own truth.
+    /// - The RAW performed weight must clear the pre-advance base
+    ///   (`base − lastIncrement`) past the half-step grading tolerance. Raw,
+    ///   before labeling, so the label cannot manufacture the very margin it
+    ///   is being tested for. This is also what keeps a clean lifter
+    ///   untouched — their pre-advance exposure IS the pre-advance base.
+    /// - The RAW performed weight must sit within one increment above the
+    ///   stored base: further out is not the label-advance artifact — it is
+    ///   a hand-set base (possibly from before the editors cleared the flag)
+    ///   or off-program heavy work, and both are left alone.
+    /// - Capped at one increment above the stored base and floored at the
+    ///   stored base. The floor is LOAD-BEARING: performedLabel can sit
+    ///   below the raw mass (small kg plates outweigh their labels), so
+    ///   without it a label deficit could drag the plan under the base.
+    ///
+    /// `lastVolumePerformedLb` is the lift's most recent completed
+    /// volume-rotation working weight from a cycle BEFORE the one being
+    /// planned (callers scope the evidence; the current cycle's own exposure
+    /// must never feed the repair that produced its plan); zero means no
+    /// evidence and the stored base stands.
+    /// Mirrored 1:1 in web/app/js/core.js `honestBase`.
+    public static func honestBase(
+        baseWeightLb: Double, lastIncrementLb: Double, lastVolumePerformedLb: Double,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb, barLb: Double = 45
+    ) -> Double {
+        guard baseWeightLb > 0, lastIncrementLb > 0, lastVolumePerformedLb > 0 else {
+            return baseWeightLb
+        }
+        guard lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2,
+              lastVolumePerformedLb <= baseWeightLb + lastIncrementLb + roundingLb / 2 else {
+            return baseWeightLb
+        }
+        let label = PlateMath.performedLabel(lastVolumePerformedLb, barLb: barLb, roundingLb: roundingLb)
+        return Swift.max(baseWeightLb, Swift.min(label + lastIncrementLb, baseWeightLb + lastIncrementLb))
+    }
+
     public static func advanceCycleLift(
         _ state: ProgramLiftState, perf: CycleLiftPerformance, focus: TrainingFocus,
         roundingLb: Double = ProgramEngine.defaultRoundingLb,
-        regime: ProgressionRegime = .standard, volumeFallback: Bool = false
+        regime: ProgressionRegime = .standard, volumeFallback: Bool = false,
+        performedVolumeLb: Double = 0
     ) -> ProgressionResult {
         let grade = gradeCycle(perf)
         let estimatedMaxLb = smoothedMax(state, perf: perf)
@@ -632,6 +683,16 @@ public enum ProgramProgression {
                     state.baseWeightLb * (perf.topSetWeightLb / perf.plannedTopWeightLb)
                 )
             }
+            // The volume rotation is where the lifter actually trains the
+            // base, and a rack can land it off the stored label in either
+            // denomination. Advancing from its canonical performed label
+            // (callers pass it through PlateMath.performedLabel) resyncs a
+            // base the prescription-time honestBase repair has been carrying,
+            // so stall and deload math stop operating on a stale number.
+            // Never downward: lighter volume work already failed the grade.
+            if performedVolumeLb > advancedFrom + roundingLb / 2 {
+                advancedFrom = performedVolumeLb
+            }
             next.baseWeightLb = advancedFrom + inc
             next.lastIncrementLb = inc
             if advancedFrom > state.baseWeightLb {
@@ -644,6 +705,18 @@ public enum ProgramProgression {
         } else {
             next.stallCount = state.stallCount + 1
             next.lastIncrementLb = 0
+            // Holding means "repeat the weight the cycle actually ran", and
+            // the volume rotation is where that weight lives. A cycle
+            // carried by the honest-base repair banked its volume work above
+            // the stored label; without this resync, zeroing lastIncrementLb
+            // would disarm the repair while the stale base persists, and the
+            // next cycle would re-prescribe the very plates the repair
+            // existed to move past. Only upward, only from completed volume
+            // work (lighter volume never clears the guard), and the deload
+            // math below then operates on the real number.
+            if performedVolumeLb > next.baseWeightLb + roundingLb / 2 {
+                next.baseWeightLb = performedVolumeLb
+            }
             if next.stallCount >= stallLimit {
                 let old = next.baseWeightLb
                 next.baseWeightLb = Weight.round(old * deloadRebuildFraction, to: roundingLb)
@@ -765,7 +838,8 @@ public enum ProgramProgression {
         _ state: ProgramLiftState, perf: CycleLiftPerformance, focus: TrainingFocus,
         style: PrescriptionStyle, movementGroup: String?,
         roundingLb: Double = ProgramEngine.defaultRoundingLb,
-        regime: ProgressionRegime = .standard, volumeFallback: Bool = false
+        regime: ProgressionRegime = .standard, volumeFallback: Bool = false,
+        performedVolumeLb: Double = 0
     ) -> ProgressionResult {
         let lower = movementGroup == "squat" || movementGroup == "hinge"
         let increment = lower ? 10.0 : 5.0
@@ -839,7 +913,8 @@ public enum ProgramProgression {
             )
         default:
             return advanceCycleLift(state, perf: perf, focus: focus, roundingLb: roundingLb,
-                                    regime: regime, volumeFallback: volumeFallback)
+                                    regime: regime, volumeFallback: volumeFallback,
+                                    performedVolumeLb: performedVolumeLb)
         }
     }
 

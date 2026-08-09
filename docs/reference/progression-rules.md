@@ -141,7 +141,40 @@ Notes:
   increment lands on what the bar actually carried
   ([INV-PROGRESSION-RIDES-PERFORMED](invariants.md)). Below plan already
   fails the grade, so the ratio can never move the base down, and a
-  performance with no recorded plan advances exactly as before.
+  performance with no recorded plan advances exactly as before. The advance
+  also rides the graded cycle's own **performed volume exposure** — on every
+  grade, not only success: the week-1 working weight, read from the log as
+  its canonical grid label under the bar that session actually used, becomes
+  the floor the base lands on. A hold or fail zeroes the earned-increment
+  flag, so without this resync the stale label would strand and the same
+  plates would be prescribed yet again. Total-bar work only, never downward
+  ([INV-ADVANCE-BUYS-PLATES](invariants.md)).
+
+### An earned advance must buy plates
+
+An advance computed in label space can prescribe the very plates the lifter
+already lifted: in a kg rack, 215 and 225 both solve to the identical
+2×20 kg stack. Every planning surface (the Today card, the workout preview,
+the program overview, the session builder, and the resume comparison)
+therefore plans from the **honest base**: when the lift's last advance
+earned weight (`lastIncrementLb > 0`) and the raw performed volume weight
+from **before the cycle being planned** cleared the pre-advance base past
+the half-step tolerance — but sits no more than one increment above the
+stored base — the plan is the performed stack's canonical label plus that
+earned increment, capped one increment above the stored base, floored at
+the stored base, and applied to total-bar lifts only. The cycle scoping is
+what keeps a clean lifter clean: their own banked week-1, performed exactly
+at the honestly advanced base, is not evidence the advance was stale.
+Labels are computed constructively from the plates (`performedLabel`
+decomposes the side into kg denominations and reads the lb twins back), and
+the evidence is matched to the slot **and** the movement, windowed to the
+prescribed sets, and labeled under its own session's bar. Editing a base by
+hand — or rotating the slot to a new variation — clears the earned
+increment, so a hand-set number or a fresh movement is never "repaired"
+(bases hand-set before this behavior shipped are protected by the
+one-increment window) ([INV-ADVANCE-BUYS-PLATES](invariants.md)). The
+motivating log: a deadlift stuck prescribing 2×20 kg for a third cycle at
+"225" now plans 235 — the 232.4 kg twin stack, a genuinely heavier bar.
 - **hold / fail** → weight holds, stall count +1 — and the needle still
   moves: the next **volume** rotation carries **one added set** at the held
   load, derived from the persisted stall so the Home card and the created

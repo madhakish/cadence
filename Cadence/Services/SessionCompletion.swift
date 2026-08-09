@@ -246,7 +246,9 @@ enum SessionCompletion {
 
     /// The set rows created with the session are the prescription. User-added
     /// rows are appended after them and remain history-only bonus work.
-    private static func prescribedWork(_ entry: SessionExercise) -> [SetEntry] {
+    // Shared with ProgramSession.lastVolumeEvidence so both clients read the
+    // same evidence window (planned-set cap included).
+    static func prescribedWork(_ entry: SessionExercise) -> [SetEntry] {
         let candidates = entry.orderedSets.filter {
             !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork
         }
@@ -921,6 +923,14 @@ enum SessionCompletion {
 
         // Cycle lifts: grade at the week-3 Peak, stash pending; apply at rollover.
         if week == ProgramProgression.gradedWeek {
+            // The advance rides the cycle's performed volume work, so the
+            // base resyncs to what was actually lifted (a kg rack lands the
+            // volume rotation off the stored label in either direction). The
+            // just-banked peak is week 3, so the most recent completed
+            // volume exposure in the log is this cycle's own.
+            let completedSessions = try context.fetch(FetchDescriptor<WorkoutSession>(
+                predicate: #Predicate { $0.isCompleted }
+            ))
             for lift in day.lifts where !lift.prescription.advancesPerExposure {
                 if let entry = programmedEntry(
                     for: lift.id, exerciseName: lift.exerciseName,
@@ -933,6 +943,12 @@ enum SessionCompletion {
                     // a held cycle may fall back to volume. Mirrored in web
                     // session.js bankProgramAdvance.
                     let prior = priorBestE1RM(for: lift.exerciseName, excluding: session, context: context)
+                    // Total-bar work only — the volume ride reasons about the
+                    // number as a bar-and-plates stack, which machines and
+                    // dumbbells must never get. Evidence is THIS cycle's own
+                    // volume exposure and is labeled under the bar that
+                    // session actually used, not the peak session's.
+                    let rideEligible = twinBarLb(entry, prescribedWork(entry)) != nil
                     let result = ProgramProgression.advanceProgramLift(
                         lift.coreState,
                         perf: cyclePerf(entry, roundingLb: loadStep),
@@ -945,7 +961,18 @@ enum SessionCompletion {
                             priorBestMaxLb: prior?.maxLb ?? 0,
                             standingBest: prior?.standing ?? false
                         ),
-                        volumeFallback: program.maximumAddedSetsPerRotation > 0
+                        volumeFallback: program.maximumAddedSetsPerRotation > 0,
+                        performedVolumeLb: {
+                            guard rideEligible,
+                                  let evidence = ProgramSession.lastVolumeEvidence(
+                                      for: lift, program: program, sessions: completedSessions,
+                                      inCycle: session.programCycleNumber
+                                  ) else { return 0 }
+                            return PlateMath.performedLabel(
+                                evidence.performedLb,
+                                barLb: evidence.barLabelLb, roundingLb: loadStep
+                            )
+                        }()
                     )
                     lift.pendingBaseWeightLb = result.state.baseWeightLb
                     lift.pendingEstimatedMaxLb = result.state.estimatedMaxLb

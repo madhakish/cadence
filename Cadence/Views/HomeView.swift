@@ -83,8 +83,13 @@ struct HomeView: View {
     private func rawProgramPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         let exercise = exercises.first { $0.name == lift.exerciseName }
+        // planningBase, not the stored base: the card must show the same
+        // honest plan the started session will store.
+        let base = ProgramSession.planningBase(
+            for: lift, exercise: exercise, program: program, sessions: completedSessions
+        )
         return ProgramEngine.programPlan(
-            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
+            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: base, nextPhase: phase, incrementLb: 0),
             programRoundingLb: program.roundingLb,
             exerciseType: exercise?.typeRaw,
             movementGroup: exercise?.movementGroup,

@@ -302,6 +302,11 @@ enum CoachingService {
                 lift.exerciseName = replacement.name
                 lift.revertToExerciseName = nil
                 lift.stallCount = 0
+                // The earned increment belonged to the OLD movement; carrying
+                // it would arm the honest-base repair against evidence the
+                // new lift never produced (the evidence lookup also checks
+                // the movement name — this keeps the stored state truthful).
+                lift.lastIncrementLb = 0
                 if lift.pendingStallCount != nil { lift.pendingStallCount = 0 }
             } else if let accessory = program.days.flatMap(\.accessories).first(where: { $0.id == slotID }) {
                 accessory.exerciseName = replacement.name

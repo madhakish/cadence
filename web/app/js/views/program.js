@@ -2,15 +2,17 @@
 // editor so one engine owns all mutations on both platforms.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { Programs, Exercises } from "../db.js";
+import { Programs, Exercises, Sessions } from "../db.js";
 import { openAddProgramSheet, programEditor } from "./settings.js";
-import { volumeFallbackSets } from "./session.js";
+import { planningBase, volumeFallbackSets } from "./session.js";
 
 const ordered = (items = []) => [...items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
   || String(a.exerciseName || a.name || "").localeCompare(String(b.exerciseName || b.name || "")));
 
 export async function render(host) {
-  const [programs, exercises] = await Promise.all([Programs.all(), Exercises.all()]);
+  const [programs, exercises, completed] = await Promise.all([
+    Programs.all(), Exercises.all(), Sessions.completed(),
+  ]);
   const exByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
   const root = ui.h("div");
   const sorted = [...programs].sort((a, b) => Number(b.isActive) - Number(a.isActive));
@@ -30,8 +32,12 @@ export async function render(host) {
         day.order === program.nextDayIndex ? ui.h("span", { class: "pill accent", text: "Next" }) : null));
       for (const lift of ordered(day.lifts)) {
         const exercise = exByName.get(lift.exerciseName);
+        // "next" shows the honest plan (planningBase) beside the stored base,
+        // so the overview and the Today card can never quote different numbers.
         const plan = C.programPlanFor(
-          { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+          { cycleNumber: program.cycleNumber,
+            baseWeightLb: planningBase(lift, exercise, program, completed),
+            nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
           lift.prescription || "automatic", lift,
           volumeFallbackSets(lift, program),

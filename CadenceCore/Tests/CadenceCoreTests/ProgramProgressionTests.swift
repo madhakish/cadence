@@ -79,6 +79,75 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(legacy.state.baseWeightLb, 200 + inc, accuracy: 0.0001)
     }
 
+    // An earned advance must buy plates, not just a bigger label: in a kg
+    // rack, 215 and 225 both solve to the identical 2×20 kg stack, so the
+    // stored base can trail what the bar actually carried. honestBase repairs
+    // the plan from the performed log; the raw performed weight — not its
+    // rounded-up label — must clear the pre-advance base, so a grid ceiling
+    // can never manufacture the firing margin. Mirrored in
+    // web/tests/core.test.mjs. [INV-ADVANCE-BUYS-PLATES]
+    func testHonestBaseRepairsAStaleAdvance() {
+        // The motivating log: 2×20 kg a side on a 45 bar (221.4 raw), advance
+        // wrote 215 + 10 = 225 — the same stack again. Honest: 225 + 10.
+        XCTAssertEqual(P.honestBase(baseWeightLb: 225, lastIncrementLb: 10, lastVolumePerformedLb: 221.37,
+                                    roundingLb: 5, barLb: 45), 235,
+                       "label(221.4) + 10 = 235 — the kg twin stack 232.4 is finally a heavier bar")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 225, lastIncrementLb: 10, lastVolumePerformedLb: 225,
+                                    roundingLb: 5, barLb: 45), 235,
+                       "a canonically-stored volume exposure repairs identically")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 225, lastIncrementLb: 10, lastVolumePerformedLb: 215,
+                                    roundingLb: 5, barLb: 45), 225,
+                       "a clean lb lifter's performed weight IS the pre-advance base — untouched")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 225, lastIncrementLb: 10, lastVolumePerformedLb: 235,
+                                    roundingLb: 5, barLb: 45), 235,
+                       "once the bumped exposure is banked, the cap holds the plan steady")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 225, lastIncrementLb: 0, lastVolumePerformedLb: 221.37,
+                                    roundingLb: 5, barLb: 45), 225,
+                       "no earned increment (hold, deload, or a hand-set base) — no repair")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 105, lastIncrementLb: 5, lastVolumePerformedLb: 101.9,
+                                    roundingLb: 5, barLb: 45), 105,
+                       "raw compare: 101.9 does not clear 102.5, and its 105 ceiling must not pretend it does")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 300, lastIncrementLb: 10, lastVolumePerformedLb: 221.37,
+                                    roundingLb: 5, barLb: 45), 300,
+                       "never downward — a base above the log stands")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 200, lastIncrementLb: 10, lastVolumePerformedLb: 221.37,
+                                    roundingLb: 5, barLb: 45), 200,
+                       "evidence more than one increment above the base is a hand-set base or off-program work — left alone")
+    }
+
+    // The advance-side half: the graded peak rides the cycle's performed
+    // volume exposure upward, so the stored base resyncs to reality and
+    // stall/deload math stop operating on a stale number. Mirrored in
+    // web/tests/core.test.mjs. [INV-ADVANCE-BUYS-PLATES]
+    func testCycleAdvanceRidesThePerformedVolumeExposure() {
+        let state = ProgramLiftState(baseWeightLb: 225, estimatedMaxLb: 280)
+        let clean = CycleLiftPerformance(prescribedSets: 3, prescribedReps: 3, completedSets: 3,
+                                         anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0,
+                                         topSetWeightLb: 264, topSetReps: 3, plannedTopWeightLb: 264)
+        let inc = P.stagedIncrement(baseWeightLb: 225, focus: .strength, regime: .rebuild, roundingLb: 5)
+        let resynced = P.advanceCycleLift(state, perf: clean, focus: .strength, roundingLb: 5,
+                                          regime: .rebuild, performedVolumeLb: 235)
+        XCTAssertEqual(resynced.state.baseWeightLb, 235 + inc, accuracy: 0.0001,
+                       "the base advances from the volume rotation actually lifted")
+        let level = P.advanceCycleLift(state, perf: clean, focus: .strength, roundingLb: 5,
+                                       regime: .rebuild, performedVolumeLb: 225)
+        XCTAssertEqual(level.state.baseWeightLb, 225 + inc, accuracy: 0.0001,
+                       "a volume label equal to the base changes nothing")
+        var missed = clean
+        missed.anyBelowPlanLoad = true
+        let held = P.advanceCycleLift(state, perf: missed, focus: .strength, roundingLb: 5,
+                                      regime: .rebuild, performedVolumeLb: 235)
+        XCTAssertEqual(held.grade, .fail)
+        XCTAssertEqual(held.state.baseWeightLb, 235,
+                       "a failed grade holds the increment, but the base still resyncs to the volume the cycle actually ran — zeroing lastIncrementLb must not strand the stale label")
+        XCTAssertEqual(held.state.lastIncrementLb, 0)
+        XCTAssertEqual(held.state.stallCount, 1)
+        let lightHold = P.advanceCycleLift(state, perf: missed, focus: .strength, roundingLb: 5,
+                                          regime: .rebuild, performedVolumeLb: 220)
+        XCTAssertEqual(lightHold.state.baseWeightLb, 225,
+                       "lighter volume evidence never drags a held base down")
+    }
+
     // The lifter's priority order: the needle moves every cycle — weight when
     // a clean jump is earnable, volume when it is not. Headroom to the LOGGED
     // prior best stages the increment; a held cycle falls back to a volume

@@ -19,6 +19,12 @@ enum ProgramSession {
 
     static func make(program: Program, day: ProgramDay, context: ModelContext) throws -> WorkoutSession {
         let allExercises = try context.fetch(FetchDescriptor<Exercise>())
+        // The performed log backs the honest-base repair (planningBase): a
+        // stale stored base must not keep prescribing the plates the lifter
+        // already lifted.
+        let completedSessions = try context.fetch(FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.isCompleted }
+        ))
 
         // Resume, don't duplicate (mirrors web createSessionFromProgramDay):
         // an open session for THIS day at the current position, whose content
@@ -33,6 +39,11 @@ enum ProgramSession {
         let openDescriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { !$0.isCompleted }
         )
+        // The gym (and its bar) resolve before the resume check: the honest
+        // base labels performed stacks against the bar the session loads.
+        let gyms = try context.fetch(FetchDescriptor<Gym>())
+        let defaultGym = gyms.first(where: { $0.isDefault }) ?? gyms.first
+        let selectedBar = defaultGym?.defaultBar ?? .bar45lb
         let dayNames = day.orderedLifts.map(\.exerciseName) + day.orderedAccessories.map(\.exerciseName)
         if let existing = try context.fetch(openDescriptor).first(where: { s in
             (s.programID == programID || (s.programID == nil && s.programName == programName)) &&
@@ -46,14 +57,12 @@ enum ProgramSession {
                 cycleNumber: program.cycleNumber, currentWeek: program.currentWeek, dayIndex: day.order,
                 sessionPlanNames: s.programPlanNames ?? [],
                 dayPlanNames: dayNames) &&
-            sessionTargetsMatch(s, program: program, day: day, exercises: allExercises)
+            sessionTargetsMatch(s, program: program, day: day, exercises: allExercises,
+                                completedSessions: completedSessions)
         }) { return existing }
 
-        let gyms = try context.fetch(FetchDescriptor<Gym>())
-        let defaultGym = gyms.first(where: { $0.isDefault }) ?? gyms.first
         let entryUnit = try context.fetch(FetchDescriptor<AppSettings>()).first?.unitDisplay.primaryUnit ?? .lb
         let session = WorkoutSession(gymID: defaultGym?.id, gymName: defaultGym?.name)
-        let selectedBar = defaultGym?.defaultBar ?? .bar45lb
         let barLb = selectedBar.lb
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         let accessoryPercent = try temporaryAccessoryPercent(
@@ -82,7 +91,11 @@ enum ProgramSession {
                                                   exerciseType: exercise.typeRaw)
             let configuration = lift.prescriptionConfiguration(movementGroup: exercise.movementGroup)
             let prescription = ProgramEngine.sessionPrescription(
-                for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: phase, incrementLb: 0),
+                for: CycleState(cycleNumber: program.cycleNumber,
+                                baseWeightLb: planningBase(for: lift, exercise: exercise,
+                                                           program: program,
+                                                           sessions: completedSessions),
+                                nextPhase: phase, incrementLb: 0),
                 programRoundingLb: program.roundingLb,
                 exerciseType: exercise.typeRaw,
                 movementGroup: exercise.movementGroup,
@@ -230,14 +243,20 @@ enum ProgramSession {
         _ session: WorkoutSession,
         program: Program,
         day: ProgramDay,
-        exercises: [Exercise]
+        exercises: [Exercise],
+        completedSessions: [WorkoutSession]
     ) -> Bool {
         guard let phase = CyclePhase(rawValue: program.currentWeek) else { return false }
         return day.orderedLifts.allSatisfy { lift in
             let exercise = exercises.first { $0.name == lift.exerciseName }
+            // The same honest base the builder plans from — an open session
+            // built from the stale label must not resume once the repair
+            // raises the plan.
             let expected = ProgramEngine.programPlan(
                 for: CycleState(cycleNumber: program.cycleNumber,
-                                baseWeightLb: lift.baseWeightLb,
+                                baseWeightLb: planningBase(for: lift, exercise: exercise,
+                                                           program: program,
+                                                           sessions: completedSessions),
                                 nextPhase: phase, incrementLb: 0),
                 programRoundingLb: program.roundingLb,
                 exerciseType: exercise?.typeRaw,
@@ -291,6 +310,76 @@ enum ProgramSession {
                 && override.rotation == program.currentWeek
         }?.temporaryAccessoryOverride?.percent
         return value ?? 100
+    }
+
+    /// The most recent completed base-training exposure for this slot: the
+    /// volume rotation for wave slots (other rotations prescribe multiples
+    /// of the base, so their weights are not comparable), any exposure for
+    /// per-exposure styles (their plan is the base every session). For wave
+    /// slots the caller scopes the CYCLE: planning reads evidence from
+    /// before the cycle being planned (`beforeCycle`) so a cycle's own
+    /// possibly-repaired exposure can never feed the repair that produced
+    /// it, while the graded advance reads exactly the graded cycle's own
+    /// volume work (`inCycle`). Entry matching reuses `programmedEntry`
+    /// (slot ID + role, lineage fallback) plus a same-movement check, so a
+    /// coaching rotation's renamed slot never inherits the old exercise's
+    /// evidence; set selection reuses `SessionCompletion.prescribedWork`
+    /// (planned-set window, completed, non-warmup), so user-added bonus rows
+    /// stay history-only on both clients. Returns the heaviest qualifying
+    /// working weight and the BAR IT WAS LIFTED UNDER — the label the twin
+    /// math must use, not whatever bar today's gym defaults to. Nil means no
+    /// evidence. Mirrors web `lastVolumeEvidence`.
+    static func lastVolumeEvidence(
+        for lift: ProgramLift, program: Program, sessions: [WorkoutSession],
+        beforeCycle: Int? = nil, inCycle: Int? = nil
+    ) -> (performedLb: Double, barLabelLb: Double)? {
+        // The name is a fallback for ID-less legacy sessions only — two
+        // programs can share a display name, and a non-nil foreign ID must
+        // never feed this program's evidence (mirrors the resume filter).
+        let mine = sessions
+            .filter { $0.isCompleted && ($0.programID == program.id
+                || ($0.programID == nil && $0.programName == program.name)) }
+            .sorted { ($0.completedAt ?? $0.date) > ($1.completedAt ?? $1.date) }
+        for session in mine {
+            if !lift.prescription.advancesPerExposure {
+                guard session.programWeek == 1 else { continue }
+                if let beforeCycle, (session.programCycleNumber ?? 0) >= beforeCycle { continue }
+                if let inCycle, session.programCycleNumber != inCycle { continue }
+            }
+            guard let entry = programmedEntry(for: lift, in: session),
+                  entry.exercise?.name == lift.exerciseName else { continue }
+            let top = SessionCompletion.prescribedWork(entry).map(\.weightLb).max() ?? 0
+            guard top > 0 else { continue }
+            return (top, (entry.barID.map { Bar.by(id: $0) } ?? .bar45lb).labelLb)
+        }
+        return nil
+    }
+
+    /// The base every planning surface builds `CycleState` from: the stored
+    /// base, repaired by `honestBase` when the log proves the last earned
+    /// advance moved the label but not the plates (a kg rack solves 215 and
+    /// 225 to the identical 2×20 kg stack). Total-bar work only — the repair
+    /// reasons about the number as a bar-and-plates stack, which is exactly
+    /// the reading machines and dumbbells must never get. Shared by the
+    /// session builder, the resume comparison, and every preview surface so
+    /// the card, the preview, and the stored prescription agree by
+    /// construction. Mirrors web `planningBase`.
+    static func planningBase(
+        for lift: ProgramLift, exercise: Exercise?, program: Program,
+        sessions: [WorkoutSession]
+    ) -> Double {
+        guard exercise?.loadBasis == .totalBar,
+              let evidence = lastVolumeEvidence(
+                  for: lift, program: program, sessions: sessions,
+                  beforeCycle: lift.prescription.advancesPerExposure ? nil : program.cycleNumber
+              ) else { return lift.baseWeightLb }
+        return ProgramProgression.honestBase(
+            baseWeightLb: lift.baseWeightLb,
+            lastIncrementLb: lift.lastIncrementLb,
+            lastVolumePerformedLb: evidence.performedLb,
+            roundingLb: program.roundingLb,
+            barLb: evidence.barLabelLb
+        )
     }
 
     /// The volume-fallback sets this lift carries, with the rotation-wide

@@ -169,7 +169,11 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     // The stashed grade belongs to the exercise being rotated out. Carrying it
     // over is the exact inheritance the comment above rules out — and the
     // pending base is the old lift's weight, which must not land on the new one.
-    if (lift) delete lift.pending;
+    // The earned increment belonged to the OLD movement too; carrying it would
+    // arm the honest-base repair against evidence the new lift never produced
+    // (the evidence lookup also checks the movement name — this keeps the
+    // stored state truthful). Mirrors CoachingService.
+    if (lift) { delete lift.pending; lift.lastIncrementLb = 0; }
     message = `${change.exerciseName} → ${replacement.name} for this slot.`;
   } else if (change.type === "tryShorterSpacing") {
     const old = program.preferredSessionSpacingDays || 3;

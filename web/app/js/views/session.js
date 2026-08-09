@@ -1626,9 +1626,21 @@ async function advanceProgram(session, milestones) {
       if (se && prescribedWork(se).length) {
         const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(se.exerciseName)?.type);
         const prior = priorBestE1RM(history, lift.exerciseName, anchorMs);
+        // The advance rides the cycle's performed volume work so the base
+        // resyncs to what was actually lifted (a kg rack lands the volume
+        // rotation off the stored label in either direction). Evidence is
+        // THIS cycle's own volume exposure, labeled under the bar that
+        // session actually used — never the peak session's. Total-bar work
+        // only — the ride reasons about the number as a bar-and-plates
+        // stack, which machines and dumbbells must never get. Mirrors
+        // SessionCompletion.
+        const rideEvidence = twinBarLb(se, prescribedWork(se)) == null ? null
+          : lastVolumeEvidence(lift, program, history, { inCycle: tag.cycleNumber });
         lift.pending = C.advanceProgramLift(lift, cyclePerf(se, loadStep), program.focus,
           lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep,
-          C.progressionRegime(lift.estimatedMaxLb, prior.maxLb, prior.standing), volumeFallback);
+          C.progressionRegime(lift.estimatedMaxLb, prior.maxLb, prior.standing), volumeFallback,
+          rideEvidence == null ? 0
+            : C.performedLabel(rideEvidence.performedLb, rideEvidence.barLabelLb, loadStep));
       }
     }
   }
@@ -1708,6 +1720,63 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
   C.barLabelLb(bar));
 }
 
+// The most recent completed base-training exposure for this slot: the volume
+// rotation for wave slots (other rotations prescribe multiples of the base,
+// so their weights are not comparable), any exposure for per-exposure styles
+// (their plan is the base every session). For wave slots the caller scopes
+// the CYCLE: planning reads evidence from before the cycle being planned
+// (beforeCycle) so a cycle's own possibly-repaired exposure can never feed
+// the repair that produced it, while the graded advance reads exactly the
+// graded cycle's own volume work (inCycle). Entry matching goes through
+// programmedEntry (slot ID + role, lineage fallback) plus a same-movement
+// check, so a coaching rotation's renamed slot never inherits the old
+// exercise's evidence; set selection goes through prescribedWork
+// (planned-set window, completed, non-warmup), so user-added bonus rows stay
+// history-only on both clients. Returns the heaviest qualifying working
+// weight and the BAR IT WAS LIFTED UNDER — the label the twin math must use,
+// not whatever bar today's gym defaults to. Null means no evidence. Mirrors
+// ProgramSession.lastVolumeEvidence.
+export function lastVolumeEvidence(lift, program, sessions, { beforeCycle = null, inCycle = null } = {}) {
+  const id = program.uuid || program.id;
+  const mine = sessions
+    .filter((s) => s.isCompleted && s.programTag
+      && (s.programTag.programId === id
+        || (s.programTag.programId == null && s.programTag.programName === program.name)))
+    .sort((a, b) => Date.parse(b.completedAt || b.date) - Date.parse(a.completedAt || a.date));
+  for (const session of mine) {
+    if (!C.advancesPerExposure(lift.prescription)) {
+      if (session.programTag.week !== 1) continue;
+      if (beforeCycle != null && (session.programTag.cycleNumber ?? 0) >= beforeCycle) continue;
+      if (inCycle != null && session.programTag.cycleNumber !== inCycle) continue;
+    }
+    const entry = programmedEntry(session, lift);
+    if (!entry || entry.exerciseName !== lift.exerciseName) continue;
+    const top = Math.max(0, ...prescribedWork(entry).map((set) => set.weightLb || 0));
+    if (top > 0) {
+      return { performedLb: top, barLabelLb: C.barLabelLb(entry.barId ? C.barById(entry.barId) : C.BARS.bar45lb) };
+    }
+  }
+  return null;
+}
+
+// The base every planning surface builds the cycle state from: the stored
+// base, repaired by honestBase when the log proves the last earned advance
+// moved the label but not the plates (a kg rack solves 215 and 225 to the
+// identical 2×20 kg stack). Total-bar work only — the repair reasons about
+// the number as a bar-and-plates stack, which is exactly the reading machines
+// and dumbbells must never get. Shared by the session builder, the resume
+// comparison, and every preview surface so the card, the preview, and the
+// stored prescription agree by construction. Mirrors ProgramSession.planningBase.
+export function planningBase(lift, exercise, program, sessions) {
+  if (!exercise || C.resolvedLoadBasis(exercise) !== "totalBar") return lift.baseWeightLb;
+  const evidence = lastVolumeEvidence(lift, program, sessions, {
+    beforeCycle: C.advancesPerExposure(lift.prescription) ? null : program.cycleNumber,
+  });
+  if (!evidence) return lift.baseWeightLb;
+  return C.honestBase(lift.baseWeightLb, lift.lastIncrementLb ?? 0,
+    evidence.performedLb, program.roundingLb, evidence.barLabelLb);
+}
+
 // The volume-fallback sets this lift carries, with the rotation-wide
 // added-set budget allocated deterministically: stalled peak-graded slots in
 // program order (day order, then slot order) receive one set each until
@@ -1737,11 +1806,14 @@ function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
   });
 }
 
-function sessionTargetsMatch(session, program, day, exMap) {
+function sessionTargetsMatch(session, program, day, exMap, allSessions) {
   return orderedProgramSlots(day.lifts, true).every((lift) => {
     const exercise = exMap.get(lift.exerciseName);
+    // The same honest base the builder plans from — an open session built
+    // from the stale label must not resume once the repair raises the plan.
     const expected = C.programPlanFor(
-      { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb,
+      { cycleNumber: program.cycleNumber,
+        baseWeightLb: planningBase(lift, exercise, program, allSessions),
         nextPhase: program.currentWeek, incrementLb: 0 },
       program.roundingLb, exercise?.type, exercise?.movementGroup,
       lift.role, program.focus, lift.prescription || "automatic",
@@ -1779,16 +1851,18 @@ export async function createSessionFromProgramDay(program, day) {
     Sessions.all(), Exercises.all(), Gyms.default(), Settings.get(), CoachingDecisions.all(),
   ]);
   const exMap = new Map(allExercises.map((e) => [e.name, e]));
+  // The bar resolves before the resume check: the honest base (planningBase)
+  // labels performed stacks against the bar the session loads.
+  const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
+  const barLb = C.barLb(bar);
   const openForDay = allSessions.find((s) => !s.isCompleted && s.programTag
     && (s.programTag.programId === stableProgramID || (s.programTag.programId == null && s.programTag.programName === program.name))
     && C.canResumeSession(s.programTag.cycleNumber, s.programTag.week, s.programTag.dayIndex,
       program.cycleNumber, program.currentWeek, day.order,
       s.programTag.planNames || [], dayNames)
-    && sessionTargetsMatch(s, program, day, exMap));
+    && sessionTargetsMatch(s, program, day, exMap, allSessions));
   if (openForDay) return openForDay.id;
   const unit = C.primaryUnit(settings.unitDisplay);
-  const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
-  const barLb = C.barLb(bar);
   const neat = (weightLb, ex, isMain, phase = null) =>
     neatProgramWeight(weightLb, ex, isMain, barLb, program.roundingLb, gym, phase);
   const accessoryPercent = effectiveAccessoryPercent(program, coachingDecisions);
@@ -1801,7 +1875,9 @@ export async function createSessionFromProgramDay(program, day) {
     const loadStep = C.programLoadStep(program.roundingLb, ex?.type);
     const configuration = { ...lift, workingSets: lift.doubleProgressionSets ?? 3 };
     const prescription = C.sessionPrescription(
-      { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+      { cycleNumber: program.cycleNumber,
+        baseWeightLb: planningBase(lift, ex, program, allSessions),
+        nextPhase: program.currentWeek, incrementLb: 0 },
       program.roundingLb, ex?.type, ex?.movementGroup, lift.role, program.focus, lift.prescription || "automatic",
       configuration, lift.estimatedMaxLb || 0,
       // A held cycle moves the needle with volume: the stall the grade

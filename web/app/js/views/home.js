@@ -5,7 +5,7 @@ import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
-import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
+import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, planningBase, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
 
 const orderedSlots = (slots = [], roleAwareLegacy = false) => {
   const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
@@ -69,7 +69,7 @@ export async function render(host) {
   } else if (program && nextProgramDay) {
     root.append(ui.h("div", { class: "card today-hero" },
       ui.h("button", { class: "row wide", style: { minHeight: "64px", textAlign: "left" },
-        onClick: () => workoutPreview(program, nextProgramDay, { exMap, gym, barLb }) },
+        onClick: () => workoutPreview(program, nextProgramDay, { exMap, gym, barLb, completed }) },
       ui.h("div", { class: "lead" }, ui.h("span", { class: "sub", text: "Next workout" }),
         ui.h("span", { class: "big", text: nextProgramDay.name }),
         ui.h("span", { class: "sub", text: `${program.name} · Cycle ${program.cycleNumber}` })),
@@ -161,7 +161,7 @@ export async function render(host) {
     const shortfall = C.sessionSpacingShortfall(daysSinceLast, program.preferredSessionSpacingDays ?? 0);
     const card = ui.h("div", { class: "card" },
       ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px", cursor: "pointer" },
-        onClick: () => workoutPreview(program, day, { exMap, gym, barLb }) },
+        onClick: () => workoutPreview(program, day, { exMap, gym, barLb, completed }) },
         ui.h("span", { class: "title", text: day.name }),
         ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
           // Position only. The phase NAME moved onto the slots it actually
@@ -181,7 +181,11 @@ export async function render(host) {
     const lifts = orderedSlots(day.lifts, true);
     for (const l of lifts) {
       const ex = exMap.get(l.exerciseName);
-      const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+      // planningBase, not the stored base: the card must show the same honest
+      // plan the started session will store.
+      const plan = C.programPlanFor({ cycleNumber: program.cycleNumber,
+        baseWeightLb: planningBase(l, ex, program, completed),
+        nextPhase: program.currentWeek, incrementLb: 0 },
         program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
         { ...l, workingSets: l.doubleProgressionSets ?? 3 },
         volumeFallbackSets(l, program));
@@ -299,7 +303,7 @@ function showGymTag(gym) {
 // creating a session; the Start button up top is what commits. Same preview
 // math as the Today card, so preview and started session never disagree.
 // (iOS mirror: WorkoutPreviewView.)
-function workoutPreview(program, day, { exMap, gym, barLb }) {
+function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
   ui.pushScreen({
     title: day.name,
     build: (body) => {
@@ -317,7 +321,11 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
       if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No program lifts this day." }));
       for (const l of lifts) {
         const ex = exMap.get(l.exerciseName);
-        const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+        // planningBase — the preview and the started session must never
+        // disagree.
+        const plan = C.programPlanFor({ cycleNumber: program.cycleNumber,
+          baseWeightLb: planningBase(l, ex, program, completed),
+          nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
           { ...l, workingSets: l.doubleProgressionSets ?? 3 },
           volumeFallbackSets(l, program));
