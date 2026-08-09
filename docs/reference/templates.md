@@ -35,9 +35,13 @@ step on this one.
 
 | Day | Main | Complementary | Accessories |
 |---|---|---|---|
-| Snatch Day | Snatch (35/55) | Overhead Squat (35/55) | Snatch Pull 3×3–5 @45 (+10) · Hanging Knee Raise 3×8–15 |
-| Clean & Jerk Day | Clean & Jerk (45/65) | Front Squat (45/65) | Clean Pull 3×3–5 @45 (+10) · Pull-ups 3×5–10 |
-| Strength Day | Back Squat (45/65) | Overhead Press (45/65) | Back Extension 3×10–15 · Hanging Knee Raise 3×8–15 |
+| Snatch + Front Squat | Snatch (35/55) | Front Squat (45/65) | Snatch Pull 3×3 @45 (+10) · Hanging Knee Raise 3×8–15 |
+| Jerk + Overhead | Split Jerk (45/65) | Push Press (45/65) · Overhead Squat (35/55) | Pull-ups 3×5–10 · Hanging Knee Raise 3×8–15 |
+| Clean & Jerk + Back Squat | Clean & Jerk (45/65) | Back Squat (45/65) | Clean Pull 3×3 @45 (+10) · Hanging Knee Raise 3×8–15 |
+
+Classic lifts run a conservative triples → doubles → singles build. See the
+[Olympic foundation source map](olympic-weightlifting.md) for the exact loading,
+history aliases, editable boundaries, and complex-notation limitation.
 
 ## Metabolic Conditioning
 

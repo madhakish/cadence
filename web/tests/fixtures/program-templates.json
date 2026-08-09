@@ -245,7 +245,7 @@
   {
     "id": "olympic-weightlifting",
     "name": "Olympic Weightlifting",
-    "tagline": "3 days · snatch, clean & jerk, strength base",
+    "tagline": "3 days · snatch, jerk, clean & jerk · pulls & squats",
     "focus": "strength",
     "roundingLb": 5,
     "exercises": [
@@ -258,14 +258,6 @@
         "rest": 120
       },
       {
-        "name": "Back Extension",
-        "category": "Accessory",
-        "type": "bodyweight",
-        "group": "hinge",
-        "isUnilateral": false,
-        "rest": 0
-      },
-      {
         "name": "Hanging Knee Raise",
         "category": "Accessory",
         "type": "bodyweight",
@@ -276,23 +268,23 @@
     ],
     "days": [
       {
-        "name": "Snatch Day",
+        "name": "Snatch + Front Squat",
         "lifts": [
           {
             "exercise": "Snatch",
             "role": "main",
             "baseWeightLb": 65,
             "estimatedMaxLb": 115,
-            "prescription": "automatic",
+            "prescription": "technique",
             "sets": 0,
             "startFraction": 0
           },
           {
-            "exercise": "Overhead Squat",
+            "exercise": "Front Squat",
             "role": "complementary",
-            "baseWeightLb": 65,
-            "estimatedMaxLb": 115,
-            "prescription": "automatic",
+            "baseWeightLb": 115,
+            "estimatedMaxLb": 185,
+            "prescription": "technique",
             "sets": 0,
             "startFraction": 0
           }
@@ -302,7 +294,7 @@
             "exercise": "Snatch Pull",
             "sets": 3,
             "minReps": 3,
-            "maxReps": 5,
+            "maxReps": 3,
             "weightLb": 95,
             "incrementLb": 10,
             "startFraction": 0
@@ -319,37 +311,39 @@
         ]
       },
       {
-        "name": "Clean & Jerk Day",
+        "name": "Jerk + Overhead",
         "lifts": [
           {
-            "exercise": "Clean & Jerk",
+            "exercise": "Split Jerk",
             "role": "main",
-            "baseWeightLb": 85,
-            "estimatedMaxLb": 145,
-            "prescription": "automatic",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 105,
+            "prescription": "technique",
             "sets": 0,
+            "startFraction": 0,
+            "historyExercise": "Clean & Jerk"
+          },
+          {
+            "exercise": "Push Press",
+            "role": "complementary",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 105,
+            "prescription": "linearFives",
+            "sets": 3,
             "startFraction": 0
           },
           {
-            "exercise": "Front Squat",
+            "exercise": "Overhead Squat",
             "role": "complementary",
-            "baseWeightLb": 115,
-            "estimatedMaxLb": 185,
-            "prescription": "automatic",
+            "baseWeightLb": 65,
+            "estimatedMaxLb": 115,
+            "prescription": "technique",
             "sets": 0,
-            "startFraction": 0
+            "startFraction": 0,
+            "historyExercise": "Snatch"
           }
         ],
         "accessories": [
-          {
-            "exercise": "Clean Pull",
-            "sets": 3,
-            "minReps": 3,
-            "maxReps": 5,
-            "weightLb": 115,
-            "incrementLb": 10,
-            "startFraction": 0
-          },
           {
             "exercise": "Pull-ups",
             "sets": 3,
@@ -358,39 +352,48 @@
             "weightLb": 0,
             "incrementLb": 0,
             "startFraction": 0
+          },
+          {
+            "exercise": "Hanging Knee Raise",
+            "sets": 3,
+            "minReps": 8,
+            "maxReps": 15,
+            "weightLb": 0,
+            "incrementLb": 0,
+            "startFraction": 0
           }
         ]
       },
       {
-        "name": "Strength Day",
+        "name": "Clean & Jerk + Back Squat",
         "lifts": [
           {
-            "exercise": "Back Squat",
+            "exercise": "Clean & Jerk",
             "role": "main",
-            "baseWeightLb": 135,
-            "estimatedMaxLb": 225,
-            "prescription": "automatic",
+            "baseWeightLb": 85,
+            "estimatedMaxLb": 145,
+            "prescription": "technique",
             "sets": 0,
             "startFraction": 0
           },
           {
-            "exercise": "Overhead Press",
+            "exercise": "Back Squat",
             "role": "complementary",
-            "baseWeightLb": 65,
-            "estimatedMaxLb": 105,
-            "prescription": "automatic",
-            "sets": 0,
+            "baseWeightLb": 135,
+            "estimatedMaxLb": 225,
+            "prescription": "linearFives",
+            "sets": 3,
             "startFraction": 0
           }
         ],
         "accessories": [
           {
-            "exercise": "Back Extension",
+            "exercise": "Clean Pull",
             "sets": 3,
-            "minReps": 10,
-            "maxReps": 15,
-            "weightLb": 0,
-            "incrementLb": 0,
+            "minReps": 3,
+            "maxReps": 3,
+            "weightLb": 115,
+            "incrementLb": 10,
             "startFraction": 0
           },
           {

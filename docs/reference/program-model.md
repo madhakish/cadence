@@ -148,7 +148,7 @@ their own session shapes and never carry one; the program-level indicator
 reports position (`Rotation 3 of 4`) and nothing more.
 
 Each slot instead carries a badge naming what it actually does — `Main · 5/3/1`,
-`Complementary · Secondary volume`, `Main · Linear 5s`. The badge names the
+`Complementary · Secondary volume`, `Main · Linear`. The badge names the
 **resolved** style, so a slot left on `automatic` advertises the style the
 engine will really run.
 

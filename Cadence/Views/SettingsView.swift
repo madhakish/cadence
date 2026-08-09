@@ -1197,7 +1197,17 @@ private struct ProgramLiftRow: View {
             if lift.prescription.advancesPerExposure
                 && lift.prescription != .doubleProgression && lift.prescription != .maxEffort {
                 Stepper("Working sets: \(lift.doubleProgressionSets)", value: $lift.doubleProgressionSets, in: 1...10)
-                Text("Sets-across of five. The base moves every banked session; the Est. 1RM above is what the coach derives it from.")
+                if lift.prescription == .linearFives {
+                    Picker("Working reps", selection: Binding(
+                        get: { lift.currentReps <= 3 ? 3 : 5 },
+                        set: { lift.currentReps = $0 }
+                    )) {
+                        Text("5 reps").tag(5)
+                        Text("3 reps").tag(3)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                Text("Sets-across of \(lift.prescription == .linearFives && lift.currentReps <= 3 ? 3 : 5). The base moves every banked session; the Est. 1RM above is what the coach derives it from.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if lift.prescription == .fiveThreeOne {

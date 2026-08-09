@@ -207,7 +207,14 @@ for (const [phase, expected] of [[1, "3x8@180"], [2, "3x8@190"], [3, "3x6@200"],
 }
 let techniquePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 100, nextPhase: 3, incrementLb: 0 }, 5,
   "barbell", "olympic", "main", "strength", "automatic");
-eq(`${techniquePlan.sets}x${techniquePlan.reps}@${techniquePlan.weightLb}`, "6x1@110", "Olympic peak is crisp singles");
+eq(`${techniquePlan.sets}x${techniquePlan.reps}@${techniquePlan.weightLb}`, "5x1@115", "Olympic peak is crisp singles");
+const techniqueBuild = [1, 2, 3, 4].map((phase) => C.programPlanFor(
+  { cycleNumber: 1, baseWeightLb: 100, nextPhase: phase, incrementLb: 0 }, 5,
+  "barbell", "olympic", "main", "strength", "automatic"));
+eq(techniqueBuild.map((plan) => plan.sets).join(","), "5,5,5,3", "Olympic build keeps five practice sets before recovery");
+eq(techniqueBuild.map((plan) => plan.reps).join(","), "3,2,1,2", "Olympic build moves triples to doubles to singles");
+eq(techniqueBuild.map((plan) => plan.weightLb).join(","), "100,110,115,90", "Olympic build adds 7.5% of its opening load per step");
+eq(C.templateStartFraction("technique"), 0.70, "new Olympic blocks start conservatively at 70% of history");
 const offsetConfig = { loadOffsetLb: 25, peakOffsetLb: 33, deloadMultiplier: 0.80 };
 eq([1, 2, 3, 4].map((phase) => C.planForStyle(
   { cycleNumber: 2, baseWeightLb: 221, nextPhase: phase }, 5, "offsetWave", offsetConfig).weightLb).join(","),
@@ -1448,6 +1455,97 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
 
   report = C.evaluateCoaching(withSlot("bike", { stallCount: 5, exerciseIsShelved: true }), greenSessions);
   ok(!report.recommendations.some(rotationOf), "conditioning slots are never rotated by this rule");
+
+  // A rebuilt upper linear slot may change one dial: 3x5 -> 5x3. A miss
+  // without the engine's 10% rebuild is not enough, and lower-body schedule
+  // changes are deliberately outside this rule.
+  const linearSessions = structuredClone(greenSessions);
+  for (const session of linearSessions.filter((candidate) => candidate.dayIndex === 1)) {
+    const press = session.exercises[0];
+    press.prescriptionStyle = "linearFives";
+    press.plannedWeightLb = 100;
+    press.sets = press.sets.map((set) => ({
+      ...set, actualWeightLb: 100, actualReps: 4, plannedWeightLb: 100, plannedReps: 5,
+    }));
+  }
+  report = C.evaluateCoaching(withSlot("press-a", {
+    prescriptionStyle: "linearFives", baseWeightLb: 90, workingSets: 3, workingReps: 5,
+  }), linearSessions);
+  let stage = report.recommendations.find((candidate) => candidate.change.type === "useLinearTriples");
+  ok(stage?.change.slotID === "press-a", "a rebuilt upper linear slot proposes triples for that slot only");
+  eq(stage.change.expectedBaseWeightLb, 90, "the stage change records the base it evaluated");
+  eq(stage.ruleID, "program.slot.linear-triples.v1", "the adaptive stage has an independent rule version");
+  ok(stage.explanation.includes("100 to 90 lb"), "the strategy transition explains the observed rebuild");
+
+  report = C.evaluateCoaching(withSlot("press-a", {
+    prescriptionStyle: "linearFives", baseWeightLb: 100, workingSets: 3, workingReps: 5,
+  }), linearSessions);
+  ok(!report.recommendations.some((candidate) => candidate.change.type === "useLinearTriples"),
+    "three misses without the load rebuild do not trigger a stage change");
+
+  report = C.evaluateCoaching(withSlot("press-a", {
+    prescriptionStyle: "linearFives", baseWeightLb: 90, workingSets: 3, workingReps: 5,
+    capacityManaged: false,
+  }), linearSessions);
+  ok(!report.recommendations.some((candidate) => candidate.change.type === "useLinearTriples"),
+    "a slot that disallows coached sets cannot propose five sets");
+
+  report = C.evaluateCoaching(withSlot("press-a", {
+    prescriptionStyle: "linearFives", baseWeightLb: 90, workingSets: 3, workingReps: 5,
+    maximumSets: 4,
+  }), linearSessions);
+  ok(!report.recommendations.some((candidate) => candidate.change.type === "useLinearTriples"),
+    "a four-set slot cap cannot propose five sets");
+
+  const oneMissSessions = structuredClone(greenSessions);
+  const oneMiss = [...oneMissSessions].reverse().find((session) => session.dayIndex === 1).exercises[0];
+  oneMiss.prescriptionStyle = "linearFives";
+  oneMiss.plannedWeightLb = 100;
+  oneMiss.sets[0] = { ...oneMiss.sets[0], actualReps: 4, plannedWeightLb: 100, plannedReps: 5 };
+  report = C.evaluateCoaching(withSlot("press-a", {
+    prescriptionStyle: "linearFives", baseWeightLb: 90, workingSets: 3, workingReps: 5,
+  }), oneMissSessions);
+  ok(!report.recommendations.some((candidate) => candidate.change.type === "useLinearTriples"),
+    "a manual base reduction after one miss cannot masquerade as the three-miss reset");
+
+  const recoveredSessions = structuredClone(linearSessions);
+  const latestSuccess = coachingSession(4, 1, 48, 100);
+  latestSuccess.exercises[0].prescriptionStyle = "linearFives";
+  recoveredSessions.push(latestSuccess);
+  report = C.evaluateCoaching(withSlot("press-a", {
+    prescriptionStyle: "linearFives", baseWeightLb: 90, workingSets: 3, workingReps: 5,
+  }), recoveredSessions);
+  ok(!report.recommendations.some((candidate) => candidate.change.type === "useLinearTriples"),
+    "a newer success makes an older three-miss run stale");
+
+  const fiveByFiveSessions = structuredClone(linearSessions);
+  for (const session of fiveByFiveSessions.filter((candidate) => candidate.dayIndex === 1)) {
+    const press = session.exercises[0];
+    press.plannedSets = 5;
+    press.sets = Array.from({ length: 5 }, () => ({
+      actualWeightLb: 100, actualReps: 4, plannedWeightLb: 100, plannedReps: 5,
+    }));
+  }
+  report = C.evaluateCoaching(withSlot("press-a", {
+    prescriptionStyle: "linearFives", baseWeightLb: 90, workingSets: 3, workingReps: 5,
+  }), fiveByFiveSessions);
+  ok(!report.recommendations.some((candidate) => candidate.change.type === "useLinearTriples"),
+    "failed 5x5 history cannot masquerade as a failed 3x5 prescription");
+
+  const lowerSessions = structuredClone(greenSessions);
+  for (const session of lowerSessions.filter((candidate) => candidate.dayIndex === 0)) {
+    const squat = session.exercises[0];
+    squat.prescriptionStyle = "linearFives";
+    squat.plannedWeightLb = 100;
+    squat.sets = squat.sets.map((set) => ({
+      ...set, actualWeightLb: 100, actualReps: 4, plannedWeightLb: 100, plannedReps: 5,
+    }));
+  }
+  report = C.evaluateCoaching(withSlot("squat", {
+    prescriptionStyle: "linearFives", baseWeightLb: 90, workingSets: 3, workingReps: 5,
+  }), lowerSessions);
+  ok(!report.recommendations.some((candidate) => candidate.change.type === "useLinearTriples"),
+    "squat and pull transitions wait for authored light-day and frequency semantics");
 }
 
 // ---- Methodology styles: 5/3/1, max/dynamic effort, linear fives, Texas ----
@@ -1503,6 +1601,17 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     const lp = C.planForStyle({ cycleNumber: 1, baseWeightLb: 205, nextPhase: phase, incrementLb: 0 }, 5, "linearFives", { workingSets: 3 });
     eq(`${lp.weightLb}/${lp.sets}x${lp.reps}`, "205/3x5", `linearFives constant at phase ${phase}`);
   }
+  const triples = C.planForStyle(
+    { cycleNumber: 1, baseWeightLb: 205, nextPhase: 2, incrementLb: 0 },
+    5, "linearFives", { workingSets: 5, currentReps: 3 });
+  eq(`${triples.weightLb}/${triples.sets}x${triples.reps}`, "205/5x3",
+    "adaptive upper linear stage changes only 3x5 to 5x3");
+  const triplesPreview = C.exposurePreview({
+    count: 1, baseWeightLb: 205, prescriptionStyle: "linearFives",
+    configuration: { workingSets: 5, currentReps: 3 },
+  });
+  eq(`${triplesPreview[0].prescription.mainWork.sets}x${triplesPreview[0].prescription.mainWork.reps}`,
+    "5x3", "the editor preview preserves the triples stage");
   const recoveryLinear = C.planForStyle(
     { cycleNumber: 1, baseWeightLb: 205, nextPhase: 4, incrementLb: 0 }, 5, "linearFives", { workingSets: 3 });
   eq(`${recoveryLinear.weightLb}/${recoveryLinear.sets}x${recoveryLinear.reps}`, "165/2x3",
@@ -1672,7 +1781,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(C.slotPhaseLabel(9, "main", "wave"), null, "an out-of-range rotation labels nothing");
 
   eq(C.slotBadge("main", "fiveThreeOne"), "Main · 5/3/1", "5/3/1 badge");
-  eq(C.slotBadge("main", "linearFives"), "Main · Linear 5s", "linear badge");
+  eq(C.slotBadge("main", "linearFives"), "Main · Linear", "linear badge");
   eq(C.slotBadge("complementary", "automatic"), "Complementary · Secondary volume",
     "automatic names the style the engine will actually run, not the placeholder");
   eq(C.slotBadge("main", "automatic", "olympic"), "Main · Technique", "olympic auto-resolves to technique");

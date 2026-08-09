@@ -193,6 +193,9 @@ public struct CoachingExerciseSnapshot: Hashable, Sendable {
     public var plannedSets: Int
     public var plannedWeightLb: Double?
     public var plannedReps: Int?
+    /// Strategy stamped on the completed session entry. Nil is legacy history
+    /// and cannot prove which strategy produced the prescription.
+    public var prescriptionStyle: PrescriptionStyle?
     public var roundingLb: Double
     public var sets: [CoachingSetSnapshot]
 
@@ -204,6 +207,7 @@ public struct CoachingExerciseSnapshot: Hashable, Sendable {
         plannedSets: Int,
         plannedWeightLb: Double? = nil,
         plannedReps: Int? = nil,
+        prescriptionStyle: PrescriptionStyle? = nil,
         roundingLb: Double = 5,
         sets: [CoachingSetSnapshot]
     ) {
@@ -214,6 +218,7 @@ public struct CoachingExerciseSnapshot: Hashable, Sendable {
         self.plannedSets = plannedSets
         self.plannedWeightLb = plannedWeightLb
         self.plannedReps = plannedReps
+        self.prescriptionStyle = prescriptionStyle
         self.roundingLb = roundingLb
         self.sets = sets
     }
@@ -265,6 +270,13 @@ public struct CoachingProgramSlot: Hashable, Sendable {
     public var isMain: Bool
     public var capacityManaged: Bool
     public var maximumSets: Int
+    /// Current, resolved strategy and its authored working shape. These are
+    /// value snapshots, not new persistence: the coaching engine needs them to
+    /// recommend a stage change without reading a SwiftData model.
+    public var prescriptionStyle: PrescriptionStyle
+    public var baseWeightLb: Double
+    public var workingSets: Int
+    public var workingReps: Int
     /// Consecutive non-success exposures already on record for this slot. Lift
     /// slots reset it whenever the base is rebuilt, so a non-zero value always
     /// means "the weight is being retried rather than added to".
@@ -282,6 +294,10 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         isMain: Bool = false,
         capacityManaged: Bool = true,
         maximumSets: Int = 6,
+        prescriptionStyle: PrescriptionStyle = .automatic,
+        baseWeightLb: Double = 0,
+        workingSets: Int = 0,
+        workingReps: Int = 0,
         stallCount: Int = 0,
         exerciseIsShelved: Bool = false
     ) {
@@ -294,6 +310,10 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         self.isMain = isMain
         self.capacityManaged = capacityManaged
         self.maximumSets = maximumSets
+        self.prescriptionStyle = prescriptionStyle
+        self.baseWeightLb = max(0, baseWeightLb)
+        self.workingSets = max(0, workingSets)
+        self.workingReps = max(0, workingReps)
         self.stallCount = max(0, stallCount)
         self.exerciseIsShelved = exerciseIsShelved
     }
@@ -358,6 +378,9 @@ public enum CoachingChange: Hashable, Sendable {
     case hold
     case reduceAccessoryVolume(percent: Int)
     case tryShorterSpacing(days: Int)
+    /// Keep per-exposure linear loading, but trade 3x5 for 5x3 on one upper
+    /// slot after its load has already needed a rebuild.
+    case useLinearTriples(slotID: String, exerciseName: String, expectedBaseWeightLb: Double)
     /// Swap one slot to a compatible variation of the same movement. The
     /// engine names the slot only; resolving an actual replacement needs the
     /// exercise library, which lives on the clients — the same split the
@@ -705,9 +728,12 @@ public enum CoachingEngine {
         // wrong at every readiness level, so these are offered alongside the
         // readiness verdict rather than gated behind a green streak. They sort
         // below every readiness rule, so the light stays the headline.
-        let rotations = rotationSuggestions(program: program, evidenceKey: evidenceKey)
+        let programChanges = (
+            rotationSuggestions(program: program, evidenceKey: evidenceKey)
+            + linearStageSuggestions(program: program, sessions: sessions, evidenceKey: evidenceKey)
+        )
         func decided(_ recommendation: CoachingRecommendation) -> [CoachingRecommendation] {
-            ([recommendation] + rotations).sorted { ($0.priority, $0.id) > ($1.priority, $1.id) }
+            ([recommendation] + programChanges).sorted { ($0.priority, $0.id) > ($1.priority, $1.id) }
         }
         // A second consecutive red rotation escalates: one bad rotation is
         // noise, two in a row is a trend, and the 25% cut has already been
@@ -757,7 +783,7 @@ public enum CoachingEngine {
             ))
         }
         guard greenStreak >= 2 else {
-            return rotations.sorted { ($0.priority, $0.id) > ($1.priority, $1.id) }
+            return programChanges.sorted { ($0.priority, $0.id) > ($1.priority, $1.id) }
         }
 
         let budgets: [(MovementPattern, Int)] = [
@@ -768,7 +794,7 @@ public enum CoachingEngine {
             .mapValues { $0.reduce(0) { $0 + $1.plannedSets } }
         let capacity = program.maximumAddedSetsPerRotation
         var changes = 0
-        var result: [CoachingRecommendation] = rotations
+        var result: [CoachingRecommendation] = programChanges
         var capacityAdjustments: [CoachingCapacityAdjustment] = []
         var capacityEvidence: [String] = []
         for (pattern, target) in budgets {
@@ -859,6 +885,84 @@ public enum CoachingEngine {
             ))
         }
         return result
+    }
+
+    /// The first adaptive stage inside Progressive Barbell Strength.
+    ///
+    /// A single miss is not evidence. `linearFives` already retries three
+    /// consecutive misses and then rebuilds the base by 10%. Only after that
+    /// rebuild is observable do we offer the smallest next change supported by
+    /// the existing slot data: keep 15 total reps, expressed as 5x3 instead of
+    /// 3x5, for this upper-body lift only. Squat and pull transitions require
+    /// light-day/frequency semantics and deliberately do not guess here.
+    private static func linearStageSuggestions(
+        program: CoachingProgramSnapshot,
+        sessions: [CoachingSessionSnapshot],
+        evidenceKey: String
+    ) -> [CoachingRecommendation] {
+        let upperPresses: Set<MovementPattern> = [.horizontalPress, .verticalPress]
+        let orderedSessions = sessions.sorted(by: { $0.date > $1.date })
+        return program.slots.compactMap { slot in
+            guard slot.prescriptionStyle == .linearFives,
+                  upperPresses.contains(slot.pattern),
+                  slot.capacityManaged,
+                  slot.maximumSets >= 5,
+                  slot.workingSets == 3, slot.workingReps == 5,
+                  slot.baseWeightLb > 0 else { return nil }
+
+            let slotHistory: [(sessionID: String, exercise: CoachingExerciseSnapshot)] = orderedSessions
+                .compactMap { session in
+                    guard let exercise = session.exercises.first(where: { $0.slotID == slot.id }) else {
+                        return nil
+                    }
+                    return (session.id, exercise)
+                }
+            let exposureCandidates: [(sessionID: String, plannedWeight: Double, missed: Bool)?] = slotHistory
+                .prefix(while: { $0.exercise.prescriptionStyle == .linearFives })
+                .map { entry in
+                    let exercise = entry.exercise
+                    let prescribedWork = exercise.sets.filter {
+                        !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork
+                    }
+                    let setRepTargets = Set(prescribedWork.compactMap(\.plannedReps))
+                    let plannedReps = exercise.plannedReps
+                        ?? (setRepTargets.count == 1 ? setRepTargets.first : nil)
+                    guard let plannedWeight = exercise.plannedWeightLb
+                            ?? prescribedWork.compactMap(\.plannedWeightLb).max(),
+                          plannedWeight > 0,
+                          exercise.plannedSets == 3,
+                          plannedReps == 5 else { return nil }
+                    let metSets = prescribedWork.filter { $0.completed && setMeetsPlan($0) }.count
+                    return (entry.sessionID, plannedWeight, metSets < exercise.plannedSets)
+                }
+            // Unknown/legacy plan data breaks the proof. Do not discard it and
+            // join two failure runs that were never observed as consecutive.
+            let exposures = exposureCandidates.prefix(while: { $0 != nil }).compactMap { $0 }
+            let missesNeeded = ProgramProgression.linearRule(
+                for: .linearFives, movementGroup: nil
+            ).stallLimit
+            guard exposures.count >= missesNeeded else { return nil }
+            let attempts = Array(exposures.prefix(missesNeeded))
+            guard attempts.allSatisfy({ $0.missed }),
+                  let lightest = attempts.map(\.plannedWeight).min(),
+                  let plannedWeight = attempts.map(\.plannedWeight).max(),
+                  abs(plannedWeight - lightest) < 0.01,
+                  slot.baseWeightLb <= plannedWeight * 0.925 else { return nil }
+            let sessionID = attempts[0].sessionID
+
+            return CoachingRecommendation(
+                ruleID: "program.slot.linear-triples.v1",
+                priority: 65,
+                title: "Move \(slot.exerciseName) to triples",
+                explanation: "\(slot.exerciseName)'s linear base was rebuilt from \(Weight.trim(plannedWeight)) to \(Weight.trim(slot.baseWeightLb)) lb after the last prescription was not met. Keep session-to-session loading, but change this slot from 3x5 to 5x3 so only rep structure changes.",
+                change: .useLinearTriples(
+                    slotID: slot.id,
+                    exerciseName: slot.exerciseName,
+                    expectedBaseWeightLb: slot.baseWeightLb
+                ),
+                evidenceKey: "\(evidenceKey)-\(sessionID)-\(slot.id)"
+            )
+        }
     }
 
     private static func preferredDay(for pattern: MovementPattern, slots: [CoachingProgramSlot]) -> Int {

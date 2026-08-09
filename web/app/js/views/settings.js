@@ -627,7 +627,7 @@ async function programDayEditor(p, day) {
                 ["automatic", "Automatic"], ["wave", "Strength wave"], ["offsetWave", "Strength wave — offsets"],
                 ["secondary", "Secondary volume"], ["hypertrophy", "Hypertrophy"], ["technique", "Technique"],
                 ["doubleProgression", "Double progression"],
-                ["linearFives", "Linear fives"], ["texasVolume", "Texas — volume day"],
+                ["linearFives", "Linear progression"], ["texasVolume", "Texas — volume day"],
                 ["texasLight", "Texas — light day"], ["texasIntensity", "Texas — intensity day"],
                 ["fiveThreeOne", "5/3/1 wave"], ["maxEffort", "Max effort"], ["dynamicEffort", "Dynamic effort"],
               ], l.prescription || "automatic").map(([value, label]) => ui.h("option", { value, text: label, selected: (l.prescription || "automatic") === value })));
@@ -659,6 +659,11 @@ async function programDayEditor(p, day) {
             ["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(l.prescription)
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Working sets" }),
                 ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 10, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } })) : null,
+            l.prescription === "linearFives"
+              ? ui.h("div", { class: "row" }, ui.h("span", { text: "Working reps" }),
+                ui.seg([{ value: 5, label: "5 reps" }, { value: 3, label: "3 reps" }],
+                  (l.currentReps ?? 5) <= 3 ? 3 : 5,
+                  async (v) => { l.currentReps = v; await Programs.save(p); refresh(); })) : null,
             l.prescription === "doubleProgression" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Sets / rep window" }),
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } }),

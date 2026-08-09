@@ -229,9 +229,23 @@ final class ProgramEngineTests: XCTestCase {
         let state = CycleState(baseWeightLb: 100, nextPhase: .peak)
         let plan = ProgramEngine.programPlan(for: state, programRoundingLb: 5, exerciseType: "barbell",
                                              movementGroup: "olympic", role: .main)
-        XCTAssertEqual(plan.sets, 6)
+        XCTAssertEqual(plan.sets, 5)
         XCTAssertEqual(plan.reps, 1)
-        XCTAssertEqual(plan.weightLb, 110)
+        XCTAssertEqual(plan.weightLb, 115)
+    }
+
+    func testTechniqueBuildKeepsPracticeVolumeAndAddsSevenPointFivePercentPerStep() {
+        let plans = CyclePhase.allCases.map { phase in
+            ProgramEngine.programPlan(
+                for: CycleState(baseWeightLb: 100, nextPhase: phase),
+                programRoundingLb: 5, exerciseType: "barbell",
+                movementGroup: "olympic", role: .main
+            )
+        }
+        XCTAssertEqual(plans.map(\.sets), [5, 5, 5, 3])
+        XCTAssertEqual(plans.map(\.reps), [3, 2, 1, 2])
+        XCTAssertEqual(plans.map(\.weightLb), [100, 110, 115, 90])
+        XCTAssertEqual(PrescriptionStyle.technique.templateStartFraction, 0.70)
     }
 
     func testOffsetWaveDerivesEveryPhaseFromTheVolumeBase() {
@@ -438,6 +452,21 @@ final class ProgramEngineTests: XCTestCase {
             XCTAssertEqual([plan.weightLb, Double(plan.sets), Double(plan.reps)], [205, 3, 5],
                            "phase \(phase.rawValue) must not reshape linear fives")
         }
+        let triples = ProgramEngine.plan(
+            for: CycleState(baseWeightLb: 205, nextPhase: .load),
+            roundingLb: 5, style: .linearFives,
+            configuration: .init(workingSets: 5, currentReps: 3)
+        )
+        XCTAssertEqual([triples.weightLb, Double(triples.sets), Double(triples.reps)], [205, 5, 3],
+                       "the adaptive stage changes only 3x5 to 5x3")
+        let preview = ProgramEngine.exposurePreview(
+            count: 1, baseWeightLb: 205,
+            prescriptionStyle: .linearFives,
+            configuration: .init(workingSets: 5, currentReps: 3)
+        )
+        XCTAssertEqual([preview.first?.prescription.mainWork.sets,
+                        preview.first?.prescription.mainWork.reps], [5, 3],
+                       "the editor preview preserves the triples stage")
         let recovery = ProgramEngine.plan(
             for: CycleState(baseWeightLb: 205, nextPhase: .deload),
             roundingLb: 5, style: .linearFives,
@@ -568,7 +597,7 @@ final class ProgramEngineTests: XCTestCase {
 
     func testSlotBadgeNamesTheStyleTheEngineWillActuallyRun() {
         XCTAssertEqual(ProgramEngine.slotBadge(role: .main, prescriptionStyle: .fiveThreeOne), "Main · 5/3/1")
-        XCTAssertEqual(ProgramEngine.slotBadge(role: .main, prescriptionStyle: .linearFives), "Main · Linear 5s")
+        XCTAssertEqual(ProgramEngine.slotBadge(role: .main, prescriptionStyle: .linearFives), "Main · Linear")
         XCTAssertEqual(ProgramEngine.slotBadge(role: .complementary, prescriptionStyle: .automatic),
                        "Complementary · Secondary volume",
                        "the badge names the resolved style, not the placeholder left in the picker")
