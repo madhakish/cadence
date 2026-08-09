@@ -620,7 +620,7 @@ private struct HistorySetRow: View {
     }
 
     private var statusColor: Color {
-        set.status == .completed ? Theme.good : .secondary
+        self.set.status == .completed ? Theme.good : .secondary
     }
 }
 
