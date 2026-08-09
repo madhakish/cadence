@@ -1625,7 +1625,52 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(deadlift.plannedWeightLb === 235,
     `[INV-ADVANCE-BUYS-PLATES] bonus 245×3 lifts the 226-base card to 235 (got ${deadlift.plannedWeightLb})`);
   await db.Sessions.del(builtId);
+
+  // A failed heavy attempt (zero reps, marked completed) is not capability
+  // evidence — without real reps the bonus row must not raise the plan.
+  const failedTag = { ...((await db.Sessions.get(priorId)).programTag) };
   await db.Sessions.del(priorId);
+  const failedId = await db.Sessions.save({
+    date: db.iso(new Date(Date.now() - 20 * 86400000)), notes: "", isCompleted: true,
+    completedAt: db.iso(new Date(Date.now() - 20 * 86400000)), gymName: null,
+    programTag: failedTag,
+    exercises: [{ order: 0, exerciseName: "Deadlift", notes: "", phase: 1,
+      programRole: "main", programSlotId: slot.id,
+      plannedWeightLb: 220, plannedSets: 5, plannedReps: 5,
+      sets: [...Array.from({ length: 5 }, (_, index) => atPlan(index)),
+        { ...bonus(5), reps: 0 }] }],
+  });
+  const failedBuiltId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const failedBuilt = await db.Sessions.get(failedBuiltId);
+  ok(failedBuilt.exercises.find((entry) => entry.exerciseName === "Deadlift").plannedWeightLb === 225,
+    "[INV-ADVANCE-BUYS-PLATES] a zero-rep bonus attempt never arms catch-up");
+  await db.Sessions.del(failedBuiltId);
+  await db.Sessions.del(failedId);
+
+  // Catch-up is a cycle-slot mechanism: a per-exposure methodology's own
+  // rule is its contract, and the plan must stay on the persisted base the
+  // style's advance actually writes.
+  slot.prescription = "linearFives";
+  await db.Programs.save(program);
+  const linearProgram = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const linearSlot = linearProgram.days[0].lifts[0];
+  const linearPriorId = await db.Sessions.save({
+    date: db.iso(new Date(Date.now() - 4 * 86400000)), notes: "", isCompleted: true,
+    completedAt: db.iso(new Date(Date.now() - 4 * 86400000)), gymName: null,
+    programTag: { programId: linearProgram.uuid || linearProgram.id, programName: name,
+      cycleNumber: 3, week: 1, dayIndex: 0, planNames: ["Deadlift"] },
+    exercises: [{ order: 0, exerciseName: "Deadlift", notes: "", phase: 1,
+      programRole: "main", programSlotId: linearSlot.id,
+      plannedWeightLb: 220, plannedSets: 5, plannedReps: 5,
+      sets: [...Array.from({ length: 5 }, (_, index) => atPlan(index)),
+        ...Array.from({ length: 3 }, (_, index) => bonus(5 + index))] }],
+  });
+  const linearBuiltId = await session.createSessionFromProgramDay(linearProgram, linearProgram.days[0]);
+  const linearBuilt = await db.Sessions.get(linearBuiltId);
+  ok(linearBuilt.exercises.find((entry) => entry.exerciseName === "Deadlift").plannedWeightLb === 225,
+    "[INV-ADVANCE-BUYS-PLATES] a per-exposure methodology keeps its own contract — bonus catch-up never overrides it");
+  await db.Sessions.del(linearBuiltId);
+  await db.Sessions.del(linearPriorId);
   await db.importBundle(parsed);
 }
 

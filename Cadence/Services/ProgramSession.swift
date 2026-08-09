@@ -323,9 +323,10 @@ enum ProgramSession {
     /// volume work (`inCycle`). Entry matching reuses `programmedEntry`
     /// (slot ID + role, lineage fallback) plus a same-movement check, so a
     /// coaching rotation's renamed slot never inherits the old exercise's
-    /// evidence; set selection reuses `SessionCompletion.prescribedWork`
+    /// evidence; at-plan selection reuses `SessionCompletion.prescribedWork`
     /// (planned-set window, completed, non-warmup), so user-added bonus rows
-    /// stay history-only on both clients. Returns the heaviest qualifying
+    /// never grade a cycle — they surface separately as `bonusLb`, the
+    /// planning-only catch-up signal. Returns the heaviest qualifying
     /// working weight and the BAR IT WAS LIFTED UNDER — the label the twin
     /// math must use, not whatever bar today's gym defaults to. Nil means no
     /// evidence. Mirrors web `lastVolumeEvidence`.
@@ -356,8 +357,11 @@ enum ProgramSession {
             let candidates = entry.orderedSets.filter {
                 !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork
             }
+            // A bonus row is capability evidence only if at least one rep
+            // actually happened — a failed heavy attempt marked completed
+            // proves the opposite of capability.
             let bonus = candidates.dropFirst(entry.plannedSets ?? candidates.count)
-                .filter { $0.status == .completed }
+                .filter { $0.status == .completed && $0.reps >= 1 }
                 .map(\.weightLb).max() ?? 0
             return (top, bonus, (entry.barID.map { Bar.by(id: $0) } ?? .bar45lb).labelLb)
         }
@@ -394,13 +398,19 @@ enum ProgramSession {
             baseWeightLb: lift.baseWeightLb, focus: program.focus,
             regime: regime, roundingLb: program.roundingLb
         )
+        // Catch-up is a CYCLE-slot mechanism: the wave's rollover advance
+        // rides the raised plan, so plan and persisted base reconverge. A
+        // per-exposure style's own rule (+5/session, Texas pairs) is its
+        // methodology contract — overriding it here would prescribe a load
+        // its advance never persists, drifting plan from base every session.
+        let bonus = lift.prescription.advancesPerExposure ? 0 : evidence.bonusLb
         return ProgramProgression.honestBase(
             baseWeightLb: lift.baseWeightLb,
             lastIncrementLb: lift.lastIncrementLb,
             lastVolumePerformedLb: evidence.performedLb,
             roundingLb: program.roundingLb,
             barLb: evidence.barLabelLb,
-            bonusPerformedLb: evidence.bonusLb,
+            bonusPerformedLb: bonus,
             catchUpIncrementLb: catchUp
         )
     }

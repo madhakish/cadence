@@ -1734,9 +1734,10 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
 // graded cycle's own volume work (inCycle). Entry matching goes through
 // programmedEntry (slot ID + role, lineage fallback) plus a same-movement
 // check, so a coaching rotation's renamed slot never inherits the old
-// exercise's evidence; set selection goes through prescribedWork
-// (planned-set window, completed, non-warmup), so user-added bonus rows stay
-// history-only on both clients. Returns the heaviest qualifying working
+// exercise's evidence; at-plan selection goes through prescribedWork
+// (planned-set window, completed, non-warmup), so user-added bonus rows
+// never grade a cycle — they surface separately as bonusLb, the
+// planning-only catch-up signal. Returns the heaviest qualifying working
 // weight and the BAR IT WAS LIFTED UNDER — the label the twin math must use,
 // not whatever bar today's gym defaults to. Null means no evidence. Mirrors
 // ProgramSession.lastVolumeEvidence.
@@ -1759,11 +1760,14 @@ export function lastVolumeEvidence(lift, program, sessions, { beforeCycle = null
     if (top > 0) {
       // The heaviest completed working set BEYOND the planned-set window —
       // work the lifter added on purpose. Grading never sees it; planning
-      // treats it as an explicit catch-up signal (honestBase).
+      // treats it as an explicit catch-up signal (honestBase). A bonus row is
+      // capability evidence only if at least one rep actually happened — a
+      // failed heavy attempt marked completed proves the opposite.
       const candidates = (entry.sets || []).filter((set) => !set.isWarmup
         && C.countsAsPrescribedWork(set.prescriptionBlock));
       const bonus = Math.max(0, ...candidates.slice(entry.plannedSets ?? candidates.length)
-        .filter((set) => set.status === "completed").map((set) => set.weightLb || 0));
+        .filter((set) => set.status === "completed" && set.reps >= 1)
+        .map((set) => set.weightLb || 0));
       return { performedLb: top, bonusLb: bonus,
         barLabelLb: C.barLabelLb(entry.barId ? C.barById(entry.barId) : C.BARS.bar45lb) };
     }
@@ -1791,9 +1795,15 @@ export function planningBase(lift, exercise, program, sessions) {
   // history scan. Mirrors ProgramSession.planningBase.
   const regime = C.progressionRegime(lift.estimatedMaxLb || 0, 0, false, lift.baseWeightLb);
   const catchUp = C.stagedIncrement(lift.baseWeightLb, program.focus, regime, program.roundingLb);
+  // Catch-up is a CYCLE-slot mechanism: the wave's rollover advance rides the
+  // raised plan, so plan and persisted base reconverge. A per-exposure
+  // style's own rule (+5/session, Texas pairs) is its methodology contract —
+  // overriding it here would prescribe a load its advance never persists,
+  // drifting plan from base every session.
+  const bonus = C.advancesPerExposure(lift.prescription) ? 0 : evidence.bonusLb;
   return C.honestBase(lift.baseWeightLb, lift.lastIncrementLb ?? 0,
     evidence.performedLb, program.roundingLb, evidence.barLabelLb,
-    evidence.bonusLb, catchUp);
+    bonus, catchUp);
 }
 
 // The volume-fallback sets this lift carries, with the rotation-wide
