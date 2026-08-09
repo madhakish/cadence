@@ -966,6 +966,103 @@ struct ProgressionChartsView: View {
         return points.filter { abs($0.date.timeIntervalSince(nearest.date)) < 1 }
     }
 
+    @ChartContentBuilder
+    private func futureBand(_ trend: Projection?) -> some ChartContent {
+        if let trend, let range = loadRange(including: trend) {
+            RectangleMark(
+                xStart: .value("Today", Date.now),
+                xEnd: .value("Horizon", trend.horizonDate),
+                yStart: .value(chartUnitLabel, range.low),
+                yEnd: .value(chartUnitLabel, range.high)
+            )
+            .foregroundStyle(Color.secondary.opacity(0.07))
+        }
+    }
+
+    @ChartContentBuilder
+    private var performedMarks: some ChartContent {
+        if showsAreaFill {
+            ForEach(points) { point in
+                AreaMark(x: .value("Date", point.date),
+                         y: .value(chartUnitLabel, point.value))
+                    .foregroundStyle(LinearGradient(
+                        colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.01)],
+                        startPoint: .top, endPoint: .bottom
+                    ))
+            }
+        }
+        ForEach(points) { point in
+            LineMark(x: .value("Date", point.date),
+                     y: .value(chartUnitLabel, point.value),
+                     series: .value("Series", seriesKey(point)))
+                .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
+                .lineStyle(StrokeStyle(lineWidth: 2,
+                                       dash: point.role == .complementary ? [5, 4] : []))
+            PointMark(x: .value("Date", point.date),
+                      y: .value(chartUnitLabel, point.value))
+                .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
+                .symbolSize(point.role == .complementary ? 28 : 44)
+        }
+    }
+
+    @ChartContentBuilder
+    private var peakTargetMark: some ChartContent {
+        if let peakTarget {
+            RuleMark(y: .value("Peak target", peakTarget))
+                .foregroundStyle(Theme.accent.opacity(0.8))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                .annotation(position: .top, alignment: .trailing) {
+                    Text("Peak target \(Weight.trim(peakTarget))")
+                        .font(.caption2).foregroundStyle(Theme.accent)
+                }
+        }
+    }
+
+    @ChartContentBuilder
+    private func projectionMarks(_ trend: Projection?) -> some ChartContent {
+        if let trend {
+            ForEach(trend.points) { point in
+                LineMark(x: .value("Date", point.date),
+                         y: .value(chartUnitLabel, point.value),
+                         series: .value("Series", "Projected"))
+                    .foregroundStyle(Self.projectionColor)
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [3, 5]))
+            }
+            PointMark(x: .value("Date", trend.horizonDate),
+                      y: .value(chartUnitLabel, trend.result.horizonValue))
+                .foregroundStyle(Self.projectionColor)
+                .symbolSize(36)
+                .annotation(position: .top, alignment: .trailing) {
+                    Text(chartValueLabel(trend.result.horizonValue))
+                        .font(.caption2.bold().monospacedDigit())
+                        .foregroundStyle(Self.projectionColor)
+                }
+            RuleMark(x: .value("Today", Date.now))
+                .foregroundStyle(Color.secondary.opacity(0.5))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                .annotation(position: .top, alignment: .leading) {
+                    Text("today")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+        }
+    }
+
+    @ChartContentBuilder
+    private var selectionMarks: some ChartContent {
+        if let selected = selectedChartPoints.first {
+            RuleMark(x: .value("Selected session", selected.date))
+                .foregroundStyle(Color.primary.opacity(0.4))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+            ForEach(selectedChartPoints) { point in
+                PointMark(x: .value("Selected session", point.date),
+                          y: .value(chartUnitLabel, point.value))
+                    .foregroundStyle(Color.primary)
+                    .symbolSize(105)
+            }
+        }
+    }
+
     private var chartCaption: String {
         let metricLabel: String
         switch metric {
@@ -1024,80 +1121,21 @@ struct ProgressionChartsView: View {
                     // plot: RectangleMark's x-only initializer is ambiguous
                     // between two overloads, and the load range is exactly what
                     // the shading should cover anyway.
-                    if let trend, let range = loadRange(including: trend) {
-                        RectangleMark(
-                            xStart: .value("Today", Date.now),
-                            xEnd: .value("Horizon", trend.horizonDate),
-                            yStart: .value(chartUnitLabel, range.low),
-                            yEnd: .value(chartUnitLabel, range.high)
-                        )
-                        .foregroundStyle(Color.secondary.opacity(0.07))
-                    }
+                    futureBand(trend)
                     // A wash under a lone line gives the plot depth without
                     // adding a second thing to read. Only when there IS one
                     // line — stacking translucent areas makes their overlaps
                     // look like data.
-                    if showsAreaFill {
-                        ForEach(points) { point in
-                            AreaMark(x: .value("Date", point.date),
-                                     y: .value(chartUnitLabel, point.value))
-                                .foregroundStyle(LinearGradient(
-                                    colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.01)],
-                                    startPoint: .top, endPoint: .bottom
-                                ))
-                        }
-                    }
-                    ForEach(points) { point in
-                        LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value),
-                                 series: .value("Series", seriesKey(point)))
-                            .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
-                            .lineStyle(StrokeStyle(lineWidth: 2,
-                                                   dash: point.role == .complementary ? [5, 4] : []))
-                        PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
-                            .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
-                            .symbolSize(point.role == .complementary ? 28 : 44)
-                    }
-                    if let peakTarget {
-                        RuleMark(y: .value("Peak target", peakTarget))
-                            .foregroundStyle(Theme.accent.opacity(0.8))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                            .annotation(position: .top, alignment: .trailing) {
-                                Text("Peak target \(Weight.trim(peakTarget))")
-                                    .font(.caption2).foregroundStyle(Theme.accent)
-                            }
-                    }
+                    performedMarks
+                    peakTargetMark
                     // The projection last, so it reads as an overlay on the
                     // history rather than another member of it. Its colour is
                     // set outright rather than through the foreground-style
                     // scale: joining that scale's domain would renumber every
                     // performed series' colour the moment a horizon was picked.
                     // No point marks either — there is no session to mark.
-                    if let trend {
-                        ForEach(trend.points) { point in
-                            LineMark(x: .value("Date", point.date),
-                                     y: .value(chartUnitLabel, point.value),
-                                     series: .value("Series", "Projected"))
-                                .foregroundStyle(Self.projectionColor)
-                                .lineStyle(StrokeStyle(lineWidth: 2, dash: [3, 5]))
-                        }
-                        PointMark(x: .value("Date", trend.horizonDate),
-                                  y: .value(chartUnitLabel, trend.result.horizonValue))
-                            .foregroundStyle(Self.projectionColor)
-                            .symbolSize(36)
-                            .annotation(position: .top, alignment: .trailing) {
-                                Text(chartValueLabel(trend.result.horizonValue))
-                                    .font(.caption2.bold().monospacedDigit())
-                                    .foregroundStyle(Self.projectionColor)
-                            }
-                        RuleMark(x: .value("Today", Date.now))
-                            .foregroundStyle(Color.secondary.opacity(0.5))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                            .annotation(position: .top, alignment: .leading) {
-                                Text("today")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                            }
-                    }
+                    projectionMarks(trend)
+                    selectionMarks
                 }
                 .chartForegroundStyleScale(range: splitByRotation ? Self.rotationPalette : Self.seriesPalette)
                 .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
@@ -1174,17 +1212,6 @@ struct ProgressionChartsView: View {
                                 .padding(10)
                                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
                             }
-                        }
-                    }
-                    if let selected = selectedChartPoints.first {
-                        RuleMark(x: .value("Selected session", selected.date))
-                            .foregroundStyle(Color.primary.opacity(0.4))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                        ForEach(selectedChartPoints) { point in
-                            PointMark(x: .value("Selected session", point.date),
-                                      y: .value(chartUnitLabel, point.value))
-                                .foregroundStyle(Color.primary)
-                                .symbolSize(105)
                         }
                     }
                 }
