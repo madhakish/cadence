@@ -4,8 +4,9 @@ import XCTest
 final class PlateMathTests: XCTestCase {
 
     // The kg↔lb denomination twins: the plate is the currency, the number is
-    // its label. Mirrors web/tests/core.test.mjs — same stacks, same masses.
-    // [INV-PLATES-ARE-THE-CURRENCY]
+    // its label. Equivalence is plate-for-plate (counts at every twin rank),
+    // never a mass match. Mirrors web/tests/core.test.mjs — same stacks, same
+    // masses. [INV-PLATES-ARE-THE-CURRENCY]
     func testDenominationTwins() {
         let kg20 = 20 * WeightUnit.lbPerKg
         XCTAssertEqual(PlateMath.kgTwinSideMassLb(90) ?? 0, 2 * kg20, accuracy: 1e-6,
@@ -26,6 +27,36 @@ final class PlateMathTests: XCTestCase {
         let heavyTwin = 45 + 8 * kg20
         XCTAssertTrue(PlateMath.plateEquivalent(targetLb: 405, performedLb: heavyTwin),
                       "a four-pair side twins despite ~7 lb of drift")
+        // Plate-for-plate cuts both ways: a stack short a plate is not the
+        // plan, and a stack with an extra pair is not the plan either.
+        XCTAssertFalse(PlateMath.plateEquivalent(targetLb: 225, performedLb: 45 + 3 * kg20),
+                       "a short stack is not the plan")
+        XCTAssertFalse(PlateMath.plateEquivalent(targetLb: 225, performedLb: heavyTwin),
+                       "a longer stack is not the plan")
+
+        // Mass-aliased twins resolve plate-for-plate. Ten kg of plates a side
+        // is the twin of BOTH the 95 stack (one 25 lb plate) and the 85 stack
+        // (two 10 lb plates); the performed stack reads greedy heaviest-first
+        // — one 10 kg plate — so only the 95 plan is met. Every such collision
+        // pair (10 lb pair vs 25 lb plate at the same rank block, ± a 2.5)
+        // resolves to exactly one plan.
+        let aliased = 89.09
+        XCTAssertTrue(PlateMath.plateEquivalent(targetLb: 95, performedLb: aliased),
+                      "the performed stack reads as one 10 kg plate a side — the 95 twin")
+        XCTAssertFalse(PlateMath.plateEquivalent(targetLb: 85, performedLb: aliased),
+                       "the two-5 kg reading is not the greedy stack — the 85 plan is not met")
+        for (smaller, larger) in [(90.0, 100.0), (175.0, 185.0), (180.0, 190.0), (265.0, 275.0),
+                                  (270.0, 280.0), (355.0, 365.0), (360.0, 370.0), (445.0, 455.0),
+                                  (450.0, 460.0), (535.0, 545.0), (540.0, 550.0), (625.0, 635.0),
+                                  (630.0, 640.0)] {
+            let mass = PlateMath.kgTwinSideMassLb((larger - 45) / 2).map { 45 + 2 * $0 }!
+            XCTAssertEqual(PlateMath.kgTwinSideMassLb((smaller - 45) / 2).map { 45 + 2 * $0 }!,
+                           mass, accuracy: 0.01, "\(smaller)/\(larger) must share a twin mass")
+            XCTAssertTrue(PlateMath.plateEquivalent(targetLb: larger, performedLb: mass),
+                          "\(larger) is the greedy reading of the aliased stack")
+            XCTAssertFalse(PlateMath.plateEquivalent(targetLb: smaller, performedLb: mass),
+                           "\(smaller)'s finer stack is not the performed plates")
+        }
 
         XCTAssertEqual(PlateMath.storedPrescription(targetLb: 405, achievedLb: heavyTwin), 405,
                        "the twin stores the programmed number, not the drift")

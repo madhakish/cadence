@@ -1930,6 +1930,32 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   const heavyTwin = 45 + 8 * (20 / C.KG_PER_LB);
   ok(C.plateEquivalent(405, heavyTwin),
     "[INV-PLATES-ARE-THE-CURRENCY] a four-pair side twins despite ~7 lb of drift");
+  // Plate-for-plate cuts both ways: a stack short a plate is not the plan, and
+  // a stack with an extra pair is not the plan either.
+  ok(!C.plateEquivalent(225, 45 + 3 * (20 / C.KG_PER_LB)),
+    "[INV-PLATES-ARE-THE-CURRENCY] a short stack is not the plan");
+  ok(!C.plateEquivalent(225, heavyTwin),
+    "[INV-PLATES-ARE-THE-CURRENCY] a longer stack is not the plan");
+
+  // Mass-aliased twins resolve plate-for-plate. Ten kg of plates a side is the
+  // twin of BOTH the 95 stack (one 25 lb plate) and the 85 stack (two 10 lb
+  // plates); the performed stack reads greedy heaviest-first — one 10 kg plate
+  // — so only the 95 plan is met. Every such collision pair (10 lb pair vs
+  // 25 lb plate at the same rank block, ± a 2.5) resolves to exactly one plan.
+  ok(C.plateEquivalent(95, 89.09),
+    "[INV-PLATES-ARE-THE-CURRENCY] the performed stack reads as one 10 kg plate a side — the 95 twin");
+  ok(!C.plateEquivalent(85, 89.09),
+    "[INV-PLATES-ARE-THE-CURRENCY] the two-5 kg reading is not the greedy stack — the 85 plan is not met");
+  for (const [smaller, larger] of [[90, 100], [175, 185], [180, 190], [265, 275], [270, 280],
+    [355, 365], [360, 370], [445, 455], [450, 460], [535, 545], [540, 550], [625, 635], [630, 640]]) {
+    const mass = 45 + 2 * C.kgTwinSideMassLb((larger - 45) / 2);
+    ok(Math.abs(45 + 2 * C.kgTwinSideMassLb((smaller - 45) / 2) - mass) <= 0.01,
+      `[INV-PLATES-ARE-THE-CURRENCY] ${smaller}/${larger} must share a twin mass`);
+    ok(C.plateEquivalent(larger, mass),
+      `[INV-PLATES-ARE-THE-CURRENCY] ${larger} is the greedy reading of the aliased stack`);
+    ok(!C.plateEquivalent(smaller, mass),
+      `[INV-PLATES-ARE-THE-CURRENCY] ${smaller}'s finer stack is not the performed plates`);
+  }
 
   // Grading: the twin stack is AT plan — this is the stall trap, closed.
   ok(!C.belowPlanLoad(221.37, 225, 5),

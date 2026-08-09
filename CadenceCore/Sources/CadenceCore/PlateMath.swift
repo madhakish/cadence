@@ -249,19 +249,54 @@ public enum PlateMath {
     }
 
     /// Whether `performedLb` is the plate-for-plate kg twin of the lb-clean
-    /// `targetLb` — same plates, kg denominations, on the same bar or on the
-    /// bar's own twin (a 45 lb bar and a 20 kg bar are the same object in the
-    /// same sense the plates are). This is what makes a kg-gym session read
-    /// as AT its lb plan instead of a below-plan miss that stalls the cycle.
+    /// `targetLb` — the performed load's greedy kg stack (heaviest-first, over
+    /// the twin-able denominations) carries exactly the plate COUNT the
+    /// target's greedy lb stack carries, at every twin rank, on the same bar
+    /// or on the bar's own twin (a 45 lb bar and a 20 kg bar are the same
+    /// object in the same sense the plates are). Equivalence is
+    /// plate-for-plate, not mass: a short stack is not the plan, a long one
+    /// is not either, and two lb stacks whose twin masses coincide resolve to
+    /// the performed stack's greedy reading (89.09 lb on a 45 bar is one 10 kg
+    /// plate a side — the 95 twin, never the two-5 kg 85 twin). This is what
+    /// makes a kg-gym session read as AT its lb plan instead of a below-plan
+    /// miss that stalls the cycle.
     public static func plateEquivalent(
         targetLb: Double, performedLb: Double, barLb: Double = 45
     ) -> Bool {
         guard targetLb > barLb, performedLb > 0 else { return false }
-        let side = (targetLb - barLb) / 2
-        guard let twinSide = kgTwinSideMassLb(side) else { return false }
+        let lbPlates = plateTwinKg.keys.sorted(by: >)
+        let kgPlatesLb = lbPlates.compactMap { plateTwinKg[$0].map { $0 * WeightUnit.lbPerKg } }
+        guard let target = greedySideCounts((targetLb - barLb) / 2, plates: lbPlates, cleanliness: 1e-6) else { return false }
         let barTwinLb = plateTwinKg[barLb].map { $0 * WeightUnit.lbPerKg } ?? barLb
-        return [barLb + 2 * twinSide, barTwinLb + 2 * twinSide]
-            .contains { abs(performedLb - $0) <= 0.15 }
+        // The performed side is a logged number, often rounded to 0.01 lb, so
+        // each plate seats with a small epsilon and the whole side must come
+        // out clean within the same band.
+        return [barLb, barTwinLb].contains { bar in
+            let side = (performedLb - bar) / 2
+            guard side >= -1e-9 else { return false }
+            return greedySideCounts(side, plates: kgPlatesLb, plateEpsilon: 0.05, cleanliness: 0.05) == target
+        }
+    }
+
+    /// Greedy heaviest-first plate counts for one side, or nil when the side
+    /// is not a clean stack of `plates` (in lb). `plateEpsilon` lets a logged,
+    /// rounded mass seat the plate it nearly reaches; `cleanliness` bounds the
+    /// leftover (and the twin-table drift) that still counts as clean.
+    private static func greedySideCounts(
+        _ sideLb: Double, plates: [Double], plateEpsilon: Double = 1e-9, cleanliness: Double
+    ) -> [Int]? {
+        guard sideLb.isFinite, sideLb >= 0 else { return nil }
+        var remaining = sideLb
+        var counts = [Int]()
+        for plate in plates {
+            var count = 0
+            while remaining >= plate - plateEpsilon {
+                remaining -= plate
+                count += 1
+            }
+            counts.append(count)
+        }
+        return abs(remaining) <= cleanliness ? counts : nil
     }
 
     /// `storedPrescription`.

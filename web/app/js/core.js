@@ -346,18 +346,52 @@ export function kgTwinSideMassLb(sideLb) {
   return Math.abs(remaining) < 1e-6 ? twinLb : null;
 }
 
+// Greedy heaviest-first plate counts for one side, or null when the side is
+// not a clean stack of `plates` (in lb). `plateEpsilon` lets a logged, rounded
+// mass seat the plate it nearly reaches; `cleanliness` bounds the leftover
+// (and the twin-table drift) that still counts as clean. Mirrors PlateMath.
+function greedySideCounts(sideLb, plates, plateEpsilon, cleanliness) {
+  if (!Number.isFinite(sideLb) || sideLb < 0) return null;
+  let remaining = sideLb;
+  const counts = [];
+  for (const plate of plates) {
+    let count = 0;
+    while (remaining >= plate - plateEpsilon) {
+      remaining -= plate;
+      count += 1;
+    }
+    counts.push(count);
+  }
+  return Math.abs(remaining) <= cleanliness ? counts : null;
+}
+
 // Whether performedLb is the plate-for-plate kg twin of the lb-clean targetLb
-// — same plates, kg denominations, on the same bar or on the bar's own twin
-// (a 45 lb bar and a 20 kg bar are the same object in the same sense the
-// plates are). This is what makes a kg-gym session read as AT its lb plan
-// instead of a below-plan miss that stalls the cycle.
+// — the performed load's greedy kg stack (heaviest-first, over the twin-able
+// denominations) carries exactly the plate COUNT the target's greedy lb stack
+// carries, at every twin rank, on the same bar or on the bar's own twin (a
+// 45 lb bar and a 20 kg bar are the same object in the same sense the plates
+// are). Equivalence is plate-for-plate, not mass: a short stack is not the
+// plan, a long one is not either, and two lb stacks whose twin masses coincide
+// resolve to the performed stack's greedy reading (89.09 lb on a 45 bar is one
+// 10 kg plate a side — the 95 twin, never the two-5 kg 85 twin). This is what
+// makes a kg-gym session read as AT its lb plan instead of a below-plan miss
+// that stalls the cycle. Mirrored 1:1 in CadenceCore PlateMath.
 export function plateEquivalent(targetLb, performedLb, barLb = 45) {
   if (!(targetLb > barLb) || !(performedLb > 0)) return false;
-  const twinSide = kgTwinSideMassLb((targetLb - barLb) / 2);
-  if (twinSide == null) return false;
+  const lbPlates = Object.keys(PLATE_TWIN_KG).map(Number).sort((a, b) => b - a);
+  const kgPlates = lbPlates.map((p) => PLATE_TWIN_KG[p]);
+  const target = greedySideCounts((targetLb - barLb) / 2, lbPlates, 1e-9, 1e-6);
+  if (target == null) return false;
   const barTwinLb = PLATE_TWIN_KG[barLb] != null ? PLATE_TWIN_KG[barLb] / KG_PER_LB : barLb;
-  return [barLb + 2 * twinSide, barTwinLb + 2 * twinSide]
-    .some((candidate) => Math.abs(performedLb - candidate) <= 0.15);
+  // The performed side is a logged number, often rounded to 0.01 lb, so each
+  // plate seats with a small epsilon and the whole side must come out clean
+  // within the same band.
+  return [barLb, barTwinLb].some((bar) => {
+    const side = (performedLb - bar) / 2;
+    if (side < -1e-9) return false;
+    const got = greedySideCounts(side, kgPlates.map((kg) => kg / KG_PER_LB), 0.05, 0.05);
+    return got != null && got.length === target.length && got.every((c, i) => c === target[i]);
+  });
 }
 
 // Branch-and-bound closest per-side load, loaded the way a human loads: within

@@ -55,13 +55,20 @@ the rack can do.
 A performed load that is the plate-for-plate **kg twin** of its lb plan — the
 greedy stack's plates swapped for their kg denominations (20↔45, 15↔35,
 10↔25, 5↔10, 2.5↔5, 1.25↔2.5), on the same bar or the bar's own twin — IS the
-plan. It grades at plan, never as a below-plan miss, and stores the canonical
-programmed number. The equivalence is a **barbell concept**: it invents a
-bar-and-plates reading of the number, so only total-bar work may claim it —
-machine and dumbbell loads grade on the numbers alone — and it maths against
-the bar's **denomination label** (`Bar.labelLb` / `barLabelLb`: a 35 bar is 35,
-a 20 kg bar is the 45), never the bar's converted mass. A non-twin shortfall
-still grades below plan, and an overshoot is not an equivalence — it belongs to
+plan. Equivalence compares **plate counts, not masses**: the performed side's
+greedy heaviest-first kg stack must carry exactly the count the plan's greedy
+lb stack carries at every twin rank. A short stack is not the plan, a long one
+is not either, and mass-aliased stacks resolve to the greedy reading — 10 kg
+of plates a side on a 45 bar is one 10 kg plate, so it meets the 95 plan
+(25 lb ↔ 10 kg), never the 85 plan (10 lb pair ↔ 5 kg pair), whose finer stack
+is not what the number reads as. The twin grades at plan, never as a
+below-plan miss, and stores the canonical programmed number. The equivalence
+is a **barbell concept**: it invents a bar-and-plates reading of the number,
+so only total-bar work may claim it — machine and dumbbell loads grade on the
+numbers alone — and it maths against the bar's **denomination label**
+(`Bar.labelLb` / `barLabelLb`: a 35 bar is 35, a 20 kg bar is the 45), never
+the bar's converted mass. A non-twin shortfall still grades below plan, and an
+overshoot is not an equivalence — it belongs to
 `INV-PROGRESSION-RIDES-PERFORMED`.
 
 > Lifters switching racks go by plates, not decimals: 2×20 kg a side on a 45
