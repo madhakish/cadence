@@ -2728,9 +2728,10 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(svg.getAttribute("viewBox") === "0 0 430 230" && svg.querySelectorAll("image.anatomy-reference").length === 2,
     "figure renders matching engraved front and back reference art side by side");
   ok([...svg.querySelectorAll("image.anatomy-reference")].map((image) => image.getAttribute("href")).join("/")
-    === "assets/vitruvian-front.png/assets/vitruvian-back.png"
-    && [...svg.querySelectorAll("image.anatomy-reference")].every((image) => image.dataset.species === "gorilla"),
-  "the anatomy view uses the matched Vitruvian weightlifting-ape assets");
+    === "assets/vitruvian-front.jpeg/assets/vitruvian-back.jpeg"
+    && [...svg.querySelectorAll("image.anatomy-reference")].every((image) => image.dataset.species === "gorilla"
+      && image.dataset.source === "exact-reference" && image === image.parentElement.firstElementChild),
+  "the anatomy view uses the exact supplied gorilla drawings beneath the muscle washes");
   ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
     "face pulls highlight rear delts instead of the generic shoulder cap");
   ok(svg.querySelectorAll('path[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
@@ -2745,13 +2746,14 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     && legend.querySelector('[data-role="supporting"]')?.textContent.includes("Traps, Abs"),
     "the visual key names the exact primary and supporting muscle groups");
 
-  const frontAsset = await readFile(new URL("../app/assets/vitruvian-front.png", import.meta.url));
-  const backAsset = await readFile(new URL("../app/assets/vitruvian-back.png", import.meta.url));
-  const pngSize = (buffer) => [buffer.readUInt32BE(16), buffer.readUInt32BE(20)];
-  ok(frontAsset.length > 150000 && pngSize(frontAsset).join("×") === "1024×1024",
-    "front reference preserves the detailed square Vitruvian ape engraving");
-  ok(backAsset.length > 200000 && pngSize(backAsset).join("×") === "1024×1024",
-    "back reference preserves matching detailed ape anatomy and construction geometry");
+  const frontAsset = await readFile(new URL("../app/assets/vitruvian-front.jpeg", import.meta.url));
+  const backAsset = await readFile(new URL("../app/assets/vitruvian-back.jpeg", import.meta.url));
+  const { createHash } = await import("node:crypto");
+  const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
+  ok(sha256(frontAsset) === "ec95ffe80e86263a441f31e01e7e5fcf6b9312d3b2d7a3e6fc3a9ae36bfd1006",
+    "front asset is byte-for-byte the supplied Vitruvian gorilla drawing");
+  ok(sha256(backAsset) === "940bbc7bf72794778d3304d226cf5ca3d265e68985bc0ffa72cb198c743a51f5",
+    "back asset is byte-for-byte the supplied matching rear drawing");
   const frontTraps = A.VITRUVIAN_FRONT_REGIONS.find((region) => region.id === "traps");
   ok(Math.min(...frontTraps.points.map((point) => point[1])) >= 55
     && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms").length === 4

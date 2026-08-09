@@ -59,16 +59,17 @@ struct AnatomyFigureView: View {
 
     private func figure(view: String) -> some View {
         ZStack {
-            if view == "front" {
-                frontHighlights
-            } else {
-                backHighlights
-            }
             Image(view == "front" ? "VitruvianFront" : "VitruvianBack")
                 .resizable()
-                .renderingMode(.template)
-                .foregroundStyle(Color.primary.opacity(0.82))
+                .renderingMode(.original)
                 .aspectRatio(1, contentMode: .fit)
+            if view == "front" {
+                frontHighlights
+                    .blendMode(.multiply)
+            } else {
+                backHighlights
+                    .blendMode(.multiply)
+            }
         }
         .aspectRatio(1, contentMode: .fit)
     }
@@ -101,13 +102,13 @@ struct AnatomyFigureView: View {
                 let path = contour(r.points)
                 if profile.primary.contains(r.id) {
                     ctx.fill(path, with: .linearGradient(
-                        Gradient(colors: [Self.primaryColor.opacity(0.68), Self.primaryColor.opacity(0.46)]),
+                        Gradient(colors: [Self.primaryColor.opacity(0.48), Self.primaryColor.opacity(0.30)]),
                         startPoint: CGPoint(x: size.width / 2, y: 0),
                         endPoint: CGPoint(x: size.width / 2, y: size.height)
                     ))
                 } else if profile.secondary.contains(r.id) {
                     ctx.fill(path, with: .linearGradient(
-                        Gradient(colors: [Self.secondaryColor.opacity(0.50), Self.secondaryColor.opacity(0.32)]),
+                        Gradient(colors: [Self.secondaryColor.opacity(0.34), Self.secondaryColor.opacity(0.22)]),
                         startPoint: CGPoint(x: size.width / 2, y: 0),
                         endPoint: CGPoint(x: size.width / 2, y: size.height)
                     ))
@@ -120,10 +121,10 @@ struct AnatomyFigureView: View {
     private var backHighlights: some View {
         ZStack {
             ForEach(backAssets(profile.secondary), id: \.self) { asset in
-                backMask(asset, color: Self.secondaryColor.opacity(0.46))
+                backMask(asset, color: Self.secondaryColor.opacity(0.32))
             }
             ForEach(backAssets(profile.primary), id: \.self) { asset in
-                backMask(asset, color: Self.primaryColor.opacity(0.68))
+                backMask(asset, color: Self.primaryColor.opacity(0.50))
             }
         }
         .aspectRatio(1, contentMode: .fit)

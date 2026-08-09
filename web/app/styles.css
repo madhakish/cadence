@@ -14,28 +14,23 @@
   --text: #efe6d2;
   --muted: #9a8f77;
   --line: #2f2718;
-  --anatomy-reference-filter: invert(1);
 }
 :root[data-theme="carbon"] {           /* Carbon — greyscale + red signal */
   --accent: #ef4444; --warn: #eab308; --hard: #dc2626; --good: #4ade80;
   --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
-  --anatomy-reference-filter: invert(1);
 }
 :root[data-theme="slate"] {            /* Slate — cool gunmetal + crimson */
   --accent: #e5484d; --warn: #d29922; --hard: #da3633; --good: #3fb950;
   --bg: #0d1117; --card: #161b22; --card2: #1e252e; --text: #eaeef4; --muted: #8a97a6; --line: #2a323c;
-  --anatomy-reference-filter: invert(1);
 }
 :root[data-theme="system"] {           /* System — follows OS; light by default, dark below */
   --accent: #c81e1e; --warn: #b8860b; --hard: #a51111; --good: #1a8f43;
   --bg: #f5f5f7; --card: #ffffff; --card2: #ececee; --text: #1a1a1c; --muted: #66666e; --line: #d9d9de;
-  --anatomy-reference-filter: none;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
     --accent: #ef4444; --warn: #eab308; --hard: #f0554f; --good: #4ade80;
     --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
-    --anatomy-reference-filter: invert(1);
   }
 }
 :root {
@@ -307,15 +302,15 @@ select.bar-select { width: auto; min-width: 96px; padding: 6px 8px; font-size: 1
 .anatomy-card { text-align: center; padding: 14px; }
 .anatomy-card .section-title { margin-top: 2px; text-align: left; }
 svg.anatomy { width: 100%; max-width: 430px; color: var(--text); overflow: visible; }
-.anatomy-reference { filter: var(--anatomy-reference-filter); opacity: .82; }
-.anatomy-region.primary, .anatomy-region.supporting { stroke-width: .65; }
-.anatomy-region-mask { pointer-events: none; }
+.anatomy-reference { opacity: 1; }
+.anatomy-region.primary, .anatomy-region.supporting { stroke-width: .65; mix-blend-mode: multiply; }
+.anatomy-region-mask { pointer-events: none; mix-blend-mode: multiply; }
 .anatomy-region-mask.primary {
-  opacity: .68;
+  opacity: .50;
   filter: invert(37%) sepia(70%) saturate(1876%) hue-rotate(335deg) brightness(95%) contrast(84%);
 }
 .anatomy-region-mask.supporting {
-  opacity: .46;
+  opacity: .32;
   filter: invert(47%) sepia(74%) saturate(1135%) hue-rotate(180deg) brightness(88%) contrast(91%);
 }
 .anatomy-view-label { fill: var(--muted); font-size: 10px; letter-spacing: .04em; }

@@ -353,8 +353,8 @@ const appendBackMask = (g, id, role) => {
   g.append(image);
 };
 
-/// Front and back figures side by side. Muscle colour sits beneath the source
-/// linework so hands, feet, facial detail, and muscle boundaries stay legible.
+/// Front and back figures side by side. The exact reference drawings remain
+/// intact while translucent muscle colour multiplies over their ink detail.
 export function figureSVG(profile) {
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("viewBox", "0 0 430 230");
@@ -364,22 +364,23 @@ export function figureSVG(profile) {
   for (const [view, dx] of [["front", 0], ["back", 220]]) {
     const g = document.createElementNS(NS, "g");
     g.setAttribute("transform", `translate(${dx},0)`);
+    const image = referenceImage(`assets/vitruvian-${view}.jpeg`);
+    image.setAttribute("data-species", "gorilla");
+    image.setAttribute("data-source", "exact-reference");
+    g.append(image);
     if (view === "front") {
       const regions = document.createElementNS(NS, "g");
       for (const r of VITRUVIAN_FRONT_REGIONS) {
         const isP = profile && profile.primary.includes(r.id);
         const isS = profile && !isP && profile.secondary.includes(r.id);
-        if (isP) regions.append(shape(r.points, PRIMARY_COLOR, "none", 0.58, "anatomy-region primary"));
-        else if (isS) regions.append(shape(r.points, SECONDARY_COLOR, "none", 0.38, "anatomy-region supporting"));
+        if (isP) regions.append(shape(r.points, PRIMARY_COLOR, "none", 0.46, "anatomy-region primary"));
+        else if (isS) regions.append(shape(r.points, SECONDARY_COLOR, "none", 0.30, "anatomy-region supporting"));
       }
       g.append(regions);
     } else if (profile) {
       for (const id of profile.secondary) appendBackMask(g, id, "supporting");
       for (const id of profile.primary) appendBackMask(g, id, "primary");
     }
-    const image = referenceImage(`assets/vitruvian-${view}.png`);
-    image.setAttribute("data-species", "gorilla");
-    g.append(image);
     svg.append(g);
   }
   for (const [label, x] of [["Ape front", 105], ["Ape back", 325]]) {

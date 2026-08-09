@@ -19,7 +19,7 @@ const ASSETS = [
   "js/app.js", "js/core.js", "js/db.js", "js/seed.js", "js/templates.js", "js/programming-defaults.js", "js/program-file.js", "js/anatomy.js", "js/ui.js", "js/charts.js", "js/constants.js", "js/barbell.js", "js/coaching-adapter.js",
   "js/views/home.js", "js/views/program.js", "js/views/history.js", "js/views/body.js",
   "js/views/signals.js", "js/views/settings.js", "js/views/session.js", "js/views/plates.js",
-  "assets/vitruvian-front.png", "assets/vitruvian-back.png",
+  "assets/vitruvian-front.jpeg", "assets/vitruvian-back.jpeg",
   "assets/vitruvian-back-traps.svg", "assets/vitruvian-back-delts.svg", "assets/vitruvian-back-lats.svg",
   "assets/vitruvian-back-triceps.svg", "assets/vitruvian-back-lowerback.svg", "assets/vitruvian-back-forearms.svg",
   "assets/vitruvian-back-glutes.svg", "assets/vitruvian-back-hamstrings.svg", "assets/vitruvian-back-calves.svg",
