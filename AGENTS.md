@@ -358,15 +358,16 @@ Native project and builds, on macOS with the required Xcode:
 brew install xcodegen
 xcodegen generate
 xcodebuild test -project Cadence.xcodeproj -scheme CadenceMigrationTests -destination 'platform=macOS'
+xcodebuild build -project Cadence.xcodeproj -scheme Cadence -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
 xcodebuild build -project Cadence.xcodeproj -scheme Cadence -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
 This Linux workspace cannot compile the app target; GitHub Actions is the
 authoritative compiler for SwiftUI/SwiftData changes. Do not claim native
-validation for a PR until the simulator build (which carries the Darwin unit
-tests) and, when persistence changed, the macOS migration test have completed
-successfully; the unsigned-device build completes that proof on `main` before
-any release.
+validation for a PR until the unsigned-device build (which carries the Darwin
+unit tests) and, when persistence changed, the macOS migration test have
+completed successfully; the simulator release artifact is built on `main`
+before any release.
 
 ## CI and releases
 
@@ -383,20 +384,20 @@ check. Native validation is change-aware behind that aggregate:
   pass before either portable suite starts;
 - the macOS jobs start only after the Linux core and web suites pass, so a
   red fast test costs zero macOS runner minutes;
-- the current iOS Simulator build (Darwin unit tests + full Release compile)
-  runs for native, shared-core, project, or CI-workflow changes;
-- the unsigned-device build runs on `main` only — its artifact is what the
-  GitHub release attaches, and it still gates the release through the
-  aggregate; PRs prove compilation via the simulator build;
+- the unsigned-device build (Darwin unit tests + production-SDK Release
+  compile) runs for native, shared-core, project, or CI-workflow changes;
+- the iOS Simulator artifact is built on `main`, where the GitHub release
+  consumes it, and still gates release through the aggregate;
 - docs/web-only changes do not consume macOS runners; and
 - the real shipped-store migration suite runs for persistence-affecting paths
   only. Its generic historical stores are cached by immutable shipped lineage,
   but a cache miss must regenerate them from the actually shipped apps.
 
-New commits cancel stale simulator and migration jobs for the same pull request.
-Do not remove the fast-test dependencies or restore the pull-request device
-build: recent failures proved both iOS jobs reported the same compiler error,
-while a doomed device build kept running minutes after CadenceCore had failed.
+New commits cancel stale device and migration jobs for the same pull request.
+Do not remove the fast-test dependencies or restore both iOS builds on pull
+requests: recent failures proved they reported the same compiler error, while a
+doomed build kept running minutes after CadenceCore had failed. If PRs compile
+one target, keep the production device target; it is both faster and stricter.
 
 Never broaden the migration skip list to make schema CI faster. If a model,
 Seeder, migration test, project definition, or shipped-store generator can

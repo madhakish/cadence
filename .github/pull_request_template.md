@@ -56,7 +56,7 @@ cd web && npm test
 
 ## CI
 
-- [ ] Green on the **exact head commit** proposed for merge — including required migration tests and the iOS Simulator build when app-target code changed
+- [ ] Green on the **exact head commit** proposed for merge — including required migration tests and the unsigned device build when app-target code changed
 
 <!-- For release or publishing changes: green PR checks prove nothing. After
      merge, watch the `main` run through a COMPLETED TestFlight job before
