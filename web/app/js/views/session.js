@@ -379,10 +379,14 @@ export async function openSession(id) {
     const head = ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
       ui.h("div", { class: "lead" },
         // The name is the door to the lift itself — muscles figure, history,
-        // settings — mid-workout, same as the program editor and library.
-        ui.h("span", { class: "title", text: se.exerciseName,
-          style: ex ? { cursor: "pointer" } : null,
-          onClick: () => { const info = exMap.get(se.exerciseName); if (info) exerciseDetail(info); } }),
+        // settings — mid-workout, same as the program editor and library. A
+        // real button, not a click-handled span: keyboard focus and
+        // Enter/Space work, and the house 44px target applies.
+        ex
+          ? ui.h("button", { class: "title title-button", text: se.exerciseName,
+            "aria-label": `${se.exerciseName} — muscles, history, and settings`,
+            onClick: () => { const info = exMap.get(se.exerciseName); if (info) exerciseDetail(info); } })
+          : ui.h("span", { class: "title", text: se.exerciseName }),
         phaseLabel ? ui.h("span", { class: "sub accent", text: phaseLabel }) : null),
       ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
         ui.h("div", { style: { width: "100px" } },
