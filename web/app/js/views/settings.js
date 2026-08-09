@@ -892,7 +892,9 @@ async function exerciseInsight(wrap, e) {
   wrap.append(card);
 }
 
-function exerciseDetail(e) {
+// Exported: the logger's exercise titles open the same lift info screen the
+// library and program editor use — muscles figure, history, settings.
+export function exerciseDetail(e) {
   ui.pushScreen({
     title: e.name,
     build: (body) => {

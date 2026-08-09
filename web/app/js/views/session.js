@@ -6,6 +6,7 @@ import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll } from "../db.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
+import { exerciseDetail } from "./settings.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -377,7 +378,11 @@ export async function openSession(id) {
     const phaseLabel = ui.sessionPhaseLabel(se, ex);
     const head = ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
       ui.h("div", { class: "lead" },
-        ui.h("span", { class: "title", text: se.exerciseName }),
+        // The name is the door to the lift itself — muscles figure, history,
+        // settings — mid-workout, same as the program editor and library.
+        ui.h("span", { class: "title", text: se.exerciseName,
+          style: ex ? { cursor: "pointer" } : null,
+          onClick: () => { const info = exMap.get(se.exerciseName); if (info) exerciseDetail(info); } }),
         phaseLabel ? ui.h("span", { class: "sub accent", text: phaseLabel }) : null),
       ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
         ui.h("div", { style: { width: "100px" } },

@@ -806,7 +806,21 @@ private struct ExerciseSection: View {
             }
         } header: {
             HStack {
-                Text(entry.exercise?.name ?? "Exercise")
+                // The name is the door to the lift itself — muscles figure,
+                // history, settings — mid-workout, same as the preview and
+                // program editor. Push, not sheet: back lands exactly where
+                // logging left off.
+                if let exercise = entry.exercise {
+                    NavigationLink {
+                        ExerciseDetailByNameView(name: exercise.name)
+                    } label: {
+                        Text(exercise.name)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Shows muscles worked, history, and exercise settings")
+                } else {
+                    Text("Exercise")
+                }
                 if let phaseLabel = entry.truthfulPhaseLabel {
                     Text(phaseLabel).foregroundStyle(Theme.accent)
                 }

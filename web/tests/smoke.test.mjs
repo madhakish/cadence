@@ -3217,6 +3217,27 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "[INV-SESSION-ALWAYS-ESCAPABLE] banked history survives a discard");
 }
 
+// Tapping the lift's name inside the logger opens the lift info screen —
+// muscles figure, history, exercise settings — not only from the library.
+// Mid-workout is exactly when "what does this train, what did I do last
+// time" gets asked, and the name looked tappable but did nothing.
+{
+  const sid = await session.createBlankSession();
+  const s = await db.Sessions.get(sid);
+  s.exercises.push({ order: 0, exerciseName: "Deadlift", notes: "", phase: null,
+    plannedWeightLb: 225, plannedSets: 3, plannedReps: 5, sets: [] });
+  await db.Sessions.save(s);
+  await session.openSession(sid); await tick();
+  const logger = [...document.querySelectorAll("#overlays .overlay")].pop();
+  const title = [...logger.querySelectorAll(".title")].find((t) => t.textContent === "Deadlift");
+  ok(title, "logger shows the lift name");
+  title.click(); await tick();
+  const detail = [...document.querySelectorAll("#overlays .overlay")].pop();
+  ok(detail !== logger && detail.querySelector(".anatomy-card svg"),
+    "tapping the lift name in the logger opens lift info with the muscles figure");
+  await db.Sessions.del(sid);
+}
+
 // The figure is only honest if every shipped exercise says what it trains.
 // The movement-group fallback exists for user-created exercises; for seeded
 // ones it was merely vague at best and wrong at worst — a leg curl inherited
