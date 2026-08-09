@@ -897,7 +897,7 @@ private struct ExerciseSection: View {
         let carryLb = Self.startingCarryLoadLb(entry: entry, last: last)
         let set = SetEntry(
             order: entry.sets.count,
-            weightLb: isTimed ? carryLb : (last?.weightLb ?? entry.plannedWeightLb ?? Self.firstSetDefaultLb(for: entry.exercise)),
+            weightLb: isTimed ? carryLb : (last?.weightLb ?? entry.plannedWeightLb ?? firstSetDefaultLb(for: entry.exercise)),
             reps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             isPerSide: entry.exercise?.isUnilateral ?? false,
             enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
@@ -927,15 +927,18 @@ private struct ExerciseSection: View {
     /// empty bar — which prescribed phantom load to everything else: a
     /// bodyweight GHD sit-up was born asking for 45 lb. The conservative
     /// bootstrap catalog already knows a starting weight per movement and
-    /// type (0 for bodyweight/band, light for dumbbell/machine); barbell
-    /// work keeps the empty bar it always started at.
-    private static func firstSetDefaultLb(for exercise: Exercise?) -> Double {
+    /// type (0 for bodyweight/band, light for dumbbell/machine). A barbell
+    /// movement is floored at the bar actually in hand: the catalog's light
+    /// recommendations assume a lighter bar, and a total-bar set cannot
+    /// weigh less than its own bar.
+    private func firstSetDefaultLb(for exercise: Exercise?) -> Double {
         guard let exercise else { return 0 }
-        return ProgrammingDefaultsData.recommendation(
+        let catalog = ProgrammingDefaultsData.recommendation(
             exerciseName: exercise.name,
             slotCategory: exercise.categoryRaw,
             exerciseType: exercise.typeRaw
         ).weightLb
+        return exercise.type == .barbell ? max(catalog, effectiveBar.lb) : catalog
     }
 }
 

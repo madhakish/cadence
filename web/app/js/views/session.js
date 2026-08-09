@@ -623,11 +623,16 @@ export async function openSession(id) {
     // literal 45 — the empty bar — which prescribed phantom load to
     // everything else (a bodyweight GHD sit-up was born asking for 45 lb).
     // The conservative bootstrap catalog already knows a starting weight per
-    // movement and type; barbell work keeps the empty bar it started at.
-    // Mirrors native ActiveSessionView.firstSetDefaultLb.
-    const firstSetDefaultLb = ex
+    // movement and type. A barbell movement is floored at the bar actually
+    // in hand: the catalog's light recommendations assume a lighter bar, and
+    // a total-bar set cannot weigh less than its own bar. Mirrors the native
+    // logger's firstSetDefaultLb.
+    const catalogLb = ex
       ? ProgrammingDefaults.recommendation(se.exerciseName, ex.category, ex.type).weightLb
       : 0;
+    const firstSetDefaultLb = ex && ex.type === "barbell"
+      ? Math.max(catalogLb, C.barLb(C.barById(se.barId || gymState.value?.defaultBarId)))
+      : catalogLb;
     const w = durationBased ? carryLb : (last ? last.weightLb : (se.plannedWeightLb ?? firstSetDefaultLb));
     const r = durationBased ? 1 : (last ? last.reps : (se.plannedReps ?? 5));
     const inheritedLoad = last && C.LOAD_BASES.includes(last.loadBasis)

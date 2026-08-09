@@ -3240,7 +3240,21 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   stored = await db.Sessions.get(gid);
   ok(stored.exercises[1].sets[0].weightLb === 5,
     `a dumbbell accessory added mid-session starts at the catalog's light default (got ${stored.exercises[1].sets[0].weightLb})`);
-  await db.Sessions.del(gid);
+
+  // A total-bar movement is floored at the bar in hand: the catalog says
+  // 20 lb for a skull crusher (assuming a lighter bar), but a set on the
+  // gym's 45 lb bar cannot weigh less than its own bar.
+  const bid = await session.createBlankSession();
+  const b = await db.Sessions.get(bid);
+  b.exercises.push({ order: 0, exerciseName: "Skull Crusher", notes: "", phase: null,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+  await db.Sessions.save(b);
+  await session.openSession(bid); await tick();
+  addSetButtons()[0].click(); await tick();
+  const barbell = await db.Sessions.get(bid);
+  ok(barbell.exercises[0].sets[0].weightLb === 45,
+    `a barbell add is floored at the active bar, never below it (got ${barbell.exercises[0].sets[0].weightLb})`);
+  await db.Sessions.del(gid); await db.Sessions.del(bid);
 }
 
 // The figure is only honest if every shipped exercise says what it trains.
