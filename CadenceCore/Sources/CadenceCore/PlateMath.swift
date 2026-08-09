@@ -278,6 +278,33 @@ public enum PlateMath {
         return achievedLb
     }
 
+    /// The canonical grid label of a PERFORMED load — the number the stack on
+    /// the bar goes by, not the number its mass happens to be. A load already
+    /// on the rounding grid is its own label; a kg stack labels under the
+    /// nearest grid number whose plate-for-plate twin it is (221.4 → 225,
+    /// 232.4 → 235, and a four-pair side that drifts past one grid step still
+    /// finds 405 from 397.7). Only when no twin label exists does it fall
+    /// back to the next grid step up, so the label never understates the
+    /// work. Mirrored 1:1 in web/app/js/core.js `performedLabel`.
+    public static func performedLabel(
+        _ performedLb: Double, barLb: Double = 45,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> Double {
+        guard performedLb > 0, roundingLb > 0 else { return performedLb }
+        let nearest = (performedLb / roundingLb).rounded() * roundingLb
+        if abs(nearest - performedLb) < 1e-6 { return performedLb }
+        let ceiling = (performedLb / roundingLb).rounded(.up) * roundingLb
+        // Heavy kg stacks drift almost 2 lb per plate pair, so the twin label
+        // can sit a couple of grid steps above the raw mass.
+        for step in 0...2 {
+            let label = ceiling + Double(step) * roundingLb
+            if plateEquivalent(targetLb: label, performedLb: performedLb, barLb: barLb) {
+                return label
+            }
+        }
+        return ceiling
+    }
+
     /// The plate inventory a lift's STATION actually stocks. A station
     /// preference filters the gym's inventory to that denomination — the
     /// deadlift platform by the window has only kg plates, the squat racks

@@ -2066,6 +2066,56 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-PROGRESSION-RIDES-PERFORMED] under plan fails the grade and holds — never advances downward");
 }
 
+// An earned advance must buy plates, not just a bigger label: in a kg rack,
+// 215 and 225 both solve to the identical 2×20 kg stack, so the stored base
+// can trail what the bar actually carried. performedLabel names the stack;
+// honestBase repairs the plan; the graded advance rides the volume exposure
+// to resync the base. Mirrors CadenceCore PlateMathTests /
+// ProgramProgressionTests — same numbers, same tolerances.
+{
+  const near = (a, b, msg) => ok(Math.abs(a - b) < 0.0001, `${msg} (got ${a}, want ${b})`);
+
+  eq(C.performedLabel(221.37), 225, "[INV-ADVANCE-BUYS-PLATES] 2×20 kg a side on a 45 bar goes by 225");
+  eq(C.performedLabel(232.39), 235, "[INV-ADVANCE-BUYS-PLATES] 20+20+2.5 kg a side goes by 235");
+  eq(C.performedLabel(226.87), 230, "[INV-ADVANCE-BUYS-PLATES] 20+20+1.25 kg a side goes by 230");
+  eq(C.performedLabel(397.74), 405,
+    "[INV-ADVANCE-BUYS-PLATES] four 20 kg pairs drift past one grid step and still find their 405 label");
+  eq(C.performedLabel(225), 225, "[INV-ADVANCE-BUYS-PLATES] a grid-clean load is its own label");
+  eq(C.performedLabel(223), 225, "[INV-ADVANCE-BUYS-PLATES] no twin label → the next grid step up, never understating");
+  eq(C.performedLabel(0), 0, "no load, no label");
+
+  eq(C.honestBase(225, 10, 221.37, 5, 45), 235,
+    "[INV-ADVANCE-BUYS-PLATES] label(221.4) + 10 = 235 — the kg twin stack 232.4 is finally a heavier bar");
+  eq(C.honestBase(225, 10, 225, 5, 45), 235,
+    "[INV-ADVANCE-BUYS-PLATES] a canonically-stored volume exposure repairs identically");
+  eq(C.honestBase(225, 10, 215, 5, 45), 225,
+    "[INV-ADVANCE-BUYS-PLATES] a clean lb lifter's performed weight IS the pre-advance base — untouched");
+  eq(C.honestBase(225, 10, 235, 5, 45), 235,
+    "[INV-ADVANCE-BUYS-PLATES] once the bumped exposure is banked, the cap holds the plan steady");
+  eq(C.honestBase(225, 0, 221.37, 5, 45), 225,
+    "[INV-ADVANCE-BUYS-PLATES] no earned increment (hold, deload, or a hand-set base) — no repair");
+  eq(C.honestBase(105, 5, 101.9, 5, 45), 105,
+    "[INV-ADVANCE-BUYS-PLATES] raw compare: 101.9 does not clear 102.5, and its 105 ceiling must not pretend it does");
+  eq(C.honestBase(300, 10, 221.37, 5, 45), 300,
+    "[INV-ADVANCE-BUYS-PLATES] never downward — a base above the log stands");
+
+  const state = { baseWeightLb: 225, estimatedMaxLb: 280, stallCount: 0, role: "main", lastIncrementLb: 0 };
+  const clean = {
+    prescribedSets: 3, prescribedReps: 3, completedSets: 3, anyStoppedEarly: false,
+    anyDroppedLoad: false, anyBelowPlanLoad: false, grindyOrWobbleSets: 0,
+    topSetWeightLb: 264, topSetReps: 3, plannedTopWeightLb: 264,
+  };
+  const inc = C.stagedIncrement(225, "strength", "rebuild", 5);
+  near(C.advanceCycleLift(state, clean, "strength", 5, "rebuild", false, 235).state.baseWeightLb,
+    235 + inc, "[INV-ADVANCE-BUYS-PLATES] the base advances from the volume rotation actually lifted");
+  near(C.advanceCycleLift(state, clean, "strength", 5, "rebuild", false, 225).state.baseWeightLb,
+    225 + inc, "[INV-ADVANCE-BUYS-PLATES] a volume label equal to the base changes nothing");
+  const held = C.advanceCycleLift(state, { ...clean, anyBelowPlanLoad: true },
+    "strength", 5, "rebuild", false, 235);
+  ok(held.grade === "fail" && held.state.baseWeightLb === 225,
+    "[INV-ADVANCE-BUYS-PLATES] a failed grade never rides — lighter work already failed it");
+}
+
 // The kg↔lb denomination twins: the plate is the currency, the number is its
 // label. Mirrors CadenceCore PlateMathTests/ProgramProgressionTests — same
 // stacks, same masses.

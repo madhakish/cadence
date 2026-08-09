@@ -471,6 +471,34 @@ own all-time best never reads as at-max — it stays standard.
 > should be a volume increment … I'll get there fast and then need change
 > plates to make smaller and smaller gains but we're not there right now."
 
+### INV-ADVANCE-BUYS-PLATES
+*platforms: core*
+
+An earned load advance must put more plates on the bar, not just a bigger
+number on the card. An advance computed in label space can fail to: in a kg
+rack, 215 and 225 both solve to the identical 2×20 kg stack, so a "+10"
+prescribes the very plates the lifter already lifted — for a third straight
+cycle. Two mechanisms hold the line, both total-bar only (the reasoning treats
+the number as a bar-and-plates stack, which machines and dumbbells never get):
+
+- **Prescription-time repair** (`honestBase`, applied through `planningBase`
+  by the session builder, the resume comparison, and every preview surface, so
+  they agree by construction): when the log shows the last earned advance
+  failed to clear the RAW performed volume weight past the half-step
+  tolerance, the plan is rebuilt as the performed stack's canonical grid label
+  (`performedLabel`: 221.4 → 225, twin-aware) plus the earned increment —
+  capped at one increment above the stored base, floored at the stored base,
+  and switched off entirely by a hand-set base (manual base edits clear
+  `lastIncrementLb`; holds and deloads already carry zero).
+- **Advance-time resync**: the graded peak's advance rides the cycle's
+  performed volume exposure (its canonical label) upward, so the stored base
+  stops trailing reality and stall/deload math work from the real number.
+
+> "My 5×5 deadlift today still has me at 225 — this should be 235, or 232
+> with kg plates." The 215→225 advance moved the label and zero plates; the
+> honest plan is label(221.4) + 10 = 235, whose kg twin stack (2×20 kg +
+> 2.5 kg a side = 232.4) is finally a heavier bar.
+
 ## Grading
 
 ### INV-BELOW-PLAN-IS-BELOW-PLAN

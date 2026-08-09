@@ -5,7 +5,7 @@ import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
-import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
+import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, planningBase, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
 
 const orderedSlots = (slots = [], roleAwareLegacy = false) => {
   const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
@@ -161,7 +161,7 @@ export async function render(host) {
     const shortfall = C.sessionSpacingShortfall(daysSinceLast, program.preferredSessionSpacingDays ?? 0);
     const card = ui.h("div", { class: "card" },
       ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px", cursor: "pointer" },
-        onClick: () => workoutPreview(program, day, { exMap, gym, barLb }) },
+        onClick: () => workoutPreview(program, day, { exMap, gym, barLb, completed }) },
         ui.h("span", { class: "title", text: day.name }),
         ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
           // Position only. The phase NAME moved onto the slots it actually
@@ -179,9 +179,14 @@ export async function render(host) {
           + ` · you prefer ${program.preferredSessionSpacingDays}. Train anyway if today is the day that works.` }));
     }
     const lifts = orderedSlots(day.lifts, true);
+    const defaultBar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
     for (const l of lifts) {
       const ex = exMap.get(l.exerciseName);
-      const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+      // planningBase, not the stored base: the card must show the same honest
+      // plan the started session will store.
+      const plan = C.programPlanFor({ cycleNumber: program.cycleNumber,
+        baseWeightLb: planningBase(l, ex, program, completed, defaultBar),
+        nextPhase: program.currentWeek, incrementLb: 0 },
         program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
         { ...l, workingSets: l.doubleProgressionSets ?? 3 },
         volumeFallbackSets(l, program));
@@ -299,7 +304,7 @@ function showGymTag(gym) {
 // creating a session; the Start button up top is what commits. Same preview
 // math as the Today card, so preview and started session never disagree.
 // (iOS mirror: WorkoutPreviewView.)
-function workoutPreview(program, day, { exMap, gym, barLb }) {
+function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
   ui.pushScreen({
     title: day.name,
     build: (body) => {
@@ -315,9 +320,14 @@ function workoutPreview(program, day, { exMap, gym, barLb }) {
       const liftCard = ui.h("div", { class: "card" });
       const lifts = orderedSlots(day.lifts, true);
       if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No program lifts this day." }));
+      const defaultBar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
       for (const l of lifts) {
         const ex = exMap.get(l.exerciseName);
-        const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: l.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
+        // planningBase — the preview and the started session must never
+        // disagree.
+        const plan = C.programPlanFor({ cycleNumber: program.cycleNumber,
+          baseWeightLb: planningBase(l, ex, program, completed, defaultBar),
+          nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
           { ...l, workingSets: l.doubleProgressionSets ?? 3 },
           volumeFallbackSets(l, program));

@@ -141,7 +141,29 @@ Notes:
   increment lands on what the bar actually carried
   ([INV-PROGRESSION-RIDES-PERFORMED](invariants.md)). Below plan already
   fails the grade, so the ratio can never move the base down, and a
-  performance with no recorded plan advances exactly as before.
+  performance with no recorded plan advances exactly as before. The advance
+  also rides the cycle's **performed volume exposure**: the most recent
+  completed volume-rotation working weight, read from the log as its
+  canonical grid label (221.4 raw is the 225 stack), becomes the floor the
+  increment lands on — total-bar work only, never downward
+  ([INV-ADVANCE-BUYS-PLATES](invariants.md)).
+
+### An earned advance must buy plates
+
+An advance computed in label space can prescribe the very plates the lifter
+already lifted: in a kg rack, 215 and 225 both solve to the identical
+2×20 kg stack. Every planning surface (the Today card, the workout preview,
+the program overview, the session builder, and the resume comparison)
+therefore plans from the **honest base**: when the lift's last advance
+earned weight (`lastIncrementLb > 0`) and the raw performed volume weight
+cleared the pre-advance base past the half-step tolerance, the plan is the
+performed stack's canonical label plus that earned increment — capped one
+increment above the stored base, floored at the stored base, and applied to
+total-bar lifts only. Editing a base by hand clears the earned increment,
+so a hand-set number is never "repaired"
+([INV-ADVANCE-BUYS-PLATES](invariants.md)). The motivating log: a deadlift
+stuck prescribing 2×20 kg for a third cycle at "225" now plans 235 — the
+232.4 kg twin stack, a genuinely heavier bar.
 - **hold / fail** → weight holds, stall count +1 — and the needle still
   moves: the next **volume** rotation carries **one added set** at the held
   load, derived from the persisted stall so the Home card and the created

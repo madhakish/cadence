@@ -1170,7 +1170,13 @@ private struct ProgramLiftRow: View {
                     Text(policy.name).tag(policy)
                 }
             }
-            Stepper("\(baseLabel): \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))", value: $lift.baseWeightLb, in: 0...1000, step: loadStep)
+            // A hand-set base is its own truth: clearing the last earned
+            // increment switches off the honest-base repair (planningBase)
+            // for this slot until the next machine advance re-earns it.
+            Stepper("\(baseLabel): \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))",
+                    value: Binding(get: { lift.baseWeightLb },
+                                   set: { lift.baseWeightLb = $0; lift.lastIncrementLb = 0 }),
+                    in: 0...1000, step: loadStep)
             Stepper("Est. 1RM: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.estimatedMaxLb))", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
             if lift.prescription == .offsetWave {
                 Stepper("Load offset: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.loadOffsetLb))",

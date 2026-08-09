@@ -313,6 +313,27 @@ export function stationPlates(preference, gymPlates) {
   return preference === "kg" ? STANDARD_KG : STANDARD_LB;
 }
 
+// The canonical grid label of a PERFORMED load — the number the stack on the
+// bar goes by, not the number its mass happens to be. A load already on the
+// rounding grid is its own label; a kg stack labels under the nearest grid
+// number whose plate-for-plate twin it is (221.4 → 225, 232.4 → 235, and a
+// four-pair side that drifts past one grid step still finds 405 from 397.7).
+// Only when no twin label exists does it fall back to the next grid step up,
+// so the label never understates the work. Mirrors PlateMath.performedLabel.
+export function performedLabel(performedLb, barLb = 45, roundingLb = 5) {
+  if (!(performedLb > 0) || !(roundingLb > 0)) return performedLb;
+  const nearest = Math.round(performedLb / roundingLb) * roundingLb;
+  if (Math.abs(nearest - performedLb) < 1e-6) return performedLb;
+  const ceiling = Math.ceil(performedLb / roundingLb) * roundingLb;
+  // Heavy kg stacks drift almost 2 lb per plate pair, so the twin label can
+  // sit a couple of grid steps above the raw mass.
+  for (let step = 0; step <= 2; step += 1) {
+    const label = ceiling + step * roundingLb;
+    if (plateEquivalent(label, performedLb, barLb)) return label;
+  }
+  return ceiling;
+}
+
 export const plateCountLb = (pc) => plateLb(pc.plate) * pc.count;
 export const plateCountLabel = (pc) =>
   pc.count === 1 ? plateLabel(pc.plate) : `${plateLabel(pc.plate)} ×${pc.count}`;
@@ -1576,8 +1597,37 @@ export function volumeIncrementSets(stallCount, stalledRank, maximumAddedSetsPer
 
 // state: { baseWeightLb, estimatedMaxLb, stallCount, role, lastIncrementLb }
 // returns { state, grade, note }
+// The base a cycle is honestly planned from: the stored base, repaired upward
+// when the log proves the last earned advance failed to clear what was
+// actually lifted. The trap is an advance computed in LABEL space: 215 + 10 =
+// 225, but in a kg rack both numbers solve to the identical 2×20 kg stack —
+// the label moved and the plates did not. The honest base is the canonical
+// label of the last performed volume exposure plus the increment that advance
+// earned: label(221.4) + 10 = 235, whose kg twin stack (232.4) is finally a
+// heavier bar. Guards: only a machine-earned advance (lastIncrementLb > 0) is
+// repaired — holds, deloads, and hand-set bases are their own truth; the RAW
+// performed weight must clear the pre-advance base (base − lastIncrement) past
+// the half-step grading tolerance, raw before labeling, because the grid label
+// rounds UP and a ceiling must not manufacture the very margin it is tested
+// for (this is also what keeps a clean lb lifter untouched — their performed
+// weight IS the pre-advance base); capped at one increment above the stored
+// base so overshoots don't compound and the plan holds steady once the bumped
+// exposure is itself banked; floored at the stored base — never downward.
+// Mirrors ProgramProgression.honestBase.
+export function honestBase(baseWeightLb, lastIncrementLb, lastVolumePerformedLb,
+  roundingLb = DEFAULT_ROUNDING_LB, barLb = 45) {
+  if (!(baseWeightLb > 0) || !(lastIncrementLb > 0) || !(lastVolumePerformedLb > 0)) {
+    return baseWeightLb;
+  }
+  if (!(lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2)) {
+    return baseWeightLb;
+  }
+  const label = performedLabel(lastVolumePerformedLb, barLb, roundingLb);
+  return Math.max(baseWeightLb, Math.min(label + lastIncrementLb, baseWeightLb + lastIncrementLb));
+}
+
 export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDING_LB,
-  regime = "standard", volumeFallback = false) {
+  regime = "standard", volumeFallback = false, performedVolumeLb = 0) {
   const grade = gradeCycle(perf);
   const estimatedMaxLb = smoothedMax(state, perf);
   const next = { ...state, estimatedMaxLb };
@@ -1600,6 +1650,15 @@ export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDI
         && perf.topSetWeightLb - perf.plannedTopWeightLb >= roundingLb / 2) {
       advancedFrom = Math.max(state.baseWeightLb,
         state.baseWeightLb * (perf.topSetWeightLb / perf.plannedTopWeightLb));
+    }
+    // The volume rotation is where the lifter actually trains the base, and a
+    // rack can land it off the stored label in either denomination. Advancing
+    // from its canonical performed label (callers pass it through
+    // performedLabel) resyncs a base the prescription-time honestBase repair
+    // has been carrying, so stall and deload math stop operating on a stale
+    // number. Never downward: lighter volume work already failed the grade.
+    if (performedVolumeLb > advancedFrom + roundingLb / 2) {
+      advancedFrom = performedVolumeLb;
     }
     next.baseWeightLb = advancedFrom + inc;
     next.lastIncrementLb = inc;
@@ -1685,7 +1744,7 @@ export function advanceLinearLift(state, perf, rule, roundingLb = DEFAULT_ROUNDI
 // styles use their published fixed increments; everything else keeps the
 // proportional rule. Mirrors ProgramProgression.advanceProgramLift.
 export function advanceProgramLift(state, perf, focus, style, movementGroup = null, roundingLb = DEFAULT_ROUNDING_LB,
-  regime = "standard", volumeFallback = false) {
+  regime = "standard", volumeFallback = false, performedVolumeLb = 0) {
   const lower = ["squat", "hinge"].includes(movementGroup);
   const increment = lower ? 10 : 5;
   if (style === "fiveThreeOne") {
@@ -1754,7 +1813,7 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
       note: "Speed work holds — raise this slot when the max-effort lift moves.",
     };
   }
-  return advanceCycleLift(state, perf, focus, roundingLb, regime, volumeFallback);
+  return advanceCycleLift(state, perf, focus, roundingLb, regime, volumeFallback, performedVolumeLb);
 }
 
 // Whether an accessory slot is CARRYING load it can never add to.

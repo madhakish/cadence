@@ -346,4 +346,23 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(PlateMath.storedPrescription(targetLb: 90, achievedLb: 85), 85)
         XCTAssertEqual(PlateMath.storedPrescription(targetLb: 50, achievedLb: 65), 65)
     }
+
+    // The canonical grid label a performed stack goes by — twin-aware, never
+    // understating the work. Mirrored in web/tests/core.test.mjs.
+    // [INV-ADVANCE-BUYS-PLATES]
+    func testPerformedLabelNamesTheStack() {
+        XCTAssertEqual(PlateMath.performedLabel(221.37), 225,
+                       "2×20 kg a side on a 45 bar goes by 225")
+        XCTAssertEqual(PlateMath.performedLabel(232.39), 235,
+                       "20+20+2.5 kg a side goes by 235")
+        XCTAssertEqual(PlateMath.performedLabel(226.87), 230,
+                       "20+20+1.25 kg a side goes by 230")
+        XCTAssertEqual(PlateMath.performedLabel(397.74), 405,
+                       "four 20 kg pairs drift past one grid step and still find their 405 label")
+        XCTAssertEqual(PlateMath.performedLabel(225), 225,
+                       "a grid-clean load is its own label")
+        XCTAssertEqual(PlateMath.performedLabel(223), 225,
+                       "no twin label → the next grid step up, never understating")
+        XCTAssertEqual(PlateMath.performedLabel(0), 0, "no load, no label")
+    }
 }

@@ -1532,6 +1532,60 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// The motivating log for the honest base ([INV-ADVANCE-BUYS-PLATES]): a kg
+// rack solved last cycle's 215 AND the advanced 225 to the identical 2×20 kg
+// stack (221.4), so "my 5×5 deadlift today still has me at 225" — for a third
+// straight cycle. The builder must plan the new volume rotation from the
+// honest base: label(221.4) + the earned 10 = 235, whose kg twin stack
+// (232.4) finally puts more plates on the bar.
+{
+  const name = "Fixture Advance Buys Plates";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 2, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Pull", order: 0, accessories: [],
+      lifts: [{ exerciseName: "Deadlift", role: "main", prescription: "wave",
+        baseWeightLb: 225, estimatedMaxLb: 280, stallCount: 0, lastIncrementLb: 10 }] }],
+  });
+  const program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const slot = program.days[0].lifts[0];
+  // Last cycle's banked volume rotation: five completed pulls at the kg stack.
+  const priorId = await db.Sessions.save({
+    date: db.iso(new Date(Date.now() - 14 * 86400000)), notes: "", isCompleted: true,
+    completedAt: db.iso(new Date(Date.now() - 14 * 86400000)), gymName: null,
+    programTag: { programId: program.uuid || program.id, programName: name,
+      cycleNumber: 1, week: 1, dayIndex: 0, planNames: ["Deadlift"] },
+    exercises: [{ order: 0, exerciseName: "Deadlift", notes: "", phase: 1,
+      programRole: "main", programSlotId: slot.id,
+      plannedWeightLb: 215, plannedSets: 5, plannedReps: 5,
+      sets: Array.from({ length: 5 }, (_, index) => ({
+        order: index, weightLb: 221.37, reps: 5, isWarmup: false, isPerSide: false,
+        enteredUnit: "lb", status: "completed", loadBasis: "totalBar", flags: [],
+        bodyFlagSite: null, autoregReason: null, prescriptionBlock: "work",
+      })) }],
+  });
+  const builtId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const built = await db.Sessions.get(builtId);
+  const deadlift = built.exercises.find((entry) => entry.exerciseName === "Deadlift");
+  ok(deadlift.plannedWeightLb === 235,
+    `[INV-ADVANCE-BUYS-PLATES] the stale 225 plans as the honest 235 (got ${deadlift.plannedWeightLb})`);
+  ok(deadlift.targetWeightLb === 235,
+    "and the resume comparison sees the same honest target, not the stale label");
+  // A hand-set base is its own truth: clearing the earned increment (what the
+  // editor does on a manual edit) switches the repair off.
+  await db.Sessions.del(builtId);
+  slot.lastIncrementLb = 0;
+  await db.Programs.save(program);
+  const editedProgram = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const editedId = await session.createSessionFromProgramDay(editedProgram, editedProgram.days[0]);
+  const edited = await db.Sessions.get(editedId);
+  ok(edited.exercises.find((entry) => entry.exerciseName === "Deadlift").plannedWeightLb === 225,
+    "[INV-ADVANCE-BUYS-PLATES] a hand-set base is never repaired");
+  await db.Sessions.del(editedId);
+  await db.Sessions.del(priorId);
+  await db.importBundle(parsed);
+}
+
 // A capped AMRAP on the load rotation must reach the engine. Before the gate
 // fix only week 3 touched estimatedMaxLb, so the extra reps were history and
 // nothing else — and the ceiling that reads estimatedMaxLb stayed anchored to
