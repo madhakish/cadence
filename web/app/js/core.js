@@ -379,7 +379,7 @@ function greedySideCounts(sideLb, plates, plateEpsilon, cleanliness) {
 export function plateEquivalent(targetLb, performedLb, barLb = 45) {
   if (!(targetLb > barLb) || !(performedLb > 0)) return false;
   const lbPlates = Object.keys(PLATE_TWIN_KG).map(Number).sort((a, b) => b - a);
-  const kgPlates = lbPlates.map((p) => PLATE_TWIN_KG[p]);
+  const kgPlatesLb = lbPlates.map((p) => PLATE_TWIN_KG[p] / KG_PER_LB);
   const target = greedySideCounts((targetLb - barLb) / 2, lbPlates, 1e-9, 1e-6);
   if (target == null) return false;
   const barTwinLb = PLATE_TWIN_KG[barLb] != null ? PLATE_TWIN_KG[barLb] / KG_PER_LB : barLb;
@@ -389,7 +389,7 @@ export function plateEquivalent(targetLb, performedLb, barLb = 45) {
   return [barLb, barTwinLb].some((bar) => {
     const side = (performedLb - bar) / 2;
     if (side < -1e-9) return false;
-    const got = greedySideCounts(side, kgPlates.map((kg) => kg / KG_PER_LB), 0.05, 0.05);
+    const got = greedySideCounts(side, kgPlatesLb, 0.05, 0.05);
     return got != null && got.length === target.length && got.every((c, i) => c === target[i]);
   });
 }
