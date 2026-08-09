@@ -56,4 +56,9 @@ assert_classification \
   $'native=true\nmigrations=false\nweb=false' \
   '.github/scripts/classify-ci-paths.sh'
 
+assert_classification \
+  "native aggregate changes cannot bypass device validation" \
+  $'native=true\nmigrations=false\nweb=false' \
+  '.github/scripts/verify-native-jobs.sh'
+
 echo "CI path classifier tests passed"

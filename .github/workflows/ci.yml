@@ -34,7 +34,7 @@ permissions:
 # the pins current.
 jobs:
   changes:
-    name: Classify changes
+    name: Preflight + classify
     runs-on: ubuntu-latest
     outputs:
       native: ${{ steps.paths.outputs.native }}
@@ -45,6 +45,34 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Fast repository checks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            git diff-tree --root --check "$HEAD_SHA"
+          else
+            git diff --check "$BASE_SHA" "$HEAD_SHA"
+          fi
+
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find .github/scripts -type f -name '*.sh' -print0)
+
+          while IFS= read -r -d '' script; do
+            node --check "$script" >/dev/null
+          done < <(find .github/scripts web \
+            -path web/node_modules -prune -o \
+            -type f \( -name '*.js' -o -name '*.mjs' \) -print0)
+
+          test ! -e Cadence.xcodeproj
+          bash .github/scripts/test-classify-ci-paths.sh
+          bash .github/scripts/test-ci-topology.sh
+          bash .github/scripts/test-verify-native-jobs.sh
       - name: Classify changed paths
         id: paths
         env:
@@ -72,12 +100,25 @@ jobs:
 
   core-tests:
     name: CadenceCore tests (Linux)
+    needs: changes
     runs-on: ubuntu-latest
     container: swift:5.10@sha256:ffc42e399ad0cad324f68d58f65e4d5f2c22eb9df73c4dfa249e898d497254b3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Linux cannot COMPILE the app target (SwiftUI/SwiftData), but it can
+      # PARSE it. A bare syntax error in app-target Swift used to survive
+      # every fast job and surface minutes later in all the macOS builds at
+      # once; this catches that class in seconds, in the container this job
+      # already pays for. Parse-only: macros, property wrappers, and Apple
+      # attributes are syntactically valid here even though they cannot
+      # type-check off-Darwin. If app code ever adopts syntax newer than this
+      # container's Swift, bump the container (CadenceCore needs the same).
+      - name: Parse app-target Swift (syntax fail-fast)
+        run: |
+          find Cadence CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
+            | xargs -0 swiftc -parse
       - name: Run unit tests
         working-directory: CadenceCore
         run: swift test
@@ -86,6 +127,7 @@ jobs:
   # touches either side without its mirror fails these suites.
   web-tests:
     name: Web tests (parity + smoke)
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -99,14 +141,9 @@ jobs:
       - name: Install pinned test deps
         working-directory: web
         run: npm ci
-      - name: Behavioural invariant coverage
-        working-directory: web
-        run: node ../.github/scripts/check-invariants.mjs
       - name: Web parity, migration, and smoke tests
         working-directory: web
         run: npm test
-      - name: Verify CI path classification
-        run: bash .github/scripts/test-classify-ci-paths.sh
       - name: Install pinned release parser
         working-directory: .github/release
         run: npm ci
@@ -115,20 +152,24 @@ jobs:
       - name: Verify release-state recovery
         run: bash .github/scripts/test-reconcile-release-state.sh
 
-  # Current app builds are independent and run in parallel. Workflow-only PRs
-  # still exercise them; docs/web-only PRs do not spend macOS runner minutes.
+  # The macOS jobs are the expensive tier, so they sit BEHIND the fast Linux
+  # suites: a red core/web/parse failure costs zero macOS minutes, and every
+  # build that does start already has the cheap proofs behind it. The ~40s of
+  # added green-path latency buys a strictly rising pass rate through the
+  # pipeline. Workflow-only PRs still exercise the builds; docs/web-only PRs
+  # do not spend macOS runner minutes.
+  # The simulator artifact is a release download, so build it on main where it
+  # is consumed. PRs compile the production device target below instead: it is
+  # both faster and the stricter pre-merge proof for the app users install.
   simulator-build:
     name: iOS Simulator build
-    needs: changes
-    if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
+    needs: [changes, core-tests, web-tests]
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Run unit tests (Darwin)
-        working-directory: CadenceCore
-        run: swift test
       - name: Install XcodeGen
         run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Generate Xcode project
@@ -153,15 +194,25 @@ jobs:
           path: dist/Cadence-simulator.app.zip
           if-no-files-found: error
 
+  # PRs compile one iOS target: the production device SDK. Its recent compile
+  # was materially faster than the simulator path and it catches device-only
+  # SDK, linker, architecture, and project-setting errors before merge. On main
+  # it also produces the unsigned release artifact.
   device-build:
     name: Unsigned device build
-    needs: changes
+    needs: [changes, core-tests, web-tests]
     if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
     runs-on: macos-latest
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && format('device-pr-{0}', github.event.pull_request.number) || format('device-run-{0}', github.run_id) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Run unit tests (Darwin)
+        working-directory: CadenceCore
+        run: swift test
       - name: Install XcodeGen
         run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Generate Xcode project
@@ -192,9 +243,12 @@ jobs:
   # immutable source lineage. Current app compilation remains mandatory above.
   migration-tests:
     name: Shipped-store migration tests
-    needs: changes
+    needs: [changes, core-tests, web-tests]
     if: needs.changes.outputs.migrations == 'true'
     runs-on: macos-latest
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && format('migrations-pr-{0}', github.event.pull_request.number) || format('migrations-run-{0}', github.run_id) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -258,23 +312,19 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Verify required native jobs
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
-          NATIVE_REQUIRED: ${{ needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main' }}
+          DEVICE_REQUIRED: ${{ needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main' }}
+          SIMULATOR_REQUIRED: ${{ github.ref == 'refs/heads/main' }}
           MIGRATIONS_REQUIRED: ${{ needs.changes.outputs.migrations == 'true' }}
           SIMULATOR_RESULT: ${{ needs.simulator-build.result }}
           DEVICE_RESULT: ${{ needs.device-build.result }}
           MIGRATION_RESULT: ${{ needs.migration-tests.result }}
-        run: |
-          [[ "$CHANGES_RESULT" == "success" ]]
-          if [[ "$NATIVE_REQUIRED" == "true" ]]; then
-            [[ "$SIMULATOR_RESULT" == "success" ]]
-            [[ "$DEVICE_RESULT" == "success" ]]
-          fi
-          if [[ "$MIGRATIONS_REQUIRED" == "true" ]]; then
-            [[ "$MIGRATION_RESULT" == "success" ]]
-          fi
+        run: bash .github/scripts/verify-native-jobs.sh
 
   release:
     name: Semantic release

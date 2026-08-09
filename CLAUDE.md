@@ -186,12 +186,17 @@ On a Mac:
 ```bash
 xcodegen generate
 xcodebuild test -project Cadence.xcodeproj -scheme CadenceMigrationTests -destination 'platform=macOS'
+xcodebuild build -project Cadence.xcodeproj -scheme Cadence -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
 xcodebuild build -project Cadence.xcodeproj -scheme Cadence -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
 This workspace usually lacks Xcode. When app-target code changes, GitHub Actions
-is the compiler: wait for the exact PR head to pass migration tests, the iOS
-Simulator build, and the unsigned-device build before calling the work done.
+is the compiler: wait for the exact PR head to pass the unsigned-device build
+(and the migration tests whenever persistence is touched) before calling the
+work done. The simulator release artifact builds on `main`; after merge,
+confirm it completes there. CI runs a Linux `swiftc -parse` pass over the app
+targets before any macOS job starts — a syntax error fails in the fast suites,
+so do not treat a still-queued macOS build as the first signal.
 
 The macOS toolchain in Actions is a first-class, long-established part of this
 repository — a complete CI/CD pipeline through semantic-release, fastlane, and
