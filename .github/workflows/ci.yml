@@ -34,7 +34,7 @@ permissions:
 # the pins current.
 jobs:
   changes:
-    name: Classify changes
+    name: Preflight + classify
     runs-on: ubuntu-latest
     outputs:
       native: ${{ steps.paths.outputs.native }}
@@ -45,6 +45,33 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Fast repository checks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            git diff-tree --root --check "$HEAD_SHA"
+          else
+            git diff --check "$BASE_SHA" "$HEAD_SHA"
+          fi
+
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find .github/scripts -type f -name '*.sh' -print0)
+
+          while IFS= read -r -d '' script; do
+            node --check "$script" >/dev/null
+          done < <(find .github/scripts web \
+            -path web/node_modules -prune -o \
+            -type f \( -name '*.js' -o -name '*.mjs' \) -print0)
+
+          test ! -e Cadence.xcodeproj
+          bash .github/scripts/test-classify-ci-paths.sh
+          bash .github/scripts/test-ci-topology.sh
       - name: Classify changed paths
         id: paths
         env:
@@ -72,6 +99,7 @@ jobs:
 
   core-tests:
     name: CadenceCore tests (Linux)
+    needs: changes
     runs-on: ubuntu-latest
     container: swift:5.10@sha256:ffc42e399ad0cad324f68d58f65e4d5f2c22eb9df73c4dfa249e898d497254b3
     steps:
@@ -98,6 +126,7 @@ jobs:
   # touches either side without its mirror fails these suites.
   web-tests:
     name: Web tests (parity + smoke)
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,14 +140,9 @@ jobs:
       - name: Install pinned test deps
         working-directory: web
         run: npm ci
-      - name: Behavioural invariant coverage
-        working-directory: web
-        run: node ../.github/scripts/check-invariants.mjs
       - name: Web parity, migration, and smoke tests
         working-directory: web
         run: npm test
-      - name: Verify CI path classification
-        run: bash .github/scripts/test-classify-ci-paths.sh
       - name: Install pinned release parser
         working-directory: .github/release
         run: npm ci
@@ -138,6 +162,9 @@ jobs:
     needs: [changes, core-tests, web-tests]
     if: needs.changes.outputs.native == 'true' || github.ref == 'refs/heads/main'
     runs-on: macos-latest
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && format('simulator-pr-{0}', github.event.pull_request.number) || format('simulator-run-{0}', github.run_id) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -219,6 +246,9 @@ jobs:
     needs: [changes, core-tests, web-tests]
     if: needs.changes.outputs.migrations == 'true'
     runs-on: macos-latest
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && format('migrations-pr-{0}', github.event.pull_request.number) || format('migrations-run-{0}', github.run_id) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

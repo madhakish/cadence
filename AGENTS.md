@@ -379,6 +379,8 @@ Pull requests always run Linux CadenceCore tests (with the app-target parse
 gate), web parity/runtime tests, and the stable `App build (macOS)` aggregate
 check. Native validation is change-aware behind that aggregate:
 
+- repository hygiene, shell/JavaScript syntax, and CI topology contracts must
+  pass before either portable suite starts;
 - the macOS jobs start only after the Linux core and web suites pass, so a
   red fast test costs zero macOS runner minutes;
 - the current iOS Simulator build (Darwin unit tests + full Release compile)
@@ -390,6 +392,11 @@ check. Native validation is change-aware behind that aggregate:
 - the real shipped-store migration suite runs for persistence-affecting paths
   only. Its generic historical stores are cached by immutable shipped lineage,
   but a cache miss must regenerate them from the actually shipped apps.
+
+New commits cancel stale simulator and migration jobs for the same pull request.
+Do not remove the fast-test dependencies or restore the pull-request device
+build: recent failures proved both iOS jobs reported the same compiler error,
+while a doomed device build kept running minutes after CadenceCore had failed.
 
 Never broaden the migration skip list to make schema CI faster. If a model,
 Seeder, migration test, project definition, or shipped-store generator can
