@@ -14,17 +14,27 @@ unfamiliar movement still does not become a setup form full of blanks.
 
 | Style | Start (× e1RM) | Session shape | Progression |
 | --- | --- | --- | --- |
-| Linear fives (novice) | 0.74 | sets-across of 5 | +10 lb lower / +5 upper per session |
+| Linear progression | 0.74 | sets-across of 5; upper 3×5 may adapt to 5×3 | +10 lb lower / +5 upper per session |
 | Texas — volume day | 0.77 | 5×5 across | +5 per completion, twin slots synced |
 | Texas — light day | 0.62 | 2×5 (squat) · 3×5 (press) | same, synced with its twin |
 | Texas — intensity day | 0.86 | 1×5 PR set | same (= +5 lb/week per lift) |
 | 5/3/1 wave | 0.90 (= training max) | 2 ramp sets + top "+" set | +10 lower / +5 upper TM per cycle |
+| Olympic technique | 0.70 | 5×3 → 5×2 → 5×1 · 3×2 recovery | ~70/75/80% quality build |
 | Max effort | 0.90 from competition-lift history | ~90% single · near-max single · daily target | +10 / +5 after each made exposure |
 | Dynamic effort | 0.50 squat/pull · 0.40 bench | speed sets, independent 3-step loop | holds; its loop supplies progression |
 
-Classic wave, secondary, hypertrophy, technique, and lift-level double
+Classic wave, secondary, hypertrophy, and lift-level double
 progression slots also reuse e1RM history when a template is created, at
-conservative fractions of 0.65, 0.55, 0.50, 0.60, and 0.50 respectively.
+conservative fractions of 0.65, 0.55, 0.50, and 0.50 respectively.
+
+## Olympic weightlifting foundation
+
+The built-in three-day block separates snatch, jerk, and clean & jerk practice;
+pairs them with their pulls and squats; and builds classic-lift practice from
+triples to doubles to singles. It is a source-shaped editable foundation, not
+an individualized competition peak. The exact source map, history aliases,
+and boundaries are documented in
+[Olympic weightlifting foundation](olympic-weightlifting.md).
 
 ## Novice linear progression — 3×5 and 5×5
 
@@ -39,6 +49,32 @@ which is the published reset. Slots that repeat a lift across the A/B days
 (the squat in both templates, the 3×5 deadlift) share one synchronized
 progression while they remain in lockstep, so the weight genuinely moves
 every session; a manually diverged slot keeps its own base.
+
+### Adaptive upper-body stage
+
+The 3×5 template can evolve one upper press at a time. After that slot misses
+three consecutive prescriptions at the same load, its normal 10% rebuild remains the first
+answer. Once Cadence can see both the failed stamped exposure and the rebuilt
+base, coaching may recommend **5×3** for that slot. Accepting keeps its current
+base and session-to-session loading; it changes only the rep structure while
+preserving 15 work reps. **Not now** records the decision and changes nothing.
+The proposal appears only when the latest three stamped exposures are the
+failed run and the slot both allows coached set changes and permits five sets.
+
+This follows the smallest-change sequence in Steve Ross's Starting Strength
+article [Don't Jump Ship: Earning the Transition from Novice to Intermediate
+Training](https://startingstrength.com/article/dont-jump-ship-earning-the-transition-from-novice-to-intermediate-training):
+individual lifts change at different times, and upper presses move from 3×5 to
+5×3 before a wholesale intermediate-program switch. Cadence's exact trigger is
+deliberately conservative and deterministic: the current base must be at least
+7.5% below the most recent failed linear prescription, which recognizes the
+engine's rounded 10% rebuild without firing on an ordinary held weight.
+
+Squat and pull transitions are not inferred by this rule. Their next coaching
+steps change light-day or frequency structure, which needs authored schedule
+semantics rather than a bogus one-slot approximation. The separate 5×5
+template also stays 5×5 unless the user edits it; this rule claims only the
+source-backed 3×5 → 5×3 transition.
 
 ## Texas Method
 

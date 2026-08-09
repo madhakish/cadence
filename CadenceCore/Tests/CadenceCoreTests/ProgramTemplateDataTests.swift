@@ -70,6 +70,25 @@ final class ProgramTemplateDataTests: XCTestCase {
         }, "template compat records agree with the seed: pull-ups are Main")
     }
 
+    func testOlympicTemplateKeepsClassicLiftsPullsAndSquatsInTheSourceShape() throws {
+        let template = try XCTUnwrap(ProgramTemplateData.all.first { $0.id == "olympic-weightlifting" })
+        XCTAssertEqual(template.days.map(\.name), [
+            "Snatch + Front Squat", "Jerk + Overhead", "Clean & Jerk + Back Squat",
+        ])
+        XCTAssertEqual(template.days.compactMap { $0.lifts.first?.exercise },
+                       ["Snatch", "Split Jerk", "Clean & Jerk"])
+        XCTAssertEqual(template.days.flatMap(\.accessories)
+            .filter { $0.exercise.hasSuffix("Pull") }
+            .map { "\($0.exercise):\($0.sets)x\($0.minReps)-\($0.maxReps)" },
+                       ["Snatch Pull:3x3-3", "Clean Pull:3x3-3"])
+        XCTAssertEqual(template.days[1].lifts.map(\.exercise),
+                       ["Split Jerk", "Push Press", "Overhead Squat"])
+        XCTAssertEqual(template.days[1].lifts.compactMap(\.historyExercise),
+                       ["Clean & Jerk", "Snatch"])
+        XCTAssertEqual(template.days[2].lifts[1].prescription, "linearFives")
+        XCTAssertEqual(template.days[2].lifts[1].sets, 3)
+    }
+
     func testConjugateTemplateKeepsWeeklyMaxEffortSeparateFromSpeedWaves() throws {
         let template = try XCTUnwrap(ProgramTemplateData.all.first { $0.id == "conjugate" })
         XCTAssertEqual(template.days.map(\.name), [

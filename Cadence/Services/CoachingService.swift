@@ -46,6 +46,15 @@ enum CoachingService {
                     isMain: lift.role == .main,
                     capacityManaged: lift.capacityManaged,
                     maximumSets: lift.maximumSets,
+                    prescriptionStyle: ProgramEngine.resolvedStyle(
+                        lift.prescription,
+                        movementGroup: exercise?.movementGroup,
+                        role: lift.role,
+                        focus: program.focus
+                    ),
+                    baseWeightLb: lift.baseWeightLb,
+                    workingSets: lift.doubleProgressionSets,
+                    workingReps: lift.currentReps <= 3 ? 3 : 5,
                     // A graded peak waits in `pending` until the deload ends.
                     // Reading only the settled count would hide a stall for a
                     // whole cycle — exactly the cycle worth rotating out of.
@@ -106,6 +115,7 @@ enum CoachingService {
                     plannedSets: entry.plannedSets ?? entry.plannedWorkingSets.count,
                     plannedWeightLb: entry.plannedWeightLb,
                     plannedReps: entry.plannedReps,
+                    prescriptionStyle: PrescriptionStyle(rawValue: entry.prescriptionStyleRaw),
                     roundingLb: ProgramEngine.loadStep(
                         programRoundingLb: program.roundingLb,
                         exerciseType: exercise.typeRaw
@@ -244,6 +254,29 @@ enum CoachingService {
             let old = program.preferredSessionSpacingDays
             program.preferredSessionSpacingDays = max(2, days)
             result = "Preferred spacing: \(old) → \(program.preferredSessionSpacingDays) days."
+        case .useLinearTriples(let slotID, let exerciseName, let expectedBaseWeightLb):
+            guard let lift = program.days.flatMap(\.lifts).first(where: { $0.id == slotID }) else {
+                throw CoachingApplyError.unknownSlot(exerciseName)
+            }
+            guard lift.exerciseName == exerciseName,
+                  lift.prescription == .linearFives,
+                  lift.capacityManaged,
+                  lift.maximumSets >= 5,
+                  lift.doubleProgressionSets == 3,
+                  lift.currentReps == 5,
+                  abs(lift.baseWeightLb - expectedBaseWeightLb) < 0.01 else {
+                throw CoachingApplyError.prescriptionChanged(exerciseName)
+            }
+            lift.doubleProgressionSets = 5
+            lift.currentReps = 3
+            lift.stallCount = 0
+            lift.pendingBaseWeightLb = nil
+            lift.pendingEstimatedMaxLb = nil
+            lift.pendingStallCount = nil
+            lift.pendingLastIncrementLb = nil
+            lift.pendingNote = nil
+            decisionAfterValue = "linearTriples:slot:\(slotID):5x3"
+            result = "\(exerciseName): 3×5 → 5×3; session-to-session loading stays in place."
         case .rotateExercise(let slotID, let exerciseName):
             guard let current = exercises.first(where: { $0.name == exerciseName }) else {
                 throw CoachingApplyError.unknownExercise(exerciseName)
@@ -360,6 +393,7 @@ enum CoachingService {
         case noVariation(String)
         case unknownExercise(String)
         case unknownSlot(String)
+        case prescriptionChanged(String)
         var errorDescription: String? {
             switch self {
             case .noExercise(let pattern):
@@ -370,6 +404,8 @@ enum CoachingService {
                 return "\(name) is no longer in the library, so a compatible variation cannot be chosen."
             case .unknownSlot(let name):
                 return "The program slot for \(name) no longer exists."
+            case .prescriptionChanged(let name):
+                return "The program slot for \(name) changed after this recommendation, so triples were not applied."
             }
         }
     }

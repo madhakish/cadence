@@ -221,6 +221,12 @@ published methodology's own progression (full details in
   squat, Texas A/B pairs) stay synchronized while they remain in
   lockstep; a manually edited or deliberately diverged slot keeps its
   own progression from then on — re-align it by setting the bases equal.
+  For a 3×5 upper press, the completed 10% rebuild also unlocks an explicit
+  coaching proposal to use 5×3. Apply changes only that slot's set/rep shape;
+  Not now keeps 3×5 and records the decision. A held weight or one miss is not
+  enough evidence: the latest three stamped exposures must be the failed run.
+  The slot must also allow coached set changes with a maximum of at least five;
+  lower-body schedule changes are not guessed.
 - **Multi-step styles** (`fiveThreeOne`, `dynamicEffort`) interpret the
   style-neutral rotation pointer through their own loops. 5/3/1 grades its
   third step and applies +10 lb lower / +5 lb upper at rollover. A missed

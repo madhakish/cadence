@@ -97,7 +97,7 @@ export const usesCyclePhases = (style) => !buildsOwnSessionShape(style);
 export const PRESCRIPTION_SHORT_NAMES = {
   automatic: "Automatic", wave: "Wave", offsetWave: "Wave — offsets",
   secondary: "Secondary volume", hypertrophy: "Hypertrophy", technique: "Technique",
-  doubleProgression: "Double progression", linearFives: "Linear 5s",
+  doubleProgression: "Double progression", linearFives: "Linear",
   texasVolume: "Texas volume", texasLight: "Texas light", texasIntensity: "Texas intensity",
   fiveThreeOne: "5/3/1", maxEffort: "Max effort", dynamicEffort: "Speed work",
 };
@@ -113,7 +113,7 @@ export const defaultStartFraction = (style) => ({
 // new program. Explicit methodology ratios still win.
 export const templateStartFraction = (style) => defaultStartFraction(style) || ({
   automatic: 0.65, wave: 0.65, offsetWave: 0.65, secondary: 0.55,
-  hypertrophy: 0.50, doubleProgression: 0.50, technique: 0.60,
+  hypertrophy: 0.50, doubleProgression: 0.50, technique: 0.70,
 }[style] || 0);
 export function resolvedPrescriptionStyle(requested = "automatic", movementGroup = null,
   role = "main", focus = "strength") {
@@ -766,7 +766,7 @@ export const rotationLabel = (rotation) =>
   `Rotation ${Number.isFinite(rotation) ? Math.min(Math.max(rotation, 1), DELOAD_WEEK) : 1} of ${DELOAD_WEEK}`;
 
 // What a slot does, for the badge beside its name: "Main · 5/3/1",
-// "Complementary · Secondary volume", "Main · Linear 5s". Resolves "automatic"
+// "Complementary · Secondary volume", "Main · Linear". Resolves "automatic"
 // first, so the badge names the style the engine will actually run rather than
 // the placeholder left in the picker.
 // Mirrored 1:1 in CadenceCore ProgramEngine.slotBadge.
@@ -836,10 +836,18 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     phasePrimerEnabled: true, ...configuration,
   };
   Object.assign(config, resolvedOffsets(config.loadOffsetLb, config.peakOffsetLb, movementGroup));
-  if (["linearFives", "texasVolume", "texasLight", "texasIntensity"].includes(style)) {
+  if (style === "linearFives") {
     // Sets-across at the slot's own base; the base moves per exposure
-    // (advanceLinearLift). Recovery is the sole phase override: advancement
-    // pauses while both load and volume drop, then the normal cadence resumes.
+    // (advanceLinearLift). currentReps is a two-stage switch: ordinary fives,
+    // or the explicit 3x5 -> 5x3 coaching transition.
+    return {
+      weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
+      sets: p === 4 ? 2 : Math.max(1, config.workingSets),
+      reps: p === 4 ? 3 : (config.currentReps <= 3 ? 3 : 5),
+      phase: p, cycleNumber: state.cycleNumber,
+    };
+  }
+  if (["texasVolume", "texasLight", "texasIntensity"].includes(style)) {
     return {
       weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
       sets: p === 4 ? 2 : Math.max(1, config.workingSets),
@@ -915,8 +923,11 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     hypertrophy: {
       1: [4, 10, 1.0], 2: [4, 8, 1.025], 3: [3, 8, 1.05], 4: [1, 5, 0.80],
     },
+    // Conservative classic-lift build: five sets of triples, doubles, then
+    // crisp singles. With the template's 70% history bootstrap this lands at
+    // ~70/75/80%; recovery uses easy doubles instead of falling near 48%.
     technique: {
-      1: [5, 3, 1.0], 2: [6, 2, 1.05], 3: [6, 1, 1.10], 4: [2, 2, 0.80],
+      1: [5, 3, 1.0], 2: [5, 2, 1.075], 3: [5, 1, 1.15], 4: [3, 2, 0.90],
     },
   };
   const table = byStyle[style] || byStyle.wave;
@@ -1926,7 +1937,9 @@ export function exposurePreview({
   config.workingSets = Math.max(1, num(config.workingSets, 3));
   config.minimumReps = Math.max(1, num(config.minimumReps, 5));
   config.maximumReps = Math.max(config.minimumReps, num(config.maximumReps, 8));
-  config.currentReps = Math.max(config.minimumReps, num(config.currentReps, config.minimumReps));
+  config.currentReps = style === "linearFives"
+    ? (num(config.currentReps, 5) <= 3 ? 3 : 5)
+    : Math.max(config.minimumReps, num(config.currentReps, config.minimumReps));
   let state = { baseWeightLb, estimatedMaxLb, stallCount, role, lastIncrementLb: 0 };
   let cycle = Math.max(1, cycleNumber);
   let phase = PHASES[rotation] ? rotation : 1;
@@ -2701,6 +2714,66 @@ function rotationSuggestions(program, evidenceKey) {
   return result;
 }
 
+// First adaptive stage inside Progressive Barbell Strength. A single miss is
+// noise: linear progression already retries three misses and rebuilds the base
+// by 10%. Once that rebuild is visible, an upper press may keep the same
+// per-exposure loading cadence while changing only 3x5 -> 5x3. Squat and pull
+// transitions need light-day/frequency semantics and are intentionally not
+// guessed here. Mirrored in CoachingEngine.linearStageSuggestions.
+function linearStageSuggestions(program, sessions, evidenceKey) {
+  const upperPresses = new Set(["horizontalPress", "verticalPress"]);
+  const orderedSessions = [...sessions].sort((a, b) => epoch(b.date) - epoch(a.date));
+  return (program.slots || []).flatMap((slot) => {
+    if (slot.prescriptionStyle !== "linearFives" || !upperPresses.has(slot.pattern)
+        || slot.capacityManaged === false || (slot.maximumSets || 6) < 5
+        || slot.workingSets !== 3 || slot.workingReps !== 5
+        || !(slot.baseWeightLb > 0)) return [];
+    const slotHistory = orderedSessions.flatMap((session) => {
+      const exercise = (session.exercises || []).find((candidate) =>
+        candidate.slotID === slot.id);
+      return exercise ? [{ sessionID: session.id, exercise }] : [];
+    });
+    const exposures = [];
+    for (const entry of slotHistory) {
+      if (entry.exercise.prescriptionStyle !== "linearFives") break;
+      const { exercise } = entry;
+      const prescribed = (exercise.sets || []).filter((set) =>
+        !set.isWarmup && countsAsPrescribedWork(set.prescriptionBlock));
+      const plannedWeight = exercise.plannedWeightLb
+        ?? Math.max(0, ...prescribed.map((set) => set.plannedWeightLb || 0));
+      const plannedSets = exercise.plannedSets || 0;
+      const setRepTargets = [...new Set(prescribed
+        .map((set) => set.plannedReps).filter(Number.isFinite))];
+      const plannedReps = exercise.plannedReps
+        ?? (setRepTargets.length === 1 ? setRepTargets[0] : null);
+      // Unknown/legacy plan data breaks the proof. Do not discard it and join
+      // two failure runs that were never observed as consecutive.
+      if (!(plannedWeight > 0) || plannedSets !== 3 || plannedReps !== 5) break;
+      const metSets = prescribed.filter((set) => set.completed !== false && atPlan(set)).length;
+      exposures.push({ sessionID: entry.sessionID, plannedWeight, missed: metSets < plannedSets });
+    }
+    const missesNeeded = linearRule("linearFives", null).stallLimit;
+    if (exposures.length < missesNeeded) return [];
+    const attempts = exposures.slice(0, missesNeeded);
+    const weights = attempts.map((attempt) => attempt.plannedWeight);
+    const lightest = Math.min(...weights), plannedWeight = Math.max(...weights);
+    if (!attempts.every((attempt) => attempt.missed)
+        || plannedWeight - lightest >= 0.01
+        || slot.baseWeightLb > plannedWeight * 0.925) return [];
+    const sessionID = attempts[0].sessionID;
+    return [{
+      id: `program.slot.linear-triples.v1:${evidenceKey}-${sessionID}-${slot.id}`,
+      ruleID: "program.slot.linear-triples.v1", priority: 65,
+      title: `Move ${slot.exerciseName} to triples`,
+      explanation: `${slot.exerciseName}'s linear base was rebuilt from ${trim(plannedWeight)} to ${trim(slot.baseWeightLb)} lb after the last prescription was not met. Keep session-to-session loading, but change this slot from 3x5 to 5x3 so only rep structure changes.`,
+      change: {
+        type: "useLinearTriples", slotID: slot.id, exerciseName: slot.exerciseName,
+        expectedBaseWeightLb: slot.baseWeightLb,
+      },
+    }];
+  });
+}
+
 function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions) {
   if (!latest) return [];
   const evidenceKey = `c${latest.key.cycleNumber}-r${latest.key.rotation}`;
@@ -2709,9 +2782,12 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   // readiness level, so these are offered alongside the readiness verdict
   // rather than gated behind a green streak. They sort below every readiness
   // rule, so the light stays the headline.
-  const rotations = rotationSuggestions(program, evidenceKey);
+  const programChanges = [
+    ...rotationSuggestions(program, evidenceKey),
+    ...linearStageSuggestions(program, sessions, evidenceKey),
+  ];
   const byPriority = (a, b) => b.priority - a.priority || b.id.localeCompare(a.id);
-  const decided = (recommendation) => [recommendation, ...rotations].sort(byPriority);
+  const decided = (recommendation) => [recommendation, ...programChanges].sort(byPriority);
   // A second consecutive red rotation escalates: one bad rotation is noise,
   // two in a row is a trend, and the 25% cut has already been tried without
   // restoring output. Cuts volume while KEEPING frequency (Rogerson 2024) —
@@ -2745,13 +2821,13 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
     title: "Hold the current prescription", explanation: latest.reasons[0] || "Another exposure is needed before adding work.",
     change: { type: "hold" },
   });
-  if (greenRotationStreak < 2) return [...rotations].sort(byPriority);
+  if (greenRotationStreak < 2) return [...programChanges].sort(byPriority);
   const budgets = [["verticalPull", 3], ["kneeFlexion", 3], ["shoulderStability", 2], ["adductor", 2], ["core", 4]];
   const planned = {};
   for (const slot of program.slots || []) planned[slot.pattern] = (planned[slot.pattern] || 0) + slot.plannedSets;
   const capacity = Math.max(0, program.maximumAddedSetsPerRotation ?? 6);
   let changes = 0;
-  const result = [...rotations];
+  const result = [...programChanges];
   const capacityAdjustments = [];
   const capacityEvidence = [];
   for (const [pattern, target] of budgets) {

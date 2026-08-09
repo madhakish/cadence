@@ -57,23 +57,29 @@ export const PROGRAM_TEMPLATES = [
   {
     id: "olympic-weightlifting",
     name: "Olympic Weightlifting",
-    tagline: "3 days · snatch, clean & jerk, strength base",
+    tagline: "3 days · snatch, jerk, clean & jerk · pulls & squats",
     focus: "strength", roundingLb: 5,
     exercises: [
       // Category mirrors the seed: vertical pulls are Main work (issue #126).
       // Instantiation never overwrites an existing record; this only shapes
       // an install where the seed record is somehow missing.
       ex("Pull-ups", "Main", "bodyweight", "pull", { defaultRestSeconds: 120 }),
-      ex("Back Extension", "Accessory", "bodyweight", "hinge"),
       ex("Hanging Knee Raise", "Accessory", "bodyweight", "core"),
     ],
     days: [
-      { name: "Snatch Day", lifts: [lift("Snatch", "main", 65, 115), lift("Overhead Squat", "complementary", 65, 115)],
-        accessories: [acc("Snatch Pull", 3, 3, 5, 95, 10), acc("Hanging Knee Raise", 3, 8, 15)] },
-      { name: "Clean & Jerk Day", lifts: [lift("Clean & Jerk", "main", 85, 145), lift("Front Squat", "complementary", 115, 185)],
-        accessories: [acc("Clean Pull", 3, 3, 5, 115, 10), acc("Pull-ups", 3, 5, 10)] },
-      { name: "Strength Day", lifts: [lift("Back Squat", "main", 135, 225), lift("Overhead Press", "complementary", 65, 105)],
-        accessories: [acc("Back Extension", 3, 10, 15), acc("Hanging Knee Raise", 3, 8, 15)] },
+      { name: "Snatch + Front Squat",
+        lifts: [lift("Snatch", "main", 65, 115, { prescription: "technique" }),
+                lift("Front Squat", "complementary", 115, 185, { prescription: "technique" })],
+        accessories: [acc("Snatch Pull", 3, 3, 3, 95, 10), acc("Hanging Knee Raise", 3, 8, 15)] },
+      { name: "Jerk + Overhead",
+        lifts: [lift("Split Jerk", "main", 65, 105, { prescription: "technique", historyExercise: "Clean & Jerk" }),
+                lift("Push Press", "complementary", 65, 105, { prescription: "linearFives", sets: 3 }),
+                lift("Overhead Squat", "complementary", 65, 115, { prescription: "technique", historyExercise: "Snatch" })],
+        accessories: [acc("Pull-ups", 3, 5, 10), acc("Hanging Knee Raise", 3, 8, 15)] },
+      { name: "Clean & Jerk + Back Squat",
+        lifts: [lift("Clean & Jerk", "main", 85, 145, { prescription: "technique" }),
+                lift("Back Squat", "complementary", 135, 225, { prescription: "linearFives", sets: 3 })],
+        accessories: [acc("Clean Pull", 3, 3, 3, 115, 10), acc("Hanging Knee Raise", 3, 8, 15)] },
     ],
   },
   {
