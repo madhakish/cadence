@@ -458,13 +458,21 @@ ladder is intact underneath. `maximumAddedSetsPerRotation` is honored as the
 **rotation-wide budget** it is: stalled slots rank in stable program order and
 receive one set each until the budget is spent — four stalled lifts under a
 budget of one add one set, not four — and zero turns the fallback off.
-Increment size stages by headroom to the **logged** prior best (rep-ceilinged
-samples logged **before** the graded session, so a long back-off set cannot
-fake a ceiling and out-of-order banking cannot see the future): a logged
-drawdown rebuilds in clean 10 lb-class jumps (change plates are noise), a
-**standing** prior best being closed back in on earns half-step increments at
-the program's own grid (`roundingLb / 2`), and a fresh log rising through its
-own all-time best never reads as at-max — it stays standard.
+Increment size stages by headroom on two axes. Against the **logged** prior
+best (rep-ceilinged samples logged **before** the graded session, so a long
+back-off set cannot fake a ceiling and out-of-order banking cannot see the
+future): a logged drawdown rebuilds in clean 10 lb-class jumps (change plates
+are noise), a **standing** prior best being closed back in on earns half-step
+increments at the program's own grid (`roundingLb / 2`), and a fresh log
+rising through its own all-time best never reads as at-max — it stays
+standard. And against the lifter's **own current estimated max**: a total-bar
+base at or below 85% of it reads rebuild outright — a young log's prior best
+rises with every cycle, so the drawdown test never fires for the rebuilding
+lifter it exists for, but base-to-capability headroom is visible right now (a
+226 base under a 278 estimate is a rebuild in progress, whatever the
+bookkeeping says). The axis is barbell-only: rebuild jumps are +10 lb plate
+classes, which dumbbell and machine steps never inherit, and it stands down
+once the base crosses 85% of capability.
 
 > The lifter's own rule, layered: "the goal is to move the needle with volume
 > progression or weight progressions … if I can't make a 10# jump the change
@@ -513,6 +521,14 @@ the number as a bar-and-plates stack, which machines and dumbbells never get):
   strand the stale label and re-prescribe the same plates yet again. Lighter
   volume evidence never drags a base down, and deload math then operates on
   the real number.
+- **Bonus work arms catch-up**: a heavier completed working set the lifter
+  ADDED past the prescription never touches grading (bonus rows stay
+  history-only — they can neither pass nor fail a cycle), but as planning
+  evidence it is an explicit signal, as deliberate as a hand edit. It lifts
+  the plan by one staged increment (the step the lift's regime currently
+  earns) above the stored base — clamped per cycle, so the base chases
+  demonstrated capability without teleporting to one good day, and a
+  hand-set base still switches everything off.
 
 > "My 5×5 deadlift today still has me at 225 — this should be 235, or 232
 > with kg plates." The 215→225 advance moved the label and zero plates; the

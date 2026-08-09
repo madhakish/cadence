@@ -1638,7 +1638,11 @@ async function advanceProgram(session, milestones) {
           : lastVolumeEvidence(lift, program, history, { inCycle: tag.cycleNumber });
         lift.pending = C.advanceProgramLift(lift, cyclePerf(se, loadStep), program.focus,
           lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep,
-          C.progressionRegime(lift.estimatedMaxLb, prior.maxLb, prior.standing), volumeFallback,
+          // The headroom axis is a barbell rule — rebuild jumps are +10 lb
+          // PLATE classes, which dumbbell and machine steps must never
+          // inherit.
+          C.progressionRegime(lift.estimatedMaxLb, prior.maxLb, prior.standing,
+            C.resolvedLoadBasis(exerciseByName.get(se.exerciseName) || {}) === "totalBar" ? lift.baseWeightLb : 0), volumeFallback,
           rideEvidence == null ? 0
             : C.performedLabel(rideEvidence.performedLb, rideEvidence.barLabelLb, loadStep));
       }
@@ -1753,7 +1757,15 @@ export function lastVolumeEvidence(lift, program, sessions, { beforeCycle = null
     if (!entry || entry.exerciseName !== lift.exerciseName) continue;
     const top = Math.max(0, ...prescribedWork(entry).map((set) => set.weightLb || 0));
     if (top > 0) {
-      return { performedLb: top, barLabelLb: C.barLabelLb(entry.barId ? C.barById(entry.barId) : C.BARS.bar45lb) };
+      // The heaviest completed working set BEYOND the planned-set window —
+      // work the lifter added on purpose. Grading never sees it; planning
+      // treats it as an explicit catch-up signal (honestBase).
+      const candidates = (entry.sets || []).filter((set) => !set.isWarmup
+        && C.countsAsPrescribedWork(set.prescriptionBlock));
+      const bonus = Math.max(0, ...candidates.slice(entry.plannedSets ?? candidates.length)
+        .filter((set) => set.status === "completed").map((set) => set.weightLb || 0));
+      return { performedLb: top, bonusLb: bonus,
+        barLabelLb: C.barLabelLb(entry.barId ? C.barById(entry.barId) : C.BARS.bar45lb) };
     }
   }
   return null;
@@ -1773,8 +1785,15 @@ export function planningBase(lift, exercise, program, sessions) {
     beforeCycle: C.advancesPerExposure(lift.prescription) ? null : program.cycleNumber,
   });
   if (!evidence) return lift.baseWeightLb;
+  // The catch-up a bonus set can arm is the increment this lift's regime
+  // currently earns — derived from slot state alone (the base-to-own-max
+  // headroom axis), so every surface computes it identically without a
+  // history scan. Mirrors ProgramSession.planningBase.
+  const regime = C.progressionRegime(lift.estimatedMaxLb || 0, 0, false, lift.baseWeightLb);
+  const catchUp = C.stagedIncrement(lift.baseWeightLb, program.focus, regime, program.roundingLb);
   return C.honestBase(lift.baseWeightLb, lift.lastIncrementLb ?? 0,
-    evidence.performedLb, program.roundingLb, evidence.barLabelLb);
+    evidence.performedLb, program.roundingLb, evidence.barLabelLb,
+    evidence.bonusLb, catchUp);
 }
 
 // The volume-fallback sets this lift carries, with the rotation-wide

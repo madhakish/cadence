@@ -1569,6 +1569,15 @@ export function focusIncrement(baseWeightLb, focus, roundingLb = DEFAULT_ROUNDIN
 // Rebuild below 90% of the prior best; fine within 2.5% of it.
 export const REBUILD_HEADROOM_BAND = 0.90;
 export const FINE_HEADROOM_BAND = 0.975;
+// A base at or below this fraction of the lifter's OWN current estimated max
+// reads rebuild regardless of history bookkeeping. The drawdown test compares
+// against the log's prior best — but a young log's prior best moves up with
+// every cycle, so the rebuilding lifter that band exists for (real prior
+// numbers predate the app) never trips it. The base-to-capability ratio is
+// visible in the log right now: a 226 base under a 278 estimated max (81%) is
+// a rebuild in progress, and +5 change-plate crumbs are noise at that
+// distance from the ceiling. Mirrors ProgramProgression.rebuildBaseHeadroom.
+export const REBUILD_BASE_HEADROOM = 0.85;
 // A prior best only counts as a CEILING once it has stood this long. A fresh
 // log rises through its own all-time best every cycle — without this guard
 // the rebuilding lifter the regime exists for would read as at-max and be
@@ -1578,7 +1587,11 @@ export const STANDING_BEST_DAYS = 35;
 // Headroom to prior capability, banded: "rebuild" | "standard" | "fine".
 // priorBestMaxLb is the best e1RM in the LOG (callers scan history); zero
 // means no evidence and grades standard. Mirrors ProgramProgression.
-export function progressionRegime(estimatedMaxLb, priorBestMaxLb, standingBest) {
+export function progressionRegime(estimatedMaxLb, priorBestMaxLb, standingBest, baseWeightLb = 0) {
+  // Base-to-own-capability headroom first — the fine band cannot also hold
+  // there (fine means the base is closing on the ceiling).
+  if (baseWeightLb > 0 && estimatedMaxLb > 0
+    && baseWeightLb <= estimatedMaxLb * REBUILD_BASE_HEADROOM) return "rebuild";
   if (!(estimatedMaxLb > 0) || !(priorBestMaxLb > 0)) return "standard";
   if (estimatedMaxLb < priorBestMaxLb * REBUILD_HEADROOM_BAND) return "rebuild";
   if (standingBest && estimatedMaxLb >= priorBestMaxLb * FINE_HEADROOM_BAND) return "fine";
@@ -1641,17 +1654,32 @@ export function volumeIncrementSets(stallCount, stalledRank, maximumAddedSetsPer
 // come from a cycle BEFORE the one being planned — callers scope it; the
 // current cycle's own exposure must never feed the repair that produced its
 // plan. Mirrors ProgramProgression.honestBase.
+// bonusPerformedLb is the heaviest completed working set the lifter ADDED
+// past the prescription (zero when none). Bonus work is deliberately
+// history-only for grading — it can never pass or fail a cycle — but as
+// planning evidence it is the opposite of ambient noise: a heavier set the
+// lifter chose to pull is as explicit a signal as a hand edit, so it arms one
+// staged increment of catch-up (catchUpIncrementLb, the increment the lift's
+// regime currently earns; the last earned increment is the fallback) even
+// when the at-plan work sat at the pre-advance base. Clamped to one step per
+// cycle: the base chases demonstrated capability, it never teleports to one
+// good day.
 export function honestBase(baseWeightLb, lastIncrementLb, lastVolumePerformedLb,
-  roundingLb = DEFAULT_ROUNDING_LB, barLb = 45) {
-  if (!(baseWeightLb > 0) || !(lastIncrementLb > 0) || !(lastVolumePerformedLb > 0)) {
-    return baseWeightLb;
+  roundingLb = DEFAULT_ROUNDING_LB, barLb = 45, bonusPerformedLb = 0, catchUpIncrementLb = 0) {
+  if (!(baseWeightLb > 0) || !(lastIncrementLb > 0)) return baseWeightLb;
+  let repaired = baseWeightLb;
+  if (lastVolumePerformedLb > 0
+    && lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2
+    && lastVolumePerformedLb <= baseWeightLb + lastIncrementLb + roundingLb / 2) {
+    const label = performedLabel(lastVolumePerformedLb, barLb, roundingLb);
+    repaired = Math.max(baseWeightLb, Math.min(label + lastIncrementLb, baseWeightLb + lastIncrementLb));
   }
-  if (!(lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2)
-    || !(lastVolumePerformedLb <= baseWeightLb + lastIncrementLb + roundingLb / 2)) {
-    return baseWeightLb;
+  if (bonusPerformedLb > baseWeightLb + roundingLb / 2) {
+    const step = catchUpIncrementLb > 0 ? catchUpIncrementLb : lastIncrementLb;
+    const label = performedLabel(bonusPerformedLb, barLb, roundingLb);
+    repaired = Math.max(repaired, Math.min(label + step, baseWeightLb + step));
   }
-  const label = performedLabel(lastVolumePerformedLb, barLb, roundingLb);
-  return Math.max(baseWeightLb, Math.min(label + lastIncrementLb, baseWeightLb + lastIncrementLb));
+  return repaired;
 }
 
 export function advanceCycleLift(state, perf, focus, roundingLb = DEFAULT_ROUNDING_LB,
