@@ -1,5 +1,14 @@
 import Foundation
 
+/// The physical plate family shown by the equipment renderer. Olympic bumper
+/// discs share a competition diameter; calibrated steel steps down with mass.
+public enum PlateVisualStyle: String, CaseIterable, Sendable, Identifiable {
+    case bumper = "Bumper"
+    case steel = "Steel"
+
+    public var id: String { rawValue }
+}
+
 /// A plate denomination in its native unit. Gyms toggle these on/off per inventory.
 public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
     public let value: Double
@@ -26,7 +35,7 @@ public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
     /// lb (colour bumpers): 55 red · 45 blue · 35 yellow · 25 green · 10 white ·
     /// 5 and under (and fractional) black iron.
     /// Mirrored 1:1 in web/app/js/core.js `plateColorToken`.
-    public var colorToken: String {
+    public func colorToken(for style: PlateVisualStyle) -> String {
         if unit == .lb {
             if value >= 55 { return "red" }
             if value == 45 { return "blue" }
@@ -40,21 +49,58 @@ public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
         if value == 15 { return "yellow" }
         if value == 10 { return "green" }
         if value == 5 { return "white" }
-        if value == 2.5 { return "red" } // IWF change plate
+        if value == 2.5 { return style == .bumper ? "red" : "black" }
         return "black" // 1.25 + misc
     }
 
-    /// Relative drawn diameter (0.4–1.0) by canonical pounds, so a barbell
-    /// graphic looks physically right regardless of unit. Mirrored 1:1 in
-    /// web/app/js/core.js `plateSizeFactor`.
-    public var sizeFactor: Double {
-        if lb >= 44 { return 1.0 }  // 45/55 lb, 20/25 kg
-        if lb >= 33 { return 0.9 }  // 35 lb, 15 kg
-        if lb >= 22 { return 0.78 } // 25 lb, 10 kg
-        if lb >= 11 { return 0.62 } // 10 lb, 5 kg
-        if lb >= 5 { return 0.5 }   // 5 lb
-        return 0.4                  // 2.5 lb / fractional
+    /// Backwards-compatible IWF/colour-bumper token.
+    public var colorToken: String { colorToken(for: .bumper) }
+
+    /// Diameter relative to a 450 mm competition disc. Bumpers 10 kg and up
+    /// (and colour-coded 10 lb and up) remain full diameter; calibrated steel
+    /// follows the common stepped competition profile.
+    public func diameterFactor(for style: PlateVisualStyle) -> Double {
+        if style == .bumper {
+            if unit == .kg {
+                if value >= 10 { return 1.0 }
+                if value >= 5 { return 0.70 }
+                if value >= 2.5 { return 0.55 }
+                return 0.45
+            }
+            if value >= 10 { return 1.0 }
+            if value >= 5 { return 0.55 }
+            return 0.45
+        }
+        if lb >= 44 { return 1.0 }
+        if lb >= 33 { return 0.89 }
+        if lb >= 22 { return 0.72 }
+        if lb >= 11 { return 0.51 }
+        if lb >= 5 { return 0.42 }
+        return 0.36
     }
+
+    /// Relative axial thickness. Rubber bumpers consume substantially more
+    /// sleeve than calibrated steel at the same denomination.
+    public func thicknessFactor(for style: PlateVisualStyle) -> Double {
+        if style == .bumper {
+            if lb >= 50 { return 1.0 }
+            if lb >= 44 { return 0.84 }
+            if lb >= 33 { return 0.70 }
+            if lb >= 22 { return 0.56 }
+            if lb >= 11 { return 0.38 }
+            if lb >= 5 { return 0.28 }
+            return 0.22
+        }
+        if lb >= 50 { return 0.55 }
+        if lb >= 44 { return 0.47 }
+        if lb >= 33 { return 0.40 }
+        if lb >= 22 { return 0.33 }
+        if lb >= 11 { return 0.25 }
+        if lb >= 5 { return 0.19 }
+        return 0.15
+    }
+
+    public var sizeFactor: Double { diameterFactor(for: .steel) }
 
     public static func < (lhs: Plate, rhs: Plate) -> Bool { lhs.lb < rhs.lb }
 

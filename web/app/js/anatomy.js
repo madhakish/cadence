@@ -1,6 +1,6 @@
-// Muscle anatomy for the exercise detail view: a Vitruvian two-view figure
-// (front + back) with per-muscle smooth regions, and the exercise → muscles
-// map that drives the highlighting (primary movers red, supporting blue).
+// Muscle anatomy for the exercise detail view: a weightlifting gorilla in Da
+// Vinci's Vitruvian construction, plus the exercise → muscles map that drives
+// the highlighting (primary movers red, supporting blue).
 //
 // DATA is ported 1:1 from CadenceCore/Sources/CadenceCore/AnatomyData.swift;
 // parity is ENFORCED against web/tests/fixtures/anatomy.json by both test
@@ -77,6 +77,34 @@ export const ANATOMY_REGIONS = [
   { id: "hamstrings", view: "back", points: mirror([[79, 130], [98, 132], [95, 153], [87, 178], [76, 184], [70, 175], [75, 153]]) },
   { id: "calves", view: "back", points: [[71, 175], [84, 181], [78, 203], [70, 211], [61, 208], [63, 196]] },
   { id: "calves", view: "back", points: mirror([[71, 175], [84, 181], [78, 203], [70, 211], [61, 208], [63, 196]]) },
+];
+
+// Rendering contours tuned to the Vitruvian weightlifting ape's 210×210 square.
+// These are deliberately separate from the legacy fixture geometry above:
+// the data/map parity contract stays stable while the visible wash follows both
+// superimposed arm and leg poses in the engraved source art.
+export const VITRUVIAN_FRONT_REGIONS = [
+  { id: "traps", points: [[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]] },
+  { id: "traps", points: mirror([[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]]) },
+  { id: "delts", points: [[68, 61], [82, 58], [91, 64], [87, 76], [76, 81], [65, 73]] },
+  { id: "delts", points: mirror([[68, 61], [82, 58], [91, 64], [87, 76], [76, 81], [65, 73]]) },
+  { id: "chest", points: [[79, 74], [103, 73], [103, 94], [92, 98], [78, 91], [75, 82]] },
+  { id: "chest", points: mirror([[79, 74], [103, 73], [103, 94], [92, 98], [78, 91], [75, 82]]) },
+  { id: "biceps", points: [[76, 69], [63, 67], [49, 71], [47, 80], [61, 84], [75, 78]] },
+  { id: "biceps", points: mirror([[76, 69], [63, 67], [49, 71], [47, 80], [61, 84], [75, 78]]) },
+  { id: "biceps", points: [[70, 48], [61, 43], [48, 38], [43, 45], [53, 55], [65, 60]] },
+  { id: "biceps", points: mirror([[70, 48], [61, 43], [48, 38], [43, 45], [53, 55], [65, 60]]) },
+  { id: "forearms", points: [[50, 70], [36, 69], [21, 72], [16, 78], [24, 84], [39, 82], [51, 78]] },
+  { id: "forearms", points: mirror([[50, 70], [36, 69], [21, 72], [16, 78], [24, 84], [39, 82], [51, 78]]) },
+  { id: "forearms", points: [[48, 39], [40, 31], [32, 27], [29, 34], [36, 44], [45, 49], [54, 54]] },
+  { id: "forearms", points: mirror([[48, 39], [40, 31], [32, 27], [29, 34], [36, 44], [45, 49], [54, 54]]) },
+  { id: "obliques", points: [[80, 91], [94, 94], [96, 113], [92, 122], [83, 119], [78, 105]] },
+  { id: "obliques", points: mirror([[80, 91], [94, 94], [96, 113], [92, 122], [83, 119], [78, 105]]) },
+  { id: "abs", points: [[94, 87], [116, 87], [121, 112], [114, 126], [105, 130], [96, 126], [89, 112]] },
+  { id: "quads", points: [[78, 123], [101, 126], [100, 145], [94, 161], [82, 169], [72, 161], [73, 143]] },
+  { id: "quads", points: mirror([[78, 123], [101, 126], [100, 145], [94, 161], [82, 169], [72, 161], [73, 143]]) },
+  { id: "adductors", points: [[92, 125], [104, 128], [102, 151], [96, 159], [89, 149], [88, 135]] },
+  { id: "adductors", points: mirror([[92, 125], [104, 128], [102, 151], [96, 159], [89, 149], [88, 135]]) },
 ];
 
 // Exercise → { primary, secondary } by canonical library name.
@@ -296,40 +324,69 @@ const shape = (points, fill, stroke, opacity, className) => {
   return p;
 };
 
-/// Two figures side by side (front left, back right), primary regions red,
-/// supporting blue, everything else neutral outline.
+const BACK_REGION_ASSET = {
+  traps: "traps", delts: "delts", reardelts: "delts", lats: "lats",
+  triceps: "triceps", lowerback: "lowerback", forearms: "forearms",
+  glutes: "glutes", hamstrings: "hamstrings", calves: "calves",
+};
+
+const referenceImage = (href, className = "anatomy-reference") => {
+  const image = document.createElementNS(NS, "image");
+  image.setAttribute("class", className);
+  image.setAttribute("href", href);
+  image.setAttribute("x", "0");
+  image.setAttribute("y", "0");
+  image.setAttribute("width", "210");
+  image.setAttribute("height", "210");
+  image.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  return image;
+};
+
+const appendBackMask = (g, id, role) => {
+  const asset = BACK_REGION_ASSET[id];
+  if (!asset) return;
+  if (g.querySelector(`image[data-role="${role}"][data-asset="${asset}"]`)) return;
+  const image = referenceImage(`assets/vitruvian-back-${asset}.svg`, `anatomy-region-mask ${role}`);
+  image.setAttribute("data-role", role);
+  image.setAttribute("data-asset", asset);
+  image.setAttribute("data-muscle", id);
+  g.append(image);
+};
+
+/// Front and back figures side by side. Muscle colour sits beneath the source
+/// linework so hands, feet, facial detail, and muscle boundaries stay legible.
 export function figureSVG(profile) {
   const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", "0 0 430 248");
+  svg.setAttribute("viewBox", "0 0 430 230");
   svg.setAttribute("class", "anatomy");
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label", profile ? muscleBlurb(profile) : "Body diagram");
   for (const [view, dx] of [["front", 0], ["back", 220]]) {
     const g = document.createElementNS(NS, "g");
     g.setAttribute("transform", `translate(${dx},0)`);
-    const orbit = document.createElementNS(NS, "circle");
-    orbit.setAttribute("class", "anatomy-orbit");
-    orbit.setAttribute("cx", "105");
-    orbit.setAttribute("cy", "111");
-    orbit.setAttribute("r", "102");
-    orbit.setAttribute("vector-effect", "non-scaling-stroke");
-    g.append(orbit);
-    for (const b of ANATOMY_BODY) g.append(shape(b, "currentColor", "currentColor", 0.1, "anatomy-body"));
-    for (const r of ANATOMY_REGIONS) {
-      if (r.view !== view) continue;
-      const isP = profile && profile.primary.includes(r.id);
-      const isS = profile && !isP && profile.secondary.includes(r.id);
-      if (isP) g.append(shape(r.points, PRIMARY_COLOR, PRIMARY_COLOR, 0.9, "anatomy-region primary"));
-      else if (isS) g.append(shape(r.points, SECONDARY_COLOR, SECONDARY_COLOR, 0.72, "anatomy-region supporting"));
-      else g.append(shape(r.points, "currentColor", "none", 0.035, "anatomy-region"));
+    if (view === "front") {
+      const regions = document.createElementNS(NS, "g");
+      for (const r of VITRUVIAN_FRONT_REGIONS) {
+        const isP = profile && profile.primary.includes(r.id);
+        const isS = profile && !isP && profile.secondary.includes(r.id);
+        if (isP) regions.append(shape(r.points, PRIMARY_COLOR, "none", 0.58, "anatomy-region primary"));
+        else if (isS) regions.append(shape(r.points, SECONDARY_COLOR, "none", 0.38, "anatomy-region supporting"));
+      }
+      g.append(regions);
+    } else if (profile) {
+      for (const id of profile.secondary) appendBackMask(g, id, "supporting");
+      for (const id of profile.primary) appendBackMask(g, id, "primary");
     }
+    const image = referenceImage(`assets/vitruvian-${view}.png`);
+    image.setAttribute("data-species", "gorilla");
+    g.append(image);
     svg.append(g);
   }
-  for (const [label, x] of [["Front", 105], ["Back", 325]]) {
+  for (const [label, x] of [["Ape front", 105], ["Ape back", 325]]) {
     const text = document.createElementNS(NS, "text");
     text.setAttribute("class", "anatomy-view-label");
     text.setAttribute("x", String(x));
-    text.setAttribute("y", "244");
+    text.setAttribute("y", "226");
     text.setAttribute("text-anchor", "middle");
     text.textContent = label;
     svg.append(text);

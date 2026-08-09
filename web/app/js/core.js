@@ -246,7 +246,7 @@ export const plateLabel = (p) => `${trim(p.value, 2)} ${p.unit}`;
 // kg is IWF: 25 red · 20 blue · 15 yellow · 10 green · 5 white · 2.5 red change plate.
 // lb (colour bumpers): 55 red · 45 blue · 35 yellow · 25 green · 10 white ·
 // 5 and under (and fractional) black iron.
-export function plateColorToken(plate) {
+export function plateColorToken(plate, style = "bumper") {
   if (plate.unit === "lb") {
     if (plate.value >= 55) return "red";
     if (plate.value === 45) return "blue";
@@ -260,21 +260,54 @@ export function plateColorToken(plate) {
   if (plate.value === 15) return "yellow";
   if (plate.value === 10) return "green";
   if (plate.value === 5) return "white";
-  if (plate.value === 2.5) return "red"; // IWF change plate
+  if (plate.value === 2.5) return style === "bumper" ? "red" : "black";
   return "black"; // 1.25 + misc
 }
 
-// Relative drawn diameter of a plate (0.4–1.0), by canonical pounds, so the
-// barbell graphic looks physically right regardless of unit.
-export function plateSizeFactor(plate) {
+// Diameter relative to a 450 mm competition disc. Bumper competition plates
+// keep the same diameter; calibrated steel steps down with denomination.
+export function plateDiameterFactor(plate, style = "steel") {
+  if (style === "bumper") {
+    if (plate.unit === "kg") {
+      if (plate.value >= 10) return 1.0;
+      if (plate.value >= 5) return 0.70;
+      if (plate.value >= 2.5) return 0.55;
+      return 0.45;
+    }
+    if (plate.value >= 10) return 1.0;
+    if (plate.value >= 5) return 0.55;
+    return 0.45;
+  }
   const lb = plateLb(plate);
-  if (lb >= 44) return 1.0;   // 45/55 lb, 20/25 kg
-  if (lb >= 33) return 0.9;   // 35 lb, 15 kg
-  if (lb >= 22) return 0.78;  // 25 lb, 10 kg
-  if (lb >= 11) return 0.62;  // 10 lb, 5 kg
-  if (lb >= 5) return 0.5;    // 5 lb
-  return 0.4;                 // 2.5 lb / fractional
+  if (lb >= 44) return 1.0;
+  if (lb >= 33) return 0.89;
+  if (lb >= 22) return 0.72;
+  if (lb >= 11) return 0.51;
+  if (lb >= 5) return 0.42;
+  return 0.36;
 }
+
+export function plateThicknessFactor(plate, style = "steel") {
+  const lb = plateLb(plate);
+  if (style === "bumper") {
+    if (lb >= 50) return 1.0;
+    if (lb >= 44) return 0.84;
+    if (lb >= 33) return 0.70;
+    if (lb >= 22) return 0.56;
+    if (lb >= 11) return 0.38;
+    if (lb >= 5) return 0.28;
+    return 0.22;
+  }
+  if (lb >= 50) return 0.55;
+  if (lb >= 44) return 0.47;
+  if (lb >= 33) return 0.40;
+  if (lb >= 22) return 0.33;
+  if (lb >= 11) return 0.25;
+  if (lb >= 5) return 0.19;
+  return 0.15;
+}
+
+export const plateSizeFactor = (plate) => plateDiameterFactor(plate, "steel");
 
 const mkPlates = (vals, unit) => vals.map((value) => ({ value, unit }));
 export const STANDARD_KG = mkPlates([25, 20, 15, 10, 5, 2.5, 1.25], "kg");

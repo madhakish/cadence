@@ -1,21 +1,32 @@
 import SwiftUI
 import CadenceCore
 
-/// The Vitruvian front/back muscle figure: primary movers red, supporting
-/// blue, everything else a neutral anatomical silhouette. Geometry comes from
-/// AnatomyData in CadenceCore (fixture-locked to the web's copy), so both
-/// apps draw the identical figure.
+/// A weightlifting gorilla drawn in Da Vinci's Vitruvian construction. Primary
+/// movers are red and supporting muscles blue; engraved linework stays above
+/// the colour so the figure keeps its hands, feet, face, and muscle boundaries.
 struct AnatomyFigureView: View {
     let profile: AnatomyData.Profile
 
     private static let primaryColor = Color(red: 0.878, green: 0.271, blue: 0.227)   // #e0453a
     private static let secondaryColor = Color(red: 0.227, green: 0.482, blue: 0.835) // #3a7bd5
+    private static let backAssetByMuscle = [
+        "traps": "VitruvianBackTraps",
+        "delts": "VitruvianBackDelts",
+        "reardelts": "VitruvianBackDelts",
+        "lats": "VitruvianBackLats",
+        "triceps": "VitruvianBackTriceps",
+        "lowerback": "VitruvianBackLowerback",
+        "forearms": "VitruvianBackForearms",
+        "glutes": "VitruvianBackGlutes",
+        "hamstrings": "VitruvianBackHamstrings",
+        "calves": "VitruvianBackCalves",
+    ]
 
     var body: some View {
         VStack(spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                labeledFigure(view: "front", label: "Front")
-                labeledFigure(view: "back", label: "Back")
+                labeledFigure(view: "front", label: "Ape front")
+                labeledFigure(view: "back", label: "Ape back")
             }
             muscleLine("Primary", ids: profile.primary, color: Self.primaryColor)
             if !profile.secondary.isEmpty {
@@ -47,9 +58,25 @@ struct AnatomyFigureView: View {
     }
 
     private func figure(view: String) -> some View {
+        ZStack {
+            if view == "front" {
+                frontHighlights
+            } else {
+                backHighlights
+            }
+            Image(view == "front" ? "VitruvianFront" : "VitruvianBack")
+                .resizable()
+                .renderingMode(.template)
+                .foregroundStyle(Color.primary.opacity(0.82))
+                .aspectRatio(1, contentMode: .fit)
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+
+    private var frontHighlights: some View {
         Canvas { ctx, size in
             let sx = size.width / 210.0
-            let sy = size.height / 224.0
+            let sy = size.height / 210.0
             func contour(_ pts: [[Double]]) -> Path {
                 var p = Path()
                 let points = pts.compactMap { point -> CGPoint? in
@@ -70,39 +97,49 @@ struct AnatomyFigureView: View {
                 return p
             }
 
-            let orbit = Path(ellipseIn: CGRect(x: 3 * sx, y: 9 * sy, width: 204 * sx, height: 204 * sy))
-            ctx.stroke(orbit, with: .color(Color.primary.opacity(0.14)), lineWidth: 0.7)
-
-            let neutral = Gradient(colors: [Color.primary.opacity(0.15), Color.primary.opacity(0.035)])
-            for b in AnatomyData.body {
-                let path = contour(b)
-                ctx.fill(path, with: .linearGradient(neutral,
-                                                     startPoint: CGPoint(x: size.width / 2, y: 0),
-                                                     endPoint: CGPoint(x: size.width / 2, y: size.height)))
-                ctx.stroke(path, with: .color(Color.primary.opacity(0.13)), lineWidth: 0.55)
-            }
-            for r in AnatomyData.regions where r.view == view {
+            for r in AnatomyData.vitruvianFrontRegions {
                 let path = contour(r.points)
                 if profile.primary.contains(r.id) {
                     ctx.fill(path, with: .linearGradient(
-                        Gradient(colors: [Self.primaryColor.opacity(0.96), Self.primaryColor.opacity(0.68)]),
+                        Gradient(colors: [Self.primaryColor.opacity(0.68), Self.primaryColor.opacity(0.46)]),
                         startPoint: CGPoint(x: size.width / 2, y: 0),
                         endPoint: CGPoint(x: size.width / 2, y: size.height)
                     ))
-                    ctx.stroke(path, with: .color(Self.primaryColor.opacity(0.9)), lineWidth: 0.55)
                 } else if profile.secondary.contains(r.id) {
                     ctx.fill(path, with: .linearGradient(
-                        Gradient(colors: [Self.secondaryColor.opacity(0.88), Self.secondaryColor.opacity(0.58)]),
+                        Gradient(colors: [Self.secondaryColor.opacity(0.50), Self.secondaryColor.opacity(0.32)]),
                         startPoint: CGPoint(x: size.width / 2, y: 0),
                         endPoint: CGPoint(x: size.width / 2, y: size.height)
                     ))
-                    ctx.stroke(path, with: .color(Self.secondaryColor.opacity(0.8)), lineWidth: 0.5)
-                } else {
-                    ctx.fill(path, with: .color(Color.primary.opacity(0.035)))
                 }
             }
         }
-        .aspectRatio(210.0 / 224.0, contentMode: .fit)
+        .aspectRatio(1, contentMode: .fit)
+    }
+
+    private var backHighlights: some View {
+        ZStack {
+            ForEach(backAssets(profile.secondary), id: \.self) { asset in
+                backMask(asset, color: Self.secondaryColor.opacity(0.46))
+            }
+            ForEach(backAssets(profile.primary), id: \.self) { asset in
+                backMask(asset, color: Self.primaryColor.opacity(0.68))
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+
+    private func backAssets(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        return ids.compactMap { Self.backAssetByMuscle[$0] }.filter { seen.insert($0).inserted }
+    }
+
+    private func backMask(_ asset: String, color: Color) -> some View {
+        Image(asset)
+            .resizable()
+            .renderingMode(.template)
+            .foregroundStyle(color)
+            .aspectRatio(1, contentMode: .fit)
     }
 }
 

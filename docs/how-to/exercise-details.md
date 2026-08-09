@@ -5,15 +5,17 @@ Exercise library** — to open its detail page.
 
 ## The muscle figure
 
-Two labeled views of a Vitruvian body figure (front and back) show what the
-movement does: **primary movers in red**, **supporting muscles in blue**. The
-human-proportioned silhouettes use curved anatomical regions rather than
-rectangular limb blocks. A matching key names the exact groups underneath, so
-the figure does not rely on color alone. Known lifts have hand-tuned muscle
-profiles; anything you add yourself falls back to a sensible profile for its
-movement group
-(all presses light up shoulders/chest/triceps, and so on). No movement
-group → no figure, so give custom exercises a group in the library.
+Two labeled views show what the movement does: **primary movers in red** and
+**supporting muscles in blue**. Both views use a powerful Olympic-weightlifting
+gorilla inside da Vinci's circle-and-square Vitruvian construction. Engraved
+muscle detail stays above the colour washes, so hands, feet, facial structure,
+and muscle boundaries remain legible instead of collapsing into blocky limb
+shapes. Both superimposed arm and leg poses highlight together. A matching key
+names the exact groups underneath, so the figure does not rely on color alone.
+Known lifts have hand-tuned muscle profiles; anything you add yourself falls
+back to a sensible profile for its movement group (all presses light up
+shoulders/chest/triceps, and so on). No movement group → no figure, so give
+custom exercises a group in the library.
 
 ## History and membership
 

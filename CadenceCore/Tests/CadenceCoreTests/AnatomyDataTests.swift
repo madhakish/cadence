@@ -68,5 +68,13 @@ final class AnatomyDataTests: XCTestCase {
         XCTAssertTrue(AnatomyData.body.allSatisfy { $0.count >= 10 },
                       "the silhouette uses curved control loops, not blocky limb rectangles")
         XCTAssertEqual(AnatomyData.map["Face Pulls"]?.primary, ["reardelts", "traps"])
+        let frontTraps = AnatomyData.vitruvianFrontRegions.first { $0.id == "traps" }
+        XCTAssertGreaterThanOrEqual(frontTraps?.points.map { $0[1] }.min() ?? 0, 55,
+                                    "the visible trap wash belongs at the ape's neck, not its forehead")
+        XCTAssertEqual(AnatomyData.vitruvianFrontRegions.filter { $0.id == "forearms" }.count, 4,
+                       "both superimposed arm poses receive a left and right forearm wash")
+        XCTAssertTrue(AnatomyData.vitruvianFrontRegions.filter { $0.id == "forearms" }
+            .allSatisfy { ($0.points.map { $0[1] }.max() ?? 0) <= 85 },
+                      "forearm washes follow the Vitruvian ape's two arm poses")
     }
 }

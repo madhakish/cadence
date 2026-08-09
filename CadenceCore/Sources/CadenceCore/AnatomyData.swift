@@ -95,6 +95,33 @@ public enum AnatomyData {
         Region("calves", "back", mirrorAnatomy([[71, 175], [84, 181], [78, 203], [70, 211], [61, 208], [63, 196]])),
     ]
 
+    /// Visible front-view washes aligned to the Vitruvian weightlifting ape's
+    /// 210×210 square. Both superimposed limb poses highlight together, while
+    /// the exercise → muscle data contract above stays unchanged.
+    public static let vitruvianFrontRegions: [Region] = [
+        Region("traps", "front", [[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]]),
+        Region("traps", "front", mirrorAnatomy([[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]])),
+        Region("delts", "front", [[68, 61], [82, 58], [91, 64], [87, 76], [76, 81], [65, 73]]),
+        Region("delts", "front", mirrorAnatomy([[68, 61], [82, 58], [91, 64], [87, 76], [76, 81], [65, 73]])),
+        Region("chest", "front", [[79, 74], [103, 73], [103, 94], [92, 98], [78, 91], [75, 82]]),
+        Region("chest", "front", mirrorAnatomy([[79, 74], [103, 73], [103, 94], [92, 98], [78, 91], [75, 82]])),
+        Region("biceps", "front", [[76, 69], [63, 67], [49, 71], [47, 80], [61, 84], [75, 78]]),
+        Region("biceps", "front", mirrorAnatomy([[76, 69], [63, 67], [49, 71], [47, 80], [61, 84], [75, 78]])),
+        Region("biceps", "front", [[70, 48], [61, 43], [48, 38], [43, 45], [53, 55], [65, 60]]),
+        Region("biceps", "front", mirrorAnatomy([[70, 48], [61, 43], [48, 38], [43, 45], [53, 55], [65, 60]])),
+        Region("forearms", "front", [[50, 70], [36, 69], [21, 72], [16, 78], [24, 84], [39, 82], [51, 78]]),
+        Region("forearms", "front", mirrorAnatomy([[50, 70], [36, 69], [21, 72], [16, 78], [24, 84], [39, 82], [51, 78]])),
+        Region("forearms", "front", [[48, 39], [40, 31], [32, 27], [29, 34], [36, 44], [45, 49], [54, 54]]),
+        Region("forearms", "front", mirrorAnatomy([[48, 39], [40, 31], [32, 27], [29, 34], [36, 44], [45, 49], [54, 54]])),
+        Region("obliques", "front", [[80, 91], [94, 94], [96, 113], [92, 122], [83, 119], [78, 105]]),
+        Region("obliques", "front", mirrorAnatomy([[80, 91], [94, 94], [96, 113], [92, 122], [83, 119], [78, 105]])),
+        Region("abs", "front", [[94, 87], [116, 87], [121, 112], [114, 126], [105, 130], [96, 126], [89, 112]]),
+        Region("quads", "front", [[78, 123], [101, 126], [100, 145], [94, 161], [82, 169], [72, 161], [73, 143]]),
+        Region("quads", "front", mirrorAnatomy([[78, 123], [101, 126], [100, 145], [94, 161], [82, 169], [72, 161], [73, 143]])),
+        Region("adductors", "front", [[92, 125], [104, 128], [102, 151], [96, 159], [89, 149], [88, 135]]),
+        Region("adductors", "front", mirrorAnatomy([[92, 125], [104, 128], [102, 151], [96, 159], [89, 149], [88, 135]])),
+    ]
+
     public static let map: [String: Profile] = [
         "Deadlift": Profile(primary: ["hamstrings", "glutes", "lowerback"], secondary: ["lats", "traps", "forearms", "quads"]),
         "Snatch-grip Deadlift": Profile(primary: ["hamstrings", "glutes", "lowerback"], secondary: ["traps", "lats", "forearms"]),

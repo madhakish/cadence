@@ -14,23 +14,28 @@
   --text: #efe6d2;
   --muted: #9a8f77;
   --line: #2f2718;
+  --anatomy-reference-filter: invert(1);
 }
 :root[data-theme="carbon"] {           /* Carbon — greyscale + red signal */
   --accent: #ef4444; --warn: #eab308; --hard: #dc2626; --good: #4ade80;
   --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
+  --anatomy-reference-filter: invert(1);
 }
 :root[data-theme="slate"] {            /* Slate — cool gunmetal + crimson */
   --accent: #e5484d; --warn: #d29922; --hard: #da3633; --good: #3fb950;
   --bg: #0d1117; --card: #161b22; --card2: #1e252e; --text: #eaeef4; --muted: #8a97a6; --line: #2a323c;
+  --anatomy-reference-filter: invert(1);
 }
 :root[data-theme="system"] {           /* System — follows OS; light by default, dark below */
   --accent: #c81e1e; --warn: #b8860b; --hard: #a51111; --good: #1a8f43;
   --bg: #f5f5f7; --card: #ffffff; --card2: #ececee; --text: #1a1a1c; --muted: #66666e; --line: #d9d9de;
+  --anatomy-reference-filter: none;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
     --accent: #ef4444; --warn: #eab308; --hard: #f0554f; --good: #4ade80;
     --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
+    --anatomy-reference-filter: invert(1);
   }
 }
 :root {
@@ -288,8 +293,9 @@ svg.barbell { height: 36px; max-width: 100%; }
 svg.dumbbell { height: 36px; max-width: 100%; }
 .barbell-shadow { fill: #000; opacity: .14; }
 .barbell-knurl { stroke: #202225; stroke-width: .45; opacity: .45; vector-effect: non-scaling-stroke; }
-.barbell-plate { vector-effect: non-scaling-stroke; }
-.barbell-plate-shine { stroke: #fff; stroke-width: .65; opacity: .28; vector-effect: non-scaling-stroke; }
+.barbell-plate, .barbell-plate-face, .barbell-plate-rim, .barbell-plate-recess,
+.barbell-plate-hub, .barbell-lock-collar { vector-effect: non-scaling-stroke; }
+.barbell-plate-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .barbell-hero { padding: 12px 0 4px; }
 .barbell-hero svg.barbell { height: 68px; }
 .barbell-hero.full svg.barbell { width: 100%; height: auto; }
@@ -300,10 +306,18 @@ select.bar-select { width: auto; min-width: 96px; padding: 6px 8px; font-size: 1
    exact groups so the meaning never depends on colour recognition alone */
 .anatomy-card { text-align: center; padding: 14px; }
 .anatomy-card .section-title { margin-top: 2px; text-align: left; }
-svg.anatomy { width: 100%; max-width: 420px; color: var(--text); overflow: visible; }
-.anatomy-orbit { fill: none; stroke: currentColor; stroke-width: .75; opacity: .14; }
-.anatomy-body { stroke-opacity: .16; }
-.anatomy-region.primary, .anatomy-region.supporting { stroke-width: .9; }
+svg.anatomy { width: 100%; max-width: 430px; color: var(--text); overflow: visible; }
+.anatomy-reference { filter: var(--anatomy-reference-filter); opacity: .82; }
+.anatomy-region.primary, .anatomy-region.supporting { stroke-width: .65; }
+.anatomy-region-mask { pointer-events: none; }
+.anatomy-region-mask.primary {
+  opacity: .68;
+  filter: invert(37%) sepia(70%) saturate(1876%) hue-rotate(335deg) brightness(95%) contrast(84%);
+}
+.anatomy-region-mask.supporting {
+  opacity: .46;
+  filter: invert(47%) sepia(74%) saturate(1135%) hue-rotate(180deg) brightness(88%) contrast(91%);
+}
 .anatomy-view-label { fill: var(--muted); font-size: 10px; letter-spacing: .04em; }
 .anatomy-legend { display: grid; gap: 6px; margin-top: 8px; text-align: left; }
 .muscle-key { display: grid; grid-template-columns: 10px auto 1fr; align-items: baseline; gap: 6px; font-size: 13px; }

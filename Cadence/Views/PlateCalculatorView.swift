@@ -12,6 +12,7 @@ struct PlateCalculatorView: View {
     @State private var targetText = ""
     @State private var targetUnit: WeightUnit = .lb
     @State private var bar: Bar = .bar45lb
+    @State private var plateStyle: PlateVisualStyle = .steel
     @State private var selectedGymName: String?
     // Reverse mode: counts per plate denomination on ONE side.
     @State private var reverseCounts: [String: Int] = [:]
@@ -57,6 +58,10 @@ struct PlateCalculatorView: View {
                 Picker("Bar", selection: $bar) {
                     ForEach(Bar.all) { Text($0.label).tag($0) }
                 }
+                Picker("Plate type", selection: $plateStyle) {
+                    ForEach(PlateVisualStyle.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
                 if gyms.count > 1 {
                     Picker("Gym", selection: Binding(
                         get: { gym?.name ?? "" },
@@ -108,7 +113,7 @@ struct PlateCalculatorView: View {
             // the list below (which may pick the other unit system).
             Section {
                 BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym,
-                            loadout: solution.loadout, presentation: .fullBar)
+                            loadout: solution.loadout, plateStyle: plateStyle, presentation: .fullBar)
                     .frame(height: 82)
                 Text("Same stack on both sides")
                     .font(.caption)
@@ -196,7 +201,7 @@ struct PlateCalculatorView: View {
                 // Draw exactly what the user says is on the bar — never re-solve it.
                 BarbellView(weightLb: total, unit: .lb, bar: bar, gym: gym,
                             loadout: Loadout(bar: bar, perSide: perSide, collarLb: collarLb),
-                            presentation: .fullBar)
+                            plateStyle: plateStyle, presentation: .fullBar)
                     .frame(height: 82)
                 Text("Counts are per side and mirrored")
                     .font(.caption)

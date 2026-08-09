@@ -150,6 +150,28 @@ for (const track of [
   const fullPlateRects = [...fullBar.querySelectorAll("rect")].filter((rect) => rect.getAttribute("stroke"));
   ok(fullPlateRects.length > 0 && fullPlateRects.length % 2 === 0,
     "every solved plate is drawn once on each side");
+  const mixedBar = barbell.barbellSVG(195, "lb", C.BARS.bar45lb,
+    { ...legacyRack, collarWeightLb: 0 }, null, null, "full").svg;
+  const leftStack = [...mixedBar.querySelectorAll('.barbell-plate[data-side="left"]')];
+  const rightStack = [...mixedBar.querySelectorAll('.barbell-plate[data-side="right"]')];
+  const plateValues = (stack) => stack.map((plate) => Number(plate.dataset.plateValue));
+  const plateXs = (stack) => stack.map((plate) => Number(plate.getAttribute("x")));
+  ok(JSON.stringify(plateValues(leftStack)) === JSON.stringify([45, 25, 5])
+    && JSON.stringify(plateValues(rightStack)) === JSON.stringify([45, 25, 5]),
+  "mixed plate stacks are ordered from each collar outward, not copied left to right across the screen");
+  ok(plateXs(leftStack).every((x, index, xs) => index === 0 || x < xs[index - 1])
+    && plateXs(rightStack).every((x, index, xs) => index === 0 || x > xs[index - 1]),
+  "left and right sleeve coordinates mirror while preserving the same collar-first load order");
+  const bumperBar = barbell.barbellSVG(195, "lb", C.BARS.bar45lb,
+    { ...legacyRack, collarWeightLb: 0 }, null, null, "full", "bumper").svg;
+  const bumperRight = [...bumperBar.querySelectorAll('.barbell-plate[data-side="right"]')];
+  ok(Number(bumperRight[0].getAttribute("height")) === Number(bumperRight[1].getAttribute("height"))
+    && Number(rightStack[0].getAttribute("height")) > Number(rightStack[1].getAttribute("height")),
+  "bumper plates keep competition diameter while calibrated steel steps down by denomination");
+  ok(bumperBar.querySelectorAll("ellipse.barbell-plate-face").length === bumperRight.length * 2
+    && bumperBar.querySelectorAll("ellipse.barbell-plate-hub").length === bumperRight.length * 2
+    && bumperBar.querySelectorAll("text.barbell-plate-label").length >= bumperRight.length * 2,
+  "plate bodies have disc faces, steel hubs, rims, and denomination marks rather than flat blocks");
   ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
     "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
   await db.Gyms.save(legacyRack);
@@ -2703,21 +2725,39 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "blurb reads as expected");
 
   const svg = A.figureSVG(A.muscleProfile("Overhead Press", "press"));
-  ok(svg.getAttribute("viewBox") === "0 0 430 248" && svg.querySelectorAll("path").length > 30,
-    "figure renders wide human silhouettes and muscle regions for both views");
-  ok(svg.querySelectorAll("circle.anatomy-orbit").length === 2
-    && [...svg.querySelectorAll("path.anatomy-body")].every((path) => path.getAttribute("d").includes("Q")),
-    "the front and back figures use Vitruvian construction circles and curved contours");
+  ok(svg.getAttribute("viewBox") === "0 0 430 230" && svg.querySelectorAll("image.anatomy-reference").length === 2,
+    "figure renders matching engraved front and back reference art side by side");
+  ok([...svg.querySelectorAll("image.anatomy-reference")].map((image) => image.getAttribute("href")).join("/")
+    === "assets/vitruvian-front.png/assets/vitruvian-back.png"
+    && [...svg.querySelectorAll("image.anatomy-reference")].every((image) => image.dataset.species === "gorilla"),
+  "the anatomy view uses the matched Vitruvian weightlifting-ape assets");
   ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
     "face pulls highlight rear delts instead of the generic shoulder cap");
   ok(svg.querySelectorAll('path[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
   ok(svg.querySelectorAll('path[fill="#3a7bd5"]').length >= 1, "supporting muscles highlighted blue");
-  ok([...svg.querySelectorAll("text.anatomy-view-label")].map((node) => node.textContent).join("/") === "Front/Back",
+  ok(svg.querySelectorAll("image.anatomy-region-mask.primary").length >= 2
+    && svg.querySelectorAll("image.anatomy-region-mask.supporting").length >= 1,
+  "back-view highlights use muscle-shaped masks rather than balloon contours");
+  ok([...svg.querySelectorAll("text.anatomy-view-label")].map((node) => node.textContent).join("/") === "Ape front/Ape back",
     "the two anatomical views identify their orientation");
   const legend = A.muscleLegend(A.muscleProfile("Overhead Press", "press"));
   ok(legend.querySelector('[data-role="primary"]')?.textContent.includes("Shoulders, Triceps")
     && legend.querySelector('[data-role="supporting"]')?.textContent.includes("Traps, Abs"),
     "the visual key names the exact primary and supporting muscle groups");
+
+  const frontAsset = await readFile(new URL("../app/assets/vitruvian-front.png", import.meta.url));
+  const backAsset = await readFile(new URL("../app/assets/vitruvian-back.png", import.meta.url));
+  const pngSize = (buffer) => [buffer.readUInt32BE(16), buffer.readUInt32BE(20)];
+  ok(frontAsset.length > 150000 && pngSize(frontAsset).join("×") === "1024×1024",
+    "front reference preserves the detailed square Vitruvian ape engraving");
+  ok(backAsset.length > 200000 && pngSize(backAsset).join("×") === "1024×1024",
+    "back reference preserves matching detailed ape anatomy and construction geometry");
+  const frontTraps = A.VITRUVIAN_FRONT_REGIONS.find((region) => region.id === "traps");
+  ok(Math.min(...frontTraps.points.map((point) => point[1])) >= 55
+    && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms").length === 4
+    && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms")
+      .every((region) => Math.max(...region.points.map((point) => point[1])) <= 85),
+  "front washes align to the ape's neck and both Vitruvian arm poses");
 }
 
 // ---- program: a cycle-scoped swap reverts at rollover (issue 20) ----
