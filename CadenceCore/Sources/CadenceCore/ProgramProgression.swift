@@ -534,6 +534,15 @@ public enum ProgramProgression {
     /// Rebuild below 90% of the prior best; fine within 2.5% of it.
     public static let rebuildHeadroomBand = 0.90
     public static let fineHeadroomBand = 0.975
+    /// A base at or below this fraction of the lifter's OWN current estimated
+    /// max reads rebuild regardless of history bookkeeping. The drawdown test
+    /// above compares against the log's prior best — but a young log's prior
+    /// best moves up with every cycle, so the rebuilding lifter that band
+    /// exists for (real prior numbers predate the app) never trips it. The
+    /// base-to-capability ratio is visible in the log right now: a 226 base
+    /// under a 278 estimated max (81%) is a rebuild in progress, and +5
+    /// change-plate crumbs are noise at that distance from the ceiling.
+    public static let rebuildBaseHeadroom = 0.85
     /// A prior best only counts as a CEILING once it has stood this long.
     /// A fresh log rises through its own all-time best every cycle — without
     /// this guard the rebuilding lifter the regime exists for would read as
@@ -543,11 +552,21 @@ public enum ProgramProgression {
     public static let standingBestDays = 35.0
 
     /// Headroom to prior capability, banded. `priorBestMaxLb` is the best
-    /// e1RM in the LOG (callers scan history); zero means no evidence and
-    /// grades standard. Mirrored 1:1 in web/app/js/core.js.
+    /// e1RM in the LOG (callers scan history); zero means no evidence on that
+    /// axis. `baseWeightLb` adds the second axis: a base at or below
+    /// `rebuildBaseHeadroom` of the lifter's own current estimated max is a
+    /// rebuild whatever the history bands say — checked first, because the
+    /// fine band cannot also hold there (fine means the base is closing on
+    /// the ceiling). Zero on both axes grades standard.
+    /// Mirrored 1:1 in web/app/js/core.js.
     public static func progressionRegime(
-        estimatedMaxLb: Double, priorBestMaxLb: Double, standingBest: Bool
+        estimatedMaxLb: Double, priorBestMaxLb: Double, standingBest: Bool,
+        baseWeightLb: Double = 0
     ) -> ProgressionRegime {
+        if baseWeightLb > 0, estimatedMaxLb > 0,
+           baseWeightLb <= estimatedMaxLb * rebuildBaseHeadroom {
+            return .rebuild
+        }
         guard estimatedMaxLb > 0, priorBestMaxLb > 0 else { return .standard }
         if estimatedMaxLb < priorBestMaxLb * rebuildHeadroomBand { return .rebuild }
         if standingBest, estimatedMaxLb >= priorBestMaxLb * fineHeadroomBand { return .fine }
@@ -632,19 +651,36 @@ public enum ProgramProgression {
     /// must never feed the repair that produced its plan); zero means no
     /// evidence and the stored base stands.
     /// Mirrored 1:1 in web/app/js/core.js `honestBase`.
+    /// `bonusPerformedLb` is the heaviest completed working set the lifter
+    /// ADDED past the prescription (zero when none). Bonus work is
+    /// deliberately history-only for grading — it can never pass or fail a
+    /// cycle — but as planning evidence it is the opposite of ambient noise:
+    /// a heavier set the lifter chose to pull is as explicit a signal as a
+    /// hand edit, so it arms one staged increment of catch-up
+    /// (`catchUpIncrementLb`, the increment the lift's regime currently
+    /// earns; the last earned increment is the fallback) even when the
+    /// at-plan work sat at the pre-advance base. Clamped to one step per
+    /// cycle: the base chases demonstrated capability, it never teleports to
+    /// one good day.
     public static func honestBase(
         baseWeightLb: Double, lastIncrementLb: Double, lastVolumePerformedLb: Double,
-        roundingLb: Double = ProgramEngine.defaultRoundingLb, barLb: Double = 45
+        roundingLb: Double = ProgramEngine.defaultRoundingLb, barLb: Double = 45,
+        bonusPerformedLb: Double = 0, catchUpIncrementLb: Double = 0
     ) -> Double {
-        guard baseWeightLb > 0, lastIncrementLb > 0, lastVolumePerformedLb > 0 else {
-            return baseWeightLb
+        guard baseWeightLb > 0, lastIncrementLb > 0 else { return baseWeightLb }
+        var repaired = baseWeightLb
+        if lastVolumePerformedLb > 0,
+           lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2,
+           lastVolumePerformedLb <= baseWeightLb + lastIncrementLb + roundingLb / 2 {
+            let label = PlateMath.performedLabel(lastVolumePerformedLb, barLb: barLb, roundingLb: roundingLb)
+            repaired = Swift.max(baseWeightLb, Swift.min(label + lastIncrementLb, baseWeightLb + lastIncrementLb))
         }
-        guard lastVolumePerformedLb > baseWeightLb - lastIncrementLb + roundingLb / 2,
-              lastVolumePerformedLb <= baseWeightLb + lastIncrementLb + roundingLb / 2 else {
-            return baseWeightLb
+        if bonusPerformedLb > baseWeightLb + roundingLb / 2 {
+            let step = catchUpIncrementLb > 0 ? catchUpIncrementLb : lastIncrementLb
+            let label = PlateMath.performedLabel(bonusPerformedLb, barLb: barLb, roundingLb: roundingLb)
+            repaired = Swift.max(repaired, Swift.min(label + step, baseWeightLb + step))
         }
-        let label = PlateMath.performedLabel(lastVolumePerformedLb, barLb: barLb, roundingLb: roundingLb)
-        return Swift.max(baseWeightLb, Swift.min(label + lastIncrementLb, baseWeightLb + lastIncrementLb))
+        return repaired
     }
 
     public static func advanceCycleLift(

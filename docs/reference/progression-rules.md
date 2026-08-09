@@ -168,7 +168,12 @@ at the honestly advanced base, is not evidence the advance was stale.
 Labels are computed constructively from the plates (`performedLabel`
 decomposes the side into kg denominations and reads the lb twins back), and
 the evidence is matched to the slot **and** the movement, windowed to the
-prescribed sets, and labeled under its own session's bar. Editing a base by
+prescribed sets, and labeled under its own session's bar. A heavier working
+set the lifter **added past the prescription** is separate evidence: it
+never touches grading, but it arms one staged increment of catch-up above
+the stored base (the step the lift's regime currently earns — a rebuild
+lift catches up in 10 lb classes), clamped per cycle so the base chases
+demonstrated capability without teleporting to one good day. Editing a base by
 hand — or rotating the slot to a new variation — clears the earned
 increment, so a hand-set number or a fresh movement is never "repaired"
 (bases hand-set before this behavior shipped are protected by the
@@ -195,9 +200,15 @@ The focus increment is **staged** by where the lifter stands against their
 own log, graded at the peak from the best e1RM recorded before the session
 being banked:
 
-- **Rebuild** (current estimate below 90% of the logged prior best): the
-  increment rounds **up** to the clean 10 lb class — a 5 lb bump needs
-  2.5 lb change plates, which are noise this far from the ceiling.
+- **Rebuild** (current estimate below 90% of the logged prior best, OR a
+  total-bar base at/below **85% of the lifter's own current estimated
+  max**): the increment rounds **up** to the clean 10 lb class — a 5 lb
+  bump needs 2.5 lb change plates, which are noise this far from the
+  ceiling. The own-max axis exists because a young log's prior best rises
+  with every cycle, so the drawdown test never fires for the rebuilding
+  lifter it was written for; base-to-capability headroom is visible in the
+  log right now. Barbell lifts only — dumbbell and machine steps never
+  inherit plate-class jumps — and the axis stands down past 85%.
 - **Standard** (no logged evidence, or inside the normal band): the focus
   increment, untouched — today's behavior.
 - **Fine** (within 2.5% of a **standing** prior best — one that has stood

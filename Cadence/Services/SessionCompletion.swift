@@ -959,7 +959,11 @@ enum SessionCompletion {
                         regime: ProgramProgression.progressionRegime(
                             estimatedMaxLb: lift.estimatedMaxLb,
                             priorBestMaxLb: prior?.maxLb ?? 0,
-                            standingBest: prior?.standing ?? false
+                            standingBest: prior?.standing ?? false,
+                            // The headroom axis is a barbell rule — rebuild
+                            // jumps are +10 lb PLATE classes, which dumbbell
+                            // and machine steps must never inherit.
+                            baseWeightLb: entry.exercise?.loadBasis == .totalBar ? lift.baseWeightLb : 0
                         ),
                         volumeFallback: program.maximumAddedSetsPerRotation > 0,
                         performedVolumeLb: {

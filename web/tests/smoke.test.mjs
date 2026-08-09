@@ -1586,6 +1586,94 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// The rebuild-pace pair, shaped like the real log that motivated it: base 226
+// (lastIncrement 5, estimated max 278 → 81% headroom → rebuild step 10), last
+// cycle's volume banked as 220×5 at plan plus a deliberate 245×3 the lifter
+// added past the prescription. The bonus rows never touch grading, but they
+// arm one rebuild step of catch-up: the card plans from 236 and shows 235.
+{
+  const name = "Fixture Rebuild Pace";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 3, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0, accessories: [],
+      lifts: [{ exerciseName: "Deadlift", role: "main", prescription: "wave",
+        baseWeightLb: 226, estimatedMaxLb: 278.3, stallCount: 0, lastIncrementLb: 5 }] }],
+  });
+  const program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const slot = program.days[0].lifts[0];
+  const atPlan = (index) => ({
+    order: index, weightLb: 220, reps: 5, isWarmup: false, isPerSide: false,
+    enteredUnit: "lb", status: "completed", loadBasis: "totalBar", flags: [],
+    bodyFlagSite: null, autoregReason: null, prescriptionBlock: "work",
+  });
+  const bonus = (index) => ({ ...atPlan(index), weightLb: 245, reps: 3 });
+  const priorId = await db.Sessions.save({
+    date: db.iso(new Date(Date.now() - 20 * 86400000)), notes: "", isCompleted: true,
+    completedAt: db.iso(new Date(Date.now() - 20 * 86400000)), gymName: null,
+    programTag: { programId: program.uuid || program.id, programName: name,
+      cycleNumber: 2, week: 1, dayIndex: 0, planNames: ["Deadlift"] },
+    exercises: [{ order: 0, exerciseName: "Deadlift", notes: "", phase: 1,
+      programRole: "main", programSlotId: slot.id,
+      plannedWeightLb: 220, plannedSets: 5, plannedReps: 5,
+      sets: [...Array.from({ length: 5 }, (_, index) => atPlan(index)),
+        ...Array.from({ length: 3 }, (_, index) => bonus(5 + index))] }],
+  });
+  const builtId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const built = await db.Sessions.get(builtId);
+  const deadlift = built.exercises.find((entry) => entry.exerciseName === "Deadlift");
+  ok(deadlift.plannedWeightLb === 235,
+    `[INV-ADVANCE-BUYS-PLATES] bonus 245×3 lifts the 226-base card to 235 (got ${deadlift.plannedWeightLb})`);
+  await db.Sessions.del(builtId);
+
+  // A failed heavy attempt (zero reps, marked completed) is not capability
+  // evidence — without real reps the bonus row must not raise the plan.
+  const failedTag = { ...((await db.Sessions.get(priorId)).programTag) };
+  await db.Sessions.del(priorId);
+  const failedId = await db.Sessions.save({
+    date: db.iso(new Date(Date.now() - 20 * 86400000)), notes: "", isCompleted: true,
+    completedAt: db.iso(new Date(Date.now() - 20 * 86400000)), gymName: null,
+    programTag: failedTag,
+    exercises: [{ order: 0, exerciseName: "Deadlift", notes: "", phase: 1,
+      programRole: "main", programSlotId: slot.id,
+      plannedWeightLb: 220, plannedSets: 5, plannedReps: 5,
+      sets: [...Array.from({ length: 5 }, (_, index) => atPlan(index)),
+        { ...bonus(5), reps: 0 }] }],
+  });
+  const failedBuiltId = await session.createSessionFromProgramDay(program, program.days[0]);
+  const failedBuilt = await db.Sessions.get(failedBuiltId);
+  ok(failedBuilt.exercises.find((entry) => entry.exerciseName === "Deadlift").plannedWeightLb === 225,
+    "[INV-ADVANCE-BUYS-PLATES] a zero-rep bonus attempt never arms catch-up");
+  await db.Sessions.del(failedBuiltId);
+  await db.Sessions.del(failedId);
+
+  // Catch-up is a cycle-slot mechanism: a per-exposure methodology's own
+  // rule is its contract, and the plan must stay on the persisted base the
+  // style's advance actually writes.
+  slot.prescription = "linearFives";
+  await db.Programs.save(program);
+  const linearProgram = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const linearSlot = linearProgram.days[0].lifts[0];
+  const linearPriorId = await db.Sessions.save({
+    date: db.iso(new Date(Date.now() - 4 * 86400000)), notes: "", isCompleted: true,
+    completedAt: db.iso(new Date(Date.now() - 4 * 86400000)), gymName: null,
+    programTag: { programId: linearProgram.uuid || linearProgram.id, programName: name,
+      cycleNumber: 3, week: 1, dayIndex: 0, planNames: ["Deadlift"] },
+    exercises: [{ order: 0, exerciseName: "Deadlift", notes: "", phase: 1,
+      programRole: "main", programSlotId: linearSlot.id,
+      plannedWeightLb: 220, plannedSets: 5, plannedReps: 5,
+      sets: [...Array.from({ length: 5 }, (_, index) => atPlan(index)),
+        ...Array.from({ length: 3 }, (_, index) => bonus(5 + index))] }],
+  });
+  const linearBuiltId = await session.createSessionFromProgramDay(linearProgram, linearProgram.days[0]);
+  const linearBuilt = await db.Sessions.get(linearBuiltId);
+  ok(linearBuilt.exercises.find((entry) => entry.exerciseName === "Deadlift").plannedWeightLb === 225,
+    "[INV-ADVANCE-BUYS-PLATES] a per-exposure methodology keeps its own contract — bonus catch-up never overrides it");
+  await db.Sessions.del(linearBuiltId);
+  await db.Sessions.del(linearPriorId);
+  await db.importBundle(parsed);
+}
+
 // The repair must read evidence from BEFORE the cycle being planned. A clean
 // lb lifter's own week-1 session (performed exactly at the honestly-advanced
 // base) is NOT proof the advance was stale — feeding it back would inflate
@@ -2045,7 +2133,12 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(recoveryDays.join(",") === "Lower A,Upper A",
     `[INV-RECOVERY-IS-A-BRIDGE] phase 4 banks one lower and one upper exposure (${recoveryDays})`);
   const squatMain = prog.days[0].lifts.find((l) => l.role === "main");
-  ok(squatMain.baseWeightLb === squatBase0 + 5, `clean cycle bumped squat ${squatBase0}→${squatMain.baseWeightLb}`);
+  // A freshly seeded base sits well under the template's estimated max, so
+  // the headroom axis reads rebuild and the clean cycle earns the +10 class
+  // — new programs climb out of their conservative start at novice-LP pace
+  // instead of change-plate crumbs, and the axis stands down at 85%.
+  ok(squatMain.baseWeightLb === squatBase0 + 10,
+    `[INV-NEEDLE-ALWAYS-MOVES] clean rebuild cycle bumped squat ${squatBase0}→${squatMain.baseWeightLb} (+10 class)`);
   ok(squatMain.estimatedMaxLb > 204, "e1RM updated from the peak");
   ok(prog.days[1].accessories[0].currentReps > accReps0, "accessory reps progressed (double progression)");
   ok((await db.Tracks.byName("Back Squat")).baseWeightLb === sqTrackBase, "standalone Back Squat track NOT double-advanced");

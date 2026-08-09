@@ -323,16 +323,20 @@ enum ProgramSession {
     /// volume work (`inCycle`). Entry matching reuses `programmedEntry`
     /// (slot ID + role, lineage fallback) plus a same-movement check, so a
     /// coaching rotation's renamed slot never inherits the old exercise's
-    /// evidence; set selection reuses `SessionCompletion.prescribedWork`
+    /// evidence; at-plan selection reuses `SessionCompletion.prescribedWork`
     /// (planned-set window, completed, non-warmup), so user-added bonus rows
-    /// stay history-only on both clients. Returns the heaviest qualifying
+    /// never grade a cycle — they surface separately as `bonusLb`, the
+    /// planning-only catch-up signal. Returns the heaviest qualifying
     /// working weight and the BAR IT WAS LIFTED UNDER — the label the twin
     /// math must use, not whatever bar today's gym defaults to. Nil means no
     /// evidence. Mirrors web `lastVolumeEvidence`.
+    /// `bonusLb` is the heaviest completed working set BEYOND the planned-set
+    /// window — work the lifter added on purpose. Grading never sees it;
+    /// planning treats it as an explicit catch-up signal (honestBase).
     static func lastVolumeEvidence(
         for lift: ProgramLift, program: Program, sessions: [WorkoutSession],
         beforeCycle: Int? = nil, inCycle: Int? = nil
-    ) -> (performedLb: Double, barLabelLb: Double)? {
+    ) -> (performedLb: Double, bonusLb: Double, barLabelLb: Double)? {
         // The name is a fallback for ID-less legacy sessions only — two
         // programs can share a display name, and a non-nil foreign ID must
         // never feed this program's evidence (mirrors the resume filter).
@@ -350,7 +354,16 @@ enum ProgramSession {
                   entry.exercise?.name == lift.exerciseName else { continue }
             let top = SessionCompletion.prescribedWork(entry).map(\.weightLb).max() ?? 0
             guard top > 0 else { continue }
-            return (top, (entry.barID.map { Bar.by(id: $0) } ?? .bar45lb).labelLb)
+            let candidates = entry.orderedSets.filter {
+                !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork
+            }
+            // A bonus row is capability evidence only if at least one rep
+            // actually happened — a failed heavy attempt marked completed
+            // proves the opposite of capability.
+            let bonus = candidates.dropFirst(entry.plannedSets ?? candidates.count)
+                .filter { $0.status == .completed && $0.reps >= 1 }
+                .map(\.weightLb).max() ?? 0
+            return (top, bonus, (entry.barID.map { Bar.by(id: $0) } ?? .bar45lb).labelLb)
         }
         return nil
     }
@@ -373,12 +386,32 @@ enum ProgramSession {
                   for: lift, program: program, sessions: sessions,
                   beforeCycle: lift.prescription.advancesPerExposure ? nil : program.cycleNumber
               ) else { return lift.baseWeightLb }
+        // The catch-up a bonus set can arm is the increment this lift's
+        // regime currently earns — derived from slot state alone (the
+        // base-to-own-max headroom axis), so every surface computes it
+        // identically without a history scan.
+        let regime = ProgramProgression.progressionRegime(
+            estimatedMaxLb: lift.estimatedMaxLb, priorBestMaxLb: 0,
+            standingBest: false, baseWeightLb: lift.baseWeightLb
+        )
+        let catchUp = ProgramProgression.stagedIncrement(
+            baseWeightLb: lift.baseWeightLb, focus: program.focus,
+            regime: regime, roundingLb: program.roundingLb
+        )
+        // Catch-up is a CYCLE-slot mechanism: the wave's rollover advance
+        // rides the raised plan, so plan and persisted base reconverge. A
+        // per-exposure style's own rule (+5/session, Texas pairs) is its
+        // methodology contract — overriding it here would prescribe a load
+        // its advance never persists, drifting plan from base every session.
+        let bonus = lift.prescription.advancesPerExposure ? 0 : evidence.bonusLb
         return ProgramProgression.honestBase(
             baseWeightLb: lift.baseWeightLb,
             lastIncrementLb: lift.lastIncrementLb,
             lastVolumePerformedLb: evidence.performedLb,
             roundingLb: program.roundingLb,
-            barLb: evidence.barLabelLb
+            barLb: evidence.barLabelLb,
+            bonusPerformedLb: bonus,
+            catchUpIncrementLb: catchUp
         )
     }
 

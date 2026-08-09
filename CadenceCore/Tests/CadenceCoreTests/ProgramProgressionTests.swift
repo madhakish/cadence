@@ -115,6 +115,31 @@ final class ProgramProgressionTests: XCTestCase {
                        "evidence more than one increment above the base is a hand-set base or off-program work — left alone")
     }
 
+    // Bonus work the lifter ADDED past the prescription arms one staged
+    // increment of catch-up — the base chases demonstrated capability, one
+    // step per cycle, and grading still never sees the bonus rows. The
+    // motivating log: base 226 (lastIncrement 5), at-plan volume 220×5 plus
+    // deliberate 245×3 bonus, estimated max 278 → rebuild step 10 → plan
+    // from 236 (the card rounds to 235). Mirrored in web/tests/core.test.mjs.
+    // [INV-ADVANCE-BUYS-PLATES]
+    func testBonusWorkArmsOneStagedIncrementOfCatchUp() {
+        XCTAssertEqual(P.honestBase(baseWeightLb: 226, lastIncrementLb: 5, lastVolumePerformedLb: 220,
+                                    roundingLb: 5, barLb: 45, bonusPerformedLb: 245, catchUpIncrementLb: 10), 236,
+                       "245×3 added past a 220×5 prescription lifts the plan one rebuild step above the base")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 226, lastIncrementLb: 5, lastVolumePerformedLb: 220,
+                                    roundingLb: 5, barLb: 45, bonusPerformedLb: 227, catchUpIncrementLb: 10), 226,
+                       "a bonus set inside the half-step band is noise, not a signal")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 226, lastIncrementLb: 5, lastVolumePerformedLb: 220,
+                                    roundingLb: 5, barLb: 45, bonusPerformedLb: 245, catchUpIncrementLb: 0), 231,
+                       "without a staged step the last earned increment bounds the catch-up")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 226, lastIncrementLb: 0, lastVolumePerformedLb: 220,
+                                    roundingLb: 5, barLb: 45, bonusPerformedLb: 245, catchUpIncrementLb: 10), 226,
+                       "a hand-set base is never repaired, bonus work or not")
+        XCTAssertEqual(P.honestBase(baseWeightLb: 225, lastIncrementLb: 10, lastVolumePerformedLb: 221.37,
+                                    roundingLb: 5, barLb: 45, bonusPerformedLb: 245, catchUpIncrementLb: 10), 235,
+                       "the stale-label repair and the bonus catch-up agree on the same honest plan")
+    }
+
     // The advance-side half: the graded peak rides the cycle's performed
     // volume exposure upward, so the stored base resyncs to reality and
     // stall/deload math stop operating on a stale number. Mirrored in
@@ -164,6 +189,18 @@ final class ProgramProgressionTests: XCTestCase {
                        "a fresh log rising through its own best never reads fine")
         XCTAssertEqual(P.progressionRegime(estimatedMaxLb: 370, priorBestMaxLb: 400, standingBest: true), .standard,
                        "inside the normal band nothing changes")
+        // The second axis: a base far below the lifter's OWN estimated max is
+        // a rebuild even when the log's prior best (which rises with every
+        // cycle of a young log) never shows a drawdown.
+        XCTAssertEqual(P.progressionRegime(estimatedMaxLb: 278.3, priorBestMaxLb: 270, standingBest: false,
+                                           baseWeightLb: 226), .rebuild,
+                       "a 226 base under a 278 estimated max (81%) is a rebuild in progress")
+        XCTAssertEqual(P.progressionRegime(estimatedMaxLb: 278.3, priorBestMaxLb: 270, standingBest: false,
+                                           baseWeightLb: 240), .standard,
+                       "past 85% of own capability the headroom axis stands down")
+        XCTAssertEqual(P.progressionRegime(estimatedMaxLb: 400, priorBestMaxLb: 400, standingBest: true,
+                                           baseWeightLb: 395), .fine,
+                       "the fine band is untouched — a base near the ceiling can never read as headroom")
     }
 
     // [INV-NEEDLE-ALWAYS-MOVES]

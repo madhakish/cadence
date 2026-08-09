@@ -660,6 +660,15 @@ ok(/deloaded/.test(st2.note || ""), "deload note present");
   eq(C.progressionRegime(395, 400, false), "standard",
     "[INV-NEEDLE-ALWAYS-MOVES] a fresh log rising through its own best never reads fine");
   eq(C.progressionRegime(370, 400, true), "standard", "inside the normal band nothing changes");
+  // [INV-NEEDLE-ALWAYS-MOVES] the second axis: a base far below the lifter's
+  // OWN estimated max is a rebuild even when a young log's rising prior best
+  // never shows a drawdown. Mirrors CadenceCore — same numbers.
+  eq(C.progressionRegime(278.3, 270, false, 226), "rebuild",
+    "a 226 base under a 278 estimated max (81%) is a rebuild in progress");
+  eq(C.progressionRegime(278.3, 270, false, 240), "standard",
+    "past 85% of own capability the headroom axis stands down");
+  eq(C.progressionRegime(400, 400, true, 395), "fine",
+    "the fine band is untouched — a base near the ceiling can never read as headroom");
 
   // [INV-NEEDLE-ALWAYS-MOVES] staged increments.
   eq(C.stagedIncrement(175, "strength", "standard", 5), 5, "standard is focusIncrement untouched");
@@ -2104,6 +2113,22 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-ADVANCE-BUYS-PLATES] never downward — a base above the log stands");
   eq(C.honestBase(200, 10, 221.37, 5, 45), 200,
     "[INV-ADVANCE-BUYS-PLATES] evidence more than one increment above the base is a hand-set base or off-program work — left alone");
+
+  // Bonus work the lifter ADDED past the prescription arms one staged
+  // increment of catch-up — the base chases demonstrated capability, one
+  // step per cycle, and grading still never sees the bonus rows. Mirrors
+  // CadenceCore — same numbers (base 226, 220×5 at plan + 245×3 bonus,
+  // rebuild step 10 → plan from 236; the card rounds to 235).
+  eq(C.honestBase(226, 5, 220, 5, 45, 245, 10), 236,
+    "[INV-ADVANCE-BUYS-PLATES] 245×3 added past a 220×5 prescription lifts the plan one rebuild step above the base");
+  eq(C.honestBase(226, 5, 220, 5, 45, 227, 10), 226,
+    "[INV-ADVANCE-BUYS-PLATES] a bonus set inside the half-step band is noise, not a signal");
+  eq(C.honestBase(226, 5, 220, 5, 45, 245, 0), 231,
+    "[INV-ADVANCE-BUYS-PLATES] without a staged step the last earned increment bounds the catch-up");
+  eq(C.honestBase(226, 0, 220, 5, 45, 245, 10), 226,
+    "[INV-ADVANCE-BUYS-PLATES] a hand-set base is never repaired, bonus work or not");
+  eq(C.honestBase(225, 10, 221.37, 5, 45, 245, 10), 235,
+    "[INV-ADVANCE-BUYS-PLATES] the stale-label repair and the bonus catch-up agree on the same honest plan");
 
   const state = { baseWeightLb: 225, estimatedMaxLb: 280, stallCount: 0, role: "main", lastIncrementLb: 0 };
   const clean = {
