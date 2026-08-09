@@ -227,6 +227,7 @@ struct BarbellView: View {
                     }
                     if solution.loadout.collarLb > 0 {
                         let collar = Path(roundedRect: CGRect(x: x, y: h / 2 - 8, width: 3.5, height: 16), cornerRadius: 1)
+                        let steel = Gradient(colors: [Color(hex: 0x5D626A), Color(hex: 0xD5D8DC), Color(hex: 0x747A83)])
                         ctx.fill(collar, with: .linearGradient(steel,
                                                               startPoint: CGPoint(x: x, y: h / 2 - 8),
                                                               endPoint: CGPoint(x: x, y: h / 2 + 8)))
