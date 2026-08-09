@@ -268,12 +268,41 @@ export async function openSession(id) {
     return C.restDefaultSeconds(ex.category, ex.movementGroup, role, restCfg, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : 0);
   }
 
-  // Session stopwatch origin (ephemeral). NULL until the workout is started:
-  // opening the logger to read the plan is not the same act as training, and a
-  // clock that starts itself on open reports elapsed time nobody trained.
-  let sessionStart = null;
-  function startWorkout() { sessionStart = Date.now(); paintBar(); }
-  function resetToNotStarted() { sessionStart = null; rest.stop(); paintBar(); }
+  // Session stopwatch origin. NULL until the workout is started: opening the
+  // logger to read the plan is not the same act as training, and a clock that
+  // starts itself on open reports elapsed time nobody trained. The origin is
+  // mirrored into localStorage (keyed by session) so reloading or relaunching
+  // the PWA mid-workout resumes the elapsed clock instead of restarting it at
+  // 0:00 — the same durable fallback the native WorkoutClock keeps in
+  // UserDefaults. A record older than a day is stale (the same sanity bound
+  // the history duration label applies) and must not resurrect last week's
+  // stopwatch onto a reopened session.
+  const CLOCK_KEY = "cadenceWorkoutClock";
+  const CLOCK_WINDOW_MS = 24 * 60 * 60 * 1000;
+  function readClockRecord() {
+    try { return JSON.parse(localStorage.getItem(CLOCK_KEY) || "null"); } catch { return null; }
+  }
+  function persistClock() {
+    try {
+      if (sessionStart == null) {
+        // Clear only a record this session owns — discarding or resetting an
+        // unstarted session must not erase another workout's running clock.
+        const record = readClockRecord();
+        if (record && String(record.sessionId) === String(session.id)) localStorage.removeItem(CLOCK_KEY);
+      } else {
+        localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: session.id, start: sessionStart }));
+      }
+    } catch { /* storage unavailable (private mode) — the in-memory clock still works */ }
+  }
+  function restoreClock() {
+    const record = readClockRecord();
+    return record && String(record.sessionId) === String(session.id)
+      && Number.isFinite(record.start) && Date.now() - record.start < CLOCK_WINDOW_MS
+      ? record.start : null;
+  }
+  let sessionStart = restoreClock();
+  function startWorkout() { sessionStart = Date.now(); persistClock(); paintBar(); }
+  function resetToNotStarted() { sessionStart = null; persistClock(); rest.stop(); paintBar(); }
   let currentSE = null;                       // the exercise you're actively working
   // Exercise AND role must come from the same session entry — pairing
   // exercises[0] with currentSE's (null) role resolved the first lift's rest
@@ -973,6 +1002,7 @@ export async function openSession(id) {
       [
         { label: "Discard session", role: "destructive", onClick: async () => {
           await Sessions.del(session.id);
+          sessionStart = null; persistClock();
           rest.stop();
           screen.close();
           ui.nav.refresh();
@@ -1002,6 +1032,7 @@ export async function openSession(id) {
     finishing = true;
     try {
       const summary = await completeSession(session);
+      sessionStart = null; persistClock();
       rest.stop();
       showSummary(summary, () => { screen.close(); ui.nav.refresh(); });
     } catch (e) {

@@ -398,6 +398,20 @@ the plan and logged sets intact.
 > Starting from `onAppear` meant reading the plan logged elapsed time nobody
 > trained, and there was no way to take it back.
 
+### INV-CLOCK-SURVIVES-RELAUNCH
+*platforms: web*
+
+A started workout's stopwatch survives an app relaunch. The clock origin is
+mirrored into durable storage (localStorage on web, UserDefaults behind the
+Live Activity snapshot on native) keyed by session, restored when the same
+session reopens within a day, ignored by any other session, and cleared on
+reset, discard, and banking. A record older than a day is stale and never
+resurrects an old stopwatch.
+
+> The origin lived only in memory — force-quitting the app mid-workout and
+> resuming the session restarted the timer at 0:00, losing the real elapsed
+> time of a workout still in progress.
+
 ### INV-UNSTARTED-HAS-NO-DURATION
 *platforms: native · unverifiable*
 

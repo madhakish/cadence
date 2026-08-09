@@ -7,11 +7,15 @@ import { JSDOM } from "jsdom";
 const dom = new JSDOM(`<!doctype html><html><body>
   <header id="topbar"><h1 id="screen-title"></h1><div id="topbar-actions"></div></header>
   <main id="view"></main><button id="fab"></button><nav id="tabbar"></nav>
-  <div id="overlays"></div><div id="toast"></div></body></html>`);
+  <div id="overlays"></div><div id="toast"></div></body></html>`,
+// localStorage needs a real origin (opaque about:blank has none) — the app
+// itself is served from /cadence/app/, so any http origin is faithful here.
+{ url: "http://localhost/cadence/app/" });
 global.window = dom.window;
 global.document = dom.window.document;
 global.FileReader = dom.window.FileReader;
 global.Node = dom.window.Node;
+global.localStorage = dom.window.localStorage;
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.error("FAIL:", m); } };
@@ -3215,6 +3219,48 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "[INV-SESSION-ALWAYS-ESCAPABLE] discarding removes the session and nothing else");
   ok((await db.Sessions.completed()).length > 0,
     "[INV-SESSION-ALWAYS-ESCAPABLE] banked history survives a discard");
+}
+
+// The workout stopwatch must survive an app relaunch. The origin previously
+// lived only in a closure, so force-quitting the PWA mid-workout restarted
+// the timer at 0:00 on resume; now it is mirrored into localStorage the way
+// the native WorkoutClock mirrors its clock into UserDefaults.
+{
+  const CLOCK_KEY = "cadenceWorkoutClock";
+  const lastBar = () => [...document.querySelectorAll("#session-bar")].pop();
+  const sid = await session.createBlankSession();
+  await session.openSession(sid); await tick();
+  lastBar().querySelector("button[aria-label^='Start the workout clock']").click(); await tick();
+  const record = JSON.parse(localStorage.getItem(CLOCK_KEY) || "null");
+  ok(record && String(record.sessionId) === String(sid) && Number.isFinite(record.start),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] starting the workout writes a durable clock record");
+
+  // The relaunch: a fresh open of the same session resumes the running clock
+  // from the stored origin instead of offering Start again.
+  await session.openSession(sid); await tick();
+  ok(lastBar().querySelector(".clock").textContent.includes("session"),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] reopening resumes the running clock, not 'not started'");
+
+  // Another session must not inherit the stored clock.
+  const otherId = await session.createBlankSession();
+  await session.openSession(otherId); await tick();
+  ok(lastBar().querySelector(".clock").textContent.includes("not started"),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a different session does not inherit the stored clock");
+
+  // A stale record (older than a day) must not resurrect last week's
+  // stopwatch onto a reopened session.
+  localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: sid, start: Date.now() - 25 * 60 * 60 * 1000 }));
+  await session.openSession(sid); await tick();
+  ok(lastBar().querySelector(".clock").textContent.includes("not started"),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a stale record does not restart the clock");
+
+  // Reset from the owning session clears the record for good.
+  localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: sid, start: Date.now() }));
+  await session.openSession(sid); await tick();
+  lastBar().querySelector("button[aria-label^='Reset this session']").click(); await tick();
+  ok(localStorage.getItem(CLOCK_KEY) == null,
+    "[INV-CLOCK-SURVIVES-RELAUNCH] reset clears the durable record");
+  await db.Sessions.del(sid); await db.Sessions.del(otherId);
 }
 
 // The figure is only honest if every shipped exercise says what it trains.

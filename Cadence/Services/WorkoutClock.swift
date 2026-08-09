@@ -15,6 +15,44 @@ final class WorkoutClock {
     var isRunning: Bool { startDate != nil }
     var isPaused: Bool { pausedAt != nil }
 
+    /// Durable stopwatch state, written on every transition. The Live
+    /// Activity snapshot is the preferred cold-start recovery (it carries a
+    /// pause in effect and any shifted origin), but an activity is not a
+    /// database: the lifter can dismiss it from the lock screen, the system
+    /// expires it, or Live Activities are simply off — and a force-quit
+    /// relaunch then restarted the workout timer at 0:00 mid-session. This
+    /// record is the fallback that survives all of those.
+    private struct PersistedClock: Codable {
+        var sessionID: String
+        var start: Date
+        var pausedAt: Date?
+    }
+    private static let persistenceKey = "workoutClockState"
+    /// A stale record must not resurrect a week-old stopwatch onto a
+    /// reopened session — the same one-day sanity bound the history
+    /// duration label applies.
+    private static let persistenceWindow: TimeInterval = 24 * 60 * 60
+
+    private func persist() {
+        let defaults = UserDefaults.standard
+        guard let sessionID, let startDate else {
+            defaults.removeObject(forKey: Self.persistenceKey)
+            return
+        }
+        let record = PersistedClock(sessionID: sessionID, start: startDate, pausedAt: pausedAt)
+        if let data = try? JSONEncoder().encode(record) {
+            defaults.set(data, forKey: Self.persistenceKey)
+        }
+    }
+
+    private static func restore(for sessionID: String) -> PersistedClock? {
+        guard let data = UserDefaults.standard.data(forKey: persistenceKey),
+              let record = try? JSONDecoder().decode(PersistedClock.self, from: data),
+              record.sessionID == sessionID,
+              Date().timeIntervalSince(record.start) < persistenceWindow else { return nil }
+        return record
+    }
+
     /// True only for the open session that owns the root-scoped stopwatch and
     /// Live Activity. Used by destructive session actions so another workout's
     /// clock is never stopped accidentally.
@@ -39,10 +77,17 @@ final class WorkoutClock {
            snap.state.sessionID == session.id {
             start = snap.state.stopwatchStart ?? snap.startDate
             paused = snap.state.stopwatchPausedAt
+        } else if sessionID == nil, let record = Self.restore(for: session.id) {
+            // No live activity to adopt (dismissed, expired, or disabled) —
+            // the durable record keeps the elapsed clock honest across a
+            // relaunch instead of restarting the workout at 0:00.
+            start = record.start
+            paused = record.pausedAt
         }
         startDate = start
         pausedAt = paused
         sessionID = session.id
+        persist()
         WorkoutActivityController.beginSessionDetached(sessionID: session.id, startDate: start,
                                                         currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
         // A shifted origin or live pause re-applies after the (queued) begin.
@@ -73,6 +118,13 @@ final class WorkoutClock {
             begin(for: session, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
             return true
         }
+        // No activity survived the relaunch, but the durable record says this
+        // session's stopwatch was running — resume it (begin() reads the same
+        // record for the origin and any pause in effect).
+        if sessionID == nil, Self.restore(for: session.id) != nil {
+            begin(for: session, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
+            return true
+        }
         return false
     }
 
@@ -80,6 +132,7 @@ final class WorkoutClock {
     func pause() {
         guard let start = startDate, pausedAt == nil else { return }
         pausedAt = Date()
+        persist()
         WorkoutActivityController.updateStopwatchDetached(origin: start, pausedAt: pausedAt)
     }
 
@@ -89,6 +142,7 @@ final class WorkoutClock {
         guard let start = startDate, let paused = pausedAt else { return }
         startDate = start.addingTimeInterval(Date().timeIntervalSince(paused))
         pausedAt = nil
+        persist()
         WorkoutActivityController.updateStopwatchDetached(origin: startDate ?? Date(), pausedAt: nil)
     }
 
@@ -98,6 +152,7 @@ final class WorkoutClock {
         guard startDate != nil else { return }
         startDate = Date()
         pausedAt = nil
+        persist()
         WorkoutActivityController.updateStopwatchDetached(origin: startDate ?? Date(), pausedAt: nil)
     }
 
@@ -114,6 +169,7 @@ final class WorkoutClock {
         startDate = nil
         pausedAt = nil
         sessionID = nil
+        persist()
         WorkoutActivityController.endSessionDetached()
     }
 }
