@@ -11,6 +11,28 @@ const el = (name, attrs = {}, text) => {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const tick = (t) => { const d = new Date(t); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
 
+// A clamped Catmull-Rom conversion: it passes through every recorded point
+// without the ugly angular joins, while keeping each segment's controls inside
+// its endpoint range so the curve cannot invent a peak above either workout.
+export function smoothLinePath(points) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+  const clamp = (value, a, b) => Math.max(Math.min(a, b), Math.min(Math.max(a, b), value));
+  let d = `M${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const p0 = points[Math.max(0, index - 1)];
+    const p1 = points[index];
+    const p2 = points[index + 1];
+    const p3 = points[Math.min(points.length - 1, index + 2)];
+    const c1x = clamp(p1[0] + (p2[0] - p0[0]) / 6, p1[0], p2[0]);
+    const c1y = clamp(p1[1] + (p2[1] - p0[1]) / 6, p1[1], p2[1]);
+    const c2x = clamp(p2[0] - (p3[0] - p1[0]) / 6, p1[0], p2[0]);
+    const c2y = clamp(p2[1] - (p3[1] - p1[1]) / 6, p1[1], p2[1]);
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
 // series: [{ t:number(ms), y:number, ann?:string }] — assumed sorted by t.
 export function lineChart(series, { height = 200, fmtY = (v) => String(Math.round(v)), targetY = null, targetLabel = "Target" } = {}) {
   const W = 340, H = height, padL = 40, padR = 14, padT = 16, padB = 24;
@@ -43,7 +65,7 @@ export function lineChart(series, { height = 200, fmtY = (v) => String(Math.roun
   }
 
   // line path
-  const d = series.map((p, i) => `${i ? "L" : "M"}${xAt(i).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ");
+  const d = smoothLinePath(series.map((p, index) => [xAt(index), yAt(p.y)]));
   svg.append(el("path", { class: "line", d }));
 
   // dots + annotations
@@ -104,6 +126,9 @@ export function progressionChart({
   const wrap = document.createElement("div");
   const svg = el("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img" });
   wrap.append(svg);
+  const selectionLayer = el("g", { class: "chart-selected" });
+  const selectablePoints = [];
+  let selectedPoint = null;
 
   const drawn = lines.filter((l) => l.points && l.points.length);
   const barPoints = bars?.points?.filter((p) => Number.isFinite(p.y)) || [];
@@ -180,7 +205,7 @@ export function progressionChart({
   // different charts from the same data.
   if (area && drawn.length === 1 && drawn[0].points.length > 1) {
     const pts = [...drawn[0].points].sort((a, b) => a.t - b.t);
-    const d = `${pts.map((p, i) => `${i ? "L" : "M"}${xAt(p.t).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ")}`
+    const d = `${smoothLinePath(pts.map((p) => [xAt(p.t), yAt(p.y)]))}`
       + ` L${xAt(pts.at(-1).t).toFixed(1)} ${baseline.toFixed(1)}`
       + ` L${xAt(pts[0].t).toFixed(1)} ${baseline.toFixed(1)} Z`;
     svg.append(el("path", { class: "area", d, style: `fill:${drawn[0].color || "var(--accent)"}` }));
@@ -188,23 +213,17 @@ export function progressionChart({
 
   for (const line of drawn) {
     const pts = [...line.points].sort((a, b) => a.t - b.t);
-    const d = pts.map((p, i) => `${i ? "L" : "M"}${xAt(p.t).toFixed(1)} ${yAt(p.y).toFixed(1)}`).join(" ");
+    const d = smoothLinePath(pts.map((p) => [xAt(p.t), yAt(p.y)]));
     const stroke = line.color || "var(--accent)";
     svg.append(el("path", {
       class: "line", d,
       style: `stroke:${stroke}${line.dash ? `;stroke-dasharray:${line.dash}` : ""}`,
     }));
     for (const p of pts) {
-      const dot = el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y), r: onSelect ? 5 : (pts.length > 30 ? 1.6 : 2.6),
-        style: `fill:${stroke}`, ...(onSelect ? { tabindex: 0, role: "button" } : {}) });
-      if (onSelect) {
-        dot.setAttribute("aria-label", `Select ${tick(p.t)}, ${fmtY(p.y)}`);
-        dot.addEventListener("click", () => onSelect(p));
-        dot.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(p); }
-        });
-      }
+      const dot = el("circle", { class: "dot", cx: xAt(p.t), cy: yAt(p.y),
+        r: pts.length > 30 ? 1.6 : 2.8, style: `fill:${stroke}` });
       svg.append(dot);
+      if (onSelect) selectablePoints.push({ point: p, x: xAt(p.t), y: yAt(p.y) });
     }
   }
 
@@ -225,6 +244,49 @@ export function progressionChart({
     const x = xAt(nowT);
     svg.append(el("line", { class: "now-line", x1: x, y1: padT, x2: x, y2: baseline }));
     svg.append(el("text", { class: "now-lbl", x: x + 3, y: padT + 8 }, "today"));
+  }
+  if (onSelect && selectablePoints.length) {
+    // One plot-sized interaction surface avoids the bogus pile of overlapping
+    // hit circles that made older points unreachable in dense, flat histories.
+    // The pointer maps to SVG coordinates and selects the genuinely nearest
+    // recorded point; visible dots stay small and exact.
+    const hit = el("rect", { class: "chart-hit", x: padL, y: padT,
+      width: W - padL - padR, height: baseline - padT, fill: "transparent",
+      tabindex: 0, role: "button", "aria-pressed": "false", "aria-label": "Select a chart point" });
+    const select = (candidate) => {
+      selectedPoint = candidate;
+      hit.setAttribute("aria-pressed", "true");
+      hit.setAttribute("aria-label", `Selected ${tick(candidate.point.t)}, ${fmtY(candidate.point.y)}`);
+      selectionLayer.replaceChildren(
+        el("line", { class: "selection-line", x1: candidate.x, y1: padT,
+          x2: candidate.x, y2: baseline }),
+        el("circle", { class: "selection-halo", cx: candidate.x, cy: candidate.y, r: 7 }),
+      );
+      onSelect(candidate.point);
+    };
+    hit.addEventListener("click", (event) => {
+      const bounds = svg.getBoundingClientRect();
+      if (!(bounds.width > 0) || !(bounds.height > 0)) return;
+      const x = (event.clientX - bounds.left) * W / bounds.width;
+      const y = (event.clientY - bounds.top) * H / bounds.height;
+      select(selectablePoints.reduce((nearest, candidate) => {
+        const distance = (candidate.x - x) ** 2 + (candidate.y - y) ** 2;
+        const nearestDistance = (nearest.x - x) ** 2 + (nearest.y - y) ** 2;
+        return distance < nearestDistance ? candidate : nearest;
+      }));
+    });
+    hit.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      const ordered = [...selectablePoints].sort((a, b) => a.point.t - b.point.t || a.y - b.y);
+      let index = selectedPoint ? ordered.indexOf(selectedPoint) : -1;
+      if (event.key === "ArrowLeft") index = Math.max(0, index < 0 ? 0 : index - 1);
+      else if (event.key === "ArrowRight") index = Math.min(ordered.length - 1, index + 1);
+      else if (event.key === "End") index = ordered.length - 1;
+      else if (event.key === "Home" || index < 0) index = 0;
+      select(ordered[index]);
+    });
+    svg.append(hit, selectionLayer);
   }
 
   svg.append(el("text", { class: "lbl", x: padL, y: H - 6 }, tick(tmin)));

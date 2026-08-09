@@ -37,6 +37,40 @@ const completeAll = async (workout) => {
 };
 
 {
+  const adjusted = history.historySetPresentationForTest({
+    weightLb: 215, reps: 3, plannedWeightLb: 225, plannedReps: 5,
+    status: "completed", isWarmup: false, isPerSide: false, prescriptionBlock: "work",
+  }, "barbell");
+  ok(adjusted.actual.includes("215") && adjusted.planned?.includes("225") && adjusted.planned.includes("5"),
+    "completed-history rows keep performed work primary and expose a changed prescription");
+  const unchanged = history.historySetPresentationForTest({
+    weightLb: 225, reps: 5, plannedWeightLb: 225, plannedReps: 5,
+    status: "completed", isWarmup: false, isPerSide: false, prescriptionBlock: "amrap",
+  }, "barbell");
+  ok(unchanged.planned === null && unchanged.kind === "AMRAP",
+    "unchanged history stays terse while preserving the set's prescription kind");
+
+  const completed = (count, fields = {}) => Array.from({ length: count }, () => ({
+    status: "completed", isWarmup: false, weightLb: 0, reps: 1, ...fields,
+  }));
+  const exerciseByName = new Map([
+    ["Back Squat", { type: "barbell" }],
+    ["Run-Walk Intervals", { type: "conditioning" }],
+    ["Plank", { type: "timed" }],
+  ]);
+  const mixedSession = { exercises: [
+    { exerciseName: "Back Squat", sets: [...completed(3), { ...completed(1)[0], isWarmup: true }] },
+    { exerciseName: "Run-Walk Intervals", sets: completed(4, { durationSeconds: 60 }) },
+    { exerciseName: "Plank", sets: completed(2, { durationSeconds: 30 }) },
+    // Missing library metadata still has enough stored data to stay out of the
+    // strength count after an exercise is deleted.
+    { exerciseName: "Deleted conditioning", sets: completed(1, { distanceMiles: 1 }) },
+  ] };
+  ok(history.completedStrengthSetCountForTest(mixedSession, exerciseByName) === 3,
+    "session history counts lifting work without relabeling conditioning intervals as work sets");
+}
+
+{
   const program = { id: "temporary-program", cycleNumber: 2, currentWeek: 3 };
   const decision = { programId: program.id, action: "accepted", date: new Date().toISOString(),
     afterValue: coach.temporaryAccessoryValue(75, 2, 3) };
@@ -129,6 +163,48 @@ for (const track of [
     "nonempty all-disabled inventory remains an intentional bar-only rack");
   ok(barbell.stationPlates("lb", barOnlyRack).length === 0,
     "bar-only intent survives in the loadout renderer");
+  const fullBar = barbell.barbellSVG(135, "lb", C.BARS.bar45lb, legacyRack, null, null, "full").svg;
+  ok(fullBar.classList.contains("full") && fullBar.querySelectorAll("rect").length > 6,
+    "plate calculator can render the solved load across the complete mirrored bar");
+  const fullPlateRects = [...fullBar.querySelectorAll("rect")].filter((rect) => rect.getAttribute("stroke"));
+  ok(fullPlateRects.length > 0 && fullPlateRects.length % 2 === 0,
+    "every solved plate is drawn once on each side");
+  const mixedBar = barbell.barbellSVG(195, "lb", C.BARS.bar45lb,
+    { ...legacyRack, collarWeightLb: 0 }, null, null, "full").svg;
+  const leftStack = [...mixedBar.querySelectorAll('.barbell-plate[data-side="left"]')];
+  const rightStack = [...mixedBar.querySelectorAll('.barbell-plate[data-side="right"]')];
+  const plateValues = (stack) => stack.map((plate) => Number(plate.dataset.plateValue));
+  const plateXs = (stack) => stack.map((plate) => Number(plate.getAttribute("x")));
+  ok(JSON.stringify(plateValues(leftStack)) === JSON.stringify([45, 25, 5])
+    && JSON.stringify(plateValues(rightStack)) === JSON.stringify([45, 25, 5]),
+  "mixed plate stacks are ordered from each collar outward, not copied left to right across the screen");
+  ok(plateXs(leftStack).every((x, index, xs) => index === 0 || x < xs[index - 1])
+    && plateXs(rightStack).every((x, index, xs) => index === 0 || x > xs[index - 1]),
+  "left and right sleeve coordinates mirror while preserving the same collar-first load order");
+  const bumperBar = barbell.barbellSVG(195, "lb", C.BARS.bar45lb,
+    { ...legacyRack, collarWeightLb: 0 }, null, null, "full", "bumper").svg;
+  const bumperRight = [...bumperBar.querySelectorAll('.barbell-plate[data-side="right"]')];
+  ok(Number(bumperRight[0].getAttribute("height")) === Number(bumperRight[1].getAttribute("height"))
+    && Number(rightStack[0].getAttribute("height")) > Number(rightStack[1].getAttribute("height")),
+  "bumper plates keep competition diameter while calibrated steel steps down by denomination");
+  ok(bumperBar.querySelectorAll("ellipse.barbell-plate-face").length === bumperRight.length * 2
+    && bumperBar.querySelectorAll("ellipse.barbell-plate-hub").length === bumperRight.length * 2
+    && bumperBar.querySelectorAll("text.barbell-plate-label").length >= bumperRight.length * 2,
+  "plate bodies have disc faces, steel hubs, rims, and denomination marks rather than flat blocks");
+  ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
+    "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
+  const collarsOnly = barbell.barbellSVG(50, "lb", C.BARS.bar45lb, legacyRack,
+    null, null, "full").svg;
+  ok(collarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 2,
+    "a collar-only full bar draws one lock collar on each sleeve");
+  ok(collarsOnly.textContent.includes("bar + collars") && !collarsOnly.textContent.includes("bar only")
+    && collarsOnly.getAttribute("aria-label").includes("with collars, no plates")
+    && !collarsOnly.getAttribute("aria-label").includes("bar only"),
+  "a collar-only load is labeled as bar plus collars visually and accessibly");
+  const compactCollarsOnly = barbell.barbellSVG(50, "lb", C.BARS.bar45lb, legacyRack).svg;
+  ok(compactCollarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 1
+    && compactCollarsOnly.textContent.includes("bar + collars"),
+  "the compact one-sleeve load also shows its collar instead of claiming bar only");
   await db.Gyms.save(legacyRack);
   await db.syncLibrary();
   ok((await db.Gyms.default()).plateToggles.length === C.ALL_STANDARD.length,
@@ -2876,9 +2952,48 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "blurb reads as expected");
 
   const svg = A.figureSVG(A.muscleProfile("Overhead Press", "press"));
-  ok(svg.querySelectorAll("polygon").length > 30, "figure renders silhouette + regions for both views");
-  ok(svg.querySelectorAll('polygon[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
-  ok(svg.querySelectorAll('polygon[fill="#3a7bd5"]').length >= 1, "supporting muscles highlighted blue");
+  ok(svg.getAttribute("viewBox") === "0 0 430 230" && svg.querySelectorAll("image.anatomy-reference").length === 2,
+    "figure renders matching engraved front and back reference art side by side");
+  ok([...svg.querySelectorAll("image.anatomy-reference")].map((image) => image.getAttribute("href")).join("/")
+    === "assets/vitruvian-front.jpeg/assets/vitruvian-back.jpeg"
+    && [...svg.querySelectorAll("image.anatomy-reference")].every((image) => image.dataset.species === "gorilla"
+      && image.dataset.source === "exact-reference" && image === image.parentElement.firstElementChild)
+    && svg.querySelectorAll("g.anatomy-figure-panel").length === 2
+    && svg.querySelectorAll("g.anatomy-highlight-layer").length === 1,
+  "the anatomy view uses the exact supplied gorilla drawings beneath the muscle washes");
+  ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
+    "face pulls highlight rear delts instead of the generic shoulder cap");
+  ok(svg.querySelectorAll('path[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
+  ok(svg.querySelectorAll('path[fill="#3a7bd5"]').length >= 1, "supporting muscles highlighted blue");
+  ok(svg.querySelectorAll("image.anatomy-region-mask.primary").length >= 2
+    && svg.querySelectorAll("image.anatomy-region-mask.supporting").length >= 1,
+  "back-view highlights use muscle-shaped masks rather than balloon contours");
+  ok([...svg.querySelectorAll("text.anatomy-view-label")].map((node) => node.textContent).join("/") === "Ape front/Ape back",
+    "the two anatomical views identify their orientation");
+  const legend = A.muscleLegend(A.muscleProfile("Overhead Press", "press"));
+  ok(legend.querySelector('[data-role="primary"]')?.textContent.includes("Shoulders, Triceps")
+    && legend.querySelector('[data-role="supporting"]')?.textContent.includes("Traps, Abs"),
+    "the visual key names the exact primary and supporting muscle groups");
+
+  const frontAsset = await readFile(new URL("../app/assets/vitruvian-front.jpeg", import.meta.url));
+  const backAsset = await readFile(new URL("../app/assets/vitruvian-back.jpeg", import.meta.url));
+  const { createHash } = await import("node:crypto");
+  const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
+  ok(sha256(frontAsset) === "ec95ffe80e86263a441f31e01e7e5fcf6b9312d3b2d7a3e6fc3a9ae36bfd1006",
+    "front asset is byte-for-byte the supplied Vitruvian gorilla drawing");
+  ok(sha256(backAsset) === "940bbc7bf72794778d3304d226cf5ca3d265e68985bc0ffa72cb198c743a51f5",
+    "back asset is byte-for-byte the supplied matching rear drawing");
+  const anatomyStyles = await readFile(new URL("../app/styles.css", import.meta.url), "utf8");
+  ok(anatomyStyles.includes(".anatomy-figure-panel")
+    && anatomyStyles.includes("mask-image: radial-gradient(ellipse closest-side")
+    && anatomyStyles.includes(".anatomy-highlight-layer { filter: blur(2.1px); }"),
+  "anatomy art feathers into its card and colour washes have softened boundaries");
+  const frontTraps = A.VITRUVIAN_FRONT_REGIONS.find((region) => region.id === "traps");
+  ok(Math.min(...frontTraps.points.map((point) => point[1])) >= 55
+    && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms").length === 4
+    && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms")
+      .every((region) => Math.max(...region.points.map((point) => point[1])) <= 85),
+  "front washes align to the ape's neck and both Vitruvian arm poses");
 }
 
 // ---- program: a cycle-scoped swap reverts at rollover (issue 20) ----
@@ -3174,7 +3289,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 // base. Drawing both as one line produced a sawtooth between two unrelated
 // progressions; main must stay legible on its own.
 {
-  const { progressionChart, ROLE_DASH } = await import("../app/js/charts.js");
+  const { progressionChart, smoothLinePath, ROLE_DASH } = await import("../app/js/charts.js");
   const at = (day) => new Date(2026, 0, day).getTime();
   const main = [{ t: at(1), y: 225 }, { t: at(8), y: 235 }, { t: at(15), y: 245 }];
   const e1rm = [{ t: at(1), y: 253 }, { t: at(8), y: 264 }, { t: at(15), y: 260 }];
@@ -3191,6 +3306,10 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const svg = chart.querySelector("svg");
   const paths = [...svg.querySelectorAll("path.line")];
   ok(paths.length === 3, "every requested load line is drawn");
+  ok(paths.every((path) => path.getAttribute("d").includes("C")),
+    "performed histories use smooth point-preserving curves instead of chunky angular joins");
+  ok(smoothLinePath([[0, 10], [5, 0], [10, 10]]).endsWith("10.0 10.0"),
+    "the smoothed chart path still passes through the final recorded value");
   ok(paths.filter((p) => (p.getAttribute("style") || "").includes("dasharray")).length === 1,
     "[INV-CHART-SPLITS-BY-ROLE] the complementary line is dashed so main stays visually dominant");
   const bars = [...svg.querySelectorAll("rect.vol-bar")].map((r) => +r.getAttribute("height"));
@@ -3209,6 +3328,38 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok([...chart.querySelectorAll(".chart-legend span")].length === 4, "every series is named in the legend");
   const empty = progressionChart({ lines: [{ key: "x", points: [] }], bars: null });
   ok(empty.querySelectorAll("path.line").length === 0, "an empty series renders nothing rather than throwing");
+
+  let selected = null;
+  const selectable = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: main }],
+    onSelect: (point) => { selected = point; },
+  });
+  const selectableSVG = selectable.querySelector("svg");
+  const hit = selectable.querySelector("rect.chart-hit");
+  selectableSVG.getBoundingClientRect = () => ({ left: 0, top: 0, width: 340, height: 220,
+    right: 340, bottom: 220 });
+  const firstDot = selectable.querySelector("circle.dot");
+  hit?.dispatchEvent(new window.MouseEvent("click", { bubbles: true,
+    clientX: +firstDot.getAttribute("cx"), clientY: +firstDot.getAttribute("cy") }));
+  ok(selected === main[0] && hit?.getAttribute("aria-pressed") === "true",
+    "selecting a chart point reports the exact record and exposes selected state");
+  ok(selectable.querySelector("line.selection-line") && selectable.querySelector("circle.selection-halo"),
+    "selection remains visible on the chart instead of changing only the detail text");
+
+  const dense = Array.from({ length: 40 }, (_, index) => ({ t: at(index + 1), y: 225 }));
+  let denseSelected = null;
+  const denseChart = progressionChart({
+    lines: [{ key: "w", label: "Working weight", color: "#ef4444", points: dense }],
+    onSelect: (point) => { denseSelected = point; },
+  });
+  const denseSVG = denseChart.querySelector("svg");
+  denseSVG.getBoundingClientRect = selectableSVG.getBoundingClientRect;
+  const denseHits = denseChart.querySelectorAll("rect.chart-hit");
+  const olderDot = denseChart.querySelectorAll("circle.dot")[5];
+  denseHits[0]?.dispatchEvent(new window.MouseEvent("click", { bubbles: true,
+    clientX: +olderDot.getAttribute("cx"), clientY: +olderDot.getAttribute("cy") }));
+  ok(denseHits.length === 1 && denseSelected === dense[5],
+    "dense flat histories use one plot hit surface and keep older points directly selectable");
 
   // ---- the projected trend, drawn past today ----
   // The forecast shares the load axis with the history it continues, but must

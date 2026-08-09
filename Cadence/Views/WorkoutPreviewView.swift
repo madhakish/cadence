@@ -104,7 +104,8 @@ struct WorkoutPreviewView: View {
                                 BarbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit,
                                             bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym,
                                             targetWeightLb: target.weightLb,
-                                            stationDenomination: previewExercise?.stationDenomination)
+                                            stationDenomination: previewExercise?.stationDenomination,
+                                            plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel)
                             } else if type == .dumbbell {
                                 DumbbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit)
                             }

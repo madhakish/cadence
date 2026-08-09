@@ -552,7 +552,7 @@ export async function openSession(id) {
     // dumbbell lifts. Mirrors native.
     if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
       const { svg, solution } = barbellSVG(s.weightLb, u, barFor(se), gymState.value, null,
-        ex?.stationDenomination ?? null);
+        ex?.stationDenomination ?? null, "compact", ex?.movementGroup === "olympic" ? "bumper" : "steel");
       const wrap = ui.h("div", { class: "barbell-wrap" }, svg);
       if (solution.isOffTarget) {
         const t = u === "kg" ? C.kgFromLb(solution.totalLb) : solution.totalLb;

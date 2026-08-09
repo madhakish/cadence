@@ -313,6 +313,23 @@ struct SessionDetailView: View {
         HealthComparison.compare(loggedMiles: loggedMiles, healthMiles: healthMiles)
     }
 
+    private var completedWorkSets: [SetEntry] {
+        session.orderedExercises
+            .filter(isStrengthEntry)
+            .flatMap(\.workingSets)
+    }
+
+    private var workingVolumeLb: Double {
+        session.orderedExercises.reduce(0) { $0 + $1.workingVolumeLb }
+    }
+
+    private var durationLabel: String? {
+        guard let end = session.completedAt, end > session.date else { return nil }
+        let minutes = Int(end.timeIntervalSince(session.date) / 60)
+        guard minutes > 0, minutes < 24 * 60 else { return nil }
+        return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+    }
+
     /// The window to ask Health about: session creation to completion.
     ///
     /// Bounded to a single day, mirroring the guard the Health *write* path
@@ -330,6 +347,7 @@ struct SessionDetailView: View {
 
     var body: some View {
         List {
+            sessionSummary
             if !session.notes.isEmpty {
                 Section("Notes") { Text(session.notes) }
             }
@@ -337,46 +355,24 @@ struct SessionDetailView: View {
             ForEach(session.orderedExercises) { entry in
                 Section {
                     ForEach(entry.orderedSets) { set in
-                        HStack {
-                            // Cardio sets carry distance/time/incline, not
-                            // weight×reps — same shared label as the logger.
-                            // Lookup via plain helper funcs, not inline lets
-                            // (type-checker budget — see CompileRegressionTests).
-                            Text(Self.setLine(set, type: entry.exercise?.type,
-                                              unitDisplay: settingsList.first?.unitDisplay ?? .lbPrimary))
-                                .font(.callout.monospacedDigit())
-                                .foregroundStyle(set.isWarmup ? .secondary : .primary)
-                            if entry.exercise?.type != .conditioning && entry.exercise?.type != .timed {
-                                Text("× \(set.reps)\(set.isPerSide ? "/side" : "")")
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if !set.isWarmup && set.status != .completed {
-                                Text(set.status.rawValue)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if !set.flags.isEmpty {
-                                Text(set.flags.map(\.rawValue).joined(separator: ", "))
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.warn)
-                            }
-                            if let site = set.bodyFlagSite {
-                                Label(site.rawValue, systemImage: "bolt.heart.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.hardStop)
-                            }
-                        }
+                        HistorySetRow(set: set, type: entry.exercise?.type,
+                                      unitDisplay: settingsList.first?.unitDisplay ?? .lbPrimary)
                     }
                     if !entry.notes.isEmpty {
                         Text(entry.notes).font(.caption).foregroundStyle(.secondary)
                     }
                 } header: {
-                    HStack {
-                        Text(entry.exercise?.name ?? "Exercise")
-                        if let phaseLabel = entry.truthfulPhaseLabel {
-                            Text(phaseLabel).foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(entry.exercise?.name ?? "Exercise")
+                            if let phaseLabel = entry.truthfulPhaseLabel {
+                                Text(phaseLabel).foregroundStyle(Theme.accent)
+                            }
                         }
+                        Text(exerciseSummary(entry))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
                     }
                 }
             }
@@ -393,6 +389,67 @@ struct SessionDetailView: View {
                 .activeEnergyKilocalories(start: window.start, end: window.end)
             healthMiles = await miles
             healthEnergyKcal = await energy
+        }
+    }
+
+    private var sessionSummary: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(session.programName ?? "Standalone")
+                        .font(.headline)
+                    Text([
+                        session.date.formatted(date: .abbreviated, time: .omitted),
+                        session.gymName
+                    ].compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 20) { summaryStats }
+                    VStack(alignment: .leading, spacing: 8) { summaryStats }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var summaryStats: some View {
+        summaryStat("\(completedWorkSets.count)", label: "work sets")
+        summaryStat(workingVolumeLb > 0
+                    ? (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: workingVolumeLb)
+                    : "—", label: "volume")
+        if let durationLabel { summaryStat(durationLabel, label: "duration") }
+    }
+
+    private func summaryStat(_ value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value).font(.headline.monospacedDigit())
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func exerciseSummary(_ entry: SessionExercise) -> String {
+        let setName = isStrengthEntry(entry) ? "work set" : "completed set"
+        var parts = ["\(entry.workingSets.count) \(setName)\(entry.workingSets.count == 1 ? "" : "s")"]
+        if entry.exercise?.type != .conditioning, entry.exercise?.type != .timed,
+           let top = entry.topSet {
+            let load = top.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb)
+            parts.append("top \(load)×\(top.reps)")
+        }
+        if entry.workingVolumeLb > 0 {
+            parts.append("\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: entry.workingVolumeLb)) volume")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func isStrengthEntry(_ entry: SessionExercise) -> Bool {
+        if let type = entry.exercise?.type {
+            return type != .conditioning && type != .timed
+        }
+        return !entry.workingSets.contains {
+            ($0.distanceMiles ?? 0) > 0 || ($0.flights ?? 0) > 0 || ($0.durationSeconds ?? 0) > 0
         }
     }
 
@@ -472,18 +529,108 @@ struct SessionDetailView: View {
         healthMiles = miles
     }
 
-    /// Lead label for a set line: cardio → the shared distance/time/incline
-    /// label; lifts → weight (both units) or BW.
-    private static func setLine(_ set: SetEntry, type: ExerciseType?, unitDisplay: UnitDisplay) -> String {
-        if type == .conditioning {
-            return CardioFormat.setLabel(distanceMiles: set.distanceMiles,
-                                         durationSeconds: set.durationSeconds,
-                                         inclinePercent: set.inclinePercent,
-                                         loadLb: set.weightLb,
-                                         flights: set.flights)
+}
+
+private struct HistorySetRow: View {
+    let set: SetEntry
+    let type: ExerciseType?
+    let unitDisplay: UnitDisplay
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: statusIcon)
+                .foregroundStyle(statusColor)
+                .frame(width: 18)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(actualLabel)
+                    .font(.callout.bold().monospacedDigit())
+                    .foregroundStyle(set.isWarmup ? .secondary : .primary)
+                if let plannedLabel {
+                    Text(plannedLabel)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if !set.flags.isEmpty {
+                    Text(set.flags.map(\.name).joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(Theme.warn)
+                }
+                if let site = set.bodyFlagSite {
+                    Label(site.rawValue + (set.bodyFlagNote.map { " — \($0)" } ?? ""),
+                          systemImage: "bolt.heart.fill")
+                        .font(.caption)
+                        .foregroundStyle(Theme.hardStop)
+                }
+            }
+            Spacer(minLength: 4)
+            Text(kindLabel)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .tracking(0.35)
         }
-        if type == .timed { return CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) }
-        return set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var actualLabel: String {
+        let performed: String
+        if type == .conditioning {
+            performed = CardioFormat.setLabel(distanceMiles: set.distanceMiles,
+                                               durationSeconds: set.durationSeconds,
+                                               inclinePercent: set.inclinePercent,
+                                               loadLb: set.weightLb,
+                                               flights: set.flights)
+        } else if type == .timed {
+            performed = CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0)
+        } else {
+            let load = set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)
+            performed = "\(load) × \(set.reps)\(set.isPerSide ? "/side" : "")"
+        }
+        switch set.status {
+        case .completed: return performed
+        case .skipped: return "Skipped · \(performed)"
+        case .planned: return "Not performed · \(performed)"
+        }
+    }
+
+    private var plannedLabel: String? {
+        if type == .timed, let planned = set.plannedDurationSeconds,
+           planned != set.durationSeconds {
+            return "Planned \(CardioFormat.durationLabel(seconds: planned))"
+        }
+        guard type != .conditioning, type != .timed else { return nil }
+        let plannedWeight = set.plannedWeightLb ?? set.weightLb
+        let plannedReps = set.plannedReps ?? set.reps
+        guard abs(plannedWeight - set.weightLb) > 0.001 || plannedReps != set.reps else { return nil }
+        let load = plannedWeight == 0 ? "BW" : unitDisplay.format(lb: plannedWeight)
+        let earned = set.prescriptionBlock == .amrap ? "+" : ""
+        return "Planned \(load) × \(plannedReps)\(earned)\(set.isPerSide ? "/side" : "")"
+    }
+
+    private var kindLabel: String {
+        if set.isWarmup || set.prescriptionBlock == .warmup { return "Warm-up" }
+        switch set.prescriptionBlock {
+        case .warmup: return "Warm-up"
+        case .primer: return "Primer"
+        case .topSingle: return "Top single"
+        case .ramp: return "Ramp"
+        case .work: return "Work"
+        case .amrap: return "AMRAP"
+        case .backoff: return "Back-off"
+        case .conditioning: return "Conditioning"
+        }
+    }
+
+    private var statusIcon: String {
+        switch set.status {
+        case .completed: return "checkmark.circle.fill"
+        case .skipped: return "minus.circle"
+        case .planned: return "circle"
+        }
+    }
+
+    private var statusColor: Color {
+        self.set.status == .completed ? Theme.good : .secondary
     }
 }
 
@@ -817,6 +964,121 @@ struct ProgressionChartsView: View {
         !splitByRotation && Set(points.map(\.series)).count == 1
     }
 
+    /// X-axis selection identifies a session date. Draw every visible series
+    /// at that date so a combined weight/e1RM chart does not pretend the user
+    /// selected one of two coincident records when the gesture only selected
+    /// their shared exposure.
+    private var selectedChartPoints: [Point] {
+        guard let selectedDate,
+              let nearest = points.min(by: {
+                  abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
+              }) else { return [] }
+        return points.filter { abs($0.date.timeIntervalSince(nearest.date)) < 1 }
+    }
+
+    @ChartContentBuilder
+    private func futureBand(_ trend: Projection?) -> some ChartContent {
+        if let trend, let range = loadRange(including: trend) {
+            RectangleMark(
+                xStart: .value("Today", Date.now),
+                xEnd: .value("Horizon", trend.horizonDate),
+                yStart: .value(chartUnitLabel, range.low),
+                yEnd: .value(chartUnitLabel, range.high)
+            )
+            .foregroundStyle(Color.secondary.opacity(0.07))
+        }
+    }
+
+    @ChartContentBuilder
+    private var performedMarks: some ChartContent {
+        if showsAreaFill {
+            ForEach(points) { point in
+                AreaMark(x: .value("Date", point.date),
+                         y: .value(chartUnitLabel, point.value))
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(LinearGradient(
+                        colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.01)],
+                        startPoint: .top, endPoint: .bottom
+                    ))
+            }
+        }
+        ForEach(points) { point in
+            LineMark(x: .value("Date", point.date),
+                     y: .value(chartUnitLabel, point.value),
+                     series: .value("Series", seriesKey(point)))
+                .interpolationMethod(.monotone)
+                .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
+                .lineStyle(StrokeStyle(lineWidth: 2.25, lineCap: .round, lineJoin: .round,
+                                       dash: point.role == .complementary ? [5, 4] : []))
+            PointMark(x: .value("Date", point.date),
+                      y: .value(chartUnitLabel, point.value))
+                .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
+                .symbolSize(point.role == .complementary ? 28 : 44)
+        }
+    }
+
+    @ChartContentBuilder
+    private var peakTargetMark: some ChartContent {
+        if let peakTarget {
+            RuleMark(y: .value("Peak target", peakTarget))
+                .foregroundStyle(Theme.accent.opacity(0.8))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                .annotation(position: .top, alignment: .trailing) {
+                    Text("Peak target \(Weight.trim(peakTarget))")
+                        .font(.caption2).foregroundStyle(Theme.accent)
+                }
+        }
+    }
+
+    @ChartContentBuilder
+    private func projectionMarks(_ trend: Projection?) -> some ChartContent {
+        if let trend {
+            ForEach(trend.points) { point in
+                LineMark(x: .value("Date", point.date),
+                         y: .value(chartUnitLabel, point.value),
+                         series: .value("Series", "Projected"))
+                    .foregroundStyle(Self.projectionColor)
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [3, 5]))
+            }
+            PointMark(x: .value("Date", trend.horizonDate),
+                      y: .value(chartUnitLabel, trend.result.horizonValue))
+                .foregroundStyle(Self.projectionColor)
+                .symbolSize(36)
+                .annotation(position: .top, alignment: .trailing) {
+                    Text(chartValueLabel(trend.result.horizonValue))
+                        .font(.caption2.bold().monospacedDigit())
+                        .foregroundStyle(Self.projectionColor)
+                }
+            RuleMark(x: .value("Today", Date.now))
+                .foregroundStyle(Color.secondary.opacity(0.5))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                .annotation(position: .top, alignment: .leading) {
+                    Text("today")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+        }
+    }
+
+    @ChartContentBuilder
+    private var selectionMarks: some ChartContent {
+        if let selected = selectedChartPoints.first {
+            RuleMark(x: .value("Selected session", selected.date))
+                .foregroundStyle(Color.primary.opacity(0.22))
+                .lineStyle(StrokeStyle(lineWidth: 1))
+            ForEach(selectedChartPoints) { point in
+                PointMark(x: .value("Selected session", point.date),
+                          y: .value(chartUnitLabel, point.value))
+                    .foregroundStyle(Color(.systemBackground))
+                    .symbolSize(96)
+                PointMark(x: .value("Selected session", point.date),
+                          y: .value(chartUnitLabel, point.value))
+                    .foregroundStyle(Color.primary)
+                    .symbolSize(42)
+            }
+        }
+    }
+
     private var chartCaption: String {
         let metricLabel: String
         switch metric {
@@ -844,12 +1106,14 @@ struct ProgressionChartsView: View {
             // would otherwise strand the chart on a metric it can only draw
             // as zero. Mirrors the web picker's clamp.
             .onChange(of: selectedLift, initial: true) {
+                selectedDate = nil
                 if !availableMetrics.contains(metric) { metric = availableMetrics[0] }
             }
             Picker("Metric", selection: $metric) {
                 ForEach(availableMetrics, id: \.self) { Text($0.rawValue) }
             }
             .pickerStyle(.segmented)
+            .onChange(of: metric) { selectedDate = nil }
             Picker("Chart intent", selection: $intent) {
                 ForEach(ChartIntent.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
@@ -873,80 +1137,21 @@ struct ProgressionChartsView: View {
                     // plot: RectangleMark's x-only initializer is ambiguous
                     // between two overloads, and the load range is exactly what
                     // the shading should cover anyway.
-                    if let trend, let range = loadRange(including: trend) {
-                        RectangleMark(
-                            xStart: .value("Today", Date.now),
-                            xEnd: .value("Horizon", trend.horizonDate),
-                            yStart: .value(chartUnitLabel, range.low),
-                            yEnd: .value(chartUnitLabel, range.high)
-                        )
-                        .foregroundStyle(Color.secondary.opacity(0.07))
-                    }
+                    futureBand(trend)
                     // A wash under a lone line gives the plot depth without
                     // adding a second thing to read. Only when there IS one
                     // line — stacking translucent areas makes their overlaps
                     // look like data.
-                    if showsAreaFill {
-                        ForEach(points) { point in
-                            AreaMark(x: .value("Date", point.date),
-                                     y: .value(chartUnitLabel, point.value))
-                                .foregroundStyle(LinearGradient(
-                                    colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.01)],
-                                    startPoint: .top, endPoint: .bottom
-                                ))
-                        }
-                    }
-                    ForEach(points) { point in
-                        LineMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value),
-                                 series: .value("Series", seriesKey(point)))
-                            .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
-                            .lineStyle(StrokeStyle(lineWidth: 2,
-                                                   dash: point.role == .complementary ? [5, 4] : []))
-                        PointMark(x: .value("Date", point.date), y: .value(chartUnitLabel, point.value))
-                            .foregroundStyle(by: .value("Series", splitByRotation ? point.rotation : point.series))
-                            .symbolSize(point.role == .complementary ? 28 : 44)
-                    }
-                    if let peakTarget {
-                        RuleMark(y: .value("Peak target", peakTarget))
-                            .foregroundStyle(Theme.accent.opacity(0.8))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                            .annotation(position: .top, alignment: .trailing) {
-                                Text("Peak target \(Weight.trim(peakTarget))")
-                                    .font(.caption2).foregroundStyle(Theme.accent)
-                            }
-                    }
+                    performedMarks
+                    peakTargetMark
                     // The projection last, so it reads as an overlay on the
                     // history rather than another member of it. Its colour is
                     // set outright rather than through the foreground-style
                     // scale: joining that scale's domain would renumber every
                     // performed series' colour the moment a horizon was picked.
                     // No point marks either — there is no session to mark.
-                    if let trend {
-                        ForEach(trend.points) { point in
-                            LineMark(x: .value("Date", point.date),
-                                     y: .value(chartUnitLabel, point.value),
-                                     series: .value("Series", "Projected"))
-                                .foregroundStyle(Self.projectionColor)
-                                .lineStyle(StrokeStyle(lineWidth: 2, dash: [3, 5]))
-                        }
-                        PointMark(x: .value("Date", trend.horizonDate),
-                                  y: .value(chartUnitLabel, trend.result.horizonValue))
-                            .foregroundStyle(Self.projectionColor)
-                            .symbolSize(36)
-                            .annotation(position: .top, alignment: .trailing) {
-                                Text(chartValueLabel(trend.result.horizonValue))
-                                    .font(.caption2.bold().monospacedDigit())
-                                    .foregroundStyle(Self.projectionColor)
-                            }
-                        RuleMark(x: .value("Today", Date.now))
-                            .foregroundStyle(Color.secondary.opacity(0.5))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                            .annotation(position: .top, alignment: .leading) {
-                                Text("today")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                            }
-                    }
+                    projectionMarks(trend)
+                    selectionMarks
                 }
                 .chartForegroundStyleScale(range: splitByRotation ? Self.rotationPalette : Self.seriesPalette)
                 .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
@@ -1005,6 +1210,7 @@ struct ProgressionChartsView: View {
                     Chart(repRecords) { record in
                         LineMark(x: .value("Reps", record.reps),
                                  y: .value("Weight", displayRepWeight(record.weightLb)))
+                            .interpolationMethod(.monotone)
                             .foregroundStyle(Theme.accent)
                         PointMark(x: .value("Reps", record.reps),
                                   y: .value("Weight", displayRepWeight(record.weightLb)))

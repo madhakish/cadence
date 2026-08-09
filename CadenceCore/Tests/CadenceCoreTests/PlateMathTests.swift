@@ -328,9 +328,15 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(Plate(value: 10, unit: .kg).colorToken, "green")
         XCTAssertEqual(Plate(value: 5, unit: .kg).colorToken, "white")
         XCTAssertEqual(Plate(value: 2.5, unit: .kg).colorToken, "red")
-        XCTAssertGreaterThan(Plate(value: 45, unit: .lb).sizeFactor,
-                             Plate(value: 10, unit: .lb).sizeFactor,
-                             "bigger plate draws taller")
+        XCTAssertEqual(Plate(value: 2.5, unit: .kg).colorToken(for: .steel), "black")
+        XCTAssertEqual(Plate(value: 20, unit: .kg).diameterFactor(for: .bumper), 1)
+        XCTAssertEqual(Plate(value: 10, unit: .kg).diameterFactor(for: .bumper), 1)
+        XCTAssertGreaterThan(Plate(value: 20, unit: .kg).diameterFactor(for: .steel),
+                             Plate(value: 10, unit: .kg).diameterFactor(for: .steel),
+                             "calibrated steel diameter steps down by denomination")
+        XCTAssertGreaterThan(Plate(value: 20, unit: .kg).thicknessFactor(for: .bumper),
+                             Plate(value: 20, unit: .kg).thicknessFactor(for: .steel),
+                             "rubber bumpers consume more sleeve than calibrated steel")
     }
 
     // [INV-LOAD-STORED-NEAT]

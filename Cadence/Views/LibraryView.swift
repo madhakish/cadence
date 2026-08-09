@@ -143,14 +143,11 @@ struct ExerciseDetailView: View {
     var body: some View {
         Form {
             if let profile {
-                Section("Muscles — primary in red, supporting in blue") {
+                Section("Muscles") {
                     AnatomyFigureView(profile: profile)
-                        .frame(maxWidth: 300)
+                        .frame(maxWidth: 420)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
-                    Text(AnatomyData.blurb(profile))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
 

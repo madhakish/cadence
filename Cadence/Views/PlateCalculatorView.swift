@@ -12,6 +12,7 @@ struct PlateCalculatorView: View {
     @State private var targetText = ""
     @State private var targetUnit: WeightUnit = .lb
     @State private var bar: Bar = .bar45lb
+    @State private var plateStyle: PlateVisualStyle = .steel
     @State private var selectedGymName: String?
     // Reverse mode: counts per plate denomination on ONE side.
     @State private var reverseCounts: [String: Int] = [:]
@@ -57,6 +58,10 @@ struct PlateCalculatorView: View {
                 Picker("Bar", selection: $bar) {
                     ForEach(Bar.all) { Text($0.label).tag($0) }
                 }
+                Picker("Plate type", selection: $plateStyle) {
+                    ForEach(PlateVisualStyle.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
                 if gyms.count > 1 {
                     Picker("Gym", selection: Binding(
                         get: { gym?.name ?? "" },
@@ -108,13 +113,17 @@ struct PlateCalculatorView: View {
             // the list below (which may pick the other unit system).
             Section {
                 BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym,
-                            loadout: solution.loadout)
-                    .scaleEffect(1.6, anchor: .leading)
-                    .frame(height: 52, alignment: .leading)
+                            loadout: solution.loadout, plateStyle: plateStyle, presentation: .fullBar)
+                    .frame(height: 82)
+                Text("Same stack on both sides")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
             Section("Per side") {
                 if solution.loadout.perSide.isEmpty {
-                    Text("Bar only").font(.title2.bold())
+                    Text(solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+                        .font(.title2.bold())
                 } else {
                     ForEach(solution.loadout.perSide) { pc in
                         HStack {
@@ -192,9 +201,13 @@ struct PlateCalculatorView: View {
             VStack(alignment: .leading, spacing: 6) {
                 // Draw exactly what the user says is on the bar — never re-solve it.
                 BarbellView(weightLb: total, unit: .lb, bar: bar, gym: gym,
-                            loadout: Loadout(bar: bar, perSide: perSide, collarLb: collarLb))
-                    .scaleEffect(1.6, anchor: .leading)
-                    .frame(height: 52, alignment: .leading)
+                            loadout: Loadout(bar: bar, perSide: perSide, collarLb: collarLb),
+                            plateStyle: plateStyle, presentation: .fullBar)
+                    .frame(height: 82)
+                Text("Counts are per side and mirrored")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 Text(Weight.both(lb: total))
                     .font(.system(size: 30, weight: .heavy, design: .rounded))
                 Text("total on \(bar.label)\(collarLb > 0 ? " + collars" : "")")

@@ -11,6 +11,7 @@ export async function openPlateCalculator() {
   let mode = "target";
   let bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   let unit = C.primaryUnit(settings.unitDisplay);
+  let plateStyle = "steel";
   let targetVal = unit === "kg" ? C.kgFromLb(135) : 135;
   const counts = {}; // plateId -> count, for reverse mode
 
@@ -37,6 +38,10 @@ export async function openPlateCalculator() {
           gymSel.addEventListener("change", () => { gym = gyms.find((g) => g.name === gymSel.value); bar = C.barById(gym.defaultBarId); draw(); });
           panel.append(ui.field("Gym", gymSel));
         }
+        panel.append(ui.h("div", { class: "field" },
+          ui.h("span", { text: "Plate type" }),
+          ui.seg([{ value: "steel", label: "Steel" }, { value: "bumper", label: "Bumper" }],
+            plateStyle, (style) => { plateStyle = style; draw(); })));
 
         if (mode === "target") drawTarget(panel);
         else drawReverse(panel);
@@ -58,10 +63,12 @@ export async function openPlateCalculator() {
           // The answer, drawn: the loaded bar itself, big — the SAME solution
           // as the list below (which may pick the other unit system).
           if (targetLb > 0) {
-            out.append(ui.h("div", { class: "barbell-hero" }, barbellSVG(targetLb, unit, bar, gym, sol).svg));
+            out.append(ui.h("div", { class: "barbell-hero full" },
+              barbellSVG(targetLb, unit, bar, gym, sol, null, "full", plateStyle).svg,
+              ui.h("div", { class: "sub centered", text: "Same stack on both sides" })));
           }
           out.append(ui.h("div", { class: "section-title", text: "Per side" }));
-          if (!sol.perSide.length) out.append(ui.h("div", { class: "big", text: "Bar only" }));
+          if (!sol.perSide.length) out.append(ui.h("div", { class: "big", text: sol.collarLb > 0 ? "Bar + collars" : "Bar only" }));
           for (const pc of sol.perSide) {
             out.append(ui.h("div", { class: "row" },
               ui.h("span", { class: "title" + (pc.plate.unit === "kg" ? " accent" : ""), text: C.plateLabel(pc.plate) }),
@@ -94,7 +101,8 @@ export async function openPlateCalculator() {
           const totalLb = C.totalOnBar(bar, perSide, collarLb);
           // Draw exactly what the user says is on the bar — never re-solve it.
           ui.clear(hero);
-          hero.append(barbellSVG(totalLb, "lb", bar, gym, { perSide, totalLb, collarLb }).svg);
+          hero.append(barbellSVG(totalLb, "lb", bar, gym, { perSide, totalLb, collarLb }, null, "full", plateStyle).svg,
+            ui.h("div", { class: "sub centered", text: "Counts are per side and mirrored" }));
           total.textContent = C.both(totalLb);
           sub.textContent = `total on ${C.barLabel(bar)}${collarLb ? ` + ${C.trim(collarLb)} lb collars` : ""}`;
         };

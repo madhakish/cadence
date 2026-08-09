@@ -1,7 +1,7 @@
 // History — session log (grouped by month), progression charts, milestones.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { lineChart, multiLineChart, progressionChart, ROTATION_COLORS, ROLE_DASH } from "../charts.js";
+import { lineChart, multiLineChart, progressionChart, smoothLinePath, ROTATION_COLORS, ROLE_DASH } from "../charts.js";
 import { Sessions, Milestones, Exercises, Programs, Checkins, topSet, workingVolume } from "../db.js";
 import { coachingReport } from "../coaching-adapter.js";
 
@@ -85,6 +85,50 @@ function setLabel(s) { return s.weightLb === 0 ? "BW" : ui.fmtWeight(s.weightLb)
 // even if the library entry is gone).
 const isCardioSet = (s) => s.distanceMiles > 0 || s.flights > 0 || s.durationSeconds > 0;
 
+const isStrengthEntry = (entry, exercise) => {
+  if (exercise?.type) return exercise.type !== "conditioning" && exercise.type !== "timed";
+  return !(entry.sets || []).some(isCardioSet);
+};
+
+export const completedStrengthSetCountForTest = (session, exerciseByName) =>
+  (session.exercises || []).reduce((count, entry) => {
+    if (!isStrengthEntry(entry, exerciseByName.get(entry.exerciseName))) return count;
+    return count + (entry.sets || []).filter((set) => !set.isWarmup && set.status === "completed").length;
+  }, 0);
+
+const historySetKind = (set) => {
+  if (set.isWarmup || set.prescriptionBlock === "warmup") return "Warm-up";
+  return ({ primer: "Primer", topSingle: "Top single", ramp: "Ramp", work: "Work",
+    amrap: "AMRAP", backoff: "Back-off", conditioning: "Conditioning" })[set.prescriptionBlock] || "Work";
+};
+
+/// The completed row keeps actual work first and shows the original plan only
+/// when the lifter changed it. Historical rows without plan snapshots remain
+/// exactly as terse as they were before snapshots existed.
+export const historySetPresentationForTest = (set, exerciseType = null) => {
+  const cardio = exerciseType === "conditioning" || (exerciseType == null && isCardioSet(set));
+  const timed = exerciseType === "timed";
+  const performed = cardio
+    ? C.cardioSetLabel(set.distanceMiles, set.durationSeconds, set.inclinePercent, set.weightLb, set.flights)
+    : timed ? C.cardioDurationLabel(set.durationSeconds || 0)
+      : `${setLabel(set)} × ${set.reps}${set.isPerSide ? "/side" : ""}`;
+  const state = set.status || "completed";
+  const actual = state === "completed" ? performed
+    : `${state === "skipped" ? "Skipped" : "Not performed"} · ${performed}`;
+  let planned = null;
+  if (timed && Number.isFinite(set.plannedDurationSeconds)
+      && set.plannedDurationSeconds !== set.durationSeconds) {
+    planned = `Planned ${C.cardioDurationLabel(set.plannedDurationSeconds)}`;
+  } else if (!cardio && !timed) {
+    const plannedWeight = Number.isFinite(set.plannedWeightLb) ? set.plannedWeightLb : set.weightLb;
+    const plannedReps = Number.isFinite(set.plannedReps) ? set.plannedReps : set.reps;
+    if (Math.abs(plannedWeight - set.weightLb) > 0.001 || plannedReps !== set.reps) {
+      planned = `Planned ${plannedWeight === 0 ? "BW" : ui.fmtWeight(plannedWeight)} × ${plannedReps}${set.prescriptionBlock === "amrap" ? "+" : ""}${set.isPerSide ? "/side" : ""}`;
+    }
+  }
+  return { actual, planned, kind: historySetKind(set), state };
+};
+
 function renderLog(panel, sessions, exercises) {
   if (!sessions.length) { panel.append(ui.empty("📋", COPY.emptyHistory)); return; }
   const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
@@ -120,21 +164,54 @@ function openDetail(s, exerciseByName) {
   ui.pushScreen({
     title: ui.fmtDate(s.date),
     build: (body) => {
+      const completedStrengthSets = completedStrengthSetCountForTest(s, exerciseByName);
+      const volume = (s.exercises || []).reduce((sum, entry) => sum + workingVolume(entry), 0);
+      const elapsedMinutes = s.completedAt
+        ? Math.floor((Date.parse(s.completedAt) - Date.parse(s.date)) / 60000) : 0;
+      const duration = elapsedMinutes > 0 && elapsedMinutes < 24 * 60
+        ? (elapsedMinutes >= 60 ? `${Math.floor(elapsedMinutes / 60)}h ${elapsedMinutes % 60}m` : `${elapsedMinutes}m`)
+        : null;
+      const identity = s.programTag?.programName || "Standalone";
+      const summary = ui.h("div", { class: "card" },
+        ui.h("div", { class: "row", style: { paddingTop: "0" } },
+          ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: identity }),
+            ui.h("span", { class: "sub", text: [ui.fmtDate(s.date), s.gymName].filter(Boolean).join(" · ") }))),
+        ui.h("div", { class: "session-summary" },
+          ui.h("div", { class: "session-stat" }, ui.h("strong", { class: "mono", text: String(completedStrengthSets) }), ui.h("span", { text: "work sets" })),
+          ui.h("div", { class: "session-stat" }, ui.h("strong", { class: "mono", text: volume > 0 ? ui.fmtWeight(volume) : "—" }), ui.h("span", { text: "volume" })),
+          duration ? ui.h("div", { class: "session-stat" }, ui.h("strong", { class: "mono", text: duration }), ui.h("span", { text: "duration" })) : null));
+      body.append(summary);
       if (s.notes) body.append(ui.h("div", { class: "card" }, ui.h("span", { class: "sub", text: s.notes })));
       for (const e of s.exercises || []) {
+        const exercise = exerciseByName.get(e.exerciseName);
         const phaseLabel = ui.sessionPhaseLabel(e, exerciseByName.get(e.exerciseName));
+        const working = (e.sets || []).filter((set) => !set.isWarmup && set.status === "completed");
+        const top = topSet(e);
+        const volume = workingVolume(e);
+        const setName = isStrengthEntry(e, exercise) ? "work set" : "completed set";
+        const summaryBits = [`${working.length} ${setName}${working.length === 1 ? "" : "s"}`];
+        if (top && exercise?.type !== "conditioning" && exercise?.type !== "timed") {
+          summaryBits.push(`top ${top.weightLb === 0 ? "BW" : ui.fmtWeight(top.weightLb)}×${top.reps}`);
+        }
+        if (volume > 0) summaryBits.push(`${ui.fmtWeight(volume)} volume`);
         const card = ui.h("div", { class: "card" },
-          ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
-            ui.h("span", { class: "title", text: e.exerciseName }),
+          ui.h("div", { class: "row", style: { paddingTop: "0" } },
+            ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: e.exerciseName }),
+              ui.h("span", { class: "sub", text: summaryBits.join(" · ") })),
             phaseLabel ? ui.h("span", { class: "pill accent", text: phaseLabel }) : null));
         for (const x of e.sets || []) {
-          card.append(ui.h("div", { class: "setrow" },
-            ui.h("span", { class: "wt mono" + (x.isWarmup ? " muted" : ""),
-              text: isCardioSet(x) ? C.cardioSetLabel(x.distanceMiles, x.durationSeconds, x.inclinePercent, x.weightLb, x.flights) : setLabel(x) }),
-            isCardioSet(x) ? null : ui.h("span", { class: "sub mono", text: `× ${x.reps}${x.isPerSide ? "/side" : ""}` }),
-            x.isWarmup ? ui.h("span", { class: "pill", text: "warmup" }) : null,
+          const shown = historySetPresentationForTest(x, exercise?.type);
+          const tags = ui.h("div", { class: "history-set-tags" },
             (x.flags || []).length ? ui.h("span", { class: "pill warn", text: x.flags.join(", ") }) : null,
-            x.bodyFlagSite ? ui.h("span", { class: "pill hard", text: x.bodyFlagSite + (x.bodyFlagNote ? ` — ${x.bodyFlagNote}` : "") }) : null));
+            x.bodyFlagSite ? ui.h("span", { class: "pill hard", text: x.bodyFlagSite + (x.bodyFlagNote ? ` — ${x.bodyFlagNote}` : "") }) : null);
+          card.append(ui.h("div", { class: `history-set state-${shown.state}${x.isWarmup ? " warm" : ""}` },
+            ui.h("span", { class: "history-set-state", "aria-hidden": "true",
+              text: shown.state === "completed" ? "✓" : shown.state === "skipped" ? "—" : "○" }),
+            ui.h("div", { class: "history-set-main" },
+              ui.h("span", { class: "title mono", text: shown.actual }),
+              shown.planned ? ui.h("span", { class: "sub mono", text: shown.planned }) : null,
+              tags.childElementCount ? tags : null),
+            ui.h("span", { class: "history-set-kind", text: shown.kind })));
         }
         if (e.notes) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: e.notes }));
         body.append(card);
@@ -444,7 +521,7 @@ function repCurve(records) {
     return node;
   };
   svg.append(element("line", { class: "axis", x1: left, y1: H - bottom, x2: W - right, y2: H - bottom }));
-  const path = records.map(([rep], index) => `${index ? "L" : "M"}${x(rep).toFixed(1)} ${y(weights[index]).toFixed(1)}`).join(" ");
+  const path = smoothLinePath(records.map(([rep], index) => [x(rep), y(weights[index])]));
   svg.append(element("path", { class: "line", d: path }));
   records.forEach(([rep], index) => svg.append(element("circle", { class: "dot", cx: x(rep), cy: y(weights[index]), r: 3 })));
   svg.append(element("text", { class: "lbl", x: left, y: H - 7 }, `${minRep} reps`));

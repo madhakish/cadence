@@ -168,9 +168,9 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 
 /* charts */
 .chart { width: 100%; height: auto; display: block; }
-.chart .axis { stroke: var(--line); stroke-width: 1; }
-.chart .line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
-.chart .dot { fill: var(--accent); }
+.chart .axis { stroke: var(--line); stroke-width: .75; vector-effect: non-scaling-stroke; }
+.chart .line { fill: none; stroke: var(--accent); stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.chart .dot { fill: var(--accent); stroke: var(--card); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart .lbl { fill: var(--muted); font-size: 10px; }
 .chart .ann { fill: var(--text); font-size: 9px; }
 /* Volume bars sit behind the load lines on their own right-hand scale. */
@@ -185,6 +185,10 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .chart .now-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; opacity: .7; }
 .chart .now-lbl { fill: var(--muted); font-size: 9px; letter-spacing: .04em; }
 .chart .future { fill: var(--muted); opacity: .05; }
+.chart .chart-hit { cursor: pointer; pointer-events: all; }
+.chart .chart-hit:focus-visible { stroke: var(--accent); stroke-width: 2; }
+.chart .selection-line { stroke: var(--text); stroke-width: 1; opacity: .25; pointer-events: none; }
+.chart .selection-halo { fill: var(--card); stroke: var(--text); stroke-width: 1.5; pointer-events: none; }
 
 /* rest timer bar */
 .rest-bar { background: var(--card); border-radius: 14px; padding: 12px 16px; margin: 8px 0; position: sticky; top: calc(var(--safe-top) + 52px); z-index: 8; }
@@ -241,6 +245,18 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .rotation-cell { min-width: 64px; min-height: 64px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; }
 .chart-selection { padding: 8px 4px; min-height: 32px; }
 .rep-curve { height: 150px; }
+.session-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 10px; }
+.session-stat { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.session-stat strong { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-stat span { color: var(--muted); font-size: 11px; }
+.history-set { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.history-set:last-child { border-bottom: 0; }
+.history-set-state { color: var(--good); font-weight: 800; padding-top: 1px; }
+.history-set.state-skipped .history-set-state, .history-set.state-planned .history-set-state { color: var(--muted); }
+.history-set-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.history-set.warm .history-set-main > .title { color: var(--muted); font-weight: 600; }
+.history-set-tags { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 3px; }
+.history-set-kind { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .035em; padding-top: 2px; }
 
 /* rotation-position glyph: equal ticks, current rotation lit. Deliberately not
    a rising wave — the counter is shared by slots whose prescriptions have
@@ -270,9 +286,52 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .barbell-wrap .plate-detail { flex-basis: 100%; }
 svg.barbell { height: 36px; max-width: 100%; }
 svg.dumbbell { height: 36px; max-width: 100%; }
-.barbell-hero { padding: 10px 0 4px; }
-.barbell-hero svg.barbell { height: 54px; }
+.barbell-shadow { fill: #000; opacity: .14; }
+.barbell-knurl { stroke: #202225; stroke-width: .45; opacity: .45; vector-effect: non-scaling-stroke; }
+.barbell-plate, .barbell-plate-face, .barbell-plate-rim, .barbell-plate-recess,
+.barbell-plate-hub, .barbell-lock-collar { vector-effect: non-scaling-stroke; }
+.barbell-plate-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.barbell-hero { padding: 12px 0 4px; }
+.barbell-hero svg.barbell { height: 68px; }
+.barbell-hero.full svg.barbell { width: 100%; height: auto; }
+.centered { text-align: center; }
 select.bar-select { width: auto; min-width: 96px; padding: 6px 8px; font-size: 13px; }
+
+/* exercise anatomy: the figure carries the spatial answer; the key names the
+   exact groups so the meaning never depends on colour recognition alone */
+.anatomy-card { text-align: center; padding: 14px; }
+.anatomy-card .section-title { margin-top: 2px; text-align: left; }
+svg.anatomy { width: 100%; max-width: 430px; color: var(--text); overflow: visible; }
+.anatomy-figure-panel {
+  -webkit-mask-image: radial-gradient(ellipse closest-side, #000 94%, rgba(0, 0, 0, .72) 97%, transparent 100%);
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-image: radial-gradient(ellipse closest-side, #000 94%, rgba(0, 0, 0, .72) 97%, transparent 100%);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+}
+.anatomy-reference { opacity: 1; }
+.anatomy-highlight-layer { filter: blur(2.1px); }
+.anatomy-region.primary, .anatomy-region.supporting { stroke-width: .65; mix-blend-mode: multiply; }
+.anatomy-region-mask { pointer-events: none; mix-blend-mode: multiply; }
+.anatomy-region-mask.primary {
+  opacity: .50;
+  filter: invert(37%) sepia(70%) saturate(1876%) hue-rotate(335deg) brightness(95%) contrast(84%) blur(1.8px);
+}
+.anatomy-region-mask.supporting {
+  opacity: .32;
+  filter: invert(47%) sepia(74%) saturate(1135%) hue-rotate(180deg) brightness(88%) contrast(91%) blur(1.8px);
+}
+.anatomy-view-label { fill: var(--muted); font-size: 10px; letter-spacing: .04em; }
+.anatomy-legend { display: grid; gap: 6px; margin-top: 8px; text-align: left; }
+.muscle-key { display: grid; grid-template-columns: 10px auto 1fr; align-items: baseline; gap: 6px; font-size: 13px; }
+.muscle-key i { width: 8px; height: 8px; border-radius: 50%; }
+.muscle-key.primary i { background: #e0453a; }
+.muscle-key.supporting i { background: #3a7bd5; }
+.muscle-key strong { font-size: 13px; }
+.muscle-key span { color: var(--muted); }
 
 /* service-worker update prompt */
 #update-banner {

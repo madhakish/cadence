@@ -955,7 +955,13 @@ eq(C.plateColorToken({ value: 15, unit: "kg" }), "yellow", "15 kg yellow (IWF)")
 eq(C.plateColorToken({ value: 10, unit: "kg" }), "green", "10 kg green (IWF)");
 eq(C.plateColorToken({ value: 5, unit: "kg" }), "white", "5 kg white (IWF)");
 eq(C.plateColorToken({ value: 2.5, unit: "kg" }), "red", "2.5 kg red change plate");
-ok(C.plateSizeFactor({ value: 45, unit: "lb" }) > C.plateSizeFactor({ value: 10, unit: "lb" }), "bigger plate draws taller");
+eq(C.plateColorToken({ value: 2.5, unit: "kg" }, "steel"), "black", "2.5 kg calibrated steel is not an IWF red change plate");
+eq(C.plateDiameterFactor({ value: 20, unit: "kg" }, "bumper"), 1, "20 kg bumper uses the 450 mm diameter");
+eq(C.plateDiameterFactor({ value: 10, unit: "kg" }, "bumper"), 1, "10 kg bumper uses the 450 mm diameter");
+ok(C.plateDiameterFactor({ value: 20, unit: "kg" }, "steel") > C.plateDiameterFactor({ value: 10, unit: "kg" }, "steel"),
+  "calibrated steel diameter steps down by denomination");
+ok(C.plateThicknessFactor({ value: 20, unit: "kg" }, "bumper") > C.plateThicknessFactor({ value: 20, unit: "kg" }, "steel"),
+  "rubber bumpers consume more sleeve than calibrated steel");
 
 // ---- bar list + id parity (mirrors PlateMathTests.testBarListMatchesWeb) ----
 eq(C.ALL_BARS.map(C.barId).join(","), "45-lb,35-lb,20-kg,15-kg", "bar list matches Swift Bar.all");

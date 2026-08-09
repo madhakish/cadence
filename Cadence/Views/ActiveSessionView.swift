@@ -747,7 +747,8 @@ private struct ExerciseSection: View {
                         BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
                                     bar: effectiveBar, gym: gym,
                                     targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                    stationDenomination: entry.exercise?.stationDenomination)
+                                    stationDenomination: entry.exercise?.stationDenomination,
+                                    plateStyle: entry.exercise?.movementGroup == "olympic" ? .bumper : .steel)
                     } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
@@ -1616,7 +1617,8 @@ private struct SetDetailSheet: View {
 
                     if isBarbell && lb > 0 {
                         BarbellView(weightLb: lb, unit: unit, bar: bar, gym: gym,
-                                    stationDenomination: exercise?.stationDenomination)
+                                    stationDenomination: exercise?.stationDenomination,
+                                    plateStyle: exercise?.movementGroup == "olympic" ? .bumper : .steel)
                             .frame(maxWidth: .infinity, alignment: .center)
                     } else if exercise?.type == .dumbbell && lb > 0 {
                         DumbbellView(weightLb: lb, unit: unit)
