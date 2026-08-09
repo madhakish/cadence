@@ -137,16 +137,23 @@ public enum ProgramTemplateData {
             tagline: "4 days · barbell strength · completion-based A/B wave",
             focus: "strength", roundingLb: 5,
             exercises: [
+                TemplateExercise("Pull-ups", "Main", "bodyweight", "pull", rest: 120),
                 TemplateExercise("Back Extension", "Accessory", "bodyweight", "hinge"),
                 TemplateExercise("Hanging Knee Raise", "Accessory", "bodyweight", "core"),
             ],
             // The upper days alternate the two presses (A: overhead emphasis,
             // B: incline emphasis); each day's accessories support THAT press,
-            // and every day carries core work.
+            // and every day carries core work. Both upper days train the
+            // vertical pull as PROGRAMMED lift work — pull-ups on a rep window
+            // that earns load at the top (double progression into weighted
+            // pull-ups) — never as an accessory buried under the press:
+            // pulling is main work (issue #126).
             days: [
                 TemplateDay("Upper A",
                             lifts: [TemplateLift("Overhead Press", "main", 65, 95),
-                                    TemplateLift("Incline DB Press", "complementary", 50, 80)],
+                                    TemplateLift("Incline DB Press", "complementary", 50, 80),
+                                    TemplateLift("Pull-ups", "complementary", 0, 0,
+                                                 prescription: "doubleProgression", sets: 3)],
                             accessories: [TemplateAccessory("DB Overhead Triceps Extension", 3, 8, 12, weightLb: 20, incrementLb: 5),
                                           TemplateAccessory("Y-T-W Raises", 3, 10, 15, weightLb: 10, incrementLb: 2.5),
                                           TemplateAccessory("GHD Sit-up", 3, 8, 15)]),
@@ -157,7 +164,9 @@ public enum ProgramTemplateData {
                                           TemplateAccessory("Hanging Knee Raise", 3, 8, 15)]),
                 TemplateDay("Upper B",
                             lifts: [TemplateLift("Incline DB Press", "main", 50, 80),
-                                    TemplateLift("Overhead Press", "complementary", 65, 95)],
+                                    TemplateLift("Overhead Press", "complementary", 65, 95),
+                                    TemplateLift("Pull-ups", "complementary", 0, 0,
+                                                 prescription: "doubleProgression", sets: 3)],
                             accessories: [TemplateAccessory("Dips", 3, 5, 12),
                                           TemplateAccessory("Band Pull-aparts", 3, 15, 25),
                                           TemplateAccessory("Hanging Knee Raise", 3, 8, 15)]),
@@ -174,7 +183,10 @@ public enum ProgramTemplateData {
             tagline: "3 days · snatch, clean & jerk, strength base",
             focus: "strength", roundingLb: 5,
             exercises: [
-                TemplateExercise("Pull-ups", "Accessory", "bodyweight", "pull", rest: 120),
+                // Category mirrors the seed: vertical pulls are Main work
+                // (issue #126). Instantiation never overwrites an existing
+                // record; this only shapes an install missing the seed record.
+                TemplateExercise("Pull-ups", "Main", "bodyweight", "pull", rest: 120),
                 TemplateExercise("Back Extension", "Accessory", "bodyweight", "hinge"),
                 TemplateExercise("Hanging Knee Raise", "Accessory", "bodyweight", "core"),
             ],

@@ -7,6 +7,14 @@
     "roundingLb": 5,
     "exercises": [
       {
+        "name": "Pull-ups",
+        "category": "Main",
+        "type": "bodyweight",
+        "group": "pull",
+        "isUnilateral": false,
+        "rest": 120
+      },
+      {
         "name": "Back Extension",
         "category": "Accessory",
         "type": "bodyweight",
@@ -43,6 +51,15 @@
             "estimatedMaxLb": 80,
             "prescription": "automatic",
             "sets": 0,
+            "startFraction": 0
+          },
+          {
+            "exercise": "Pull-ups",
+            "role": "complementary",
+            "baseWeightLb": 0,
+            "estimatedMaxLb": 0,
+            "prescription": "doubleProgression",
+            "sets": 3,
             "startFraction": 0
           }
         ],
@@ -139,6 +156,15 @@
             "prescription": "automatic",
             "sets": 0,
             "startFraction": 0
+          },
+          {
+            "exercise": "Pull-ups",
+            "role": "complementary",
+            "baseWeightLb": 0,
+            "estimatedMaxLb": 0,
+            "prescription": "doubleProgression",
+            "sets": 3,
+            "startFraction": 0
           }
         ],
         "accessories": [
@@ -225,7 +251,7 @@
     "exercises": [
       {
         "name": "Pull-ups",
-        "category": "Accessory",
+        "category": "Main",
         "type": "bodyweight",
         "group": "pull",
         "isUnilateral": false,

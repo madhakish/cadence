@@ -379,7 +379,14 @@ export async function programEditor(p) {
     for (const day of p.days || []) {
       if (!(day.lifts || []).some((lift) => lift.role === "main")) warnings.push(`${day.name} has no main lift.`);
       for (const lift of day.lifts || []) {
-        if (!(lift.baseWeightLb > 0)) warnings.push(`${lift.exerciseName} needs a rotation-1 base weight.`);
+        // A bodyweight lift's base IS zero — pull-ups start unloaded by
+        // design, so the missing-base warning would fire forever on a slot
+        // that is configured exactly right.
+        const liftExercise = exerciseByName.get(lift.exerciseName);
+        if (!(lift.baseWeightLb > 0)
+          && (!liftExercise || C.resolvedLoadBasis(liftExercise) !== "bodyweight")) {
+          warnings.push(`${lift.exerciseName} needs a rotation-1 base weight.`);
+        }
         if (lift.estimatedMaxLb > 0 && lift.baseWeightLb > lift.estimatedMaxLb) warnings.push(`${lift.exerciseName}'s base is above its estimated 1RM.`);
         else {
           const ceiling = C.focusParams(p.focus).tm;

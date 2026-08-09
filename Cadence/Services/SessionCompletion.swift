@@ -787,7 +787,12 @@ enum SessionCompletion {
                 maxReps: max(lift.minimumReps, lift.maximumReps),
                 currentReps: max(lift.minimumReps, lift.currentReps),
                 weightLb: lift.baseWeightLb,
-                incrementLb: loadStep,
+                // A bodyweight-basis slot progresses by reps alone — its
+                // identity carries no external load, so a numeric increment
+                // would store weight that history, tonnage, and PR detection
+                // all ignore. Adding a belt is switching to the weighted
+                // identity (Weighted Pull-up), not incrementing this one.
+                incrementLb: entry.exercise?.loadBasis == .bodyweight ? 0 : loadStep,
                 stallCount: lift.stallCount
             )
             let next = ProgramProgression.advanceAccessory(
