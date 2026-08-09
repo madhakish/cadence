@@ -367,7 +367,7 @@ authoritative compiler for SwiftUI/SwiftData changes. Do not claim native
 validation for a PR until the unsigned-device build (which carries the Darwin
 unit tests) and, when persistence changed, the macOS migration test have
 completed successfully; the simulator release artifact is built on `main`
-before any release.
+before a release is published.
 
 ## CI and releases
 
@@ -380,20 +380,30 @@ Pull requests always run Linux CadenceCore tests (with the app-target parse
 gate), web parity/runtime tests, and the stable `App build (macOS)` aggregate
 check. Native validation is change-aware behind that aggregate:
 
-- repository hygiene, shell/JavaScript syntax, and CI topology contracts must
-  pass before either portable suite starts;
+- repository hygiene, shell/JavaScript/Ruby/workflow syntax, and CI topology
+  contracts must pass before either portable suite starts;
 - the macOS jobs start only after the Linux core and web suites pass, so a
   red fast test costs zero macOS runner minutes;
 - the unsigned-device build (Darwin unit tests + production-SDK Release
   compile) runs for native, shared-core, project, or CI-workflow changes;
-- the iOS Simulator artifact is built on `main`, where the GitHub release
-  consumes it, and still gates release through the aggregate;
+- the same pinned conventional-commit analyzer used by semantic-release plans
+  release artifacts after the fast suites; a pending release builds the
+  simulator download and one signed App Store IPA, while non-release and
+  already-tagged commits build neither;
+- the signed IPA is checksummed, version/bundle/signature verified, retained as
+  an immutable workflow artifact, and promoted byte-for-byte to both the GitHub
+  release and TestFlight; publisher jobs must never call a build lane;
+- the stable aggregate directly requires both portable suites, so a skipped
+  native tier can never hide a core or web failure;
 - docs/web-only changes do not consume macOS runners; and
 - the real shipped-store migration suite runs for persistence-affecting paths
   only. Its generic historical stores are cached by immutable shipped lineage,
   but a cache miss must regenerate them from the actually shipped apps.
 
-New commits cancel stale device and migration jobs for the same pull request.
+New commits cancel the entire stale workflow for the same pull request. Main
+and manually dispatched production runs remain serialized and are never
+cancelled by a newer run. Every job has an explicit timeout so a hung toolchain
+cannot consume the platform's six-hour default.
 Do not remove the fast-test dependencies or restore both iOS builds on pull
 requests: recent failures proved they reported the same compiler error, while a
 doomed build kept running minutes after CadenceCore had failed. If PRs compile
@@ -404,13 +414,15 @@ Seeder, migration test, project definition, or shipped-store generator can
 affect compatibility, `.github/scripts/classify-ci-paths.sh` must classify it
 as a migration change and its classifier tests must be updated.
 
-Green pushes to `main` run semantic-release. An exact release tag on the main
-commit is the handoff to signed TestFlight publishing, including after a retry
-where semantic-release already created the tag. GitHub release-binary uploads
-run independently with retries and must never suppress TestFlight.
-`workflow_dispatch` with `force_testflight=true` remains the explicit recovery
-path for re-uploading the latest tag. Web deploys reuse the CI web-test result;
-`pages.yml` is manual recovery only. See `docs/TESTFLIGHT.md`; do not weaken
+Green pushes to `main` run semantic-release only after the signed artifact is
+sealed. The release tag is the handoff to promotion, not permission to rebuild.
+GitHub release uploads run independently with retries and must never suppress
+TestFlight. `workflow_dispatch` with `force_testflight=true` re-downloads the
+latest release's signed IPA and checksum and promotes those exact bytes. Web
+deploys reuse the CI web-test result. `verify_signed_artifact=true` is the
+non-publishing proof path for signing/Fastlane changes and builds only the
+signed IPA. `pages.yml` is manual recovery only. See `docs/TESTFLIGHT.md`; do
+not weaken
 signing, migration, or secret controls to make CI convenient.
 
 ## Code and repository hygiene

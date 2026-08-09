@@ -76,7 +76,7 @@ for (const [label, body] of [
 
 const workflow = await readFile(new URL("../workflows/ci.yml", import.meta.url), "utf8");
 const workflowConcurrency = workflow.match(/\nconcurrency:\n(?<block>[\s\S]*?)\n\n# Default every job/)?.groups?.block;
-const releaseJob = workflow.match(/\n  release:\n(?<job>[\s\S]*?)\n  # GitHub release binaries/)?.groups?.job;
+const releaseJob = workflow.match(/\n  release:\n(?<job>[\s\S]*?)\n  # GitHub and TestFlight/)?.groups?.job;
 const releaseAssetsJob = workflow.match(/\n  release-assets:\n(?<job>[\s\S]*?)\n  testflight:\n/)?.groups?.job;
 const testflightJob = workflow.match(/\n  testflight:\n(?<job>[\s\S]*?)\n  deploy-web:\n/)?.groups?.job;
 const releaseConfig = JSON.parse(
@@ -87,8 +87,10 @@ const githubPlugin = releaseConfig.plugins.find(([name]) => name === "@semantic-
 assert.ok(workflowConcurrency, "Expected ci.yml to define workflow concurrency");
 assert.match(workflowConcurrency, /'cadence-production-release'/);
 assert.match(workflowConcurrency, /format\('ci-pr-\{0\}-\{1\}'/);
+assert.match(workflowConcurrency, /github\.run_id/);
+assert.doesNotMatch(workflowConcurrency, /cancel-in-progress:/);
 assert.match(workflowConcurrency, /queue: max/);
-assert.doesNotMatch(workflowConcurrency, /cancel-in-progress/);
+assert.match(workflow, /bash \.github\/scripts\/cancel-stale-pr-runs\.sh/);
 assert.ok(releaseJob, "Expected ci.yml to define release before release-assets");
 assert.match(releaseJob, /concurrency:\n\s+group: semantic-release\n\s+queue: max/);
 assert.match(releaseJob, /if: >-\n\s+always\(\) &&/);
@@ -96,6 +98,7 @@ assert.match(releaseJob, /needs\.core-tests\.result == 'success'/);
 assert.match(releaseJob, /needs\.web-tests\.result == 'success'/);
 assert.match(releaseJob, /needs\.app-build\.result == 'success'/);
 assert.match(releaseJob, /github\.ref == 'refs\/heads\/main'/);
+assert.match(releaseJob, /!\(github\.event_name == 'workflow_dispatch' && inputs\.verify_signed_artifact\)/);
 assert.match(releaseJob, /fetch-depth: 0\n\s+fetch-tags: true/);
 assert.match(releaseJob, /id: semantic-release-command\n\s+continue-on-error: true/);
 assert.match(releaseJob, /id: release-state\n\s+if: always\(\)/);
@@ -111,9 +114,11 @@ assert.equal(githubPlugin?.[1]?.assets, undefined, "GitHub asset uploads must no
 assert.ok(releaseAssetsJob, "Expected a separate GitHub release-assets job");
 assert.match(releaseAssetsJob, /if: >-\n\s+always\(\) &&\n\s+!cancelled\(\) &&/);
 assert.match(releaseAssetsJob, /needs\.release\.outputs\.published == 'true'/);
+assert.match(releaseAssetsJob, /needs\.web-tests\.outputs\.release-artifact-source == 'build'/);
 assert.match(releaseAssetsJob, /for attempt in 1 2 3 4 5/);
 assert.match(releaseAssetsJob, /GH_REPO: \$\{\{ github\.repository \}\}/);
 assert.match(releaseAssetsJob, /gh release upload/);
+assert.match(releaseAssetsJob, /name: Cadence-store/);
 assert.ok(testflightJob, "Expected ci.yml to define testflight before deploy-web");
 assert.doesNotMatch(testflightJob, /TESTFLIGHT_ENABLED/);
 assert.doesNotMatch(testflightJob, /needs\.release\.result == 'success'/);
@@ -121,5 +126,9 @@ assert.match(testflightJob, /if: >-\n\s+always\(\) &&\n\s+!cancelled\(\) &&/);
 assert.match(testflightJob, /needs\.release\.outputs\.published == 'true'/);
 assert.doesNotMatch(testflightJob, /needs:.*release-assets/);
 assert.match(testflightJob, /fetch-depth: 0\n\s+fetch-tags: true/);
+assert.match(testflightJob, /bundle exec fastlane upload_beta/);
+assert.match(testflightJob, /bash \.github\/scripts\/verify-release-artifact\.sh/);
+assert.doesNotMatch(testflightJob, /bundle exec fastlane build_beta/);
+assert.doesNotMatch(testflightJob, /bundle exec fastlane beta/);
 
-console.log(`${cases.length + 43} semantic-release contract assertions passed`);
+console.log(`${cases.length + 50} semantic-release contract assertions passed`);

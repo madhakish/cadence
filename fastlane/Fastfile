@@ -1,48 +1,43 @@
 default_platform(:ios)
 
-# Fully headless build → sign → TestFlight. Runs only on the macOS CI runner.
-# All credentials come from env (GitHub Actions secrets/vars); nothing
-# interactive, no Apple ID password, no 2FA.
+# Fully headless signing and TestFlight promotion. CI deliberately separates
+# build_beta from upload_beta: the signed IPA is sealed as a workflow artifact,
+# then every publisher consumes those exact bytes. No upload lane may compile.
 
 APP_ID = ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence"
 # The Live Activity ships in an embedded widget extension with its own App ID,
-# which needs its own distribution profile or the archive won't sign.
+# which needs its own distribution profile or the archive will not sign.
 WIDGET_ID = "#{APP_ID}.Widgets"
+ARTIFACT_DIR = File.expand_path(ENV["ARTIFACT_DIR"] || "../dist", __dir__)
+ARTIFACT_NAME = "Cadence-store.ipa"
+
+def cadence_api_key
+  app_store_connect_api_key(
+    key_id: ENV["ASC_KEY_ID"],
+    issuer_id: ENV["ASC_ISSUER_ID"],
+    key_content: ENV["ASC_KEY_CONTENT"], # base64 of the .p8 (robust for multiline secrets)
+    is_key_content_base64: true
+  )
+end
 
 platform :ios do
-  desc "Build a Release archive and upload it to TestFlight"
-  lane :beta do
+  desc "Build and sign the immutable Release IPA without uploading it"
+  lane :build_beta do
     # Create + unlock a temporary CI keychain so `match` imports the distribution
     # cert somewhere `codesign` can use non-interactively. Without this, match
-    # lands the cert in the locked login keychain and codesign blocks forever on a
-    # keychain-access GUI prompt — the headless macOS-runner build hangs at the
-    # "Signing …" step (observed: a 59-min stall on an orphaned codesign process).
+    # lands the cert in the locked login keychain and codesign can hang waiting
+    # for a GUI prompt on the headless runner.
     setup_ci
-
-    api_key = app_store_connect_api_key(
-      key_id: ENV["ASC_KEY_ID"],
-      issuer_id: ENV["ASC_ISSUER_ID"],
-      key_content: ENV["ASC_KEY_CONTENT"], # base64 of the .p8 (robust for multiline secrets)
-      is_key_content_base64: true
-    )
+    api_key = cadence_api_key
 
     # Generate Cadence.xcodeproj from the XcodeGen spec (gitignored in repo).
     sh("cd .. && xcodegen generate")
 
-    # NOTE: the App ID (com.madhakish.Cadence, with HealthKit enabled) and the
-    # App Store Connect app record are created once by hand — see docs/TESTFLIGHT.md.
-    # That's more reliable than headless `produce`.
-
-    # Fetch the distribution cert + provisioning profiles for BOTH the app and
-    # the widget extension. READ-ONLY by default (see Matchfile): routine CI
-    # runs must not be able to rewrite the signing material, which caps the
-    # blast radius of a compromised job or dependency. First-run provisioning
-    # of a new App ID needs a one-off MATCH_READONLY=false + a read/write PAT
-    # (see docs/TESTFLIGHT.md), then revert both.
+    # The App IDs and App Store Connect record are created once by hand; see
+    # docs/TESTFLIGHT.md. Routine CI only reads signing material.
     match(type: "appstore", app_identifier: [APP_ID, WIDGET_ID], api_key: api_key,
           readonly: ENV["MATCH_READONLY"] != "false")
 
-    # Switch each target to manual signing with its match profile.
     update_code_signing_settings(
       use_automatic_signing: false,
       path: "Cadence.xcodeproj",
@@ -60,37 +55,50 @@ platform :ios do
       profile_name: ENV["sigh_#{WIDGET_ID}_appstore_profile-name"]
     )
 
-    # Version + build number are driven entirely by build-setting overrides at
-    # archive time, which the generated Info.plist references via
-    # $(MARKETING_VERSION) / $(CURRENT_PROJECT_VERSION). This is deterministic
-    # and avoids agvtool touching a literal Info.plist.
-    #   - MARKETING_VERSION → the semantic-release version (APP_VERSION = the v*
-    #     tag minus "v"), so TestFlight maps 1:1 to the released version.
-    #   - CURRENT_PROJECT_VERSION → a monotonic build number from TestFlight.
+    # Version + build number are build-setting overrides. The version comes
+    # from the same commit analyzer that gates this job; the build number is
+    # allocated once from TestFlight before the immutable IPA is created.
     next_build = latest_testflight_build_number(
       api_key: api_key, app_identifier: APP_ID, initial_build_number: 0
     ) + 1
     app_version = ENV["APP_VERSION"].to_s.strip
-    version_arg = app_version.empty? ? "" : " MARKETING_VERSION=#{app_version}"
+    UI.user_error!("APP_VERSION is required") if app_version.empty?
 
     build_app(
       scheme: "Cadence",
       project: "Cadence.xcodeproj",
       configuration: "Release",
       export_method: "app-store",
+      output_directory: ARTIFACT_DIR,
+      output_name: ARTIFACT_NAME,
       export_options: {
         provisioningProfiles: {
           APP_ID => ENV["sigh_#{APP_ID}_appstore_profile-name"],
           WIDGET_ID => ENV["sigh_#{WIDGET_ID}_appstore_profile-name"]
         }
       },
-      xcargs: "-allowProvisioningUpdates CURRENT_PROJECT_VERSION=#{next_build}#{version_arg}"
+      xcargs: "-allowProvisioningUpdates CURRENT_PROJECT_VERSION=#{next_build} MARKETING_VERSION=#{app_version}"
     )
+  end
+
+  desc "Upload an already-built signed IPA to TestFlight without rebuilding"
+  lane :upload_beta do
+    ipa_path = File.expand_path(ENV["IPA_PATH"] || File.join(ARTIFACT_DIR, ARTIFACT_NAME))
+    UI.user_error!("Signed IPA not found at #{ipa_path}") unless File.file?(ipa_path)
 
     upload_to_testflight(
-      api_key: api_key,
+      api_key: cadence_api_key,
       app_identifier: APP_ID,
+      ipa: ipa_path,
       skip_waiting_for_build_processing: true
     )
+  end
+
+  # Retain the one-command local/recovery entrypoint, but keep the phase split
+  # visible so CI can persist and promote the bytes between them.
+  desc "Build, sign, and upload in one local invocation"
+  lane :beta do
+    build_beta
+    upload_beta
   end
 end

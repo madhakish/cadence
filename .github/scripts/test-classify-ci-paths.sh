@@ -52,6 +52,11 @@ assert_classification \
   '.github/workflows/ci.yml'
 
 assert_classification \
+  "release automation changes compile the current app without rebuilding historical stores" \
+  $'native=true\nmigrations=false\nweb=false' \
+  $'fastlane/Fastfile\n.github/scripts/plan-release.mjs\n.github/scripts/verify-release-artifact.sh'
+
+assert_classification \
   "classifier changes cannot bypass native validation" \
   $'native=true\nmigrations=false\nweb=false' \
   '.github/scripts/classify-ci-paths.sh'

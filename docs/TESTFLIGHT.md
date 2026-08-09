@@ -1,17 +1,18 @@
 # TestFlight — fully automated, no Mac
 
 The native app builds, signs, and ships to TestFlight entirely on GitHub's macOS
-CI runners (`testflight` job in `.github/workflows/ci.yml`, driven by
-`fastlane/Fastfile`). Your Linux/Windows machines never touch it: you push to
+CI runners (`store-build` and `testflight` in `.github/workflows/ci.yml`, driven
+by `fastlane/Fastfile`). Your Linux/Windows machines never touch it: you push to
 `main`, the cloud does the rest, and the build shows up in the TestFlight app on
 your phone.
 
 The pipeline requires the one-time Apple setup below. Once semantic-release
-publishes a tag, TestFlight must upload it; missing Apple or signing
-configuration fails the workflow visibly instead of silently skipping it.
-GitHub's downloadable unsigned/simulator assets upload in a separate retrying
-job, so an `uploads.github.com` outage cannot suppress the signed TestFlight
-build.
+publishes a tag, the signed IPA has already been built, code-signature checked,
+version checked, SHA-256 sealed, and retained as an immutable Actions artifact.
+The GitHub release and TestFlight independently promote those exact bytes;
+neither publisher contains a build step. Missing Apple or signing configuration
+therefore fails before a version tag is created. An `uploads.github.com` outage
+cannot suppress TestFlight.
 
 ## One-time setup (≈ 30–45 min, mostly waiting on Apple)
 
@@ -89,21 +90,32 @@ Repository **secrets**:
 
 ## Run it
 Merge a release-producing Conventional Commit to `main`. After the parallel
-validation jobs pass, semantic-release creates the version tag and the
-`testflight` job runs `xcodegen generate` → `match` → signed Release archive →
-upload. Non-release commits such as `docs:` and `ci:` do not waste time creating
-duplicate TestFlight builds.
+validation jobs pass, `store-build` runs `xcodegen generate` → `match` → signed
+Release archive exactly once. CI verifies and caches that IPA, semantic-release
+creates the version tag, and the `testflight` job downloads, re-verifies, and
+uploads the cached file without compiling. The GitHub release receives the same
+IPA and its checksum. Non-release commits such as `docs:` and `ci:` build no
+release artifacts.
 
-The release tag is the durable handoff. If semantic-release creates the tag and
-a later GitHub API call fails, a retry recognizes the exact tag on the `main`
-commit and continues to TestFlight instead of treating the release as a no-op.
+To exercise signing or Fastlane changes without creating a release, manually
+dispatch **CI** on `main` with `verify_signed_artifact=true`. That path builds,
+signs, verifies, and caches only the store IPA; it skips the simulator,
+semantic-release, GitHub publishing, and TestFlight. It cannot be combined with
+`force_testflight`.
+
+The release tag is the durable handoff, not permission to build again. Rerun a
+failed publishing job in the original workflow run so it reuses that run's
+immutable artifact. A later whole-workflow recovery downloads the versioned IPA
+and checksum already attached to the GitHub release.
 
 If a release tag was created but its upload failed or never started, run the
 **CI** workflow manually on `main` with `force_testflight=true`. That explicit
-recovery option uploads the latest existing release tag even when the manual
-run does not create another release. Set `full_migrations=true` only when you
-also need to force regeneration/verification of every shipped-store upgrade
-path.
+recovery option downloads and uploads the latest release's exact signed IPA; it
+does not rebuild current `main` under an old version. If the GitHub release asset
+itself is missing, rerun the failed publisher in the original release workflow
+while its retained Actions artifact is available. Set `full_migrations=true`
+only when you also need to force regeneration/verification of every
+shipped-store upgrade path.
 
 ### Release queue
 
