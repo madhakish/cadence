@@ -6,6 +6,7 @@ import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll } from "../db.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
+import * as ProgrammingDefaults from "../programming-defaults.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -618,7 +619,16 @@ export async function openSession(id) {
     const carryLb = ex && ex.type === "conditioning" && C.cardioCarriesLoad(se.exerciseName)
       ? (last ? last.weightLb : (C.cardioDefaultLoadLb(se.exerciseName) ?? 0))
       : 0;
-    const w = durationBased ? carryLb : (last ? last.weightLb : (se.plannedWeightLb ?? 45));
+    // First set with no plan and no predecessor: the old default was a
+    // literal 45 — the empty bar — which prescribed phantom load to
+    // everything else (a bodyweight GHD sit-up was born asking for 45 lb).
+    // The conservative bootstrap catalog already knows a starting weight per
+    // movement and type; barbell work keeps the empty bar it started at.
+    // Mirrors native ActiveSessionView.firstSetDefaultLb.
+    const firstSetDefaultLb = ex
+      ? ProgrammingDefaults.recommendation(se.exerciseName, ex.category, ex.type).weightLb
+      : 0;
+    const w = durationBased ? carryLb : (last ? last.weightLb : (se.plannedWeightLb ?? firstSetDefaultLb));
     const r = durationBased ? 1 : (last ? last.reps : (se.plannedReps ?? 5));
     const inheritedLoad = last && C.LOAD_BASES.includes(last.loadBasis)
       ? { loadBasis: last.loadBasis, implementCount: last.implementCount }
