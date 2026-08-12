@@ -567,7 +567,13 @@ async function programDayEditor(p, day) {
         body.append(ui.field("Day name", nameInput));
 
         body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
-        const openDetail = async (name) => { const ex = await Exercises.byName(name); if (ex) exerciseDetail(ex); };
+        // The editor's exercise edits (rest, load basis, station plates)
+        // change the exposure previews below, so Back redraws the day. Same
+        // accessible title-button the logger uses — one affordance, not a
+        // keyboard-invisible span here and a real button there.
+        const openDetail = async (name) => { const ex = await Exercises.byName(name); if (ex) exerciseDetail(ex, { onClose: draw }); };
+        const detailTitle = (name) => ui.h("button", { class: "title title-button", text: name,
+          "aria-label": `${name} — muscles, history, and settings`, onClick: () => openDetail(name) });
         for (const l of orderedSlots(day.lifts)) {
           const orderedDays = [...(p.days || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
           const recoveryOrders = C.recoveryDayOrders(orderedDays.map((candidate) => {
@@ -611,7 +617,7 @@ async function programDayEditor(p, day) {
           };
           body.append(ui.h("div", { class: "card" },
             ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
-              ui.h("span", { class: "title", text: l.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(l.exerciseName) }),
+              detailTitle(l.exerciseName),
               ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${l.exerciseName} earlier`, onClick: async () => { if (moveSlot(day.lifts, l, -1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${l.exerciseName} later`, onClick: async () => { if (moveSlot(day.lifts, l, 1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.lifts = day.lifts.filter((x) => x !== l); await Programs.save(p); draw(); } })),
@@ -706,7 +712,7 @@ async function programDayEditor(p, day) {
           const isConditioning = exerciseType === "conditioning";
           body.append(ui.h("div", { class: "card" },
             ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
-              ui.h("span", { class: "title", text: a.exerciseName, style: { cursor: "pointer" }, onClick: () => openDetail(a.exerciseName) }),
+              detailTitle(a.exerciseName),
               ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${a.exerciseName} earlier`, onClick: async () => { if (moveSlot(day.accessories, a, -1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${a.exerciseName} later`, onClick: async () => { if (moveSlot(day.accessories, a, 1)) { await Programs.save(p); draw(); } } }),
               ui.h("button", { class: "btn sm ghost danger", text: "Remove", onClick: async () => { day.accessories = day.accessories.filter((x) => x !== a); await Programs.save(p); draw(); } })),
@@ -893,10 +899,14 @@ async function exerciseInsight(wrap, e) {
 }
 
 // Exported: the logger's exercise titles open the same lift info screen the
-// library and program editor use — muscles figure, history, settings.
-export function exerciseDetail(e) {
+// library and program editor use — muscles figure, history, settings. The
+// caller may pass onClose to repaint itself: this screen live-edits the
+// exercise (rest, load basis, type, shelving), and a logger underneath must
+// not keep showing the pre-edit state.
+export function exerciseDetail(e, { onClose } = {}) {
   ui.pushScreen({
     title: e.name,
+    onClose,
     build: (body) => {
       const draw = () => {
         ui.clear(body);

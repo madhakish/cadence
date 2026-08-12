@@ -3235,6 +3235,24 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const detail = [...document.querySelectorAll("#overlays .overlay")].pop();
   ok(detail !== logger && detail.querySelector(".anatomy-card svg"),
     "tapping the lift name in the logger opens lift info with the muscles figure");
+
+  // The detail screen live-edits the exercise (rest, load basis, shelving).
+  // Back must repaint the logger, or the card keeps showing the pre-edit
+  // state: bump the lift's own rest and check the ⏱ chip caught up.
+  const restRow = [...detail.querySelectorAll(".row")].find((r) => r.textContent.startsWith("Rest"));
+  const plus = [...restRow.querySelectorAll(".stepper button")].pop();
+  plus.click(); await tick(); // Default → 0:15 of the lift's own rest
+  detail.querySelector(".overlay-head button").click(); await tick();
+  const chip = [...logger.querySelectorAll("button")].find((b) => b.textContent.startsWith("⏱"));
+  ok(chip && chip.textContent.includes("0:15"),
+    `closing lift info repaints the logger (rest chip reads ${chip?.textContent})`);
+
+  // Restore the seeded default and close the logger so later overlay-based
+  // tests don't inherit this screen stack.
+  const deadlift = await db.Exercises.byName("Deadlift");
+  deadlift.defaultRestSeconds = 0;
+  await db.Exercises.save(deadlift);
+  logger.querySelector(".overlay-head button").click(); await tick();
   await db.Sessions.del(sid);
 }
 

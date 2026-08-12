@@ -381,11 +381,14 @@ export async function openSession(id) {
         // The name is the door to the lift itself — muscles figure, history,
         // settings — mid-workout, same as the program editor and library. A
         // real button, not a click-handled span: keyboard focus and
-        // Enter/Space work, and the house 44px target applies.
+        // Enter/Space work, and the house 44px target applies. The detail
+        // screen live-edits this exercise (rest, load basis, shelving), so
+        // Back repaints the logger — otherwise the card keeps showing the
+        // pre-edit prescription state.
         ex
           ? ui.h("button", { class: "title title-button", text: se.exerciseName,
             "aria-label": `${se.exerciseName} — muscles, history, and settings`,
-            onClick: () => { const info = exMap.get(se.exerciseName); if (info) exerciseDetail(info); } })
+            onClick: () => exerciseDetail(ex, { onClose: () => renderBody(body) }) })
           : ui.h("span", { class: "title", text: se.exerciseName }),
         phaseLabel ? ui.h("span", { class: "sub accent", text: phaseLabel }) : null),
       ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
