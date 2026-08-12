@@ -99,6 +99,8 @@ enum Copy {
     static let restOver = "Rest over."
     static let offTarget = "Closest load is off target."
     static let emptyHistory = "Nothing logged yet."
+    static let emptyVolume = "No volume history"
+    static let emptyRepPRs = "No rep PRs"
     static let shelved = "Shelved"
 }
 
