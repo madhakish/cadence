@@ -1276,6 +1276,23 @@ export const DELOAD_WEEK = 4;
 // would otherwise sit open indefinitely; they do not schedule rotations.
 export const RECOVERY_SESSION_LIMIT = 2;
 export const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Whether a persisted workout-stopwatch record may be adopted after a
+// relaunch. One rule shared by the native UserDefaults record and the web
+// localStorage record. A RUNNING record goes stale after a day (adopting
+// last week's origin would paint days of elapsed time onto a reopened
+// session); a PAUSED record is frozen evidence — elapsed is fixed at
+// (pausedAt − start) — and stays adoptable, needing only internal
+// consistency. Future-dated fields (clock skew, bad bytes) never fabricate
+// a stopwatch. Mirrors CadenceCore StopwatchRecovery.
+export const STOPWATCH_RECORD_WINDOW_MS = 24 * 60 * 60 * 1000;
+export function stopwatchRecordUsable(startMs, pausedAtMs, nowMs) {
+  if (!Number.isFinite(startMs) || startMs > nowMs) return false;
+  if (pausedAtMs != null) {
+    return Number.isFinite(pausedAtMs) && pausedAtMs >= startMs && pausedAtMs <= nowMs;
+  }
+  return nowMs - startMs < STOPWATCH_RECORD_WINDOW_MS;
+}
 // Complete rotations that must be banked since the last recovery bridge before
 // another early one is allowed. Without a floor a run of red rotations turns
 // recovery into the schedule, which is the opposite of what it is for.

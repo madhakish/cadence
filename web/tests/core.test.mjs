@@ -2252,5 +2252,32 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-STATION-OWNS-ITS-PLATES] every prescribed plate is a kg plate");
 }
 
+// ---- Stopwatch record adoption (mirrors StopwatchRecoveryTests) ----
+{
+  const now = 1_700_000_000_000;
+  const MIN = 60 * 1000, HOUR = 60 * MIN;
+  ok(C.stopwatchRecordUsable(now - 40 * MIN, null, now),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a running record within a day is adoptable");
+  ok(C.stopwatchRecordUsable(now - 23.9 * HOUR, null, now),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a running record just inside the window is adoptable");
+  ok(!C.stopwatchRecordUsable(now - 24 * HOUR, null, now),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a running record at the window is stale");
+  ok(!C.stopwatchRecordUsable(now - 7 * 24 * HOUR, null, now),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] last week's running record is stale");
+  ok(!C.stopwatchRecordUsable(now + HOUR, null, now),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a future-dated origin never fabricates a stopwatch");
+  ok(!C.stopwatchRecordUsable(NaN, null, now),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a non-numeric origin is unusable");
+  // Paused records are frozen evidence: elapsed is fixed at pausedAt − start,
+  // so wall-clock age does not stale them — only inconsistency does.
+  const threeDaysAgo = now - 3 * 24 * HOUR;
+  ok(C.stopwatchRecordUsable(threeDaysAgo, threeDaysAgo + 30 * MIN, now),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a paused record outlives the running window");
+  ok(!C.stopwatchRecordUsable(threeDaysAgo, threeDaysAgo - 5 * MIN, now),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a pause before the start is corrupt");
+  ok(!C.stopwatchRecordUsable(threeDaysAgo, now + 5 * MIN, now),
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a future-dated pause is corrupt");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
