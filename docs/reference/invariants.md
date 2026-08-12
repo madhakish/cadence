@@ -398,6 +398,39 @@ the plan and logged sets intact.
 > Starting from `onAppear` meant reading the plan logged elapsed time nobody
 > trained, and there was no way to take it back.
 
+### INV-CLOCK-SURVIVES-RELAUNCH
+*platforms: core, web*
+
+A started workout's stopwatch survives an app relaunch. The clock origin is
+mirrored into durable storage (localStorage on web, UserDefaults behind the
+Live Activity snapshot on native) keyed by session, restored when the same
+session reopens, ignored by any other session, and cleared on reset, discard,
+banking, backup import, and wipe. Whether a record may be adopted is one
+shared core rule (`StopwatchRecovery` / `stopwatchRecordUsable`): a RUNNING
+record goes stale after a day and never resurrects an old stopwatch; a PAUSED
+record is frozen evidence — its elapsed span is fixed — and stays adoptable;
+future-dated fields never fabricate one.
+
+> The origin lived only in memory — force-quitting the app mid-workout and
+> resuming the session restarted the timer at 0:00, losing the real elapsed
+> time of a workout still in progress.
+
+### INV-CLOCK-TEARDOWN-IS-SCOPED
+*platforms: native · unverifiable*
+
+A destructive action on a session — discard, bank, or a backup restore —
+tears down only what that session owns: its clock (when tracking), its
+durable record, and any orphaned Live Activity it left behind. It never stops
+another workout's clock or rest countdown, never erases another session's
+record, and never dismisses an ad-hoc quick rest. A restore replaces the
+world, so it ends whatever clock was running.
+
+> Banking a leftover session called `end()` unguarded, which nils the clock
+> and — via the durable record's remove-on-nil write — erased the RUNNING
+> workout's relaunch recovery. A discard from Today cleared the record but
+> left the session's orphaned Live Activity alive, and the snapshot outranks
+> the record on adoption, so the discarded stopwatch came back anyway.
+
 ### INV-UNSTARTED-HAS-NO-DURATION
 *platforms: native · unverifiable*
 

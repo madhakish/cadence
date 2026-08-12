@@ -7,6 +7,7 @@ import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, Coac
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
 import { exerciseDetail } from "./settings.js";
+import { writeClockRecord, clearClockRecord, storedClockStart } from "../workout-clock.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -269,12 +270,14 @@ export async function openSession(id) {
     return C.restDefaultSeconds(ex.category, ex.movementGroup, role, restCfg, ex.defaultRestSeconds > 0 ? ex.defaultRestSeconds : 0);
   }
 
-  // Session stopwatch origin (ephemeral). NULL until the workout is started:
-  // opening the logger to read the plan is not the same act as training, and a
-  // clock that starts itself on open reports elapsed time nobody trained.
-  let sessionStart = null;
-  function startWorkout() { sessionStart = Date.now(); paintBar(); }
-  function resetToNotStarted() { sessionStart = null; rest.stop(); paintBar(); }
+  // Session stopwatch origin. NULL until the workout is started: opening the
+  // logger to read the plan is not the same act as training, and a clock that
+  // starts itself on open reports elapsed time nobody trained. Restored from
+  // the durable record (see the module-scope helpers) so a relaunch resumes
+  // the running clock instead of restarting it at 0:00.
+  let sessionStart = storedClockStart(session.id);
+  function startWorkout() { sessionStart = Date.now(); writeClockRecord(session.id, sessionStart); paintBar(); }
+  function resetToNotStarted() { sessionStart = null; clearClockRecord(session.id); rest.stop(); paintBar(); }
   let currentSE = null;                       // the exercise you're actively working
   // Exercise AND role must come from the same session entry — pairing
   // exercises[0] with currentSE's (null) role resolved the first lift's rest
@@ -989,7 +992,7 @@ export async function openSession(id) {
         : `Discard this session and lose ${performed} logged set${performed === 1 ? "" : "s"}?`,
       [
         { label: "Discard session", role: "destructive", onClick: async () => {
-          await Sessions.del(session.id);
+          await Sessions.del(session.id); // Sessions.del drops the clock record
           rest.stop();
           screen.close();
           ui.nav.refresh();
@@ -1019,6 +1022,8 @@ export async function openSession(id) {
     finishing = true;
     try {
       const summary = await completeSession(session);
+      sessionStart = null;
+      clearClockRecord(session.id);
       rest.stop();
       showSummary(summary, () => { screen.close(); ui.nav.refresh(); });
     } catch (e) {

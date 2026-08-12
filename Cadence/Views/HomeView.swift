@@ -476,8 +476,14 @@ struct HomeView: View {
                     guard let session = discardSession else { return }
                     if workoutClock.isTracking(sessionID: session.id) {
                         restTimer.stop()
-                        workoutClock.end()
                     }
+                    // Scoped teardown: ends the clock only if this session
+                    // owns it; otherwise drops just this session's leftovers —
+                    // its durable record and any orphaned Live Activity a
+                    // force-quit left on the lock screen (which begin() would
+                    // otherwise adopt ahead of the cleared record and
+                    // resurrect the discarded stopwatch).
+                    workoutClock.release(sessionID: session.id)
                     context.delete(session)
                     PersistenceErrorCenter.shared.save(context, operation: "Discarding the session")
                     discardSession = nil
