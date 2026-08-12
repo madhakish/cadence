@@ -942,6 +942,11 @@ export async function openSession(id) {
 
   async function pickExercise(body) {
     const all = await Exercises.all();
+    // exMap is snapshotted at openSession; this sheet reads fresh, so an
+    // exercise created since (another tab) would otherwise join the session
+    // with an inert title and generic accessory rest. Fold the fresh reads
+    // in so the card renders the exercise it actually added.
+    for (const e of all) exMap.set(e.name, e);
     ui.sheet({
       title: "Add exercise",
       build: (c, api) => {
