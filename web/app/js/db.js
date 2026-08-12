@@ -2,6 +2,7 @@
 // Sessions embed their exercises and sets as one document (the active-session
 // screen is one unit of work), which keeps reads/writes join-free.
 import * as C from "./core.js";
+import { clearClockRecord, clearAnyClockRecord } from "./workout-clock.js";
 import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
@@ -349,7 +350,12 @@ export const Sessions = {
   async all() { return (await getAll("sessions")).map(normalizeSession); },
   async get(id) { const session = await get("sessions", id); return session ? normalizeSession(session) : null; },
   save: (s) => put("sessions", normalizeSession(s)),
-  del: (id) => del("sessions", id),
+  // Deleting a session drops its durable stopwatch record here, at the one
+  // choke point every deletion path flows through — a leftover record would
+  // resurrect the discarded stopwatch onto whatever session reuses the id
+  // (backups and restores preserve ids). Ownership-checked: another
+  // session's running clock is never touched.
+  del: async (id) => { await del("sessions", id); clearClockRecord(id); },
   async openAll() { const all = await Sessions.all(); return all.filter((s) => !s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date)); },
   async open() { const all = await Sessions.all(); return all.filter((s) => !s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null; },
   async completed() { const all = await Sessions.all(); return all.filter((s) => s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date)); },
@@ -1294,12 +1300,20 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       for (const r of records) s.put(r);
     }
   });
+  // The sessions store was just replaced wholesale: any stopwatch record
+  // belongs to the pre-import world, and web session ids are small
+  // autoincrement integers that collide across installs — left alive, the
+  // record would graft the old stopwatch onto an unrelated imported session.
+  if (writes.has("sessions")) clearAnyClockRecord();
   return { repairedSlotIDs };
 }
 
 export async function wipeAll({ preserveCheckpoints = false } = {}) {
   const stores = Object.keys(STORES).filter((name) => !preserveCheckpoints || name !== "checkpoints");
   await runAll(stores, "readwrite", (os) => { for (const name of stores) os(name).clear(); });
+  // A wiped stopwatch must not outlive the wipe: a restored backup could
+  // reuse the session id and resurrect it.
+  clearAnyClockRecord();
   const db = _db;
   _db = null;
   _opening = null;
