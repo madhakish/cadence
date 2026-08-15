@@ -2994,6 +2994,47 @@ function rotationSuggestions(program, evidenceKey) {
   return result;
 }
 
+// The vertical pull belongs at the lift tier (issue #126): current templates
+// train pull-ups as programmed double-progression work that earns load at the
+// top of its rep window — never as an accessory buried under the press, and
+// never only as a machine stack. A program instantiated before that change
+// still carries the old shape, and no migration rewrites an authored program,
+// so the coach offers the upgrade instead: one recommendation per day whose
+// ONLY vertical pull is accessory work. The evidence key is
+// rotation-independent — a structural fact, not a per-rotation reading — so
+// one dismissal silences it for good, and applying removes the condition.
+// Mirrored 1:1 in CoachingEngine.verticalPullPromotions.
+export function verticalPullPromotions(program) {
+  const result = [];
+  const byDay = new Map();
+  for (const slot of program.slots || []) {
+    if (!byDay.has(slot.dayIndex)) byDay.set(slot.dayIndex, []);
+    byDay.get(slot.dayIndex).push(slot);
+  }
+  for (const dayIndex of [...byDay.keys()].sort((a, b) => a - b)) {
+    const slots = byDay.get(dayIndex);
+    const lifts = slots.filter((slot) => slot.role !== "accessory");
+    if (!lifts.length || lifts.some((slot) => slot.pattern === "verticalPull")) continue;
+    // Sorted by slot id: the snapshot is built in day-record order, and the
+    // recommendation id derives from these ids — reordering the same slots
+    // must not re-emit a dismissed offer.
+    const pulls = slots.filter((slot) =>
+      slot.role === "accessory" && slot.pattern === "verticalPull" && !slot.exerciseIsShelved)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    if (!pulls.length) continue;
+    const names = pulls.map((slot) => slot.exerciseName);
+    const key = `day${dayIndex}:${pulls.map((slot) => slot.id).join(",")}`;
+    result.push({
+      id: `program.day.vertical-pull-tier.v1:${key}`,
+      ruleID: "program.day.vertical-pull-tier.v1", priority: 55,
+      title: "Train the pull as lift work",
+      explanation: `This day's only vertical pull is accessory work (${names.join(", ")}). Pulling is main work: retire the accessory and train pull-ups as a programmed lift on a rep window that earns load at the top — the same shape new programs start with.`,
+      change: { type: "promoteVerticalPull", dayIndex, accessorySlotIDs: pulls.map((slot) => slot.id), accessoryNames: names },
+    });
+  }
+  return result;
+}
+
 // First adaptive stage inside Progressive Barbell Strength. A single miss is
 // noise: linear progression already retries three misses and rebuilds the base
 // by 10%. Once that rebuild is visible, an upper press may keep the same
@@ -3065,6 +3106,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   const programChanges = [
     ...rotationSuggestions(program, evidenceKey),
     ...linearStageSuggestions(program, sessions, evidenceKey),
+    ...verticalPullPromotions(program),
   ];
   // Ordinal tiebreak (see rotationSuggestions): the surfaced-first ordering
   // must be locale-independent and identical to Swift's.

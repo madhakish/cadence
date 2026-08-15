@@ -6,6 +6,7 @@ import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram } from "../db.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
+import { exerciseDetail } from "./settings.js";
 import { writeClockRecord, clearClockRecord, storedClockStart } from "../workout-clock.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
@@ -383,7 +384,18 @@ export async function openSession(id) {
     const phaseLabel = ui.sessionPhaseLabel(se, ex);
     const head = ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
       ui.h("div", { class: "lead" },
-        ui.h("span", { class: "title", text: se.exerciseName }),
+        // The name is the door to the lift itself — muscles figure, history,
+        // settings — mid-workout, same as the program editor and library. A
+        // real button, not a click-handled span: keyboard focus and
+        // Enter/Space work, and the house 44px target applies. The detail
+        // screen live-edits this exercise (rest, load basis, shelving), so
+        // Back repaints the logger — otherwise the card keeps showing the
+        // pre-edit prescription state.
+        ex
+          ? ui.h("button", { class: "title title-button", text: se.exerciseName,
+            "aria-label": `${se.exerciseName} — muscles, history, and settings`,
+            onClick: () => exerciseDetail(ex, { onClose: () => renderBody(body) }) })
+          : ui.h("span", { class: "title", text: se.exerciseName }),
         phaseLabel ? ui.h("span", { class: "sub accent", text: phaseLabel }) : null),
       ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
         ui.h("div", { style: { width: "100px" } },
@@ -936,6 +948,11 @@ export async function openSession(id) {
 
   async function pickExercise(body) {
     const all = await Exercises.all();
+    // exMap is snapshotted at openSession; this sheet reads fresh, so an
+    // exercise created since (another tab) would otherwise join the session
+    // with an inert title and generic accessory rest. Fold the fresh reads
+    // in so the card renders the exercise it actually added.
+    for (const e of all) exMap.set(e.name, e);
     ui.sheet({
       title: "Add exercise",
       build: (c, api) => {

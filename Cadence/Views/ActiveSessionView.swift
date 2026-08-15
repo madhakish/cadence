@@ -661,6 +661,9 @@ private struct ExerciseSection: View {
     /// Standalone entries skip the dialog — with no slot, session-only is the
     /// only meaning a swap can have.
     @State private var pendingSwap: Exercise?
+    /// The lift-info sheet's subject (the entry's own exercise, opened from
+    /// the header name).
+    @State private var liftInfo: Exercise?
 
     private var restSeconds: Int { smartRestSeconds(for: entry.exercise, role: entry.programRole, settings: settings) }
     private var restBinding: Binding<Int> {
@@ -822,7 +825,30 @@ private struct ExerciseSection: View {
             }
         } header: {
             HStack {
-                Text(entry.exercise?.name ?? "Exercise")
+                // The name is the door to the lift itself — muscles figure,
+                // history, settings — mid-workout, same as the preview and
+                // program editor. A sheet, not a header NavigationLink: sheet
+                // presentation from this header is proven (the Menu and the
+                // swap dialog already present here), dismissing lands exactly
+                // where logging left off, and the entry's own relationship is
+                // the identity — no by-name re-resolution that could dead-end
+                // at "Not in the library" for a lift the session still holds.
+                if let exercise = entry.exercise {
+                    Button {
+                        liftInfo = exercise
+                    } label: {
+                        Text(exercise.name)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Shows muscles worked, history, and exercise settings")
+                    .sheet(item: $liftInfo) { exercise in
+                        NavigationStack {
+                            ExerciseDetailView(exercise: exercise)
+                        }
+                    }
+                } else {
+                    Text("Exercise")
+                }
                 if let phaseLabel = entry.truthfulPhaseLabel {
                     Text(phaseLabel).foregroundStyle(Theme.accent)
                 }

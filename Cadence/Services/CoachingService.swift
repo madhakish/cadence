@@ -278,6 +278,49 @@ enum CoachingService {
             lift.pendingNote = nil
             decisionAfterValue = "linearTriples:slot:\(slotID):5x3"
             result = "\(exerciseName): 3×5 → 5×3; session-to-session loading stays in place."
+        case .promoteVerticalPull(let dayIndex, let accessorySlotIDs, let accessoryNames):
+            guard let day = program.days.first(where: { $0.order == dayIndex }) else {
+                throw CoachingApplyError.unknownSlot(accessoryNames.first ?? "vertical pull")
+            }
+            // The replacement is the template's own choice — pull-ups on a
+            // double-progression window that grows into weighted pull-ups —
+            // not a SwapRules candidate: crossing the tier is the point.
+            guard let pullUps = exercises.first(where: {
+                $0.name == "Pull-ups" && $0.gateStatus != .shelved
+            }) else {
+                throw CoachingApplyError.exerciseUnavailable("Pull-ups")
+            }
+            let retiring = day.accessories.filter { accessorySlotIDs.contains($0.id) }
+            guard !retiring.isEmpty else {
+                throw CoachingApplyError.unknownSlot(accessoryNames.first ?? "vertical pull")
+            }
+            let retiredNames = retiring.map(\.exerciseName)
+            for accessory in retiring {
+                day.accessories.removeAll { $0 === accessory }
+                context.delete(accessory)
+            }
+            for (index, accessory) in day.orderedAccessories.enumerated() { accessory.order = index }
+            // Idempotent against a stale offer: if the day gained a pull-up
+            // lift since evaluation (hand-edit, another apply), retiring the
+            // accessories is still right but a second identical slot is not.
+            if day.lifts.contains(where: { $0.exerciseName == pullUps.name }) {
+                result = "Retired \(retiredNames.joined(separator: ", ")) — \(day.name) already trains \(pullUps.name) at the lift tier."
+            } else {
+                // The same slot shape the template authors: complementary
+                // double progression, three sets, born at bodyweight (base 0)
+                // — the rep window's model defaults match template
+                // instantiation.
+                // max(order)+1, not count: authored orders can be
+                // noncontiguous (imports, edits), and the promoted slot must
+                // append after the day's last lift, not land between them.
+                let pullSlot = ProgramLift(exerciseName: pullUps.name, role: .complementary,
+                                           order: (day.lifts.map(\.order).max() ?? -1) + 1,
+                                           prescription: .doubleProgression,
+                                           baseWeightLb: 0, estimatedMaxLb: 0)
+                context.insert(pullSlot)
+                day.lifts.append(pullSlot)
+                result = "\(retiredNames.joined(separator: ", ")) → \(pullUps.name) as programmed lift work on \(day.name)."
+            }
         case .rotateExercise(let slotID, let exerciseName):
             guard let current = exercises.first(where: { $0.name == exerciseName }) else {
                 throw CoachingApplyError.unknownExercise(exerciseName)
@@ -400,6 +443,11 @@ enum CoachingService {
         case unknownExercise(String)
         case unknownSlot(String)
         case prescriptionChanged(String)
+        /// The named exercise is missing OR shelved — distinct from
+        /// unknownExercise, whose rotate-flavored copy ("a compatible
+        /// variation cannot be chosen") is wrong for appliers that need one
+        /// specific exercise. Copy matches the web adapter's string.
+        case exerciseUnavailable(String)
         var errorDescription: String? {
             switch self {
             case .noExercise(let pattern):
@@ -412,6 +460,8 @@ enum CoachingService {
                 return "The program slot for \(name) no longer exists."
             case .prescriptionChanged(let name):
                 return "The program slot for \(name) changed after this recommendation, so triples were not applied."
+            case .exerciseUnavailable(let name):
+                return "\(name) is not in the library. Add or unshelve it first."
             }
         }
     }
