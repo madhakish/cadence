@@ -2293,5 +2293,36 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   }
 }
 
+// ---- Banked-set corrections (mirrors SetLifecycleTests) ----
+{
+  const banked = { weightLb: 195, reps: 5, durationSeconds: null, status: "completed" };
+  const reweighed = C.correctedSetValues(banked, { weightLb: 205 });
+  ok(reweighed.weightLb === 205 && reweighed.reps === 5 && reweighed.status === "completed",
+    "[INV-BANKED-SETS-CORRECTABLE] editing weight cannot reset reps or status");
+  const ticked = C.correctedSetValues({ ...banked, status: "planned" }, { status: "completed" });
+  ok(ticked.status === "completed" && ticked.weightLb === 195,
+    "[INV-BANKED-SETS-CORRECTABLE] the missed ✓ becomes real history without touching the weight");
+  const garbage = C.correctedSetValues({ ...banked, durationSeconds: 30 },
+    { weightLb: -5, reps: -1, durationSeconds: -10, status: "imaginary" });
+  ok(garbage.weightLb === 195 && garbage.reps === 5 && garbage.durationSeconds === 30
+    && garbage.status === "completed",
+    "[INV-BANKED-SETS-CORRECTABLE] negative, non-numeric, or unknown corrections keep the stored values");
+  const nan = C.correctedSetValues(banked, { weightLb: NaN, reps: 2.5 });
+  ok(nan.weightLb === 195 && nan.reps === 5,
+    "[INV-BANKED-SETS-CORRECTABLE] NaN weights and fractional reps keep the stored values");
+  const untouched = C.correctedSetValues({ ...banked, durationSeconds: 45 }, {});
+  ok(untouched.weightLb === 195 && untouched.reps === 5 && untouched.durationSeconds === 45
+    && untouched.status === "completed",
+    "[INV-BANKED-SETS-CORRECTABLE] an empty correction changes nothing");
+  // The status cycle is shared domain behavior — one tap must walk the same
+  // documented order on both clients (mirrors SetLifecycleTests).
+  ok(C.nextSetStatus("planned") === "completed"
+    && C.nextSetStatus("completed") === "skipped"
+    && C.nextSetStatus("skipped") === "planned",
+    "[INV-BANKED-SETS-CORRECTABLE] the status cycle is planned → completed → skipped → planned");
+  ok(C.nextSetStatus("imaginary") === "completed",
+    "an unknown status starts the cycle from planned, like Swift");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

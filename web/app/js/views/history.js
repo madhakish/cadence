@@ -160,10 +160,142 @@ function renderLog(panel, sessions, exercises) {
   }
 }
 
+// The stored weight's display form in the entry unit — what an untouched
+// field reads, and what the no-edit comparison in applyDrafts uses. C.trim on
+// both branches, like native Weight.trim: a kg-entered weight stores float
+// noise, and the raw float string must never leak into the editor.
+const displayWeightText = (set, unit) => (set.weightLb > 0
+  ? C.trim(unit === "kg" ? C.kgFromLb(set.weightLb) : set.weightLb) : "");
+
+// One glyph mapping for a set's status, matching the logger (session.js) so
+// "skipped" looks like one concept across the app.
+const statusGlyph = (status) => (status === "completed" ? "✓" : status === "skipped" ? "−" : "○");
+
+// One banked set in correction mode: cycle the status, retype the weight or
+// reps (or the hold for timed work). The row edits a DRAFT — the stored
+// record is untouched until applyDrafts pushes every draft through the shared
+// C.correctedSetValues rule, so a half-typed number is never written, an
+// empty or garbage field keeps the stored value, and nothing beyond the four
+// performed fields is reachable. The weight edits in the display's primary
+// unit and stores canonical pounds, like every other entry surface.
+function editableHistorySetRow(set, exerciseType, draft) {
+  const unit = C.primaryUnit(ui.prefs.unitDisplay);
+  const effectiveStatus = () => draft.status || set.status;
+  const statusBtn = ui.h("button", { class: "btn ghost sm mono", text: statusGlyph(effectiveStatus()),
+    style: { minWidth: "44px", minHeight: "44px" },
+    "aria-label": `Status: ${effectiveStatus()}. Tap to mark ${C.nextSetStatus(effectiveStatus())}`,
+    onClick: () => {
+      draft.status = C.nextSetStatus(effectiveStatus());
+      statusBtn.textContent = statusGlyph(effectiveStatus());
+      statusBtn.setAttribute("aria-label", `Status: ${effectiveStatus()}. Tap to mark ${C.nextSetStatus(effectiveStatus())}`);
+    } });
+  // Field constraints mirror what the shared rule will actually accept —
+  // integers for reps and holds, decimals for weight, nothing negative.
+  const numberInput = (label, value, integer, oninput) => ui.h("input", {
+    type: "number", inputmode: integer ? "numeric" : "decimal",
+    min: "0", step: integer ? "1" : "any", placeholder: label, value,
+    style: { maxWidth: "90px" }, "aria-label": label, oninput,
+  });
+  const fields = exerciseType === "timed"
+    ? [numberInput("Hold (s)", draft.secondsText ?? (set.durationSeconds > 0 ? String(set.durationSeconds) : ""), true,
+      (event) => { draft.secondsText = event.target.value; })]
+    : [numberInput(`Weight (${unit})`, draft.weightText ?? displayWeightText(set, unit), false,
+      (event) => { draft.weightText = event.target.value; }),
+      ui.h("span", { class: "sub", text: "×" }),
+      numberInput("Reps", draft.repsText ?? String(set.reps ?? 0), true,
+        (event) => { draft.repsText = event.target.value; })];
+  return ui.h("div", { class: `history-set${set.isWarmup ? " warm" : ""}` },
+    statusBtn,
+    ui.h("div", { class: "history-set-main", style: { display: "flex", gap: "8px", alignItems: "center" } }, ...fields),
+    ui.h("span", { class: "history-set-kind", text: historySetKind(set) }));
+}
+
 function openDetail(s, exerciseByName) {
-  ui.pushScreen({
+  // Correction mode for a banked log: a set that never got its ✓ mid-workout
+  // or a weight banked at the stale plan can be fixed here. The corrected
+  // history is what charts, recalls, exports, and prior-best evidence read.
+  // It does NOT re-run the grading that fired at bank time — that result is
+  // already stashed in the lift's pending state — so a prescription built
+  // from the wrong base is fixed in the program editor, not here.
+  let editing = false;
+  let screen = null;
+  // Field text buffered per set while editing; the stored record is untouched
+  // until the drafts are applied (Save, or leaving the screen), so a
+  // half-typed number can never persist and an untouched field is not an edit.
+  const drafts = new Map();
+  const draftFor = (set) => { if (!drafts.has(set)) drafts.set(set, {}); return drafts.get(set); };
+  // Apply every draft through the shared correction rule. The no-edit
+  // comparison happens HERE, against the untouched stored values — so a field
+  // still reading the stored value's display form (including a kg string
+  // whose round-trip would drift the canonical pounds) is not an edit, and
+  // the comparison basis can never move mid-typing.
+  const applyDrafts = () => {
+    const unit = C.primaryUnit(ui.prefs.unitDisplay);
+    for (const [set, draft] of drafts) {
+      const correction = {};
+      if (draft.weightText != null && draft.weightText !== displayWeightText(set, unit)) {
+        correction.weightLb = C.toLb(parseFloat(draft.weightText), unit);
+      }
+      if (draft.repsText != null && draft.repsText !== String(set.reps ?? 0)) {
+        correction.reps = parseFloat(draft.repsText);
+      }
+      if (draft.secondsText != null
+          && draft.secondsText !== (set.durationSeconds > 0 ? String(set.durationSeconds) : "")) {
+        correction.durationSeconds = parseFloat(draft.secondsText);
+      }
+      if (draft.status && draft.status !== set.status) correction.status = draft.status;
+      Object.assign(set, C.correctedSetValues(set, correction));
+    }
+  };
+  const saveCorrections = async () => {
+    applyDrafts();
+    await Sessions.save(s);
+    drafts.clear();
+    // The log list and rolling load behind this overlay were rendered from
+    // the pre-edit record; refresh them so the correction is visible the
+    // moment the user backs out.
+    ui.nav.refresh();
+  };
+  const render = () => screen && renderDetail(screen.body);
+  const editBtn = s.isCompleted ? ui.h("button", { class: "btn ghost sm", text: "Edit",
+    "aria-label": "Edit this workout's sets",
+    onClick: async () => {
+      if (editing) {
+        // A failed write must not masquerade as a save: stay in edit mode
+        // with the drafts intact and say what happened (mirrors the native
+        // PersistenceErrorCenter contract).
+        try {
+          await saveCorrections();
+        } catch (error) {
+          ui.toast(`Saving the corrections failed — ${error?.message || "storage error"}. Your edits are still here; try Save again, then export a backup.`);
+          return;
+        }
+        ui.toast("Corrections saved.");
+      }
+      editing = !editing;
+      editBtn.textContent = editing ? "Save" : "Edit";
+      editBtn.setAttribute("aria-label", editing ? "Save the workout corrections" : "Edit this workout's sets");
+      render();
+    } }) : null;
+  screen = ui.pushScreen({
     title: ui.fmtDate(s.date),
-    build: (body) => {
+    actions: editBtn ? [editBtn] : [],
+    build: (body) => renderDetail(body),
+    // Leaving the screen commits like native's save-on-leave: what the
+    // fields show is what banks. A read-only visit saves nothing.
+    onClose: () => {
+      if (!editing || !drafts.size) return;
+      saveCorrections().catch(() => {
+        ui.toast("Saving the corrections failed — reopen the workout and Save again.");
+      });
+    },
+  });
+
+  function renderDetail(body) {
+      // A re-render (Edit/Save toggle) must not throw the reader back to the
+      // top of a long session.
+      const scrollTop = body.scrollTop;
+      ui.clear(body);
       const completedStrengthSets = completedStrengthSetCountForTest(s, exerciseByName);
       const volume = (s.exercises || []).reduce((sum, entry) => sum + workingVolume(entry, exerciseByName.get(entry.exerciseName)), 0);
       const elapsedMinutes = s.completedAt
@@ -203,6 +335,16 @@ function openDetail(s, exerciseByName) {
               ui.h("span", { class: "sub", text: summaryBits.join(" · ") })),
             phaseLabel ? ui.h("span", { class: "pill accent", text: phaseLabel }) : null));
         for (const x of e.sets || []) {
+          // Only strength and timed rows are correctable, keyed on the DATA
+          // when the library entry is gone (like the read-only rendering): a
+          // restored cardio record whose exercise was deleted must not grow a
+          // weight×reps editor over its distance. Conditioning corrections
+          // belong to the Health comparison flow, which reconciles against a
+          // measurement instead of a memory.
+          if (editing && (isStrengthEntry(e, exercise) || exercise?.type === "timed")) {
+            card.append(editableHistorySetRow(x, exercise?.type, draftFor(x)));
+            continue;
+          }
           const shown = historySetPresentationForTest(x, exercise?.type);
           const tags = ui.h("div", { class: "history-set-tags" },
             (x.flags || []).length ? ui.h("span", { class: "pill warn", text: x.flags.join(", ") }) : null,
@@ -219,8 +361,8 @@ function openDetail(s, exerciseByName) {
         if (e.notes) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: e.notes }));
         body.append(card);
       }
-    },
-  });
+      body.scrollTop = scrollTop;
+  }
 }
 
 // A lift can hold a MAIN slot on one day and a COMPLEMENTARY slot on another
