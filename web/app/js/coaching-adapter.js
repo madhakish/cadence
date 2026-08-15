@@ -149,7 +149,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     // double-progression window that grows into weighted pull-ups — not a
     // swap candidate: crossing the tier is the point. Mirrors CoachingService.
     const pullUps = exercises.find((item) => item.name === "Pull-ups"
-      && !item.isShelved && item.gateStatus !== "shelved");
+      && C.exerciseIsAvailableForProgramming(item));
     if (!pullUps) throw new Error("Pull-ups is not in the library. Add or unshelve it first.");
     const ids = new Set((change.accessorySlotIDs || []).map(String));
     const retiring = (day.accessories || []).filter((slot) => ids.has(String(slot.id)));
