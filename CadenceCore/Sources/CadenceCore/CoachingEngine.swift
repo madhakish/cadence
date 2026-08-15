@@ -445,6 +445,19 @@ public enum CoachingEngine {
     public static let greenAtPlanFloor = 0.90
     public static let yellowPerformanceDrop = -0.02
     public static let redPerformanceDrop = -0.05
+    /// How long after a session a hard-stop check-in still attributes to it.
+    /// Lives here (not in the adapters) so the two clients cannot tune it
+    /// apart — the same workout + check-in pair must read the same on both.
+    public static let checkInAttributionWindow: TimeInterval = 36 * 60 * 60
+
+    /// Whether a free-text check-in response reports a hard stop. One
+    /// catalog, shared by readiness attribution and the Body screen on both
+    /// clients — a vocabulary word added to one copy and not another flips
+    /// rotation readiness per platform. Mirrors core.js isHardStopResponse.
+    public static func isHardStopResponse(_ response: String) -> Bool {
+        let lowered = response.lowercased()
+        return ["flag", "pain", "swell", "off"].contains { lowered.contains($0) }
+    }
 
     public static func evaluate(
         program: CoachingProgramSnapshot,

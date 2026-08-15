@@ -37,7 +37,7 @@ struct HomeView: View {
     @State private var coachingMessage: String?
     @State private var recoveryMessage: String?
     @State private var showCoachDetail = false
-    @AppStorage("gymTagLastAutoDay") private var gymTagLastShownDay = 0.0
+    @AppStorage(RootView.gymTagLastAutoDayKey) private var gymTagLastShownDay = 0.0
 
     private var settings: AppSettings? { settingsList.first }
     private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
@@ -536,6 +536,12 @@ struct HomeView: View {
                 context: context
             )
         } catch {
+            // Every other user-initiated write goes through the error center,
+            // whose contract is rollback-on-failure. Without it, a failed
+            // accept leaves the half-applied program mutation and the audit
+            // row as dirty state the NEXT unrelated save would silently
+            // commit under a different operation label.
+            PersistenceErrorCenter.shared.report(error, operation: "Applying the coaching recommendation", context: context)
             coachingMessage = error.localizedDescription
         }
     }
@@ -551,6 +557,9 @@ struct HomeView: View {
             )
             coachingMessage = "Deferred. The program was not changed."
         } catch {
+            // Same rollback contract as accept: a failed decision insert must
+            // not linger as dirty state in the shared context.
+            PersistenceErrorCenter.shared.report(error, operation: "Recording the coaching decision", context: context)
             coachingMessage = error.localizedDescription
         }
     }

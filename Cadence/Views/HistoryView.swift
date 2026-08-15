@@ -266,7 +266,7 @@ struct SessionDetailView: View {
     let session: WorkoutSession
     @Environment(\.modelContext) private var context
     @Query private var settingsList: [AppSettings]
-    @AppStorage("healthReadEnabled") private var healthReadEnabled = false
+    @AppStorage(HealthKitService.readEnabledKey) private var healthReadEnabled = false
     @State private var healthMiles: Double?
     @State private var healthEnergyKcal: Double?
     @State private var didCheckHealth = false
@@ -338,7 +338,10 @@ struct SessionDetailView: View {
     private var durationLabel: String? {
         guard let end = session.completedAt, end > session.date else { return nil }
         let minutes = Int(end.timeIntervalSince(session.date) / 60)
-        guard minutes > 0, minutes < 24 * 60 else { return nil }
+        // The same one-day sanity bound the stopwatch record applies — one
+        // constant, so the clock and this label cannot disagree about what a
+        // plausible single-day session is.
+        guard minutes > 0, minutes < Int(StopwatchRecovery.recordWindow / 60) else { return nil }
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
 
@@ -878,7 +881,11 @@ struct ProgressionChartsView: View {
     private enum ChartRole: String, CaseIterable {
         case main, complementary, extra
         static func of(_ entry: SessionExercise, in session: WorkoutSession) -> ChartRole {
-            switch entry.programRole {
+            // An empty string is "no role", not a role: web stores empty as
+            // falsy and old imports wrote "" for roleless entries, so treating
+            // .some("") as programmed work would chart an unprogrammed
+            // session's record as extra on this client only.
+            switch entry.programRole?.isEmpty == true ? nil : entry.programRole {
             case LiftRole.complementary.rawValue: return .complementary
             case LiftRole.main.rawValue: return .main
             case .some: return .extra          // accessory, and anything added later

@@ -115,11 +115,16 @@ final class AppSettings {
     init() {
         self.unitDisplayRaw = UnitDisplay.lbPrimary.rawValue
         self.birthYear = 0
-        self.accessoryRestSeconds = 90
-        self.mainCompoundRestSeconds = 300
-        self.olympicRestSeconds = 240
-        self.mainUpperRestSeconds = 180
-        self.secondaryRestSeconds = 180
+        // Fresh rows seed from the shared core defaults so this init can never
+        // drift from RestConfig.standard / web C.REST_DEFAULTS. The property
+        // declarations above keep their literal defaults — those are SwiftData
+        // migration fill-ins for existing stores, part of the frozen schema.
+        let rest = RestConfig.standard
+        self.accessoryRestSeconds = rest.accessorySeconds
+        self.mainCompoundRestSeconds = rest.mainCompoundSeconds
+        self.olympicRestSeconds = rest.olympicSeconds
+        self.mainUpperRestSeconds = rest.mainUpperSeconds
+        self.secondaryRestSeconds = rest.secondarySeconds
         self.autoStartRest = false
         self.haptics = true
         self.gymTagFirstLaunchOfDay = false

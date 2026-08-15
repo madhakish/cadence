@@ -134,7 +134,7 @@ function renderLog(panel, sessions, exercises) {
   const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
   // Session volume relative to the biggest session on record — the thin bar
   // under each card makes trends scannable while scrolling.
-  const volumeOf = (s) => (s.exercises || []).reduce((a, e) => a + workingVolume(e), 0);
+  const volumeOf = (s) => (s.exercises || []).reduce((a, e) => a + workingVolume(e, exerciseByName.get(e.exerciseName)), 0);
   const maxVolume = Math.max(1, ...sessions.map(volumeOf));
   let currentMonth = "";
   for (const s of sessions) {
@@ -296,11 +296,14 @@ function openDetail(s, exerciseByName) {
       // top of a long session.
       const scrollTop = body.scrollTop;
       ui.clear(body);
-            const completedStrengthSets = completedStrengthSetCountForTest(s, exerciseByName);
-      const volume = (s.exercises || []).reduce((sum, entry) => sum + workingVolume(entry), 0);
+      const completedStrengthSets = completedStrengthSetCountForTest(s, exerciseByName);
+      const volume = (s.exercises || []).reduce((sum, entry) => sum + workingVolume(entry, exerciseByName.get(entry.exerciseName)), 0);
       const elapsedMinutes = s.completedAt
         ? Math.floor((Date.parse(s.completedAt) - Date.parse(s.date)) / 60000) : 0;
-      const duration = elapsedMinutes > 0 && elapsedMinutes < 24 * 60
+      // The same one-day sanity bound the stopwatch record applies — one
+      // constant, so the clock and this label cannot disagree about what a
+      // plausible single-day session is.
+      const duration = elapsedMinutes > 0 && elapsedMinutes < C.STOPWATCH_RECORD_WINDOW_MS / 60000
         ? (elapsedMinutes >= 60 ? `${Math.floor(elapsedMinutes / 60)}h ${elapsedMinutes % 60}m` : `${elapsedMinutes}m`)
         : null;
       const identity = s.programTag?.programName || "Standalone";
@@ -319,7 +322,7 @@ function openDetail(s, exerciseByName) {
         const phaseLabel = ui.sessionPhaseLabel(e, exerciseByName.get(e.exerciseName));
         const working = (e.sets || []).filter((set) => !set.isWarmup && set.status === "completed");
         const top = topSet(e);
-        const volume = workingVolume(e);
+        const volume = workingVolume(e, exercise);
         const setName = isStrengthEntry(e, exercise) ? "work set" : "completed set";
         const summaryBits = [`${working.length} ${setName}${working.length === 1 ? "" : "s"}`];
         if (top && exercise?.type !== "conditioning" && exercise?.type !== "timed") {
@@ -450,6 +453,7 @@ function renderCharts(panel, sessions, exercises, program) {
     metricSlot.append(ui.seg(metricOptions, chartMetric, (m) => { chartMetric = m; renderInner(); }));
 
     const displayValue = (lb) => C.primaryUnit(ui.prefs.unitDisplay) === "kg" ? C.kgFromLb(lb) : lb;
+    const chartExercise = exercises.find((e) => e.name === chartEx) || null;
     // Per (session, role): the top working weight, the best e1RM sample, and
     // the tonnage. One pass keeps every metric describing the same set of
     // performed sets, so switching metric can never re-slice the data.
@@ -478,7 +482,7 @@ function renderCharts(panel, sessions, exercises, program) {
           // charted value. It did not, so a kg lifter's volume axis, caption
           // and bars were canonical pounds wearing a kg label — and native
           // (which does convert) drew a different number from the same data.
-          volume: displayValue(entries.reduce((sum, entry) => sum + workingVolume(entry), 0)) || null,
+          volume: displayValue(entries.reduce((sum, entry) => sum + workingVolume(entry, chartExercise), 0)) || null,
           // The best completed working set's reps: the direct analogue of
           // "heaviest set" for a lift whose load never changes. Reps are a
           // count — no unit conversion. Mirrors the native metric == .reps

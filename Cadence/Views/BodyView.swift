@@ -14,7 +14,7 @@ struct BodyView: View {
     /// Body now, and the link's contract is the screen, not the tab.
     @Binding var pendingSignals: Bool
 
-    @AppStorage("healthReadEnabled") private var healthReadEnabled = false
+    @AppStorage(HealthKitService.readEnabledKey) private var healthReadEnabled = false
 
     @State private var showWeightEntry = false
     @State private var healthWeighIn: HealthBodyweight?

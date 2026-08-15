@@ -28,7 +28,10 @@ final class HealthKitService {
     /// that device never gave. HealthKit deliberately refuses to report read
     /// authorization status (that itself would leak health information), so
     /// the app has to remember that the lifter asked.
-    private static let readEnabledKey = "healthReadEnabled"
+    /// Non-private so the three @AppStorage view sites reference THIS key
+    /// instead of re-typing the literal — a typo in any copy silently forks
+    /// a privacy opt-in (the same pattern BackupCheckpointService's keys use).
+    static let readEnabledKey = "healthReadEnabled"
 
     var isReadEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: Self.readEnabledKey) }

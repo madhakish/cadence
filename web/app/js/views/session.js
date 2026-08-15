@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
-import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll } from "../db.js";
+import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram } from "../db.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
 import { exerciseDetail } from "./settings.js";
@@ -210,6 +210,12 @@ export async function openSession(id) {
         : (entry?.sets || []).filter((set) => !set.isWarmup && set.status === "completed");
       const top = recalledSets.reduce((best, set) => (!best || set.weightLb > best.weightLb ? set : best), null);
       if (!top) continue;
+      // A timed exposure recalls its longest hold, like native — "BW×0" is
+      // not what last Tuesday's plank was.
+      if (exMap.get(current.exerciseName)?.type === "timed") {
+        const longest = Math.max(0, ...recalledSets.map((set) => set.durationSeconds || 0));
+        return `${prefix}: ${C.cardioDurationLabel(longest)} · ${ui.fmtDate(p.date)} (${agoLabel(p.date)})`;
+      }
       const w = top.weightLb === 0 ? "BW" : ui.fmtWeight(top.weightLb);
       return `${prefix}: ${w}×${top.reps} · ${ui.fmtDate(p.date)} (${agoLabel(p.date)})`;
     }
@@ -1304,9 +1310,8 @@ function accPerf(se, roundingLb = 5) {
 // Rotations, not sessions: a session count means something different on every
 // split, and the floor it feeds has to mean the same thing on all of them.
 function rotationsSinceLastDeload(completed, program) {
-  const id = program.uuid || program.id;
   const mine = completed
-    .filter((s) => s.programTag && (s.programTag.programId === id || s.programTag.programName === program.name))
+    .filter((s) => s.programTag && sessionBelongsToProgram(s, program))
     .sort((a, b) => Date.parse(a.completedAt || a.date) - Date.parse(b.completedAt || b.date));
   let lastDeload = -1;
   mine.forEach((s, index) => { if (s.programTag.week === C.DELOAD_WEEK) lastDeload = index; });
@@ -1395,11 +1400,7 @@ function rollOverRecovery(program, exerciseByName, note) {
 }
 
 function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
-  const stableID = program.uuid || program.id;
-  const cycleSessions = completed.filter((candidate) => candidate.programTag
-    && (candidate.programTag.programId === stableID
-      || (candidate.programTag.programId == null
-        && candidate.programTag.programName === program.name))
+  const cycleSessions = completed.filter((candidate) => sessionBelongsToProgram(candidate, program)
     && candidate.programTag.cycleNumber === program.cycleNumber);
   const recoverySessions = cycleSessions.filter((candidate) =>
     candidate.programTag.week === C.DELOAD_WEEK);
@@ -1447,11 +1448,8 @@ export async function reconcileRecoveryBridge(program, completed = null, now = n
   // expiry window indefinitely, and Start would go on minting stale recovery
   // prescriptions. That is the indefinite-light-work path this whole mechanism
   // exists to close. Mirrors SessionCompletion.reconcileRecoveryBridge.
-  const stableID = program.uuid || program.id;
-  const openForThisProgram = (await Sessions.openAll()).some((candidate) => candidate.programTag
-    && (candidate.programTag.programId === stableID
-      || (candidate.programTag.programId == null
-        && candidate.programTag.programName === program.name)));
+  const openForThisProgram = (await Sessions.openAll())
+    .some((candidate) => sessionBelongsToProgram(candidate, program));
   if (openForThisProgram) return null;
   const [history, exercises] = await Promise.all([
     completed || Sessions.completed(), Exercises.all(),
@@ -1679,10 +1677,7 @@ async function advanceProgram(session, milestones) {
   let recoveryCompletionReason = null;
   if (isRecovery) {
     const completedRecovery = (await Sessions.completed())
-      .filter((candidate) => candidate.programTag
-        && (candidate.programTag.programId === (program.uuid || program.id)
-          || (candidate.programTag.programId == null
-            && candidate.programTag.programName === program.name))
+      .filter((candidate) => sessionBelongsToProgram(candidate, program)
         && candidate.programTag.cycleNumber === program.cycleNumber
         && candidate.programTag.week === C.DELOAD_WEEK);
     if (!completedRecovery.some((candidate) => String(candidate.id) === String(session.id))) {
@@ -1764,11 +1759,8 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
 // not whatever bar today's gym defaults to. Null means no evidence. Mirrors
 // ProgramSession.lastVolumeEvidence.
 export function lastVolumeEvidence(lift, program, sessions, { beforeCycle = null, inCycle = null } = {}) {
-  const id = program.uuid || program.id;
   const mine = sessions
-    .filter((s) => s.isCompleted && s.programTag
-      && (s.programTag.programId === id
-        || (s.programTag.programId == null && s.programTag.programName === program.name)))
+    .filter((s) => s.isCompleted && sessionBelongsToProgram(s, program))
     .sort((a, b) => Date.parse(b.completedAt || b.date) - Date.parse(a.completedAt || a.date));
   for (const session of mine) {
     if (!C.advancesPerExposure(lift.prescription)) {
@@ -1907,7 +1899,7 @@ export async function createSessionFromProgramDay(program, day) {
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const barLb = C.barLb(bar);
   const openForDay = allSessions.find((s) => !s.isCompleted && s.programTag
-    && (s.programTag.programId === stableProgramID || (s.programTag.programId == null && s.programTag.programName === program.name))
+    && sessionBelongsToProgram(s, program)
     && C.canResumeSession(s.programTag.cycleNumber, s.programTag.week, s.programTag.dayIndex,
       program.cycleNumber, program.currentWeek, day.order,
       s.programTag.planNames || [], dayNames)

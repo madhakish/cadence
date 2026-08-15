@@ -6,6 +6,7 @@ import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, planningBase, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
+import { gymTagShownOn, markGymTagShown } from "../gym-tag.js";
 
 const orderedSlots = (slots = [], roleAwareLegacy = false) => {
   const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
@@ -90,11 +91,11 @@ export async function render(host) {
   }
 
   // The keychain replacement is prominent until today's scan, then compact.
-  const gymProminent = !gym?.barcodeImage || localStorage.getItem("cadenceGymTagAutoDay") !== todayKey;
+  const gymProminent = !gym?.barcodeImage || !gymTagShownOn(todayKey);
   root.append(ui.h("div", { class: "card gym-tag-hero" },
     ui.h("button", { class: `btn ${gymProminent ? "primary" : "ghost"} wide`,
       style: { minHeight: "44px", justifyContent: "space-between" },
-      onClick: () => { localStorage.setItem("cadenceGymTagAutoDay", todayKey); showGymTag(gym); } },
+      onClick: () => { markGymTagShown(todayKey); showGymTag(gym); } },
       ui.h("span", { text: gymProminent ? "▤  Gym Tag" : "▤  Scan gym tag" }),
       gymProminent ? ui.h("span", { class: "sub", text: gym && gym.barcodeImage ? "Ready to scan ›" : "Add barcode ›" }) : null)));
 
@@ -104,9 +105,8 @@ export async function render(host) {
         ui.h("span", { class: "accent", text: `↻ ${recoveryCompletion.message}` }))));
   }
 
-  if (settings.gymTagFirstLaunchOfDay && gym?.barcodeImage
-      && localStorage.getItem("cadenceGymTagAutoDay") !== todayKey) {
-    localStorage.setItem("cadenceGymTagAutoDay", todayKey);
+  if (settings.gymTagFirstLaunchOfDay && gym?.barcodeImage && !gymTagShownOn(todayKey)) {
+    markGymTagShown(todayKey);
     queueMicrotask(() => showGymTag(gym));
   }
 
@@ -135,7 +135,9 @@ export async function render(host) {
     const report = coachingReport(program, completed, exMap, checkins);
     const handled = new Set(decisions.filter((decision) => (decision.programId || decision.programID) === (program.uuid || program.id))
       .map((decision) => decision.recommendationId || decision.recommendationID));
-    const visible = report.recommendations.filter((recommendation) => !handled.has(recommendation.id)).slice(0, 3);
+    // No cap, matching native: the engine already prioritizes, and hiding a
+    // pending recommendation on one client only made the coaches disagree.
+    const visible = report.recommendations.filter((recommendation) => !handled.has(recommendation.id));
     const latest = report.rotations.at(-1);
     const coach = ui.h("button", { class: "card row wide coach-summary",
       onClick: () => showCoachDetail({ program, report, visible, latest, allExercises }) },
@@ -267,7 +269,7 @@ function showCoachDetail({ program, report, visible, latest, allExercises }) {
               try {
                 const message = await applyCoachingRecommendation(proposed, recommendation, allExercises);
                 await Programs.saveWithDecision(proposed,
-                  coachingDecision(proposed, recommendation, "accepted", latest?.reasons || []));
+                  coachingDecision(proposed, recommendation, "accepted", latest?.reasons || [], program));
                 api.close(); ui.toast(message); ui.nav.refresh();
               } catch (error) {
                 ui.toast(error?.message || "That change could not be applied.");

@@ -3616,9 +3616,130 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     `a colourless dashed swatch falls back to the accent (${dashSwatch?.style.borderTop})`);
 }
 
+// ---- Cross-client parity: shared abstractions spelled once ----
+
+// The clock reader self-heals: bytes that can never be adopted (unparsable,
+// shapeless, ownerless, stale) are deleted on read instead of shadowing the
+// slot forever — mirroring native WorkoutClock.loadRecord.
+{
+  const { CLOCK_KEY, storedClockStart } = await import("../app/js/workout-clock.js");
+  localStorage.setItem(CLOCK_KEY, "not json{");
+  ok(storedClockStart(1) === null && localStorage.getItem(CLOCK_KEY) == null,
+    "[INV-CLOCK-SURVIVES-RELAUNCH] unparsable clock bytes are deleted on read");
+  localStorage.setItem(CLOCK_KEY, JSON.stringify({ sessionId: 1, start: Date.now() - 25 * 60 * 60 * 1000 }));
+  ok(storedClockStart(1) === null && localStorage.getItem(CLOCK_KEY) == null,
+    "[INV-CLOCK-SURVIVES-RELAUNCH] a stale record is deleted on read, not left to linger");
+  const live = { sessionId: 7, start: Date.now() - 60 * 1000 };
+  localStorage.setItem(CLOCK_KEY, JSON.stringify(live));
+  ok(storedClockStart(1) === null && localStorage.getItem(CLOCK_KEY) != null,
+    "[INV-CLOCK-SURVIVES-RELAUNCH] another session's LIVE record survives a foreign read");
+  ok(storedClockStart(7) === live.start, "the owner still adopts its record");
+  localStorage.removeItem(CLOCK_KEY);
+}
+
+// The gym-tag day stamp has one owner module (mirroring the clock record), and
+// the persistence layer clears it on wipe/import — a restored phone gets its
+// prominent tag and first-launch auto-show back.
+{
+  const { GYM_TAG_DAY_KEY, gymTagShownOn, markGymTagShown } = await import("../app/js/gym-tag.js");
+  const today = new Date().toLocaleDateString("en-CA");
+  markGymTagShown(today);
+  ok(gymTagShownOn(today) && localStorage.getItem(GYM_TAG_DAY_KEY) === today,
+    "the gym-tag stamp records today through the owner module");
+  ok(!gymTagShownOn("2001-01-01"), "a different day reads as not shown");
+  await db.importBundle(JSON.parse(await db.exportJSON()), { createCheckpoint: false });
+  ok(localStorage.getItem(GYM_TAG_DAY_KEY) == null,
+    "a backup import clears the pre-import gym-tag stamp");
+}
+
+// Session→program linkage is spelled once: a tag carrying a programId belongs
+// to that program and NO other — a deleted program's sessions must never be
+// attributed to a later program that reuses the display name. Mirrors native
+// WorkoutSession.belongs(to:).
+{
+  const program = { uuid: "11111111-1111-4111-8111-111111111111", id: 3, name: "Strength" };
+  const s = (tag) => ({ programTag: tag });
+  ok(db.sessionBelongsToProgram(s({ programId: program.uuid, programName: "Old Name" }), program),
+    "a uuid-tagged session matches its program regardless of name");
+  ok(db.sessionBelongsToProgram(s({ programId: 3, programName: null }), program),
+    "a legacy numeric-id tag still matches");
+  ok(!db.sessionBelongsToProgram(s({ programId: "22222222-2222-4222-8222-222222222222", programName: "Strength" }), program),
+    "a FOREIGN id never falls back to the name — deleted programs stay deleted");
+  ok(db.sessionBelongsToProgram(s({ programId: null, programName: "Strength" }), program),
+    "only an ID-LESS legacy tag may match by display name");
+  ok(!db.sessionBelongsToProgram(s(null), program) && !db.sessionBelongsToProgram({}, program),
+    "an untagged session belongs to no program");
+}
+
+// Working volume: the library TYPE excludes conditioning first; the per-set
+// DATA still excludes cardio sets whose library entry is gone. One rule,
+// mirroring native SessionExercise.workingVolumeLb.
+{
+  const liftEntry = { sets: [
+    { isWarmup: false, status: "completed", weightLb: 100, reps: 5, loadBasis: "totalBar", implementCount: 1 },
+    { isWarmup: true, status: "completed", weightLb: 45, reps: 5, loadBasis: "totalBar", implementCount: 1 },
+  ] };
+  ok(db.workingVolume(liftEntry, { type: "barbell" }) === 500,
+    "a completed working set contributes weight × reps; warmups never do");
+  ok(db.workingVolume(liftEntry, { type: "conditioning" }) === 0,
+    "a conditioning-TYPED movement contributes nothing even with plain weight×reps sets");
+  const carryEntry = { sets: [
+    { isWarmup: false, status: "completed", weightLb: 20, reps: 1, distanceMiles: 3, loadBasis: "external", implementCount: 1 },
+  ] };
+  ok(db.workingVolume(carryEntry) === 0,
+    "a loaded carry is excluded by its DATA when the library entry is gone");
+}
+
+// Backup validator bounds are RELEASED acceptance, shared with native
+// ImportService (which widened its lift set-count caps to this envelope):
+// values this validator has already let into real stores must stay
+// restorable forever — a bound tightened after the fact would reject a
+// user's own next backup.
+{
+  const bundle = (program) => ({ schemaVersion: db.BACKUP_SCHEMA_VERSION, programs: [program] });
+  const base = { id: "33333333-3333-4333-8333-333333333333", name: "P", focus: "strength", cycleNumber: 1 };
+  const rejects = (program, why) => {
+    try { db.validateBackup(bundle(program)); return ok(false, why); } catch { return ok(true, why); }
+  };
+  const lifts = (fields) => [{ name: "D", order: 0, lifts: [{ exerciseName: "X", role: "main", ...fields }] }];
+  db.validateBackup(bundle({ ...base, currentWeek: 4 }));
+  ok(true, "currentWeek 4 (deload) is a valid rotation pointer");
+  db.validateBackup(bundle({ ...base, days: lifts({ doubleProgressionSets: 100, maximumSets: 100 }) }));
+  ok(true, "lift set counts up to the released 100 envelope stay restorable");
+  rejects({ ...base, days: lifts({ doubleProgressionSets: 101 }) },
+    "doubleProgressionSets above the released envelope is rejected");
+  rejects({ ...base, days: [{ name: "D", order: 0, accessories: [{ exerciseName: "X", maximumSets: 21 }] }] },
+    "accessory maximumSets above the released 20 cap is rejected (both clients released 20)");
+}
+
+// Accepted coaching decisions carry the before/after program snapshots the
+// native audit trail records; deferred decisions record none. The accessory
+// cut clamps to the 1% floor like native.
+{
+  const before = { uuid: "44444444-4444-4444-8444-444444444444", name: "P", cycleNumber: 2, currentWeek: 3,
+    days: [{ name: "Upper", order: 0,
+      lifts: [{ exerciseName: "Bench Press", role: "main", order: 0 }],
+      accessories: [{ exerciseName: "Face Pulls", sets: 3, order: 0 }] }] };
+  ok(coach.programDescription(before) === "Upper[Bench Press:lift,Face Pulls:3]",
+    "programDescription reads exactly like native CoachingService.programDescription");
+  const after = structuredClone(before);
+  after.days[0].accessories[0].sets = 4;
+  const rec = { id: "r1", ruleID: "rule", title: "t", explanation: "e", change: { type: "addSet", slotID: "s", count: 1 } };
+  const accepted = coach.coachingDecision(after, rec, "accepted", [], before);
+  ok(accepted.beforeValue === "Upper[Bench Press:lift,Face Pulls:3]"
+    && accepted.afterValue === "Upper[Bench Press:lift,Face Pulls:4]",
+    "an accepted decision snapshots the plan before and after the change");
+  const deferred = coach.coachingDecision(before, rec, "deferred", []);
+  ok(deferred.beforeValue === null && deferred.afterValue === null,
+    "a deferred decision records no snapshot, like native record()");
+  const cut = coach.coachingDecision(before, { ...rec, change: { type: "reduceAccessoryVolume", percent: 100 } }, "accepted", [], before);
+  ok(cut.afterValue === "temporaryAccessoryPercent:1:cycle:2:rotation:3",
+    "a total cut clamps to the 1% floor instead of writing an unparseable 0");
+}
+
 // A banked log is correctable: the set that never got its ✓ mid-workout and
-// the set that banked the stale plan's weight are exactly the record the
-// next prescription reads, so History must be able to fix them.
+// the set that banked the stale plan's weight are the record charts, recalls,
+// exports, and prior-best evidence read, so History must be able to fix them.
 {
   const sid = await db.Sessions.save({
     date: db.iso(new Date()), completedAt: db.iso(new Date()), isCompleted: true, notes: "",

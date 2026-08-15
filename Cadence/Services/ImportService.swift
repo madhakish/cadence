@@ -371,14 +371,18 @@ enum ImportService {
                     try finite(lift.loadOffsetLb, "\(liftPath).loadOffsetLb", min: 0)
                     try finite(lift.peakOffsetLb, "\(liftPath).peakOffsetLb", min: 0)
                     try finite(lift.deloadMultiplier, "\(liftPath).deloadMultiplier", min: 0.25, max: 1)
-                    try integer(lift.doubleProgressionSets, "\(liftPath).doubleProgressionSets", min: 1, max: 20)
+                    // Set-count ceiling is 100, not 20: the released web
+                    // validator accepted up to 100 into real stores, and a
+                    // cross-platform backup those stores exported must stay
+                    // restorable here. Widening revokes nothing.
+                    try integer(lift.doubleProgressionSets, "\(liftPath).doubleProgressionSets", min: 1, max: 100)
                     try integer(lift.minimumReps, "\(liftPath).minimumReps", min: 1, max: 100)
                     try integer(lift.maximumReps, "\(liftPath).maximumReps", min: 1, max: 100)
                     try integer(lift.currentReps, "\(liftPath).currentReps", min: 1, max: 100)
                     try finite(lift.lastPeakSingleLb, "\(liftPath).lastPeakSingleLb", min: 0)
                     try finite(lift.peakSingleIncrementLb, "\(liftPath).peakSingleIncrementLb", min: 0)
                     try finite(lift.dropIncrementLb, "\(liftPath).dropIncrementLb", min: 0)
-                    try integer(lift.maximumSets, "\(liftPath).maximumSets", min: 1, max: 20)
+                    try integer(lift.maximumSets, "\(liftPath).maximumSets", min: 1, max: 100)
                     try finite(lift.baseWeightLb, "\(liftPath).baseWeightLb", min: 0)
                     try finite(lift.estimatedMaxLb, "\(liftPath).estimatedMaxLb", min: 0)
                     try integer(lift.stallCount, "\(liftPath).stallCount", min: 0)
@@ -888,7 +892,9 @@ enum ImportService {
         }
         for (oi, e) in (s.exercises ?? []).enumerated() {
             let entry = SessionExercise(order: oi, exercise: e.name.flatMap { exByName[$0] }, notes: e.notes ?? "")
-            entry.programRole = e.role
+            // Empty means roleless, matching web's `e.role || null`: importing
+            // "" as a role would flip an unprogrammed entry's chart role.
+            entry.programRole = e.role.flatMap { $0.isEmpty ? nil : $0 }
             entry.programSlotID = e.programSlotId
             entry.barID = e.barId
             entry.plannedWeightLb = e.plannedWeightLb

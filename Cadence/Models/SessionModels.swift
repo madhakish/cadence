@@ -159,9 +159,14 @@ final class SessionExercise {
         // A carried pack is not tonnage. Twenty pounds for three miles is not
         // twenty pounds of volume, and conditioning has never contributed to
         // this number — it only became reachable once loaded carries started
-        // storing a weight instead of a forced zero.
+        // storing a weight instead of a forced zero. The library TYPE decides
+        // first; the per-set DATA (distance, flights, duration) still excludes
+        // a cardio set whose library entry is gone — restored history must
+        // behave the same on both clients (mirrors web db.js workingVolume).
         guard exercise?.type != .conditioning else { return 0 }
-        return workingSets.compactMap(\.volumeLb).reduce(0, +)
+        return workingSets
+            .filter { !(($0.distanceMiles ?? 0) > 0 || ($0.flights ?? 0) > 0 || ($0.durationSeconds ?? 0) > 0) }
+            .compactMap(\.volumeLb).reduce(0, +)
     }
 
     var topSet: SetEntry? {
