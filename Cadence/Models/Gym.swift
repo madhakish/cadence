@@ -151,3 +151,11 @@ final class AppSettings {
                    accessorySeconds: accessoryRestSeconds)
     }
 }
+
+extension Array where Element == AppSettings {
+    /// The display preference for a `@Query`-fetched settings list — the
+    /// single-row read plus its fallback, spelled once. Dozens of views
+    /// repeated `first?.unitDisplay ?? .lbPrimary`; a fallback edited in one
+    /// copy and not the rest would silently fork the app's display unit.
+    var unitDisplay: UnitDisplay { first?.unitDisplay ?? .lbPrimary }
+}

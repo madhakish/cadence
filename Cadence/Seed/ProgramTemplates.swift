@@ -32,7 +32,7 @@ enum ProgramTemplates {
         }
 
         let existingPrograms = try context.fetch(FetchDescriptor<Program>())
-        let existingByName = Dictionary(uniqueKeysWithValues: existing.map { ($0.name, $0) })
+        let existingByName = existing.indexedByName()
         let templateByName = Dictionary(uniqueKeysWithValues: template.exercises.map { ($0.name, $0) })
         let historyNames = Set(template.days.flatMap { day in
             day.lifts.flatMap { [$0.exercise, $0.historyExercise].compactMap { $0 } }
@@ -129,7 +129,7 @@ enum ProgramTemplates {
             FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.isCompleted })
         )
         for session in sessions {
-            let timestamp = session.completedAt ?? session.date
+            let timestamp = session.effectiveCompletionDate
             for entry in session.exercises {
                 guard let name = entry.exercise?.name, names.contains(name) else { continue }
                 let working = entry.workingSets.filter { $0.weightLb > 0 && $0.reps >= 1 }

@@ -74,7 +74,7 @@ enum SessionCompletion {
         }
         session.isCompleted = true
         session.completedAt = .now
-        let unitDisplay = (try? context.fetch(FetchDescriptor<AppSettings>()).first?.unitDisplay) ?? .lbPrimary
+        let unitDisplay = ((try? context.fetch(FetchDescriptor<AppSettings>())) ?? []).unitDisplay
 
         var lines: [SessionSummary.LiftLine] = []
         var allEvents: [PREvent] = []
@@ -221,7 +221,7 @@ enum SessionCompletion {
         if isProgramSession,
            let programs = try? context.fetch(FetchDescriptor<Program>()),
            let program = programs.matching(sessionProgramID: session.programID, name: session.programName),
-           let nextDay = program.orderedDays.first(where: { $0.order == program.nextDayIndex }) ?? program.orderedDays.first {
+           let nextDay = program.nextDay {
             // A day is not in a phase — its slots are, and they can disagree.
             // Naming one phase for the whole day claims a wave over slots that
             // may be linear, 5/3/1 or speed work. Position is what a "next up"
@@ -329,13 +329,13 @@ enum SessionCompletion {
         guard let sessions = try? context.fetch(
             FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.isCompleted })
         ) else { return nil }
-        let anchor = session.completedAt ?? session.date
+        let anchor = session.effectiveCompletionDate
         var best = 0.0
         var bestDate = Date.distantPast
         for candidate in sessions where candidate !== session {
             // PRIOR means prior: a session banked out of order must not let
             // later work retroactively pick this cycle's regime.
-            let stamp = candidate.completedAt ?? candidate.date
+            let stamp = candidate.effectiveCompletionDate
             guard stamp <= anchor else { continue }
             for entry in candidate.exercises where entry.exercise?.name == exerciseName {
                 // Same rep ceiling as strengthSampleIndex: Epley drifts high
@@ -430,7 +430,7 @@ enum SessionCompletion {
         _ sessions: [WorkoutSession], program: Program
     ) -> Int {
         let mine = sessions.filter { $0.isCompleted && $0.belongs(to: program) }
-            .sorted { ($0.completedAt ?? $0.date) < ($1.completedAt ?? $1.date) }
+            .sorted { $0.effectiveCompletionDate < $1.effectiveCompletionDate }
         var lastDeloadIndex = -1
         for (index, session) in mine.enumerated() where session.programWeek == ProgramProgression.deloadWeek {
             lastDeloadIndex = index
@@ -553,7 +553,7 @@ enum SessionCompletion {
             limit: 1,
             context: context
         ).first
-        if let peak { return peak.completedAt ?? peak.date }
+        if let peak { return peak.effectiveCompletionDate }
 
         // Early recovery deliberately skips Peak. In that case the most
         // recent Volume/Load completion is the expiry anchor.
@@ -570,9 +570,9 @@ enum SessionCompletion {
             context: context
         ).first
         let preceding = [volume, load].compactMap { $0 }.max {
-            ($0.completedAt ?? $0.date) < ($1.completedAt ?? $1.date)
+            $0.effectiveCompletionDate < $1.effectiveCompletionDate
         }
-        return preceding.map { $0.completedAt ?? $0.date }
+        return preceding.map(\.effectiveCompletionDate)
     }
 
     /// Close a stale or already-satisfied recovery bridge before Today or
@@ -620,7 +620,7 @@ enum SessionCompletion {
         guard try context.fetch(openByName).isEmpty else { return nil }
 
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
-        let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
+        let exerciseByName = exercises.indexedByName()
         let recoveryOrders = ProgramProgression.recoveryDayOrders(
             program.orderedDays.map { programDay in
                 let mainName = programDay.orderedLifts.first(where: { $0.role == .main })?.exerciseName
@@ -667,7 +667,7 @@ enum SessionCompletion {
             message = "Recovery complete — the seven-day recovery window elapsed. Cycle \(nextCycle) starts at Volume."
         }
 
-        let unitDisplay = (try context.fetch(FetchDescriptor<AppSettings>()).first?.unitDisplay) ?? .lbPrimary
+        let unitDisplay = try context.fetch(FetchDescriptor<AppSettings>()).unitDisplay
         var events: [PREvent] = []
         rollOverRecovery(
             program: program,
@@ -697,10 +697,10 @@ enum SessionCompletion {
         guard let program = programs.matching(sessionProgramID: session.programID,
                                               name: session.programName) else { return }
         let dayIndex = session.programDayIndex ?? 0
-        guard let day = program.days.first(where: { $0.order == dayIndex }) else { return }
+        guard let day = program.day(order: dayIndex) else { return }
         let week = session.programWeek ?? program.currentWeek
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
-        let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
+        let exerciseByName = exercises.indexedByName()
         let exerciseTypeByName = exerciseByName.mapValues { $0.typeRaw }
         let allDayOrders = program.orderedDays.map(\.order)
         let recoveryDayOrders = ProgramProgression.recoveryDayOrders(
@@ -1008,7 +1008,7 @@ enum SessionCompletion {
                 selectedExposureCount: recoveryDayOrders.count,
                 selectedExposuresComplete: advance.isLastDay,
                 lastHardPhaseCompletion: nil,
-                asOf: session.completedAt ?? session.date
+                asOf: session.effectiveCompletionDate
             )
         } else {
             advance = ProgramProgression.scheduleAdvance(
@@ -1059,7 +1059,7 @@ enum SessionCompletion {
             exerciseTypeByName: exerciseTypeByName,
             context: context,
             unitDisplay: unitDisplay,
-            date: session.completedAt ?? session.date,
+            date: session.effectiveCompletionDate,
             events: &events
         )
     }

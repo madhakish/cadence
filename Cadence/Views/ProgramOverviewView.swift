@@ -162,7 +162,7 @@ struct ProgramOverviewView: View {
     }
 
     private func format(_ lb: Double) -> String {
-        (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lb)
+        settingsList.unitDisplay.format(lb: lb)
     }
 
     private func importProgram(from result: Result<URL, Error>) -> String {

@@ -63,7 +63,7 @@ struct ActiveSessionView: View {
     private var workoutName: String {
         let program = programs.matching(sessionProgramID: session.programID, name: session.programName)
         return session.programDayIndex.flatMap { index in
-            program?.orderedDays.first { $0.order == index }?.name
+            program?.day(order: index)?.name
         } ?? session.programName ?? "Workout"
     }
     /// The stopwatch origin lives in WorkoutClock (root-scoped), so it survives
@@ -392,7 +392,7 @@ struct ActiveSessionView: View {
                     lines[current.persistentModelID] = "\(prefix): \(CardioFormat.durationLabel(seconds: longest)) · \(when) (\(agoLabel(past.date)))"
                     continue
                 }
-                let weight = top.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb)
+                let weight = top.weightLb == 0 ? "BW" : settingsList.unitDisplay.format(lb: top.weightLb)
                 let when = past.date.formatted(date: .abbreviated, time: .omitted)
                 lines[current.persistentModelID] = "\(prefix): \(weight)×\(top.reps) · \(when) (\(agoLabel(past.date)))"
             }
@@ -433,7 +433,7 @@ struct ActiveSessionView: View {
         guard let role = entry.programRole else { return "Last" }
         let program = programs.matching(sessionProgramID: session.programID, name: session.programName)
         let day = session.programDayIndex.flatMap { index in
-            program?.orderedDays.first { $0.order == index }?.name
+            program?.day(order: index)?.name
         }
         return ["Last", role, day].compactMap { $0 }.joined(separator: " ")
     }
@@ -483,7 +483,7 @@ struct ActiveSessionView: View {
             set.autoregReason = reason
         }
         let top = plan.map { ordered[$0.index].weightLb }.max() ?? 0
-        entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top)) — \(reason.rawValue)."
+        entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \(settingsList.unitDisplay.format(lb: top)) — \(reason.rawValue)."
         PersistenceErrorCenter.shared.save(context, operation: "Dropping the load")
     }
 }
@@ -589,7 +589,7 @@ private struct ExerciseSection: View {
                 PersistenceErrorCenter.shared.report(error, operation: "Loading the program for the swap", context: context)
                 return
             }
-            guard let day = program.days.first(where: { $0.order == dayIndex }) else {
+            guard let day = program.day(order: dayIndex) else {
                 PersistenceErrorCenter.shared.report(
                     NSError(domain: "Cadence", code: 2,
                             userInfo: [NSLocalizedDescriptionKey: "The program day for this session no longer exists."]),
@@ -1992,7 +1992,7 @@ private struct SessionSummarySheet: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(line.exerciseName).font(.headline)
                             Text(line.volumeLb > 0
-                                 ? "Top: \(line.topSetLabel) · Volume: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: line.volumeLb))"
+                                 ? "Top: \(line.topSetLabel) · Volume: \(settingsList.unitDisplay.format(lb: line.volumeLb))"
                                  : line.topSetLabel)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)

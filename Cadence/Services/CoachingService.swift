@@ -13,7 +13,7 @@ enum CoachingService {
         exercises: [Exercise],
         checkIns: [CheckIn] = []
     ) -> CoachingReport {
-        let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
+        let exerciseByName = exercises.indexedByName()
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         let slots = program.days.flatMap { day -> [CoachingProgramSlot] in
             let liftSlots = day.lifts.map { lift in
@@ -125,13 +125,13 @@ enum CoachingService {
             }
             return CoachingSessionSnapshot(
                 id: session.id,
-                date: session.completedAt ?? session.date,
+                date: session.effectiveCompletionDate,
                 programID: program.id,
                 cycleNumber: cycle,
                 rotation: rotation,
                 dayIndex: dayIndex,
                 hasHardStopCheckIn: checkIns.contains { checkIn in
-                    let start = session.completedAt ?? session.date
+                    let start = session.effectiveCompletionDate
                     let seconds = checkIn.date.timeIntervalSince(start)
                     return checkIn.isHardStop && seconds >= 0
                         && seconds <= CoachingEngine.checkInAttributionWindow
@@ -176,7 +176,7 @@ enum CoachingService {
                 result = "\(accessory.exerciseName): \(old) → \(accessory.sets) sets per rotation."
             }
         case .addPattern(let pattern, let dayIndex, let sets):
-            guard let day = program.days.first(where: { $0.order == dayIndex }) ?? program.orderedDays.first,
+            guard let day = program.day(order: dayIndex) ?? program.orderedDays.first,
                   let exercise = preferredExercise(for: pattern, in: exercises) else {
                 throw CoachingApplyError.noExercise(pattern.name)
             }
@@ -200,7 +200,7 @@ enum CoachingService {
             var resolvedPatterns: [(MovementPattern, Int, Int, ProgramDay, Exercise)] = []
             for adjustment in adjustments {
                 guard case .addPattern(let pattern, let dayIndex, let sets) = adjustment else { continue }
-                guard let day = program.days.first(where: { $0.order == dayIndex }) ?? program.orderedDays.first,
+                guard let day = program.day(order: dayIndex) ?? program.orderedDays.first,
                       let exercise = preferredExercise(for: pattern, in: exercises) else {
                     throw CoachingApplyError.noExercise(pattern.name)
                 }
@@ -418,26 +418,15 @@ enum CoachingService {
     }
 
     private static func preferredExercise(for pattern: MovementPattern, in exercises: [Exercise]) -> Exercise? {
-        let preferred: [MovementPattern: [String]] = [
-            .verticalPull: ["Lat Pulldown", "Assisted Pull-up", "Pull-ups", "Chin-ups",
-                            "Weighted Pull-up", "Weighted Chin-up"],
-            .kneeFlexion: ["Seated Leg Curl", "Lying Leg Curl", "Nordic Hamstring Curl"],
-            .shoulderStability: ["Face Pulls", "Band External Rotation", "Y-T-W Raises"],
-            .adductor: ["Copenhagen Plank", "Cable Hip Adduction"],
-            .core: ["Hanging Knee Raise", "Dead Bug", "Plank"],
-        ]
-        let available = exercises.filter { !$0.isShelved && $0.gateStatus != .shelved }
-        for name in preferred[pattern] ?? [] {
+        let available = exercises.filter(\.isAvailableForProgramming)
+        for name in CoachingEngine.preferredExerciseNames[pattern] ?? [] {
             if let exercise = available.first(where: { $0.name == name }) { return exercise }
         }
         return available.first { $0.movementPattern == pattern }
     }
 
     private static func defaultRepRange(_ pattern: MovementPattern) -> (Int, Int) {
-        switch pattern {
-        case .adductor, .core: return (8, 12)
-        default: return (6, 10)
-        }
+        CoachingEngine.defaultRepRange(for: pattern)
     }
 
     private static func programDescription(_ program: Program) -> String {

@@ -211,7 +211,7 @@ enum Seeder {
     /// are the only backfills.
     static func syncLibrary(context: ModelContext) throws {
         let existing = try context.fetch(FetchDescriptor<Exercise>())
-        var byName = Dictionary(uniqueKeysWithValues: existing.map { ($0.name, $0) })
+        var byName = existing.indexedByName()
         for definition in libraryDefinitions() {
             if let current = byName[definition.name] {
                 if current.movementGroup.isEmpty && !definition.movementGroup.isEmpty {
@@ -459,7 +459,7 @@ enum Seeder {
                     && ($0.programID == program.id
                         || ($0.programID == nil && $0.programName == program.name))
             }
-            .sorted { ($0.completedAt ?? $0.date) > ($1.completedAt ?? $1.date) }
+            .sorted { $0.effectiveCompletionDate > $1.effectiveCompletionDate }
 
         for day in days {
             let current = day.orderedLifts.map {

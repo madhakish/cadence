@@ -223,5 +223,20 @@ final class Exercise {
         !reEntryCriteria.isEmpty && Set(reEntryCriteria).isSubset(of: Set(completedReEntryCriteria))
     }
 
+    /// Shelved is the only gate state the coach must not prescribe into;
+    /// watch and re-entry remain programmable (re-entry EXISTS to be
+    /// programmed carefully). Mirrors web exerciseIsAvailableForProgramming.
+    var isAvailableForProgramming: Bool { gateStatus != .shelved }
+
     var isMainLift: Bool { category == .main }
+}
+
+extension Array where Element == Exercise {
+    /// The name→record index used at every session/program↔library join.
+    /// Names are `@Attribute(.unique)`, so `uniqueKeysWithValues` cannot trap
+    /// on a store that upholds its own constraint — and the join is spelled
+    /// once instead of once per service.
+    func indexedByName() -> [String: Exercise] {
+        Dictionary(uniqueKeysWithValues: map { ($0.name, $0) })
+    }
 }

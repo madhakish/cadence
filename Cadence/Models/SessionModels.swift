@@ -82,6 +82,12 @@ final class WorkoutSession {
         uniqueSessionModels(exercises).sorted { $0.order < $1.order }
     }
 
+    /// When this session actually ended — the timestamp history, progression
+    /// windows, and check-in attribution all sort and anchor by. Sessions
+    /// banked before `completedAt` existed fall back to their start date.
+    /// Mirrors web `completedAt || date`.
+    var effectiveCompletionDate: Date { completedAt ?? date }
+
     /// True if this session contains a movement watched at the knee
     /// (running-type conditioning) — drives the next-morning knee check-in.
     /// Keyed on the exercise's watch-site data (editable in the library),

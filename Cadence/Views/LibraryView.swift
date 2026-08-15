@@ -123,7 +123,7 @@ struct ExerciseDetailView: View {
             }
             guard let top = matching.flatMap(\.workingSets).max(by: { $0.weightLb < $1.weightLb }) else { continue }
             let program = s.programName.map { " · \($0)" } ?? ""
-            return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb)) × \(top.reps)\(program)"
+            return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \(settingsList.unitDisplay.format(lb: top.weightLb)) × \(top.reps)\(program)"
         }
         return "Not yet"
     }
@@ -293,7 +293,7 @@ struct ExerciseDetailView: View {
                                 value: $exercise.reEntryTestSets, in: 1...8)
                         Stepper("Test reps: \(exercise.reEntryTestReps)",
                                 value: $exercise.reEntryTestReps, in: 1...12)
-                        Stepper("Test load: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: exercise.reEntryTestWeightLb))",
+                        Stepper("Test load: \(settingsList.unitDisplay.format(lb: exercise.reEntryTestWeightLb))",
                                 value: $exercise.reEntryTestWeightLb, in: 0...1000, step: 5)
                     }
                 }

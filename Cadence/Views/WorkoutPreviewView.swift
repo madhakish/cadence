@@ -19,7 +19,7 @@ struct WorkoutPreviewView: View {
     private var completedSessions: [WorkoutSession]
 
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
-    private var unitDisplay: UnitDisplay { settingsList.first?.unitDisplay ?? .lbPrimary }
+    private var unitDisplay: UnitDisplay { settingsList.unitDisplay }
     private var phase: CyclePhase { CyclePhase(rawValue: program.currentWeek) ?? .volume }
 
     private func targetPlan(for lift: ProgramLift) -> SessionPlan {

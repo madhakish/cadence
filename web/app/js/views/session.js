@@ -149,9 +149,6 @@ function beep(haptics = true) {
   if (haptics && navigator.vibrate) navigator.vibrate(200);
 }
 
-const topSetOf = (e) => (e.sets || []).filter((x) => !x.isWarmup && x.status === "completed")
-  .reduce((b, x) => (!b || x.weightLb > b.weightLb ? x : b), null);
-
 // Compact "how long ago" for the last-session recall line.
 function agoLabel(date) {
   const days = Math.max(0, Math.floor((Date.now() - new Date(date)) / 86400000));
@@ -1831,26 +1828,15 @@ export function planningBase(lift, exercise, program, sessions) {
 export function volumeFallbackSets(lift, program) {
   const stalled = [...(program.days || [])]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .flatMap((day) => orderedProgramSlots(day.lifts || [])
+    .flatMap((day) => C.orderedProgramSlots(day.lifts || [])
       .filter((slot) => (slot.stallCount ?? 0) > 0 && !C.advancesPerExposure(slot.prescription)));
   const rank = stalled.findIndex((slot) => slot.id === lift.id);
   if (rank < 0) return 0;
   return C.volumeIncrementSets(lift.stallCount ?? 0, rank, program.maximumAddedSetsPerRotation ?? 6);
 }
 
-function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
-  const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
-  return [...slots].sort((a, b) => {
-    if (allLegacy && roleAwareLegacy) {
-      const role = (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1);
-      if (role) return role;
-    }
-    return (a.order ?? 0) - (b.order ?? 0) || a.exerciseName.localeCompare(b.exerciseName);
-  });
-}
-
 function sessionTargetsMatch(session, program, day, exMap, allSessions) {
-  return orderedProgramSlots(day.lifts, true).every((lift) => {
+  return C.orderedProgramSlots(day.lifts, true).every((lift) => {
     const exercise = exMap.get(lift.exerciseName);
     // The same honest base the builder plans from — an open session built
     // from the stale label must not resume once the repair raises the plan.
@@ -1886,8 +1872,8 @@ export async function createSessionFromProgramDay(program, day) {
   // A name/program-only match resurrected stale snapshots after a day was
   // edited; canResume compares the snapshot (not live exercises) so a
   // session-local remove/swap is preserved while a program edit builds fresh.
-  const sortedLifts = orderedProgramSlots(day.lifts, true);
-  const sortedAccessories = orderedProgramSlots(day.accessories);
+  const sortedLifts = C.orderedProgramSlots(day.lifts, true);
+  const sortedAccessories = C.orderedProgramSlots(day.accessories);
   const dayNames = [...sortedLifts.map((l) => l.exerciseName), ...sortedAccessories.map((a) => a.exerciseName)];
   const stableProgramID = program.uuid || program.id;
   const [allSessions, allExercises, gym, settings, coachingDecisions] = await Promise.all([

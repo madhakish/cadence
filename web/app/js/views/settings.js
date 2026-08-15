@@ -321,7 +321,7 @@ function pickExerciseSheet(onPick) {
       const paint = () => {
         ui.clear(results);
         const term = search.value.trim().toLowerCase();
-        const available = all.filter((exercise) => exercise.gateStatus !== "shelved" && !exercise.isShelved);
+        const available = all.filter(C.exerciseIsAvailableForProgramming);
         const visible = term ? available.filter((exercise) => [exercise.name, exercise.movementGroup, exercise.type,
           C.movementPatternName(exercise.movementPattern), ...(exercise.aliases || []), ...(exercise.strategyTags || [])]
           .some((value) => String(value || "").toLowerCase().includes(term))) : available;
@@ -981,7 +981,7 @@ export function exerciseDetail(e, { onClose } = {}) {
 
         body.append(ui.h("div", { class: "section-title", text: "Availability & re-entry" }));
         const gateStatus = ui.h("select", {}, ...[["open", "Open"], ["watch", "Watch"], ["shelved", "Shelved"], ["re-entry", "Re-entry test"]]
-          .map(([value, text]) => ui.h("option", { value, text, selected: value === (e.gateStatus || (e.isShelved ? "shelved" : "open")) })));
+          .map(([value, text]) => ui.h("option", { value, text, selected: value === C.exerciseGateStatus(e) })));
         gateStatus.addEventListener("change", async () => {
           e.gateStatus = gateStatus.value; e.isShelved = gateStatus.value === "shelved";
           await Exercises.save(e); draw();
