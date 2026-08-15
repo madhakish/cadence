@@ -3285,6 +3285,46 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "[INV-SESSION-ALWAYS-ESCAPABLE] banked history survives a discard");
 }
 
+// An exercise added mid-session is born at ITS OWN starting load, not the
+// empty bar's. The first "+ Set" of an entry with no plan and no predecessor
+// defaulted to a literal 45 lb whatever the movement was — a bodyweight GHD
+// sit-up came into the world asking for 45 lb of phantom plates.
+{
+  const gid = await session.createBlankSession();
+  const g = await db.Sessions.get(gid);
+  g.exercises.push({ order: 0, exerciseName: "GHD Sit-up", notes: "", phase: null,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+  g.exercises.push({ order: 1, exerciseName: "DB Curls", notes: "", phase: null,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+  await db.Sessions.save(g);
+  await session.openSession(gid); await tick();
+  const addSetButtons = () => [...[...document.querySelectorAll("#overlays .overlay")].pop()
+    .querySelectorAll("button")].filter((b) => b.textContent === "+ Set");
+  addSetButtons()[0].click(); await tick();
+  let stored = await db.Sessions.get(gid);
+  ok(stored.exercises[0].sets[0].weightLb === 0,
+    `a bodyweight movement added mid-session is born unloaded (got ${stored.exercises[0].sets[0].weightLb})`);
+  addSetButtons()[1].click(); await tick();
+  stored = await db.Sessions.get(gid);
+  ok(stored.exercises[1].sets[0].weightLb === 5,
+    `a dumbbell accessory added mid-session starts at the catalog's light default (got ${stored.exercises[1].sets[0].weightLb})`);
+
+  // A total-bar movement is floored at the bar in hand: the catalog says
+  // 20 lb for a skull crusher (assuming a lighter bar), but a set on the
+  // gym's 45 lb bar cannot weigh less than its own bar.
+  const bid = await session.createBlankSession();
+  const b = await db.Sessions.get(bid);
+  b.exercises.push({ order: 0, exerciseName: "Skull Crusher", notes: "", phase: null,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+  await db.Sessions.save(b);
+  await session.openSession(bid); await tick();
+  addSetButtons()[0].click(); await tick();
+  const barbell = await db.Sessions.get(bid);
+  ok(barbell.exercises[0].sets[0].weightLb === 45,
+    `a barbell add is floored at the active bar, never below it (got ${barbell.exercises[0].sets[0].weightLb})`);
+  await db.Sessions.del(gid); await db.Sessions.del(bid);
+}
+
 // Tapping the lift's name inside the logger opens the lift info screen —
 // muscles figure, history, exercise settings — not only from the library.
 // Mid-workout is exactly when "what does this train, what did I do last

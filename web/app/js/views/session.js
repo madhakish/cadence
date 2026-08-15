@@ -6,6 +6,7 @@ import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram } from "../db.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
+import * as ProgrammingDefaults from "../programming-defaults.js";
 import { exerciseDetail } from "./settings.js";
 import { writeClockRecord, clearClockRecord, storedClockStart } from "../workout-clock.js";
 
@@ -639,7 +640,21 @@ export async function openSession(id) {
     const carryLb = ex && ex.type === "conditioning" && C.cardioCarriesLoad(se.exerciseName)
       ? (last ? last.weightLb : (C.cardioDefaultLoadLb(se.exerciseName) ?? 0))
       : 0;
-    const w = durationBased ? carryLb : (last ? last.weightLb : (se.plannedWeightLb ?? 45));
+    // First set with no plan and no predecessor: the old default was a
+    // literal 45 — the empty bar — which prescribed phantom load to
+    // everything else (a bodyweight GHD sit-up was born asking for 45 lb).
+    // The conservative bootstrap catalog already knows a starting weight per
+    // movement and type. A barbell movement is floored at the bar actually
+    // in hand: the catalog's light recommendations assume a lighter bar, and
+    // a total-bar set cannot weigh less than its own bar. Mirrors the native
+    // logger's firstSetDefaultLb.
+    const catalogLb = ex
+      ? ProgrammingDefaults.recommendation(se.exerciseName, ex.category, ex.type).weightLb
+      : 0;
+    const firstSetDefaultLb = ex && ex.type === "barbell"
+      ? Math.max(catalogLb, C.barLb(C.barById(se.barId || gymState.value?.defaultBarId)))
+      : catalogLb;
+    const w = durationBased ? carryLb : (last ? last.weightLb : (se.plannedWeightLb ?? firstSetDefaultLb));
     const r = durationBased ? 1 : (last ? last.reps : (se.plannedReps ?? 5));
     const inheritedLoad = last && C.LOAD_BASES.includes(last.loadBasis)
       ? { loadBasis: last.loadBasis, implementCount: last.implementCount }
