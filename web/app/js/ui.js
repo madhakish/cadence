@@ -72,6 +72,8 @@ export function pushScreen({ title, build, actions = [], onClose }) {
   const el = h("div", { class: "overlay" }, head, body);
   overlays().append(el);
   const api = { el, body, close, setTitle: (t) => { head.querySelector("h2").textContent = t; } };
+  // onClose mirrors sheet(): the screen underneath may need to repaint state
+  // this screen edited (the logger under the lift-info editor).
   function close() { el.remove(); onClose?.(); }
   if (build) build(body, api);
   return api;

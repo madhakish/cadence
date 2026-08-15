@@ -2293,6 +2293,57 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   }
 }
 
+// ---- Vertical-pull tier promotion (mirrors CoachingEngineTests) ----
+{
+  const slot = (id, name, day, pattern, role, shelved = false) => ({
+    id, exerciseName: name, dayIndex: day, pattern, plannedSets: 3, role,
+    isMain: role === "main", exerciseIsShelved: shelved,
+  });
+  const offered = C.verticalPullPromotions({ slots: [
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("pulldown", "Lat Pulldown", 0, "verticalPull", "accessory"),
+    slot("curls", "DB Curls", 0, "arms", "accessory"),
+  ] });
+  ok(offered.length === 1 && offered[0].change.type === "promoteVerticalPull"
+    && offered[0].change.dayIndex === 0
+    && offered[0].change.accessorySlotIDs.join() === "pulldown"
+    && offered[0].change.accessoryNames.join() === "Lat Pulldown",
+    "a day pulling only through a machine accessory earns the promotion offer");
+  ok(offered[0].id === "program.day.vertical-pull-tier.v1:day0:pulldown",
+    "the promotion id is rotation-independent so one dismissal holds for good");
+  ok(C.verticalPullPromotions({ slots: [
+    slot("press", "Incline DB Press", 0, "horizontalPress", "main"),
+    slot("pullups", "Pull-ups", 0, "verticalPull", "accessory"),
+  ] }).length === 1, "a pull-up accessory is the same below-the-tier shape");
+  ok(C.verticalPullPromotions({ slots: [
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("pullups", "Pull-ups", 0, "verticalPull", "complementary"),
+    slot("pulldown", "Lat Pulldown", 0, "verticalPull", "accessory"),
+  ] }).length === 0, "a day already pulling at the lift tier needs nothing");
+  ok(C.verticalPullPromotions({ slots: [
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("pulldown", "Lat Pulldown", 0, "verticalPull", "accessory", true),
+  ] }).length === 0, "a shelved pull accessory is not a choice to promote");
+  ok(C.verticalPullPromotions({ slots: [
+    slot("pulldown", "Lat Pulldown", 0, "verticalPull", "accessory"),
+  ] }).length === 0, "a day with no lift work is not a day to reshape");
+  // The snapshot arrives in day-record order; the id must not depend on it,
+  // or a reorder would re-emit a dismissed offer.
+  const forward = C.verticalPullPromotions({ slots: [
+    slot("a-pull", "Straight-arm Pulldown", 0, "verticalPull", "accessory"),
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("z-pull", "Lat Pulldown", 0, "verticalPull", "accessory"),
+  ] });
+  const reversed = C.verticalPullPromotions({ slots: [
+    slot("z-pull", "Lat Pulldown", 0, "verticalPull", "accessory"),
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("a-pull", "Straight-arm Pulldown", 0, "verticalPull", "accessory"),
+  ] });
+  ok(forward[0].id === reversed[0].id
+    && forward[0].id === "program.day.vertical-pull-tier.v1:day0:a-pull,z-pull",
+    "the offer id is stable under slot reordering");
+}
+
 // ---- Banked-set corrections (mirrors SetLifecycleTests) ----
 {
   const banked = { weightLb: 195, reps: 5, durationSeconds: null, status: "completed" };

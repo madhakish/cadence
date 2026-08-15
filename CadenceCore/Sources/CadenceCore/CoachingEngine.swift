@@ -381,6 +381,12 @@ public enum CoachingChange: Hashable, Sendable {
     /// Keep per-exposure linear loading, but trade 3x5 for 5x3 on one upper
     /// slot after its load has already needed a rebuild.
     case useLinearTriples(slotID: String, exerciseName: String, expectedBaseWeightLb: Double)
+    /// Retire a day's accessory-tier vertical pulls (a machine pulldown, a
+    /// pull-up accessory) and train the pattern as programmed lift work
+    /// instead. The engine names the day and the accessories; the client
+    /// supplies the pull-up slot from the library — the same engine/client
+    /// split rotateExercise uses.
+    case promoteVerticalPull(dayIndex: Int, accessorySlotIDs: [String], accessoryNames: [String])
     /// Swap one slot to a compatible variation of the same movement. The
     /// engine names the slot only; resolving an actual replacement needs the
     /// exercise library, which lives on the clients — the same split the
@@ -744,6 +750,7 @@ public enum CoachingEngine {
         let programChanges = (
             rotationSuggestions(program: program, evidenceKey: evidenceKey)
             + linearStageSuggestions(program: program, sessions: sessions, evidenceKey: evidenceKey)
+            + verticalPullPromotions(program: program)
         )
         func decided(_ recommendation: CoachingRecommendation) -> [CoachingRecommendation] {
             ([recommendation] + programChanges).sorted { ($0.priority, $0.id) > ($1.priority, $1.id) }
@@ -895,6 +902,52 @@ public enum CoachingEngine {
                 explanation: "\(slot.exerciseName) has \(slot.stallCount) exposure\(slot.stallCount == 1 ? "" : "s") on record without meeting its prescription, so it is being retried rather than added to. Rotating to a compatible variation of the same movement is the usual answer before the weight gets cut.",
                 change: .rotateExercise(slotID: slot.id, exerciseName: slot.exerciseName),
                 evidenceKey: "\(evidenceKey)-\(slot.id)"
+            ))
+        }
+        return result
+    }
+
+    /// The vertical pull belongs at the lift tier (issue #126): current
+    /// templates train pull-ups as programmed double-progression work that
+    /// earns load at the top of its rep window — never as an accessory buried
+    /// under the press, and never only as a machine stack. A program
+    /// instantiated before that change still carries the old shape, and no
+    /// migration rewrites an authored program, so the coach offers the
+    /// upgrade instead: one recommendation per day whose ONLY vertical pull
+    /// is accessory work. The evidence key is rotation-independent — this is
+    /// a structural fact about the program, not a per-rotation reading — so
+    /// one dismissal silences it for good, and applying removes the
+    /// condition itself.
+    static func verticalPullPromotions(
+        program: CoachingProgramSnapshot
+    ) -> [CoachingRecommendation] {
+        var result: [CoachingRecommendation] = []
+        let byDay = Dictionary(grouping: program.slots, by: \.dayIndex)
+        for (dayIndex, slots) in byDay.sorted(by: { $0.key < $1.key }) {
+            let lifts = slots.filter { $0.role != "accessory" }
+            // A day with no lift work at all is not a training day to
+            // reshape, and a day already pulling at the lift tier needs
+            // nothing.
+            guard !lifts.isEmpty,
+                  !lifts.contains(where: { $0.pattern == .verticalPull }) else { continue }
+            // Sorted by slot id: the snapshot is built from unsorted
+            // relationship arrays, and the recommendation id derives from
+            // these ids — reordering the same slots must not re-emit a
+            // dismissed offer.
+            let pulls = slots.filter {
+                $0.role == "accessory" && $0.pattern == .verticalPull && !$0.exerciseIsShelved
+            }.sorted { $0.id < $1.id }
+            guard !pulls.isEmpty else { continue }
+            let names = pulls.map(\.exerciseName)
+            result.append(CoachingRecommendation(
+                ruleID: "program.day.vertical-pull-tier.v1",
+                priority: 55,
+                title: "Train the pull as lift work",
+                explanation: "This day's only vertical pull is accessory work (\(names.joined(separator: ", "))). Pulling is main work: retire the accessory and train pull-ups as a programmed lift on a rep window that earns load at the top — the same shape new programs start with.",
+                change: .promoteVerticalPull(dayIndex: dayIndex,
+                                             accessorySlotIDs: pulls.map(\.id),
+                                             accessoryNames: names),
+                evidenceKey: "day\(dayIndex):" + pulls.map(\.id).joined(separator: ",")
             ))
         }
         return result

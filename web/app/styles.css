@@ -92,6 +92,10 @@ body {
 .list .row { cursor: pointer; }
 .row .lead { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .row .title { font-weight: 600; }
+/* A tappable title (the logger's lift name): a real button for keyboard and
+   screen-reader semantics, dressed as the text it replaces, with the house
+   44 px touch target. */
+button.title-button { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; }
 .row .sub { color: var(--muted); font-size: 13px; }
 .chev::after { content: "›"; color: var(--muted); font-size: 22px; line-height: 1; }
 .muted { color: var(--muted); }
