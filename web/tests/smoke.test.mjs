@@ -3561,7 +3561,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 
   // Re-entering edit mode and firing the field's event WITHOUT changing the
   // value is not an edit: the rounded kg display string must never round-trip
-  // into a drifted canonical pound value.
+  // into a drifted canonical pound value. The comparison runs at commit time
+  // against the untouched stored value, so the basis cannot move mid-typing.
   ui.prefs.unitDisplay = "kgPrimary";
   editBtn.click(); await tick();
   const kgInput = [...overlay.querySelectorAll('input[aria-label^="Weight"]')][0];
@@ -3571,7 +3572,38 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "[INV-BANKED-SETS-CORRECTABLE] an untouched kg field never drifts the stored pounds");
   ui.prefs.unitDisplay = "lbPrimary";
 
-  overlay.querySelector("button")?.click(); await tick(); // ‹ Back
+  // Leaving the screen commits like native's save-on-leave: corrections must
+  // not silently vanish on ‹ Back.
+  editBtn.click(); await tick();
+  const repsInput = [...overlay.querySelectorAll('input[aria-label="Reps"]')][0];
+  repsInput.value = "6";
+  repsInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+  overlay.querySelector("button")?.click(); await tick(); await tick(); // ‹ Back
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].reps === 6,
+    "[INV-BANKED-SETS-CORRECTABLE] backing out mid-edit saves the corrections instead of dropping them");
+  await db.Sessions.del(sid);
+}
+
+// The correctable gate keys on the DATA when the library entry is gone, like
+// the read-only rendering: a restored cardio record whose exercise was
+// deleted must not grow a weight×reps editor over its distance.
+{
+  const sid = await db.Sessions.save({
+    date: db.iso(new Date()), completedAt: db.iso(new Date()), isCompleted: true, notes: "",
+    exercises: [{ exerciseName: "Deleted Custom Ruck", order: 0, sets: [
+      { order: 0, weightLb: 20, reps: 1, isWarmup: false, status: "completed", enteredUnit: "lb",
+        prescriptionBlock: "conditioning", distanceMiles: 2, durationSeconds: 1800 },
+    ] }],
+  });
+  await history.render(host()); await tick();
+  [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Log").click(); await tick();
+  [...host().querySelectorAll(".card .row")]
+    .find((r) => (r.textContent || "").includes("Deleted Custom Ruck")).click(); await tick();
+  const overlay = [...document.querySelectorAll(".overlay")].pop();
+  overlay.querySelector('button[aria-label="Edit this workout\'s sets"]').click(); await tick();
+  ok(!overlay.querySelector('input[aria-label^="Weight"]'),
+    "[INV-BANKED-SETS-CORRECTABLE] a cardio record with no library entry stays read-only in edit mode");
+  overlay.querySelector("button")?.click(); await tick();
   await db.Sessions.del(sid);
 }
 

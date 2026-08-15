@@ -234,6 +234,16 @@ export function correctedSetValues(set, correction = {}) {
   if (SET_STATUSES.includes(correction.status)) corrected.status = correction.status;
   return corrected;
 }
+// One tap on a correction row's status mark walks the shared status order —
+// planned → completed → skipped → planned. Owned here, not in the two view
+// layers: the cycle is user-facing documented behavior, and a reorder on one
+// client would make the same tap do different things per platform. An unknown
+// status starts the cycle from planned. Mirrors
+// SetLifecycle.nextCorrectionStatus.
+export function nextSetStatus(status) {
+  const index = SET_STATUSES.indexOf(status);
+  return SET_STATUSES[((index < 0 ? 0 : index) + 1) % SET_STATUSES.length];
+}
 
 // Whether a set of this kind counts as the slot's prescribed work — the sets
 // that are graded and that supply the cycle's strength sample.

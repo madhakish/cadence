@@ -2300,6 +2300,14 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(untouched.weightLb === 195 && untouched.reps === 5 && untouched.durationSeconds === 45
     && untouched.status === "completed",
     "[INV-BANKED-SETS-CORRECTABLE] an empty correction changes nothing");
+  // The status cycle is shared domain behavior — one tap must walk the same
+  // documented order on both clients (mirrors SetLifecycleTests).
+  ok(C.nextSetStatus("planned") === "completed"
+    && C.nextSetStatus("completed") === "skipped"
+    && C.nextSetStatus("skipped") === "planned",
+    "[INV-BANKED-SETS-CORRECTABLE] the status cycle is planned → completed → skipped → planned");
+  ok(C.nextSetStatus("imaginary") === "completed",
+    "an unknown status starts the cycle from planned, like Swift");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

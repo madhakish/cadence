@@ -33,19 +33,25 @@ Tap **Done** (iOS) / **Save** (web) to commit.
 
 ## What a correction affects
 
-The corrected history is the record every downstream surface reads:
+The corrected history is the record these surfaces read:
 
-- session volume and work-set counts,
+- session volume, work-set counts, and duration summaries,
 - progression charts and last-time recall lines,
-- and — most importantly — **next-session planning**. Prescriptions read
-  performed evidence from banked history, so fixing a set that banked the
-  stale plan (195 when you actually squatted 205) is exactly how you keep
-  the next prescription honest.
+- exports and backups,
+- the prior-best comparisons future grading reads (est. 1RM history), and
+- the narrow performed-evidence repair that plans barbell volume work
+  (`honestBase` reads the last volume exposure's top set).
 
-Two things a correction does **not** do:
+Three things a correction does **not** do — be honest with yourself about
+these:
 
-- It does not re-run the progression grading that already happened when
-  you banked the workout. The edit corrects the record, not the past
-  decision; the next rollover grades from the corrected history.
+- It does **not** re-run the progression grading that fired when you
+  banked the workout. That grade was computed from the uncorrected sets
+  and stashed into the lift's pending state; the rollover applies the
+  stash without re-reading history. If the *next prescription's base* is
+  wrong, fix the lift's base weight in **Settings → your program → the
+  lift** — that is the number planning actually builds from.
 - It does not re-scan for personal records, so a milestone is neither
   invented nor revoked by an edit.
+- It does not touch the planned prescription snapshot — the
+  plan-versus-actual comparison keeps showing what was prescribed.

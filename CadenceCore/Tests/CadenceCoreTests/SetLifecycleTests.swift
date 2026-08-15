@@ -85,4 +85,13 @@ final class SetLifecycleTests: XCTestCase {
         XCTAssertEqual(untouched.durationSeconds, 45)
         XCTAssertEqual(untouched.status, .completed, "an empty correction changes nothing")
     }
+
+    /// [INV-BANKED-SETS-CORRECTABLE] The status cycle is shared domain
+    /// behavior — one tap must walk the same documented order on both clients
+    /// (mirrors the core.test.mjs nextSetStatus block).
+    func testStatusCorrectionCycleIsSharedAndOrdered() {
+        XCTAssertEqual(SetLifecycle.nextCorrectionStatus(.planned), .completed)
+        XCTAssertEqual(SetLifecycle.nextCorrectionStatus(.completed), .skipped)
+        XCTAssertEqual(SetLifecycle.nextCorrectionStatus(.skipped), .planned)
+    }
 }

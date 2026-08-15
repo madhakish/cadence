@@ -45,7 +45,7 @@ public enum SetLifecycle {
     /// values, body signals) is deliberately out of reach: editing reps cannot
     /// reset weight, and a correction cannot rewrite what was prescribed.
     /// Mirrors web `correctedSetValues`.
-    public struct SetCorrection: Hashable, Sendable {
+    public struct SetCorrection: Sendable {
         public var weightLb: Double?
         public var reps: Int?
         public var durationSeconds: Int?
@@ -58,6 +58,18 @@ public enum SetLifecycle {
             self.durationSeconds = durationSeconds
             self.status = status
         }
+    }
+
+    /// One tap on a correction row's status mark walks the shared status
+    /// order — planned → completed → skipped → planned. Owned here, not in
+    /// the two view layers: the cycle is user-facing documented behavior,
+    /// and a reorder on one client would make the same tap do different
+    /// things per platform. An unknown status starts the cycle from planned.
+    /// Mirrors web `nextSetStatus`.
+    public static func nextCorrectionStatus(_ status: SetStatus) -> SetStatus {
+        let all = SetStatus.allCases
+        let index = all.firstIndex(of: status) ?? 0
+        return all[(index + 1) % all.count]
     }
 
     public static func correctedSetValues(

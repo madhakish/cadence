@@ -459,13 +459,20 @@ touches banked history or the program schedule.
 *platforms: core, web*
 
 A banked session's performed record can be corrected afterward — set status,
-weight, reps, and timed holds — from the session detail on both clients. A
-correction applies only the fields it provides and only sane values (a blank
-or negative entry keeps the stored value), never touches flags, warm-up
-state, load semantics, or the planned prescription, and the corrected history
-is what charts, recalls, and next-session planning read. Grading that already
-ran at bank time is not re-run, and milestones are neither invented nor
-revoked by an edit.
+weight, reps, and timed holds — from the session detail on both clients (the
+native editor is the same contract, hand-verified). Corrections are DRAFTS:
+nothing touches the stored record until an explicit commit (Done/Save, or
+leaving the screen), so a half-typed number is never banked, and a field
+still reading the stored value's display form is not an edit. A correction
+applies only the fields it provides and only sane values (a blank, negative,
+or non-numeric entry keeps the stored value), never touches flags, warm-up
+state, load semantics, or the planned prescription, and only strength and
+timed rows are correctable — keyed on set DATA when the library entry is
+gone, so a restored cardio record cannot grow a weight×reps editor. The
+status cycle is the shared `nextCorrectionStatus` order. The corrected
+history is what charts, recalls, exports, and prior-best evidence read; the
+grading stashed at bank time is not re-run, and milestones are neither
+invented nor revoked by an edit.
 
 > A set the lifter performed but never ticked, or a weight banked at the
 > stale plan, was uncorrectable — and the wrong record then fed every
