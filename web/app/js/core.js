@@ -235,6 +235,10 @@ export const countsAsPrescribedWork = (block) => PRESCRIBED_WORK_BLOCKS.includes
 // ledger rather than against a load, so it never joins the lifting counts.
 export const PROGRAM_INSTRUCTION_BLOCKS = [...PRESCRIBED_WORK_BLOCKS, "conditioning"];
 export const countsAsProgramInstruction = (block) => PROGRAM_INSTRUCTION_BLOCKS.includes(block || "work");
+// A set's effective block when the field predates the block model: warmups
+// are warmups, everything else is work. Mirrors the native SetEntry
+// prescriptionBlock getter's fallback.
+export const resolvedPrescriptionBlock = (set) => set.prescriptionBlock || (set.isWarmup ? "warmup" : "work");
 
 // ---- Plates & bars ---------------------------------------------------------
 
@@ -1466,6 +1470,41 @@ export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, cu
 // isn't the same exercise, and isn't shelved. `current`/`candidate` are
 // exercise records. Loadability follows the resolved load basis, not equipment
 // type: a weighted pull-up is bodyweight-typed but still carries external load.
+// ---- Program slot ordering (one spelling) ----------------------------------
+// The coach's explicit order; ties break on exerciseName with ORDINAL
+// comparison (Swift's tuple `<`), not locale collation. Slots from stores
+// that predate the order field (every order equal) keep the old main-first
+// presentation where the caller asks for it. Mirrors native
+// ProgramDay.orderedLifts / orderedAccessories.
+export function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
+  const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
+  const byName = (a, b) => (a.exerciseName < b.exerciseName ? -1 : a.exerciseName > b.exerciseName ? 1 : 0);
+  return [...slots].sort((a, b) => {
+    if (allLegacy && roleAwareLegacy) {
+      const role = (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1);
+      if (role) return role;
+    }
+    return (a.order ?? 0) - (b.order ?? 0) || byName(a, b);
+  });
+}
+
+// ---- Exercise gate (one spelling) ------------------------------------------
+// The tri-state gate is authoritative; the legacy `isShelved` boolean decides
+// only for records written before the gate existed, and a stale "open" next
+// to isShelved=true reads as shelved. Mirrors the native Exercise.gateStatus
+// getter — six ad-hoc spellings of this rule disagreed on exactly those
+// legacy/stale combinations.
+export function exerciseGateStatus(exercise) {
+  if (!exercise) return "open";
+  const raw = ["open", "watch", "shelved", "re-entry"].includes(exercise.gateStatus)
+    ? exercise.gateStatus : "open";
+  return raw === "open" && exercise.isShelved ? "shelved" : raw;
+}
+export function exerciseIsShelved(exercise) { return exerciseGateStatus(exercise) === "shelved"; }
+// Shelved is the only gate state the coach must not prescribe into; watch and
+// re-entry remain programmable (re-entry EXISTS to be programmed carefully).
+export function exerciseIsAvailableForProgramming(exercise) { return !exerciseIsShelved(exercise); }
+
 export function swapCompatible(current, candidate) {
   return !!current.movementGroup
     && candidate.movementGroup === current.movementGroup
@@ -2708,6 +2747,26 @@ export function movementPattern(exerciseName, movementGroup, explicitPattern = n
 
 // v2: a second consecutive red rotation escalates to a deeper cut.
 export const COACHING_RULE_VERSION = 2;
+// The set ceiling a slot falls to when it has never been given one. Mirrors
+// CoachingEngine.defaultMaximumSets — capacity planning on both clients must
+// agree on how much a defaulted slot can absorb.
+export const DEFAULT_MAXIMUM_SETS = 6;
+// Preference-ordered exercise names for filling a missing movement pattern —
+// the coach's opinion, not the athlete's data. One catalog, mirrors
+// CoachingEngine.preferredExerciseNames: a name added to one client's copy
+// made the same accepted recommendation add different exercises.
+export const PREFERRED_EXERCISES = {
+  verticalPull: ["Lat Pulldown", "Assisted Pull-up", "Pull-ups", "Chin-ups",
+    "Weighted Pull-up", "Weighted Chin-up"],
+  kneeFlexion: ["Seated Leg Curl", "Lying Leg Curl", "Nordic Hamstring Curl"],
+  shoulderStability: ["Face Pulls", "Band External Rotation", "Y-T-W Raises"],
+  adductor: ["Copenhagen Plank", "Cable Hip Adduction"],
+  core: ["Hanging Knee Raise", "Dead Bug", "Plank"],
+};
+// The rep window a coach-added accessory slot opens with, by pattern.
+// Mirrors CoachingEngine.defaultRepRange(for:).
+export const defaultRepRange = (pattern) => ["adductor", "core"].includes(pattern)
+  ? { minReps: 8, maxReps: 12 } : { minReps: 6, maxReps: 10 };
 export const GREEN_COMPLETION_FLOOR = 0.90;
 export const RED_COMPLETION_FLOOR = 0.80;
 export const GREEN_AT_PLAN_FLOOR = 0.90;
@@ -2748,7 +2807,7 @@ function programmedCoachingSession(session, slots) {
 
       let remainingWork = Math.max(0, exercise.plannedSets || 0);
       const sets = (exercise.sets || []).filter((set) => {
-        const block = set.prescriptionBlock || (set.isWarmup ? "warmup" : "work");
+        const block = resolvedPrescriptionBlock(set);
         if (!countsAsProgramInstruction(block)) return true;
         if (remainingWork <= 0) return false;
         remainingWork -= 1;
@@ -2916,7 +2975,7 @@ function linearStageSuggestions(program, sessions, evidenceKey) {
   const orderedSessions = [...sessions].sort((a, b) => epoch(b.date) - epoch(a.date));
   return (program.slots || []).flatMap((slot) => {
     if (slot.prescriptionStyle !== "linearFives" || !upperPresses.has(slot.pattern)
-        || slot.capacityManaged === false || (slot.maximumSets || 6) < 5
+        || slot.capacityManaged === false || (slot.maximumSets || DEFAULT_MAXIMUM_SETS) < 5
         || slot.workingSets !== 3 || slot.workingReps !== 5
         || !(slot.baseWeightLb > 0)) return [];
     const slotHistory = orderedSessions.flatMap((session) => {
@@ -3029,9 +3088,9 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
     const amount = Math.min(target - current, capacity - changes);
     const slot = (program.slots || []).find((candidate) => candidate.pattern === pattern
       && candidate.capacityManaged !== false && !candidate.isMain
-      && candidate.plannedSets < (candidate.maximumSets || 6));
+      && candidate.plannedSets < (candidate.maximumSets || DEFAULT_MAXIMUM_SETS));
     if (slot) {
-      const add = Math.min(amount, (slot.maximumSets || 6) - slot.plannedSets);
+      const add = Math.min(amount, (slot.maximumSets || DEFAULT_MAXIMUM_SETS) - slot.plannedSets);
       if (add <= 0) continue;
       capacityAdjustments.push({ type: "addSet", slotID: slot.id, exerciseName: slot.exerciseName, count: add });
       capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${add}`);

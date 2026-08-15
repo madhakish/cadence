@@ -3,21 +3,10 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
-import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet } from "../db.js";
+import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet, localDayKey } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, planningBase, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
 import { gymTagShownOn, markGymTagShown } from "../gym-tag.js";
-
-const orderedSlots = (slots = [], roleAwareLegacy = false) => {
-  const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
-  return [...slots].sort((a, b) => {
-    if (allLegacy && roleAwareLegacy) {
-      const role = (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1);
-      if (role) return role;
-    }
-    return (a.order ?? 0) - (b.order ?? 0) || a.exerciseName.localeCompare(b.exerciseName);
-  });
-};
 
 const barbellPrescriptionView = (achievedLb, targetLb, unit, gym, stationDenomination = null, movementGroup = null) => {
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
@@ -51,7 +40,7 @@ export async function render(host) {
   const exMap = new Map(allExercises.map((e) => [e.name, e]));
   const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
   const root = ui.h("div");
-  const todayKey = new Date().toLocaleDateString("en-CA");
+  const todayKey = localDayKey(new Date());
   const primaryOpen = [...openSessions].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
   const nextProgramDay = program?.days?.find((day) => day.order === program.nextDayIndex) || program?.days?.[0];
 
@@ -181,7 +170,7 @@ export async function render(host) {
         text: `${daysSinceLast === 0 ? "Trained today" : `${daysSinceLast} day${daysSinceLast === 1 ? "" : "s"} since your last session`}`
           + ` · you prefer ${program.preferredSessionSpacingDays}. Train anyway if today is the day that works.` }));
     }
-    const lifts = orderedSlots(day.lifts, true);
+    const lifts = C.orderedProgramSlots(day.lifts, true);
     for (const l of lifts) {
       const ex = exMap.get(l.exerciseName);
       // planningBase, not the stored base: the card must show the same honest
@@ -320,7 +309,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
 
       body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
       const liftCard = ui.h("div", { class: "card" });
-      const lifts = orderedSlots(day.lifts, true);
+      const lifts = C.orderedProgramSlots(day.lifts, true);
       if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No program lifts this day." }));
       for (const l of lifts) {
         const ex = exMap.get(l.exerciseName);
@@ -356,7 +345,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
       if (day.accessories.length) {
         body.append(ui.h("div", { class: "section-title", text: "Accessories" }));
         const accCard = ui.h("div", { class: "card" });
-        for (const a of orderedSlots(day.accessories)) {
+        for (const a of C.orderedProgramSlots(day.accessories)) {
           const type = exMap.get(a.exerciseName)?.type;
           const isTimed = type === "timed" || type === "conditioning";
           accCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },

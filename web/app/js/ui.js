@@ -42,7 +42,9 @@ export const fmtWeight = (lb) => C.unitFormat(prefs.unitDisplay, lb);
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dd = (d) => (d instanceof Date ? d : new Date(d));
 export const fmtDate = (d) => { const x = dd(d); return `${MONTHS[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`; };
-export const fmtLong = (d) => { const x = dd(d); return `${MONTHS[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`; };
+// Alias, not a second implementation — the two formats drifted apart once
+// already and had to be re-converged by hand.
+export const fmtLong = fmtDate;
 export const monthYear = (d) => { const x = dd(d); return `${MONTHS[x.getMonth()]} ${x.getFullYear()}`; };
 export const mmss = (sec) => { sec = Math.max(0, Math.round(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; };
 

@@ -2293,5 +2293,50 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   }
 }
 
+// ---- Shared coaching catalogs and defaults (mirrors CoachingEngineTests) ----
+{
+  ok(C.DEFAULT_MAXIMUM_SETS === 6, "the defaulted slot ceiling is 6 sets on both clients");
+  ok(JSON.stringify(C.defaultRepRange("adductor")) === JSON.stringify({ minReps: 8, maxReps: 12 })
+    && JSON.stringify(C.defaultRepRange("core")) === JSON.stringify({ minReps: 8, maxReps: 12 })
+    && JSON.stringify(C.defaultRepRange("verticalPull")) === JSON.stringify({ minReps: 6, maxReps: 10 }),
+    "coach-added slots open 8–12 for adductor/core and 6–10 elsewhere");
+  ok(C.PREFERRED_EXERCISES.verticalPull[0] === "Lat Pulldown"
+    && C.PREFERRED_EXERCISES.core.includes("Plank"),
+    "the preferred-exercise catalog is the shared one");
+}
+
+// ---- Exercise gate: one spelling (mirrors native Exercise.gateStatus) ----
+{
+  ok(C.exerciseGateStatus({ gateStatus: "shelved" }) === "shelved", "an explicit shelved gate reads shelved");
+  ok(C.exerciseGateStatus({ gateStatus: "re-entry", isShelved: true }) === "re-entry",
+    "a tri-state gate outranks the legacy boolean");
+  ok(C.exerciseGateStatus({ gateStatus: "open", isShelved: true }) === "shelved",
+    "a stale open next to isShelved reads shelved, like native");
+  ok(C.exerciseGateStatus({ isShelved: true }) === "shelved"
+    && C.exerciseGateStatus({}) === "open" && C.exerciseGateStatus(null) === "open",
+    "gate-less legacy records fall back to the boolean");
+  ok(C.exerciseIsAvailableForProgramming({ gateStatus: "re-entry", isShelved: true })
+    && !C.exerciseIsAvailableForProgramming({ isShelved: true }),
+    "re-entry stays programmable; shelved never is");
+}
+
+// ---- Program slot ordering: one spelling ----
+{
+  const authored = [
+    { exerciseName: "B Lift", role: "complementary", order: 2 },
+    { exerciseName: "A Lift", role: "main", order: 5 },
+  ];
+  ok(C.orderedProgramSlots(authored).map((s) => s.exerciseName).join(",") === "B Lift,A Lift",
+    "authored orders win over roles and names");
+  const legacy = [
+    { exerciseName: "Z Complement", role: "complementary", order: 0 },
+    { exerciseName: "A Main", role: "main", order: 0 },
+  ];
+  ok(C.orderedProgramSlots(legacy, true)[0].exerciseName === "A Main",
+    "legacy all-equal orders keep main-first when the caller asks");
+  ok(C.orderedProgramSlots(legacy)[0].exerciseName === "A Main",
+    "without role awareness, equal orders tie-break on ordinal name");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

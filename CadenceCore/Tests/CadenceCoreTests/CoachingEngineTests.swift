@@ -570,4 +570,16 @@ final class CoachingEngineTests: XCTestCase {
             XCTAssertFalse(CoachingEngine.isHardStopResponse(response), "\"\(response)\" is not a hard stop")
         }
     }
+
+    // Mirrors the core.test.mjs shared-catalog block: the coach's defaults
+    // and preferred-exercise names must be the same catalog on both clients.
+    func testSharedCoachingCatalogsMatchTheWebMirror() {
+        XCTAssertEqual(CoachingEngine.defaultMaximumSets, 6)
+        XCTAssertEqual(CoachingEngine.defaultRepRange(for: .adductor).minReps, 8)
+        XCTAssertEqual(CoachingEngine.defaultRepRange(for: .core).maxReps, 12)
+        XCTAssertEqual(CoachingEngine.defaultRepRange(for: .verticalPull).minReps, 6)
+        XCTAssertEqual(CoachingEngine.defaultRepRange(for: .verticalPull).maxReps, 10)
+        XCTAssertEqual(CoachingEngine.preferredExerciseNames[.verticalPull]?.first, "Lat Pulldown")
+        XCTAssertEqual(CoachingEngine.preferredExerciseNames[.core]?.contains("Plank"), true)
+    }
 }

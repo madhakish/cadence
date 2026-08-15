@@ -17,7 +17,7 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
       return { id: lift.id, exerciseName: lift.exerciseName, dayIndex: day.order,
         pattern: exercise?.movementPattern || C.movementPattern(lift.exerciseName, exercise?.movementGroup),
         plannedSets: plan.sets, role: lift.role, isMain: lift.role === "main", capacityManaged: lift.capacityManaged !== false,
-        maximumSets: lift.maximumSets || 6,
+        maximumSets: lift.maximumSets || C.DEFAULT_MAXIMUM_SETS,
         prescriptionStyle: C.resolvedPrescriptionStyle(
           lift.prescription || "automatic", exercise?.movementGroup, lift.role, program.focus,
         ),
@@ -29,15 +29,15 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
         // cycle worth rotating out of. Native splits pending across columns;
         // web stashes the whole ProgressionResult under `pending`.
         stallCount: lift.pending?.state?.stallCount ?? lift.stallCount ?? 0,
-        exerciseIsShelved: exercise?.gateStatus === "shelved" || (!exercise?.gateStatus && !!exercise?.isShelved) };
+        exerciseIsShelved: C.exerciseIsShelved(exercise) };
     }),
     ...(day.accessories || []).map((accessory) => {
       const exercise = exMap.get(accessory.exerciseName);
       return { id: accessory.id, exerciseName: accessory.exerciseName, dayIndex: day.order,
         pattern: exercise?.movementPattern || C.movementPattern(accessory.exerciseName, exercise?.movementGroup),
         plannedSets: accessory.sets, role: "accessory", isMain: false, capacityManaged: accessory.capacityManaged !== false,
-        maximumSets: accessory.maximumSets || 6, stallCount: accessory.stallCount || 0,
-        exerciseIsShelved: exercise?.gateStatus === "shelved" || (!exercise?.gateStatus && !!exercise?.isShelved) };
+        maximumSets: accessory.maximumSets || C.DEFAULT_MAXIMUM_SETS, stallCount: accessory.stallCount || 0,
+        exerciseIsShelved: C.exerciseIsShelved(exercise) };
     }),
   ]);
   const history = sessions.flatMap((session) => {
@@ -63,7 +63,7 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
           sets: (entry.sets || []).map((set) => ({ actualWeightLb: set.weightLb, actualReps: set.reps,
             plannedWeightLb: set.plannedWeightLb ?? entry.plannedWeightLb ?? null,
             plannedReps: set.plannedReps ?? entry.plannedReps ?? null, isWarmup: !!set.isWarmup,
-            prescriptionBlock: set.prescriptionBlock || (set.isWarmup ? "warmup" : "work"),
+            prescriptionBlock: C.resolvedPrescriptionBlock(set),
             completed: set.status === "completed", stoppedEarly: (set.flags || []).includes("stopped early"),
             hasBodyFlag: !!set.bodyFlagSite, quality: C.setQuality(set.flags) || "ungraded",
             durationSeconds: set.durationSeconds ?? null })) };
@@ -73,23 +73,14 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
     maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation ?? 6 }, history, program.reliableHistoryStart);
 }
 
-const PREFERRED_EXERCISES = {
-  verticalPull: ["Lat Pulldown", "Assisted Pull-up", "Pull-ups", "Chin-ups",
-    "Weighted Pull-up", "Weighted Chin-up"],
-  kneeFlexion: ["Seated Leg Curl", "Lying Leg Curl", "Nordic Hamstring Curl"],
-  shoulderStability: ["Face Pulls", "Band External Rotation", "Y-T-W Raises"],
-  adductor: ["Copenhagen Plank", "Cable Hip Adduction"],
-  core: ["Hanging Knee Raise", "Dead Bug", "Plank"],
-};
-
 export async function applyCoachingRecommendation(program, recommendation, exercises) {
   const change = recommendation.change;
   let message = "Program held unchanged.";
   if (change.type === "capacityPlan") {
-    const available = exercises.filter((exercise) => !exercise.isShelved && exercise.gateStatus !== "shelved");
+    const available = exercises.filter(C.exerciseIsAvailableForProgramming);
     const resolved = (change.additions || []).map((adjustment) => {
       if (adjustment.type !== "addPattern") return { adjustment };
-      const exercise = (PREFERRED_EXERCISES[adjustment.pattern] || [])
+      const exercise = (C.PREFERRED_EXERCISES[adjustment.pattern] || [])
         .map((name) => available.find((item) => item.name === name)).find(Boolean)
         || available.find((item) => item.movementPattern === adjustment.pattern);
       // Fallback = lowest ORDER, like native orderedDays.first — array
@@ -112,13 +103,13 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
         if (!("sets" in slot) && (slot.prescription || "automatic") !== "doubleProgression") continue;
         const key = "sets" in slot ? "sets" : "doubleProgressionSets";
         const old = slot[key] || 1;
-        slot[key] = Math.min(slot.maximumSets || 6, old + adjustment.count);
+        slot[key] = Math.min(slot.maximumSets || C.DEFAULT_MAXIMUM_SETS, old + adjustment.count);
         messages.push(`${adjustment.exerciseName} ${old}→${slot[key]}`);
       } else {
-        const minReps = ["adductor", "core"].includes(adjustment.pattern) ? 8 : 6;
+        const { minReps, maxReps } = C.defaultRepRange(adjustment.pattern);
         item.day.accessories.push({ exerciseName: item.exercise.name, order: item.day.accessories.length,
           sets: adjustment.sets, minReps,
-          maxReps: ["adductor", "core"].includes(adjustment.pattern) ? 12 : 10,
+          maxReps,
           currentReps: minReps, targetSeconds: item.exercise.type === "timed" ? 30 : 0,
           durationStepSeconds: 5, weightLb: 0, incrementLb: 0, stallCount: 0,
           capacityManaged: true, maximumSets: 6, conditioningEffort: "easy", targetRPE: 0 });
@@ -131,20 +122,20 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
       .find((candidate) => candidate.id === change.slotID);
     if (slot && (("sets" in slot) || (slot.prescription || "automatic") === "doubleProgression")) {
       const key = "sets" in slot ? "sets" : "doubleProgressionSets";
-      const old = slot[key] || 1; slot[key] = Math.min(slot.maximumSets || 6, old + change.count);
+      const old = slot[key] || 1; slot[key] = Math.min(slot.maximumSets || C.DEFAULT_MAXIMUM_SETS, old + change.count);
       message = `${slot.exerciseName}: ${old} → ${slot[key]} sets per rotation.`;
     }
   } else if (change.type === "addPattern") {
-    const available = exercises.filter((exercise) => !exercise.isShelved && exercise.gateStatus !== "shelved");
-    const exercise = (PREFERRED_EXERCISES[change.pattern] || []).map((name) => available.find((item) => item.name === name)).find(Boolean)
+    const available = exercises.filter(C.exerciseIsAvailableForProgramming);
+    const exercise = (C.PREFERRED_EXERCISES[change.pattern] || []).map((name) => available.find((item) => item.name === name)).find(Boolean)
       || available.find((item) => item.movementPattern === change.pattern);
     // Fallback = lowest ORDER, like native orderedDays.first (see capacityPlan).
     const day = (program.days || []).find((item) => item.order === change.dayIndex)
       || [...(program.days || [])].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))[0];
     if (!exercise || !day) throw new Error(`No available ${C.movementPatternName(change.pattern).toLowerCase()} exercise.`);
-    const minReps = ["adductor", "core"].includes(change.pattern) ? 8 : 6;
+    const { minReps, maxReps } = C.defaultRepRange(change.pattern);
     day.accessories.push({ exerciseName: exercise.name, order: day.accessories.length, sets: change.sets,
-      minReps, maxReps: ["adductor", "core"].includes(change.pattern) ? 12 : 10,
+      minReps, maxReps,
       currentReps: minReps, targetSeconds: exercise.type === "timed" ? 30 : 0,
       durationStepSeconds: 5, weightLb: 0, incrementLb: 0, stallCount: 0,
       capacityManaged: true, maximumSets: 6, conditioningEffort: "easy", targetRPE: 0 });
@@ -156,7 +147,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     if (!current) throw new Error(`${change.exerciseName} is no longer in the library, so a compatible variation cannot be chosen.`);
     const replacement = exercises.find((candidate) => C.swapCompatible(
       current,
-      { ...candidate, isShelved: !!candidate.isShelved || candidate.gateStatus === "shelved" },
+      { ...candidate, isShelved: C.exerciseIsShelved(candidate) },
     ));
     if (!replacement) throw new Error(`No compatible variation of ${change.exerciseName} is available. Add one to the library, or unshelve an existing one.`);
     // Same policy as the manual swap gesture: the slot keeps its load and
@@ -190,7 +181,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     if (!lift) throw new Error(`The program slot for ${change.exerciseName} no longer exists.`);
     if (lift.exerciseName !== change.exerciseName
         || (lift.prescription || "automatic") !== "linearFives"
-        || lift.capacityManaged === false || (lift.maximumSets || 6) < 5
+        || lift.capacityManaged === false || (lift.maximumSets || C.DEFAULT_MAXIMUM_SETS) < 5
         || (lift.doubleProgressionSets ?? 3) !== 3 || (lift.currentReps ?? 5) !== 5
         || !Number.isFinite(change.expectedBaseWeightLb)
         || !Number.isFinite(lift.baseWeightLb)

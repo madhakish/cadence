@@ -217,7 +217,7 @@ struct HistoryView: View {
             return (name, top)
         }
         guard let lead = tops.max(by: { $0.1.weightLb < $1.1.weightLb }) else { return nil }
-        let w = lead.1.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lead.1.weightLb)
+        let w = lead.1.weightLb == 0 ? "BW" : settingsList.unitDisplay.format(lb: lead.1.weightLb)
         return (lead.0, "\(w)×\(lead.1.reps)")
     }
 
@@ -228,7 +228,7 @@ struct HistoryView: View {
         }
         guard let leadName = tops.max(by: { $0.1.weightLb < $1.1.weightLb })?.0 else { return "" }
         return tops.filter { $0.0 != leadName }
-            .map { "\($0.0) \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: $0.1.weightLb))×\($0.1.reps)" }
+            .map { "\($0.0) \(settingsList.unitDisplay.format(lb: $0.1.weightLb))×\($0.1.reps)" }
             .joined(separator: " · ")
     }
 
@@ -255,7 +255,7 @@ struct HistoryView: View {
     private func sessionLine(_ session: WorkoutSession) -> String {
         session.orderedExercises.compactMap { entry -> String? in
             guard let name = entry.exercise?.name, let top = entry.topSet else { return nil }
-            return "\(name) \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb))×\(top.reps)"
+            return "\(name) \(settingsList.unitDisplay.format(lb: top.weightLb))×\(top.reps)"
         }.joined(separator: " · ")
     }
 }
@@ -359,7 +359,7 @@ struct SessionDetailView: View {
                 Section {
                     ForEach(entry.orderedSets) { set in
                         HistorySetRow(set: set, type: entry.exercise?.type,
-                                      unitDisplay: settingsList.first?.unitDisplay ?? .lbPrimary)
+                                      unitDisplay: settingsList.unitDisplay)
                     }
                     if !entry.notes.isEmpty {
                         Text(entry.notes).font(.caption).foregroundStyle(.secondary)
@@ -420,7 +420,7 @@ struct SessionDetailView: View {
     private var summaryStats: some View {
         summaryStat("\(completedWorkSets.count)", label: "work sets")
         summaryStat(workingVolumeLb > 0
-                    ? (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: workingVolumeLb)
+                    ? settingsList.unitDisplay.format(lb: workingVolumeLb)
                     : "—", label: "volume")
         if let durationLabel { summaryStat(durationLabel, label: "duration") }
     }
@@ -438,11 +438,11 @@ struct SessionDetailView: View {
         var parts = ["\(entry.workingSets.count) \(setName)\(entry.workingSets.count == 1 ? "" : "s")"]
         if entry.exercise?.type != .conditioning, entry.exercise?.type != .timed,
            let top = entry.topSet {
-            let load = top.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb)
+            let load = top.weightLb == 0 ? "BW" : settingsList.unitDisplay.format(lb: top.weightLb)
             parts.append("top \(load)×\(top.reps)")
         }
         if entry.workingVolumeLb > 0 {
-            parts.append("\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: entry.workingVolumeLb)) volume")
+            parts.append("\(settingsList.unitDisplay.format(lb: entry.workingVolumeLb)) volume")
         }
         return parts.joined(separator: " · ")
     }
@@ -729,7 +729,7 @@ struct ProgressionChartsView: View {
     /// background bars on its own scale rather than a third line competing
     /// with two metrics that genuinely share a unit.
     private var points: [Point] {
-        let display = settingsList.first?.unitDisplay ?? .lbPrimary
+        let display = settingsList.unitDisplay
         let shown = { (lb: Double) in display.primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb }
         var result: [Point] = []
         for session in sessions {
@@ -781,7 +781,7 @@ struct ProgressionChartsView: View {
     /// Tonnage for the combined view. It keeps its own zero-based scale — a
     /// magnitude, not a load — so it can never stretch the weight axis.
     private var volumeBars: [Point] {
-        let display = settingsList.first?.unitDisplay ?? .lbPrimary
+        let display = settingsList.unitDisplay
         return sessions.compactMap { session -> Point? in
             let entries = session.exercises.filter {
                 $0.exercise?.name == selectedLift && ChartRole.of($0, in: session) == .main
@@ -808,7 +808,7 @@ struct ProgressionChartsView: View {
 
     /// Reps are a count, not a load: they carry no weight unit and never convert.
     private var chartUnitLabel: String {
-        metric == .reps ? "reps" : (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue
+        metric == .reps ? "reps" : settingsList.unitDisplay.primaryUnit.rawValue
     }
 
     private var peakTarget: Double? {
@@ -817,7 +817,7 @@ struct ProgressionChartsView: View {
                 .flatMap(\.lifts).first(where: { $0.exerciseName == selectedLift }),
               lift.peakSingleEnabled, lift.lastPeakSingleLb > 0 else { return nil }
         let targetLb = lift.lastPeakSingleLb + lift.peakSingleIncrementLb
-        return (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit == .kg
+        return settingsList.unitDisplay.primaryUnit == .kg
             ? Weight.kg(fromLb: targetLb) : targetLb
     }
 
@@ -1230,7 +1230,7 @@ struct ProgressionChartsView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("\(record.reps) rep\(record.reps == 1 ? "" : "s")")
                                         .font(.caption).foregroundStyle(.secondary)
-                                    Text((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: record.weightLb))
+                                    Text(settingsList.unitDisplay.format(lb: record.weightLb))
                                         .font(.callout.bold().monospacedDigit())
                                 }
                                 .padding(10)
@@ -1248,7 +1248,7 @@ struct ProgressionChartsView: View {
 
     private var defaultLiftName: String {
         if let program = programs.first(where: \.isActive) ?? programs.first,
-           let day = program.orderedDays.first(where: { $0.order == program.nextDayIndex }) ?? program.orderedDays.first,
+           let day = program.nextDay,
            let lift = day.orderedLifts.first(where: { $0.role == .main }),
            mainLifts.contains(where: { $0.name == lift.exerciseName }) {
             return lift.exerciseName
@@ -1262,7 +1262,7 @@ struct ProgressionChartsView: View {
     }
 
     private func displayRepWeight(_ lb: Double) -> Double {
-        (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb
+        settingsList.unitDisplay.primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb
     }
 
     private var selectedPointDetail: String? {
@@ -1279,7 +1279,7 @@ struct ProgressionChartsView: View {
         }.max() ?? 0
         let role = ChartRole.of(entry, in: session).rawValue
         let rotation = ChartRotation.label(entryPhase: entry.phase?.rawValue, sessionRotation: session.programWeek)
-        let display = settingsList.first?.unitDisplay ?? .lbPrimary
+        let display = settingsList.unitDisplay
         return "\(session.date.formatted(date: .abbreviated, time: .omitted)) · \(display.format(lb: top.weightLb)) × \(top.reps) · e1RM \(display.format(lb: estimate)) · \(role) · \(rotation)"
     }
 }

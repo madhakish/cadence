@@ -484,7 +484,7 @@ export async function resolveExercises(program, library) {
           continue;
         }
         resolved.set(raw, match);
-        const status = match.gateStatus || (match.isShelved ? "shelved" : "open");
+        const status = C.exerciseGateStatus(match);
         if ((status === "shelved" || status === "re-entry") && !gated.includes(match.name)) {
           gated.push(match.name);
         }

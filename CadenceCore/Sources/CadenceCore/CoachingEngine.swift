@@ -293,7 +293,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         role: String? = nil,
         isMain: Bool = false,
         capacityManaged: Bool = true,
-        maximumSets: Int = 6,
+        maximumSets: Int = CoachingEngine.defaultMaximumSets,
         prescriptionStyle: PrescriptionStyle = .automatic,
         baseWeightLb: Double = 0,
         workingSets: Int = 0,
@@ -439,6 +439,33 @@ public enum CoachingEngine {
     public static let greenAtPlanFloor = 0.90
     public static let yellowPerformanceDrop = -0.02
     public static let redPerformanceDrop = -0.05
+    /// The set ceiling a slot falls to when it has never been given one.
+    /// Mirrors core.js DEFAULT_MAXIMUM_SETS — capacity planning on both
+    /// clients must agree on how much a defaulted slot can absorb.
+    public static let defaultMaximumSets = 6
+
+    /// Preference-ordered exercise names for filling a missing movement
+    /// pattern — the coach's opinion, not the athlete's data. One catalog,
+    /// mirrors core.js PREFERRED_EXERCISES: a name added to one client's copy
+    /// made the same accepted recommendation add different exercises.
+    public static let preferredExerciseNames: [MovementPattern: [String]] = [
+        .verticalPull: ["Lat Pulldown", "Assisted Pull-up", "Pull-ups", "Chin-ups",
+                        "Weighted Pull-up", "Weighted Chin-up"],
+        .kneeFlexion: ["Seated Leg Curl", "Lying Leg Curl", "Nordic Hamstring Curl"],
+        .shoulderStability: ["Face Pulls", "Band External Rotation", "Y-T-W Raises"],
+        .adductor: ["Copenhagen Plank", "Cable Hip Adduction"],
+        .core: ["Hanging Knee Raise", "Dead Bug", "Plank"],
+    ]
+
+    /// The rep window a coach-added accessory slot opens with, by pattern.
+    /// Mirrors core.js defaultRepRange.
+    public static func defaultRepRange(for pattern: MovementPattern) -> (minReps: Int, maxReps: Int) {
+        switch pattern {
+        case .adductor, .core: return (8, 12)
+        default: return (6, 10)
+        }
+    }
+
     /// How long after a session a hard-stop check-in still attributes to it.
     /// Lives here (not in the adapters) so the two clients cannot tune it
     /// apart — the same workout + check-in pair must read the same on both.
