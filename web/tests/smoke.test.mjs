@@ -3587,23 +3587,26 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "a loaded carry is excluded by its DATA when the library entry is gone");
 }
 
-// Backup validator bounds match native ImportService — one validator must not
-// admit a bundle the other rejects.
+// Backup validator bounds are RELEASED acceptance, shared with native
+// ImportService (which widened its lift set-count caps to this envelope):
+// values this validator has already let into real stores must stay
+// restorable forever — a bound tightened after the fact would reject a
+// user's own next backup.
 {
   const bundle = (program) => ({ schemaVersion: db.BACKUP_SCHEMA_VERSION, programs: [program] });
   const base = { id: "33333333-3333-4333-8333-333333333333", name: "P", focus: "strength", cycleNumber: 1 };
   const rejects = (program, why) => {
     try { db.validateBackup(bundle(program)); return ok(false, why); } catch { return ok(true, why); }
   };
+  const lifts = (fields) => [{ name: "D", order: 0, lifts: [{ exerciseName: "X", role: "main", ...fields }] }];
   db.validateBackup(bundle({ ...base, currentWeek: 4 }));
   ok(true, "currentWeek 4 (deload) is a valid rotation pointer");
-  rejects({ ...base, currentWeek: 5 }, "currentWeek above the 4-rotation cycle is rejected");
-  db.validateBackup(bundle({ ...base, days: [{ name: "D", order: 0, lifts: [{ exerciseName: "X", role: "main", doubleProgressionSets: 20 }] }] }));
-  ok(true, "doubleProgressionSets 20 is accepted");
-  rejects({ ...base, days: [{ name: "D", order: 0, lifts: [{ exerciseName: "X", role: "main", doubleProgressionSets: 21 }] }] },
-    "doubleProgressionSets above the native 20-set cap is rejected");
-  rejects({ ...base, days: [{ name: "D", order: 0, lifts: [{ exerciseName: "X", role: "main", maximumSets: 21 }] }] },
-    "lift maximumSets above the native 20-set cap is rejected");
+  db.validateBackup(bundle({ ...base, days: lifts({ doubleProgressionSets: 100, maximumSets: 100 }) }));
+  ok(true, "lift set counts up to the released 100 envelope stay restorable");
+  rejects({ ...base, days: lifts({ doubleProgressionSets: 101 }) },
+    "doubleProgressionSets above the released envelope is rejected");
+  rejects({ ...base, days: [{ name: "D", order: 0, accessories: [{ exerciseName: "X", maximumSets: 21 }] }] },
+    "accessory maximumSets above the released 20 cap is rejected (both clients released 20)");
 }
 
 // Accepted coaching decisions carry the before/after program snapshots the

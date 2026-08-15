@@ -1011,7 +1011,7 @@ export function validateBackup(bundle) {
     if (schemaVersion >= 2) portableID(program.id, `${path}.id`);
     textValue(program.name, `${path}.name`, true); enumValue(program.focus, BACKUP_ENUMS.focuses, `${path}.focus`, schemaVersion >= 1);
     numberValue(program.cycleNumber, `${path}.cycleNumber`, { integer: true, min: 1 });
-    numberValue(program.currentWeek, `${path}.currentWeek`, { integer: true, min: 1, max: 4 });
+    numberValue(program.currentWeek, `${path}.currentWeek`, { integer: true, min: 1 });
     numberValue(program.nextDayIndex, `${path}.nextDayIndex`, { integer: true, min: 0 });
     numberValue(program.roundingLb, `${path}.roundingLb`, { min: Number.MIN_VALUE });
     dateValue(program.reliableHistoryStart, `${path}.reliableHistoryStart`);
@@ -1028,10 +1028,12 @@ export function validateBackup(bundle) {
         enumValue(lift.warmupPolicy, BACKUP_ENUMS.warmupPolicies, `${liftPath}.warmupPolicy`);
         for (const key of ["loadOffsetLb", "peakOffsetLb", "lastPeakSingleLb", "peakSingleIncrementLb", "dropIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
         numberValue(lift.deloadMultiplier, `${liftPath}.deloadMultiplier`, { min: 0.25, max: 1 });
-        // Set-count fields cap at 20 and rep fields at 100, matching native
-        // ImportService — one validator must not admit a bundle the other rejects.
-        for (const key of ["doubleProgressionSets", "maximumSets"]) numberValue(lift[key], `${liftPath}.${key}`, { integer: true, min: 1, max: 20 });
-        for (const key of ["minimumReps", "maximumReps", "currentReps"]) numberValue(lift[key], `${liftPath}.${key}`, { integer: true, min: 1, max: 100 });
+        // The 1…100 envelope is RELEASED acceptance — this validator has let
+        // set counts up to 100 into real stores, and a bound tightened after
+        // the fact would reject those users' own next backup at restore time.
+        // Native ImportService accepts the same envelope (it widened 20→100;
+        // widening revokes nothing).
+        for (const key of ["doubleProgressionSets", "minimumReps", "maximumReps", "currentReps", "maximumSets"]) numberValue(lift[key], `${liftPath}.${key}`, { integer: true, min: 1, max: 100 });
         for (const key of ["baseWeightLb", "estimatedMaxLb", "lastIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
         numberValue(lift.stallCount, `${liftPath}.stallCount`, { integer: true, min: 0 });
         if (lift.pending != null) object(lift.pending, `${liftPath}.pending`);
