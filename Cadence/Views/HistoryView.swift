@@ -693,16 +693,25 @@ private struct HistorySetEditRow: View {
             .accessibilityLabel("Status: \(statusName). Tap to mark \(nextStatusName)")
             if isTimed {
                 editorField("Hold (seconds)", text: $secondsText) {
+                    // A field still reading exactly the stored value's display
+                    // form is not an edit: the seed's own onChange, and a
+                    // retyped identical value, must leave the record untouched
+                    // (a kg display string round-trips to a slightly different
+                    // canonical pound value, so writing it back would drift a
+                    // weight the lifter never touched).
+                    guard secondsText != displaySeconds else { return }
                     apply(SetLifecycle.SetCorrection(durationSeconds: Int(secondsText)))
                 }
             } else {
                 editorField("Weight (\(unit.rawValue))", text: $weightText) {
+                    guard weightText != displayWeight else { return }
                     apply(SetLifecycle.SetCorrection(
                         weightLb: Double(weightText).map { Weight.toLb($0, from: unit) }
                     ))
                 }
                 Text("×").foregroundStyle(.secondary)
                 editorField("Reps", text: $repsText) {
+                    guard repsText != String(self.set.reps) else { return }
                     apply(SetLifecycle.SetCorrection(reps: Int(repsText)))
                 }
             }
@@ -725,12 +734,22 @@ private struct HistorySetEditRow: View {
             .accessibilityLabel(label)
     }
 
-    private func seed() {
-        weightText = set.weightLb == 0 ? "" : Weight.trim(
-            unit == .kg ? Weight.kg(fromLb: set.weightLb) : set.weightLb
+    /// The stored value's display form — what `seed()` writes and what the
+    /// no-edit guards compare against.
+    private var displayWeight: String {
+        self.set.weightLb == 0 ? "" : Weight.trim(
+            unit == .kg ? Weight.kg(fromLb: self.set.weightLb) : self.set.weightLb
         )
+    }
+
+    private var displaySeconds: String {
+        self.set.durationSeconds.map(String.init) ?? ""
+    }
+
+    private func seed() {
+        weightText = displayWeight
         repsText = String(set.reps)
-        secondsText = set.durationSeconds.map(String.init) ?? ""
+        secondsText = displaySeconds
     }
 
     private func apply(_ correction: SetLifecycle.SetCorrection) {
@@ -761,7 +780,7 @@ private struct HistorySetEditRow: View {
         }
     }
 
-    private var statusName: String { set.status.rawValue }
+    private var statusName: String { self.set.status.rawValue }
     private var nextStatusName: String { nextStatus.rawValue }
 }
 

@@ -3559,6 +3559,18 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(db.workingVolume(corrected.exercises[0]) === 205 * 5 + 195 * 5,
     "session volume reads the corrected record");
 
+  // Re-entering edit mode and firing the field's event WITHOUT changing the
+  // value is not an edit: the rounded kg display string must never round-trip
+  // into a drifted canonical pound value.
+  ui.prefs.unitDisplay = "kgPrimary";
+  editBtn.click(); await tick();
+  const kgInput = [...overlay.querySelectorAll('input[aria-label^="Weight"]')][0];
+  kgInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+  editBtn.click(); await tick(); // Save
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].weightLb === 205,
+    "[INV-BANKED-SETS-CORRECTABLE] an untouched kg field never drifts the stored pounds");
+  ui.prefs.unitDisplay = "lbPrimary";
+
   overlay.querySelector("button")?.click(); await tick(); // ‹ Back
   await db.Sessions.del(sid);
 }

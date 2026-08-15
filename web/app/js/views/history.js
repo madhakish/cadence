@@ -180,21 +180,31 @@ function editableHistorySetRow(set, exerciseType) {
       statusBtn.textContent = stateGlyph();
       statusBtn.setAttribute("aria-label", `Status: ${set.status}. Tap to mark ${nextStatus()}`);
     } });
-  const numberInput = (label, value, oninput) => ui.h("input", {
-    type: "number", inputmode: "decimal", placeholder: label, value,
+  // Field constraints mirror what the shared rule will actually accept —
+  // integers for reps and holds, decimals for weight, nothing negative — so
+  // the keyboard and the validator agree instead of silently ignoring input.
+  const numberInput = (label, value, integer, oninput) => ui.h("input", {
+    type: "number", inputmode: integer ? "numeric" : "decimal",
+    min: "0", step: integer ? "1" : "any", placeholder: label, value,
     style: { maxWidth: "90px" }, "aria-label": label, oninput,
   });
+  // The stored weight's display form. A field still reading exactly this is
+  // not an edit — a kg display string round-trips to a slightly different
+  // canonical pound value, so committing it would drift a weight the lifter
+  // never changed (mirrors the native guard).
+  const displayWeight = () => (set.weightLb > 0
+    ? String(unit === "kg" ? Math.round(C.kgFromLb(set.weightLb) * 10) / 10 : set.weightLb) : "");
   const fields = exerciseType === "timed"
-    ? [numberInput("Hold (s)", set.durationSeconds > 0 ? String(set.durationSeconds) : "",
+    ? [numberInput("Hold (s)", set.durationSeconds > 0 ? String(set.durationSeconds) : "", true,
       (event) => commit({ durationSeconds: parseFloat(event.target.value) }))]
-    : [numberInput(`Weight (${unit})`, set.weightLb > 0
-      ? String(unit === "kg" ? Math.round(C.kgFromLb(set.weightLb) * 10) / 10 : set.weightLb) : "",
+    : [numberInput(`Weight (${unit})`, displayWeight(), false,
       (event) => {
+        if (event.target.value === displayWeight()) return;
         const typed = parseFloat(event.target.value);
         commit({ weightLb: unit === "kg" ? C.lbFromKg(typed) : typed });
       }),
       ui.h("span", { class: "sub", text: "×" }),
-      numberInput("Reps", String(set.reps ?? 0),
+      numberInput("Reps", String(set.reps ?? 0), true,
         (event) => commit({ reps: parseFloat(event.target.value) }))];
   return ui.h("div", { class: `history-set${set.isWarmup ? " warm" : ""}` },
     statusBtn,
@@ -215,7 +225,16 @@ function openDetail(s, exerciseByName) {
     "aria-label": "Edit this workout's sets",
     onClick: async () => {
       if (editing) {
-        await Sessions.save(s);
+        // A failed write must not masquerade as a save: the corrections exist
+        // only in memory until IndexedDB confirms, so stay in edit mode with
+        // the edits on screen and say what happened (mirrors the native
+        // PersistenceErrorCenter contract).
+        try {
+          await Sessions.save(s);
+        } catch (error) {
+          ui.toast(`Saving the corrections failed — ${error?.message || "storage error"}. Your edits are still here; try Save again, then export a backup.`);
+          return;
+        }
         ui.toast("Corrections saved.");
       }
       editing = !editing;
