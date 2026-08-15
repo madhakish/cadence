@@ -557,4 +557,78 @@ final class CoachingEngineTests: XCTestCase {
         // the green streak that unlocks capacity recommendations.
         XCTAssertEqual(report.greenRotationStreak, 0)
     }
+
+    /// The vertical pull belongs at the lift tier: a day whose ONLY vertical
+    /// pull is accessory work (a machine pulldown, a pull-up accessory) earns
+    /// the promotion offer; a day already pulling at the lift tier, a shelved
+    /// pull, or a day with no lift work does not. Mirrored in
+    /// web/tests/core.test.mjs.
+    func testVerticalPullPromotions() {
+        func slot(_ id: String, _ name: String, day: Int, pattern: MovementPattern,
+                  role: String, shelved: Bool = false) -> CoachingProgramSlot {
+            CoachingProgramSlot(id: id, exerciseName: name, dayIndex: day, pattern: pattern,
+                                plannedSets: 3, role: role, isMain: role == "main",
+                                exerciseIsShelved: shelved)
+        }
+        // Upper day pulling only through a machine accessory: offered.
+        let legacyUpper = CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
+            slot("press", "Overhead Press", day: 0, pattern: .verticalPress, role: "main"),
+            slot("pulldown", "Lat Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+            slot("curls", "DB Curls", day: 0, pattern: .arms, role: "accessory"),
+        ])
+        let offered = CoachingEngine.verticalPullPromotions(program: legacyUpper)
+        XCTAssertEqual(offered.count, 1)
+        guard case .promoteVerticalPull(let dayIndex, let ids, let names) = offered[0].change else {
+            return XCTFail("expected promoteVerticalPull, got \(offered[0].change)")
+        }
+        XCTAssertEqual(dayIndex, 0)
+        XCTAssertEqual(ids, ["pulldown"])
+        XCTAssertEqual(names, ["Lat Pulldown"])
+        // The id is rotation-independent, so one dismissal holds for good.
+        XCTAssertEqual(offered[0].id, "program.day.vertical-pull-tier.v1:day0:pulldown")
+
+        // The snapshot arrives in day-record order; the id must not depend on
+        // it, or a reorder would re-emit a dismissed offer.
+        let forward = CoachingEngine.verticalPullPromotions(program:
+            CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
+                slot("a-pull", "Straight-arm Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+                slot("press2", "Overhead Press", day: 0, pattern: .verticalPress, role: "main"),
+                slot("z-pull", "Lat Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+            ]))
+        let reversed = CoachingEngine.verticalPullPromotions(program:
+            CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
+                slot("z-pull", "Lat Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+                slot("press2", "Overhead Press", day: 0, pattern: .verticalPress, role: "main"),
+                slot("a-pull", "Straight-arm Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+            ]))
+        XCTAssertEqual(forward.first?.id, reversed.first?.id)
+        XCTAssertEqual(forward.first?.id, "program.day.vertical-pull-tier.v1:day0:a-pull,z-pull")
+
+        // A pull-up ACCESSORY is the same below-the-tier shape: offered.
+        let pullupAccessory = CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
+            slot("press", "Incline DB Press", day: 0, pattern: .horizontalPress, role: "main"),
+            slot("pullups", "Pull-ups", day: 0, pattern: .verticalPull, role: "accessory"),
+        ])
+        XCTAssertEqual(CoachingEngine.verticalPullPromotions(program: pullupAccessory).count, 1)
+
+        // A day already training the vertical pull at the lift tier: nothing.
+        let upgraded = CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
+            slot("press", "Overhead Press", day: 0, pattern: .verticalPress, role: "main"),
+            slot("pullups", "Pull-ups", day: 0, pattern: .verticalPull, role: "complementary"),
+            slot("pulldown", "Lat Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+        ])
+        XCTAssertTrue(CoachingEngine.verticalPullPromotions(program: upgraded).isEmpty)
+
+        // A shelved pull accessory is not a training choice to promote, and a
+        // day with no lift work is not a day to reshape.
+        let shelved = CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
+            slot("press", "Overhead Press", day: 0, pattern: .verticalPress, role: "main"),
+            slot("pulldown", "Lat Pulldown", day: 0, pattern: .verticalPull, role: "accessory", shelved: true),
+        ])
+        XCTAssertTrue(CoachingEngine.verticalPullPromotions(program: shelved).isEmpty)
+        let accessoriesOnly = CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
+            slot("pulldown", "Lat Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+        ])
+        XCTAssertTrue(CoachingEngine.verticalPullPromotions(program: accessoriesOnly).isEmpty)
+    }
 }

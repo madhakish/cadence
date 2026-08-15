@@ -2,7 +2,13 @@
 
 The **Charts** tab plots one lift over time. Native and web draw the same
 series from the same rules (`ProgressionChartsView` ≡ `renderCharts` +
-`progressionChart` in `web/app/js/charts.js`).
+`progressionChart` in `web/app/js/charts.js`). Presentation differs by
+platform: native offers **Progression / Volume / Rep PRs** as three plots of
+one full-height chart surface (a segmented control switches between them, so
+each chart gets a real viewport instead of collapsing beside its siblings),
+while web stacks the same three views on one scrolling screen. Which series
+exist, what counts into them, and which lifts earn which metrics are
+identical on both.
 
 ## Role: why a lift can be two lines
 
@@ -31,9 +37,15 @@ the main progression stays visually dominant.
 |---|---|
 | Working weight | Heaviest completed working set |
 | Est. 1RM | Best Epley estimate across completed working sets — see [progression rules](progression-rules.md) |
-| Volume | Working tonnage (warm-ups excluded) |
-| **All three** | Weight and est. 1RM as lines; volume as bars behind |
+| **Weight + e1RM** | Both lines on the shared load axis |
 | Reps | Best completed working set's reps — offered *instead* of the load metrics for a bodyweight lift |
+
+Working tonnage (warm-ups excluded, main slots only) is its own **Volume**
+view — a bar chart on its own zero-based scale, never sharing the load axis.
+It exists only for lifts whose load basis supports load PRs: a lift that
+tracks reps rather than external load has no meaningful tonnage, and the
+Volume view says so instead of charting snapshotted history under semantics
+the lift no longer has.
 
 Which metrics are offered depends on what the lift's load **means**. An
 unloaded pull-up has no external resistance, so working weight, est. 1RM and
@@ -47,13 +59,12 @@ Every metric — tonnage included — is converted to your display unit at the
 chart boundary. Weights are stored in canonical pounds, so a kg lifter's
 volume axis reads in kilograms like the rest of the chart.
 
-**All three** deliberately does *not* use a second y-axis for volume.
-Working weight and est. 1RM share a unit, so they belong on one axis and the
-**gap between them is the signal** — an est. 1RM climbing while the top set
-stays flat means the reps are improving at a fixed load. Tonnage is a
-different quantity two orders of magnitude larger, so it recedes to
-translucent bars on their own zero-based right-hand scale. It can never
-stretch the load axis.
+**Weight + e1RM** deliberately shares one axis: the two metrics genuinely
+share a unit, and the **gap between them is the signal** — an est. 1RM
+climbing while the top set stays flat means the reps are improving at a
+fixed load. Tonnage is a different quantity two orders of magnitude larger,
+which is exactly why it lives on its own Volume view with its own zero-based
+scale instead of stretching the load axis.
 
 ## Split by rotation
 
@@ -110,8 +121,9 @@ a tonnage axis has no meaningful load target.
 
 ## Rep PRs
 
-Below the chart: the heaviest completed set at each rep count from 1 to 12.
-This is a lifetime best per rep, not a per-session series, so it never
+The heaviest completed set at each rep count from 1 to 12 — a chart plus a
+card per rep count (its own plot on native, below the progression chart on
+web). This is a lifetime best per rep, not a per-session series, so it never
 moves down.
 
 ## Inspecting a point

@@ -2279,5 +2279,87 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-CLOCK-SURVIVES-RELAUNCH] a future-dated pause is corrupt");
 }
 
+// ---- Vertical-pull tier promotion (mirrors CoachingEngineTests) ----
+{
+  const slot = (id, name, day, pattern, role, shelved = false) => ({
+    id, exerciseName: name, dayIndex: day, pattern, plannedSets: 3, role,
+    isMain: role === "main", exerciseIsShelved: shelved,
+  });
+  const offered = C.verticalPullPromotions({ slots: [
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("pulldown", "Lat Pulldown", 0, "verticalPull", "accessory"),
+    slot("curls", "DB Curls", 0, "arms", "accessory"),
+  ] });
+  ok(offered.length === 1 && offered[0].change.type === "promoteVerticalPull"
+    && offered[0].change.dayIndex === 0
+    && offered[0].change.accessorySlotIDs.join() === "pulldown"
+    && offered[0].change.accessoryNames.join() === "Lat Pulldown",
+    "a day pulling only through a machine accessory earns the promotion offer");
+  ok(offered[0].id === "program.day.vertical-pull-tier.v1:day0:pulldown",
+    "the promotion id is rotation-independent so one dismissal holds for good");
+  ok(C.verticalPullPromotions({ slots: [
+    slot("press", "Incline DB Press", 0, "horizontalPress", "main"),
+    slot("pullups", "Pull-ups", 0, "verticalPull", "accessory"),
+  ] }).length === 1, "a pull-up accessory is the same below-the-tier shape");
+  ok(C.verticalPullPromotions({ slots: [
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("pullups", "Pull-ups", 0, "verticalPull", "complementary"),
+    slot("pulldown", "Lat Pulldown", 0, "verticalPull", "accessory"),
+  ] }).length === 0, "a day already pulling at the lift tier needs nothing");
+  ok(C.verticalPullPromotions({ slots: [
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("pulldown", "Lat Pulldown", 0, "verticalPull", "accessory", true),
+  ] }).length === 0, "a shelved pull accessory is not a choice to promote");
+  ok(C.verticalPullPromotions({ slots: [
+    slot("pulldown", "Lat Pulldown", 0, "verticalPull", "accessory"),
+  ] }).length === 0, "a day with no lift work is not a day to reshape");
+  // The snapshot arrives in day-record order; the id must not depend on it,
+  // or a reorder would re-emit a dismissed offer.
+  const forward = C.verticalPullPromotions({ slots: [
+    slot("a-pull", "Straight-arm Pulldown", 0, "verticalPull", "accessory"),
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("z-pull", "Lat Pulldown", 0, "verticalPull", "accessory"),
+  ] });
+  const reversed = C.verticalPullPromotions({ slots: [
+    slot("z-pull", "Lat Pulldown", 0, "verticalPull", "accessory"),
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("a-pull", "Straight-arm Pulldown", 0, "verticalPull", "accessory"),
+  ] });
+  ok(forward[0].id === reversed[0].id
+    && forward[0].id === "program.day.vertical-pull-tier.v1:day0:a-pull,z-pull",
+    "the offer id is stable under slot reordering");
+}
+
+// ---- Banked-set corrections (mirrors SetLifecycleTests) ----
+{
+  const banked = { weightLb: 195, reps: 5, durationSeconds: null, status: "completed" };
+  const reweighed = C.correctedSetValues(banked, { weightLb: 205 });
+  ok(reweighed.weightLb === 205 && reweighed.reps === 5 && reweighed.status === "completed",
+    "[INV-BANKED-SETS-CORRECTABLE] editing weight cannot reset reps or status");
+  const ticked = C.correctedSetValues({ ...banked, status: "planned" }, { status: "completed" });
+  ok(ticked.status === "completed" && ticked.weightLb === 195,
+    "[INV-BANKED-SETS-CORRECTABLE] the missed ✓ becomes real history without touching the weight");
+  const garbage = C.correctedSetValues({ ...banked, durationSeconds: 30 },
+    { weightLb: -5, reps: -1, durationSeconds: -10, status: "imaginary" });
+  ok(garbage.weightLb === 195 && garbage.reps === 5 && garbage.durationSeconds === 30
+    && garbage.status === "completed",
+    "[INV-BANKED-SETS-CORRECTABLE] negative, non-numeric, or unknown corrections keep the stored values");
+  const nan = C.correctedSetValues(banked, { weightLb: NaN, reps: 2.5 });
+  ok(nan.weightLb === 195 && nan.reps === 5,
+    "[INV-BANKED-SETS-CORRECTABLE] NaN weights and fractional reps keep the stored values");
+  const untouched = C.correctedSetValues({ ...banked, durationSeconds: 45 }, {});
+  ok(untouched.weightLb === 195 && untouched.reps === 5 && untouched.durationSeconds === 45
+    && untouched.status === "completed",
+    "[INV-BANKED-SETS-CORRECTABLE] an empty correction changes nothing");
+  // The status cycle is shared domain behavior — one tap must walk the same
+  // documented order on both clients (mirrors SetLifecycleTests).
+  ok(C.nextSetStatus("planned") === "completed"
+    && C.nextSetStatus("completed") === "skipped"
+    && C.nextSetStatus("skipped") === "planned",
+    "[INV-BANKED-SETS-CORRECTABLE] the status cycle is planned → completed → skipped → planned");
+  ok(C.nextSetStatus("imaginary") === "completed",
+    "an unknown status starts the cycle from planned, like Swift");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

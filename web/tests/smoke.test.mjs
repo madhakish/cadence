@@ -291,6 +291,70 @@ for (const track of [
   ok(refused, "an exercise the library no longer has refuses rather than guessing a replacement");
 }
 
+// The vertical-pull promotion crosses the tier: the machine accessory retires
+// and the day gains the template's pull-up slot — complementary double
+// progression born at bodyweight. Programs predating the vertical-pull
+// template change (issue #126) have no other upgrade path, because no
+// migration rewrites an authored program.
+{
+  const original = await db.Programs.active();
+  const proposed = structuredClone(original);
+  const day = proposed.days[0];
+  // Shape the day like a pre-#126 program: no pull-up lift, a machine pull
+  // accessory, and deliberately noncontiguous authored lift orders.
+  day.lifts = (day.lifts || []).filter((slot) => slot.exerciseName !== "Pull-ups");
+  day.lifts.forEach((slot, index) => { slot.order = index === 0 ? 0 : 5; });
+  day.accessories = [...(day.accessories || []), { id: "legacy-pulldown", exerciseName: "Lat Pulldown",
+    order: (day.accessories || []).length, sets: 4, minReps: 8, maxReps: 12, currentReps: 8,
+    weightLb: 120, incrementLb: 5, stallCount: 0, capacityManaged: true, maximumSets: 6 }];
+  const message = await coach.applyCoachingRecommendation(proposed, {
+    id: "promote-recommendation", ruleID: "program.day.vertical-pull-tier.v1",
+    title: "Train the pull as lift work", explanation: "Fixture recommendation",
+    change: { type: "promoteVerticalPull", dayIndex: day.order ?? 0,
+      accessorySlotIDs: ["legacy-pulldown"], accessoryNames: ["Lat Pulldown"] },
+  }, seededExercises);
+  ok(!day.accessories.some((slot) => slot.id === "legacy-pulldown"),
+    "the machine vertical pull retires from the day");
+  ok(day.accessories.every((slot, index) => slot.order === index),
+    "surviving accessories are renumbered");
+  const added = (day.lifts || []).find((slot) => slot.exerciseName === "Pull-ups" && slot.role === "complementary");
+  ok(!!added && added.prescription === "doubleProgression"
+    && added.doubleProgressionSets === 3 && added.baseWeightLb === 0,
+    "the day gains the template's pull-up slot: complementary double progression at bodyweight");
+  ok(added.order === 6,
+    `the promoted slot appends after the highest authored order (got ${added.order})`);
+  ok(message.includes("Lat Pulldown") && message.includes("Pull-ups"),
+    `the result names both sides of the promotion (${message})`);
+
+  // A stale offer stays safe: the day already trains pull-ups at the lift
+  // tier, so a second apply retires the accessory without duplicating the
+  // slot.
+  day.accessories = [...day.accessories, { id: "legacy-pulldown-2", exerciseName: "Lat Pulldown",
+    order: day.accessories.length, sets: 4, minReps: 8, maxReps: 12, currentReps: 8,
+    weightLb: 120, incrementLb: 5, stallCount: 0, capacityManaged: true, maximumSets: 6 }];
+  await coach.applyCoachingRecommendation(proposed, {
+    id: "promote-stale", ruleID: "program.day.vertical-pull-tier.v1",
+    title: "Train the pull as lift work", explanation: "Fixture recommendation",
+    change: { type: "promoteVerticalPull", dayIndex: day.order ?? 0,
+      accessorySlotIDs: ["legacy-pulldown-2"], accessoryNames: ["Lat Pulldown"] },
+  }, seededExercises);
+  ok((day.lifts || []).filter((slot) => slot.exerciseName === "Pull-ups").length === 1
+    && !day.accessories.some((slot) => slot.id === "legacy-pulldown-2"),
+    "a stale offer retires the accessory without duplicating the pull-up slot");
+
+  // Without pull-ups in the library the promotion refuses rather than
+  // guessing — same posture as a rotation with no compatible variation.
+  let refused = false;
+  try {
+    await coach.applyCoachingRecommendation(structuredClone(original), {
+      id: "promote-no-pullups", ruleID: "program.day.vertical-pull-tier.v1",
+      title: "Train the pull as lift work", explanation: "Fixture recommendation",
+      change: { type: "promoteVerticalPull", dayIndex: 0, accessorySlotIDs: ["x"], accessoryNames: ["Lat Pulldown"] },
+    }, seededExercises.filter((item) => item.name !== "Pull-ups"));
+  } catch { refused = true; }
+  ok(refused, "a library without pull-ups refuses the promotion");
+}
+
 // An accepted linear-stage recommendation mutates only the proposed slot and
 // leaves an explicit strategy-stage value in the audit record.
 {
@@ -3261,6 +3325,45 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.Sessions.del(gid); await db.Sessions.del(bid);
 }
 
+// Tapping the lift's name inside the logger opens the lift info screen —
+// muscles figure, history, exercise settings — not only from the library.
+// Mid-workout is exactly when "what does this train, what did I do last
+// time" gets asked, and the name looked tappable but did nothing.
+{
+  const sid = await session.createBlankSession();
+  const s = await db.Sessions.get(sid);
+  s.exercises.push({ order: 0, exerciseName: "Deadlift", notes: "", phase: null,
+    plannedWeightLb: 225, plannedSets: 3, plannedReps: 5, sets: [] });
+  await db.Sessions.save(s);
+  await session.openSession(sid); await tick();
+  const logger = [...document.querySelectorAll("#overlays .overlay")].pop();
+  const title = [...logger.querySelectorAll(".title")].find((t) => t.textContent === "Deadlift");
+  ok(title, "logger shows the lift name");
+  title.click(); await tick();
+  const detail = [...document.querySelectorAll("#overlays .overlay")].pop();
+  ok(detail !== logger && detail.querySelector(".anatomy-card svg"),
+    "tapping the lift name in the logger opens lift info with the muscles figure");
+
+  // The detail screen live-edits the exercise (rest, load basis, shelving).
+  // Back must repaint the logger, or the card keeps showing the pre-edit
+  // state: bump the lift's own rest and check the ⏱ chip caught up.
+  const restRow = [...detail.querySelectorAll(".row")].find((r) => r.textContent.startsWith("Rest"));
+  const plus = [...restRow.querySelectorAll(".stepper button")].pop();
+  plus.click(); await tick(); // Default → 0:15 of the lift's own rest
+  detail.querySelector(".overlay-head button").click(); await tick();
+  const chip = [...logger.querySelectorAll("button")].find((b) => b.textContent.startsWith("⏱"));
+  ok(chip && chip.textContent.includes("0:15"),
+    `closing lift info repaints the logger (rest chip reads ${chip?.textContent})`);
+
+  // Restore the seeded default and close the logger so later overlay-based
+  // tests don't inherit this screen stack.
+  const deadlift = await db.Exercises.byName("Deadlift");
+  deadlift.defaultRestSeconds = 0;
+  await db.Exercises.save(deadlift);
+  logger.querySelector(".overlay-head button").click(); await tick();
+  await db.Sessions.del(sid);
+}
+
 // The workout stopwatch must survive an app relaunch. The origin previously
 // lived only in a closure, so force-quitting the PWA mid-workout restarted
 // the timer at 0:00 on resume; now it is mirrored into localStorage the way
@@ -3551,6 +3654,100 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     .find((i) => (i.style.borderTop || "").includes("dashed"));
   ok(dashSwatch && !/undefined/.test(dashSwatch.style.borderTop),
     `a colourless dashed swatch falls back to the accent (${dashSwatch?.style.borderTop})`);
+}
+
+// A banked log is correctable: the set that never got its ✓ mid-workout and
+// the set that banked the stale plan's weight are exactly the record the
+// next prescription reads, so History must be able to fix them.
+{
+  const sid = await db.Sessions.save({
+    date: db.iso(new Date()), completedAt: db.iso(new Date()), isCompleted: true, notes: "",
+    exercises: [{ exerciseName: "Back Squat", order: 0, sets: [
+      { order: 0, weightLb: 195, reps: 5, isWarmup: false, status: "completed", enteredUnit: "lb",
+        prescriptionBlock: "work", plannedWeightLb: 195, plannedReps: 5, flags: ["clean"] },
+      { order: 1, weightLb: 195, reps: 5, isWarmup: false, status: "planned", enteredUnit: "lb",
+        prescriptionBlock: "work", plannedWeightLb: 195, plannedReps: 5 },
+    ] }],
+  });
+  await history.render(host()); await tick();
+  [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Log").click(); await tick();
+  const row = [...host().querySelectorAll(".card .row")]
+    .find((r) => (r.textContent || "").includes("Back Squat"));
+  ok(row, "the banked session appears in the log");
+  row.click(); await tick();
+  const overlay = [...document.querySelectorAll(".overlay")].pop();
+  const editBtn = overlay.querySelector('button[aria-label="Edit this workout\'s sets"]');
+  ok(editBtn, "[INV-BANKED-SETS-CORRECTABLE] a banked session offers Edit");
+  editBtn.click(); await tick();
+
+  const weightInputs = [...overlay.querySelectorAll('input[aria-label^="Weight"]')];
+  ok(weightInputs.length === 2, "both work sets grow weight fields in edit mode");
+  weightInputs[0].value = "205";
+  weightInputs[0].dispatchEvent(new window.Event("input", { bubbles: true }));
+  const plannedStatus = overlay.querySelector('button[aria-label^="Status: planned"]');
+  ok(plannedStatus, "the never-ticked set shows its planned status");
+  plannedStatus.click(); await tick();
+  editBtn.click(); await tick(); // Save
+
+  const corrected = await db.Sessions.get(sid);
+  const [reweighed, ticked] = corrected.exercises[0].sets;
+  ok(reweighed.weightLb === 205 && reweighed.reps === 5,
+    "[INV-BANKED-SETS-CORRECTABLE] the corrected weight is stored; reps survive the edit");
+  ok(reweighed.plannedWeightLb === 195,
+    "[INV-BANKED-SETS-CORRECTABLE] the correction never rewrites what was prescribed");
+  ok((reweighed.flags || []).includes("clean"),
+    "[INV-BANKED-SETS-CORRECTABLE] quality flags survive the edit");
+  ok(ticked.status === "completed" && ticked.weightLb === 195,
+    "[INV-BANKED-SETS-CORRECTABLE] the missed ✓ becomes real history without touching its weight");
+  ok(db.workingVolume(corrected.exercises[0]) === 205 * 5 + 195 * 5,
+    "session volume reads the corrected record");
+
+  // Re-entering edit mode and firing the field's event WITHOUT changing the
+  // value is not an edit: the rounded kg display string must never round-trip
+  // into a drifted canonical pound value. The comparison runs at commit time
+  // against the untouched stored value, so the basis cannot move mid-typing.
+  ui.prefs.unitDisplay = "kgPrimary";
+  editBtn.click(); await tick();
+  const kgInput = [...overlay.querySelectorAll('input[aria-label^="Weight"]')][0];
+  kgInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+  editBtn.click(); await tick(); // Save
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].weightLb === 205,
+    "[INV-BANKED-SETS-CORRECTABLE] an untouched kg field never drifts the stored pounds");
+  ui.prefs.unitDisplay = "lbPrimary";
+
+  // Leaving the screen commits like native's save-on-leave: corrections must
+  // not silently vanish on ‹ Back.
+  editBtn.click(); await tick();
+  const repsInput = [...overlay.querySelectorAll('input[aria-label="Reps"]')][0];
+  repsInput.value = "6";
+  repsInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+  overlay.querySelector("button")?.click(); await tick(); await tick(); // ‹ Back
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].reps === 6,
+    "[INV-BANKED-SETS-CORRECTABLE] backing out mid-edit saves the corrections instead of dropping them");
+  await db.Sessions.del(sid);
+}
+
+// The correctable gate keys on the DATA when the library entry is gone, like
+// the read-only rendering: a restored cardio record whose exercise was
+// deleted must not grow a weight×reps editor over its distance.
+{
+  const sid = await db.Sessions.save({
+    date: db.iso(new Date()), completedAt: db.iso(new Date()), isCompleted: true, notes: "",
+    exercises: [{ exerciseName: "Deleted Custom Ruck", order: 0, sets: [
+      { order: 0, weightLb: 20, reps: 1, isWarmup: false, status: "completed", enteredUnit: "lb",
+        prescriptionBlock: "conditioning", distanceMiles: 2, durationSeconds: 1800 },
+    ] }],
+  });
+  await history.render(host()); await tick();
+  [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Log").click(); await tick();
+  [...host().querySelectorAll(".card .row")]
+    .find((r) => (r.textContent || "").includes("Deleted Custom Ruck")).click(); await tick();
+  const overlay = [...document.querySelectorAll(".overlay")].pop();
+  overlay.querySelector('button[aria-label="Edit this workout\'s sets"]').click(); await tick();
+  ok(!overlay.querySelector('input[aria-label^="Weight"]'),
+    "[INV-BANKED-SETS-CORRECTABLE] a cardio record with no library entry stays read-only in edit mode");
+  overlay.querySelector("button")?.click(); await tick();
+  await db.Sessions.del(sid);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

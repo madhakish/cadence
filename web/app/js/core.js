@@ -214,6 +214,36 @@ export const normalizedSetFlags = (quality, stoppedEarly = false, rir = null) =>
   ...(SET_RIRS.includes(rir) ? [rir] : []),
   ...(stoppedEarly ? ["stopped early"] : []),
 ];
+// A correction to one banked set's performed record, applied after the session
+// was completed: the lifter noticed the log is wrong (a set never marked
+// complete, a weight banked at the stale plan). Only the fields the correction
+// PROVIDES change, and only when they are sane — a blank or negative entry
+// keeps the stored value rather than writing garbage into history. Everything
+// else on the set (flags, warmup, load basis, planned values, body signals) is
+// deliberately out of reach: editing reps cannot reset weight, and a
+// correction cannot rewrite what was prescribed. Mirrors
+// SetLifecycle.correctedSetValues.
+export function correctedSetValues(set, correction = {}) {
+  const corrected = { weightLb: set.weightLb, reps: set.reps,
+    durationSeconds: set.durationSeconds ?? null, status: set.status };
+  if (Number.isFinite(correction.weightLb) && correction.weightLb >= 0) corrected.weightLb = correction.weightLb;
+  if (Number.isInteger(correction.reps) && correction.reps >= 0) corrected.reps = correction.reps;
+  if (Number.isInteger(correction.durationSeconds) && correction.durationSeconds >= 0) {
+    corrected.durationSeconds = correction.durationSeconds;
+  }
+  if (SET_STATUSES.includes(correction.status)) corrected.status = correction.status;
+  return corrected;
+}
+// One tap on a correction row's status mark walks the shared status order —
+// planned → completed → skipped → planned. Owned here, not in the two view
+// layers: the cycle is user-facing documented behavior, and a reorder on one
+// client would make the same tap do different things per platform. An unknown
+// status starts the cycle from planned. Mirrors
+// SetLifecycle.nextCorrectionStatus.
+export function nextSetStatus(status) {
+  const index = SET_STATUSES.indexOf(status);
+  return SET_STATUSES[((index < 0 ? 0 : index) + 1) % SET_STATUSES.length];
+}
 
 // Whether a set of this kind counts as the slot's prescribed work — the sets
 // that are graded and that supply the cycle's strength sample.
@@ -2890,6 +2920,47 @@ function rotationSuggestions(program, evidenceKey) {
   return result;
 }
 
+// The vertical pull belongs at the lift tier (issue #126): current templates
+// train pull-ups as programmed double-progression work that earns load at the
+// top of its rep window — never as an accessory buried under the press, and
+// never only as a machine stack. A program instantiated before that change
+// still carries the old shape, and no migration rewrites an authored program,
+// so the coach offers the upgrade instead: one recommendation per day whose
+// ONLY vertical pull is accessory work. The evidence key is
+// rotation-independent — a structural fact, not a per-rotation reading — so
+// one dismissal silences it for good, and applying removes the condition.
+// Mirrored 1:1 in CoachingEngine.verticalPullPromotions.
+export function verticalPullPromotions(program) {
+  const result = [];
+  const byDay = new Map();
+  for (const slot of program.slots || []) {
+    if (!byDay.has(slot.dayIndex)) byDay.set(slot.dayIndex, []);
+    byDay.get(slot.dayIndex).push(slot);
+  }
+  for (const dayIndex of [...byDay.keys()].sort((a, b) => a - b)) {
+    const slots = byDay.get(dayIndex);
+    const lifts = slots.filter((slot) => slot.role !== "accessory");
+    if (!lifts.length || lifts.some((slot) => slot.pattern === "verticalPull")) continue;
+    // Sorted by slot id: the snapshot is built in day-record order, and the
+    // recommendation id derives from these ids — reordering the same slots
+    // must not re-emit a dismissed offer.
+    const pulls = slots.filter((slot) =>
+      slot.role === "accessory" && slot.pattern === "verticalPull" && !slot.exerciseIsShelved)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    if (!pulls.length) continue;
+    const names = pulls.map((slot) => slot.exerciseName);
+    const key = `day${dayIndex}:${pulls.map((slot) => slot.id).join(",")}`;
+    result.push({
+      id: `program.day.vertical-pull-tier.v1:${key}`,
+      ruleID: "program.day.vertical-pull-tier.v1", priority: 55,
+      title: "Train the pull as lift work",
+      explanation: `This day's only vertical pull is accessory work (${names.join(", ")}). Pulling is main work: retire the accessory and train pull-ups as a programmed lift on a rep window that earns load at the top — the same shape new programs start with.`,
+      change: { type: "promoteVerticalPull", dayIndex, accessorySlotIDs: pulls.map((slot) => slot.id), accessoryNames: names },
+    });
+  }
+  return result;
+}
+
 // First adaptive stage inside Progressive Barbell Strength. A single miss is
 // noise: linear progression already retries three misses and rebuilds the base
 // by 10%. Once that rebuild is visible, an upper press may keep the same
@@ -2961,6 +3032,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   const programChanges = [
     ...rotationSuggestions(program, evidenceKey),
     ...linearStageSuggestions(program, sessions, evidenceKey),
+    ...verticalPullPromotions(program),
   ];
   const byPriority = (a, b) => b.priority - a.priority || b.id.localeCompare(a.id);
   const decided = (recommendation) => [recommendation, ...programChanges].sort(byPriority);

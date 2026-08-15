@@ -270,6 +270,18 @@ struct SessionDetailView: View {
     @State private var healthMiles: Double?
     @State private var healthEnergyKcal: Double?
     @State private var didCheckHealth = false
+    /// Correction mode for a banked log: a set that never got its ✓ mid-workout
+    /// or a weight banked at the stale plan can be fixed here. The corrected
+    /// history is what charts, recalls, exports, and prior-best evidence read.
+    /// It does NOT re-run the grading that fired at bank time — that result is
+    /// already stashed in the lift's pending state — so a prescription built
+    /// from the wrong base is fixed in the program editor, not here.
+    @State private var isEditing = false
+    /// Field text buffered per set while editing. Nothing touches the stored
+    /// record until the drafts are committed (Done, or leaving the screen), so
+    /// a half-typed number can never be banked by an autosave, and an
+    /// untouched field is not an edit.
+    @State private var setDrafts: [PersistentIdentifier: SetCorrectionDraft] = [:]
 
     /// The conditioning sets this session actually performed. `workingSets` is
     /// already completed-and-non-warmup: a set left planned, or skipped after
@@ -345,6 +357,57 @@ struct SessionDetailView: View {
         return (session.date, end)
     }
 
+    private var unitDisplay: UnitDisplay { settingsList.first?.unitDisplay ?? .lbPrimary }
+
+    /// Strength and timed rows are correctable; conditioning is not, and a
+    /// row whose library entry is gone falls back to its DATA — the same
+    /// rule the read-only rendering uses.
+    private func isCorrectable(_ entry: SessionExercise) -> Bool {
+        isStrengthEntry(entry) || entry.exercise?.type == .timed
+    }
+
+    private func draftBinding(for set: SetEntry) -> Binding<SetCorrectionDraft> {
+        Binding(get: { setDrafts[set.persistentModelID] ?? SetCorrectionDraft() },
+                set: { setDrafts[set.persistentModelID] = $0 })
+    }
+
+    /// Apply every buffered draft through the shared correction rule, writing
+    /// only fields that actually changed. The no-edit comparison happens HERE,
+    /// against the untouched stored values — so a field still reading the
+    /// stored value's display form (including a kg string whose round-trip
+    /// would drift the canonical pounds) is not an edit, and the comparison
+    /// basis can never move mid-typing because typing never touches the model.
+    private func commitCorrections() {
+        let unit = unitDisplay.primaryUnit
+        for entry in session.orderedExercises where isCorrectable(entry) {
+            for set in entry.orderedSets {
+                guard let draft = setDrafts[set.persistentModelID] else { continue }
+                var correction = SetLifecycle.SetCorrection(status: draft.status)
+                if let text = draft.weightText, text != displayWeightText(set.weightLb, unit: unit) {
+                    // The same comma-tolerant parse every entry surface uses —
+                    // a decimal-comma keyboard types "92,5".
+                    correction.weightLb = Double(text.replacingOccurrences(of: ",", with: "."))
+                        .map { Weight.toLb($0, from: unit) }
+                }
+                if let text = draft.repsText, text != String(set.reps) {
+                    correction.reps = Int(text)
+                }
+                if let text = draft.secondsText, text != (set.durationSeconds.map(String.init) ?? "") {
+                    correction.durationSeconds = Int(text)
+                }
+                let corrected = SetLifecycle.correctedSetValues(
+                    weightLb: set.weightLb, reps: set.reps,
+                    durationSeconds: set.durationSeconds, status: set.status,
+                    correction: correction
+                )
+                if set.weightLb != corrected.weightLb { set.weightLb = corrected.weightLb }
+                if set.reps != corrected.reps { set.reps = corrected.reps }
+                if set.durationSeconds != corrected.durationSeconds { set.durationSeconds = corrected.durationSeconds }
+                if set.status != corrected.status { set.status = corrected.status }
+            }
+        }
+    }
+
     var body: some View {
         List {
             sessionSummary
@@ -355,8 +418,22 @@ struct SessionDetailView: View {
             ForEach(session.orderedExercises) { entry in
                 Section {
                     ForEach(entry.orderedSets) { set in
-                        HistorySetRow(set: set, type: entry.exercise?.type,
-                                      unitDisplay: settingsList.first?.unitDisplay ?? .lbPrimary)
+                        // Only strength and timed rows are correctable, keyed on
+                        // the DATA when the library entry is gone (like the
+                        // read-only rendering): a restored cardio record whose
+                        // exercise was deleted must not grow a weight×reps
+                        // editor over its distance. Conditioning corrections
+                        // belong to the Health comparison flow above, which
+                        // reconciles against a measurement instead of a memory.
+                        if isEditing, isCorrectable(entry) {
+                            HistorySetEditRow(set: set,
+                                              isTimed: entry.exercise?.type == .timed,
+                                              unitDisplay: unitDisplay,
+                                              draft: draftBinding(for: set))
+                        } else {
+                            HistorySetRow(set: set, type: entry.exercise?.type,
+                                          unitDisplay: unitDisplay)
+                        }
                     }
                     if !entry.notes.isEmpty {
                         Text(entry.notes).font(.caption).foregroundStyle(.secondary)
@@ -378,6 +455,35 @@ struct SessionDetailView: View {
             }
         }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
+        .onDisappear {
+            // Leaving the screen commits like Done: what the fields show is
+            // what banks. A read-only visit (no drafts) saves nothing.
+            guard isEditing, !setDrafts.isEmpty else { return }
+            commitCorrections()
+            if PersistenceErrorCenter.shared.save(context, operation: "Saving the workout corrections") {
+                setDrafts = [:]
+            }
+        }
+        .toolbar {
+            if session.isCompleted {
+                Button(isEditing ? "Done" : "Edit") {
+                    if isEditing {
+                        commitCorrections()
+                        // A failed save rolls the context back; staying in edit
+                        // mode with the drafts intact keeps the typed values on
+                        // screen for a retry instead of dropping to read-only
+                        // rows showing the reverted record.
+                        if PersistenceErrorCenter.shared.save(context, operation: "Saving the workout corrections") {
+                            setDrafts = [:]
+                            isEditing = false
+                        }
+                    } else {
+                        isEditing = true
+                    }
+                }
+                .accessibilityLabel(isEditing ? "Finish editing this workout" : "Edit this workout's sets")
+            }
+        }
         .task {
             // One lookup per open, and only when there is something to compare
             // and a window to compare it over.
@@ -417,7 +523,7 @@ struct SessionDetailView: View {
     private var summaryStats: some View {
         summaryStat("\(completedWorkSets.count)", label: "work sets")
         summaryStat(workingVolumeLb > 0
-                    ? (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: workingVolumeLb)
+                    ? unitDisplay.format(lb: workingVolumeLb)
                     : "—", label: "volume")
         if let durationLabel { summaryStat(durationLabel, label: "duration") }
     }
@@ -435,11 +541,11 @@ struct SessionDetailView: View {
         var parts = ["\(entry.workingSets.count) \(setName)\(entry.workingSets.count == 1 ? "" : "s")"]
         if entry.exercise?.type != .conditioning, entry.exercise?.type != .timed,
            let top = entry.topSet {
-            let load = top.weightLb == 0 ? "BW" : (settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: top.weightLb)
+            let load = top.weightLb == 0 ? "BW" : unitDisplay.format(lb: top.weightLb)
             parts.append("top \(load)×\(top.reps)")
         }
         if entry.workingVolumeLb > 0 {
-            parts.append("\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: entry.workingVolumeLb)) volume")
+            parts.append("\(unitDisplay.format(lb: entry.workingVolumeLb)) volume")
         }
         return parts.joined(separator: " · ")
     }
@@ -621,16 +727,99 @@ private struct HistorySetRow: View {
         }
     }
 
-    private var statusIcon: String {
-        switch set.status {
-        case .completed: return "checkmark.circle.fill"
-        case .skipped: return "minus.circle"
-        case .planned: return "circle"
-        }
-    }
+    private var statusIcon: String { statusIconName(self.set.status) }
 
     private var statusColor: Color {
         self.set.status == .completed ? Theme.good : .secondary
+    }
+}
+
+/// The stored weight's display form in the entry unit — what an untouched
+/// field reads, and what the no-edit comparison in `commitCorrections` uses.
+private func displayWeightText(_ weightLb: Double, unit: WeightUnit) -> String {
+    weightLb == 0 ? "" : Weight.trim(unit == .kg ? Weight.kg(fromLb: weightLb) : weightLb)
+}
+
+/// One glyph mapping for a set's status, shared by the read-only row and the
+/// correction row.
+private func statusIconName(_ status: SetStatus) -> String {
+    switch status {
+    case .completed: return "checkmark.circle.fill"
+    case .skipped: return "minus.circle"
+    case .planned: return "circle"
+    }
+}
+
+/// Field text buffered for one set while correcting. `nil` means the field
+/// was never touched — only touched fields can become corrections.
+struct SetCorrectionDraft {
+    var weightText: String?
+    var repsText: String?
+    var secondsText: String?
+    var status: SetStatus?
+}
+
+/// One banked set in correction mode: cycle the status, retype the weight or
+/// reps (or the hold for timed work). The row edits a DRAFT — the stored
+/// record is untouched until `commitCorrections` applies every draft through
+/// the shared `SetLifecycle.correctedSetValues` rule, so a half-typed number
+/// is never written, an empty or garbage field keeps the stored value, and
+/// nothing beyond the four performed fields is reachable. The weight edits in
+/// the display's primary unit and stores canonical pounds, like every other
+/// entry surface.
+private struct HistorySetEditRow: View {
+    let set: SetEntry
+    let isTimed: Bool
+    let unitDisplay: UnitDisplay
+    @Binding var draft: SetCorrectionDraft
+
+    private var unit: WeightUnit { unitDisplay.primaryUnit }
+    private var effectiveStatus: SetStatus { draft.status ?? set.status }
+    private var nextStatus: SetStatus { SetLifecycle.nextCorrectionStatus(effectiveStatus) }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                draft.status = nextStatus
+            } label: {
+                Image(systemName: statusIconName(effectiveStatus))
+                    .font(.title3)
+                    .foregroundStyle(effectiveStatus == .completed ? Theme.good : .secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Status: \(effectiveStatus.rawValue). Tap to mark \(nextStatus.rawValue)")
+            if isTimed {
+                editorField("Hold (seconds)",
+                            text: draftField(\.secondsText,
+                                             fallback: set.durationSeconds.map(String.init) ?? ""))
+            } else {
+                editorField("Weight (\(unit.rawValue))",
+                            text: draftField(\.weightText,
+                                             fallback: displayWeightText(set.weightLb, unit: unit)))
+                Text("×").foregroundStyle(.secondary)
+                editorField("Reps", text: draftField(\.repsText, fallback: String(set.reps)))
+            }
+            Spacer(minLength: 4)
+            if set.isWarmup {
+                Text("Warm-up").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func draftField(_ keyPath: WritableKeyPath<SetCorrectionDraft, String?>,
+                            fallback: String) -> Binding<String> {
+        Binding(get: { draft[keyPath: keyPath] ?? fallback },
+                set: { draft[keyPath: keyPath] = $0 })
+    }
+
+    private func editorField(_ label: String, text: Binding<String>) -> some View {
+        TextField(label, text: text)
+            .keyboardType(.decimalPad)
+            .textFieldStyle(.roundedBorder)
+            .font(.callout.monospacedDigit())
+            .frame(maxWidth: 110)
+            .accessibilityLabel(label)
     }
 }
 
@@ -647,6 +836,7 @@ struct ProgressionChartsView: View {
     // Defaults to the first main lift in the library on appear — no
     // hardcoded exercise name (the library is user data).
     @State private var selectedLift = ""
+    @State private var plot: Plot = .progression
     @State private var metric: Metric = .topSet
     @State private var intent: ChartIntent = .mainProgression
     @State private var selectedDate: Date?
@@ -654,10 +844,15 @@ struct ProgressionChartsView: View {
     /// something the lifter asks for rather than something they are handed.
     @State private var horizon: TrendProjection.Horizon = .off
 
+    enum Plot: String, CaseIterable {
+        case progression = "Progression"
+        case volume = "Volume"
+        case repPRs = "Rep PRs"
+    }
+
     enum Metric: String, CaseIterable {
         case topSet = "Working weight"
         case estimatedMax = "Est. 1RM"
-        case volume = "Volume"
         case all = "Weight + e1RM"
         /// Best completed working set's reps — the direct analogue of
         /// "heaviest set" for a lift whose load never changes.
@@ -718,9 +913,8 @@ struct ProgressionChartsView: View {
     private var visibleRoles: [ChartRole] { showComplementary ? [.main, .complementary] : [.main] }
 
     /// Load points (working weight and/or est. 1RM) for the visible roles.
-    /// Volume is deliberately NOT here — in the combined view it becomes
-    /// background bars on its own scale rather than a third line competing
-    /// with two metrics that genuinely share a unit.
+    /// Volume is deliberately NOT a metric here — tonnage lives on its own
+    /// plot (`volumeBars`), on its own zero-based scale.
     private var points: [Point] {
         let display = settingsList.first?.unitDisplay ?? .lbPrimary
         let shown = { (lb: Double) in display.primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb }
@@ -759,20 +953,13 @@ struct ProgressionChartsView: View {
                     result.append(Point(date: session.date, value: Double(best), rotation: rotation,
                                         role: role, series: "Reps\(suffix)"))
                 }
-                if metric == .volume {
-                    let volume = entries.reduce(0) { $0 + $1.workingVolumeLb }
-                    if volume > 0 {
-                        result.append(Point(date: session.date, value: shown(volume), rotation: rotation,
-                                            role: role, series: "Volume\(suffix)"))
-                    }
-                }
             }
         }
         return result
     }
 
-    /// Tonnage for the combined view. It keeps its own zero-based scale — a
-    /// magnitude, not a load — so it can never stretch the weight axis.
+    /// Tonnage for the Volume plot. It keeps its own zero-based scale — a
+    /// magnitude, not a load — so it never shares the weight axis.
     private var volumeBars: [Point] {
         let display = settingsList.first?.unitDisplay ?? .lbPrimary
         return sessions.compactMap { session -> Point? in
@@ -801,11 +988,19 @@ struct ProgressionChartsView: View {
 
     /// Reps are a count, not a load: they carry no weight unit and never convert.
     private var chartUnitLabel: String {
-        metric == .reps ? "reps" : (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue
+        metric == .reps ? "reps" : loadUnitLabel
+    }
+
+    /// The display unit for quantities that are ALWAYS a load (tonnage),
+    /// independent of the Progression tab's metric state — the Volume plot
+    /// must never caption pounds as "(reps)" because a hidden picker on
+    /// another tab happens to sit on the reps metric.
+    private var loadUnitLabel: String {
+        (settingsList.first?.unitDisplay ?? .lbPrimary).primaryUnit.rawValue
     }
 
     private var peakTarget: Double? {
-        guard metric != .volume, metric != .reps,
+        guard metric != .reps,
               let lift = (programs.first(where: \.isActive) ?? programs.first)?.days
                 .flatMap(\.lifts).first(where: { $0.exerciseName == selectedLift }),
               lift.peakSingleEnabled, lift.lastPeakSingleLb > 0 else { return nil }
@@ -864,7 +1059,6 @@ struct ProgressionChartsView: View {
     private var projectionSeriesPrefix: String {
         switch metric {
         case .estimatedMax: return "Est. 1RM"
-        case .volume: return "Volume"
         case .reps: return "Reps"
         case .topSet, .all: return "Working weight"
         }
@@ -874,15 +1068,15 @@ struct ProgressionChartsView: View {
     /// only ever occupies complementary slots would otherwise draw a full chart
     /// beside "0 of 4 sessions so far" — refusing on a role distinction the
     /// lifter never asked about. Web falls back the same way.
-    private var projectionSamplePoints: [Point] {
-        let ofMetric = points.filter { $0.series.hasPrefix(projectionSeriesPrefix) }
+    private func projectionSamplePoints(in pts: [Point]) -> [Point] {
+        let ofMetric = pts.filter { $0.series.hasPrefix(projectionSeriesPrefix) }
         let main = ofMetric.filter { $0.role == .main }
         return main.isEmpty ? ofMetric : main
     }
 
-    private var projection: Projection? {
+    private func projection(from pts: [Point]) -> Projection? {
         guard horizon != .off else { return nil }
-        let samples = projectionSamplePoints
+        let samples = projectionSamplePoints(in: pts)
         guard let origin = samples.map(\.date).min() else { return nil }
         let day = { (date: Date) in date.timeIntervalSince(origin) / Self.secondsPerDay }
         guard let result = TrendProjection.project(
@@ -904,9 +1098,9 @@ struct ProgressionChartsView: View {
     /// forecast and getting an unchanged chart back reads as a broken control,
     /// and the reason is the useful part: the refusal names what the history is
     /// missing.
-    private func projectionRefusal(given projection: Projection?) -> String? {
+    private func projectionRefusal(given projection: Projection?, in pts: [Point]) -> String? {
         guard horizon != .off, projection == nil else { return nil }
-        let samples = projectionSamplePoints
+        let samples = projectionSamplePoints(in: pts)
         guard samples.count >= TrendProjection.minimumSamples else {
             return "Not enough history to project — \(samples.count) of \(TrendProjection.minimumSamples) sessions so far."
         }
@@ -932,8 +1126,8 @@ struct ProgressionChartsView: View {
     /// the plot without depending on the chart's derived domain. Volume bars
     /// are excluded — they ride their own scale and would drag the band down
     /// past the load lines it is meant to sit behind.
-    private func loadRange(including projection: Projection) -> (low: Double, high: Double)? {
-        let values = points.map(\.value) + projection.points.map(\.value)
+    private func loadRange(in pts: [Point], including projection: Projection) -> (low: Double, high: Double)? {
+        let values = pts.map(\.value) + projection.points.map(\.value)
         guard let low = values.min(), let high = values.max(), high > low else { return nil }
         return (low, high)
     }
@@ -960,25 +1154,25 @@ struct ProgressionChartsView: View {
     /// is depth rather than clutter. Rotation split and the combined metric
     /// both put several lines on the plot, and translucent areas over each
     /// other read as regions that mean something.
-    private var showsAreaFill: Bool {
-        !splitByRotation && Set(points.map(\.series)).count == 1
+    private func showsAreaFill(_ pts: [Point]) -> Bool {
+        !splitByRotation && Set(pts.map(\.series)).count == 1
     }
 
     /// X-axis selection identifies a session date. Draw every visible series
     /// at that date so a combined weight/e1RM chart does not pretend the user
     /// selected one of two coincident records when the gesture only selected
     /// their shared exposure.
-    private var selectedChartPoints: [Point] {
+    private func selectedChartPoints(in pts: [Point]) -> [Point] {
         guard let selectedDate,
-              let nearest = points.min(by: {
+              let nearest = pts.min(by: {
                   abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
               }) else { return [] }
-        return points.filter { abs($0.date.timeIntervalSince(nearest.date)) < 1 }
+        return pts.filter { abs($0.date.timeIntervalSince(nearest.date)) < 1 }
     }
 
     @ChartContentBuilder
-    private func futureBand(_ trend: Projection?) -> some ChartContent {
-        if let trend, let range = loadRange(including: trend) {
+    private func futureBand(_ pts: [Point], _ trend: Projection?) -> some ChartContent {
+        if let trend, let range = loadRange(in: pts, including: trend) {
             RectangleMark(
                 xStart: .value("Today", Date.now),
                 xEnd: .value("Horizon", trend.horizonDate),
@@ -990,9 +1184,9 @@ struct ProgressionChartsView: View {
     }
 
     @ChartContentBuilder
-    private var performedMarks: some ChartContent {
-        if showsAreaFill {
-            ForEach(points) { point in
+    private func performedMarks(_ pts: [Point]) -> some ChartContent {
+        if showsAreaFill(pts) {
+            ForEach(pts) { point in
                 AreaMark(x: .value("Date", point.date),
                          y: .value(chartUnitLabel, point.value))
                     .interpolationMethod(.monotone)
@@ -1002,7 +1196,7 @@ struct ProgressionChartsView: View {
                     ))
             }
         }
-        ForEach(points) { point in
+        ForEach(pts) { point in
             LineMark(x: .value("Date", point.date),
                      y: .value(chartUnitLabel, point.value),
                      series: .value("Series", seriesKey(point)))
@@ -1061,12 +1255,13 @@ struct ProgressionChartsView: View {
     }
 
     @ChartContentBuilder
-    private var selectionMarks: some ChartContent {
-        if let selected = selectedChartPoints.first {
-            RuleMark(x: .value("Selected session", selected.date))
+    private func selectionMarks(_ pts: [Point]) -> some ChartContent {
+        let selected = selectedChartPoints(in: pts)
+        if let first = selected.first {
+            RuleMark(x: .value("Selected session", first.date))
                 .foregroundStyle(Color.primary.opacity(0.22))
                 .lineStyle(StrokeStyle(lineWidth: 1))
-            ForEach(selectedChartPoints) { point in
+            ForEach(selected) { point in
                 PointMark(x: .value("Selected session", point.date),
                           y: .value(chartUnitLabel, point.value))
                     .foregroundStyle(Color(.systemBackground))
@@ -1084,7 +1279,6 @@ struct ProgressionChartsView: View {
         switch metric {
         case .topSet: metricLabel = "Top working weight"
         case .estimatedMax: metricLabel = "Estimated 1RM"
-        case .volume: metricLabel = "Working volume"
         case .all: metricLabel = "Working weight and est. 1RM"
         case .reps: metricLabel = "Best working set"
         }
@@ -1092,151 +1286,195 @@ struct ProgressionChartsView: View {
         return "\(metricLabel) per session (\(chartUnitLabel))\(role)"
     }
 
-    var body: some View {
-        // Bound ONCE per pass. `projection` re-runs the least-squares fit over
-        // a freshly recomputed `points` on every read, and the body reads it
-        // from five places.
-        let trend = projection
-        return VStack(spacing: 12) {
-            Picker("Lift", selection: $selectedLift) {
-                ForEach(mainLifts) { Text($0.name).tag($0.name) }
-            }
-            .onAppear { if selectedLift.isEmpty { selectedLift = defaultLiftName } }
-            // Switching to a bodyweight lift while a load metric is selected
-            // would otherwise strand the chart on a metric it can only draw
-            // as zero. Mirrors the web picker's clamp.
-            .onChange(of: selectedLift, initial: true) {
-                selectedDate = nil
-                if !availableMetrics.contains(metric) { metric = availableMetrics[0] }
-            }
-            Picker("Metric", selection: $metric) {
-                ForEach(availableMetrics, id: \.self) { Text($0.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: metric) { selectedDate = nil }
-            Picker("Chart intent", selection: $intent) {
-                ForEach(ChartIntent.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.menu)
-            // How far past today to extend the fitted trend.
-            Picker("Project forward", selection: $horizon) {
-                ForEach(TrendProjection.Horizon.allCases, id: \.self) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityLabel("Project forward")
-            .accessibilityHint("Extends the trend fitted from performed sessions past today")
+    /// One caption style for all three plots, so a styling tweak cannot land
+    /// on only some of them.
+    private func plotCaption(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+    }
 
-            if points.isEmpty {
-                ContentUnavailableView(Copy.emptyHistory, systemImage: "chart.xyaxis.line")
-            } else {
-                Chart {
-                    // The future, shaded behind everything: the region right of
-                    // today is a different kind of space and should read that
-                    // way before the eye reaches the dashes.
-                    // The y bounds are spelled out rather than left to span the
-                    // plot: RectangleMark's x-only initializer is ambiguous
-                    // between two overloads, and the load range is exactly what
-                    // the shading should cover anyway.
-                    futureBand(trend)
-                    // A wash under a lone line gives the plot depth without
-                    // adding a second thing to read. Only when there IS one
-                    // line — stacking translucent areas makes their overlaps
-                    // look like data.
-                    performedMarks
-                    peakTargetMark
-                    // The projection last, so it reads as an overlay on the
-                    // history rather than another member of it. Its colour is
-                    // set outright rather than through the foreground-style
-                    // scale: joining that scale's domain would renumber every
-                    // performed series' colour the moment a horizon was picked.
-                    // No point marks either — there is no session to mark.
-                    projectionMarks(trend)
-                    selectionMarks
+    var body: some View {
+        // Datasets are bound ONCE per render: `points` is a full
+        // sessions×entries scan that the marks, legend, selection, and
+        // projection would otherwise each re-run (with fresh UUID identities
+        // defeating chart diffing), and it is only computed while its plot is
+        // visible. Fit only while the progression plot is visible — volume
+        // and rep PRs are recorded views, not alternate canvases for a
+        // hidden forecast.
+        let pts = plot == .progression ? points : []
+        let trend = plot == .progression ? projection(from: pts) : nil
+        // A ScrollView, so the chart's minimum height can never clip the
+        // captions, selected-point detail, or projection summary off-screen
+        // on small screens or large Dynamic Type. The collapsed-strip bug
+        // this view fixes came from flexible-height compression, which the
+        // per-plot minimum heights prevent — with those in place the scroll
+        // only ever appears when content genuinely overflows.
+        return ScrollView {
+            VStack(spacing: 12) {
+                Picker("Lift", selection: $selectedLift) {
+                    ForEach(mainLifts) { Text($0.name).tag($0.name) }
                 }
-                .chartForegroundStyleScale(range: splitByRotation ? Self.rotationPalette : Self.seriesPalette)
-                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
-                .chartYAxis { AxisMarks(position: .leading) }
-                .chartYScale(domain: .automatic(includesZero: false))
-                .chartLegend(Set(points.map(\.series)).count > 1 ? .visible : .hidden)
-                .chartXSelection(value: $selectedDate)
-                .frame(maxHeight: 280)
+                .onAppear { if selectedLift.isEmpty { selectedLift = defaultLiftName } }
+                // Switching to a bodyweight lift while a load metric is selected
+                // would otherwise strand the chart on a metric it can only draw
+                // as zero. Mirrors the web picker's clamp.
+                .onChange(of: selectedLift, initial: true) {
+                    selectedDate = nil
+                    if !availableMetrics.contains(metric) { metric = availableMetrics[0] }
+                }
+                Picker("Plot", selection: $plot) {
+                    ForEach(Plot.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: plot) { selectedDate = nil }
+
+                if plot == .progression {
+                    Picker("Metric", selection: $metric) {
+                        ForEach(availableMetrics, id: \.self) { Text($0.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: metric) { selectedDate = nil }
+                    Picker("Chart intent", selection: $intent) {
+                        ForEach(ChartIntent.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    Picker("Project forward", selection: $horizon) {
+                        ForEach(TrendProjection.Horizon.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityLabel("Project forward")
+                    .accessibilityHint("Extends the trend fitted from performed sessions past today")
+                }
+
+                switch plot {
+                case .progression: progressionPlot(pts, trend)
+                case .volume: volumePlot
+                case .repPRs: repPRPlot
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private func progressionPlot(_ pts: [Point], _ trend: Projection?) -> some View {
+        if pts.isEmpty {
+            // A lift that only ever occupied complementary slots has no main
+            // points but can hold real rep PRs — say where they are instead
+            // of asserting there is no history at all.
+            ContentUnavailableView(Copy.emptyHistory, systemImage: "chart.xyaxis.line",
+                                   description: repRecords.isEmpty
+                                       ? nil : Text("Rep PRs for this lift are under the Rep PRs plot."))
+        } else {
+            Chart {
+                futureBand(pts, trend)
+                performedMarks(pts)
+                peakTargetMark
+                projectionMarks(trend)
+                selectionMarks(pts)
+            }
+            .chartForegroundStyleScale(range: splitByRotation ? Self.rotationPalette : Self.seriesPalette)
+            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
+            .chartYScale(domain: .automatic(includesZero: false))
+            .chartLegend(Set(pts.map(\.series)).count > 1 ? .visible : .hidden)
+            .chartXSelection(value: $selectedDate)
+            .historyChartViewport(min: 220, ideal: 280)
+            plotCaption(chartCaption)
+            if let detail = selectedPointDetail {
+                Text(detail)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .accessibilityLabel(detail)
+            }
+            if let trend {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(projectionSummary(trend))
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Self.projectionColor)
+                    Text("\(TrendProjection.fitDescription(trend.result.fitQuality)) · fitted from performed sessions — a continuation of the past, not a plan.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
-                Text(chartCaption)
-                    .font(.caption2)
+                .accessibilityElement(children: .combine)
+            } else if let refusal = projectionRefusal(given: trend, in: pts) {
+                Text(refusal)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                if let detail = selectedPointDetail {
-                    Text(detail)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-                        .accessibilityLabel(detail)
-                }
-                if selectedIsLoaded, !volumeBars.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Working volume").font(.caption.bold())
-                        Chart(volumeBars) { bar in
-                            BarMark(x: .value("Date", bar.date), y: .value("Volume", bar.value))
-                                .foregroundStyle(Color(hex: 0x8B9196).opacity(0.55))
-                        }
-                        .chartYAxis { AxisMarks(position: .leading) }
-                        .frame(height: 105)
-                    }
                     .padding(.horizontal)
-                }
-                if let trend {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(projectionSummary(trend))
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(Self.projectionColor)
-                        Text("\(TrendProjection.fitDescription(trend.result.fitQuality)) · fitted from performed sessions — a continuation of the past, not a plan.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .accessibilityElement(children: .combine)
-                } else if let refusal = projectionRefusal(given: trend) {
-                    Text(refusal)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
             }
-            if !repRecords.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Rep PRs").font(.headline)
-                    Chart(repRecords) { record in
-                        LineMark(x: .value("Reps", record.reps),
-                                 y: .value("Weight", displayRepWeight(record.weightLb)))
-                            .interpolationMethod(.monotone)
-                            .foregroundStyle(Theme.accent)
-                        PointMark(x: .value("Reps", record.reps),
-                                  y: .value("Weight", displayRepWeight(record.weightLb)))
-                            .foregroundStyle(Theme.accent)
-                    }
-                    .frame(height: 150)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(repRecords) { record in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(record.reps) rep\(record.reps == 1 ? "" : "s")")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                    Text((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: record.weightLb))
-                                        .font(.callout.bold().monospacedDigit())
-                                }
-                                .padding(10)
-                                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-            Spacer()
         }
-        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var volumePlot: some View {
+        // Which lifts earn a tonnage chart is decided by the lift's CURRENT
+        // load basis — the same rule that strips load metrics from the
+        // Metric picker, mirrored from web `metricOptions`. Sets snapshot the
+        // basis they were logged under, so a lift re-based to bodyweight or
+        // assisted can still hold volumeLb > 0 history; charting it would
+        // present tonnage the lift's own semantics say is not meaningful,
+        // and a genuinely unloaded lift would read "No volume history" as
+        // lost data. Explain instead.
+        if !selectedIsLoaded {
+            ContentUnavailableView("Volume is tonnage", systemImage: "chart.bar.xaxis",
+                                   description: Text("This lift tracks reps, not external load, so it has no volume to chart."))
+        } else {
+            let bars = volumeBars
+            if bars.isEmpty {
+                ContentUnavailableView(Copy.emptyVolume, systemImage: "chart.bar.xaxis")
+            } else {
+                Chart(bars) { bar in
+                    BarMark(x: .value("Date", bar.date), y: .value("Volume", bar.value))
+                        .foregroundStyle(Color(hex: 0x8B9196).opacity(0.55))
+                }
+                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
+                .historyChartViewport(min: 260, ideal: 340)
+                // loadUnitLabel, not chartUnitLabel: tonnage is always a load,
+                // whatever metric the (hidden) Progression picker sits on.
+                plotCaption("Working volume per session (\(loadUnitLabel)) · main slots only")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var repPRPlot: some View {
+        let records = repRecords
+        if records.isEmpty {
+            ContentUnavailableView(Copy.emptyRepPRs, systemImage: "chart.line.uptrend.xyaxis")
+        } else {
+            Chart(records) { record in
+                LineMark(x: .value("Reps", record.reps),
+                         y: .value("Weight", displayRepWeight(record.weightLb)))
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(Theme.accent)
+                PointMark(x: .value("Reps", record.reps),
+                          y: .value("Weight", displayRepWeight(record.weightLb)))
+                    .foregroundStyle(Theme.accent)
+            }
+            .historyChartViewport(min: 240, ideal: 300)
+            plotCaption("Best completed working set at each rep count")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(records) { record in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(record.reps) rep\(record.reps == 1 ? "" : "s")")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Text((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: record.weightLb))
+                                .font(.callout.bold().monospacedDigit())
+                        }
+                        .padding(10)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
     }
 
     private var defaultLiftName: String {
@@ -1274,5 +1512,21 @@ struct ProgressionChartsView: View {
         let rotation = ChartRotation.label(entryPhase: entry.phase?.rawValue, sessionRotation: session.programWeek)
         let display = settingsList.first?.unitDisplay ?? .lbPrimary
         return "\(session.date.formatted(date: .abbreviated, time: .omitted)) · \(display.format(lb: top.weightLb)) × \(top.reps) · e1RM \(display.format(lb: estimate)) · \(role) · \(rotation)"
+    }
+}
+
+/// The collapse fix, in one place. A history chart gets a real minimum
+/// height and wins the layout competition — a flexible-height chart beside
+/// fixed-height siblings is exactly how the collapsed-strip bug happened —
+/// plus the leading Y axis and the shared horizontal inset every plot
+/// carries. Route every plot through this so the next one cannot forget
+/// half the incantation.
+private extension View {
+    func historyChartViewport(min minHeight: CGFloat, ideal idealHeight: CGFloat) -> some View {
+        self
+            .chartYAxis { AxisMarks(position: .leading) }
+            .frame(minHeight: minHeight, idealHeight: idealHeight, maxHeight: .infinity)
+            .layoutPriority(1)
+            .padding(.horizontal)
     }
 }
