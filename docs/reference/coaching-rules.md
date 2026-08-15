@@ -105,6 +105,26 @@ trains the same pattern at the same tier, so those remain the best prior — but
 clears the stall counter, because inheriting the countdown would deload a lift
 that has not yet missed anything.
 
+## Vertical-pull tier promotion
+
+Current templates train the vertical pull as **programmed lift work** —
+pull-ups on a double-progression rep window that earns load at the top,
+growing into weighted pull-ups — never as an accessory buried under the
+press, and never only as a machine stack. A program instantiated before that
+change still carries the old shape, and no migration rewrites an authored
+program, so the coach offers the upgrade instead: one recommendation per day
+whose **only** vertical pull is accessory work (a machine pulldown, or a
+pull-up accessory). Days already pulling at the lift tier, days with no lift
+work at all, and shelved pull accessories are left alone.
+
+Applying it retires those accessories and adds the template's own slot — a
+complementary `doubleProgression` pull-up lift, three sets, born at
+bodyweight. If pull-ups are not in the library (or are shelved), the
+proposal refuses with that reason, the same posture a rotation takes with no
+compatible variation. Unlike the per-rotation hygiene rules, its identity is
+rotation-independent: dismissing it once silences it for good, and applying
+it removes the condition that raised it.
+
 ## Capacity and movement gaps
 
 After two consecutive Green rotations, Cadence may offer one bundled, audited
