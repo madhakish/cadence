@@ -3221,6 +3221,45 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "[INV-SESSION-ALWAYS-ESCAPABLE] banked history survives a discard");
 }
 
+// Tapping the lift's name inside the logger opens the lift info screen —
+// muscles figure, history, exercise settings — not only from the library.
+// Mid-workout is exactly when "what does this train, what did I do last
+// time" gets asked, and the name looked tappable but did nothing.
+{
+  const sid = await session.createBlankSession();
+  const s = await db.Sessions.get(sid);
+  s.exercises.push({ order: 0, exerciseName: "Deadlift", notes: "", phase: null,
+    plannedWeightLb: 225, plannedSets: 3, plannedReps: 5, sets: [] });
+  await db.Sessions.save(s);
+  await session.openSession(sid); await tick();
+  const logger = [...document.querySelectorAll("#overlays .overlay")].pop();
+  const title = [...logger.querySelectorAll(".title")].find((t) => t.textContent === "Deadlift");
+  ok(title, "logger shows the lift name");
+  title.click(); await tick();
+  const detail = [...document.querySelectorAll("#overlays .overlay")].pop();
+  ok(detail !== logger && detail.querySelector(".anatomy-card svg"),
+    "tapping the lift name in the logger opens lift info with the muscles figure");
+
+  // The detail screen live-edits the exercise (rest, load basis, shelving).
+  // Back must repaint the logger, or the card keeps showing the pre-edit
+  // state: bump the lift's own rest and check the ⏱ chip caught up.
+  const restRow = [...detail.querySelectorAll(".row")].find((r) => r.textContent.startsWith("Rest"));
+  const plus = [...restRow.querySelectorAll(".stepper button")].pop();
+  plus.click(); await tick(); // Default → 0:15 of the lift's own rest
+  detail.querySelector(".overlay-head button").click(); await tick();
+  const chip = [...logger.querySelectorAll("button")].find((b) => b.textContent.startsWith("⏱"));
+  ok(chip && chip.textContent.includes("0:15"),
+    `closing lift info repaints the logger (rest chip reads ${chip?.textContent})`);
+
+  // Restore the seeded default and close the logger so later overlay-based
+  // tests don't inherit this screen stack.
+  const deadlift = await db.Exercises.byName("Deadlift");
+  deadlift.defaultRestSeconds = 0;
+  await db.Exercises.save(deadlift);
+  logger.querySelector(".overlay-head button").click(); await tick();
+  await db.Sessions.del(sid);
+}
+
 // The workout stopwatch must survive an app relaunch. The origin previously
 // lived only in a closure, so force-quitting the PWA mid-workout restarted
 // the timer at 0:00 on resume; now it is mirrored into localStorage the way

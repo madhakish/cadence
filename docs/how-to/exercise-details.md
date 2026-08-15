@@ -1,7 +1,10 @@
 # See what a lift works — and where it stands
 
-Tap any exercise name — in a program day's editor or in **Settings →
-Exercise library** — to open its detail page.
+Tap any exercise name — in the **active workout's logger**, in a program
+day's editor, or in **Settings → Exercise library** — to open its detail
+page. Mid-workout is exactly when "what does this train, what did I do last
+time" gets asked; closing the page lands back on the set you were logging,
+with any edits (rest, load basis, shelving) reflected immediately.
 
 ## The muscle figure
 
