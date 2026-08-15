@@ -36,6 +36,59 @@ public enum SetLifecycle {
         flags.first { rirValues.contains($0) }
     }
 
+    /// A correction to one banked set's performed record, applied after the
+    /// session was completed: the lifter noticed the log is wrong (a set never
+    /// marked complete, a weight banked at the stale plan). Only the fields the
+    /// correction PROVIDES change, and only when they are sane — a blank or
+    /// negative entry keeps the stored value rather than writing garbage into
+    /// history. Everything else on the set (flags, warmup, load basis, planned
+    /// values, body signals) is deliberately out of reach: editing reps cannot
+    /// reset weight, and a correction cannot rewrite what was prescribed.
+    /// Mirrors web `correctedSetValues`.
+    public struct SetCorrection: Sendable {
+        public var weightLb: Double?
+        public var reps: Int?
+        public var durationSeconds: Int?
+        public var status: SetStatus?
+
+        public init(weightLb: Double? = nil, reps: Int? = nil,
+                    durationSeconds: Int? = nil, status: SetStatus? = nil) {
+            self.weightLb = weightLb
+            self.reps = reps
+            self.durationSeconds = durationSeconds
+            self.status = status
+        }
+    }
+
+    /// One tap on a correction row's status mark walks the shared status
+    /// order — planned → completed → skipped → planned. Owned here, not in
+    /// the two view layers: the cycle is user-facing documented behavior,
+    /// and a reorder on one client would make the same tap do different
+    /// things per platform. An unknown status starts the cycle from planned.
+    /// Mirrors web `nextSetStatus`.
+    public static func nextCorrectionStatus(_ status: SetStatus) -> SetStatus {
+        let all = SetStatus.allCases
+        let index = all.firstIndex(of: status) ?? 0
+        return all[(index + 1) % all.count]
+    }
+
+    public static func correctedSetValues(
+        weightLb: Double, reps: Int, durationSeconds: Int?, status: SetStatus,
+        correction: SetCorrection
+    ) -> (weightLb: Double, reps: Int, durationSeconds: Int?, status: SetStatus) {
+        var corrected = (weightLb: weightLb, reps: reps,
+                         durationSeconds: durationSeconds, status: status)
+        if let value = correction.weightLb, value.isFinite, value >= 0 {
+            corrected.weightLb = value
+        }
+        if let value = correction.reps, value >= 0 { corrected.reps = value }
+        if let value = correction.durationSeconds, value >= 0 {
+            corrected.durationSeconds = value
+        }
+        if let value = correction.status { corrected.status = value }
+        return corrected
+    }
+
     /// Quality and RIR are each mutually exclusive within their own group;
     /// stopped-early remains independent.
     ///
