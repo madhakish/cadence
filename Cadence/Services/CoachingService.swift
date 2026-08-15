@@ -293,20 +293,33 @@ enum CoachingService {
             guard !retiring.isEmpty else {
                 throw CoachingApplyError.unknownSlot(accessoryNames.first ?? "vertical pull")
             }
+            let retiredNames = retiring.map(\.exerciseName)
             for accessory in retiring {
                 day.accessories.removeAll { $0 === accessory }
                 context.delete(accessory)
             }
             for (index, accessory) in day.orderedAccessories.enumerated() { accessory.order = index }
-            // The same slot shape the template authors: complementary double
-            // progression, three sets, born at bodyweight (base 0) — the rep
-            // window's model defaults match template instantiation.
-            let pullSlot = ProgramLift(exerciseName: pullUps.name, role: .complementary,
-                                       order: day.lifts.count, prescription: .doubleProgression,
-                                       baseWeightLb: 0, estimatedMaxLb: 0)
-            context.insert(pullSlot)
-            day.lifts.append(pullSlot)
-            result = "\(accessoryNames.joined(separator: ", ")) → \(pullUps.name) as programmed lift work on \(day.name)."
+            // Idempotent against a stale offer: if the day gained a pull-up
+            // lift since evaluation (hand-edit, another apply), retiring the
+            // accessories is still right but a second identical slot is not.
+            if day.lifts.contains(where: { $0.exerciseName == pullUps.name }) {
+                result = "Retired \(retiredNames.joined(separator: ", ")) — \(day.name) already trains \(pullUps.name) at the lift tier."
+            } else {
+                // The same slot shape the template authors: complementary
+                // double progression, three sets, born at bodyweight (base 0)
+                // — the rep window's model defaults match template
+                // instantiation.
+                // max(order)+1, not count: authored orders can be
+                // noncontiguous (imports, edits), and the promoted slot must
+                // append after the day's last lift, not land between them.
+                let pullSlot = ProgramLift(exerciseName: pullUps.name, role: .complementary,
+                                           order: (day.lifts.map(\.order).max() ?? -1) + 1,
+                                           prescription: .doubleProgression,
+                                           baseWeightLb: 0, estimatedMaxLb: 0)
+                context.insert(pullSlot)
+                day.lifts.append(pullSlot)
+                result = "\(retiredNames.joined(separator: ", ")) → \(pullUps.name) as programmed lift work on \(day.name)."
+            }
         case .rotateExercise(let slotID, let exerciseName):
             guard let current = exercises.first(where: { $0.name == exerciseName }) else {
                 throw CoachingApplyError.unknownExercise(exerciseName)

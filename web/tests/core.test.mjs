@@ -2313,6 +2313,21 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(C.verticalPullPromotions({ slots: [
     slot("pulldown", "Lat Pulldown", 0, "verticalPull", "accessory"),
   ] }).length === 0, "a day with no lift work is not a day to reshape");
+  // The snapshot arrives in day-record order; the id must not depend on it,
+  // or a reorder would re-emit a dismissed offer.
+  const forward = C.verticalPullPromotions({ slots: [
+    slot("a-pull", "Straight-arm Pulldown", 0, "verticalPull", "accessory"),
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("z-pull", "Lat Pulldown", 0, "verticalPull", "accessory"),
+  ] });
+  const reversed = C.verticalPullPromotions({ slots: [
+    slot("z-pull", "Lat Pulldown", 0, "verticalPull", "accessory"),
+    slot("press", "Overhead Press", 0, "verticalPress", "main"),
+    slot("a-pull", "Straight-arm Pulldown", 0, "verticalPull", "accessory"),
+  ] });
+  ok(forward[0].id === reversed[0].id
+    && forward[0].id === "program.day.vertical-pull-tier.v1:day0:a-pull,z-pull",
+    "the offer id is stable under slot reordering");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

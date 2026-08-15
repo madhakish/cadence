@@ -587,6 +587,23 @@ final class CoachingEngineTests: XCTestCase {
         // The id is rotation-independent, so one dismissal holds for good.
         XCTAssertEqual(offered[0].id, "program.day.vertical-pull-tier.v1:day0:pulldown")
 
+        // The snapshot arrives in day-record order; the id must not depend on
+        // it, or a reorder would re-emit a dismissed offer.
+        let forward = CoachingEngine.verticalPullPromotions(program:
+            CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
+                slot("a-pull", "Straight-arm Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+                slot("press2", "Overhead Press", day: 0, pattern: .verticalPress, role: "main"),
+                slot("z-pull", "Lat Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+            ]))
+        let reversed = CoachingEngine.verticalPullPromotions(program:
+            CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
+                slot("z-pull", "Lat Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+                slot("press2", "Overhead Press", day: 0, pattern: .verticalPress, role: "main"),
+                slot("a-pull", "Straight-arm Pulldown", day: 0, pattern: .verticalPull, role: "accessory"),
+            ]))
+        XCTAssertEqual(forward.first?.id, reversed.first?.id)
+        XCTAssertEqual(forward.first?.id, "program.day.vertical-pull-tier.v1:day0:a-pull,z-pull")
+
         // A pull-up ACCESSORY is the same below-the-tier shape: offered.
         let pullupAccessory = CoachingProgramSnapshot(id: "p1", expectedDayIndexes: [0], slots: [
             slot("press", "Incline DB Press", day: 0, pattern: .horizontalPress, role: "main"),

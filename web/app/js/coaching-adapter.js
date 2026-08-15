@@ -158,16 +158,27 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     const ids = new Set((change.accessorySlotIDs || []).map(String));
     const retiring = (day.accessories || []).filter((slot) => ids.has(String(slot.id)));
     if (!retiring.length) throw new Error("The vertical-pull accessories this recommendation names no longer exist.");
+    const retiredNames = retiring.map((slot) => slot.exerciseName).join(", ");
     day.accessories = day.accessories.filter((slot) => !ids.has(String(slot.id)));
     day.accessories.forEach((slot, index) => { slot.order = index; });
-    // The same slot shape the template authors: complementary double
-    // progression, three sets, born at bodyweight (base 0).
-    day.lifts = [...(day.lifts || []), {
-      exerciseName: pullUps.name, role: "complementary", order: (day.lifts || []).length,
-      prescription: "doubleProgression", doubleProgressionSets: 3,
-      baseWeightLb: 0, estimatedMaxLb: 0, stallCount: 0, lastIncrementLb: 0,
-    }];
-    message = `${retiring.map((slot) => slot.exerciseName).join(", ")} → ${pullUps.name} as programmed lift work on ${day.name}.`;
+    // Idempotent against a stale offer: if the day gained a pull-up lift
+    // since evaluation (hand-edit, another apply), retiring the accessories
+    // is still right but a second identical slot is not.
+    if ((day.lifts || []).some((slot) => slot.exerciseName === pullUps.name)) {
+      message = `Retired ${retiredNames} — ${day.name} already trains ${pullUps.name} at the lift tier.`;
+    } else {
+      // The same slot shape the template authors: complementary double
+      // progression, three sets, born at bodyweight (base 0). max(order)+1,
+      // not length: authored orders can be noncontiguous (imports, edits),
+      // and the promoted slot must append after the day's last lift.
+      day.lifts = [...(day.lifts || []), {
+        exerciseName: pullUps.name, role: "complementary",
+        order: Math.max(-1, ...(day.lifts || []).map((slot) => slot.order ?? 0)) + 1,
+        prescription: "doubleProgression", doubleProgressionSets: 3,
+        baseWeightLb: 0, estimatedMaxLb: 0, stallCount: 0, lastIncrementLb: 0,
+      }];
+      message = `${retiredNames} → ${pullUps.name} as programmed lift work on ${day.name}.`;
+    }
   } else if (change.type === "rotateExercise") {
     const current = exercises.find((item) => item.name === change.exerciseName);
     if (!current) throw new Error(`${change.exerciseName} is no longer in the library, so a compatible variation cannot be chosen.`);

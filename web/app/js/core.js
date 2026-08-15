@@ -2911,8 +2911,12 @@ export function verticalPullPromotions(program) {
     const slots = byDay.get(dayIndex);
     const lifts = slots.filter((slot) => slot.role !== "accessory");
     if (!lifts.length || lifts.some((slot) => slot.pattern === "verticalPull")) continue;
+    // Sorted by slot id: the snapshot is built in day-record order, and the
+    // recommendation id derives from these ids — reordering the same slots
+    // must not re-emit a dismissed offer.
     const pulls = slots.filter((slot) =>
-      slot.role === "accessory" && slot.pattern === "verticalPull" && !slot.exerciseIsShelved);
+      slot.role === "accessory" && slot.pattern === "verticalPull" && !slot.exerciseIsShelved)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
     if (!pulls.length) continue;
     const names = pulls.map((slot) => slot.exerciseName);
     const key = `day${dayIndex}:${pulls.map((slot) => slot.id).join(",")}`;

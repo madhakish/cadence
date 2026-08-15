@@ -300,6 +300,10 @@ for (const track of [
   const original = await db.Programs.active();
   const proposed = structuredClone(original);
   const day = proposed.days[0];
+  // Shape the day like a pre-#126 program: no pull-up lift, a machine pull
+  // accessory, and deliberately noncontiguous authored lift orders.
+  day.lifts = (day.lifts || []).filter((slot) => slot.exerciseName !== "Pull-ups");
+  day.lifts.forEach((slot, index) => { slot.order = index === 0 ? 0 : 5; });
   day.accessories = [...(day.accessories || []), { id: "legacy-pulldown", exerciseName: "Lat Pulldown",
     order: (day.accessories || []).length, sets: 4, minReps: 8, maxReps: 12, currentReps: 8,
     weightLb: 120, incrementLb: 5, stallCount: 0, capacityManaged: true, maximumSets: 6 }];
@@ -317,8 +321,26 @@ for (const track of [
   ok(!!added && added.prescription === "doubleProgression"
     && added.doubleProgressionSets === 3 && added.baseWeightLb === 0,
     "the day gains the template's pull-up slot: complementary double progression at bodyweight");
+  ok(added.order === 6,
+    `the promoted slot appends after the highest authored order (got ${added.order})`);
   ok(message.includes("Lat Pulldown") && message.includes("Pull-ups"),
     `the result names both sides of the promotion (${message})`);
+
+  // A stale offer stays safe: the day already trains pull-ups at the lift
+  // tier, so a second apply retires the accessory without duplicating the
+  // slot.
+  day.accessories = [...day.accessories, { id: "legacy-pulldown-2", exerciseName: "Lat Pulldown",
+    order: day.accessories.length, sets: 4, minReps: 8, maxReps: 12, currentReps: 8,
+    weightLb: 120, incrementLb: 5, stallCount: 0, capacityManaged: true, maximumSets: 6 }];
+  await coach.applyCoachingRecommendation(proposed, {
+    id: "promote-stale", ruleID: "program.day.vertical-pull-tier.v1",
+    title: "Train the pull as lift work", explanation: "Fixture recommendation",
+    change: { type: "promoteVerticalPull", dayIndex: day.order ?? 0,
+      accessorySlotIDs: ["legacy-pulldown-2"], accessoryNames: ["Lat Pulldown"] },
+  }, seededExercises);
+  ok((day.lifts || []).filter((slot) => slot.exerciseName === "Pull-ups").length === 1
+    && !day.accessories.some((slot) => slot.id === "legacy-pulldown-2"),
+    "a stale offer retires the accessory without duplicating the pull-up slot");
 
   // Without pull-ups in the library the promotion refuses rather than
   // guessing — same posture as a rotation with no compatible variation.

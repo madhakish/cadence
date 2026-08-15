@@ -917,9 +917,13 @@ public enum CoachingEngine {
             // nothing.
             guard !lifts.isEmpty,
                   !lifts.contains(where: { $0.pattern == .verticalPull }) else { continue }
+            // Sorted by slot id: the snapshot is built from unsorted
+            // relationship arrays, and the recommendation id derives from
+            // these ids — reordering the same slots must not re-emit a
+            // dismissed offer.
             let pulls = slots.filter {
                 $0.role == "accessory" && $0.pattern == .verticalPull && !$0.exerciseIsShelved
-            }
+            }.sorted { $0.id < $1.id }
             guard !pulls.isEmpty else { continue }
             let names = pulls.map(\.exerciseName)
             result.append(CoachingRecommendation(
