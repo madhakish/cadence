@@ -166,7 +166,7 @@ struct SettingsView: View {
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(track.exerciseName)
-                                Text("+\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: track.incrementLb)) per \(track.mode == .cycle ? "cycle" : "session") · next: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
+                                Text("+\(settingsList.unitDisplay.format(lb: track.incrementLb)) per \(track.mode == .cycle ? "cycle" : "session") · next: \(settingsList.unitDisplay.format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -529,7 +529,7 @@ struct TrackEditorView: View {
     @Environment(\.modelContext) private var context
     @Bindable var track: LiftTrack
     @Query private var settingsList: [AppSettings]
-    private var unitDisplay: UnitDisplay { settingsList.first?.unitDisplay ?? .lbPrimary }
+    private var unitDisplay: UnitDisplay { settingsList.unitDisplay }
 
     var body: some View {
         Form {
@@ -583,7 +583,7 @@ struct ProgramEditorView: View {
 
     private var validationMessages: [String] {
         var messages: [String] = []
-        let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
+        let exerciseByName = exercises.indexedByName()
         var rotationSets: [String: Int] = [:]
         var patternSets: [MovementPattern: Int] = [:]
         var intervalSlots = 0
@@ -716,7 +716,7 @@ struct ProgramEditorView: View {
                     Text("Hypertrophy").tag(TrainingFocus.hypertrophy)
                     Text("Maintain").tag(TrainingFocus.maintain)
                 }
-                Stepper("Rounding: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: program.roundingLb))", value: $program.roundingLb, in: 2.5...10, step: 2.5)
+                Stepper("Rounding: \(settingsList.unitDisplay.format(lb: program.roundingLb))", value: $program.roundingLb, in: 2.5...10, step: 2.5)
                 // Activation is exclusive — only one program drives Today.
                 Toggle("Active", isOn: Binding(get: { program.isActive }, set: { on in
                     if on { for p in allPrograms { p.isActive = (p === program) } } else { program.isActive = false }
@@ -834,7 +834,7 @@ struct ProgramEditorView: View {
         program.currentWeek = newValue
         if newValue == ProgramProgression.deloadWeek {
             let exercises = (try? context.fetch(FetchDescriptor<Exercise>())) ?? []
-            let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0) })
+            let exerciseByName = exercises.indexedByName()
             let recoveryOrders = ProgramProgression.recoveryDayOrders(
                 program.orderedDays.map { day in
                     let mainName = day.orderedLifts.first(where: { $0.role == .main })?.exerciseName
@@ -1187,15 +1187,15 @@ private struct ProgramLiftRow: View {
             // A hand-set base is its own truth: clearing the last earned
             // increment switches off the honest-base repair (planningBase)
             // for this slot until the next machine advance re-earns it.
-            Stepper("\(baseLabel): \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.baseWeightLb))",
+            Stepper("\(baseLabel): \(settingsList.unitDisplay.format(lb: lift.baseWeightLb))",
                     value: Binding(get: { lift.baseWeightLb },
                                    set: { lift.baseWeightLb = $0; lift.lastIncrementLb = 0 }),
                     in: 0...1000, step: loadStep)
-            Stepper("Est. 1RM: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.estimatedMaxLb))", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
+            Stepper("Est. 1RM: \(settingsList.unitDisplay.format(lb: lift.estimatedMaxLb))", value: $lift.estimatedMaxLb, in: 0...1200, step: 5)
             if lift.prescription == .offsetWave {
-                Stepper("Load offset: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.loadOffsetLb))",
+                Stepper("Load offset: +\(settingsList.unitDisplay.format(lb: lift.loadOffsetLb))",
                         value: $lift.loadOffsetLb, in: 0...100, step: loadStep)
-                Stepper("Peak offset: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.peakOffsetLb))",
+                Stepper("Peak offset: +\(settingsList.unitDisplay.format(lb: lift.peakOffsetLb))",
                         value: $lift.peakOffsetLb, in: 0...150, step: loadStep)
             }
             // Every wave-shaped style deloads at this slot's own intensity.
@@ -1211,7 +1211,7 @@ private struct ProgramLiftRow: View {
                 Stepper("Sets: \(lift.doubleProgressionSets)", value: $lift.doubleProgressionSets, in: 1...8)
                 Stepper("Minimum reps: \(lift.minimumReps)", value: $lift.minimumReps, in: 1...20)
                 Stepper("Maximum reps: \(lift.maximumReps)", value: $lift.maximumReps, in: lift.minimumReps...30)
-                Text("Current target: \(lift.currentReps) reps · add \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: loadStep)) only after every set reaches the top of the window.")
+                Text("Current target: \(lift.currentReps) reps · add \(settingsList.unitDisplay.format(lb: loadStep)) only after every set reaches the top of the window.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if lift.prescription.advancesPerExposure
@@ -1245,14 +1245,14 @@ private struct ProgramLiftRow: View {
             if !resolvedPrescription.buildsOwnSessionShape {
                 Toggle("Peak top single", isOn: $lift.peakSingleEnabled)
                 if lift.peakSingleEnabled {
-                    Stepper("Last clean single: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.lastPeakSingleLb))",
+                    Stepper("Last clean single: \(settingsList.unitDisplay.format(lb: lift.lastPeakSingleLb))",
                             value: $lift.lastPeakSingleLb, in: 0...1200, step: loadStep)
-                    Stepper("Single step: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.peakSingleIncrementLb))",
+                    Stepper("Single step: +\(settingsList.unitDisplay.format(lb: lift.peakSingleIncrementLb))",
                             value: $lift.peakSingleIncrementLb, in: loadStep...25, step: loadStep)
                 }
                 Toggle("Phase primer single", isOn: $lift.phasePrimerEnabled)
             }
-            Stepper("One-tap drop: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: lift.dropIncrementLb)) (0 = automatic)",
+            Stepper("One-tap drop: \(settingsList.unitDisplay.format(lb: lift.dropIncrementLb)) (0 = automatic)",
                     value: $lift.dropIncrementLb, in: 0...50, step: loadStep)
             Toggle("Coach may add sets", isOn: $lift.capacityManaged)
             if lift.capacityManaged {
@@ -1317,10 +1317,10 @@ private struct ProgramAccessoryRow: View {
                             value: $accessory.durationStepSeconds, in: 0...60, step: 5)
                 }
             } else {
-                Stepper("Weight: \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: accessory.weightLb))", value: $accessory.weightLb, in: 0...500, step: 2.5)
+                Stepper("Weight: \(settingsList.unitDisplay.format(lb: accessory.weightLb))", value: $accessory.weightLb, in: 0...500, step: 2.5)
                 Stepper("Min reps: \(accessory.minReps)", value: $accessory.minReps, in: 1...20)
                 Stepper("Max reps: \(accessory.maxReps)", value: $accessory.maxReps, in: 1...30)
-                Stepper("Load step: +\((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
+                Stepper("Load step: +\(settingsList.unitDisplay.format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
             }
         }
     }
@@ -1334,7 +1334,7 @@ private struct ExercisePickerSheetView: View {
     let onPick: (String) -> Void
 
     private var visible: [Exercise] {
-        let available = exercises.filter { $0.gateStatus != .shelved }
+        let available = exercises.filter(\.isAvailableForProgramming)
         return search.isEmpty ? available : available.filter {
             $0.name.localizedCaseInsensitiveContains(search)
                 || $0.movementGroup.localizedCaseInsensitiveContains(search)

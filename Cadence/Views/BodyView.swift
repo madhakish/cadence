@@ -23,7 +23,7 @@ struct BodyView: View {
     typealias HealthBodyweight = (weightLb: Double, bodyFatPercent: Double?, date: Date)
 
     private var settings: AppSettings? { settingsList.first }
-    private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
+    private var unitDisplay: UnitDisplay { settingsList.unitDisplay }
     private func displayWeight(_ lb: Double) -> Double {
         unitDisplay.primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb
     }

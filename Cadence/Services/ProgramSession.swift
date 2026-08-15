@@ -343,7 +343,7 @@ enum ProgramSession {
         let mine = sessions
             .filter { $0.isCompleted && ($0.programID == program.id
                 || ($0.programID == nil && $0.programName == program.name)) }
-            .sorted { ($0.completedAt ?? $0.date) > ($1.completedAt ?? $1.date) }
+            .sorted { $0.effectiveCompletionDate > $1.effectiveCompletionDate }
         for session in mine {
             if !lift.prescription.advancesPerExposure {
                 guard session.programWeek == 1 else { continue }

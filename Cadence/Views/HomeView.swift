@@ -40,7 +40,7 @@ struct HomeView: View {
     @AppStorage(RootView.gymTagLastAutoDayKey) private var gymTagLastShownDay = 0.0
 
     private var settings: AppSettings? { settingsList.first }
-    private var unitDisplay: UnitDisplay { settings?.unitDisplay ?? .lbPrimary }
+    private var unitDisplay: UnitDisplay { settingsList.unitDisplay }
     private var entryUnit: WeightUnit { unitDisplay.primaryUnit }
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
     private var activeProgram: Program? { programs.first { $0.isActive } ?? programs.first }
@@ -77,7 +77,7 @@ struct HomeView: View {
     }
 
     private func nextDay(_ program: Program) -> ProgramDay? {
-        program.orderedDays.first { $0.order == program.nextDayIndex } ?? program.orderedDays.first
+        program.nextDay
     }
 
     private func rawProgramPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {

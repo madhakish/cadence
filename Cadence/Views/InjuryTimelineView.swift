@@ -29,7 +29,7 @@ struct InjuryTimelineView: View {
                 let exercise = set.sessionExercise?.exercise?.name ?? "Set"
                 return TimelineItem(
                     date: session?.date ?? .distantPast,
-                    title: "\(exercise) — \((settingsList.first?.unitDisplay ?? .lbPrimary).format(lb: set.weightLb))×\(set.reps)",
+                    title: "\(exercise) — \(settingsList.unitDisplay.format(lb: set.weightLb))×\(set.reps)",
                     detail: set.bodyFlagNote ?? "",
                     isHardStop: false
                 )

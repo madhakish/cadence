@@ -79,6 +79,20 @@ final class Program {
         uniqueProgramModels(days).sorted { $0.order < $1.order }
     }
 
+    /// The day whose ORDER (not array position) matches — the only correct
+    /// way to resolve a stored day pointer, since orders are unique but not
+    /// contiguous and the collection is unordered.
+    func day(order: Int) -> ProgramDay? {
+        orderedDays.first { $0.order == order }
+    }
+
+    /// The scheduled next day, falling back to the lowest-order day when the
+    /// pointer names an order that no longer exists (a deleted or renumbered
+    /// day must not strand the schedule).
+    var nextDay: ProgramDay? {
+        day(order: nextDayIndex) ?? orderedDays.first
+    }
+
     /// All exercise names owned by this program (so Home can filter them out of
     /// the standalone "Next up" tracks).
     var ownedExerciseNames: Set<String> {

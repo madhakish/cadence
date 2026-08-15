@@ -247,7 +247,7 @@ const normalizeSession = (session) => ({
       plannedWeightLb: set.plannedWeightLb ?? null,
       plannedReps: set.plannedReps ?? null,
       plannedDurationSeconds: set.plannedDurationSeconds ?? null,
-      prescriptionBlock: set.prescriptionBlock || (set.isWarmup ? "warmup" : "work"),
+      prescriptionBlock: C.resolvedPrescriptionBlock(set),
     })),
   })),
 });
@@ -260,8 +260,7 @@ const normalizeExercise = (exercise) => ({
     ? exercise.secondaryMovementPattern : null,
   aliases: Array.isArray(exercise.aliases) ? exercise.aliases : [],
   strategyTags: Array.isArray(exercise.strategyTags) ? exercise.strategyTags : [],
-  gateStatus: ["open", "watch", "shelved", "re-entry"].includes(exercise.gateStatus)
-    ? exercise.gateStatus : (exercise.isShelved ? "shelved" : "open"),
+  gateStatus: C.exerciseGateStatus(exercise),
   gateSite: normalizeBodySite(exercise.gateSite),
   reEntryCriteria: Array.isArray(exercise.reEntryCriteria) ? exercise.reEntryCriteria : [],
   completedReEntryCriteria: Array.isArray(exercise.completedReEntryCriteria) ? exercise.completedReEntryCriteria : [],
@@ -276,10 +275,11 @@ const normalizeExercise = (exercise) => ({
 
 // ---- Date helpers ----
 export const iso = (d) => (d instanceof Date ? d : new Date(d)).toISOString();
-export const localDayKey = (d) => {
-  const x = d instanceof Date ? d : new Date(d);
-  return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
-};
+// The one spelling of "which local calendar day is this" — zero-padded
+// ISO-style (en-CA), the same shape the gym-tag stamp stores. The previous
+// hand-rolled version used the 0-BASED month and no padding, so any adopter
+// would have minted keys that never matched the stamp.
+export const localDayKey = (d) => (d instanceof Date ? d : new Date(d)).toLocaleDateString("en-CA");
 // `isToday` went with the protein tracker — it had no other caller.
 
 // ---- Settings ----
@@ -688,7 +688,7 @@ export async function exportBundle() {
           weightLb: x.weightLb, reps: x.reps,
           targetWeightLb: x.targetWeightLb ?? null, plannedWeightLb: x.plannedWeightLb ?? null,
           plannedReps: x.plannedReps ?? null, plannedDurationSeconds: x.plannedDurationSeconds ?? null,
-          prescriptionBlock: x.prescriptionBlock || (x.isWarmup ? "warmup" : "work"),
+          prescriptionBlock: C.resolvedPrescriptionBlock(x),
           isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
           status: x.status || (s.isCompleted ? "completed" : "planned"),
           loadBasis: C.LOAD_BASES.includes(x.loadBasis) ? x.loadBasis : C.resolvedLoadBasis(exerciseByName.get(e.exerciseName)),
@@ -1242,7 +1242,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
           order: si, weightLb: x.weightLb, reps: x.reps,
           targetWeightLb: x.targetWeightLb ?? null, plannedWeightLb: x.plannedWeightLb ?? null,
           plannedReps: x.plannedReps ?? null, plannedDurationSeconds: x.plannedDurationSeconds ?? null,
-          prescriptionBlock: x.prescriptionBlock || (x.isWarmup ? "warmup" : "work"),
+          prescriptionBlock: C.resolvedPrescriptionBlock(x),
           isWarmup: !!x.isWarmup, isPerSide: !!x.isPerSide,
           status: x.status || (s.isCompleted !== false ? "completed" : "planned"),
           loadBasis: C.LOAD_BASES.includes(x.loadBasis) ? x.loadBasis : C.resolvedLoadBasis(exerciseByName.get(e.name)),

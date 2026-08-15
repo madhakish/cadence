@@ -30,7 +30,7 @@ struct ExposurePreviewView: View {
     var count: Int = 4
 
     private var exercise: Exercise? { exercises.first { $0.name == lift.exerciseName } }
-    private var unitDisplay: UnitDisplay { settingsList.first?.unitDisplay ?? .lbPrimary }
+    private var unitDisplay: UnitDisplay { settingsList.unitDisplay }
 
     private var resolvedStyle: PrescriptionStyle {
         ProgramEngine.resolvedStyle(lift.prescription, movementGroup: exercise?.movementGroup,
