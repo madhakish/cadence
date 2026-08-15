@@ -270,6 +270,12 @@ struct SessionDetailView: View {
     @State private var healthMiles: Double?
     @State private var healthEnergyKcal: Double?
     @State private var didCheckHealth = false
+    /// Correction mode for a banked log: a set that never got its ✓ mid-workout
+    /// or a weight banked at the stale plan can be fixed here, and the fixed
+    /// history is what charts, PR comparisons, and next-session planning read.
+    /// Progression that already graded this session is not re-run — the edit
+    /// corrects the record, not the past decision.
+    @State private var isEditing = false
 
     /// The conditioning sets this session actually performed. `workingSets` is
     /// already completed-and-non-warmup: a set left planned, or skipped after
@@ -355,8 +361,16 @@ struct SessionDetailView: View {
             ForEach(session.orderedExercises) { entry in
                 Section {
                     ForEach(entry.orderedSets) { set in
-                        HistorySetRow(set: set, type: entry.exercise?.type,
-                                      unitDisplay: settingsList.first?.unitDisplay ?? .lbPrimary)
+                        // Conditioning rows stay read-only: distance/pace/flight
+                        // corrections belong to the Health comparison flow above,
+                        // which reconciles against a measurement instead of a memory.
+                        if isEditing, entry.exercise?.type != .conditioning {
+                            HistorySetEditRow(set: set, type: entry.exercise?.type,
+                                              unitDisplay: settingsList.first?.unitDisplay ?? .lbPrimary)
+                        } else {
+                            HistorySetRow(set: set, type: entry.exercise?.type,
+                                          unitDisplay: settingsList.first?.unitDisplay ?? .lbPrimary)
+                        }
                     }
                     if !entry.notes.isEmpty {
                         Text(entry.notes).font(.caption).foregroundStyle(.secondary)
@@ -378,6 +392,18 @@ struct SessionDetailView: View {
             }
         }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
+        .saveChangesOnDisappear(context, operation: "Saving the workout corrections")
+        .toolbar {
+            if session.isCompleted {
+                Button(isEditing ? "Done" : "Edit") {
+                    if isEditing {
+                        PersistenceErrorCenter.shared.save(context, operation: "Saving the workout corrections")
+                    }
+                    isEditing.toggle()
+                }
+                .accessibilityLabel(isEditing ? "Finish editing this workout" : "Edit this workout's sets")
+            }
+        }
         .task {
             // One lookup per open, and only when there is something to compare
             // and a window to compare it over.
@@ -632,6 +658,111 @@ private struct HistorySetRow: View {
     private var statusColor: Color {
         self.set.status == .completed ? Theme.good : .secondary
     }
+}
+
+/// One banked set in correction mode: cycle the status, retype the weight or
+/// reps (or the hold for timed work). Every commit goes through the shared
+/// `SetLifecycle.correctedSetValues` rule — an empty or negative field keeps
+/// the stored value, and nothing beyond the four performed fields is
+/// reachable, so a correction can never disturb flags, warmups, or what was
+/// prescribed. The weight edits in the display's primary unit and stores
+/// canonical pounds, like every other entry surface.
+private struct HistorySetEditRow: View {
+    @Bindable var set: SetEntry
+    let type: ExerciseType?
+    let unitDisplay: UnitDisplay
+
+    @State private var weightText = ""
+    @State private var repsText = ""
+    @State private var secondsText = ""
+
+    private var isTimed: Bool { type == .timed }
+    private var unit: WeightUnit { unitDisplay.primaryUnit }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                apply(SetLifecycle.SetCorrection(status: nextStatus))
+            } label: {
+                Image(systemName: statusIcon)
+                    .font(.title3)
+                    .foregroundStyle(set.status == .completed ? Theme.good : .secondary)
+                    .frame(minWidth: 34, minHeight: 34)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Status: \(statusName). Tap to mark \(nextStatusName)")
+            if isTimed {
+                editorField("Hold (seconds)", text: $secondsText) {
+                    apply(SetLifecycle.SetCorrection(durationSeconds: Int(secondsText)))
+                }
+            } else {
+                editorField("Weight (\(unit.rawValue))", text: $weightText) {
+                    apply(SetLifecycle.SetCorrection(
+                        weightLb: Double(weightText).map { Weight.toLb($0, from: unit) }
+                    ))
+                }
+                Text("×").foregroundStyle(.secondary)
+                editorField("Reps", text: $repsText) {
+                    apply(SetLifecycle.SetCorrection(reps: Int(repsText)))
+                }
+            }
+            Spacer(minLength: 4)
+            if set.isWarmup {
+                Text("Warm-up").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { seed() }
+    }
+
+    private func editorField(_ label: String, text: Binding<String>,
+                             commit: @escaping () -> Void) -> some View {
+        TextField(label, text: text)
+            .keyboardType(.decimalPad)
+            .textFieldStyle(.roundedBorder)
+            .font(.callout.monospacedDigit())
+            .frame(maxWidth: 110)
+            .onChange(of: text.wrappedValue) { commit() }
+            .accessibilityLabel(label)
+    }
+
+    private func seed() {
+        weightText = set.weightLb == 0 ? "" : Weight.trim(
+            unit == .kg ? Weight.kg(fromLb: set.weightLb) : set.weightLb
+        )
+        repsText = String(set.reps)
+        secondsText = set.durationSeconds.map(String.init) ?? ""
+    }
+
+    private func apply(_ correction: SetLifecycle.SetCorrection) {
+        let corrected = SetLifecycle.correctedSetValues(
+            weightLb: set.weightLb, reps: set.reps,
+            durationSeconds: set.durationSeconds, status: set.status,
+            correction: correction
+        )
+        set.weightLb = corrected.weightLb
+        set.reps = corrected.reps
+        set.durationSeconds = corrected.durationSeconds
+        set.status = corrected.status
+    }
+
+    private var nextStatus: SetStatus {
+        switch set.status {
+        case .planned: return .completed
+        case .completed: return .skipped
+        case .skipped: return .planned
+        }
+    }
+
+    private var statusIcon: String {
+        switch set.status {
+        case .completed: return "checkmark.circle.fill"
+        case .skipped: return "minus.circle"
+        case .planned: return "circle"
+        }
+    }
+
+    private var statusName: String { set.status.rawValue }
+    private var nextStatusName: String { nextStatus.rawValue }
 }
 
 // MARK: - Progression charts

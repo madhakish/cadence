@@ -3513,5 +3513,55 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     `a colourless dashed swatch falls back to the accent (${dashSwatch?.style.borderTop})`);
 }
 
+// A banked log is correctable: the set that never got its ✓ mid-workout and
+// the set that banked the stale plan's weight are exactly the record the
+// next prescription reads, so History must be able to fix them.
+{
+  const sid = await db.Sessions.save({
+    date: db.iso(new Date()), completedAt: db.iso(new Date()), isCompleted: true, notes: "",
+    exercises: [{ exerciseName: "Back Squat", order: 0, sets: [
+      { order: 0, weightLb: 195, reps: 5, isWarmup: false, status: "completed", enteredUnit: "lb",
+        prescriptionBlock: "work", plannedWeightLb: 195, plannedReps: 5, flags: ["clean"] },
+      { order: 1, weightLb: 195, reps: 5, isWarmup: false, status: "planned", enteredUnit: "lb",
+        prescriptionBlock: "work", plannedWeightLb: 195, plannedReps: 5 },
+    ] }],
+  });
+  await history.render(host()); await tick();
+  [...host().querySelectorAll(".seg button")].find((b) => b.textContent === "Log").click(); await tick();
+  const row = [...host().querySelectorAll(".card .row")]
+    .find((r) => (r.textContent || "").includes("Back Squat"));
+  ok(row, "the banked session appears in the log");
+  row.click(); await tick();
+  const overlay = [...document.querySelectorAll(".overlay")].pop();
+  const editBtn = overlay.querySelector('button[aria-label="Edit this workout\'s sets"]');
+  ok(editBtn, "[INV-BANKED-SETS-CORRECTABLE] a banked session offers Edit");
+  editBtn.click(); await tick();
+
+  const weightInputs = [...overlay.querySelectorAll('input[aria-label^="Weight"]')];
+  ok(weightInputs.length === 2, "both work sets grow weight fields in edit mode");
+  weightInputs[0].value = "205";
+  weightInputs[0].dispatchEvent(new window.Event("input", { bubbles: true }));
+  const plannedStatus = overlay.querySelector('button[aria-label^="Status: planned"]');
+  ok(plannedStatus, "the never-ticked set shows its planned status");
+  plannedStatus.click(); await tick();
+  editBtn.click(); await tick(); // Save
+
+  const corrected = await db.Sessions.get(sid);
+  const [reweighed, ticked] = corrected.exercises[0].sets;
+  ok(reweighed.weightLb === 205 && reweighed.reps === 5,
+    "[INV-BANKED-SETS-CORRECTABLE] the corrected weight is stored; reps survive the edit");
+  ok(reweighed.plannedWeightLb === 195,
+    "[INV-BANKED-SETS-CORRECTABLE] the correction never rewrites what was prescribed");
+  ok((reweighed.flags || []).includes("clean"),
+    "[INV-BANKED-SETS-CORRECTABLE] quality flags survive the edit");
+  ok(ticked.status === "completed" && ticked.weightLb === 195,
+    "[INV-BANKED-SETS-CORRECTABLE] the missed ✓ becomes real history without touching its weight");
+  ok(db.workingVolume(corrected.exercises[0]) === 205 * 5 + 195 * 5,
+    "session volume reads the corrected record");
+
+  overlay.querySelector("button")?.click(); await tick(); // ‹ Back
+  await db.Sessions.del(sid);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

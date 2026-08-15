@@ -38,4 +38,51 @@ final class SetLifecycleTests: XCTestCase {
         // The two groups must not overlap, or one would exclude the other.
         XCTAssertTrue(Set(SetLifecycle.qualityValues).isDisjoint(with: SetLifecycle.rirValues))
     }
+
+    /// [INV-BANKED-SETS-CORRECTABLE] The shared correction rule for editing a
+    /// banked set: only provided fields change, only sane values are written,
+    /// and one field's edit can never disturb another (mirrors core.test.mjs).
+    func testBankedSetCorrectionsApplyOnlySaneProvidedFields() {
+        typealias Correction = SetLifecycle.SetCorrection
+        let base = (weightLb: 195.0, reps: 5, durationSeconds: nil as Int?, status: SetStatus.completed)
+
+        let reweighed = SetLifecycle.correctedSetValues(
+            weightLb: base.weightLb, reps: base.reps, durationSeconds: base.durationSeconds,
+            status: base.status, correction: Correction(weightLb: 205)
+        )
+        XCTAssertEqual(reweighed.weightLb, 205)
+        XCTAssertEqual(reweighed.reps, 5, "editing weight cannot reset reps")
+        XCTAssertEqual(reweighed.status, .completed)
+
+        let ticked = SetLifecycle.correctedSetValues(
+            weightLb: base.weightLb, reps: base.reps, durationSeconds: nil,
+            status: .planned, correction: Correction(status: .completed)
+        )
+        XCTAssertEqual(ticked.status, .completed, "the missed ✓ becomes real history")
+        XCTAssertEqual(ticked.weightLb, 195, "editing status cannot reset weight")
+
+        let garbage = SetLifecycle.correctedSetValues(
+            weightLb: base.weightLb, reps: base.reps, durationSeconds: 30,
+            status: base.status,
+            correction: Correction(weightLb: -5, reps: -1, durationSeconds: -10)
+        )
+        XCTAssertEqual(garbage.weightLb, 195, "a negative weight keeps the stored value")
+        XCTAssertEqual(garbage.reps, 5, "a negative rep count keeps the stored value")
+        XCTAssertEqual(garbage.durationSeconds, 30, "a negative hold keeps the stored value")
+
+        let nan = SetLifecycle.correctedSetValues(
+            weightLb: base.weightLb, reps: base.reps, durationSeconds: nil,
+            status: base.status, correction: Correction(weightLb: .nan)
+        )
+        XCTAssertEqual(nan.weightLb, 195, "a non-numeric weight keeps the stored value")
+
+        let untouched = SetLifecycle.correctedSetValues(
+            weightLb: base.weightLb, reps: base.reps, durationSeconds: 45,
+            status: base.status, correction: Correction()
+        )
+        XCTAssertEqual(untouched.weightLb, 195)
+        XCTAssertEqual(untouched.reps, 5)
+        XCTAssertEqual(untouched.durationSeconds, 45)
+        XCTAssertEqual(untouched.status, .completed, "an empty correction changes nothing")
+    }
 }

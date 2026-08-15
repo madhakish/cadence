@@ -455,6 +455,23 @@ A session can always be discarded from inside itself, not only from Today, and
 the confirmation names how many logged sets would be lost. Discarding never
 touches banked history or the program schedule.
 
+### INV-BANKED-SETS-CORRECTABLE
+*platforms: core, web*
+
+A banked session's performed record can be corrected afterward — set status,
+weight, reps, and timed holds — from the session detail on both clients. A
+correction applies only the fields it provides and only sane values (a blank
+or negative entry keeps the stored value), never touches flags, warm-up
+state, load semantics, or the planned prescription, and the corrected history
+is what charts, recalls, and next-session planning read. Grading that already
+ran at bank time is not re-run, and milestones are neither invented nor
+revoked by an edit.
+
+> A set the lifter performed but never ticked, or a weight banked at the
+> stale plan, was uncorrectable — and the wrong record then fed every
+> downstream surface, including the next prescription's performed-base
+> evidence.
+
 ### INV-PROPAGATION-IS-OPT-IN
 *platforms: native · unverifiable*
 

@@ -214,6 +214,26 @@ export const normalizedSetFlags = (quality, stoppedEarly = false, rir = null) =>
   ...(SET_RIRS.includes(rir) ? [rir] : []),
   ...(stoppedEarly ? ["stopped early"] : []),
 ];
+// A correction to one banked set's performed record, applied after the session
+// was completed: the lifter noticed the log is wrong (a set never marked
+// complete, a weight banked at the stale plan). Only the fields the correction
+// PROVIDES change, and only when they are sane — a blank or negative entry
+// keeps the stored value rather than writing garbage into history. Everything
+// else on the set (flags, warmup, load basis, planned values, body signals) is
+// deliberately out of reach: editing reps cannot reset weight, and a
+// correction cannot rewrite what was prescribed. Mirrors
+// SetLifecycle.correctedSetValues.
+export function correctedSetValues(set, correction = {}) {
+  const corrected = { weightLb: set.weightLb, reps: set.reps,
+    durationSeconds: set.durationSeconds ?? null, status: set.status };
+  if (Number.isFinite(correction.weightLb) && correction.weightLb >= 0) corrected.weightLb = correction.weightLb;
+  if (Number.isInteger(correction.reps) && correction.reps >= 0) corrected.reps = correction.reps;
+  if (Number.isInteger(correction.durationSeconds) && correction.durationSeconds >= 0) {
+    corrected.durationSeconds = correction.durationSeconds;
+  }
+  if (SET_STATUSES.includes(correction.status)) corrected.status = correction.status;
+  return corrected;
+}
 
 // Whether a set of this kind counts as the slot's prescribed work — the sets
 // that are graded and that supply the cycle's strength sample.

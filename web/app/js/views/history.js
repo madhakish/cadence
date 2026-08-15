@@ -160,10 +160,77 @@ function renderLog(panel, sessions, exercises) {
   }
 }
 
+// One banked set in correction mode: cycle the status, retype the weight or
+// reps (or the hold for timed work). Every commit goes through the shared
+// C.correctedSetValues rule — an empty or negative field keeps the stored
+// value, and nothing beyond the four performed fields is reachable, so a
+// correction can never disturb flags, warmups, or what was prescribed. The
+// weight edits in the display's primary unit and stores canonical pounds,
+// like every other entry surface.
+function editableHistorySetRow(set, exerciseType) {
+  const unit = C.primaryUnit(ui.prefs.unitDisplay);
+  const commit = (correction) => Object.assign(set, C.correctedSetValues(set, correction));
+  const stateGlyph = () => (set.status === "completed" ? "✓" : set.status === "skipped" ? "—" : "○");
+  const nextStatus = () => (set.status === "planned" ? "completed" : set.status === "completed" ? "skipped" : "planned");
+  const statusBtn = ui.h("button", { class: "btn ghost sm mono", text: stateGlyph(),
+    style: { minWidth: "44px", minHeight: "44px" },
+    "aria-label": `Status: ${set.status || "completed"}. Tap to mark ${nextStatus()}`,
+    onClick: () => {
+      commit({ status: nextStatus() });
+      statusBtn.textContent = stateGlyph();
+      statusBtn.setAttribute("aria-label", `Status: ${set.status}. Tap to mark ${nextStatus()}`);
+    } });
+  const numberInput = (label, value, oninput) => ui.h("input", {
+    type: "number", inputmode: "decimal", placeholder: label, value,
+    style: { maxWidth: "90px" }, "aria-label": label, oninput,
+  });
+  const fields = exerciseType === "timed"
+    ? [numberInput("Hold (s)", set.durationSeconds > 0 ? String(set.durationSeconds) : "",
+      (event) => commit({ durationSeconds: parseFloat(event.target.value) }))]
+    : [numberInput(`Weight (${unit})`, set.weightLb > 0
+      ? String(unit === "kg" ? Math.round(C.kgFromLb(set.weightLb) * 10) / 10 : set.weightLb) : "",
+      (event) => {
+        const typed = parseFloat(event.target.value);
+        commit({ weightLb: unit === "kg" ? C.lbFromKg(typed) : typed });
+      }),
+      ui.h("span", { class: "sub", text: "×" }),
+      numberInput("Reps", String(set.reps ?? 0),
+        (event) => commit({ reps: parseFloat(event.target.value) }))];
+  return ui.h("div", { class: `history-set${set.isWarmup ? " warm" : ""}` },
+    statusBtn,
+    ui.h("div", { class: "history-set-main", style: { display: "flex", gap: "8px", alignItems: "center" } }, ...fields),
+    ui.h("span", { class: "history-set-kind", text: historySetKind(set) }));
+}
+
 function openDetail(s, exerciseByName) {
+  let editing = false;
+  let bodyEl = null;
+  const render = () => bodyEl && renderDetail(bodyEl);
+  // Correction mode for a banked log: a set that never got its ✓ mid-workout
+  // or a weight banked at the stale plan can be fixed here, and the fixed
+  // history is what charts, PR comparisons, and next-session planning read.
+  // Progression that already graded this session is not re-run — the edit
+  // corrects the record, not the past decision.
+  const editBtn = s.isCompleted ? ui.h("button", { class: "btn ghost sm", text: "Edit",
+    "aria-label": "Edit this workout's sets",
+    onClick: async () => {
+      if (editing) {
+        await Sessions.save(s);
+        ui.toast("Corrections saved.");
+      }
+      editing = !editing;
+      editBtn.textContent = editing ? "Save" : "Edit";
+      editBtn.setAttribute("aria-label", editing ? "Save the workout corrections" : "Edit this workout's sets");
+      render();
+    } }) : null;
   ui.pushScreen({
     title: ui.fmtDate(s.date),
-    build: (body) => {
+    actions: editBtn ? [editBtn] : [],
+    build: (body) => { bodyEl = body; render(); },
+  });
+
+  function renderDetail(body) {
+      ui.clear(body);
       const completedStrengthSets = completedStrengthSetCountForTest(s, exerciseByName);
       const volume = (s.exercises || []).reduce((sum, entry) => sum + workingVolume(entry), 0);
       const elapsedMinutes = s.completedAt
@@ -200,6 +267,13 @@ function openDetail(s, exerciseByName) {
               ui.h("span", { class: "sub", text: summaryBits.join(" · ") })),
             phaseLabel ? ui.h("span", { class: "pill accent", text: phaseLabel }) : null));
         for (const x of e.sets || []) {
+          // Conditioning rows stay read-only: distance/pace/flight corrections
+          // belong to the Health comparison flow, which reconciles against a
+          // measurement instead of a memory.
+          if (editing && exercise?.type !== "conditioning") {
+            card.append(editableHistorySetRow(x, exercise?.type));
+            continue;
+          }
           const shown = historySetPresentationForTest(x, exercise?.type);
           const tags = ui.h("div", { class: "history-set-tags" },
             (x.flags || []).length ? ui.h("span", { class: "pill warn", text: x.flags.join(", ") }) : null,
@@ -216,8 +290,7 @@ function openDetail(s, exerciseByName) {
         if (e.notes) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: e.notes }));
         body.append(card);
       }
-    },
-  });
+  }
 }
 
 // A lift can hold a MAIN slot on one day and a COMPLEMENTARY slot on another
