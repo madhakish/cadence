@@ -277,6 +277,36 @@ enum CoachingService {
             lift.pendingNote = nil
             decisionAfterValue = "linearTriples:slot:\(slotID):5x3"
             result = "\(exerciseName): 3×5 → 5×3; session-to-session loading stays in place."
+        case .promoteVerticalPull(let dayIndex, let accessorySlotIDs, let accessoryNames):
+            guard let day = program.days.first(where: { $0.order == dayIndex }) else {
+                throw CoachingApplyError.unknownSlot(accessoryNames.first ?? "vertical pull")
+            }
+            // The replacement is the template's own choice — pull-ups on a
+            // double-progression window that grows into weighted pull-ups —
+            // not a SwapRules candidate: crossing the tier is the point.
+            guard let pullUps = exercises.first(where: {
+                $0.name == "Pull-ups" && $0.gateStatus != .shelved
+            }) else {
+                throw CoachingApplyError.unknownExercise("Pull-ups")
+            }
+            let retiring = day.accessories.filter { accessorySlotIDs.contains($0.id) }
+            guard !retiring.isEmpty else {
+                throw CoachingApplyError.unknownSlot(accessoryNames.first ?? "vertical pull")
+            }
+            for accessory in retiring {
+                day.accessories.removeAll { $0 === accessory }
+                context.delete(accessory)
+            }
+            for (index, accessory) in day.orderedAccessories.enumerated() { accessory.order = index }
+            // The same slot shape the template authors: complementary double
+            // progression, three sets, born at bodyweight (base 0) — the rep
+            // window's model defaults match template instantiation.
+            let pullSlot = ProgramLift(exerciseName: pullUps.name, role: .complementary,
+                                       order: day.lifts.count, prescription: .doubleProgression,
+                                       baseWeightLb: 0, estimatedMaxLb: 0)
+            context.insert(pullSlot)
+            day.lifts.append(pullSlot)
+            result = "\(accessoryNames.joined(separator: ", ")) → \(pullUps.name) as programmed lift work on \(day.name)."
         case .rotateExercise(let slotID, let exerciseName):
             guard let current = exercises.first(where: { $0.name == exerciseName }) else {
                 throw CoachingApplyError.unknownExercise(exerciseName)

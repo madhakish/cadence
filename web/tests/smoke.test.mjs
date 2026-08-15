@@ -291,6 +291,48 @@ for (const track of [
   ok(refused, "an exercise the library no longer has refuses rather than guessing a replacement");
 }
 
+// The vertical-pull promotion crosses the tier: the machine accessory retires
+// and the day gains the template's pull-up slot — complementary double
+// progression born at bodyweight. Programs predating the vertical-pull
+// template change (issue #126) have no other upgrade path, because no
+// migration rewrites an authored program.
+{
+  const original = await db.Programs.active();
+  const proposed = structuredClone(original);
+  const day = proposed.days[0];
+  day.accessories = [...(day.accessories || []), { id: "legacy-pulldown", exerciseName: "Lat Pulldown",
+    order: (day.accessories || []).length, sets: 4, minReps: 8, maxReps: 12, currentReps: 8,
+    weightLb: 120, incrementLb: 5, stallCount: 0, capacityManaged: true, maximumSets: 6 }];
+  const message = await coach.applyCoachingRecommendation(proposed, {
+    id: "promote-recommendation", ruleID: "program.day.vertical-pull-tier.v1",
+    title: "Train the pull as lift work", explanation: "Fixture recommendation",
+    change: { type: "promoteVerticalPull", dayIndex: day.order ?? 0,
+      accessorySlotIDs: ["legacy-pulldown"], accessoryNames: ["Lat Pulldown"] },
+  }, seededExercises);
+  ok(!day.accessories.some((slot) => slot.id === "legacy-pulldown"),
+    "the machine vertical pull retires from the day");
+  ok(day.accessories.every((slot, index) => slot.order === index),
+    "surviving accessories are renumbered");
+  const added = (day.lifts || []).find((slot) => slot.exerciseName === "Pull-ups" && slot.role === "complementary");
+  ok(!!added && added.prescription === "doubleProgression"
+    && added.doubleProgressionSets === 3 && added.baseWeightLb === 0,
+    "the day gains the template's pull-up slot: complementary double progression at bodyweight");
+  ok(message.includes("Lat Pulldown") && message.includes("Pull-ups"),
+    `the result names both sides of the promotion (${message})`);
+
+  // Without pull-ups in the library the promotion refuses rather than
+  // guessing — same posture as a rotation with no compatible variation.
+  let refused = false;
+  try {
+    await coach.applyCoachingRecommendation(structuredClone(original), {
+      id: "promote-no-pullups", ruleID: "program.day.vertical-pull-tier.v1",
+      title: "Train the pull as lift work", explanation: "Fixture recommendation",
+      change: { type: "promoteVerticalPull", dayIndex: 0, accessorySlotIDs: ["x"], accessoryNames: ["Lat Pulldown"] },
+    }, seededExercises.filter((item) => item.name !== "Pull-ups"));
+  } catch { refused = true; }
+  ok(refused, "a library without pull-ups refuses the promotion");
+}
+
 // An accepted linear-stage recommendation mutates only the proposed slot and
 // leaves an explicit strategy-stage value in the audit record.
 {
