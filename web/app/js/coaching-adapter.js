@@ -2,7 +2,7 @@
 // Evaluation is read-only. Program mutations cross an explicit user-accepted
 // boundary and the caller persists a CoachingDecision audit record.
 import * as C from "./core.js";
-import { iso } from "./db.js";
+import { iso, sessionBelongsToProgram } from "./db.js";
 
 export function coachingReport(program, sessions, exMap, checkins = []) {
   const id = program.uuid || program.id;
@@ -42,15 +42,15 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
   ]);
   const history = sessions.flatMap((session) => {
     const tag = session.programTag;
-    if (!tag || (tag.programId !== id && tag.programName !== program.name)
+    if (!tag || !sessionBelongsToProgram(session, program)
         || tag.cycleNumber == null || tag.week == null || tag.dayIndex == null) return [];
     const sessionDate = Date.parse(session.completedAt || session.date);
     return [{ id: String(session.id), date: session.completedAt || session.date, programID: id,
       cycleNumber: tag.cycleNumber, rotation: tag.week, dayIndex: tag.dayIndex, completed: true,
       hasHardStopCheckIn: checkins.some((checkin) => {
         const elapsed = Date.parse(checkin.date) - sessionDate;
-        return elapsed >= 0 && elapsed <= 36 * 60 * 60 * 1_000
-          && /flag|pain|swell|off/i.test(checkin.response || "");
+        return elapsed >= 0 && elapsed <= C.CHECKIN_ATTRIBUTION_WINDOW_MS
+          && C.isHardStopResponse(checkin.response);
       }),
       exercises: (session.exercises || []).map((entry) => {
         const exercise = exMap.get(entry.exerciseName);
@@ -92,7 +92,10 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
       const exercise = (PREFERRED_EXERCISES[adjustment.pattern] || [])
         .map((name) => available.find((item) => item.name === name)).find(Boolean)
         || available.find((item) => item.movementPattern === adjustment.pattern);
-      const day = (program.days || []).find((item) => item.order === adjustment.dayIndex) || program.days?.[0];
+      // Fallback = lowest ORDER, like native orderedDays.first — array
+      // position is authoring history, not schedule position.
+      const day = (program.days || []).find((item) => item.order === adjustment.dayIndex)
+        || [...(program.days || [])].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))[0];
       if (!exercise || !day) throw new Error(`No available ${C.movementPatternName(adjustment.pattern).toLowerCase()} exercise.`);
       return { adjustment, exercise, day };
     });
@@ -135,7 +138,9 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     const available = exercises.filter((exercise) => !exercise.isShelved && exercise.gateStatus !== "shelved");
     const exercise = (PREFERRED_EXERCISES[change.pattern] || []).map((name) => available.find((item) => item.name === name)).find(Boolean)
       || available.find((item) => item.movementPattern === change.pattern);
-    const day = (program.days || []).find((item) => item.order === change.dayIndex) || program.days?.[0];
+    // Fallback = lowest ORDER, like native orderedDays.first (see capacityPlan).
+    const day = (program.days || []).find((item) => item.order === change.dayIndex)
+      || [...(program.days || [])].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))[0];
     if (!exercise || !day) throw new Error(`No available ${C.movementPatternName(change.pattern).toLowerCase()} exercise.`);
     const minReps = ["adductor", "core"].includes(change.pattern) ? 8 : 6;
     day.accessories.push({ exerciseName: exercise.name, order: day.accessories.length, sets: change.sets,
@@ -201,16 +206,36 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
   return message;
 }
 
-export function coachingDecision(program, recommendation, action, evidence) {
-  const temporary = action === "accepted" && recommendation.change.type === "reduceAccessoryVolume"
-    ? temporaryAccessoryValue(100 - recommendation.change.percent, program.cycleNumber, program.currentWeek)
-    : action === "accepted" && recommendation.change.type === "useLinearTriples"
+// One-line audit snapshot of a program's structure, mirroring native
+// CoachingService.programDescription — the accepted-decision before/after
+// record has to read the same in either client's export.
+export function programDescription(program) {
+  const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
+  return [...(program.days || [])].sort(byOrder).map((day) => {
+    const slots = [...(day.lifts || [])].sort(byOrder).map((lift) => `${lift.exerciseName}:lift`)
+      .concat([...(day.accessories || [])].sort(byOrder)
+        .map((accessory) => `${accessory.exerciseName}:${accessory.sets}`));
+    return `${day.name}[${slots.join(",")}]`;
+  }).join(" | ");
+}
+
+// `program` is the post-apply plan; `beforeProgram` (accepted decisions only)
+// is the pre-apply plan the audit trail diffs against. Deferred decisions
+// record no snapshot, like native CoachingService.record.
+export function coachingDecision(program, recommendation, action, evidence, beforeProgram = null) {
+  const accepted = action === "accepted";
+  // Clamp like native: a ≥100% cut must persist the 1% floor, not a 0 that
+  // fails the override parse and silently restores full accessory volume.
+  const temporary = accepted && recommendation.change.type === "reduceAccessoryVolume"
+    ? temporaryAccessoryValue(Math.max(1, 100 - recommendation.change.percent), program.cycleNumber, program.currentWeek)
+    : accepted && recommendation.change.type === "useLinearTriples"
       ? `linearTriples:slot:${recommendation.change.slotID}:5x3`
       : null;
   return { id: crypto.randomUUID(), date: iso(new Date()), programId: program.uuid || program.id,
     ruleId: recommendation.ruleID, recommendationId: recommendation.id, action,
     title: recommendation.title, explanation: recommendation.explanation, evidence,
-    beforeValue: null, afterValue: temporary };
+    beforeValue: accepted ? programDescription(beforeProgram || program) : null,
+    afterValue: accepted ? (temporary ?? programDescription(program)) : null };
 }
 
 export function temporaryAccessoryValue(percent, cycleNumber, rotation) {

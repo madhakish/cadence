@@ -557,4 +557,17 @@ final class CoachingEngineTests: XCTestCase {
         // the green streak that unlocks capacity recommendations.
         XCTAssertEqual(report.greenRotationStreak, 0)
     }
+
+    // One vocabulary and one window on both clients — a word added to one
+    // copy and not the other flips rotation readiness per platform.
+    // Mirrors the core.test.mjs hard-stop attribution block.
+    func testHardStopVocabularyAndAttributionWindowAreShared() {
+        XCTAssertEqual(CoachingEngine.checkInAttributionWindow, 36 * 60 * 60)
+        for response in ["flagged the knee", "PAIN in the elbow", "swelling", "took the day off"] {
+            XCTAssertTrue(CoachingEngine.isHardStopResponse(response), "\"\(response)\" is a hard stop")
+        }
+        for response in ["felt great", "a bit tired", ""] {
+            XCTAssertFalse(CoachingEngine.isHardStopResponse(response), "\"\(response)\" is not a hard stop")
+        }
+    }
 }

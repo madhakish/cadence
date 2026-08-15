@@ -220,8 +220,7 @@ enum SessionCompletion {
         }
         if isProgramSession,
            let programs = try? context.fetch(FetchDescriptor<Program>()),
-           let program = session.programID.flatMap({ id in programs.first { $0.id == id } })
-                ?? programs.first(where: { $0.name == session.programName }),
+           let program = programs.matching(sessionProgramID: session.programID, name: session.programName),
            let nextDay = program.orderedDays.first(where: { $0.order == program.nextDayIndex }) ?? program.orderedDays.first {
             // A day is not in a phase — its slots are, and they can disagree.
             // Naming one phase for the whole day claims a wave over slots that
@@ -430,9 +429,8 @@ enum SessionCompletion {
     private static func rotationsSinceLastDeload(
         _ sessions: [WorkoutSession], program: Program
     ) -> Int {
-        let mine = sessions.filter {
-            $0.isCompleted && ($0.programID == program.id || $0.programName == program.name)
-        }.sorted { ($0.completedAt ?? $0.date) < ($1.completedAt ?? $1.date) }
+        let mine = sessions.filter { $0.isCompleted && $0.belongs(to: program) }
+            .sorted { ($0.completedAt ?? $0.date) < ($1.completedAt ?? $1.date) }
         var lastDeloadIndex = -1
         for (index, session) in mine.enumerated() where session.programWeek == ProgramProgression.deloadWeek {
             lastDeloadIndex = index
@@ -696,8 +694,8 @@ enum SessionCompletion {
     private static func advanceProgram(_ session: WorkoutSession, context: ModelContext,
                                        unitDisplay: UnitDisplay, events: inout [PREvent]) throws {
         let programs = try context.fetch(FetchDescriptor<Program>())
-        guard let program = session.programID.flatMap({ id in programs.first { $0.id == id } })
-                ?? programs.first(where: { $0.name == session.programName }) else { return }
+        guard let program = programs.matching(sessionProgramID: session.programID,
+                                              name: session.programName) else { return }
         let dayIndex = session.programDayIndex ?? 0
         guard let day = program.days.first(where: { $0.order == dayIndex }) else { return }
         let week = session.programWeek ?? program.currentWeek

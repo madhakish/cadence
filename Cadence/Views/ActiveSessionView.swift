@@ -61,8 +61,7 @@ struct ActiveSessionView: View {
         return index + 1
     }
     private var workoutName: String {
-        let program = session.programID.flatMap { id in programs.first { $0.id == id } }
-            ?? programs.first { $0.name == session.programName }
+        let program = programs.matching(sessionProgramID: session.programID, name: session.programName)
         return session.programDayIndex.flatMap { index in
             program?.orderedDays.first { $0.order == index }?.name
         } ?? session.programName ?? "Workout"
@@ -415,8 +414,13 @@ struct ActiveSessionView: View {
         let sameProgram = (session.programID != nil && session.programID == pastSession.programID)
             || (pastSession.programID == nil && session.programName == pastSession.programName)
         guard sameProgram, session.programDayIndex == pastSession.programDayIndex else { return nil }
+        // Slot ID AND role, like web programmedEntry: a slot whose role was
+        // re-authored between cycles is a different exposure, and recalling
+        // the old role's numbers would grade today against the wrong tier.
         if let slotID = current.programSlotID,
-           let exact = pastSession.exercises.first(where: { $0.programSlotID == slotID }) {
+           let exact = pastSession.exercises.first(where: {
+               $0.programSlotID == slotID && $0.programRole == role
+           }) {
             return exact
         }
         let lineage = pastSession.exercises.filter {
@@ -427,8 +431,7 @@ struct ActiveSessionView: View {
 
     private func recallPrefix(for entry: SessionExercise) -> String {
         guard let role = entry.programRole else { return "Last" }
-        let program = session.programID.flatMap { id in programs.first { $0.id == id } }
-            ?? programs.first { $0.name == session.programName }
+        let program = programs.matching(sessionProgramID: session.programID, name: session.programName)
         let day = session.programDayIndex.flatMap { index in
             program?.orderedDays.first { $0.order == index }?.name
         }
@@ -646,9 +649,8 @@ private struct ExerciseSection: View {
     }
 
     private func fetchProgram(id: String?, named name: String?) throws -> Program? {
-        let programs = try context.fetch(FetchDescriptor<Program>())
-        return id.flatMap { stableID in programs.first { $0.id == stableID } }
-            ?? programs.first { $0.name == name }
+        try context.fetch(FetchDescriptor<Program>())
+            .matching(sessionProgramID: id, name: name)
     }
 
     /// A nil override follows the selected gym's default. Explicit choices are
@@ -968,14 +970,15 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
     // refined by the user's own row edits. Resync refreshes the warmup
     // WEIGHTS for the new bar/gym/working weight without changing how many
     // warmups the plan owns (suffix keeps the steps nearest the working
-    // weight); it must never re-inflate a deliberately short ramp.
-    // Manually added exercises still grow a full ramp as before.
+    // weight); it must never re-inflate a deliberately short — or deliberately
+    // EMPTY — ramp: a programmed entry with zero warmups keeps zero, matching
+    // web. Manually added exercises still grow a full ramp as before.
     //
     // An EQUIPMENT-changing swap is the exception: the old ramp described a
     // different implement, so its length carries no intent about the new one,
     // and a lift that had no ramp at all (a machine or band slot) must be able
     // to gain one when it becomes a barbell.
-    if entry.programRole != nil, !rebuildingForNewEquipment, !existing.isEmpty {
+    if entry.programRole != nil, !rebuildingForNewEquipment {
         desired = Array(desired.suffix(existing.count))
     }
     var rebuilt: [SetEntry] = []

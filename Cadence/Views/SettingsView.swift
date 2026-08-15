@@ -19,7 +19,7 @@ struct SettingsView: View {
     @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
     @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
     /// Device-local on purpose — a Health read grant must not ride in a backup.
-    @AppStorage("healthReadEnabled") private var healthReadEnabled = false
+    @AppStorage(HealthKitService.readEnabledKey) private var healthReadEnabled = false
 
     var body: some View {
         NavigationStack {

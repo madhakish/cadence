@@ -2270,6 +2270,17 @@ export const REST_DEFAULTS = {
   accessorySeconds: 90,     // accessories
 };
 
+// How long after a session a hard-stop check-in still attributes to it, and
+// what counts as a hard-stop response. One catalog for readiness attribution
+// and the Body screen on both clients — a vocabulary word added to one copy
+// and not another flips rotation readiness per platform. Mirrors
+// CoachingEngine.checkInAttributionWindow / isHardStopResponse.
+export const CHECKIN_ATTRIBUTION_WINDOW_MS = 36 * 60 * 60 * 1000;
+export function isHardStopResponse(response) {
+  const lowered = String(response || "").toLowerCase();
+  return ["flag", "pain", "swell", "off"].some((word) => lowered.includes(word));
+}
+
 // Smart per-exercise rest, resolved in a fixed precedence order:
 //   1. the exercise's own rest (exerciseDefaultRest > 0) wins everywhere —
 //      the deliberate exception (set via ⏱ in the logger or the library);
@@ -2863,7 +2874,11 @@ export const ACCESSORY_STALL_ROTATION_THRESHOLD = 3;
 // variation, and the athlete decides.
 function rotationSuggestions(program, evidenceKey) {
   const result = [];
-  const ordered = [...(program.slots || [])].sort((a, b) => a.dayIndex - b.dayIndex || String(a.id).localeCompare(String(b.id)));
+  // Ordinal (code-unit) tiebreak, NOT localeCompare: Swift's String `<` is
+  // ordinal, and the slot walk order feeds recommendation ids that must match
+  // across clients regardless of the browser's locale/collation.
+  const ordered = [...(program.slots || [])].sort((a, b) => a.dayIndex - b.dayIndex
+    || (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
   for (const slot of ordered) {
     if (isConditioningPattern(slot.pattern)) continue;
     if (slot.exerciseIsShelved) {
@@ -2962,7 +2977,9 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
     ...rotationSuggestions(program, evidenceKey),
     ...linearStageSuggestions(program, sessions, evidenceKey),
   ];
-  const byPriority = (a, b) => b.priority - a.priority || b.id.localeCompare(a.id);
+  // Ordinal tiebreak (see rotationSuggestions): the surfaced-first ordering
+  // must be locale-independent and identical to Swift's.
+  const byPriority = (a, b) => b.priority - a.priority || (b.id < a.id ? -1 : b.id > a.id ? 1 : 0);
   const decided = (recommendation) => [recommendation, ...programChanges].sort(byPriority);
   // A second consecutive red rotation escalates: one bad rotation is noise,
   // two in a row is a trend, and the 25% cut has already been tried without

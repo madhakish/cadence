@@ -888,7 +888,9 @@ enum ImportService {
         }
         for (oi, e) in (s.exercises ?? []).enumerated() {
             let entry = SessionExercise(order: oi, exercise: e.name.flatMap { exByName[$0] }, notes: e.notes ?? "")
-            entry.programRole = e.role
+            // Empty means roleless, matching web's `e.role || null`: importing
+            // "" as a role would flip an unprogrammed entry's chart role.
+            entry.programRole = e.role.flatMap { $0.isEmpty ? nil : $0 }
             entry.programSlotID = e.programSlotId
             entry.barID = e.barId
             entry.plannedWeightLb = e.plannedWeightLb

@@ -15,7 +15,7 @@ export async function render(host) {
     const prior = latestBySite.get(checkin.site);
     if (!prior || new Date(checkin.date) > new Date(prior.date)) latestBySite.set(checkin.site, checkin);
   }
-  const hardStops = [...latestBySite.values()].filter((item) => /flag|pain|swell|off/i.test(item.response)).length;
+  const hardStops = [...latestBySite.values()].filter((item) => C.isHardStopResponse(item.response)).length;
   root.append(ui.h("button", { class: "card row wide", ariaLabel: `Signals${hardStops ? `, ${hardStops} active hard stops` : ""}`,
     onClick: () => ui.pushScreen({ title: "Signals", build: (body) => { signals.render(body); } }) },
   ui.h("span", { class: "title", text: "⚡ Signals" }),

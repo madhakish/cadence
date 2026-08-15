@@ -2279,5 +2279,19 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-CLOCK-SURVIVES-RELAUNCH] a future-dated pause is corrupt");
 }
 
+// ---- Hard-stop check-in attribution (mirrors CoachingEngineTests) ----
+// One vocabulary and one window on both clients — a word added to one copy
+// and not the other flips rotation readiness per platform.
+{
+  ok(C.CHECKIN_ATTRIBUTION_WINDOW_MS === 36 * 60 * 60 * 1000,
+    "the check-in attribution window is 36 hours");
+  for (const response of ["flagged the knee", "PAIN in the elbow", "swelling", "took the day off"]) {
+    ok(C.isHardStopResponse(response), `"${response}" is a hard stop`);
+  }
+  for (const response of ["felt great", "a bit tired", ""]) {
+    ok(!C.isHardStopResponse(response), `"${response}" is not a hard stop`);
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

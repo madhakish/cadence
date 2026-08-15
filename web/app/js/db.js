@@ -3,6 +3,7 @@
 // screen is one unit of work), which keeps reads/writes join-free.
 import * as C from "./core.js";
 import { clearClockRecord, clearAnyClockRecord } from "./workout-clock.js";
+import { clearGymTagDay } from "./gym-tag.js";
 import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
@@ -299,8 +300,9 @@ function defaultSettings() {
     theme: "carbon",
     birthYear: 0,
     accessoryRestSeconds: 90, // legacy — superseded by rest.accessorySeconds, kept for old exports
-    // Five configurable rest buckets (seconds); secondary rests less than a top main.
-    rest: { mainCompoundSeconds: 300, olympicSeconds: 240, mainUpperSeconds: 180, secondarySeconds: 180, accessorySeconds: 90 },
+    // Five configurable rest buckets (seconds) — the shared core defaults,
+    // spread so the seed can never drift from C.REST_DEFAULTS / RestConfig.
+    rest: { ...C.REST_DEFAULTS },
     autoStartRest: false, // manual start by default — auto lies if you rested first
     haptics: true,
     gymTagFirstLaunchOfDay: false,
@@ -419,15 +421,30 @@ export function topSet(sessionExercise) {
   const working = sessionExercise.sets.filter((s) => !s.isWarmup && s.status === "completed");
   return working.reduce((best, s) => (!best || s.weightLb > best.weightLb ? s : best), null);
 }
-export function workingVolume(sessionExercise) {
+export function workingVolume(sessionExercise, exercise = null) {
+  // A carried pack is not tonnage: 20 lb for three miles is not 20 lb of
+  // volume. Conditioning never reached this number until loaded carries
+  // began storing a weight instead of a forced zero. The library TYPE
+  // decides first (a conditioning movement contributes nothing even when a
+  // set carries plain weight×reps data); the per-set DATA still excludes a
+  // cardio set whose library entry is gone, so restored history behaves.
+  // Mirrors native SessionExercise.workingVolumeLb.
+  if (exercise?.type === "conditioning") return 0;
   return sessionExercise.sets.filter((s) => !s.isWarmup && s.status === "completed")
-    // A carried pack is not tonnage: 20 lb for three miles is not 20 lb of
-    // volume. Conditioning never reached this number until loaded carries
-    // began storing a weight instead of a forced zero. Keyed on the DATA, like
-    // isCardioSet in the history view, so restored history still behaves when
-    // the library entry is gone.
     .filter((s) => !(s.distanceMiles > 0 || s.flights > 0 || s.durationSeconds > 0))
     .reduce((sum, set) => sum + (C.loadVolume(set) ?? 0), 0);
+}
+// Session→program linkage, spelled once. The name fallback exists ONLY for
+// ID-less legacy tags: a tag carrying a non-nil programId belongs to that
+// program and no other — a deleted program's sessions must never be attributed
+// to a later program that reuses the display name. Programs carry both a
+// legacy numeric id and a portable uuid, so either identifies the program.
+// Mirrors native WorkoutSession.belongs(to:).
+export function sessionBelongsToProgram(session, program) {
+  const tag = session.programTag;
+  if (!tag) return false;
+  if (tag.programId != null) return tag.programId === program.uuid || tag.programId === program.id;
+  return tag.programName === program.name;
 }
 // ---- Seeding ----
 export async function ensureSeeded() {
@@ -484,12 +501,8 @@ async function restoreMirroredProgramDayMatrices() {
   const names = (entries) => [...entries].map((entry) => entry.exerciseName).sort().join("\u0001");
 
   for (const program of programs) {
-    const programIDs = new Set([program.id, program.uuid].filter((value) => value != null));
-    const histories = sessions.filter((session) => {
-      const tag = session.programTag;
-      return tag && (programIDs.has(tag.programId)
-        || (tag.programId == null && tag.programName === program.name));
-    }).sort((left, right) => new Date(right.completedAt || right.date)
+    const histories = sessions.filter((session) => sessionBelongsToProgram(session, program))
+      .sort((left, right) => new Date(right.completedAt || right.date)
       - new Date(left.completedAt || left.date));
     let changed = false;
 
@@ -998,7 +1011,7 @@ export function validateBackup(bundle) {
     if (schemaVersion >= 2) portableID(program.id, `${path}.id`);
     textValue(program.name, `${path}.name`, true); enumValue(program.focus, BACKUP_ENUMS.focuses, `${path}.focus`, schemaVersion >= 1);
     numberValue(program.cycleNumber, `${path}.cycleNumber`, { integer: true, min: 1 });
-    numberValue(program.currentWeek, `${path}.currentWeek`, { integer: true, min: 1 });
+    numberValue(program.currentWeek, `${path}.currentWeek`, { integer: true, min: 1, max: 4 });
     numberValue(program.nextDayIndex, `${path}.nextDayIndex`, { integer: true, min: 0 });
     numberValue(program.roundingLb, `${path}.roundingLb`, { min: Number.MIN_VALUE });
     dateValue(program.reliableHistoryStart, `${path}.reliableHistoryStart`);
@@ -1015,7 +1028,10 @@ export function validateBackup(bundle) {
         enumValue(lift.warmupPolicy, BACKUP_ENUMS.warmupPolicies, `${liftPath}.warmupPolicy`);
         for (const key of ["loadOffsetLb", "peakOffsetLb", "lastPeakSingleLb", "peakSingleIncrementLb", "dropIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
         numberValue(lift.deloadMultiplier, `${liftPath}.deloadMultiplier`, { min: 0.25, max: 1 });
-        for (const key of ["doubleProgressionSets", "minimumReps", "maximumReps", "currentReps", "maximumSets"]) numberValue(lift[key], `${liftPath}.${key}`, { integer: true, min: 1, max: 100 });
+        // Set-count fields cap at 20 and rep fields at 100, matching native
+        // ImportService — one validator must not admit a bundle the other rejects.
+        for (const key of ["doubleProgressionSets", "maximumSets"]) numberValue(lift[key], `${liftPath}.${key}`, { integer: true, min: 1, max: 20 });
+        for (const key of ["minimumReps", "maximumReps", "currentReps"]) numberValue(lift[key], `${liftPath}.${key}`, { integer: true, min: 1, max: 100 });
         for (const key of ["baseWeightLb", "estimatedMaxLb", "lastIncrementLb"]) numberValue(lift[key], `${liftPath}.${key}`, { min: 0 });
         numberValue(lift.stallCount, `${liftPath}.stallCount`, { integer: true, min: 0 });
         if (lift.pending != null) object(lift.pending, `${liftPath}.pending`);
@@ -1305,6 +1321,9 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   // autoincrement integers that collide across installs — left alive, the
   // record would graft the old stopwatch onto an unrelated imported session.
   if (writes.has("sessions")) clearAnyClockRecord();
+  // The gym-tag day stamp describes the pre-import install's day; a restored
+  // phone must get its prominent tag (and first-launch auto-show) back.
+  clearGymTagDay();
   return { repairedSlotIDs };
 }
 
@@ -1314,6 +1333,7 @@ export async function wipeAll({ preserveCheckpoints = false } = {}) {
   // A wiped stopwatch must not outlive the wipe: a restored backup could
   // reuse the session id and resurrect it.
   clearAnyClockRecord();
+  clearGymTagDay();
   const db = _db;
   _db = null;
   _opening = null;

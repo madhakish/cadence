@@ -13,8 +13,18 @@ import * as C from "./core.js";
 
 export const CLOCK_KEY = "cadenceWorkoutClock";
 
+// Single reader, and the self-heal point: bytes that can never be adopted —
+// unparsable, shapeless, ownerless, or failing the shared usability rule —
+// are deleted on read instead of lingering to shadow the slot forever.
+// Mirrors WorkoutClock.loadRecord.
 function readClockRecord() {
-  try { return JSON.parse(localStorage.getItem(CLOCK_KEY) || "null"); } catch { return null; }
+  let record = null;
+  try { record = JSON.parse(localStorage.getItem(CLOCK_KEY) || "null"); } catch { record = undefined; }
+  if (record === null) return null;
+  if (record && typeof record === "object" && record.sessionId != null
+      && C.stopwatchRecordUsable(record.start, null, Date.now())) return record;
+  try { localStorage.removeItem(CLOCK_KEY); } catch { /* noop */ }
+  return null;
 }
 
 export function writeClockRecord(sessionId, start) {
@@ -41,11 +51,10 @@ export function clearAnyClockRecord() {
   try { localStorage.removeItem(CLOCK_KEY); } catch { /* noop */ }
 }
 
-// The stored origin for this session, or null: wrong session, unusable
-// record (stale, future-dated, malformed), or nothing stored.
+// The stored origin for this session, or null: wrong session, or nothing
+// usable stored (readClockRecord already deleted stale, future-dated, or
+// malformed bytes).
 export function storedClockStart(sessionId) {
   const record = readClockRecord();
-  return record && String(record.sessionId) === String(sessionId)
-    && C.stopwatchRecordUsable(record.start, null, Date.now())
-    ? record.start : null;
+  return record && String(record.sessionId) === String(sessionId) ? record.start : null;
 }

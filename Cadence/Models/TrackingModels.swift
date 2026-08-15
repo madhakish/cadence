@@ -119,10 +119,7 @@ final class CheckIn {
     }
 
     var site: BodySite? { BodySite.fromStorage(siteRaw) }
-    var isHardStop: Bool {
-        let value = response.lowercased()
-        return ["flag", "pain", "swell", "off"].contains { value.contains($0) }
-    }
+    var isHardStop: Bool { CoachingEngine.isHardStopResponse(response) }
 }
 
 /// Auto-detected milestone, persisted so the history reads like a logbook.

@@ -86,7 +86,7 @@ enum CoachingService {
         )
         let history = sessions.compactMap { session -> CoachingSessionSnapshot? in
             guard session.isCompleted,
-                  session.programID == program.id || session.programName == program.name,
+                  session.belongs(to: program),
                   let cycle = session.programCycleNumber,
                   let rotation = session.programWeek,
                   let dayIndex = session.programDayIndex else { return nil }
@@ -133,7 +133,8 @@ enum CoachingService {
                 hasHardStopCheckIn: checkIns.contains { checkIn in
                     let start = session.completedAt ?? session.date
                     let seconds = checkIn.date.timeIntervalSince(start)
-                    return checkIn.isHardStop && seconds >= 0 && seconds <= 36 * 60 * 60
+                    return checkIn.isHardStop && seconds >= 0
+                        && seconds <= CoachingEngine.checkInAttributionWindow
                 },
                 exercises: entries
             )
@@ -307,7 +308,18 @@ enum CoachingService {
                 // new lift never produced (the evidence lookup also checks
                 // the movement name — this keeps the stored state truthful).
                 lift.lastIncrementLb = 0
-                if lift.pendingStallCount != nil { lift.pendingStallCount = 0 }
+                // The stashed grade belongs to the exercise being rotated
+                // out too: a surviving pendingBaseWeightLb would land the
+                // OLD movement's graded base on the replacement at the next
+                // rollover. The web adapter has always dropped the whole
+                // pending record; this clears the same five fields so both
+                // clients persist the same state from the same accepted
+                // recommendation.
+                lift.pendingBaseWeightLb = nil
+                lift.pendingEstimatedMaxLb = nil
+                lift.pendingStallCount = nil
+                lift.pendingLastIncrementLb = nil
+                lift.pendingNote = nil
             } else if let accessory = program.days.flatMap(\.accessories).first(where: { $0.id == slotID }) {
                 accessory.exerciseName = replacement.name
                 accessory.revertToExerciseName = nil
