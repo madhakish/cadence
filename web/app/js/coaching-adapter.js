@@ -112,7 +112,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
           maxReps,
           currentReps: minReps, targetSeconds: item.exercise.type === "timed" ? 30 : 0,
           durationStepSeconds: 5, weightLb: 0, incrementLb: 0, stallCount: 0,
-          capacityManaged: true, maximumSets: 6, conditioningEffort: "easy", targetRPE: 0 });
+          capacityManaged: true, maximumSets: C.DEFAULT_MAXIMUM_SETS, conditioningEffort: "easy", targetRPE: 0 });
         messages.push(`${item.exercise.name} +${adjustment.sets}`);
       }
     }
@@ -138,7 +138,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
       minReps, maxReps,
       currentReps: minReps, targetSeconds: exercise.type === "timed" ? 30 : 0,
       durationStepSeconds: 5, weightLb: 0, incrementLb: 0, stallCount: 0,
-      capacityManaged: true, maximumSets: 6, conditioningEffort: "easy", targetRPE: 0 });
+      capacityManaged: true, maximumSets: C.DEFAULT_MAXIMUM_SETS, conditioningEffort: "easy", targetRPE: 0 });
     message = `Added ${change.sets} sets of ${exercise.name} to ${day.name}.`;
   } else if (change.type === "reduceAccessoryVolume") {
     message = `Scheduled a ${change.percent}% accessory-set cut for the next rotation only.`;
