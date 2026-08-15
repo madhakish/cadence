@@ -214,6 +214,36 @@ export const normalizedSetFlags = (quality, stoppedEarly = false, rir = null) =>
   ...(SET_RIRS.includes(rir) ? [rir] : []),
   ...(stoppedEarly ? ["stopped early"] : []),
 ];
+// A correction to one banked set's performed record, applied after the session
+// was completed: the lifter noticed the log is wrong (a set never marked
+// complete, a weight banked at the stale plan). Only the fields the correction
+// PROVIDES change, and only when they are sane — a blank or negative entry
+// keeps the stored value rather than writing garbage into history. Everything
+// else on the set (flags, warmup, load basis, planned values, body signals) is
+// deliberately out of reach: editing reps cannot reset weight, and a
+// correction cannot rewrite what was prescribed. Mirrors
+// SetLifecycle.correctedSetValues.
+export function correctedSetValues(set, correction = {}) {
+  const corrected = { weightLb: set.weightLb, reps: set.reps,
+    durationSeconds: set.durationSeconds ?? null, status: set.status };
+  if (Number.isFinite(correction.weightLb) && correction.weightLb >= 0) corrected.weightLb = correction.weightLb;
+  if (Number.isInteger(correction.reps) && correction.reps >= 0) corrected.reps = correction.reps;
+  if (Number.isInteger(correction.durationSeconds) && correction.durationSeconds >= 0) {
+    corrected.durationSeconds = correction.durationSeconds;
+  }
+  if (SET_STATUSES.includes(correction.status)) corrected.status = correction.status;
+  return corrected;
+}
+// One tap on a correction row's status mark walks the shared status order —
+// planned → completed → skipped → planned. Owned here, not in the two view
+// layers: the cycle is user-facing documented behavior, and a reorder on one
+// client would make the same tap do different things per platform. An unknown
+// status starts the cycle from planned. Mirrors
+// SetLifecycle.nextCorrectionStatus.
+export function nextSetStatus(status) {
+  const index = SET_STATUSES.indexOf(status);
+  return SET_STATUSES[((index < 0 ? 0 : index) + 1) % SET_STATUSES.length];
+}
 
 // Whether a set of this kind counts as the slot's prescribed work — the sets
 // that are graded and that supply the cycle's strength sample.

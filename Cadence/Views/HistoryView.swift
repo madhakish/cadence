@@ -270,6 +270,18 @@ struct SessionDetailView: View {
     @State private var healthMiles: Double?
     @State private var healthEnergyKcal: Double?
     @State private var didCheckHealth = false
+    /// Correction mode for a banked log: a set that never got its ✓ mid-workout
+    /// or a weight banked at the stale plan can be fixed here. The corrected
+    /// history is what charts, recalls, exports, and prior-best evidence read.
+    /// It does NOT re-run the grading that fired at bank time — that result is
+    /// already stashed in the lift's pending state — so a prescription built
+    /// from the wrong base is fixed in the program editor, not here.
+    @State private var isEditing = false
+    /// Field text buffered per set while editing. Nothing touches the stored
+    /// record until the drafts are committed (Done, or leaving the screen), so
+    /// a half-typed number can never be banked by an autosave, and an
+    /// untouched field is not an edit.
+    @State private var setDrafts: [PersistentIdentifier: SetCorrectionDraft] = [:]
 
     /// The conditioning sets this session actually performed. `workingSets` is
     /// already completed-and-non-warmup: a set left planned, or skipped after
@@ -348,6 +360,57 @@ struct SessionDetailView: View {
         return (session.date, end)
     }
 
+    private var unitDisplay: UnitDisplay { settingsList.unitDisplay }
+
+    /// Strength and timed rows are correctable; conditioning is not, and a
+    /// row whose library entry is gone falls back to its DATA — the same
+    /// rule the read-only rendering uses.
+    private func isCorrectable(_ entry: SessionExercise) -> Bool {
+        isStrengthEntry(entry) || entry.exercise?.type == .timed
+    }
+
+    private func draftBinding(for set: SetEntry) -> Binding<SetCorrectionDraft> {
+        Binding(get: { setDrafts[set.persistentModelID] ?? SetCorrectionDraft() },
+                set: { setDrafts[set.persistentModelID] = $0 })
+    }
+
+    /// Apply every buffered draft through the shared correction rule, writing
+    /// only fields that actually changed. The no-edit comparison happens HERE,
+    /// against the untouched stored values — so a field still reading the
+    /// stored value's display form (including a kg string whose round-trip
+    /// would drift the canonical pounds) is not an edit, and the comparison
+    /// basis can never move mid-typing because typing never touches the model.
+    private func commitCorrections() {
+        let unit = unitDisplay.primaryUnit
+        for entry in session.orderedExercises where isCorrectable(entry) {
+            for set in entry.orderedSets {
+                guard let draft = setDrafts[set.persistentModelID] else { continue }
+                var correction = SetLifecycle.SetCorrection(status: draft.status)
+                if let text = draft.weightText, text != displayWeightText(set.weightLb, unit: unit) {
+                    // The same comma-tolerant parse every entry surface uses —
+                    // a decimal-comma keyboard types "92,5".
+                    correction.weightLb = Double(text.replacingOccurrences(of: ",", with: "."))
+                        .map { Weight.toLb($0, from: unit) }
+                }
+                if let text = draft.repsText, text != String(set.reps) {
+                    correction.reps = Int(text)
+                }
+                if let text = draft.secondsText, text != (set.durationSeconds.map(String.init) ?? "") {
+                    correction.durationSeconds = Int(text)
+                }
+                let corrected = SetLifecycle.correctedSetValues(
+                    weightLb: set.weightLb, reps: set.reps,
+                    durationSeconds: set.durationSeconds, status: set.status,
+                    correction: correction
+                )
+                if set.weightLb != corrected.weightLb { set.weightLb = corrected.weightLb }
+                if set.reps != corrected.reps { set.reps = corrected.reps }
+                if set.durationSeconds != corrected.durationSeconds { set.durationSeconds = corrected.durationSeconds }
+                if set.status != corrected.status { set.status = corrected.status }
+            }
+        }
+    }
+
     var body: some View {
         List {
             sessionSummary
@@ -358,8 +421,22 @@ struct SessionDetailView: View {
             ForEach(session.orderedExercises) { entry in
                 Section {
                     ForEach(entry.orderedSets) { set in
-                        HistorySetRow(set: set, type: entry.exercise?.type,
-                                      unitDisplay: settingsList.unitDisplay)
+                        // Only strength and timed rows are correctable, keyed on
+                        // the DATA when the library entry is gone (like the
+                        // read-only rendering): a restored cardio record whose
+                        // exercise was deleted must not grow a weight×reps
+                        // editor over its distance. Conditioning corrections
+                        // belong to the Health comparison flow above, which
+                        // reconciles against a measurement instead of a memory.
+                        if isEditing, isCorrectable(entry) {
+                            HistorySetEditRow(set: set,
+                                              isTimed: entry.exercise?.type == .timed,
+                                              unitDisplay: unitDisplay,
+                                              draft: draftBinding(for: set))
+                        } else {
+                            HistorySetRow(set: set, type: entry.exercise?.type,
+                                          unitDisplay: unitDisplay)
+                        }
                     }
                     if !entry.notes.isEmpty {
                         Text(entry.notes).font(.caption).foregroundStyle(.secondary)
@@ -381,6 +458,35 @@ struct SessionDetailView: View {
             }
         }
         .navigationTitle(session.date.formatted(date: .abbreviated, time: .omitted))
+        .onDisappear {
+            // Leaving the screen commits like Done: what the fields show is
+            // what banks. A read-only visit (no drafts) saves nothing.
+            guard isEditing, !setDrafts.isEmpty else { return }
+            commitCorrections()
+            if PersistenceErrorCenter.shared.save(context, operation: "Saving the workout corrections") {
+                setDrafts = [:]
+            }
+        }
+        .toolbar {
+            if session.isCompleted {
+                Button(isEditing ? "Done" : "Edit") {
+                    if isEditing {
+                        commitCorrections()
+                        // A failed save rolls the context back; staying in edit
+                        // mode with the drafts intact keeps the typed values on
+                        // screen for a retry instead of dropping to read-only
+                        // rows showing the reverted record.
+                        if PersistenceErrorCenter.shared.save(context, operation: "Saving the workout corrections") {
+                            setDrafts = [:]
+                            isEditing = false
+                        }
+                    } else {
+                        isEditing = true
+                    }
+                }
+                .accessibilityLabel(isEditing ? "Finish editing this workout" : "Edit this workout's sets")
+            }
+        }
         .task {
             // One lookup per open, and only when there is something to compare
             // and a window to compare it over.
@@ -420,7 +526,7 @@ struct SessionDetailView: View {
     private var summaryStats: some View {
         summaryStat("\(completedWorkSets.count)", label: "work sets")
         summaryStat(workingVolumeLb > 0
-                    ? settingsList.unitDisplay.format(lb: workingVolumeLb)
+                    ? unitDisplay.format(lb: workingVolumeLb)
                     : "—", label: "volume")
         if let durationLabel { summaryStat(durationLabel, label: "duration") }
     }
@@ -438,11 +544,11 @@ struct SessionDetailView: View {
         var parts = ["\(entry.workingSets.count) \(setName)\(entry.workingSets.count == 1 ? "" : "s")"]
         if entry.exercise?.type != .conditioning, entry.exercise?.type != .timed,
            let top = entry.topSet {
-            let load = top.weightLb == 0 ? "BW" : settingsList.unitDisplay.format(lb: top.weightLb)
+            let load = top.weightLb == 0 ? "BW" : unitDisplay.format(lb: top.weightLb)
             parts.append("top \(load)×\(top.reps)")
         }
         if entry.workingVolumeLb > 0 {
-            parts.append("\(settingsList.unitDisplay.format(lb: entry.workingVolumeLb)) volume")
+            parts.append("\(unitDisplay.format(lb: entry.workingVolumeLb)) volume")
         }
         return parts.joined(separator: " · ")
     }
@@ -624,16 +730,99 @@ private struct HistorySetRow: View {
         }
     }
 
-    private var statusIcon: String {
-        switch set.status {
-        case .completed: return "checkmark.circle.fill"
-        case .skipped: return "minus.circle"
-        case .planned: return "circle"
-        }
-    }
+    private var statusIcon: String { statusIconName(self.set.status) }
 
     private var statusColor: Color {
         self.set.status == .completed ? Theme.good : .secondary
+    }
+}
+
+/// The stored weight's display form in the entry unit — what an untouched
+/// field reads, and what the no-edit comparison in `commitCorrections` uses.
+private func displayWeightText(_ weightLb: Double, unit: WeightUnit) -> String {
+    weightLb == 0 ? "" : Weight.trim(unit == .kg ? Weight.kg(fromLb: weightLb) : weightLb)
+}
+
+/// One glyph mapping for a set's status, shared by the read-only row and the
+/// correction row.
+private func statusIconName(_ status: SetStatus) -> String {
+    switch status {
+    case .completed: return "checkmark.circle.fill"
+    case .skipped: return "minus.circle"
+    case .planned: return "circle"
+    }
+}
+
+/// Field text buffered for one set while correcting. `nil` means the field
+/// was never touched — only touched fields can become corrections.
+struct SetCorrectionDraft {
+    var weightText: String?
+    var repsText: String?
+    var secondsText: String?
+    var status: SetStatus?
+}
+
+/// One banked set in correction mode: cycle the status, retype the weight or
+/// reps (or the hold for timed work). The row edits a DRAFT — the stored
+/// record is untouched until `commitCorrections` applies every draft through
+/// the shared `SetLifecycle.correctedSetValues` rule, so a half-typed number
+/// is never written, an empty or garbage field keeps the stored value, and
+/// nothing beyond the four performed fields is reachable. The weight edits in
+/// the display's primary unit and stores canonical pounds, like every other
+/// entry surface.
+private struct HistorySetEditRow: View {
+    let set: SetEntry
+    let isTimed: Bool
+    let unitDisplay: UnitDisplay
+    @Binding var draft: SetCorrectionDraft
+
+    private var unit: WeightUnit { unitDisplay.primaryUnit }
+    private var effectiveStatus: SetStatus { draft.status ?? set.status }
+    private var nextStatus: SetStatus { SetLifecycle.nextCorrectionStatus(effectiveStatus) }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                draft.status = nextStatus
+            } label: {
+                Image(systemName: statusIconName(effectiveStatus))
+                    .font(.title3)
+                    .foregroundStyle(effectiveStatus == .completed ? Theme.good : .secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Status: \(effectiveStatus.rawValue). Tap to mark \(nextStatus.rawValue)")
+            if isTimed {
+                editorField("Hold (seconds)",
+                            text: draftField(\.secondsText,
+                                             fallback: set.durationSeconds.map(String.init) ?? ""))
+            } else {
+                editorField("Weight (\(unit.rawValue))",
+                            text: draftField(\.weightText,
+                                             fallback: displayWeightText(set.weightLb, unit: unit)))
+                Text("×").foregroundStyle(.secondary)
+                editorField("Reps", text: draftField(\.repsText, fallback: String(set.reps)))
+            }
+            Spacer(minLength: 4)
+            if set.isWarmup {
+                Text("Warm-up").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func draftField(_ keyPath: WritableKeyPath<SetCorrectionDraft, String?>,
+                            fallback: String) -> Binding<String> {
+        Binding(get: { draft[keyPath: keyPath] ?? fallback },
+                set: { draft[keyPath: keyPath] = $0 })
+    }
+
+    private func editorField(_ label: String, text: Binding<String>) -> some View {
+        TextField(label, text: text)
+            .keyboardType(.decimalPad)
+            .textFieldStyle(.roundedBorder)
+            .font(.callout.monospacedDigit())
+            .frame(maxWidth: 110)
+            .accessibilityLabel(label)
     }
 }
 

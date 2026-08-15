@@ -67,14 +67,14 @@ export function icon(name) {
 
 // ---- overlays (full-screen pushed screens) ----
 const overlays = () => document.getElementById("overlays");
-export function pushScreen({ title, build, actions = [] }) {
+export function pushScreen({ title, build, actions = [], onClose }) {
   const body = h("div", { class: "overlay-body" });
   const back = h("button", { class: "btn ghost sm", text: "‹ Back", onClick: () => close() });
   const head = h("div", { class: "overlay-head" }, back, h("h2", { text: title || "" }), h("div", { class: "btn-row" }, ...actions));
   const el = h("div", { class: "overlay" }, head, body);
   overlays().append(el);
   const api = { el, body, close, setTitle: (t) => { head.querySelector("h2").textContent = t; } };
-  function close() { el.remove(); }
+  function close() { el.remove(); onClose?.(); }
   if (build) build(body, api);
   return api;
 }
