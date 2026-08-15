@@ -159,7 +159,14 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     const retiring = (day.accessories || []).filter((slot) => ids.has(String(slot.id)));
     if (!retiring.length) throw new Error("The vertical-pull accessories this recommendation names no longer exist.");
     const retiredNames = retiring.map((slot) => slot.exerciseName).join(", ");
-    day.accessories = day.accessories.filter((slot) => !ids.has(String(slot.id)));
+    // Renumber over the AUTHORED sequence (order field, name tiebreak — the
+    // same comparator native orderedAccessories uses), not raw array
+    // position: the editor reorders by mutating order fields only, so array
+    // order can lag the authored order and stamping by index would silently
+    // revert the user's reorder.
+    day.accessories = day.accessories.filter((slot) => !ids.has(String(slot.id)))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+        || String(a.exerciseName).localeCompare(String(b.exerciseName)));
     day.accessories.forEach((slot, index) => { slot.order = index; });
     // Idempotent against a stale offer: if the day gained a pull-up lift
     // since evaluation (hand-edit, another apply), retiring the accessories

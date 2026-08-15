@@ -287,7 +287,7 @@ enum CoachingService {
             guard let pullUps = exercises.first(where: {
                 $0.name == "Pull-ups" && $0.gateStatus != .shelved
             }) else {
-                throw CoachingApplyError.unknownExercise("Pull-ups")
+                throw CoachingApplyError.exerciseUnavailable("Pull-ups")
             }
             let retiring = day.accessories.filter { accessorySlotIDs.contains($0.id) }
             guard !retiring.isEmpty else {
@@ -442,6 +442,11 @@ enum CoachingService {
         case unknownExercise(String)
         case unknownSlot(String)
         case prescriptionChanged(String)
+        /// The named exercise is missing OR shelved — distinct from
+        /// unknownExercise, whose rotate-flavored copy ("a compatible
+        /// variation cannot be chosen") is wrong for appliers that need one
+        /// specific exercise. Copy matches the web adapter's string.
+        case exerciseUnavailable(String)
         var errorDescription: String? {
             switch self {
             case .noExercise(let pattern):
@@ -454,6 +459,8 @@ enum CoachingService {
                 return "The program slot for \(name) no longer exists."
             case .prescriptionChanged(let name):
                 return "The program slot for \(name) changed after this recommendation, so triples were not applied."
+            case .exerciseUnavailable(let name):
+                return "\(name) is not in the library. Add or unshelve it first."
             }
         }
     }
