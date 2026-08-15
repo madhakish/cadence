@@ -23,6 +23,7 @@ section that matches what you're trying to do.
 - [Start from a pre-programmed style](how-to/start-from-a-style.md)
 - [Build a custom program](how-to/build-a-custom-program.md)
 - [Run a training day](how-to/run-a-training-day.md)
+- [Correct a banked workout](how-to/correct-a-banked-workout.md)
 - [Swap an exercise](how-to/swap-an-exercise.md)
 - [See what a lift works — muscles, history, programs](how-to/exercise-details.md)
 - [Load a bar with the plate calculator](how-to/plate-calculator.md)
