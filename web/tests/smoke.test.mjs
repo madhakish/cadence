@@ -355,6 +355,34 @@ for (const track of [
   ok(refused, "a library without pull-ups refuses the promotion");
 }
 
+// Max-effort rotation follows the seeded special-exercise sequence and gives
+// the replacement its own target instead of inheriting the outgoing lift.
+{
+  const proposed = {
+    roundingLb: 5,
+    days: [{ name: "ME Lower", lifts: [{
+      id: "me-lower", exerciseName: "Low Box Squat", role: "main",
+      prescription: "maxEffort", baseWeightLb: 365, estimatedMaxLb: 405,
+      stallCount: 0, lastIncrementLb: 10,
+    }], accessories: [] }],
+  };
+  const history = [{ isCompleted: true, exercises: [{ exerciseName: "Front Box Squat", sets: [
+    { weightLb: 315, reps: 1, isWarmup: false, status: "completed", prescriptionBlock: "work" },
+  ] }] }];
+  await coach.applyCoachingRecommendation(proposed, {
+    id: "rotate-me-weekly", ruleID: "program.slot.rotate.max-effort-weekly.v2",
+    title: "Rotate Low Box Squat", explanation: "Fixture recommendation",
+    change: { type: "rotateExercise", slotID: "me-lower", exerciseName: "Low Box Squat" },
+  }, seededExercises, history);
+  const rotated = proposed.days[0].lifts[0];
+  ok(rotated.exerciseName === "Front Box Squat",
+    "max-effort rotation follows the authored special-exercise sequence");
+  ok(rotated.baseWeightLb === 325,
+    "a returning variation targets its own 315 single plus 10, not the outgoing 365 target");
+  ok(rotated.stallCount === 0 && rotated.lastIncrementLb === 0,
+    "the new variation starts without inherited stall or earned-increment state");
+}
+
 // An accepted linear-stage recommendation mutates only the proposed slot and
 // leaves an explicit strategy-stage value in the audit record.
 {
@@ -550,6 +578,12 @@ for (let i = 0; i < 10; i++) {
   const prog = await db.Programs.active();
   const day = [...prog.days].sort((a, b) => a.order - b.order)[0]; // Lower A: Back Squat main, Deadlift complementary
   const sid = await session.createSessionFromProgramDay(prog, day);
+  const builtProgramSession = await db.Sessions.get(sid);
+  const defaultGym = await db.Gyms.default();
+  ok(builtProgramSession.exercises.filter((entry) =>
+    seededExercises.find((exercise) => exercise.name === entry.exerciseName)?.type === "barbell")
+    .every((entry) => entry.barId === defaultGym.defaultBarId),
+  "program sessions stamp the bar that built every barbell prescription");
   await session.openSession(sid); await tick();
   const logger = [...document.querySelectorAll("#overlays .overlay")].at(-1);
   ok(logger.querySelector(".overlay-head h2")?.textContent === day.name,
@@ -916,6 +950,8 @@ await tick();
 const dl = (await db.Tracks.all()).find((t) => t.exerciseName === "Deadlift");
 const id = await session.createSessionFromTrack(dl);
 const created = await db.Sessions.get(id);
+ok(created.exercises[0].barId === (await db.Gyms.default()).defaultBarId,
+  "tracked barbell sessions preserve the bar used to build their history");
 const work = created.exercises[0].sets.filter((s) => !s.isWarmup);
 const warm = created.exercises[0].sets.filter((s) => s.isWarmup);
 const achievedDeadlift = created.exercises[0].plannedWeightLb;

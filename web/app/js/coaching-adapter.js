@@ -73,7 +73,7 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
     maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation ?? 6 }, history, program.reliableHistoryStart);
 }
 
-export async function applyCoachingRecommendation(program, recommendation, exercises) {
+export async function applyCoachingRecommendation(program, recommendation, exercises, sessions = []) {
   const change = recommendation.change;
   let message = "Program held unchanged.";
   if (change.type === "capacityPlan") {
@@ -185,20 +185,35 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
   } else if (change.type === "rotateExercise") {
     const current = exercises.find((item) => item.name === change.exerciseName);
     if (!current) throw new Error(`${change.exerciseName} is no longer in the library, so a compatible variation cannot be chosen.`);
-    const replacement = exercises.find((candidate) => C.swapCompatible(
-      current,
-      { ...candidate, isShelved: C.exerciseIsShelved(candidate) },
-    ));
-    if (!replacement) throw new Error(`No compatible variation of ${change.exerciseName} is available. Add one to the library, or unshelve an existing one.`);
-    // Same policy as the manual swap gesture: the slot keeps its load and
-    // estimate, because a compatible candidate trains the same pattern at the
-    // same tier and those remain the best prior. The stall counter does NOT
-    // carry — rotating is the answer to the stall, so inheriting its countdown
-    // would deload a lift that has not yet missed anything.
     const lift = (program.days || []).flatMap((day) => day.lifts || []).find((slot) => slot.id === change.slotID);
     const accessory = (program.days || []).flatMap((day) => day.accessories || []).find((slot) => slot.id === change.slotID);
     const slot = lift || accessory;
     if (!slot) throw new Error(`The program slot for ${change.exerciseName} no longer exists.`);
+    const compatible = exercises.filter((candidate) => C.swapCompatible(
+      current,
+      { ...candidate, isShelved: C.exerciseIsShelved(candidate) },
+    ));
+    const preferred = C.PREFERRED_MAX_EFFORT_EXERCISES[current.movementPattern] || [];
+    const start = preferred.includes(current.name) ? (preferred.indexOf(current.name) + 1) % preferred.length : 0;
+    const preferredNames = preferred.length
+      ? Array.from({ length: preferred.length }, (_, index) => preferred[(start + index) % preferred.length]) : [];
+    const replacement = lift && (lift.prescription || "automatic") === "maxEffort"
+      ? preferredNames.map((name) => compatible.find((candidate) => candidate.name === name)).find(Boolean)
+        || compatible[0]
+      : compatible[0];
+    if (!replacement) throw new Error(`No compatible variation of ${change.exerciseName} is available. Add one to the library, or unshelve an existing one.`);
+    if (lift && (lift.prescription || "automatic") === "maxEffort") {
+      const priorBest = Math.max(0, ...sessions.filter((session) => session.isCompleted)
+        .flatMap((session) => session.exercises || [])
+        .filter((entry) => entry.exerciseName === replacement.name)
+        .flatMap((entry) => entry.sets || [])
+        .filter((set) => !set.isWarmup && set.status === "completed" && set.reps === 1
+          && C.countsAsPrescribedWork(C.resolvedPrescriptionBlock(set)))
+        .map((set) => set.weightLb || 0));
+      lift.baseWeightLb = C.maxEffortVariationTarget(
+        priorBest, lift.estimatedMaxLb, lift.baseWeightLb, replacement.movementGroup, program.roundingLb,
+      );
+    }
     slot.exerciseName = replacement.name;
     slot.revertToExerciseName = null;
     slot.stallCount = 0;

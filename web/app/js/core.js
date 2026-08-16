@@ -877,6 +877,20 @@ export function fitDescription(fitQuality) {
 export const rotationLabel = (rotation) =>
   `Rotation ${Number.isFinite(rotation) ? Math.min(Math.max(rotation, 1), DELOAD_WEEK) : 1} of ${DELOAD_WEEK}`;
 
+// Relative position for the exercise-detail four-rotation preview. Recovery
+// is separate from the next work rotation. Mirrors ProgramEngine.
+export function rotationContextLabel(rotation, currentRotation) {
+  const current = Number.isFinite(currentRotation)
+    ? Math.min(Math.max(currentRotation, 1), DELOAD_WEEK) : 1;
+  if (rotation === current) return rotation === DELOAD_WEEK ? "Current recovery" : "Current";
+  if (rotation === DELOAD_WEEK) return "Recovery";
+  const previous = current === 1 || current === DELOAD_WEEK ? 3 : current - 1;
+  if (rotation === previous) return "Previous";
+  const next = current >= 3 ? 1 : current + 1;
+  if (rotation === next) return current >= 3 ? "Next cycle" : "Next";
+  return "Later";
+}
+
 // What a slot does, for the badge beside its name: "Main · 5/3/1",
 // "Complementary · Secondary volume", "Main · Linear". Resolves "automatic"
 // first, so the badge names the style the engine will actually run rather than
@@ -1501,19 +1515,16 @@ export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, cu
 // exercise records. Loadability follows the resolved load basis, not equipment
 // type: a weighted pull-up is bodyweight-typed but still carries external load.
 // ---- Program slot ordering (one spelling) ----------------------------------
-// The coach's explicit order; ties break on exerciseName with ORDINAL
-// comparison (Swift's tuple `<`), not locale collation. Slots from stores
-// that predate the order field (every order equal) keep the old main-first
-// presentation where the caller asks for it. Mirrors native
+// Main work always precedes complementary work; authored order is preserved
+// inside each role. Ties break on exerciseName with ORDINAL comparison
+// (Swift's tuple `<`), not locale collation. Accessory-only callers have no
+// main roles, so this is also their authored order. Mirrors native
 // ProgramDay.orderedLifts / orderedAccessories.
-export function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
-  const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
+export function orderedProgramSlots(slots = []) {
   const byName = (a, b) => (a.exerciseName < b.exerciseName ? -1 : a.exerciseName > b.exerciseName ? 1 : 0);
   return [...slots].sort((a, b) => {
-    if (allLegacy && roleAwareLegacy) {
-      const role = (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1);
-      if (role) return role;
-    }
+    const role = (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1);
+    if (role) return role;
     return (a.order ?? 0) - (b.order ?? 0) || byName(a, b);
   });
 }
@@ -1735,6 +1746,18 @@ export function stagedIncrement(baseWeightLb, focus, regime, roundingLb = DEFAUL
     return Math.max(half, Math.round((inc / 2) / half) * half);
   }
   return inc;
+}
+
+// Target for a newly selected max-effort variation. Returning variations use
+// their own completed single plus the normal upper/lower increment; an unseen
+// variation opens at 90% of the slot estimate. Never inherit the old special
+// exercise's target. Mirrors ProgramProgression.maxEffortVariationTarget.
+export function maxEffortVariationTarget(priorBestSingleLb, estimatedMaxLb, fallbackBaseLb,
+  movementGroup = null, roundingLb = DEFAULT_ROUNDING_LB) {
+  const increment = ["squat", "hinge"].includes(movementGroup) ? 10 : 5;
+  const seed = priorBestSingleLb > 0 ? priorBestSingleLb + increment
+    : estimatedMaxLb > 0 ? estimatedMaxLb * 0.90 : fallbackBaseLb;
+  return Math.max(0, roundTo(seed, roundingLb));
 }
 
 // Extra sets the next VOLUME rotation carries after a held cycle, so the
@@ -2748,6 +2771,20 @@ export const movementPatternName = (pattern) => ({
   unknown: "Unclassified",
 }[pattern] || "Unclassified");
 
+// One matcher for the library, program pickers, and active logger. Exercise
+// availability is deliberately filtered by each caller: a gate is not search.
+const normalizedExerciseSearchText = (value) => String(value ?? "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+export function exerciseMatchesSearch(exercise, query) {
+  const term = normalizedExerciseSearchText(query).trim();
+  if (!term) return true;
+  return [exercise?.name, exercise?.movementGroup,
+    movementPatternName(exercise?.movementPattern), exercise?.type,
+    ...(exercise?.aliases || []), ...(exercise?.strategyTags || [])]
+    .some((value) => normalizedExerciseSearchText(value).includes(term));
+}
+
 export const isConditioningPattern = (pattern) =>
   ["easyAerobic", "intervals", "mixedConditioning"].includes(pattern);
 
@@ -2792,6 +2829,12 @@ export const PREFERRED_EXERCISES = {
   shoulderStability: ["Face Pulls", "Band External Rotation", "Y-T-W Raises"],
   adductor: ["Copenhagen Plank", "Cable Hip Adduction"],
   core: ["Hanging Knee Raise", "Dead Bug", "Plank"],
+};
+// Seeded special-exercise rotations for max-effort slots. Compatible custom
+// variations remain the fallback. Mirrors CoachingEngine.
+export const PREFERRED_MAX_EFFORT_EXERCISES = {
+  squat: ["Low Box Squat", "Front Box Squat", "Paused Box Squat"],
+  horizontalPress: ["Floor Press", "Close-Grip Floor Press"],
 };
 // The rep window a coach-added accessory slot opens with, by pattern.
 // Mirrors CoachingEngine.defaultRepRange(for:).
@@ -2961,13 +3004,14 @@ export const ACCESSORY_STALL_ROTATION_THRESHOLD = 3;
 // been shelved, or the slot is stuck retrying a weight it is not making. Both
 // are suggestions — the engine names the slot, the client resolves a compatible
 // variation, and the athlete decides.
-function rotationSuggestions(program, evidenceKey) {
+function rotationSuggestions(program, sessions, evidenceKey) {
   const result = [];
   // Ordinal (code-unit) tiebreak, NOT localeCompare: Swift's String `<` is
   // ordinal, and the slot walk order feeds recommendation ids that must match
   // across clients regardless of the browser's locale/collation.
   const ordered = [...(program.slots || [])].sort((a, b) => a.dayIndex - b.dayIndex
     || (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
+  const newest = [...sessions].sort((a, b) => epoch(b.date) - epoch(a.date));
   for (const slot of ordered) {
     if (isConditioningPattern(slot.pattern)) continue;
     if (slot.exerciseIsShelved) {
@@ -2979,6 +3023,23 @@ function rotationSuggestions(program, evidenceKey) {
         change: { type: "rotateExercise", slotID: slot.id, exerciseName: slot.exerciseName },
       });
       continue;
+    }
+    if (slot.prescriptionStyle === "maxEffort") {
+      const latest = newest.flatMap((session) => {
+        if (session.rotation === DELOAD_WEEK) return [];
+        const exercise = (session.exercises || []).find((candidate) => candidate.slotID === slot.id);
+        return exercise ? [{ session, exercise }] : [];
+      })[0];
+      if (latest?.exercise.exerciseName === slot.exerciseName) {
+        result.push({
+          id: `program.slot.rotate.max-effort-weekly.v${COACHING_RULE_VERSION}:${evidenceKey}-${latest.session.id}-${slot.id}`,
+          ruleID: `program.slot.rotate.max-effort-weekly.v${COACHING_RULE_VERSION}`, priority: 65,
+          title: `Rotate ${slot.exerciseName}`,
+          explanation: `The latest max-effort exposure used ${slot.exerciseName}. Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.`,
+          change: { type: "rotateExercise", slotID: slot.id, exerciseName: slot.exerciseName },
+        });
+        continue;
+      }
     }
     const threshold = slot.role === "accessory" ? ACCESSORY_STALL_ROTATION_THRESHOLD : LIFT_STALL_ROTATION_THRESHOLD;
     const stalls = Math.max(0, slot.stallCount || 0);
@@ -3104,7 +3165,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   // rather than gated behind a green streak. They sort below every readiness
   // rule, so the light stays the headline.
   const programChanges = [
-    ...rotationSuggestions(program, evidenceKey),
+    ...rotationSuggestions(program, sessions, evidenceKey),
     ...linearStageSuggestions(program, sessions, evidenceKey),
     ...verticalPullPromotions(program),
   ];

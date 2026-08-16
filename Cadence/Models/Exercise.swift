@@ -229,6 +229,18 @@ final class Exercise {
     var isAvailableForProgramming: Bool { gateStatus != .shelved }
 
     var isMainLift: Bool { category == .main }
+
+    func matchesSearch(_ query: String) -> Bool {
+        ExerciseSearch.matches(
+            query,
+            name: name,
+            movementGroup: movementGroup,
+            movementPatternName: movementPattern.name,
+            exerciseType: typeRaw,
+            aliases: aliases,
+            strategyTags: strategyTags
+        )
+    }
 }
 
 extension Array where Element == Exercise {

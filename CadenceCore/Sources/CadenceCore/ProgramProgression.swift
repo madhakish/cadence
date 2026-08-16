@@ -599,6 +599,29 @@ public enum ProgramProgression {
         }
     }
 
+    /// Target for a newly selected max-effort variation. A returning special
+    /// exercise resumes from its own completed single plus the normal
+    /// upper/lower increment; a never-seen variation opens conservatively from
+    /// the slot's estimated max. The old variation's target is never inherited.
+    /// Mirrors web `maxEffortVariationTarget`.
+    public static func maxEffortVariationTarget(
+        priorBestSingleLb: Double?, estimatedMaxLb: Double,
+        fallbackBaseLb: Double, movementGroup: String?,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> Double {
+        let lower = movementGroup == "squat" || movementGroup == "hinge"
+        let increment = lower ? 10.0 : 5.0
+        let seed: Double
+        if let priorBestSingleLb, priorBestSingleLb > 0 {
+            seed = priorBestSingleLb + increment
+        } else if estimatedMaxLb > 0 {
+            seed = estimatedMaxLb * 0.90
+        } else {
+            seed = fallbackBaseLb
+        }
+        return Swift.max(0, Weight.round(seed, to: roundingLb))
+    }
+
     /// Extra sets the next VOLUME rotation carries after a held cycle, so the
     /// needle still moves when the weight cannot. Derived from persisted
     /// state alone — the Home card and the created session agree by

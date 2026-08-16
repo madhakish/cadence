@@ -98,6 +98,7 @@ export async function createSessionFromTrack(track) {
     perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex),
   }));
   const se = { order: 0, exerciseName: track.exerciseName, notes: "", phase: sug.phase || null,
+    barId: ex?.type === "barbell" ? C.barId(bar) : null,
     targetWeightLb: sug.weightLb, plannedWeightLb: workingLb, plannedSets: sug.sets, plannedReps: sug.reps, sets };
   const id = await Sessions.save({ date: iso(new Date()), notes: "", isCompleted: false, gymId: gym?.id || null, gymName: gym?.name || null, exercises: [se] });
   return id;
@@ -976,7 +977,7 @@ export async function openSession(id) {
         const paint = () => {
           ui.clear(results);
           const term = search.value.trim().toLowerCase();
-          const visible = term ? all.filter((exercise) => [exercise.name, exercise.movementGroup].some((value) => String(value || "").toLowerCase().includes(term))) : all;
+          const visible = term ? all.filter((exercise) => C.exerciseMatchesSearch(exercise, term)) : all;
           for (const cat of CATEGORIES) {
             const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
             if (!inCat.length) continue;
@@ -984,7 +985,9 @@ export async function openSession(id) {
             for (const e of inCat) {
               results.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px", justifyContent: "space-between" },
                 onClick: () => {
-                  session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null, plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+                  session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null,
+                    barId: e.type === "barbell" ? C.barId(C.barById(gymState.value?.defaultBarId)) : null,
+                    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
                   api.close(); save(); renderBody(body);
                 } },
                 ui.h("span", { text: e.name }), e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : ui.h("span")));
@@ -1979,6 +1982,7 @@ export async function createSessionFromProgramDay(program, day) {
         C.barLabelLb(bar))
       : rawFallback;
     exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek,
+      barId: ex?.type === "barbell" ? C.barId(bar) : null,
       targetWeightLb: plan.weightLb, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps,
       fallbackWeightLb, prescriptionStyle: lift.prescription || "automatic",
       programRole: lift.role, programSlotId: lift.id, sets });
@@ -2007,6 +2011,7 @@ export async function createSessionFromProgramDay(program, day) {
       sets.push(set);
     }
     exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null,
+      barId: ex?.type === "barbell" ? C.barId(bar) : null,
       targetWeightLb: isTimed ? 0 : acc.weightLb, plannedWeightLb: isTimed ? 0 : weightLb,
       plannedSets: effectiveSets, plannedReps: isTimed ? 1 : acc.currentReps,
       plannedDurationSeconds: isTimed ? (acc.targetSeconds || 30) : null,

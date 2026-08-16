@@ -7,6 +7,7 @@ import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, Coachi
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, planningBase, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
 import { gymTagShownOn, markGymTagShown } from "../gym-tag.js";
+import { exerciseDetail } from "./settings.js";
 
 const barbellPrescriptionView = (achievedLb, targetLb, unit, gym, stationDenomination = null, movementGroup = null) => {
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
@@ -129,7 +130,7 @@ export async function render(host) {
     const visible = report.recommendations.filter((recommendation) => !handled.has(recommendation.id));
     const latest = report.rotations.at(-1);
     const coach = ui.h("button", { class: "card row wide coach-summary",
-      onClick: () => showCoachDetail({ program, report, visible, latest, allExercises }) },
+      onClick: () => showCoachDetail({ program, report, visible, latest, allExercises, completed }) },
         ui.h("div", { class: "lead" },
           ui.h("span", { class: `title readiness-${report.currentReadiness}`, text: `Coach · ${report.currentReadiness[0].toUpperCase() + report.currentReadiness.slice(1)}` }),
           ui.h("span", { class: "sub", text: latest?.reasons?.[0] || "Bank program days to establish an output baseline." })),
@@ -186,7 +187,10 @@ export async function render(host) {
       plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main" || C.buildsOwnSessionShape(l.prescription || "automatic"), barLb, program.roundingLb, gym, program.currentWeek);
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
         ui.h("div", { class: "lead" },
-          ui.h("span", { class: "title", text: l.exerciseName }),
+          ex ? ui.h("button", { class: "title title-button", text: l.exerciseName,
+            "aria-label": `${l.exerciseName} — history, program cycle, and settings`,
+            onClick: () => exerciseDetail(ex) })
+            : ui.h("span", { class: "title", text: l.exerciseName }),
           ui.slotBadge(l, program.currentWeek, ex?.movementGroup, program.focus)),
         ui.h("div", { style: { textAlign: "right" } },
           ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) }),
@@ -237,7 +241,7 @@ export async function render(host) {
   }
 }
 
-function showCoachDetail({ program, report, visible, latest, allExercises }) {
+function showCoachDetail({ program, report, visible, latest, allExercises, completed }) {
   ui.sheet({
     title: "Coach",
     build: (content, api) => {
@@ -256,7 +260,7 @@ function showCoachDetail({ program, report, visible, latest, allExercises }) {
             ui.h("button", { class: "btn primary", text: "Apply", onClick: async () => {
               const proposed = structuredClone(program);
               try {
-                const message = await applyCoachingRecommendation(proposed, recommendation, allExercises);
+                const message = await applyCoachingRecommendation(proposed, recommendation, allExercises, completed);
                 await Programs.saveWithDecision(proposed,
                   coachingDecision(proposed, recommendation, "accepted", latest?.reasons || [], program));
                 api.close(); ui.toast(message); ui.nav.refresh();
@@ -325,7 +329,10 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
         plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main" || C.buildsOwnSessionShape(l.prescription || "automatic"), barLb, program.roundingLb, gym, program.currentWeek);
         liftCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
           ui.h("div", { class: "lead" },
-            ui.h("span", { class: "title", text: l.exerciseName }),
+            ex ? ui.h("button", { class: "title title-button", text: l.exerciseName,
+              "aria-label": `${l.exerciseName} — history, program cycle, and settings`,
+              onClick: () => exerciseDetail(ex) })
+              : ui.h("span", { class: "title", text: l.exerciseName }),
             ui.slotBadge(l, program.currentWeek, ex?.movementGroup, program.focus)),
           ui.h("div", { style: { textAlign: "right" } },
             ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) }),
@@ -346,10 +353,14 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
         body.append(ui.h("div", { class: "section-title", text: "Accessories" }));
         const accCard = ui.h("div", { class: "card" });
         for (const a of C.orderedProgramSlots(day.accessories)) {
-          const type = exMap.get(a.exerciseName)?.type;
+          const accessoryExercise = exMap.get(a.exerciseName);
+          const type = accessoryExercise?.type;
           const isTimed = type === "timed" || type === "conditioning";
           accCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
-            ui.h("span", { class: "title", text: a.exerciseName }),
+            accessoryExercise ? ui.h("button", { class: "title title-button", text: a.exerciseName,
+              "aria-label": `${a.exerciseName} — history, program cycle, and settings`,
+              onClick: () => exerciseDetail(accessoryExercise) })
+              : ui.h("span", { class: "title", text: a.exerciseName }),
             ui.h("span", { class: "sub mono", text: isTimed
               ? `${a.sets} × ${C.cardioDurationLabel(a.targetSeconds || 30)}`
               : (a.weightLb > 0 ? `${a.sets}×${a.currentReps} @ ${ui.fmtWeight(a.weightLb)}` : `${a.sets}×${a.currentReps}`) })));

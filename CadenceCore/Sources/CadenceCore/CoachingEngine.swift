@@ -463,6 +463,15 @@ public enum CoachingEngine {
         .core: ["Hanging Knee Raise", "Dead Bug", "Plank"],
     ]
 
+    /// Seeded special-exercise rotations for max-effort slots. This is a
+    /// deliberately small methodology catalog, not a generic swap list:
+    /// compatible custom variations remain the fallback. Mirrors web
+    /// `PREFERRED_MAX_EFFORT_EXERCISES`.
+    public static let preferredMaxEffortExerciseNames: [MovementPattern: [String]] = [
+        .squat: ["Low Box Squat", "Front Box Squat", "Paused Box Squat"],
+        .horizontalPress: ["Floor Press", "Close-Grip Floor Press"],
+    ]
+
     /// The rep window a coach-added accessory slot opens with, by pattern.
     /// Mirrors core.js defaultRepRange.
     public static func defaultRepRange(for pattern: MovementPattern) -> (minReps: Int, maxReps: Int) {
@@ -775,7 +784,7 @@ public enum CoachingEngine {
         // readiness verdict rather than gated behind a green streak. They sort
         // below every readiness rule, so the light stays the headline.
         let programChanges = (
-            rotationSuggestions(program: program, evidenceKey: evidenceKey)
+            rotationSuggestions(program: program, sessions: sessions, evidenceKey: evidenceKey)
             + linearStageSuggestions(program: program, sessions: sessions, evidenceKey: evidenceKey)
             + verticalPullPromotions(program: program)
         )
@@ -902,9 +911,10 @@ public enum CoachingEngine {
     /// making. Both are suggestions — the engine names the slot, the client
     /// resolves a compatible variation, and the athlete decides.
     private static func rotationSuggestions(
-        program: CoachingProgramSnapshot, evidenceKey: String
+        program: CoachingProgramSnapshot, sessions: [CoachingSessionSnapshot], evidenceKey: String
     ) -> [CoachingRecommendation] {
         var result: [CoachingRecommendation] = []
+        let newest = sessions.sorted { $0.date > $1.date }
         for slot in program.slots.sorted(by: { ($0.dayIndex, $0.id) < ($1.dayIndex, $1.id) }) {
             guard !slot.pattern.isConditioning else { continue }
             if slot.exerciseIsShelved {
@@ -915,6 +925,23 @@ public enum CoachingEngine {
                     explanation: "This slot still prescribes \(slot.exerciseName), which you have shelved. Rotate it to a compatible variation of the same movement, or reopen the exercise.",
                     change: .rotateExercise(slotID: slot.id, exerciseName: slot.exerciseName),
                     evidenceKey: "\(evidenceKey)-\(slot.id)"
+                ))
+                continue
+            }
+            if slot.prescriptionStyle == .maxEffort,
+               let latestExposure = newest.lazy.compactMap({ session -> (CoachingSessionSnapshot, CoachingExerciseSnapshot)? in
+                   guard session.rotation != ProgramProgression.deloadWeek,
+                         let exercise = session.exercises.first(where: { $0.slotID == slot.id }) else { return nil }
+                   return (session, exercise)
+               }).first,
+               latestExposure.1.exerciseName == slot.exerciseName {
+                result.append(CoachingRecommendation(
+                    ruleID: "program.slot.rotate.max-effort-weekly.v\(ruleVersion)",
+                    priority: 65,
+                    title: "Rotate \(slot.exerciseName)",
+                    explanation: "The latest max-effort exposure used \(slot.exerciseName). Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.",
+                    change: .rotateExercise(slotID: slot.id, exerciseName: slot.exerciseName),
+                    evidenceKey: "\(evidenceKey)-\(latestExposure.0.id)-\(slot.id)"
                 ))
                 continue
             }

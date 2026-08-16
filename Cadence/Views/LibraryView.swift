@@ -12,14 +12,7 @@ struct LibraryView: View {
 
     private var visibleExercises: [Exercise] {
         guard !search.isEmpty else { return exercises }
-        return exercises.filter {
-            $0.name.localizedCaseInsensitiveContains(search)
-                || $0.movementGroup.localizedCaseInsensitiveContains(search)
-                || $0.movementPattern.name.localizedCaseInsensitiveContains(search)
-                || $0.typeRaw.localizedCaseInsensitiveContains(search)
-                || $0.aliases.contains(where: { $0.localizedCaseInsensitiveContains(search) })
-                || $0.strategyTags.contains(where: { $0.localizedCaseInsensitiveContains(search) })
-        }
+        return exercises.filter { $0.matchesSearch(search) }
     }
 
     var body: some View {
@@ -87,12 +80,70 @@ struct ExerciseDetailView: View {
     @Bindable var exercise: Exercise
     @Query private var programs: [Program]
     @Query private var settingsList: [AppSettings]
+    @Query private var gyms: [Gym]
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted },
            sort: \WorkoutSession.date, order: .reverse)
     private var completed: [WorkoutSession]
 
     private var profile: AnatomyData.Profile? {
         AnatomyData.muscleProfile(name: exercise.name, movementGroup: exercise.movementGroup)
+    }
+
+    private struct CycleMembership: Identifiable {
+        let program: Program
+        let day: ProgramDay
+        let lift: ProgramLift
+        var id: String { "\(program.id):\(lift.id)" }
+    }
+
+    private var cycleMemberships: [CycleMembership] {
+        programs.flatMap { program in
+            program.orderedDays.flatMap { day in
+                day.orderedLifts.compactMap { lift in
+                    lift.exerciseName == exercise.name
+                        ? CycleMembership(program: program, day: day, lift: lift)
+                        : nil
+                }
+            }
+        }
+    }
+
+    private var defaultGym: Gym? { gyms.first(where: \.isDefault) ?? gyms.first }
+
+    private func cyclePlan(
+        _ item: CycleMembership, phase: CyclePhase, planningBase: Double
+    ) -> SessionPlan {
+        let lift = item.lift
+        let program = item.program
+        let raw = ProgramEngine.programPlan(
+            for: CycleState(
+                cycleNumber: program.cycleNumber,
+                baseWeightLb: planningBase,
+                nextPhase: phase,
+                incrementLb: 0
+            ),
+            programRoundingLb: program.roundingLb,
+            exerciseType: exercise.typeRaw,
+            movementGroup: exercise.movementGroup,
+            role: lift.role,
+            focus: program.focus,
+            prescriptionStyle: lift.prescription,
+            configuration: lift.prescriptionConfiguration(movementGroup: exercise.movementGroup),
+            addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program)
+        )
+        let weight = ProgramSession.achievableWeight(
+            raw.weightLb,
+            exercise: exercise,
+            isMain: lift.role == .main || lift.prescription.buildsOwnSessionShape,
+            gym: defaultGym,
+            bar: defaultGym?.defaultBar ?? .bar45lb,
+            stepLb: program.roundingLb,
+            phase: phase
+        )
+        return SessionPlan(
+            weightLb: weight, sets: raw.sets, reps: raw.reps,
+            phase: raw.phase, cycleNumber: raw.cycleNumber
+        )
     }
 
     /// "Program · Day (role)" for every slot this exercise fills.
@@ -168,6 +219,52 @@ struct ExerciseDetailView: View {
                     Text("None").foregroundStyle(.secondary)
                 } else {
                     ForEach(memberships, id: \.self) { Text($0) }
+                }
+            }
+
+            if !cycleMemberships.isEmpty {
+                Section("Program cycle") {
+                    ForEach(cycleMemberships) { item in
+                        let planningBase = ProgramSession.planningBase(
+                            for: item.lift, exercise: exercise,
+                            program: item.program, sessions: completed
+                        )
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("\(item.program.name) · \(item.day.name)")
+                                .font(.subheadline.bold())
+                            ForEach(CyclePhase.allCases, id: \.rawValue) { phase in
+                                let plan = cyclePlan(item, phase: phase, planningBase: planningBase)
+                                let phaseLabel = ProgramEngine.slotPhaseLabel(
+                                    rotation: phase.rawValue,
+                                    role: item.lift.role,
+                                    prescriptionStyle: item.lift.prescription,
+                                    movementGroup: exercise.movementGroup,
+                                    focus: item.program.focus
+                                ) ?? "R\(phase.rawValue)"
+                                HStack(alignment: .firstTextBaseline) {
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(phaseLabel).font(.caption.bold())
+                                        Text(ProgramEngine.rotationContextLabel(
+                                            rotation: phase.rawValue,
+                                            currentRotation: item.program.currentWeek
+                                        ))
+                                            .font(.caption2)
+                                            .foregroundStyle(
+                                                phase.rawValue == item.program.currentWeek
+                                                    ? Theme.accent : .secondary
+                                            )
+                                    }
+                                    Spacer()
+                                    Text(plan.weightLb > 0 ? settingsList.unitDisplay.format(lb: plan.weightLb) : "Bodyweight")
+                                        .font(.subheadline.bold().monospacedDigit())
+                                    Text("\(plan.sets)×\(plan.reps)")
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
             }
 

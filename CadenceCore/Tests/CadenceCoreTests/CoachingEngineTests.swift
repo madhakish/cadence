@@ -234,6 +234,18 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertEqual(suggestion.ruleID, "program.slot.rotate.stalled.v\(CoachingEngine.ruleVersion)")
     }
 
+    func testCompletedMaxEffortExposureProposesWeeklySpecialExerciseRotation() throws {
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") { $0.prescriptionStyle = .maxEffort },
+            sessions: greenRotations()
+        )
+        let suggestion = try XCTUnwrap(report.recommendations.first {
+            $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
+        })
+        XCTAssertEqual(rotationSlotID(suggestion), "squat")
+        XCTAssertTrue(suggestion.explanation.contains("another special exercise"))
+    }
+
     func testStallSuggestionSurvivesARedRotationButNeverLeadsIt() {
         var sessions = (0...3).map {
             session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day, weight: 100)

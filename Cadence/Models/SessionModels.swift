@@ -103,7 +103,9 @@ final class WorkoutSession {
 final class SessionExercise {
     var order: Int
     var notes: String
-    /// Optional per-exercise override. Nil follows the session gym's default.
+    /// Bar actually selected for this entry. New barbell entries stamp the
+    /// current gym default so later gym-setting edits cannot reinterpret old
+    /// plate stacks. Nil remains valid for legacy/non-barbell history.
     var barID: String?
     var exercise: Exercise?
     var session: WorkoutSession?

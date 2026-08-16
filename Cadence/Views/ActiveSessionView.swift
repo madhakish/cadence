@@ -440,6 +440,9 @@ struct ActiveSessionView: View {
 
     private func addExercise(_ exercise: Exercise) {
         let entry = SessionExercise(order: session.exercises.count, exercise: exercise)
+        if exercise.type == .barbell {
+            entry.barID = (gym?.defaultBar ?? .bar45lb).id
+        }
         context.insert(entry)
         session.exercises.append(entry)
         PersistenceErrorCenter.shared.save(context, operation: "Adding the exercise")
@@ -1958,11 +1961,7 @@ private struct ExercisePickerSheet: View {
     let onPick: (Exercise) -> Void
 
     private var visible: [Exercise] {
-        search.isEmpty ? exercises : exercises.filter {
-            $0.name.localizedCaseInsensitiveContains(search)
-                || $0.movementGroup.localizedCaseInsensitiveContains(search)
-                || $0.typeRaw.localizedCaseInsensitiveContains(search)
-        }
+        search.isEmpty ? exercises : exercises.filter { $0.matchesSearch(search) }
     }
 
     var body: some View {

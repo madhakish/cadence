@@ -322,9 +322,7 @@ function pickExerciseSheet(onPick) {
         ui.clear(results);
         const term = search.value.trim().toLowerCase();
         const available = all.filter(C.exerciseIsAvailableForProgramming);
-        const visible = term ? available.filter((exercise) => [exercise.name, exercise.movementGroup, exercise.type,
-          C.movementPatternName(exercise.movementPattern), ...(exercise.aliases || []), ...(exercise.strategyTags || [])]
-          .some((value) => String(value || "").toLowerCase().includes(term))) : available;
+        const visible = term ? available.filter((exercise) => C.exerciseMatchesSearch(exercise, term)) : available;
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
           if (!inCat.length) continue;
@@ -346,6 +344,9 @@ function removeDay(p, day) {
 }
 
 function orderedSlots(slots = []) {
+  if (slots.some((slot) => slot.role === "main" || slot.role === "complementary")) {
+    return C.orderedProgramSlots(slots);
+  }
   return [...slots].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
     || String(a.exerciseName || a.name || "").localeCompare(String(b.exerciseName || b.name || "")));
 }
@@ -790,9 +791,7 @@ function exerciseLibrary(exercises) {
       const paint = () => {
         ui.clear(results);
         const term = search.value.trim().toLowerCase();
-        const visible = term ? exercises.filter((e) => [e.name, e.movementGroup, e.type,
-          C.movementPatternName(e.movementPattern), ...(e.aliases || []), ...(e.strategyTags || [])]
-          .some((value) => String(value || "").toLowerCase().includes(term))) : exercises;
+        const visible = term ? exercises.filter((exercise) => C.exerciseMatchesSearch(exercise, term)) : exercises;
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
           if (!inCat.length) continue;
@@ -864,9 +863,13 @@ function newExerciseSheet(exercises, onSaved) {
 async function exerciseInsight(wrap, e) {
   const [programs, completed] = await Promise.all([Programs.all(), Sessions.completed()]);
   const memberships = [];
+  const cycleMemberships = [];
   for (const p of programs) {
     for (const d of p.days || []) {
-      for (const l of d.lifts || []) if (l.exerciseName === e.name) memberships.push(`${p.name} · ${d.name} (${l.role})`);
+      for (const l of d.lifts || []) if (l.exerciseName === e.name) {
+        memberships.push(`${p.name} · ${d.name} (${l.role})`);
+        cycleMemberships.push({ program: p, day: d, lift: l });
+      }
       for (const a of d.accessories || []) if (a.exerciseName === e.name) memberships.push(`${p.name} · ${d.name} (accessory)`);
     }
   }
@@ -896,6 +899,34 @@ async function exerciseInsight(wrap, e) {
       ui.h("span", { text: `Top set, last ${series.length}` }), ui.spark(series)));
   }
   wrap.append(card);
+
+  if (cycleMemberships.length) {
+    wrap.append(ui.h("div", { class: "section-title", text: "Program cycle" }));
+    for (const { program, day, lift } of cycleMemberships) {
+      const cycle = ui.h("div", { class: "card" },
+        ui.h("div", { class: "title", style: { marginBottom: "4px" }, text: `${program.name} · ${day.name}` }));
+      for (let rotation = 1; rotation <= C.DELOAD_WEEK; rotation++) {
+        const plan = C.programPlanFor({
+          cycleNumber: program.cycleNumber,
+          baseWeightLb: lift.baseWeightLb,
+          nextPhase: rotation,
+          incrementLb: 0,
+        }, program.roundingLb, e.type, e.movementGroup, lift.role, program.focus,
+        lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 });
+        const phaseLabel = C.slotPhaseLabel(rotation, lift.role, lift.prescription || "automatic",
+          e.movementGroup, program.focus) || `R${rotation}`;
+        cycle.append(ui.h("div", { class: "row" },
+          ui.h("div", { class: "lead" },
+            ui.h("span", { class: "sub", text: phaseLabel }),
+            ui.h("span", { class: rotation === program.currentWeek ? "sub accent" : "sub",
+              text: C.rotationContextLabel(rotation, program.currentWeek) })),
+          ui.h("div", { style: { textAlign: "right" } },
+            ui.h("div", { class: "title mono", text: plan.weightLb > 0 ? ui.fmtWeight(plan.weightLb) : "Bodyweight" }),
+            ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
+      }
+      wrap.append(cycle);
+    }
+  }
 }
 
 // Exported: the logger's exercise titles open the same lift info screen the

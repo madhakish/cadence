@@ -151,6 +151,7 @@ enum CoachingService {
         _ recommendation: CoachingRecommendation,
         for program: Program,
         exercises: [Exercise],
+        sessions: [WorkoutSession] = [],
         evidence: [String],
         context: ModelContext
     ) throws -> String {
@@ -325,7 +326,12 @@ enum CoachingService {
             guard let current = exercises.first(where: { $0.name == exerciseName }) else {
                 throw CoachingApplyError.unknownExercise(exerciseName)
             }
-            guard let replacement = exercises.first(where: {
+            let lift = program.days.flatMap(\.lifts).first(where: { $0.id == slotID })
+            let accessory = program.days.flatMap(\.accessories).first(where: { $0.id == slotID })
+            guard lift != nil || accessory != nil else {
+                throw CoachingApplyError.unknownSlot(exerciseName)
+            }
+            let compatible = exercises.filter {
                 SwapRules.compatible(
                     currentName: current.name, currentCategory: current.categoryRaw,
                     currentLoadBasis: current.loadBasis, currentGroup: current.movementGroup,
@@ -333,16 +339,32 @@ enum CoachingService {
                     candidateLoadBasis: $0.loadBasis, candidateGroup: $0.movementGroup,
                     candidateShelved: $0.isShelved || $0.gateStatus == .shelved
                 )
-            }) else {
+            }
+            let replacement = lift?.prescription == .maxEffort
+                ? preferredMaxEffortVariation(after: current, compatible: compatible)
+                : compatible.first
+            guard let replacement else {
                 throw CoachingApplyError.noVariation(exerciseName)
             }
-            // Same policy as the manual swap gesture: the slot keeps its load
-            // and estimate, because a compatible candidate trains the same
-            // pattern at the same tier and those remain the best prior. The
-            // stall counter does NOT carry — rotating is the answer to the
-            // stall, so inheriting its countdown would deload a lift that has
-            // not yet missed anything.
-            if let lift = program.days.flatMap(\.lifts).first(where: { $0.id == slotID }) {
+            if let lift {
+                if lift.prescription == .maxEffort {
+                    let priorBest = sessions.filter(\.isCompleted)
+                        .flatMap(\.exercises)
+                        .filter { $0.exercise?.name == replacement.name }
+                        .flatMap(\.orderedSets)
+                        .filter {
+                            !$0.isWarmup && $0.status == .completed && $0.reps == 1
+                                && $0.prescriptionBlock.countsAsPrescribedWork
+                        }
+                        .map(\.weightLb).max()
+                    lift.baseWeightLb = ProgramProgression.maxEffortVariationTarget(
+                        priorBestSingleLb: priorBest,
+                        estimatedMaxLb: lift.estimatedMaxLb,
+                        fallbackBaseLb: lift.baseWeightLb,
+                        movementGroup: replacement.movementGroup,
+                        roundingLb: program.roundingLb
+                    )
+                }
                 lift.exerciseName = replacement.name
                 lift.revertToExerciseName = nil
                 lift.stallCount = 0
@@ -363,12 +385,10 @@ enum CoachingService {
                 lift.pendingStallCount = nil
                 lift.pendingLastIncrementLb = nil
                 lift.pendingNote = nil
-            } else if let accessory = program.days.flatMap(\.accessories).first(where: { $0.id == slotID }) {
+            } else if let accessory {
                 accessory.exerciseName = replacement.name
                 accessory.revertToExerciseName = nil
                 accessory.stallCount = 0
-            } else {
-                throw CoachingApplyError.unknownSlot(exerciseName)
             }
             result = "\(exerciseName) → \(replacement.name) for this slot."
         case .hold:
@@ -423,6 +443,19 @@ enum CoachingService {
             if let exercise = available.first(where: { $0.name == name }) { return exercise }
         }
         return available.first { $0.movementPattern == pattern }
+    }
+
+    private static func preferredMaxEffortVariation(
+        after current: Exercise, compatible: [Exercise]
+    ) -> Exercise? {
+        guard let names = CoachingEngine.preferredMaxEffortExerciseNames[current.movementPattern],
+              !names.isEmpty else { return compatible.first }
+        let start = names.firstIndex(of: current.name).map { ($0 + 1) % names.count } ?? 0
+        for offset in 0..<names.count {
+            let name = names[(start + offset) % names.count]
+            if let exercise = compatible.first(where: { $0.name == name }) { return exercise }
+        }
+        return compatible.first
     }
 
     private static func defaultRepRange(_ pattern: MovementPattern) -> (Int, Int) {

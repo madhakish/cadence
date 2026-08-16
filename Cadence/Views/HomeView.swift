@@ -325,7 +325,13 @@ struct HomeView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(alignment: .firstTextBaseline) {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(lift.exerciseName).font(.subheadline.bold())
+                                        NavigationLink {
+                                            ExerciseDetailByNameView(name: lift.exerciseName)
+                                        } label: {
+                                            Text(lift.exerciseName).font(.subheadline.bold())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityHint("Shows exercise history, program cycle, and settings")
                                         SlotPrescriptionBadge(
                                             lift: lift, rotation: program.currentWeek,
                                             movementGroup: exercises.first { $0.name == lift.exerciseName }?.movementGroup,
@@ -532,6 +538,7 @@ struct HomeView: View {
                 recommendation,
                 for: program,
                 exercises: exercises,
+                sessions: completedSessions,
                 evidence: report.rotations.last?.reasons ?? [],
                 context: context
             )
@@ -626,6 +633,9 @@ struct HomeView: View {
         context.insert(session)
 
         let entry = SessionExercise(order: 0, exercise: exercise)
+        if exercise.type == .barbell {
+            entry.barID = (defaultGym?.defaultBar ?? .bar45lb).id
+        }
         let plan = trackPlan(track)
         entry.targetWeightLb = track.suggestion.weightLb
         entry.plannedWeightLb = plan.weightLb

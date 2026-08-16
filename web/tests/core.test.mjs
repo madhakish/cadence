@@ -1289,6 +1289,16 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(C.movementPattern("Back Extension", "hinge"), "hipExtension", "back extensions classify as hip extension");
   eq(C.movementPattern("Overhead Press", "press"), "verticalPress", "OHP classifies vertically");
 
+  const searchable = { name: "Nordic Hamstring Curl", movementGroup: "hinge", movementPattern: "kneeFlexion",
+    type: "bodyweight", aliases: ["Nordic curl"], strategyTags: ["posterior-chain"] };
+  for (const term of ["nordic ham", "HINGE", "isolation", "body", "nordic curl", "posterior"]) {
+    ok(C.exerciseMatchesSearch(searchable, term), `shared exercise search matches ${term}`);
+  }
+  ok(C.exerciseMatchesSearch({ name: "Dégagé Step", movementGroup: "squat", movementPattern: "unilateralKnee", type: "bodyweight" }, "degage"),
+    "exercise search is diacritic-insensitive");
+  ok(C.exerciseMatchesSearch(searchable, "  ") && !C.exerciseMatchesSearch(searchable, "row"),
+    "empty search includes everything and unrelated text is rejected");
+
   const coachingProgram = {
     id: "program", expectedDayIndexes: [0, 1, 2, 3],
     slots: [
@@ -1453,6 +1463,12 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   suggestion = report.recommendations.find(rotationOf);
   ok(!!suggestion, "one non-success cycle on a lift slot proposes a rotation");
   eq(suggestion.ruleID, `program.slot.rotate.stalled.v${C.COACHING_RULE_VERSION}`, "stalled slots get their own rule");
+
+  report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), greenSessions);
+  suggestion = report.recommendations.find((candidate) =>
+    candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`);
+  ok(!!suggestion && suggestion.change.slotID === "squat",
+    "a completed max-effort exposure proposes a weekly special-exercise rotation");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
@@ -2326,16 +2342,44 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     { exerciseName: "B Lift", role: "complementary", order: 2 },
     { exerciseName: "A Lift", role: "main", order: 5 },
   ];
-  ok(C.orderedProgramSlots(authored).map((s) => s.exerciseName).join(",") === "B Lift,A Lift",
-    "authored orders win over roles and names");
+  ok(C.orderedProgramSlots(authored).map((s) => s.exerciseName).join(",") === "A Lift,B Lift",
+    "main work stays ahead of complementary work even when authored orders cross roles");
   const legacy = [
     { exerciseName: "Z Complement", role: "complementary", order: 0 },
     { exerciseName: "A Main", role: "main", order: 0 },
   ];
   ok(C.orderedProgramSlots(legacy, true)[0].exerciseName === "A Main",
-    "legacy all-equal orders keep main-first when the caller asks");
+    "legacy all-equal orders keep main-first");
   ok(C.orderedProgramSlots(legacy)[0].exerciseName === "A Main",
-    "without role awareness, equal orders tie-break on ordinal name");
+    "all callers share the same role-first ordering");
+  const sameRole = [
+    { exerciseName: "Second Main", role: "main", order: 2 },
+    { exerciseName: "First Main", role: "main", order: 1 },
+  ];
+  ok(C.orderedProgramSlots(sameRole)[0].exerciseName === "First Main",
+    "authored order still wins within the same role");
+}
+
+// ---- Exercise-detail rotation context ----
+{
+  eq(C.rotationContextLabel(1, 2), "Previous", "R1 is previous while R2 is current");
+  eq(C.rotationContextLabel(2, 2), "Current", "R2 is current");
+  eq(C.rotationContextLabel(3, 2), "Next", "R3 is next");
+  eq(C.rotationContextLabel(4, 2), "Recovery", "R4 is always the recovery row");
+  eq(C.rotationContextLabel(1, 3), "Next cycle", "R1 follows R3 after recovery");
+  eq(C.rotationContextLabel(4, 4), "Current recovery", "current R4 is named as recovery");
+}
+
+// ---- Max-effort variation targets: exercise-specific, never inherited ----
+{
+  eq(C.maxEffortVariationTarget(315, 405, 365, "squat", 5), 325,
+    "a returning lower-body variation adds 10 to its own best single");
+  eq(C.maxEffortVariationTarget(225, 300, 275, "press", 5), 230,
+    "a returning upper-body variation adds 5 to its own best single");
+  eq(C.maxEffortVariationTarget(null, 405, 365, "squat", 5), 365,
+    "an unseen variation opens at 90% of the current estimate");
+  eq(C.maxEffortVariationTarget(null, 0, 275, "press", 5), 275,
+    "missing estimates use the explicit fallback base");
 }
 
 // ---- Vertical-pull tier promotion (mirrors CoachingEngineTests) ----

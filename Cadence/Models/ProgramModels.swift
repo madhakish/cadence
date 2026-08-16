@@ -117,17 +117,15 @@ final class ProgramDay {
         self.accessories = []
     }
 
-    /// The coach's explicit order. Legacy stores whose slots predate the field
-    /// retain the old main-first behavior until the day is reordered once.
+    /// Main work first, then complementary work. Explicit order is retained
+    /// inside each role so assistance cannot move ahead of the main lift.
     var orderedLifts: [ProgramLift] {
-        let unique = uniqueProgramModels(lifts)
-        if Set(unique.map(\.order)).count <= 1 {
-            return unique.sorted {
-                ($0.role == .main ? 0 : 1, $0.exerciseName)
-                    < ($1.role == .main ? 0 : 1, $1.exerciseName)
-            }
+        uniqueProgramModels(lifts).sorted {
+            ProgramEngine.programSlotPrecedes(
+                lhsRole: $0.roleRaw, lhsOrder: $0.order, lhsName: $0.exerciseName,
+                rhsRole: $1.roleRaw, rhsOrder: $1.order, rhsName: $1.exerciseName
+            )
         }
-        return unique.sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
     }
     var orderedAccessories: [ProgramAccessory] {
         uniqueProgramModels(accessories).sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }

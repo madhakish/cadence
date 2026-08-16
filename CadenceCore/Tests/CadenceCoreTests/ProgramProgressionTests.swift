@@ -14,6 +14,25 @@ final class ProgramProgressionTests: XCTestCase {
         ProgramLiftState(baseWeightLb: 175, estimatedMaxLb: 226, stallCount: 0, role: .main, lastIncrementLb: 0)
     }
 
+    func testMaxEffortVariationTargetUsesThatVariationsOwnHistory() {
+        XCTAssertEqual(P.maxEffortVariationTarget(
+            priorBestSingleLb: 315, estimatedMaxLb: 405, fallbackBaseLb: 365,
+            movementGroup: "squat", roundingLb: 5
+        ), 325)
+        XCTAssertEqual(P.maxEffortVariationTarget(
+            priorBestSingleLb: 225, estimatedMaxLb: 300, fallbackBaseLb: 275,
+            movementGroup: "press", roundingLb: 5
+        ), 230)
+        XCTAssertEqual(P.maxEffortVariationTarget(
+            priorBestSingleLb: nil, estimatedMaxLb: 405, fallbackBaseLb: 365,
+            movementGroup: "squat", roundingLb: 5
+        ), 365, "an unseen variation opens at 90% of the current estimate")
+        XCTAssertEqual(P.maxEffortVariationTarget(
+            priorBestSingleLb: nil, estimatedMaxLb: 0, fallbackBaseLb: 275,
+            movementGroup: "press", roundingLb: 5
+        ), 275, "missing estimates fall back without carrying a different PR")
+    }
+
     // [INV-PLATES-ARE-THE-CURRENCY] The twin stack grades AT plan — closing
     // the stall trap where a kg gym's honest session read as a below-plan miss.
     func testTwinStackGradesAtPlan() {
