@@ -289,6 +289,50 @@ for (const track of [
     }, seededExercises);
   } catch { refused = true; }
   ok(refused, "an exercise the library no longer has refuses rather than guessing a replacement");
+
+  const manuallyChanged = structuredClone(original);
+  const liveSlot = manuallyChanged.days.flatMap((day) => day.lifts || [])
+    .find((item) => item.id === slot.id);
+  const manualReplacement = seededExercises.find((candidate) =>
+    candidate.name !== before.name && C.swapCompatible(from, candidate));
+  ok(!!manualReplacement, "the fixture has a compatible manual replacement");
+  liveSlot.exerciseName = manualReplacement.name;
+  refused = false;
+  try {
+    await coach.applyCoachingRecommendation(manuallyChanged, {
+      id: "rotate-stale", ruleID: "program.slot.rotate.stalled", title: "Stuck",
+      explanation: "Fixture recommendation",
+      change: { type: "rotateExercise", slotID: slot.id, exerciseName: before.name },
+    }, seededExercises);
+  } catch { refused = true; }
+  ok(refused && liveSlot.exerciseName === manualReplacement.name,
+    "a stale recommendation never overwrites a manual slot change");
+}
+
+// A program-level equipment boundary applies to automatic coaching changes.
+// The alphabetically first compatible candidate is deliberately a machine so
+// this proves the adapter filters before its deterministic ranking.
+{
+  const program = {
+    equipmentPolicy: "freeWeightsOnly", roundingLb: 5,
+    days: [{ name: "Anchor", lifts: [{
+      id: "policy-lift", exerciseName: "Current Squat", role: "main",
+      prescription: "automatic", baseWeightLb: 100, estimatedMaxLb: 150,
+      stallCount: 1, lastIncrementLb: 0,
+    }], accessories: [] }],
+  };
+  const exercises = [
+    { name: "Current Squat", category: "Main", type: "barbell", movementGroup: "squat" },
+    { name: "A Machine Squat", category: "Main", type: "machine", movementGroup: "squat" },
+    { name: "Z Free Squat", category: "Main", type: "barbell", movementGroup: "squat" },
+  ];
+  await coach.applyCoachingRecommendation(program, {
+    id: "rotate-policy", ruleID: "program.slot.rotate.stalled", title: "Stuck",
+    explanation: "Fixture recommendation",
+    change: { type: "rotateExercise", slotID: "policy-lift", exerciseName: "Current Squat" },
+  }, exercises);
+  ok(program.days[0].lifts[0].exerciseName === "Z Free Squat",
+    "a free-weight program never accepts a machine coaching substitution");
 }
 
 // The vertical-pull promotion crosses the tier: the machine accessory retires
@@ -367,7 +411,10 @@ for (const track of [
     }], accessories: [] }],
   };
   const history = [{ isCompleted: true, exercises: [{ exerciseName: "Front Box Squat", sets: [
-    { weightLb: 315, reps: 1, isWarmup: false, status: "completed", prescriptionBlock: "work" },
+    { weightLb: 350, reps: 1, isWarmup: false, status: "completed",
+      prescriptionBlock: "work", flags: ["grindy"] },
+    { weightLb: 315, reps: 1, isWarmup: false, status: "completed",
+      prescriptionBlock: "work", flags: ["clean"] },
   ] }] }];
   await coach.applyCoachingRecommendation(proposed, {
     id: "rotate-me-weekly", ruleID: "program.slot.rotate.max-effort-weekly.v2",
@@ -378,7 +425,7 @@ for (const track of [
   ok(rotated.exerciseName === "Front Box Squat",
     "max-effort rotation follows the authored special-exercise sequence");
   ok(rotated.baseWeightLb === 325,
-    "a returning variation targets its own 315 single plus 10, not the outgoing 365 target");
+    "a returning variation uses its clean 315 single, not the outgoing target or a grindy 350");
   ok(rotated.stallCount === 0 && rotated.lastIncrementLb === 0,
     "the new variation starts without inherited stall or earned-increment state");
 }
@@ -1009,7 +1056,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // Every other assertion here compares against the constant, so a JS-only bump
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
-ok(db.BACKUP_SCHEMA_VERSION === 8, `backup schema is pinned at 8 (got ${db.BACKUP_SCHEMA_VERSION})`);
+ok(db.BACKUP_SCHEMA_VERSION === 9, `backup schema is pinned at 9 (got ${db.BACKUP_SCHEMA_VERSION})`);
 
 // An app must never write a backup it cannot itself restore. A corrupted or
 // out-of-range birthYear is clamped to the not-set sentinel on the way through
@@ -1472,7 +1519,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 8, "climbed flights ship inside the current backup schema");
+    ok(climbBundle.schemaVersion === 9, "climbed flights ship inside the current backup schema");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -3293,7 +3340,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const stable = (v) => (v && typeof v === "object" && !Array.isArray(v))
     ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])]))
     : Array.isArray(v) ? v.map(stable) : v;
-  // The generated fixture is the current V3 portable contract. Importing and
+  // The generated fixture is the current portable contract. Importing and
   // re-exporting it must preserve every field, including coaching decisions
   // and immutable target/planned/performed snapshots.
   const canon = (bundle) => {

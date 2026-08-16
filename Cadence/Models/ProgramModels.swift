@@ -49,6 +49,9 @@ final class Program {
     var reliableHistoryStart: Date?
     var preferredSessionSpacingDays: Int = 3
     var maximumAddedSetsPerRotation: Int = 6
+    /// Automatic exercise selection may use any equipment unless a program
+    /// explicitly narrows itself to free-weight/bodyweight work.
+    var equipmentPolicyRaw: String = "any"
     @Relationship(deleteRule: .cascade, inverse: \ProgramDay.program)
     var days: [ProgramDay]
     var createdAt: Date
@@ -66,6 +69,7 @@ final class Program {
         self.reliableHistoryStart = nil
         self.preferredSessionSpacingDays = 3
         self.maximumAddedSetsPerRotation = 6
+        self.equipmentPolicyRaw = "any"
         self.days = []
         self.createdAt = .now
     }
@@ -73,6 +77,11 @@ final class Program {
     var focus: TrainingFocus {
         get { TrainingFocus(rawValue: focusRaw) ?? .strength }
         set { focusRaw = newValue.rawValue }
+    }
+
+    var equipmentPolicy: EquipmentPolicy {
+        get { EquipmentPolicy(rawValue: equipmentPolicyRaw) ?? .any }
+        set { equipmentPolicyRaw = newValue.rawValue }
     }
 
     var orderedDays: [ProgramDay] {
@@ -104,6 +113,8 @@ final class Program {
 final class ProgramDay {
     var name: String
     var order: Int
+    /// Explicit authoring intent. `general` preserves every existing program.
+    var trainingIntentRaw: String = "general"
     var program: Program?
     @Relationship(deleteRule: .cascade, inverse: \ProgramLift.day)
     var lifts: [ProgramLift]
@@ -113,8 +124,14 @@ final class ProgramDay {
     init(name: String, order: Int) {
         self.name = name
         self.order = order
+        self.trainingIntentRaw = "general"
         self.lifts = []
         self.accessories = []
+    }
+
+    var trainingIntent: DayTrainingIntent {
+        get { DayTrainingIntent(rawValue: trainingIntentRaw) ?? .general }
+        set { trainingIntentRaw = newValue.rawValue }
     }
 
     /// Main work first, then complementary work. Explicit order is retained

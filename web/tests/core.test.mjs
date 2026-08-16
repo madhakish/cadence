@@ -1135,6 +1135,15 @@ eq(C.cardioDefaultLoadLb("Ruck"), 20, "[INV-RUCK-CARRIES-ITS-LOAD] a ruck starts
 eq(C.cardioDefaultLoadLb("Sled Push"), null, "sleds vary too much to have an honest default");
 eq(C.cardioDefaultLoadLb("Walk"), null, "unloaded work has no default load");
 eq(C.CARDIO_LOAD_INCREMENT_LB, 10, "[INV-RUCK-CARRIES-ITS-LOAD] packs move in 10 lb steps");
+ok(C.equipmentPolicyAllows("any", "machine"), "legacy programs may use any authored equipment");
+ok(!C.equipmentPolicyAllows("freeWeightsOnly", "machine"),
+  "free-weight programs reject machine coaching substitutions");
+for (const type of ["barbell", "dumbbell", "kettlebell", "bodyweight"]) {
+  ok(C.equipmentPolicyAllows("freeWeightsOnly", type), `free-weight policy allows ${type}`);
+}
+for (const type of ["band", "timed", "conditioning"]) {
+  ok(!C.equipmentPolicyAllows("freeWeightsOnly", type), `free-weight policy rejects ${type}`);
+}
 eq(C.cardioSetLabel(3, 2700, null, 20), "20 lb · 3 mi · 45:00 · 4 mph",
   "[INV-RUCK-CARRIES-ITS-LOAD] the pack weight leads the label");
 eq(C.cardioSetLabel(3, 2700, null, 0), "3 mi · 45:00 · 4 mph", "unloaded work shows no load");
@@ -1405,6 +1414,16 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(!!hamstrings, "hamstring isolation gap is proposed");
   eq(hamstrings.dayIndex, 0, "hamstrings slot onto the squat-led day");
 
+  const qualityOnlyProgram = {
+    ...coachingProgram,
+    slots: coachingProgram.slots.map((slot, index) => ({
+      ...slot, trainingIntent: index % 2 === 0 ? "technique" : "explosive",
+    })),
+  };
+  report = C.evaluateCoaching(qualityOnlyProgram, sessions);
+  ok(!report.recommendations.some((candidate) => candidate.change.type === "capacityPlan"),
+    "technique and explosive days never become automatic accessory-volume sinks");
+
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3));
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(2, dayIndex, 12 + dayIndex * 3, 105, dayIndex === 0 ? 90 : 105));
@@ -1464,11 +1483,22 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(!!suggestion, "one non-success cycle on a lift slot proposes a rotation");
   eq(suggestion.ruleID, `program.slot.rotate.stalled.v${C.COACHING_RULE_VERSION}`, "stalled slots get their own rule");
 
-  report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), greenSessions);
+  const maxEffortSessions = structuredClone(greenSessions);
+  const latestSquat = maxEffortSessions.filter((session) => session.dayIndex === 0).at(-1);
+  latestSquat.exercises[0].sets = [{
+    actualWeightLb: 115, actualReps: 1, plannedWeightLb: 115, plannedReps: 1,
+    completed: true, prescriptionBlock: "work",
+  }];
+  report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), maxEffortSessions);
   suggestion = report.recommendations.find((candidate) =>
     candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`);
   ok(!!suggestion && suggestion.change.slotID === "squat",
     "a completed max-effort exposure proposes a weekly special-exercise rotation");
+
+  report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), greenSessions);
+  ok(!report.recommendations.some((candidate) =>
+    candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
+  "opening a session or completing volume work is not a max-effort exposure");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
@@ -1719,9 +1749,10 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   const meMiss2 = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);
   eq(meMiss2.state.stallCount, 0, "ME misses never accrue a counter another style could trip over");
   const madeSingle = { ...cleanTop, prescribedReps: 1, topSetWeightLb: 325, topSetReps: 1 };
-  const meUp = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, madeSingle, "strength", "maxEffort", "press", 5);
+  const meUp = C.advanceProgramLift({ ...tmState, baseWeightLb: 315, estimatedMaxLb: 300 }, madeSingle, "strength", "maxEffort", "press", 5);
   eq(meUp.state.baseWeightLb, 330, "ME anchors a heavier made single before adding the next step");
-  eq(meUp.state.estimatedMaxLb, 330, "a single is not inflated through a rep-max formula");
+  eq(meUp.state.estimatedMaxLb, 300,
+    "a special-exercise single never replaces the stable reference estimate");
   const meMiss = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);
   eq(meMiss.state.baseWeightLb, 315, "ME missed single holds — rotate instead");
   const deHold = C.advanceProgramLift({ ...tmState, baseWeightLb: 150 }, cleanTop, "strength", "dynamicEffort", "squat", 5);
@@ -2376,8 +2407,8 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "a returning lower-body variation adds 10 to its own best single");
   eq(C.maxEffortVariationTarget(225, 300, 275, "press", 5), 230,
     "a returning upper-body variation adds 5 to its own best single");
-  eq(C.maxEffortVariationTarget(null, 405, 365, "squat", 5), 365,
-    "an unseen variation opens at 90% of the current estimate");
+  eq(C.maxEffortVariationTarget(null, 405, 365, "squat", 5), 325,
+    "an unseen variation gets a conservative 80% calibration ceiling");
   eq(C.maxEffortVariationTarget(null, 0, 275, "press", 5), 275,
     "missing estimates use the explicit fallback base");
 }

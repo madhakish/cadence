@@ -36,6 +36,7 @@ enum ProgramExportService {
             id: options.includeIdentity ? program.id : nil,
             name: program.name,
             focus: program.focusRaw,
+            equipmentPolicy: program.equipmentPolicyRaw,
             roundingLb: program.roundingLb,
             coachEnabled: program.coachEnabled,
             preferredSessionSpacingDays: program.preferredSessionSpacingDays,
@@ -53,6 +54,7 @@ enum ProgramExportService {
                 // session's programTag.dayIndex refers to; renumbering here
                 // would misattribute logged work on reimport.
                 order: day.order,
+                trainingIntent: day.trainingIntentRaw,
                 lifts: day.orderedLifts.map { lift in
                     ProgramFileContract.Lift(
                         id: options.includeIdentity ? lift.id : nil,

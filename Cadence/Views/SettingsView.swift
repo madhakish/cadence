@@ -716,6 +716,14 @@ struct ProgramEditorView: View {
                     Text("Hypertrophy").tag(TrainingFocus.hypertrophy)
                     Text("Maintain").tag(TrainingFocus.maintain)
                 }
+                Picker("Equipment", selection: Binding(
+                    get: { program.equipmentPolicy },
+                    set: { program.equipmentPolicy = $0 }
+                )) {
+                    ForEach(EquipmentPolicy.allCases, id: \.self) { policy in
+                        Text(policy.name).tag(policy)
+                    }
+                }
                 Stepper("Rounding: \(settingsList.unitDisplay.format(lb: program.roundingLb))", value: $program.roundingLb, in: 2.5...10, step: 2.5)
                 // Activation is exclusive — only one program drives Today.
                 Toggle("Active", isOn: Binding(get: { program.isActive }, set: { on in
@@ -769,7 +777,14 @@ struct ProgramEditorView: View {
                         ProgramDayEditorView(day: day, step: program.roundingLb)
                     } label: {
                         VStack(alignment: .leading) {
-                            Text(day.name)
+                            HStack {
+                                Text(day.name)
+                                Text(day.trainingIntent.name)
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Theme.accent.opacity(0.14), in: Capsule())
+                            }
                             // orderedLifts, not lifts: the SwiftData to-many
                             // array is unordered, so the raw list can show the
                             // complementary lift before the main.
@@ -882,12 +897,14 @@ struct ProgramEditorView: View {
             focus: program.focus, cycleNumber: program.cycleNumber, currentWeek: program.currentWeek,
             nextDayIndex: program.nextDayIndex, roundingLb: program.roundingLb, isActive: false)
         copy.coachEnabled = program.coachEnabled
+        copy.equipmentPolicy = program.equipmentPolicy
         copy.reliableHistoryStart = program.reliableHistoryStart
         copy.preferredSessionSpacingDays = program.preferredSessionSpacingDays
         copy.maximumAddedSetsPerRotation = program.maximumAddedSetsPerRotation
         context.insert(copy)
         for sourceDay in program.orderedDays {
             let dayCopy = ProgramDay(name: sourceDay.name, order: sourceDay.order)
+            dayCopy.trainingIntent = sourceDay.trainingIntent
             context.insert(dayCopy)
             copy.days.append(dayCopy)
             // Stamp the clone's slot orders from the enumerated DISPLAY order:
@@ -946,6 +963,14 @@ struct ProgramDayEditorView: View {
         Form {
             Section("Day") {
                 TextField("Name", text: $day.name)
+                Picker("Training intent", selection: Binding(
+                    get: { day.trainingIntent },
+                    set: { day.trainingIntent = $0 }
+                )) {
+                    ForEach(DayTrainingIntent.allCases, id: \.self) { intent in
+                        Text(intent.name).tag(intent)
+                    }
+                }
             }
             Section("Lifts") {
                 // Every row carries an explicit Remove button (mirroring the web

@@ -26,7 +26,7 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(P.maxEffortVariationTarget(
             priorBestSingleLb: nil, estimatedMaxLb: 405, fallbackBaseLb: 365,
             movementGroup: "squat", roundingLb: 5
-        ), 365, "an unseen variation opens at 90% of the current estimate")
+        ), 325, "an unseen variation gets a conservative 80% calibration ceiling")
         XCTAssertEqual(P.maxEffortVariationTarget(
             priorBestSingleLb: nil, estimatedMaxLb: 0, fallbackBaseLb: 275,
             movementGroup: "press", roundingLb: 5
@@ -686,7 +686,7 @@ final class ProgramProgressionTests: XCTestCase {
     }
 
     func testMaxEffortAddsAfterMadeSinglesAndHoldsOnMisses() {
-        let state = ProgramLiftState(baseWeightLb: 315, estimatedMaxLb: 330)
+        let state = ProgramLiftState(baseWeightLb: 315, estimatedMaxLb: 300)
         let madeSingle = CycleLiftPerformance(
             prescribedSets: 1, prescribedReps: 1, completedSets: 1,
             anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0,
@@ -695,7 +695,8 @@ final class ProgramProgressionTests: XCTestCase {
         let up = ProgramProgression.advanceProgramLift(state, perf: madeSingle, focus: .strength,
                                                        style: .maxEffort, movementGroup: "press", roundingLb: 5)
         XCTAssertEqual(up.state.baseWeightLb, 330, "a heavier made single becomes the anchor before adding the next step")
-        XCTAssertEqual(up.state.estimatedMaxLb, 330, "a single is not inflated through a rep-max formula")
+        XCTAssertEqual(up.state.estimatedMaxLb, 300,
+                       "a special-exercise single never replaces the stable reference estimate")
         let miss = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: false), focus: .strength,
                                                          style: .maxEffort, movementGroup: "press", roundingLb: 5)
         XCTAssertEqual(miss.state.baseWeightLb, 315)

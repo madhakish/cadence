@@ -12,7 +12,7 @@ export async function render(host) {
   root.append(ui.seg(BODY_SITES, site, (s) => { site = s; render(host); }));
 
   const siteCheckins = checkins.filter((c) => c.site === site).sort((a, b) => new Date(b.date) - new Date(a.date));
-  if (site === "Knee" && siteCheckins[0] && /flag|pain|swell|off/i.test(siteCheckins[0].response)) {
+  if (site === "Knee" && siteCheckins[0] && C.isHardStopResponse(siteCheckins[0].response)) {
     root.append(ui.h("div", { class: "card", style: { background: "rgba(255,204,0,0.16)" } },
       ui.h("span", { class: "warn", text: `✋ ${COPY.swelling}` })));
   }
@@ -31,7 +31,7 @@ export async function render(host) {
     }
   }
   for (const c of siteCheckins) {
-    items.push({ date: c.date, title: `Check-in: ${c.response}`, detail: c.note || "", hard: /flag|pain|swell|off/i.test(c.response) });
+    items.push({ date: c.date, title: `Check-in: ${c.response}`, detail: c.note || "", hard: C.isHardStopResponse(c.response) });
   }
   items.sort((a, b) => new Date(b.date) - new Date(a.date));
 

@@ -11,6 +11,7 @@ the standalone "Next up" tracks.
 |---|---|
 | `name` | Display name |
 | `focus` | `strength` / `hypertrophy` / `maintain` — see table below |
+| `equipmentPolicy` | `any` preserves unrestricted legacy selection; `freeWeightsOnly` limits automatic candidates to barbell, dumbbell, kettlebell, and bodyweight work |
 | `cycleNumber` | Which mesocycle you're on (increments after recovery) |
 | `currentWeek` | Persisted compatibility name for the style-neutral rotation pointer (1…4); each lift prescription interprets the position itself |
 | `nextDayIndex` | The `order` of the day the Today screen offers next — a day's order value, not its position in the array |
@@ -23,6 +24,21 @@ Ceiling and increment values live in
 [Progression rules](progression-rules.md#what-each-grade-does-at-rollover)
 — in short: strength pushes to 90% of est. 1RM with 2.5% increments,
 hypertrophy to 78% with 1.5%, maintain never increments.
+
+## Day
+
+A day carries an explicit `trainingIntent`: `general`, `heavy`, `volume`,
+`technique`, or `explosive`. This describes the quality the authored day is
+meant to express inside the evolving cycle; the cycle still owns rotation,
+adaptation, recovery, and fatigue position. Intent is not inferred from the
+day name or whichever lift happens to sort first. Existing programs migrate
+to `general`, preserving their behavior without reinterpretation.
+
+The deterministic coach carries both fields into its slot view. Equipment
+policy filters automatic add-pattern, capacity, rotation, and promotion
+candidates. Capacity growth does not add sets to `technique` or `explosive`
+days; legacy `general` days retain the previous behavior. Manual edits remain
+under the lifter's control.
 
 ## Lift (per day)
 

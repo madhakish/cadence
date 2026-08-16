@@ -23,6 +23,7 @@ const program = {
   uuid: "f0000000-0000-4000-8000-000000000000",
   name: "Fixture Upper/Lower",
   focus: "strength",
+  equipmentPolicy: "freeWeightsOnly",
   roundingLb: 5,
   coachEnabled: true,
   preferredSessionSpacingDays: 3,
@@ -37,6 +38,7 @@ const program = {
     {
       name: "Fixture Lower",
       order: 0,
+      trainingIntent: "heavy",
       lifts: [
         {
           id: ID(1), exerciseName: "Back Squat", role: "main", order: 0,
@@ -84,6 +86,7 @@ const program = {
       // so a non-contiguous order must survive export and import verbatim.
       name: "Fixture Upper",
       order: 2,
+      trainingIntent: "volume",
       lifts: [
         {
           id: ID(4), exerciseName: "Overhead Press", role: "main", order: 0,

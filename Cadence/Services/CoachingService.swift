@@ -40,6 +40,7 @@ enum CoachingService {
                     id: lift.id,
                     exerciseName: lift.exerciseName,
                     dayIndex: day.order,
+                    trainingIntent: day.trainingIntent,
                     pattern: exercise?.movementPattern ?? .unknown,
                     plannedSets: plan.sets,
                     role: lift.role.rawValue,
@@ -67,6 +68,7 @@ enum CoachingService {
                     id: accessory.id,
                     exerciseName: accessory.exerciseName,
                     dayIndex: day.order,
+                    trainingIntent: day.trainingIntent,
                     pattern: exerciseByName[accessory.exerciseName]?.movementPattern ?? .unknown,
                     plannedSets: accessory.sets,
                     role: "accessory",
@@ -158,6 +160,9 @@ enum CoachingService {
         let before = programDescription(program)
         var decisionAfterValue: String?
         var result = "Recommendation recorded."
+        let automaticExercises = exercises.filter {
+            program.equipmentPolicy.allows(exerciseType: $0.typeRaw)
+        }
         switch recommendation.change {
         case .addSet(let slotID, let count):
             if let accessory = program.days.flatMap(\.accessories).first(where: { $0.id == slotID }) {
@@ -178,7 +183,7 @@ enum CoachingService {
             }
         case .addPattern(let pattern, let dayIndex, let sets):
             guard let day = program.day(order: dayIndex) ?? program.orderedDays.first,
-                  let exercise = preferredExercise(for: pattern, in: exercises) else {
+                  let exercise = preferredExercise(for: pattern, in: automaticExercises) else {
                 throw CoachingApplyError.noExercise(pattern.name)
             }
             let accessory = ProgramAccessory(
@@ -202,7 +207,7 @@ enum CoachingService {
             for adjustment in adjustments {
                 guard case .addPattern(let pattern, let dayIndex, let sets) = adjustment else { continue }
                 guard let day = program.day(order: dayIndex) ?? program.orderedDays.first,
-                      let exercise = preferredExercise(for: pattern, in: exercises) else {
+                      let exercise = preferredExercise(for: pattern, in: automaticExercises) else {
                     throw CoachingApplyError.noExercise(pattern.name)
                 }
                 resolvedPatterns.append((pattern, dayIndex, sets, day, exercise))
@@ -286,7 +291,7 @@ enum CoachingService {
             // The replacement is the template's own choice — pull-ups on a
             // double-progression window that grows into weighted pull-ups —
             // not a SwapRules candidate: crossing the tier is the point.
-            guard let pullUps = exercises.first(where: {
+            guard let pullUps = automaticExercises.first(where: {
                 $0.name == "Pull-ups" && $0.gateStatus != .shelved
             }) else {
                 throw CoachingApplyError.exerciseUnavailable("Pull-ups")
@@ -331,7 +336,10 @@ enum CoachingService {
             guard lift != nil || accessory != nil else {
                 throw CoachingApplyError.unknownSlot(exerciseName)
             }
-            let compatible = exercises.filter {
+            guard (lift?.exerciseName ?? accessory?.exerciseName) == exerciseName else {
+                throw CoachingApplyError.slotChanged(exerciseName)
+            }
+            let compatible = automaticExercises.filter {
                 SwapRules.compatible(
                     currentName: current.name, currentCategory: current.categoryRaw,
                     currentLoadBasis: current.loadBasis, currentGroup: current.movementGroup,
@@ -339,7 +347,7 @@ enum CoachingService {
                     candidateLoadBasis: $0.loadBasis, candidateGroup: $0.movementGroup,
                     candidateShelved: $0.isShelved || $0.gateStatus == .shelved
                 )
-            }
+            }.sorted { $0.name < $1.name }
             let replacement = lift?.prescription == .maxEffort
                 ? preferredMaxEffortVariation(after: current, compatible: compatible)
                 : compatible.first
@@ -463,7 +471,12 @@ enum CoachingService {
                 for set in exercise.orderedSets where !set.isWarmup
                     && set.status == .completed
                     && set.reps == 1
-                    && set.prescriptionBlock.countsAsPrescribedWork {
+                    && set.prescriptionBlock.countsAsPrescribedWork
+                    && !set.flags.contains(.stoppedEarly)
+                    && set.quality != .grindy
+                    && set.quality != .wobble
+                    && set.bodyFlagSite == nil
+                    && set.autoregReason == nil {
                     best = max(best ?? set.weightLb, set.weightLb)
                 }
             }
@@ -488,6 +501,7 @@ enum CoachingService {
         case noVariation(String)
         case unknownExercise(String)
         case unknownSlot(String)
+        case slotChanged(String)
         case prescriptionChanged(String)
         /// The named exercise is missing OR shelved — distinct from
         /// unknownExercise, whose rotate-flavored copy ("a compatible
@@ -504,6 +518,8 @@ enum CoachingService {
                 return "\(name) is no longer in the library, so a compatible variation cannot be chosen."
             case .unknownSlot(let name):
                 return "The program slot for \(name) no longer exists."
+            case .slotChanged(let name):
+                return "The program slot changed after the \(name) recommendation, so no rotation was applied."
             case .prescriptionChanged(let name):
                 return "The program slot for \(name) changed after this recommendation, so triples were not applied."
             case .exerciseUnavailable(let name):

@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
-import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
+import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
@@ -475,6 +475,16 @@ export async function programEditor(p) {
         body.append(ui.field("Training focus", ui.seg(
           [{ value: "strength", label: "Strength" }, { value: "hypertrophy", label: "Hypertrophy" }, { value: "maintain", label: "Maintain" }],
           p.focus, async (v) => { p.focus = v; await Programs.save(p); })));
+        const equipment = ui.h("select", {}, ...[
+          ["any", "Any equipment"], ["freeWeightsOnly", "Free weights + bodyweight"],
+        ].map(([value, text]) => ui.h("option", {
+          value, text, selected: value === (p.equipmentPolicy || "any"),
+        })));
+        equipment.addEventListener("change", async () => {
+          p.equipmentPolicy = equipment.value;
+          await Programs.save(p);
+        });
+        body.append(ui.field("Equipment", equipment));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Rounding" }),
             ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: ui.fmtWeight, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
@@ -513,7 +523,12 @@ export async function programEditor(p) {
         for (const day of days) {
           list.append(ui.h("div", { class: "row" },
             ui.h("div", { class: "lead", style: { cursor: "pointer", flex: "1" }, onClick: () => programDayEditor(p, day) },
-              ui.h("span", { class: "title", text: day.name }),
+              ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
+                ui.h("span", { class: "title", text: day.name }),
+                ui.h("span", { class: "pill accent", text: {
+                  general: "General", heavy: "Heavy", volume: "Volume",
+                  technique: "Technique", explosive: "Explosive",
+                }[day.trainingIntent || "general"] })),
               ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
             ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { if (moveSlot(p.days, day, -1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
             ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { if (moveSlot(p.days, day, 1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
@@ -521,7 +536,8 @@ export async function programEditor(p) {
         }
         body.append(list);
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add day", onClick: async () => {
-          p.days.push({ name: `Day ${p.days.length + 1}`, order: p.days.length, lifts: [], accessories: [] });
+          p.days.push({ name: `Day ${p.days.length + 1}`, order: p.days.length,
+            trainingIntent: "general", lifts: [], accessories: [] });
           await Programs.save(p); draw();
         } }));
         // The plan, not a snapshot: no stall counters, no stashed peak grade,
@@ -566,6 +582,18 @@ async function programDayEditor(p, day) {
         const nameInput = ui.h("input", { type: "text", value: day.name });
         nameInput.addEventListener("change", async () => { day.name = nameInput.value || day.name; api.setTitle(day.name); await Programs.save(p); });
         body.append(ui.field("Day name", nameInput));
+        const intentLabels = {
+          general: "General", heavy: "Heavy", volume: "Volume",
+          technique: "Technique", explosive: "Explosive",
+        };
+        const intent = ui.h("select", {}, ...BACKUP_ENUMS.dayTrainingIntents.map((value) => ui.h("option", {
+          value, text: intentLabels[value], selected: value === (day.trainingIntent || "general"),
+        })));
+        intent.addEventListener("change", async () => {
+          day.trainingIntent = intent.value;
+          await Programs.save(p);
+        });
+        body.append(ui.field("Training intent", intent));
 
         body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
         // The editor's exercise edits (rest, load basis, station plates)

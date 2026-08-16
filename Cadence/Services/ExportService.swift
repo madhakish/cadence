@@ -279,6 +279,7 @@ enum ExportService {
     struct ExportProgramDay: Codable {
         let name: String
         let order: Int
+        let trainingIntent: String
         let lifts: [ExportProgramLift]
         let accessories: [ExportProgramAccessory]
     }
@@ -287,6 +288,7 @@ enum ExportService {
         let id: String
         let name: String
         let focus: String
+        let equipmentPolicy: String
         let cycleNumber: Int
         let currentWeek: Int
         let nextDayIndex: Int
@@ -483,14 +485,15 @@ enum ExportService {
             },
             programs: programs.map { p in
                 ExportProgram(
-                    id: p.id, name: p.name, focus: p.focusRaw, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
+                    id: p.id, name: p.name, focus: p.focusRaw, equipmentPolicy: p.equipmentPolicyRaw,
+                    cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
                     nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: p.isActive,
                     coachEnabled: p.coachEnabled, reliableHistoryStart: p.reliableHistoryStart,
                     preferredSessionSpacingDays: p.preferredSessionSpacingDays,
                     maximumAddedSetsPerRotation: p.maximumAddedSetsPerRotation,
                     days: p.orderedDays.map { d in
                         ExportProgramDay(
-                            name: d.name, order: d.order,
+                            name: d.name, order: d.order, trainingIntent: d.trainingIntentRaw,
                             lifts: d.orderedLifts.map { l in
                                 ExportProgramLift(
                                     id: l.id, exerciseName: l.exerciseName, role: l.roleRaw, order: l.order,

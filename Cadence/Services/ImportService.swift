@@ -86,11 +86,13 @@ enum ImportService {
     private struct ProgramDTO: Decodable {
         var id: String?; var name: String?; var focus: String?; var cycleNumber: Int?; var currentWeek: Int?
         var nextDayIndex: Int?; var roundingLb: Double?; var isActive: Bool?; var days: [DayDTO]?
+        var equipmentPolicy: String?
         var coachEnabled: Bool?; var reliableHistoryStart: Date?; var preferredSessionSpacingDays: Int?
         var maximumAddedSetsPerRotation: Int?
 
         private enum CodingKeys: String, CodingKey {
             case id, name, focus, cycleNumber, currentWeek, nextDayIndex, roundingLb, isActive, days
+            case equipmentPolicy
             case coachEnabled, reliableHistoryStart, preferredSessionSpacingDays, maximumAddedSetsPerRotation
         }
         init(from decoder: Decoder) throws {
@@ -105,13 +107,17 @@ enum ImportService {
             roundingLb = try? c.decode(Double.self, forKey: .roundingLb)
             isActive = try? c.decode(Bool.self, forKey: .isActive)
             days = try? c.decode([DayDTO].self, forKey: .days)
+            equipmentPolicy = try? c.decode(String.self, forKey: .equipmentPolicy)
             coachEnabled = try? c.decode(Bool.self, forKey: .coachEnabled)
             reliableHistoryStart = try? c.decode(Date.self, forKey: .reliableHistoryStart)
             preferredSessionSpacingDays = try? c.decode(Int.self, forKey: .preferredSessionSpacingDays)
             maximumAddedSetsPerRotation = try? c.decode(Int.self, forKey: .maximumAddedSetsPerRotation)
         }
     }
-    private struct DayDTO: Decodable { var name: String?; var order: Int?; var lifts: [LiftDTO]?; var accessories: [AccessoryDTO]? }
+    private struct DayDTO: Decodable {
+        var name: String?; var order: Int?; var trainingIntent: String?
+        var lifts: [LiftDTO]?; var accessories: [AccessoryDTO]?
+    }
     private struct LiftDTO: Decodable {
         var id: String?; var exerciseName: String?; var role: String?; var order: Int?
         var prescription: String?; var warmupPolicy: String?; var baseWeightLb: Double?; var estimatedMaxLb: Double?
@@ -350,6 +356,8 @@ enum ImportService {
             if schemaVersion >= 2 { _ = try portableID(program.id, "\(path).id") }
             _ = try requiredText(program.name, "\(path).name")
             try known(program.focus, ["strength", "hypertrophy", "maintain"], "\(path).focus", required: schemaVersion >= 1)
+            try known(program.equipmentPolicy, Set(EquipmentPolicy.allCases.map(\.rawValue)),
+                      "\(path).equipmentPolicy", required: schemaVersion >= 9)
             try integer(program.cycleNumber, "\(path).cycleNumber", min: 1)
             try integer(program.currentWeek, "\(path).currentWeek", min: 1, max: 4)
             try integer(program.nextDayIndex, "\(path).nextDayIndex", min: 0)
@@ -360,6 +368,8 @@ enum ImportService {
                 let dayPath = "\(path).days[\(di)]"
                 _ = try requiredText(day.name, "\(dayPath).name")
                 try integer(day.order, "\(dayPath).order", required: true, min: 0)
+                try known(day.trainingIntent, Set(DayTrainingIntent.allCases.map(\.rawValue)),
+                          "\(dayPath).trainingIntent", required: schemaVersion >= 9)
                 for (li, lift) in (day.lifts ?? []).enumerated() {
                     let liftPath = "\(dayPath).lifts[\(li)]"
                     if lift.id != nil { _ = try portableID(lift.id, "\(liftPath).id") }
@@ -799,12 +809,14 @@ enum ImportService {
                            cycleNumber: p.cycleNumber ?? 1, currentWeek: p.currentWeek ?? 1,
                            nextDayIndex: p.nextDayIndex ?? 0, roundingLb: p.roundingLb ?? 5, isActive: p.isActive ?? false)
         if preserveID, let id = p.id { prog.id = id }
+        prog.equipmentPolicyRaw = p.equipmentPolicy ?? EquipmentPolicy.any.rawValue
         prog.coachEnabled = p.coachEnabled ?? true
         prog.reliableHistoryStart = p.reliableHistoryStart
         prog.preferredSessionSpacingDays = p.preferredSessionSpacingDays ?? 3
         prog.maximumAddedSetsPerRotation = p.maximumAddedSetsPerRotation ?? 6
         for d in (p.days ?? []) {
             let day = ProgramDay(name: d.name ?? "Day", order: d.order ?? 0)
+            day.trainingIntentRaw = d.trainingIntent ?? DayTrainingIntent.general.rawValue
             prog.days.append(day)
             // Missing orders take the array position; a day whose slots ALL
             // tie carries no ordering information either, so the authored

@@ -33,10 +33,13 @@ Method* bundle, pp. 50–51, and *The Book of Methods*, p. 101.
   template supplies Low, Front, and Paused Box Squats plus Floor Press and
   Close-Grip Floor Press as starter pools; compatible custom variations remain
   available when those pools do not fit.
-- A returning variation targets its own best completed single plus 10 lb for a
-  squat/hinge or 5 lb for a press. A first-use variation opens at 90% of the
-  slot's current estimated max. Cadence never transfers one variation's max to
-  another exercise merely because they share a program slot.
+- A returning variation targets its own clean completed single plus the
+  smallest normal lower/upper increment. The supplied sources provide no valid
+  conversion from a competition lift to an unseen variation. Until Cadence can
+  store an explicit `Establish` exposure, the numeric plan shows 80% of the
+  stable reference estimate as a conservative calibration ceiling—not a
+  claimed variation max. Cadence never transfers one variation's max to another
+  exercise merely because they share a program slot.
 - After three max-effort exposures, Cadence's recovery bridge substitutes two
   moderate triples. This is the app's conservative implementation of the
   source recommendation to replace an exhausted max-effort session with

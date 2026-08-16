@@ -64,6 +64,18 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertTrue(plan.explanation.localizedCaseInsensitiveContains("hamstring"))
     }
 
+    func testTechniqueAndExplosiveDaysDoNotAccumulateAutomaticCapacity() {
+        var protected = program()
+        for index in protected.slots.indices {
+            protected.slots[index].trainingIntent = index.isMultiple(of: 2) ? .technique : .explosive
+        }
+        let report = CoachingEngine.evaluate(program: protected, sessions: greenRotations())
+        XCTAssertFalse(report.recommendations.contains {
+            if case .capacityPlan = $0.change { return true }
+            return false
+        }, "quality-intent days must not become accessory-volume sinks")
+    }
+
     func testAdjustedLowerWorkMakesRotationYellow() {
         var sessions = (0...3).map { session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day) }
         sessions += (0...3).map {
@@ -234,16 +246,35 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertEqual(suggestion.ruleID, "program.slot.rotate.stalled.v\(CoachingEngine.ruleVersion)")
     }
 
-    func testCompletedMaxEffortExposureProposesWeeklySpecialExerciseRotation() throws {
+    func testCompletedMaxEffortSingleProposesWeeklySpecialExerciseRotation() throws {
+        var sessions = greenRotations()
+        let latestSquatIndex = try XCTUnwrap(sessions.indices.last { sessions[$0].dayIndex == 0 })
+        sessions[latestSquatIndex].exercises[0].sets = [
+            CoachingSetSnapshot(
+                actualWeightLb: 115, actualReps: 1,
+                plannedWeightLb: 115, plannedReps: 1,
+                prescriptionBlock: .work
+            )
+        ]
         let report = CoachingEngine.evaluate(
             program: program(patching: "squat") { $0.prescriptionStyle = .maxEffort },
-            sessions: greenRotations()
+            sessions: sessions
         )
         let suggestion = try XCTUnwrap(report.recommendations.first {
             $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
         })
         XCTAssertEqual(rotationSlotID(suggestion), "squat")
         XCTAssertTrue(suggestion.explanation.contains("another special exercise"))
+    }
+
+    func testMaxEffortEntryWithoutACompletedWorkSingleDoesNotProposeRotation() {
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") { $0.prescriptionStyle = .maxEffort },
+            sessions: greenRotations()
+        )
+        XCTAssertFalse(report.recommendations.contains {
+            $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
+        }, "opening a session or completing volume work is not a max-effort exposure")
     }
 
     func testStallSuggestionSurvivesARedRotationButNeverLeadsIt() {

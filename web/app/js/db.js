@@ -8,8 +8,8 @@ import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 5;
-export const BACKUP_SCHEMA_VERSION = 8;
+const DB_VERSION = 6;
+export const BACKUP_SCHEMA_VERSION = 9;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -44,6 +44,7 @@ function open() {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, opts);
       }
       if (event.oldVersion < 4) migrateToV4(req.transaction);
+      else if (event.oldVersion < 6) migrateToV6(req.transaction);
       if (event.oldVersion < 5) migrateToV5(req.result);
     };
     req.onsuccess = () => {
@@ -91,6 +92,20 @@ function migrateToV4(transaction) {
 // dropped by normalizeSettings; `birthYear` replaces it.
 function migrateToV5(db) {
   if (db.objectStoreNames.contains("protein")) db.deleteObjectStore("protein");
+}
+
+// V6 adds only explicit program semantics. A legacy program remains exactly
+// as permissive as before (`any` equipment), and an unlabelled day remains
+// neutral (`general`). Older-than-V4 stores already pass through the current
+// normalizeProgram in migrateToV4, so they must not be cursor-rewritten twice.
+function migrateToV6(transaction) {
+  const store = transaction.objectStore("programs");
+  store.openCursor().onsuccess = (event) => {
+    const cursor = event.target.result;
+    if (!cursor) return;
+    cursor.update(normalizeProgram(cursor.value));
+    cursor.continue();
+  };
 }
 
 // One transaction over one or more stores. fn receives a store getter and is
@@ -148,6 +163,8 @@ const stableID = (seed) => {
 };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isPortableUUID = (value) => typeof value === "string" && UUID_RE.test(value);
+const EQUIPMENT_POLICIES = ["any", "freeWeightsOnly"];
+const DAY_TRAINING_INTENTS = ["general", "heavy", "volume", "technique", "explosive"];
 const normalizeProgram = (p) => {
   const uuid = isPortableUUID(p.uuid) ? p.uuid : (isPortableUUID(p.id) ? p.id : stableID(`program:${p.name}`));
   // Day orders are preserved VERBATIM. Renumbering them to a contiguous
@@ -160,12 +177,14 @@ const normalizeProgram = (p) => {
   return {
     ...p,
     uuid,
+    equipmentPolicy: EQUIPMENT_POLICIES.includes(p.equipmentPolicy) ? p.equipmentPolicy : "any",
     coachEnabled: p.coachEnabled !== false,
     reliableHistoryStart: p.reliableHistoryStart || null,
     preferredSessionSpacingDays: Number.isInteger(p.preferredSessionSpacingDays) ? p.preferredSessionSpacingDays : 3,
     maximumAddedSetsPerRotation: Number.isInteger(p.maximumAddedSetsPerRotation) ? p.maximumAddedSetsPerRotation : 6,
     days: (p.days || []).map((day, dayIndex) => normalizeDaySlotOrders({
       ...day,
+      trainingIntent: DAY_TRAINING_INTENTS.includes(day.trainingIntent) ? day.trainingIntent : "general",
       lifts: (day.lifts || []).map((lift, slotIndex) => ({
         ...lift,
         id: isPortableUUID(lift.id) ? lift.id : stableID(`slot:${uuid}:day:${day.order ?? dayIndex}:lift:${slotIndex}`),
@@ -709,13 +728,14 @@ export async function exportBundle() {
     checkIns: checkins.map((c) => ({ date: iso(c.date), site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })),
     milestones: milestones.map((m) => ({ date: iso(m.date), exercise: m.exerciseName || null, kind: m.kind, label: m.label })),
     programs: programs.map((p) => ({
-      id: p.uuid, name: p.name, focus: p.focus, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
+      id: p.uuid, name: p.name, focus: p.focus, equipmentPolicy: p.equipmentPolicy,
+      cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
       nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: !!p.isActive,
       coachEnabled: p.coachEnabled !== false, reliableHistoryStart: p.reliableHistoryStart || null,
       preferredSessionSpacingDays: p.preferredSessionSpacingDays ?? 3,
       maximumAddedSetsPerRotation: p.maximumAddedSetsPerRotation ?? 6,
       days: (p.days || []).map((d) => ({
-        name: d.name, order: d.order,
+        name: d.name, order: d.order, trainingIntent: d.trainingIntent,
         lifts: (d.lifts || []).map((l) => ({
           id: l.id, exerciseName: l.exerciseName, role: l.role, order: l.order ?? 0,
           prescription: l.prescription || "automatic", warmupPolicy: l.warmupPolicy || "automatic",
@@ -856,6 +876,7 @@ export const BACKUP_ENUMS = {
   categories: ["Main", "Accessory", "Conditioning"],
   exerciseTypes: ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"],
   focuses: ["strength", "hypertrophy", "maintain"], modes: ["cycle", "linear"],
+  equipmentPolicies: EQUIPMENT_POLICIES, dayTrainingIntents: DAY_TRAINING_INTENTS,
   prescriptions: ["automatic", "wave", "offsetWave", "secondary", "hypertrophy", "technique", "doubleProgression",
     "linearFives", "texasVolume", "texasLight", "texasIntensity", "fiveThreeOne", "maxEffort", "dynamicEffort"],
   warmupPolicies: ["automatic", "full", "short", "none"],
@@ -1010,6 +1031,7 @@ export function validateBackup(bundle) {
   each(programs, "programs", (program, path) => {
     if (schemaVersion >= 2) portableID(program.id, `${path}.id`);
     textValue(program.name, `${path}.name`, true); enumValue(program.focus, BACKUP_ENUMS.focuses, `${path}.focus`, schemaVersion >= 1);
+    enumValue(program.equipmentPolicy, BACKUP_ENUMS.equipmentPolicies, `${path}.equipmentPolicy`, schemaVersion >= 9);
     numberValue(program.cycleNumber, `${path}.cycleNumber`, { integer: true, min: 1 });
     numberValue(program.currentWeek, `${path}.currentWeek`, { integer: true, min: 1 });
     numberValue(program.nextDayIndex, `${path}.nextDayIndex`, { integer: true, min: 0 });
@@ -1020,6 +1042,7 @@ export function validateBackup(bundle) {
     const days = array(program, "days", `${path}.days`);
     each(days, `${path}.days`, (day, dayPath) => {
       textValue(day.name, `${dayPath}.name`, true); numberValue(day.order, `${dayPath}.order`, { required: true, integer: true, min: 0 });
+      enumValue(day.trainingIntent, BACKUP_ENUMS.dayTrainingIntents, `${dayPath}.trainingIntent`, schemaVersion >= 9);
       each(array(day, "lifts", `${dayPath}.lifts`), `${dayPath}.lifts`, (lift, liftPath) => {
         if (lift.id != null) portableID(lift.id, `${liftPath}.id`);
         textValue(lift.exerciseName, `${liftPath}.exerciseName`, true); enumValue(lift.role, BACKUP_ENUMS.liftRoles, `${liftPath}.role`, schemaVersion >= 1);

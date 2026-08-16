@@ -175,6 +175,15 @@ export const inferredLoadBasis = (exerciseType) => {
   return "externalTotal";
 };
 export const inferredImplementCount = (exerciseType) => exerciseType === "dumbbell" ? 2 : 1;
+
+// A program policy constrains automatic substitutions, not the exercise
+// library or an athlete's deliberate manual edits. Keep this pure so the
+// native and web coaching adapters enforce the same boundary.
+export function equipmentPolicyAllows(policy, exerciseType) {
+  if (policy !== "freeWeightsOnly") return true;
+  return ["barbell", "dumbbell", "kettlebell", "bodyweight"]
+    .includes(String(exerciseType ?? "").toLowerCase());
+}
 export const resolvedLoadBasis = (exercise) => LOAD_BASES.includes(exercise?.loadBasis)
   ? exercise.loadBasis : inferredLoadBasis(exercise?.type);
 export const resolvedImplementCount = (exercise) => resolvedLoadBasis(exercise) === "perImplement"
@@ -1749,14 +1758,15 @@ export function stagedIncrement(baseWeightLb, focus, regime, roundingLb = DEFAUL
 }
 
 // Target for a newly selected max-effort variation. Returning variations use
-// their own completed single plus the normal upper/lower increment; an unseen
-// variation opens at 90% of the slot estimate. Never inherit the old special
-// exercise's target. Mirrors ProgramProgression.maxEffortVariationTarget.
+// their own completed single plus the normal upper/lower increment. The
+// numeric-only model cannot derive one exercise's max from another, so an
+// unseen variation gets an 80% calibration ceiling, not a fabricated 90%
+// target. Never inherit the old variation. Mirrors ProgramProgression.
 export function maxEffortVariationTarget(priorBestSingleLb, estimatedMaxLb, fallbackBaseLb,
   movementGroup = null, roundingLb = DEFAULT_ROUNDING_LB) {
   const increment = ["squat", "hinge"].includes(movementGroup) ? 10 : 5;
   const seed = priorBestSingleLb > 0 ? priorBestSingleLb + increment
-    : estimatedMaxLb > 0 ? estimatedMaxLb * 0.90 : fallbackBaseLb;
+    : estimatedMaxLb > 0 ? estimatedMaxLb * 0.80 : fallbackBaseLb;
   return Math.max(0, roundTo(seed, roundingLb));
 }
 
@@ -2002,9 +2012,8 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
       next.stallCount = 0;
       next.baseWeightLb = roundTo(made + increment, roundingLb);
       next.lastIncrementLb = next.baseWeightLb - state.baseWeightLb;
-      // A real single is already a max-strength observation; Epley would
-      // inflate it by 3.3% merely because reps === 1.
-      next.estimatedMaxLb = Math.max(state.estimatedMaxLb, perf.topSetWeightLb);
+      // Keep the reference-lift estimate stable. Feeding this special
+      // exercise's single into it would leak one variation's max into the next.
       note = `Made the top single — next target +${trim(increment)} lb. Rotate the variation to keep it moving.`;
     } else {
       // Rotation, not accumulation, is this methodology's stall answer — no
@@ -2973,15 +2982,17 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
 }
 
 const preferredCoachingDay = (pattern, slots) => {
+  const eligible = slots.filter((slot) => !["technique", "explosive"]
+    .includes(slot.trainingIntent || "general"));
   if (["kneeFlexion", "hipExtension"].includes(pattern)) {
-    const squat = slots.find((slot) => slot.isMain && slot.pattern === "squat");
+    const squat = eligible.find((slot) => slot.isMain && slot.pattern === "squat");
     if (squat) return squat.dayIndex;
   }
   if (["verticalPull", "shoulderStability"].includes(pattern)) {
-    const upper = slots.find((slot) => slot.isMain && ["horizontalPress", "verticalPress"].includes(slot.pattern));
+    const upper = eligible.find((slot) => slot.isMain && ["horizontalPress", "verticalPress"].includes(slot.pattern));
     if (upper) return upper.dayIndex;
   }
-  return slots.length ? Math.min(...slots.map((slot) => slot.dayIndex)) : 0;
+  return eligible.length ? Math.min(...eligible.map((slot) => slot.dayIndex)) : null;
 };
 
 const shorterSpacingTrial = (sessions) => {
@@ -3028,14 +3039,17 @@ function rotationSuggestions(program, sessions, evidenceKey) {
       const latest = newest.flatMap((session) => {
         if (session.rotation === DELOAD_WEEK) return [];
         const exercise = (session.exercises || []).find((candidate) => candidate.slotID === slot.id);
-        return exercise ? [{ session, exercise }] : [];
+        const completedSingle = (exercise?.sets || []).some((set) => !set.isWarmup
+          && set.completed !== false && set.actualReps === 1
+          && countsAsPrescribedWork(set.prescriptionBlock));
+        return exercise && completedSingle ? [{ session, exercise }] : [];
       })[0];
       if (latest?.exercise.exerciseName === slot.exerciseName) {
         result.push({
           id: `program.slot.rotate.max-effort-weekly.v${COACHING_RULE_VERSION}:${evidenceKey}-${latest.session.id}-${slot.id}`,
           ruleID: `program.slot.rotate.max-effort-weekly.v${COACHING_RULE_VERSION}`, priority: 65,
           title: `Rotate ${slot.exerciseName}`,
-          explanation: `The latest max-effort exposure used ${slot.exerciseName}. Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.`,
+          explanation: `The latest completed max-effort single used ${slot.exerciseName}. Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.`,
           change: { type: "rotateExercise", slotID: slot.id, exerciseName: slot.exerciseName },
         });
         continue;
@@ -3221,6 +3235,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
     const amount = Math.min(target - current, capacity - changes);
     const slot = (program.slots || []).find((candidate) => candidate.pattern === pattern
       && candidate.capacityManaged !== false && !candidate.isMain
+      && !["technique", "explosive"].includes(candidate.trainingIntent || "general")
       && candidate.plannedSets < (candidate.maximumSets || DEFAULT_MAXIMUM_SETS));
     if (slot) {
       const add = Math.min(amount, (slot.maximumSets || DEFAULT_MAXIMUM_SETS) - slot.plannedSets);
@@ -3230,6 +3245,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
       changes += add;
     } else {
       const dayIndex = preferredCoachingDay(pattern, program.slots || []);
+      if (dayIndex === null) continue;
       capacityAdjustments.push({ type: "addPattern", pattern, dayIndex, sets: amount });
       capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${amount}`);
       changes += amount;

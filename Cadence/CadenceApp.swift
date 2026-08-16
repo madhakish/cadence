@@ -36,9 +36,10 @@ final class AppBootstrap: ObservableObject {
         errorMessage = nil
         isTemporary = false
         let candidates: [(String, () throws -> ModelContainer)] = [
-            // V7 first: it is the newest shipped checksum, so stores already
-            // carrying the pull-up promotion stamp match here without trying
+            // V8 first: it is the newest shipped checksum, so stores already
+            // carrying station plate preferences match here without trying
             // older fallback ladders first.
+            ("V8 staged migration", { try self.makeContainer(migrationPlan: CadenceV8MigrationPlan.self) }),
             ("V7 staged migration", { try self.makeContainer(migrationPlan: CadenceV7MigrationPlan.self) }),
             ("V6 staged migration", { try self.makeContainer(migrationPlan: CadenceV6MigrationPlan.self) }),
             ("V5 staged migration", { try self.makeContainer(migrationPlan: CadenceV5MigrationPlan.self) }),
@@ -98,7 +99,7 @@ final class AppBootstrap: ObservableObject {
         migrationPlan: Plan.Type,
         isStoredInMemoryOnly: Bool = false
     ) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isStoredInMemoryOnly)
         return try ModelContainer(
             for: schema,
@@ -108,7 +109,7 @@ final class AppBootstrap: ObservableObject {
     }
 
     private func makeUnplannedContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let config = ModelConfiguration(schema: schema)
         return try ModelContainer(for: schema, migrationPlan: nil, configurations: config)
     }

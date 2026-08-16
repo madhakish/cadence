@@ -264,6 +264,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
     public var id: String
     public var exerciseName: String
     public var dayIndex: Int
+    public var trainingIntent: DayTrainingIntent
     public var pattern: MovementPattern
     public var plannedSets: Int
     public var role: String
@@ -288,6 +289,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         id: String,
         exerciseName: String,
         dayIndex: Int,
+        trainingIntent: DayTrainingIntent = .general,
         pattern: MovementPattern,
         plannedSets: Int,
         role: String? = nil,
@@ -304,6 +306,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         self.id = id
         self.exerciseName = exerciseName
         self.dayIndex = dayIndex
+        self.trainingIntent = trainingIntent
         self.pattern = pattern
         self.plannedSets = plannedSets
         self.role = role ?? (isMain ? LiftRole.main.rawValue : "accessory")
@@ -858,7 +861,8 @@ public enum CoachingEngine {
             guard current < target, changes < capacity else { continue }
             let amount = min(target - current, capacity - changes)
             if let slot = program.slots.first(where: {
-                $0.pattern == pattern && $0.capacityManaged && !$0.isMain && $0.plannedSets < $0.maximumSets
+                $0.pattern == pattern && $0.capacityManaged && !$0.isMain
+                    && supportsAddedCapacity($0) && $0.plannedSets < $0.maximumSets
             }) {
                 let add = min(amount, slot.maximumSets - slot.plannedSets)
                 guard add > 0 else { continue }
@@ -868,7 +872,7 @@ public enum CoachingEngine {
                 capacityEvidence.append("\(pattern.name) \(current)/\(target) → +\(add)")
                 changes += add
             } else {
-                let day = preferredDay(for: pattern, slots: program.slots)
+                guard let day = preferredDay(for: pattern, slots: program.slots) else { continue }
                 capacityAdjustments.append(.addPattern(
                     pattern: pattern, dayIndex: day, sets: amount
                 ))
@@ -931,7 +935,11 @@ public enum CoachingEngine {
             if slot.prescriptionStyle == .maxEffort,
                let latestExposure = newest.lazy.compactMap({ session -> (CoachingSessionSnapshot, CoachingExerciseSnapshot)? in
                    guard session.rotation != ProgramProgression.deloadWeek,
-                         let exercise = session.exercises.first(where: { $0.slotID == slot.id }) else { return nil }
+                         let exercise = session.exercises.first(where: { $0.slotID == slot.id }),
+                         exercise.sets.contains(where: {
+                             !$0.isWarmup && $0.completed && $0.actualReps == 1
+                                 && $0.prescriptionBlock.countsAsPrescribedWork
+                         }) else { return nil }
                    return (session, exercise)
                }).first,
                latestExposure.1.exerciseName == slot.exerciseName {
@@ -939,7 +947,7 @@ public enum CoachingEngine {
                     ruleID: "program.slot.rotate.max-effort-weekly.v\(ruleVersion)",
                     priority: 65,
                     title: "Rotate \(slot.exerciseName)",
-                    explanation: "The latest max-effort exposure used \(slot.exerciseName). Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.",
+                    explanation: "The latest completed max-effort single used \(slot.exerciseName). Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.",
                     change: .rotateExercise(slotID: slot.id, exerciseName: slot.exerciseName),
                     evidenceKey: "\(evidenceKey)-\(latestExposure.0.id)-\(slot.id)"
                 ))
@@ -1085,18 +1093,26 @@ public enum CoachingEngine {
         }
     }
 
-    private static func preferredDay(for pattern: MovementPattern, slots: [CoachingProgramSlot]) -> Int {
+    /// Technique and explosive days own quality, not fatigue accumulation.
+    /// Explicit intent is the proof; legacy `.general` days retain the old
+    /// capacity behavior exactly.
+    private static func supportsAddedCapacity(_ slot: CoachingProgramSlot) -> Bool {
+        slot.trainingIntent != .technique && slot.trainingIntent != .explosive
+    }
+
+    private static func preferredDay(for pattern: MovementPattern, slots: [CoachingProgramSlot]) -> Int? {
+        let eligible = slots.filter(supportsAddedCapacity)
         if pattern == .kneeFlexion || pattern == .hipExtension {
-            if let squatDay = slots.first(where: { $0.isMain && $0.pattern == .squat })?.dayIndex {
+            if let squatDay = eligible.first(where: { $0.isMain && $0.pattern == .squat })?.dayIndex {
                 return squatDay
             }
         }
         if pattern == .verticalPull || pattern == .shoulderStability {
-            if let upperDay = slots.first(where: {
+            if let upperDay = eligible.first(where: {
                 $0.isMain && ($0.pattern == .horizontalPress || $0.pattern == .verticalPress)
             })?.dayIndex { return upperDay }
         }
-        return slots.map(\.dayIndex).min() ?? 0
+        return eligible.map(\.dayIndex).min()
     }
 
     /// A conservative individualized frequency experiment: after at least four

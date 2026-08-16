@@ -15,6 +15,7 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
         lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
       );
       return { id: lift.id, exerciseName: lift.exerciseName, dayIndex: day.order,
+        trainingIntent: day.trainingIntent || "general",
         pattern: exercise?.movementPattern || C.movementPattern(lift.exerciseName, exercise?.movementGroup),
         plannedSets: plan.sets, role: lift.role, isMain: lift.role === "main", capacityManaged: lift.capacityManaged !== false,
         maximumSets: lift.maximumSets || C.DEFAULT_MAXIMUM_SETS,
@@ -34,6 +35,7 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
     ...(day.accessories || []).map((accessory) => {
       const exercise = exMap.get(accessory.exerciseName);
       return { id: accessory.id, exerciseName: accessory.exerciseName, dayIndex: day.order,
+        trainingIntent: day.trainingIntent || "general",
         pattern: exercise?.movementPattern || C.movementPattern(accessory.exerciseName, exercise?.movementGroup),
         plannedSets: accessory.sets, role: "accessory", isMain: false, capacityManaged: accessory.capacityManaged !== false,
         maximumSets: accessory.maximumSets || C.DEFAULT_MAXIMUM_SETS, stallCount: accessory.stallCount || 0,
@@ -76,8 +78,10 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
 export async function applyCoachingRecommendation(program, recommendation, exercises, sessions = []) {
   const change = recommendation.change;
   let message = "Program held unchanged.";
+  const automaticExercises = exercises.filter((item) => C.exerciseIsAvailableForProgramming(item)
+    && C.equipmentPolicyAllows(program.equipmentPolicy, item.type));
   if (change.type === "capacityPlan") {
-    const available = exercises.filter(C.exerciseIsAvailableForProgramming);
+    const available = automaticExercises;
     const resolved = (change.additions || []).map((adjustment) => {
       if (adjustment.type !== "addPattern") return { adjustment };
       const exercise = (C.PREFERRED_EXERCISES[adjustment.pattern] || [])
@@ -126,7 +130,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
       message = `${slot.exerciseName}: ${old} → ${slot[key]} sets per rotation.`;
     }
   } else if (change.type === "addPattern") {
-    const available = exercises.filter(C.exerciseIsAvailableForProgramming);
+    const available = automaticExercises;
     const exercise = (C.PREFERRED_EXERCISES[change.pattern] || []).map((name) => available.find((item) => item.name === name)).find(Boolean)
       || available.find((item) => item.movementPattern === change.pattern);
     // Fallback = lowest ORDER, like native orderedDays.first (see capacityPlan).
@@ -148,8 +152,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     // The replacement is the template's own choice — pull-ups on a
     // double-progression window that grows into weighted pull-ups — not a
     // swap candidate: crossing the tier is the point. Mirrors CoachingService.
-    const pullUps = exercises.find((item) => item.name === "Pull-ups"
-      && C.exerciseIsAvailableForProgramming(item));
+    const pullUps = automaticExercises.find((item) => item.name === "Pull-ups");
     if (!pullUps) throw new Error("Pull-ups is not in the library. Add or unshelve it first.");
     const ids = new Set((change.accessorySlotIDs || []).map(String));
     const retiring = (day.accessories || []).filter((slot) => ids.has(String(slot.id)));
@@ -189,10 +192,14 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     const accessory = (program.days || []).flatMap((day) => day.accessories || []).find((slot) => slot.id === change.slotID);
     const slot = lift || accessory;
     if (!slot) throw new Error(`The program slot for ${change.exerciseName} no longer exists.`);
-    const compatible = exercises.filter((candidate) => C.swapCompatible(
+    if (slot.exerciseName !== change.exerciseName) {
+      throw new Error(`The program slot changed after the ${change.exerciseName} recommendation, so no rotation was applied.`);
+    }
+    const compatible = automaticExercises.filter((candidate) => C.swapCompatible(
       current,
       { ...candidate, isShelved: C.exerciseIsShelved(candidate) },
-    ));
+    ))
+      .sort((a, b) => String(a.name) < String(b.name) ? -1 : String(a.name) > String(b.name) ? 1 : 0);
     const preferred = C.PREFERRED_MAX_EFFORT_EXERCISES[current.movementPattern] || [];
     const start = preferred.includes(current.name) ? (preferred.indexOf(current.name) + 1) % preferred.length : 0;
     const preferredNames = preferred.length
@@ -208,7 +215,9 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
         .filter((entry) => entry.exerciseName === replacement.name)
         .flatMap((entry) => entry.sets || [])
         .filter((set) => !set.isWarmup && set.status === "completed" && set.reps === 1
-          && C.countsAsPrescribedWork(C.resolvedPrescriptionBlock(set)))
+          && C.countsAsPrescribedWork(C.resolvedPrescriptionBlock(set))
+          && !(set.flags || []).some((flag) => ["stopped early", "grindy", "wobble"].includes(flag))
+          && !set.bodyFlagSite && !set.autoregReason)
         .map((set) => set.weightLb || 0));
       lift.baseWeightLb = C.maxEffortVariationTarget(
         priorBest, lift.estimatedMaxLb, lift.baseWeightLb, replacement.movementGroup, program.roundingLb,

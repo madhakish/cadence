@@ -601,8 +601,11 @@ public enum ProgramProgression {
 
     /// Target for a newly selected max-effort variation. A returning special
     /// exercise resumes from its own completed single plus the normal
-    /// upper/lower increment; a never-seen variation opens conservatively from
-    /// the slot's estimated max. The old variation's target is never inherited.
+    /// upper/lower increment. Cadence cannot derive an unseen variation's max
+    /// from another exercise, so the numeric-only model supplies an 80%
+    /// calibration ceiling rather than pretending 90% is a variation-specific
+    /// target. The first clean single becomes that variation's own evidence.
+    /// The old variation's target is never inherited.
     /// Mirrors web `maxEffortVariationTarget`.
     public static func maxEffortVariationTarget(
         priorBestSingleLb: Double?, estimatedMaxLb: Double,
@@ -615,7 +618,7 @@ public enum ProgramProgression {
         if let priorBestSingleLb, priorBestSingleLb > 0 {
             seed = priorBestSingleLb + increment
         } else if estimatedMaxLb > 0 {
-            seed = estimatedMaxLb * 0.90
+            seed = estimatedMaxLb * 0.80
         } else {
             seed = fallbackBaseLb
         }
@@ -950,9 +953,9 @@ public enum ProgramProgression {
                 next.stallCount = 0
                 next.baseWeightLb = Weight.round(made + increment, to: roundingLb)
                 next.lastIncrementLb = next.baseWeightLb - state.baseWeightLb
-                // A real single is already a max-strength observation; Epley
-                // would inflate it by 3.3% merely because reps == 1.
-                next.estimatedMaxLb = Swift.max(state.estimatedMaxLb, perf.topSetWeightLb)
+                // Keep the slot's reference-lift estimate stable. Feeding this
+                // special exercise's single into it would leak one variation's
+                // max into the next through a different field.
                 note = "Made the top single — next target +\(Weight.trim(increment)) lb. Rotate the variation to keep it moving."
             } else {
                 // Rotation, not accumulation, is this methodology's stall
