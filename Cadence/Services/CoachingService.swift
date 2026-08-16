@@ -348,15 +348,10 @@ enum CoachingService {
             }
             if let lift {
                 if lift.prescription == .maxEffort {
-                    let priorBest = sessions.filter(\.isCompleted)
-                        .flatMap(\.exercises)
-                        .filter { $0.exercise?.name == replacement.name }
-                        .flatMap(\.orderedSets)
-                        .filter {
-                            !$0.isWarmup && $0.status == .completed && $0.reps == 1
-                                && $0.prescriptionBlock.countsAsPrescribedWork
-                        }
-                        .map(\.weightLb).max()
+                    let priorBest = bestCompletedMaxEffortSingle(
+                        for: replacement.name,
+                        sessions: sessions
+                    )
                     lift.baseWeightLb = ProgramProgression.maxEffortVariationTarget(
                         priorBestSingleLb: priorBest,
                         estimatedMaxLb: lift.estimatedMaxLb,
@@ -456,6 +451,24 @@ enum CoachingService {
             if let exercise = compatible.first(where: { $0.name == name }) { return exercise }
         }
         return compatible.first
+    }
+
+    private static func bestCompletedMaxEffortSingle(
+        for exerciseName: String,
+        sessions: [WorkoutSession]
+    ) -> Double? {
+        var best: Double?
+        for session in sessions where session.isCompleted {
+            for exercise in session.exercises where exercise.exercise?.name == exerciseName {
+                for set in exercise.orderedSets where !set.isWarmup
+                    && set.status == .completed
+                    && set.reps == 1
+                    && set.prescriptionBlock.countsAsPrescribedWork {
+                    best = max(best ?? set.weightLb, set.weightLb)
+                }
+            }
+        }
+        return best
     }
 
     private static func defaultRepRange(_ pattern: MovementPattern) -> (Int, Int) {
