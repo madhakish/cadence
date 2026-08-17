@@ -147,6 +147,14 @@ final class ProgramDay {
     var orderedAccessories: [ProgramAccessory] {
         uniqueProgramModels(accessories).sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
     }
+
+    /// Authored order (order field, ordinal name tiebreak), role-blind — the
+    /// portable contracts (backup, program file) serialize the athlete's
+    /// authored sequence exactly as the web exporter does; role-first
+    /// `orderedLifts` is a display/session rule, not part of the bytes.
+    var authoredLifts: [ProgramLift] {
+        uniqueProgramModels(lifts).sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
+    }
 }
 
 /// A cycle-driven main/complementary lift. Wraps `ProgramLiftState`.

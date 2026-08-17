@@ -148,7 +148,17 @@ maximum; otherwise Cadence proposes an available exercise from the library.
 Automatic capacity never grows a day explicitly authored as `technique` or
 `explosive`; those days own execution quality rather than fatigue accumulation.
 Programs with the legacy `general` intent behave exactly as before. The
-program's equipment policy also filters any new exercise proposed for a gap.
+program's equipment policy also filters any new exercise proposed for a gap —
+and it filters at **evaluation** time, not only on Apply: the snapshot carries
+the set of patterns the library can actually fill under the policy, so the
+coach never proposes an addition that is guaranteed to fail (a
+`freeWeightsOnly` program whose only adductor candidates are machines).
+
+A floor that cannot be raised automatically — every candidate day is
+`technique`/`explosive`, or no policy-compatible exercise exists — is not
+silently dropped. A separate informational recommendation
+(`capacity.rotation-plan.blocked`, a `hold` change) names each blocked
+pattern and why, so an unmet minimum is always visible to the athlete.
 
 Hamstring isolation and hip-extension additions are placed on the squat-led
 day, preserving the posterior-chain budget of the deadlift-led day. Program

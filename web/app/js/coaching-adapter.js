@@ -71,8 +71,22 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
             durationSeconds: set.durationSeconds ?? null })) };
       }) }];
   });
+  // What the apply path could actually resolve for each pattern, so the
+  // engine never proposes an addPattern that is guaranteed to throw on Apply
+  // (a freeWeightsOnly program whose only candidates are machines, forever).
+  // Mirrors CoachingService.report and the resolution in
+  // applyCoachingRecommendation: preferred names first, then any exercise
+  // classified under the pattern.
+  const policyExercises = [...exMap.values()].filter((item) => C.exerciseIsAvailableForProgramming(item)
+    && C.equipmentPolicyAllows(program.equipmentPolicy, item.type));
+  const patternsWithAvailableExercise = [...new Set([
+    ...policyExercises.map((item) => item.movementPattern).filter(Boolean),
+    ...Object.keys(C.PREFERRED_EXERCISES).filter((pattern) => (C.PREFERRED_EXERCISES[pattern] || [])
+      .some((name) => policyExercises.some((item) => item.name === name))),
+  ])];
   return C.evaluateCoaching({ id, expectedDayIndexes: (program.days || []).map((day) => day.order), slots,
-    maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation ?? 6 }, history, program.reliableHistoryStart);
+    maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation ?? 6,
+    patternsWithAvailableExercise }, history, program.reliableHistoryStart);
 }
 
 export async function applyCoachingRecommendation(program, recommendation, exercises, sessions = []) {
@@ -200,16 +214,19 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
       { ...candidate, isShelved: C.exerciseIsShelved(candidate) },
     ))
       .sort((a, b) => String(a.name) < String(b.name) ? -1 : String(a.name) > String(b.name) ? 1 : 0);
-    const preferred = C.PREFERRED_MAX_EFFORT_EXERCISES[current.movementPattern] || [];
-    const start = preferred.includes(current.name) ? (preferred.indexOf(current.name) + 1) % preferred.length : 0;
-    const preferredNames = preferred.length
-      ? Array.from({ length: preferred.length }, (_, index) => preferred[(start + index) % preferred.length]) : [];
-    const replacement = lift && (lift.prescription || "automatic") === "maxEffort"
-      ? preferredNames.map((name) => compatible.find((candidate) => candidate.name === name)).find(Boolean)
-        || compatible[0]
-      : compatible[0];
+    const isMaxEffortLift = !!lift && (lift.prescription || "automatic") === "maxEffort";
+    let replacement = compatible[0];
+    if (isMaxEffortLift) {
+      const preferred = C.PREFERRED_MAX_EFFORT_EXERCISES[current.movementPattern] || [];
+      const currentIndex = preferred.indexOf(current.name);
+      const start = currentIndex >= 0 ? (currentIndex + 1) % preferred.length : 0;
+      const rotated = preferred.length
+        ? Array.from({ length: preferred.length }, (_, index) => preferred[(start + index) % preferred.length]) : [];
+      replacement = rotated.map((name) => compatible.find((candidate) => candidate.name === name)).find(Boolean)
+        || compatible[0];
+    }
     if (!replacement) throw new Error(`No compatible variation of ${change.exerciseName} is available. Add one to the library, or unshelve an existing one.`);
-    if (lift && (lift.prescription || "automatic") === "maxEffort") {
+    if (isMaxEffortLift) {
       const priorBest = Math.max(0, ...sessions.filter((session) => session.isCompleted)
         .flatMap((session) => session.exercises || [])
         .filter((entry) => entry.exerciseName === replacement.name)

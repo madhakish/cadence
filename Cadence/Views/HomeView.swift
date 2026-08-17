@@ -633,9 +633,7 @@ struct HomeView: View {
         context.insert(session)
 
         let entry = SessionExercise(order: 0, exercise: exercise)
-        if exercise.type == .barbell {
-            entry.barID = (defaultGym?.defaultBar ?? .bar45lb).id
-        }
+        entry.stampBarID(for: exercise, bar: defaultGym?.defaultBar ?? .bar45lb)
         let plan = trackPlan(track)
         entry.targetWeightLb = track.suggestion.weightLb
         entry.plannedWeightLb = plan.weightLb

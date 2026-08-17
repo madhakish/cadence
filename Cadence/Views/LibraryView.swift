@@ -96,17 +96,27 @@ struct ExerciseDetailView: View {
         var id: String { "\(program.id):\(lift.id)" }
     }
 
-    private var cycleMemberships: [CycleMembership] {
-        programs.flatMap { program in
-            program.orderedDays.flatMap { day in
-                day.orderedLifts.compactMap { lift in
-                    lift.exerciseName == exercise.name
-                        ? CycleMembership(program: program, day: day, lift: lift)
-                        : nil
+    /// One traversal produces both the membership labels and the cycle rows —
+    /// two properties walking the same programs→days→lifts filter is how the
+    /// name-matching rule drifts. Mirrors web exerciseInsight's single loop.
+    private var membershipData: (labels: [String], cycle: [CycleMembership]) {
+        var labels: [String] = []
+        var cycle: [CycleMembership] = []
+        for program in programs {
+            for day in program.orderedDays {
+                for lift in day.orderedLifts where lift.exerciseName == exercise.name {
+                    labels.append("\(program.name) · \(day.name) (\(lift.roleRaw))")
+                    cycle.append(CycleMembership(program: program, day: day, lift: lift))
+                }
+                for accessory in day.accessories where accessory.exerciseName == exercise.name {
+                    labels.append("\(program.name) · \(day.name) (accessory)")
                 }
             }
         }
+        return (labels, cycle)
     }
+
+    private var cycleMemberships: [CycleMembership] { membershipData.cycle }
 
     private var defaultGym: Gym? { gyms.first(where: \.isDefault) ?? gyms.first }
 
@@ -147,20 +157,7 @@ struct ExerciseDetailView: View {
     }
 
     /// "Program · Day (role)" for every slot this exercise fills.
-    private var memberships: [String] {
-        var out: [String] = []
-        for p in programs {
-            for d in p.orderedDays {
-                for l in d.orderedLifts where l.exerciseName == exercise.name {
-                    out.append("\(p.name) · \(d.name) (\(l.roleRaw))")
-                }
-                for a in d.accessories where a.exerciseName == exercise.name {
-                    out.append("\(p.name) · \(d.name) (accessory)")
-                }
-            }
-        }
-        return out
-    }
+    private var memberships: [String] { membershipData.labels }
 
     /// Compact previous-performance context from the newest completed session
     /// containing this exercise.

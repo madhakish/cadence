@@ -288,4 +288,7 @@ program's **current** cycle/week/day. Duplicates and leftovers still
 bank into history — with a note — but can't advance the schedule or
 accessories twice. A session whose saved slot roles no longer match the current
 day is likewise history-only. Starting a day while an unchanged session is
-already open resumes it; a changed day builds a fresh session.
+already open resumes it; a day whose **composition** changed (a lift swapped,
+added, or removed in the editor) builds a fresh session. A pure position move
+does not — display order is derived role-first, and reordering must never
+orphan an in-flight session with logged sets.

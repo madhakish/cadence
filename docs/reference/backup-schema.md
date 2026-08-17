@@ -191,7 +191,10 @@ Every session carries:
 A program tag carries a stable portable `programId` plus the historical
 `programName` label. It also carries cycle, week, day index, and `planNames`,
 the immutable snapshot used to decide whether an open session may resume after
-a program edit. Renaming a program therefore cannot detach an open session.
+a program edit. The comparison is a name **multiset** (composition), not a
+sequence: display order is derived role-first, so a pure reorder — or a
+snapshot written before role-first ordering existed — never orphans an open
+session. Renaming a program therefore cannot detach an open session either.
 
 Every set carries a `status` of `planned`, `completed`, or `skipped`. Only
 completed sets contribute to volume, PRs, charts, HealthKit metadata, or

@@ -171,7 +171,7 @@ export async function render(host) {
         text: `${daysSinceLast === 0 ? "Trained today" : `${daysSinceLast} day${daysSinceLast === 1 ? "" : "s"} since your last session`}`
           + ` · you prefer ${program.preferredSessionSpacingDays}. Train anyway if today is the day that works.` }));
     }
-    const lifts = C.orderedProgramSlots(day.lifts, true);
+    const lifts = C.orderedProgramSlots(day.lifts);
     for (const l of lifts) {
       const ex = exMap.get(l.exerciseName);
       // planningBase, not the stored base: the card must show the same honest
@@ -313,7 +313,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
 
       body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
       const liftCard = ui.h("div", { class: "card" });
-      const lifts = C.orderedProgramSlots(day.lifts, true);
+      const lifts = C.orderedProgramSlots(day.lifts);
       if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No program lifts this day." }));
       for (const l of lifts) {
         const ex = exMap.get(l.exerciseName);

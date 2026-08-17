@@ -70,6 +70,12 @@ export function includesEmptyBarWarmup(exerciseName) {
 
 async function defaultGymTag() { const g = await Gyms.default(); return { gymId: g?.id || null, gymName: g?.name || null }; }
 
+// Barbell entries record the bar that builds them so later gym edits cannot
+// reinterpret logged stacks; every other type floats (barId null). One
+// spelling for every entry-creation path — a missed stamp silently recreates
+// the legacy drifting rows. Mirrors SessionExercise.stampBarID.
+function barStamp(exercise, bar) { return exercise?.type === "barbell" ? C.barId(bar) : null; }
+
 export async function createSessionFromTrack(track) {
   const [ex, gym, settings] = await Promise.all([Exercises.byName(track.exerciseName), Gyms.default(), Settings.get()]);
   const unit = C.primaryUnit(settings.unitDisplay);
@@ -98,7 +104,7 @@ export async function createSessionFromTrack(track) {
     perSide: ex && ex.isUnilateral, unit, ...loadOptions(ex),
   }));
   const se = { order: 0, exerciseName: track.exerciseName, notes: "", phase: sug.phase || null,
-    barId: ex?.type === "barbell" ? C.barId(bar) : null,
+    barId: barStamp(ex, bar),
     targetWeightLb: sug.weightLb, plannedWeightLb: workingLb, plannedSets: sug.sets, plannedReps: sug.reps, sets };
   const id = await Sessions.save({ date: iso(new Date()), notes: "", isCompleted: false, gymId: gym?.id || null, gymName: gym?.name || null, exercises: [se] });
   return id;
@@ -360,9 +366,20 @@ export async function openSession(id) {
     if (gymOptions.length) {
       const gymSelect = ui.h("select", {}, ...gymOptions.map((g) => ui.h("option", { value: g.id, text: g.name, selected: g.id === gymState.value?.id })));
       gymSelect.addEventListener("change", () => {
+        // Entries still tracking the OUTGOING gym's default bar follow the
+        // explicit switch (restamp + warmup resync); a manually chosen bar, an
+        // entry with logged sets, or a legacy nil entry keeps its record —
+        // nil-only resync went dead the moment creation started stamping
+        // every barbell entry. Mirrors ActiveSessionView.trainingAtSection.
+        const previousBarId = gymState.value ? C.barId(C.barById(gymState.value.defaultBarId)) : null;
         gymState.value = gymOptions.find((g) => g.id === gymSelect.value) || gymState.value;
         session.gymId = gymState.value?.id || null; session.gymName = gymState.value?.name || null;
-        for (const se of session.exercises) if (!se.barId) synchronizeWarmups(se, C.barById(gymState.value.defaultBarId));
+        const bar = C.barById(gymState.value.defaultBarId);
+        for (const se of session.exercises) {
+          const hasCompletedSet = (se.sets || []).some((set) => set.status === "completed");
+          if (se.barId && se.barId === previousBarId && !hasCompletedSet) se.barId = C.barId(bar);
+          if (!se.barId || se.barId === C.barId(bar)) synchronizeWarmups(se, bar);
+        }
         save(); renderBody(body);
       });
       body.append(ui.field("Training at", gymSelect));
@@ -986,7 +1003,7 @@ export async function openSession(id) {
               results.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px", justifyContent: "space-between" },
                 onClick: () => {
                   session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null,
-                    barId: e.type === "barbell" ? C.barId(C.barById(gymState.value?.defaultBarId)) : null,
+                    barId: barStamp(e, C.barById(gymState.value?.defaultBarId)),
                     plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
                   api.close(); save(); renderBody(body);
                 } },
@@ -1854,7 +1871,7 @@ export function volumeFallbackSets(lift, program) {
 }
 
 function sessionTargetsMatch(session, program, day, exMap, allSessions) {
-  return C.orderedProgramSlots(day.lifts, true).every((lift) => {
+  return C.orderedProgramSlots(day.lifts).every((lift) => {
     const exercise = exMap.get(lift.exerciseName);
     // The same honest base the builder plans from — an open session built
     // from the stale label must not resume once the repair raises the plan.
@@ -1890,7 +1907,7 @@ export async function createSessionFromProgramDay(program, day) {
   // A name/program-only match resurrected stale snapshots after a day was
   // edited; canResume compares the snapshot (not live exercises) so a
   // session-local remove/swap is preserved while a program edit builds fresh.
-  const sortedLifts = C.orderedProgramSlots(day.lifts, true);
+  const sortedLifts = C.orderedProgramSlots(day.lifts);
   const sortedAccessories = C.orderedProgramSlots(day.accessories);
   const dayNames = [...sortedLifts.map((l) => l.exerciseName), ...sortedAccessories.map((a) => a.exerciseName)];
   const stableProgramID = program.uuid || program.id;
@@ -1982,7 +1999,7 @@ export async function createSessionFromProgramDay(program, day) {
         C.barLabelLb(bar))
       : rawFallback;
     exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek,
-      barId: ex?.type === "barbell" ? C.barId(bar) : null,
+      barId: barStamp(ex, bar),
       targetWeightLb: plan.weightLb, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps,
       fallbackWeightLb, prescriptionStyle: lift.prescription || "automatic",
       programRole: lift.role, programSlotId: lift.id, sets });
@@ -2011,7 +2028,7 @@ export async function createSessionFromProgramDay(program, day) {
       sets.push(set);
     }
     exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null,
-      barId: ex?.type === "barbell" ? C.barId(bar) : null,
+      barId: barStamp(ex, bar),
       targetWeightLb: isTimed ? 0 : acc.weightLb, plannedWeightLb: isTimed ? 0 : weightLb,
       plannedSets: effectiveSets, plannedReps: isTimed ? 1 : acc.currentReps,
       plannedDurationSeconds: isTimed ? (acc.targetSeconds || 30) : null,

@@ -265,6 +265,46 @@ final class CoachingEngineTests: XCTestCase {
         })
         XCTAssertEqual(rotationSlotID(suggestion), "squat")
         XCTAssertTrue(suggestion.explanation.contains("another special exercise"))
+        XCTAssertTrue(suggestion.id.hasSuffix("-squat"), "one suggestion per slot")
+        XCTAssertFalse(suggestion.id.contains(sessions[latestSquatIndex].id),
+                       "the id carries only portable components — a session id is client-local (web autoincrement vs UUID) and rewritten by backup restore, resurfacing dismissed prompts")
+    }
+
+    func testAllQualityDaysSurfaceBlockedVolumeFloors() throws {
+        var protected = program()
+        for index in protected.slots.indices {
+            protected.slots[index].trainingIntent = index.isMultiple(of: 2) ? .technique : .explosive
+        }
+        let report = CoachingEngine.evaluate(program: protected, sessions: greenRotations())
+        let blocked = try XCTUnwrap(report.recommendations.first {
+            $0.ruleID == "capacity.rotation-plan.blocked.v\(CoachingEngine.ruleVersion)"
+        }, "an unmet volume floor with no eligible day must be surfaced, not silently dropped")
+        XCTAssertEqual(blocked.change, .hold)
+        XCTAssertTrue(blocked.explanation.contains("no eligible day (technique/explosive)"))
+    }
+
+    func testUnfillablePatternIsBlockedNotProposed() throws {
+        var constrained = program()
+        // The client's library/equipment policy cannot fill vertical pull:
+        // proposing addPattern for it would fail on Apply, every rotation.
+        constrained.patternsWithAvailableExercise = [.kneeFlexion, .shoulderStability, .adductor, .core]
+        let report = CoachingEngine.evaluate(program: constrained, sessions: greenRotations())
+        let plan = try XCTUnwrap(report.recommendations.first { recommendation in
+            if case .capacityPlan = recommendation.change { return true }
+            return false
+        })
+        guard case .capacityPlan(let additions) = plan.change else {
+            return XCTFail("Expected one bundled capacity plan")
+        }
+        XCTAssertFalse(additions.contains { adjustment in
+            if case .addPattern(let pattern, _, _) = adjustment { return pattern == .verticalPull }
+            return false
+        }, "a pattern with no policy-compatible exercise is never proposed")
+        let blocked = try XCTUnwrap(report.recommendations.first {
+            $0.ruleID == "capacity.rotation-plan.blocked.v\(CoachingEngine.ruleVersion)"
+        })
+        XCTAssertTrue(blocked.explanation.contains("no compatible exercise available"),
+                      "the impossible pattern is reported as blocked instead of re-proposed forever")
     }
 
     func testMaxEffortEntryWithoutACompletedWorkSingleDoesNotProposeRotation() {

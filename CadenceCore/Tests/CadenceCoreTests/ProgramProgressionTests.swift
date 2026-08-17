@@ -388,6 +388,10 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertFalse(resume(3, 3, plan, plan, tagCycle: 1), "stale cycle → build fresh")
         XCTAssertFalse(resume(3, 3, plan, plan, tagWeek: 2), "stale week → build fresh")
         XCTAssertFalse(resume(3, 3, [], plan), "pre-snapshot session → build fresh")
+        XCTAssertTrue(resume(3, 3, ["Dips", "Overhead Press", "Incline DB Press"], plan),
+                      "same composition in a different order → resume: role-first display reordering (and pre-role-first snapshots) must not orphan an in-flight session")
+        XCTAssertFalse(resume(3, 3, ["Dips", "Dips", "Overhead Press"], plan),
+                       "plan names compare as a multiset — duplicates must match")
     }
 
     func testBelowPlanWorkFailsCycle() {

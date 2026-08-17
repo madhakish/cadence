@@ -485,7 +485,12 @@ enum ExportService {
             },
             programs: programs.map { p in
                 ExportProgram(
-                    id: p.id, name: p.name, focus: p.focusRaw, equipmentPolicy: p.equipmentPolicyRaw,
+                    // equipmentPolicy/trainingIntent go through the coercing
+                    // accessors: import validation rejects out-of-enum values,
+                    // and an unknown raw (newer-binary downgrade, corruption)
+                    // must not produce a backup this same app refuses to
+                    // restore. Web exports the normalized value the same way.
+                    id: p.id, name: p.name, focus: p.focusRaw, equipmentPolicy: p.equipmentPolicy.rawValue,
                     cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
                     nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: p.isActive,
                     coachEnabled: p.coachEnabled, reliableHistoryStart: p.reliableHistoryStart,
@@ -493,8 +498,10 @@ enum ExportService {
                     maximumAddedSetsPerRotation: p.maximumAddedSetsPerRotation,
                     days: p.orderedDays.map { d in
                         ExportProgramDay(
-                            name: d.name, order: d.order, trainingIntent: d.trainingIntentRaw,
-                            lifts: d.orderedLifts.map { l in
+                            name: d.name, order: d.order, trainingIntent: d.trainingIntent.rawValue,
+                            // Authored order, matching the web backup export —
+                            // role-first display must not change the bytes.
+                            lifts: d.authoredLifts.map { l in
                                 ExportProgramLift(
                                     id: l.id, exerciseName: l.exerciseName, role: l.roleRaw, order: l.order,
                                     prescription: l.prescriptionRaw, warmupPolicy: l.warmupPolicyRaw,

@@ -327,13 +327,22 @@ public struct CoachingProgramSnapshot: Hashable, Sendable {
     public var expectedDayIndexes: Set<Int>
     public var slots: [CoachingProgramSlot]
     public var maximumAddedSetsPerRotation: Int
+    /// Patterns the client's apply path can actually resolve to an exercise
+    /// under the program's equipment policy. `nil` means the caller did not
+    /// say (legacy snapshots): propose as before. When present, the capacity
+    /// rule never proposes an `addPattern` that is guaranteed to fail on
+    /// Apply — a freeWeightsOnly program whose only candidates are machines
+    /// would otherwise be offered the same impossible plan every rotation.
+    public var patternsWithAvailableExercise: Set<MovementPattern>?
 
     public init(id: String, expectedDayIndexes: Set<Int>, slots: [CoachingProgramSlot],
-                maximumAddedSetsPerRotation: Int = 6) {
+                maximumAddedSetsPerRotation: Int = 6,
+                patternsWithAvailableExercise: Set<MovementPattern>? = nil) {
         self.id = id
         self.expectedDayIndexes = expectedDayIndexes
         self.slots = slots
         self.maximumAddedSetsPerRotation = max(0, maximumAddedSetsPerRotation)
+        self.patternsWithAvailableExercise = patternsWithAvailableExercise
     }
 }
 
@@ -856,6 +865,7 @@ public enum CoachingEngine {
         var result: [CoachingRecommendation] = programChanges
         var capacityAdjustments: [CoachingCapacityAdjustment] = []
         var capacityEvidence: [String] = []
+        var blockedEvidence: [String] = []
         for (pattern, target) in budgets {
             let current = planned[pattern, default: 0]
             guard current < target, changes < capacity else { continue }
@@ -871,13 +881,21 @@ public enum CoachingEngine {
                 ))
                 capacityEvidence.append("\(pattern.name) \(current)/\(target) → +\(add)")
                 changes += add
-            } else {
-                guard let day = preferredDay(for: pattern, slots: program.slots) else { continue }
+            } else if let available = program.patternsWithAvailableExercise,
+                      !available.contains(pattern) {
+                // The client's library/equipment policy cannot fill this
+                // pattern; proposing addPattern would only ever fail on Apply.
+                blockedEvidence.append("\(pattern.name) \(current)/\(target) — no compatible exercise available")
+            } else if let day = preferredDay(for: pattern, slots: program.slots) {
                 capacityAdjustments.append(.addPattern(
                     pattern: pattern, dayIndex: day, sets: amount
                 ))
                 capacityEvidence.append("\(pattern.name) \(current)/\(target) → +\(amount)")
                 changes += amount
+            } else {
+                // Every candidate day is technique/explosive: the floor stays
+                // unmet, and silence would hide that from the athlete.
+                blockedEvidence.append("\(pattern.name) \(current)/\(target) — no eligible day (technique/explosive)")
             }
         }
         if !capacityAdjustments.isEmpty {
@@ -888,6 +906,17 @@ public enum CoachingEngine {
                 title: "Add \(total) targeted set\(total == 1 ? "" : "s")",
                 explanation: "Two rotations were green. " + capacityEvidence.joined(separator: "; ") + ".",
                 change: .capacityPlan(capacityAdjustments),
+                evidenceKey: evidenceKey
+            ))
+        }
+        if !blockedEvidence.isEmpty {
+            result.append(CoachingRecommendation(
+                ruleID: "capacity.rotation-plan.blocked.v\(ruleVersion)",
+                priority: 39,
+                title: "Volume floors need attention",
+                explanation: "Two rotations were green, but some movement floors cannot be raised automatically: "
+                    + blockedEvidence.joined(separator: "; ") + ".",
+                change: .hold,
                 evidenceKey: evidenceKey
             ))
         }
@@ -918,7 +947,12 @@ public enum CoachingEngine {
         program: CoachingProgramSnapshot, sessions: [CoachingSessionSnapshot], evidenceKey: String
     ) -> [CoachingRecommendation] {
         var result: [CoachingRecommendation] = []
-        let newest = sessions.sorted { $0.date > $1.date }
+        // Only the max-effort branch reads history; most programs have no
+        // such slot and must not pay a full-history sort per report (the
+        // report already recomputes per Home render on both clients).
+        let newest: [CoachingSessionSnapshot] = program.slots
+            .contains { $0.prescriptionStyle == .maxEffort }
+            ? sessions.sorted { $0.date > $1.date } : []
         for slot in program.slots.sorted(by: { ($0.dayIndex, $0.id) < ($1.dayIndex, $1.id) }) {
             guard !slot.pattern.isConditioning else { continue }
             if slot.exerciseIsShelved {
@@ -949,7 +983,12 @@ public enum CoachingEngine {
                     title: "Rotate \(slot.exerciseName)",
                     explanation: "The latest completed max-effort single used \(slot.exerciseName). Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.",
                     change: .rotateExercise(slotID: slot.id, exerciseName: slot.exerciseName),
-                    evidenceKey: "\(evidenceKey)-\(latestExposure.0.id)-\(slot.id)"
+                    // Portable components only (cycle/rotation key + slot id)
+                    // — NEVER the session id, which is a UUID here but an
+                    // IndexedDB autoincrement on web and is rewritten by any
+                    // backup restore, so embedding it resurfaces dismissed
+                    // recommendations. Mirrors web rotationSuggestions.
+                    evidenceKey: "\(evidenceKey)-\(slot.id)"
                 ))
                 continue
             }

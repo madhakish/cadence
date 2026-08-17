@@ -287,12 +287,26 @@ struct ActiveSessionView: View {
                     get: { gym?.id ?? "" },
                     set: { id in
                         guard let selected = gyms.first(where: { $0.id == id }) else { return }
+                        // Entries still tracking the OUTGOING gym's default
+                        // bar follow the explicit switch (restamp + warmup
+                        // resync); a manually chosen bar, an entry with
+                        // logged sets, or a legacy nil entry keeps its
+                        // record — the nil-only resync went dead the moment
+                        // creation started stamping every barbell entry.
+                        // Mirrors the web session gym select.
+                        let previousBarID = gym?.defaultBar.id
                         session.gymID = selected.id
                         session.gymName = selected.name
-                        for entry in session.exercises where entry.barID == nil {
-                            synchronizeWarmups(entry, bar: selected.defaultBar, gym: selected,
-                                               enteredUnit: settingsList.first?.unitDisplay.primaryUnit ?? .lb,
-                                               context: context)
+                        for entry in session.exercises {
+                            let hasCompletedSet = entry.sets.contains { $0.status == .completed }
+                            if entry.barID != nil, entry.barID == previousBarID, !hasCompletedSet {
+                                entry.barID = selected.defaultBar.id
+                            }
+                            if entry.barID == nil || entry.barID == selected.defaultBar.id {
+                                synchronizeWarmups(entry, bar: selected.defaultBar, gym: selected,
+                                                   enteredUnit: settingsList.first?.unitDisplay.primaryUnit ?? .lb,
+                                                   context: context)
+                            }
                         }
                         PersistenceErrorCenter.shared.save(context, operation: "Changing the session gym")
                     }
@@ -440,9 +454,7 @@ struct ActiveSessionView: View {
 
     private func addExercise(_ exercise: Exercise) {
         let entry = SessionExercise(order: session.exercises.count, exercise: exercise)
-        if exercise.type == .barbell {
-            entry.barID = (gym?.defaultBar ?? .bar45lb).id
-        }
+        entry.stampBarID(for: exercise, bar: gym?.defaultBar ?? .bar45lb)
         context.insert(entry)
         session.exercises.append(entry)
         PersistenceErrorCenter.shared.save(context, operation: "Adding the exercise")
@@ -617,6 +629,16 @@ private struct ExerciseSection: View {
             }
         }
         entry.exercise = newExercise
+        // The swap is an entry mutation like creation: a barbell substitute
+        // must carry a bar record (keep an existing pick, else stamp the gym
+        // default) and a non-barbell substitute must not keep a stale one —
+        // an unstamped swapped entry is exactly the legacy-nil row the
+        // gym-change resync would keep reinterpreting.
+        if newExercise.type != .barbell {
+            entry.barID = nil
+        } else if entry.barID == nil {
+            entry.barID = (gym?.defaultBar ?? .bar45lb).id
+        }
         entry.sets.forEach { set in
             set.isPerSide = newExercise.isUnilateral
             if set.status == .planned {

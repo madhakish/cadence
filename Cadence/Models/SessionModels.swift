@@ -135,6 +135,15 @@ final class SessionExercise {
         self.sets = []
     }
 
+    /// One spelling of the bar-stamping rule for every entry-creation path:
+    /// barbell entries record the bar that builds them so later gym edits
+    /// cannot reinterpret logged stacks; every other type floats (nil).
+    /// A creation site that hand-rolls the stamp is a site a future rule
+    /// change will miss. Mirrors web session.js `barStamp`.
+    func stampBarID(for exercise: Exercise, bar: Bar) {
+        barID = exercise.type == .barbell ? bar.id : nil
+    }
+
     var phase: CyclePhase? {
         get { phaseRaw.flatMap(CyclePhase.init(rawValue:)) }
         set { phaseRaw = newValue?.rawValue }

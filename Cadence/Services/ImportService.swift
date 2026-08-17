@@ -356,7 +356,7 @@ enum ImportService {
             if schemaVersion >= 2 { _ = try portableID(program.id, "\(path).id") }
             _ = try requiredText(program.name, "\(path).name")
             try known(program.focus, ["strength", "hypertrophy", "maintain"], "\(path).focus", required: schemaVersion >= 1)
-            try known(program.equipmentPolicy, Set(EquipmentPolicy.allCases.map(\.rawValue)),
+            try known(program.equipmentPolicy, ProgramFileContract.equipmentPolicies,
                       "\(path).equipmentPolicy", required: schemaVersion >= 9)
             try integer(program.cycleNumber, "\(path).cycleNumber", min: 1)
             try integer(program.currentWeek, "\(path).currentWeek", min: 1, max: 4)
@@ -368,7 +368,9 @@ enum ImportService {
                 let dayPath = "\(path).days[\(di)]"
                 _ = try requiredText(day.name, "\(dayPath).name")
                 try integer(day.order, "\(dayPath).order", required: true, min: 0)
-                try known(day.trainingIntent, Set(DayTrainingIntent.allCases.map(\.rawValue)),
+                // The static contract set, not a per-day rebuild — this runs
+                // inside the day loop for every restored program.
+                try known(day.trainingIntent, ProgramFileContract.dayTrainingIntents,
                           "\(dayPath).trainingIntent", required: schemaVersion >= 9)
                 for (li, lift) in (day.lifts ?? []).enumerated() {
                     let liftPath = "\(dayPath).lifts[\(li)]"

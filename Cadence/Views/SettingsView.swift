@@ -1095,6 +1095,14 @@ struct ProgramDayEditorView: View {
     private func moveLifts(from offsets: IndexSet, to destination: Int) {
         var ordered = day.orderedLifts
         ordered.move(fromOffsets: offsets, toOffset: destination)
+        // Role-first ordering is enforced at display time: a drop that lands
+        // complementary work ahead of a main would snap back visually while
+        // silently rewriting every authored order, so refuse it (no write)
+        // instead of churning a no-op. Mirrors web settings.js moveSlot.
+        let roles = ordered.map(\.roleRaw)
+        if let lastMain = roles.lastIndex(of: LiftRole.main.rawValue),
+           let firstOther = roles.firstIndex(where: { $0 != LiftRole.main.rawValue }),
+           firstOther < lastMain { return }
         for (index, lift) in ordered.enumerated() { lift.order = index }
         PersistenceErrorCenter.shared.save(context, operation: "Reordering program lifts")
     }

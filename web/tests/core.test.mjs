@@ -609,6 +609,10 @@ eq(C.sessionTagCurrent(2, 1, 3, 2, 1, 0), false, "stale day → not current");
   eq(C.canResumeSession(1, 1, 3, 2, 1, 3, plan, plan), false, "stale cycle → build fresh");
   eq(C.canResumeSession(2, 2, 3, 2, 1, 3, plan, plan), false, "stale week → build fresh");
   eq(C.canResumeSession(2, 1, 3, 2, 1, 3, [], plan), false, "pre-snapshot session (no plan names) → build fresh");
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Dips", "Overhead Press", "Incline DB Press"], plan), true,
+    "same composition in a different order resumes — role-first display reordering (and pre-role-first snapshots) must not orphan an in-flight session");
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Dips", "Dips", "Overhead Press"], plan), false,
+    "plan names compare as a multiset, not a set — duplicates must match");
 }
 
 // RestClock.add shrinks as well as extends, flooring at 0 (subtract control)
@@ -1423,6 +1427,28 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   report = C.evaluateCoaching(qualityOnlyProgram, sessions);
   ok(!report.recommendations.some((candidate) => candidate.change.type === "capacityPlan"),
     "technique and explosive days never become automatic accessory-volume sinks");
+  const blocked = report.recommendations.find((candidate) =>
+    candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
+  ok(!!blocked && blocked.change.type === "hold",
+    "an unmet volume floor with no eligible day is surfaced, not silently dropped");
+  ok(blocked.explanation.includes("no eligible day (technique/explosive)"),
+    "the blocked evidence names why the floor cannot be raised");
+
+  // The client can declare which patterns its library/equipment policy can
+  // actually fill; the engine must never propose an addPattern that is
+  // guaranteed to fail on Apply (and must say so instead).
+  const constrainedProgram = {
+    ...coachingProgram,
+    patternsWithAvailableExercise: ["kneeFlexion", "shoulderStability", "adductor", "core"],
+  };
+  report = C.evaluateCoaching(constrainedProgram, sessions);
+  const constrainedPlan = report.recommendations.find((r) => r.change.type === "capacityPlan");
+  ok(!!constrainedPlan && !constrainedPlan.change.additions.some((a) => a.pattern === "verticalPull"),
+    "a pattern with no policy-compatible exercise is never proposed");
+  const constrainedBlocked = report.recommendations.find((candidate) =>
+    candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
+  ok(!!constrainedBlocked && constrainedBlocked.explanation.includes("no compatible exercise available"),
+    "the impossible pattern is reported as blocked instead of re-proposed forever");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3));
@@ -1494,6 +1520,8 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`);
   ok(!!suggestion && suggestion.change.slotID === "squat",
     "a completed max-effort exposure proposes a weekly special-exercise rotation");
+  ok(suggestion.id.endsWith("-squat") && !suggestion.id.includes(latestSquat.id),
+    "the rotation id carries only portable components — a client-local session id would resurface dismissed prompts after a backup restore");
 
   report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), greenSessions);
   ok(!report.recommendations.some((candidate) =>
@@ -2379,10 +2407,8 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     { exerciseName: "Z Complement", role: "complementary", order: 0 },
     { exerciseName: "A Main", role: "main", order: 0 },
   ];
-  ok(C.orderedProgramSlots(legacy, true)[0].exerciseName === "A Main",
-    "legacy all-equal orders keep main-first");
   ok(C.orderedProgramSlots(legacy)[0].exerciseName === "A Main",
-    "all callers share the same role-first ordering");
+    "legacy all-equal orders keep main-first");
   const sameRole = [
     { exerciseName: "Second Main", role: "main", order: 2 },
     { exerciseName: "First Main", role: "main", order: 1 },

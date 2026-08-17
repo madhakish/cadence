@@ -118,7 +118,7 @@ enum ProgramSession {
             let exactLoad = lift.role.rawValue == "main" || lift.prescription.buildsOwnSessionShape
             let weightLb = neat(plan.weightLb, exercise, isMain: exactLoad, phase: phase)
             let entry = SessionExercise(order: order, exercise: exercise)
-            if exercise.type == .barbell { entry.barID = selectedBar.id }
+            entry.stampBarID(for: exercise, bar: selectedBar)
             entry.programRole = lift.role.rawValue
             entry.programSlotID = lift.id
             entry.plannedWeightLb = weightLb
@@ -207,7 +207,7 @@ enum ProgramSession {
                 ? (weightLb > 0 ? weightLb : (CardioFormat.defaultLoadLb(exerciseName: exercise.name) ?? 0))
                 : 0
             let entry = SessionExercise(order: order, exercise: exercise)
-            if exercise.type == .barbell { entry.barID = selectedBar.id }
+            entry.stampBarID(for: exercise, bar: selectedBar)
             entry.programRole = "accessory"
             entry.programSlotID = acc.id
             entry.plannedWeightLb = weightLb

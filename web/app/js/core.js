@@ -1505,15 +1505,22 @@ export function sessionTagCurrent(tagCycle, tagWeek, tagDayIndex, cycleNumber, c
 }
 
 // Whether an OPEN session may be resumed on (re)Start vs built fresh: same
-// cycle/week/day tag AND the plan it was BUILT from still equals the day's
-// CURRENT plan. Snapshot-vs-current, not the live exercises — so a session-
-// local remove/swap is preserved (resumed), while a PROGRAM edit or position
-// move diverges the built-from plan → build fresh. Empty sessionPlanNames
-// (pre-snapshot session) never resumes. Mirrors CadenceCore canResumeSession.
+// cycle/week/day tag AND the plan it was BUILT from still has the SAME
+// COMPOSITION as the day's current plan. Snapshot-vs-current, not the live
+// exercises — so a session-local remove/swap is preserved (resumed), while a
+// PROGRAM edit (swap/add/remove) diverges the built-from plan → build fresh.
+// Composition, not sequence: display order is now derived role-first, so a
+// pure position move — and, critically, a pre-role-first snapshot written by
+// an older version — must not orphan an in-flight session with logged sets.
+// The sorted comparison is ordinal (code units), matching Swift's String `<`.
+// Empty sessionPlanNames (pre-snapshot session) never resumes. Mirrors
+// CadenceCore canResumeSession.
 export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, currentWeek, dayIndex, sessionPlanNames, dayPlanNames) {
-  return tagCycle === cycleNumber && tagWeek === currentWeek && tagDayIndex === dayIndex
-    && sessionPlanNames.length > 0 && sessionPlanNames.length === dayPlanNames.length
-    && sessionPlanNames.every((n, i) => n === dayPlanNames[i]);
+  if (tagCycle !== cycleNumber || tagWeek !== currentWeek || tagDayIndex !== dayIndex) return false;
+  if (!sessionPlanNames.length || sessionPlanNames.length !== dayPlanNames.length) return false;
+  const session = [...sessionPlanNames].sort();
+  const day = [...dayPlanNames].sort();
+  return session.every((name, index) => name === day[index]);
 }
 
 // ---- Swap rules (issue 20) ----------------------------------------------
@@ -1761,7 +1768,12 @@ export function stagedIncrement(baseWeightLb, focus, regime, roundingLb = DEFAUL
 // their own completed single plus the normal upper/lower increment. The
 // numeric-only model cannot derive one exercise's max from another, so an
 // unseen variation gets an 80% calibration ceiling, not a fabricated 90%
-// target. Never inherit the old variation. Mirrors ProgramProgression.
+// target. The old variation's TARGET is never inherited when any estimate
+// exists; the last-resort fallbackBaseLb (no prior single AND a zero
+// estimate — a hand-authored slot that never bootstrapped) IS the outgoing
+// slot's base: with no evidence of any kind, holding the bar where the
+// athlete was already working is the least-wrong seed, and the pre-rotation
+// behavior for exactly this case. Mirrors ProgramProgression.
 export function maxEffortVariationTarget(priorBestSingleLb, estimatedMaxLb, fallbackBaseLb,
   movementGroup = null, roundingLb = DEFAULT_ROUNDING_LB) {
   const increment = ["squat", "hinge"].includes(movementGroup) ? 10 : 5;
@@ -2981,9 +2993,13 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
   };
 }
 
+// Technique and explosive days own quality, not fatigue accumulation.
+// Explicit intent is the proof; legacy `general` days retain the old capacity
+// behavior exactly. Mirrors CoachingEngine.supportsAddedCapacity.
+const supportsAddedCapacity = (slot) => !["technique", "explosive"].includes(slot.trainingIntent || "general");
+
 const preferredCoachingDay = (pattern, slots) => {
-  const eligible = slots.filter((slot) => !["technique", "explosive"]
-    .includes(slot.trainingIntent || "general"));
+  const eligible = slots.filter(supportsAddedCapacity);
   if (["kneeFlexion", "hipExtension"].includes(pattern)) {
     const squat = eligible.find((slot) => slot.isMain && slot.pattern === "squat");
     if (squat) return squat.dayIndex;
@@ -3022,7 +3038,10 @@ function rotationSuggestions(program, sessions, evidenceKey) {
   // across clients regardless of the browser's locale/collation.
   const ordered = [...(program.slots || [])].sort((a, b) => a.dayIndex - b.dayIndex
     || (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
-  const newest = [...sessions].sort((a, b) => epoch(b.date) - epoch(a.date));
+  // Only the max-effort branch reads history; most programs have no such slot
+  // and must not pay a full-history copy+sort per report (mirrors native).
+  const newest = ordered.some((slot) => slot.prescriptionStyle === "maxEffort")
+    ? [...sessions].sort((a, b) => epoch(b.date) - epoch(a.date)) : [];
   for (const slot of ordered) {
     if (isConditioningPattern(slot.pattern)) continue;
     if (slot.exerciseIsShelved) {
@@ -3036,17 +3055,24 @@ function rotationSuggestions(program, sessions, evidenceKey) {
       continue;
     }
     if (slot.prescriptionStyle === "maxEffort") {
-      const latest = newest.flatMap((session) => {
-        if (session.rotation === DELOAD_WEEK) return [];
+      // First qualifying session wins — stop there instead of materializing
+      // every match across years of history (mirrors native lazy .first).
+      let latest = null;
+      for (const session of newest) {
+        if (session.rotation === DELOAD_WEEK) continue;
         const exercise = (session.exercises || []).find((candidate) => candidate.slotID === slot.id);
         const completedSingle = (exercise?.sets || []).some((set) => !set.isWarmup
           && set.completed !== false && set.actualReps === 1
           && countsAsPrescribedWork(set.prescriptionBlock));
-        return exercise && completedSingle ? [{ session, exercise }] : [];
-      })[0];
+        if (exercise && completedSingle) { latest = { session, exercise }; break; }
+      }
       if (latest?.exercise.exerciseName === slot.exerciseName) {
         result.push({
-          id: `program.slot.rotate.max-effort-weekly.v${COACHING_RULE_VERSION}:${evidenceKey}-${latest.session.id}-${slot.id}`,
+          // The id carries only portable components (cycle/rotation evidence
+          // key + slot id) — NEVER the session id, which is an IndexedDB
+          // autoincrement locally but a UUID natively and after any backup
+          // restore, so embedding it resurfaces dismissed recommendations.
+          id: `program.slot.rotate.max-effort-weekly.v${COACHING_RULE_VERSION}:${evidenceKey}-${slot.id}`,
           ruleID: `program.slot.rotate.max-effort-weekly.v${COACHING_RULE_VERSION}`, priority: 65,
           title: `Rotate ${slot.exerciseName}`,
           explanation: `The latest completed max-effort single used ${slot.exerciseName}. Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.`,
@@ -3229,13 +3255,14 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   const result = [...programChanges];
   const capacityAdjustments = [];
   const capacityEvidence = [];
+  const blockedEvidence = [];
   for (const [pattern, target] of budgets) {
     const current = planned[pattern] || 0;
     if (current >= target || changes >= capacity) continue;
     const amount = Math.min(target - current, capacity - changes);
     const slot = (program.slots || []).find((candidate) => candidate.pattern === pattern
       && candidate.capacityManaged !== false && !candidate.isMain
-      && !["technique", "explosive"].includes(candidate.trainingIntent || "general")
+      && supportsAddedCapacity(candidate)
       && candidate.plannedSets < (candidate.maximumSets || DEFAULT_MAXIMUM_SETS));
     if (slot) {
       const add = Math.min(amount, (slot.maximumSets || DEFAULT_MAXIMUM_SETS) - slot.plannedSets);
@@ -3243,9 +3270,19 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
       capacityAdjustments.push({ type: "addSet", slotID: slot.id, exerciseName: slot.exerciseName, count: add });
       capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${add}`);
       changes += add;
+    } else if (program.patternsWithAvailableExercise
+        && !program.patternsWithAvailableExercise.includes(pattern)) {
+      // The client told us its library/equipment policy cannot fill this
+      // pattern; proposing addPattern would only ever fail on Apply, forever.
+      blockedEvidence.push(`${movementPatternName(pattern)} ${current}/${target} — no compatible exercise available`);
     } else {
       const dayIndex = preferredCoachingDay(pattern, program.slots || []);
-      if (dayIndex === null) continue;
+      if (dayIndex === null) {
+        // Every candidate day is technique/explosive: the floor stays unmet,
+        // and silence would hide that from the athlete entirely.
+        blockedEvidence.push(`${movementPatternName(pattern)} ${current}/${target} — no eligible day (technique/explosive)`);
+        continue;
+      }
       capacityAdjustments.push({ type: "addPattern", pattern, dayIndex, sets: amount });
       capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${amount}`);
       changes += amount;
@@ -3257,6 +3294,13 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
     title: `Add ${changes} targeted set${changes === 1 ? "" : "s"}`,
     explanation: `Two rotations were green. ${capacityEvidence.join("; ")}.`,
     change: { type: "capacityPlan", additions: capacityAdjustments },
+  });
+  if (blockedEvidence.length) result.push({
+    id: `capacity.rotation-plan.blocked.v${COACHING_RULE_VERSION}:${evidenceKey}`,
+    ruleID: `capacity.rotation-plan.blocked.v${COACHING_RULE_VERSION}`, priority: 39,
+    title: "Volume floors need attention",
+    explanation: `Two rotations were green, but some movement floors cannot be raised automatically: ${blockedEvidence.join("; ")}.`,
+    change: { type: "hold" },
   });
   const shorter = shorterSpacingTrial(sessions);
   if (shorter !== null) result.push({

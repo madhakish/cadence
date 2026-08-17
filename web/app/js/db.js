@@ -641,6 +641,15 @@ export async function syncLibrary() {
 // mutable state, not just the log — tracks (live per-lift progression), gyms
 // (barcode image, plate inventory, default bar), the exercise library (rest,
 // shelved, watch sites), and settings ride along with sessions.
+
+// Authored slot order for the portable contracts: order field, ORDINAL name
+// tiebreak (Swift tuple `<`), role-blind — role-first is a display rule, not
+// part of the serialized sequence. Mirrors ProgramDay.authoredLifts.
+const authoredExportSlots = (slots) => [...(slots || [])]
+  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+    || (String(a.exerciseName) < String(b.exerciseName) ? -1
+      : String(a.exerciseName) > String(b.exerciseName) ? 1 : 0));
+
 export async function exportBundle() {
   const sessionFingerprint = (session) => JSON.stringify({
     date: iso(session.date), notes: session.notes || "", gym: session.gymName || "",
@@ -734,9 +743,13 @@ export async function exportBundle() {
       coachEnabled: p.coachEnabled !== false, reliableHistoryStart: p.reliableHistoryStart || null,
       preferredSessionSpacingDays: p.preferredSessionSpacingDays ?? 3,
       maximumAddedSetsPerRotation: p.maximumAddedSetsPerRotation ?? 6,
-      days: (p.days || []).map((d) => ({
+      // Authored order (order field, ordinal name tiebreak), not raw array
+      // position: the editor reorders by mutating order fields only, and the
+      // native exporter emits the same authored sequence — the two clients'
+      // backups of one store must serialize the same bytes.
+      days: [...(p.days || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((d) => ({
         name: d.name, order: d.order, trainingIntent: d.trainingIntent,
-        lifts: (d.lifts || []).map((l) => ({
+        lifts: authoredExportSlots(d.lifts).map((l) => ({
           id: l.id, exerciseName: l.exerciseName, role: l.role, order: l.order ?? 0,
           prescription: l.prescription || "automatic", warmupPolicy: l.warmupPolicy || "automatic",
           loadOffsetLb: l.loadOffsetLb ?? 0, peakOffsetLb: l.peakOffsetLb ?? 0,
@@ -759,7 +772,7 @@ export async function exportBundle() {
           // marker-free exports (and the synthetic fixture) stay byte-stable.
           ...(l.revertToExerciseName ? { revertToExerciseName: l.revertToExerciseName } : {}),
         })),
-        accessories: (d.accessories || []).map((a) => ({ id: a.id, exerciseName: a.exerciseName, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, capacityManaged: a.capacityManaged !== false, maximumSets: a.maximumSets ?? 6, conditioningEffort: a.conditioningEffort || "easy", targetRPE: a.targetRPE ?? 0, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
+        accessories: authoredExportSlots(d.accessories).map((a) => ({ id: a.id, exerciseName: a.exerciseName, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, capacityManaged: a.capacityManaged !== false, maximumSets: a.maximumSets ?? 6, conditioningEffort: a.conditioningEffort || "easy", targetRPE: a.targetRPE ?? 0, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
       })),
     })),
     tracks, gyms: gyms.map(normalizeGym),

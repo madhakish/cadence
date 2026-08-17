@@ -80,11 +80,27 @@ enum CoachingService {
             }
             return liftSlots + accessorySlots
         }
+        // What the apply path could actually resolve for each pattern, so the
+        // engine never proposes an addPattern that is guaranteed to throw on
+        // Apply (a freeWeightsOnly program whose only candidates are
+        // machines, forever). Mirrors `preferredExercise`'s resolution:
+        // preferred names first, then any exercise classified under the
+        // pattern. Mirrors the web coaching adapter.
+        let policyExercises = exercises.filter {
+            $0.isAvailableForProgramming
+                && program.equipmentPolicy.allows(exerciseType: $0.typeRaw)
+        }
+        var availablePatterns = Set(policyExercises.map(\.movementPattern))
+        for (pattern, names) in CoachingEngine.preferredExerciseNames
+        where names.contains(where: { name in policyExercises.contains { $0.name == name } }) {
+            availablePatterns.insert(pattern)
+        }
         let snapshot = CoachingProgramSnapshot(
             id: program.id,
             expectedDayIndexes: Set(program.days.map(\.order)),
             slots: slots,
-            maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation
+            maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation,
+            patternsWithAvailableExercise: availablePatterns
         )
         let history = sessions.compactMap { session -> CoachingSessionSnapshot? in
             guard session.isCompleted,

@@ -8,6 +8,16 @@ import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory,
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
 import { Sessions } from "../db.js";
+// Module cycle with session.js is safe: these are hoisted function exports
+// used only at runtime (session.js likewise imports exerciseDetail from here).
+import { neatProgramWeight, planningBase, volumeFallbackSets } from "./session.js";
+
+// One spelling of the day-intent display names (pill + editor select).
+// Mirrors DayTrainingIntent.name in CadenceCore/ProgramPolicy.swift.
+const INTENT_LABELS = {
+  general: "General", heavy: "Heavy", volume: "Volume",
+  technique: "Technique", explosive: "Explosive",
+};
 
 // Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
 // Peak result would otherwise make the next rollover treat the skipped Peak as a
@@ -344,11 +354,14 @@ function removeDay(p, day) {
 }
 
 function orderedSlots(slots = []) {
-  if (slots.some((slot) => slot.role === "main" || slot.role === "complementary")) {
-    return C.orderedProgramSlots(slots);
-  }
+  // Program slots (lifts AND accessories) always go through the shared
+  // role-aware ordering — its ordinal tiebreak is deliberate so the editor
+  // shows the same sequence as home/session/native/export regardless of the
+  // browser's collation. Only day lists (name-keyed, no exerciseName) keep a
+  // local sort.
+  if (slots.some((slot) => slot.exerciseName != null)) return C.orderedProgramSlots(slots);
   return [...slots].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
-    || String(a.exerciseName || a.name || "").localeCompare(String(b.exerciseName || b.name || "")));
+    || String(a.name || "").localeCompare(String(b.name || "")));
 }
 
 function moveSlot(slots, slot, delta) {
@@ -356,6 +369,11 @@ function moveSlot(slots, slot, delta) {
   const from = ordered.indexOf(slot);
   const to = from + delta;
   if (from < 0 || to < 0 || to >= ordered.length) return false;
+  // Role-first ordering is enforced at display time: a move across the
+  // main/complementary boundary would re-render in the same place while
+  // silently rewriting every authored order, so refuse it (no write) instead
+  // of churning a no-op. Mirrors SettingsView.moveLifts.
+  if ((ordered[from].role || null) !== (ordered[to].role || null)) return false;
   [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
   ordered.forEach((item, index) => { item.order = index; });
   return true;
@@ -525,10 +543,7 @@ export async function programEditor(p) {
             ui.h("div", { class: "lead", style: { cursor: "pointer", flex: "1" }, onClick: () => programDayEditor(p, day) },
               ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
                 ui.h("span", { class: "title", text: day.name }),
-                ui.h("span", { class: "pill accent", text: {
-                  general: "General", heavy: "Heavy", volume: "Volume",
-                  technique: "Technique", explosive: "Explosive",
-                }[day.trainingIntent || "general"] })),
+                ui.h("span", { class: "pill accent", text: INTENT_LABELS[day.trainingIntent || "general"] })),
               ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
             ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { if (moveSlot(p.days, day, -1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
             ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { if (moveSlot(p.days, day, 1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
@@ -582,12 +597,8 @@ async function programDayEditor(p, day) {
         const nameInput = ui.h("input", { type: "text", value: day.name });
         nameInput.addEventListener("change", async () => { day.name = nameInput.value || day.name; api.setTitle(day.name); await Programs.save(p); });
         body.append(ui.field("Day name", nameInput));
-        const intentLabels = {
-          general: "General", heavy: "Heavy", volume: "Volume",
-          technique: "Technique", explosive: "Explosive",
-        };
         const intent = ui.h("select", {}, ...BACKUP_ENUMS.dayTrainingIntents.map((value) => ui.h("option", {
-          value, text: intentLabels[value], selected: value === (day.trainingIntent || "general"),
+          value, text: INTENT_LABELS[value], selected: value === (day.trainingIntent || "general"),
         })));
         intent.addEventListener("change", async () => {
           day.trainingIntent = intent.value;
@@ -889,7 +900,8 @@ function newExerciseSheet(exercises, onSaved) {
 // Program membership, last-performed, and progress for one exercise —
 // assembled async and filled into `wrap` so the screen renders instantly.
 async function exerciseInsight(wrap, e) {
-  const [programs, completed] = await Promise.all([Programs.all(), Sessions.completed()]);
+  const [programs, completed, gym] = await Promise.all([Programs.all(), Sessions.completed(), Gyms.default()]);
+  const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
   const memberships = [];
   const cycleMemberships = [];
   for (const p of programs) {
@@ -933,14 +945,23 @@ async function exerciseInsight(wrap, e) {
     for (const { program, day, lift } of cycleMemberships) {
       const cycle = ui.h("div", { class: "card" },
         ui.h("div", { class: "title", style: { marginBottom: "4px" }, text: `${program.name} · ${day.name}` }));
+      // planningBase + volume-fallback sets + gym snapping, exactly like the
+      // Home card and the session the app will create — the raw stored base
+      // showed a different table than every other surface (and than native
+      // ExerciseDetailView, which runs the same three repairs).
+      const base = planningBase(lift, e, program, completed);
       for (let rotation = 1; rotation <= C.DELOAD_WEEK; rotation++) {
         const plan = C.programPlanFor({
           cycleNumber: program.cycleNumber,
-          baseWeightLb: lift.baseWeightLb,
+          baseWeightLb: base,
           nextPhase: rotation,
           incrementLb: 0,
         }, program.roundingLb, e.type, e.movementGroup, lift.role, program.focus,
-        lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 });
+        lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+        volumeFallbackSets(lift, program));
+        plan.weightLb = neatProgramWeight(plan.weightLb, e,
+          lift.role === "main" || C.buildsOwnSessionShape(lift.prescription || "automatic"),
+          barLb, program.roundingLb, gym, rotation);
         const phaseLabel = C.slotPhaseLabel(rotation, lift.role, lift.prescription || "automatic",
           e.movementGroup, program.focus) || `R${rotation}`;
         cycle.append(ui.h("div", { class: "row" },

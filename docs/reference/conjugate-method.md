@@ -32,7 +32,10 @@ Method* bundle, pp. 50–51, and *The Book of Methods*, p. 101.
   Coach offers a reviewable rotation before the next max-effort day. The
   template supplies Low, Front, and Paused Box Squats plus Floor Press and
   Close-Grip Floor Press as starter pools; compatible custom variations remain
-  available when those pools do not fit.
+  available when those pools do not fit. The recommendation's identity is
+  built from portable components only (cycle/rotation evidence key plus slot
+  id) so a dismissal or apply recorded on one client survives a backup
+  restore and matches the other client, like every other rotation rule.
 - A returning variation targets its own clean completed single plus the
   smallest normal lower/upper increment. The supplied sources provide no valid
   conversion from a competition lift to an unseen variation. Until Cadence can

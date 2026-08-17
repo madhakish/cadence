@@ -175,7 +175,11 @@ export function exportProgramFile(program, { includeState = false, includeIdenti
       order,
       trainingIntent: day.trainingIntent ?? DEFAULTS.trainingIntent,
       lifts: [...(day.lifts || [])]
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.exerciseName).localeCompare(String(b.exerciseName)))
+        // Ordinal name tiebreak (Swift tuple `<`), not locale collation — the
+        // native exporter must produce identical bytes for the same program.
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+          || (String(a.exerciseName) < String(b.exerciseName) ? -1
+            : String(a.exerciseName) > String(b.exerciseName) ? 1 : 0))
         .map((lift) => ({
           ...(includeIdentity && lift.id ? { id: lift.id } : {}),
           ...pick(lift, liftFields),
@@ -193,7 +197,9 @@ export function exportProgramFile(program, { includeState = false, includeIdenti
             ? { revertToExerciseName: lift.revertToExerciseName } : {}),
         })),
       accessories: [...(day.accessories || [])]
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.exerciseName).localeCompare(String(b.exerciseName)))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+          || (String(a.exerciseName) < String(b.exerciseName) ? -1
+            : String(a.exerciseName) > String(b.exerciseName) ? 1 : 0))
         .map((accessory) => ({
           ...(includeIdentity && accessory.id ? { id: accessory.id } : {}),
           ...pick(accessory, accessoryFields),
