@@ -970,6 +970,12 @@ public enum CoachingEngine {
                let latestExposure = newest.lazy.compactMap({ session -> (CoachingSessionSnapshot, CoachingExerciseSnapshot)? in
                    guard session.rotation != ProgramProgression.deloadWeek,
                          let exercise = session.exercises.first(where: { $0.slotID == slot.id }),
+                         // Only work PERFORMED under a max-effort prescription
+                         // counts as an exposure: a peak single logged while
+                         // the slot ran another style (or before it became
+                         // maxEffort) must not rotate the slot away. The
+                         // entry's stamped style is the session-time truth.
+                         exercise.prescriptionStyle == .maxEffort,
                          exercise.sets.contains(where: {
                              !$0.isWarmup && $0.completed && $0.actualReps == 1
                                  && $0.prescriptionBlock.countsAsPrescribedWork

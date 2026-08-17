@@ -249,6 +249,7 @@ final class CoachingEngineTests: XCTestCase {
     func testCompletedMaxEffortSingleProposesWeeklySpecialExerciseRotation() throws {
         var sessions = greenRotations()
         let latestSquatIndex = try XCTUnwrap(sessions.indices.last { sessions[$0].dayIndex == 0 })
+        sessions[latestSquatIndex].exercises[0].prescriptionStyle = .maxEffort
         sessions[latestSquatIndex].exercises[0].sets = [
             CoachingSetSnapshot(
                 actualWeightLb: 115, actualReps: 1,
@@ -315,6 +316,29 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertFalse(report.recommendations.contains {
             $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
         }, "opening a session or completing volume work is not a max-effort exposure")
+    }
+
+    func testSingleUnderAnotherStyleIsNotAMaxEffortExposure() throws {
+        // A peak single (or work banked before the slot became maxEffort) is
+        // performed under another prescription; only the entry's stamped
+        // session-time style qualifies it as an exposure.
+        var sessions = greenRotations()
+        let latestSquatIndex = try XCTUnwrap(sessions.indices.last { sessions[$0].dayIndex == 0 })
+        sessions[latestSquatIndex].exercises[0].prescriptionStyle = .wave
+        sessions[latestSquatIndex].exercises[0].sets = [
+            CoachingSetSnapshot(
+                actualWeightLb: 115, actualReps: 1,
+                plannedWeightLb: 115, plannedReps: 1,
+                prescriptionBlock: .work
+            )
+        ]
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") { $0.prescriptionStyle = .maxEffort },
+            sessions: sessions
+        )
+        XCTAssertFalse(report.recommendations.contains {
+            $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
+        }, "a single performed under another style never counts as a max-effort exposure")
     }
 
     func testStallSuggestionSurvivesARedRotationButNeverLeadsIt() {

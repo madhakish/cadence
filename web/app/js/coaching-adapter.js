@@ -227,7 +227,9 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     }
     if (!replacement) throw new Error(`No compatible variation of ${change.exerciseName} is available. Add one to the library, or unshelve an existing one.`);
     if (isMaxEffortLift) {
-      const priorBest = Math.max(0, ...sessions.filter((session) => session.isCompleted)
+      // reduce, not Math.max(...spread): spreading every matching set into
+      // arguments can overflow the engine's argument limit on a long history.
+      const priorBest = sessions.filter((session) => session.isCompleted)
         .flatMap((session) => session.exercises || [])
         .filter((entry) => entry.exerciseName === replacement.name)
         .flatMap((entry) => entry.sets || [])
@@ -235,7 +237,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
           && C.countsAsPrescribedWork(C.resolvedPrescriptionBlock(set))
           && !(set.flags || []).some((flag) => ["stopped early", "grindy", "wobble"].includes(flag))
           && !set.bodyFlagSite && !set.autoregReason)
-        .map((set) => set.weightLb || 0));
+        .reduce((best, set) => Math.max(best, set.weightLb || 0), 0);
       lift.baseWeightLb = C.maxEffortVariationTarget(
         priorBest, lift.estimatedMaxLb, lift.baseWeightLb, replacement.movementGroup, program.roundingLb,
       );

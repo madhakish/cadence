@@ -1511,6 +1511,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
 
   const maxEffortSessions = structuredClone(greenSessions);
   const latestSquat = maxEffortSessions.filter((session) => session.dayIndex === 0).at(-1);
+  latestSquat.exercises[0].prescriptionStyle = "maxEffort";
   latestSquat.exercises[0].sets = [{
     actualWeightLb: 115, actualReps: 1, plannedWeightLb: 115, plannedReps: 1,
     completed: true, prescriptionBlock: "work",
@@ -1527,6 +1528,18 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(!report.recommendations.some((candidate) =>
     candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
   "opening a session or completing volume work is not a max-effort exposure");
+
+  // A completed single performed under ANOTHER prescription style (a peak
+  // single, or work banked before the slot became maxEffort) is not a
+  // max-effort exposure either — only the entry's stamped session-time style
+  // qualifies it.
+  const foreignStyleSessions = structuredClone(maxEffortSessions);
+  foreignStyleSessions.filter((session) => session.dayIndex === 0).at(-1)
+    .exercises[0].prescriptionStyle = "wave";
+  report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), foreignStyleSessions);
+  ok(!report.recommendations.some((candidate) =>
+    candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
+  "a single performed under another style never counts as a max-effort exposure");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));

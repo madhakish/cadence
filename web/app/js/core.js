@@ -3061,10 +3061,15 @@ function rotationSuggestions(program, sessions, evidenceKey) {
       for (const session of newest) {
         if (session.rotation === DELOAD_WEEK) continue;
         const exercise = (session.exercises || []).find((candidate) => candidate.slotID === slot.id);
-        const completedSingle = (exercise?.sets || []).some((set) => !set.isWarmup
-          && set.completed !== false && set.actualReps === 1
-          && countsAsPrescribedWork(set.prescriptionBlock));
-        if (exercise && completedSingle) { latest = { session, exercise }; break; }
+        // Only work PERFORMED under a max-effort prescription counts as an
+        // exposure: a peak single logged while the slot ran another style (or
+        // before it became maxEffort) must not rotate the slot away. The
+        // entry's stamped style is the session-time truth.
+        const completedSingle = exercise?.prescriptionStyle === "maxEffort"
+          && (exercise.sets || []).some((set) => !set.isWarmup
+            && set.completed !== false && set.actualReps === 1
+            && countsAsPrescribedWork(set.prescriptionBlock));
+        if (completedSingle) { latest = { session, exercise }; break; }
       }
       if (latest?.exercise.exerciseName === slot.exerciseName) {
         result.push({
