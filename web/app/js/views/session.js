@@ -388,12 +388,12 @@ export async function openSession(id) {
         for (const se of session.exercises) {
           // Completed WORK freezes the bar record; a tapped warmup alone
           // must not pin a wrong-gym bar for the rest of the session. A
-          // manual pick equal to the outgoing default follows the switch —
-          // the accepted cost of not persisting a picked-vs-stamped bit.
-          // Mirrors ActiveSessionView.
+          // HAND-PICKED bar (barIdManual) never follows the switch, even
+          // when it equals the outgoing default — that ambiguity is exactly
+          // what the V10 bit resolves. Mirrors ActiveSessionView.
           const hasCompletedWork = (se.sets || []).some((set) => !set.isWarmup && set.status === "completed");
-          if (se.barId && se.barId === previousBarId && !hasCompletedWork) se.barId = C.barId(bar);
-          if (!se.barId || se.barId === C.barId(bar)) synchronizeWarmups(se, bar);
+          if (se.barId && se.barId === previousBarId && !se.barIdManual && !hasCompletedWork) se.barId = C.barId(bar);
+          if (!se.barId || (se.barId === C.barId(bar) && !se.barIdManual)) synchronizeWarmups(se, bar);
         }
         save(); renderBody(body);
       });
@@ -513,6 +513,10 @@ export async function openSession(id) {
       ...C.ALL_BARS.map((b) => ui.h("option", { value: C.barId(b), text: C.barLabel(b), selected: C.barId(b) === C.barId(barFor(se)) })));
     sel.addEventListener("change", () => {
       se.barId = sel.value;
+      // A hand-picked bar is a decision: it never follows a mid-session gym
+      // switch, even when it happens to equal a gym's default. Mirrors
+      // ActiveSessionView's bar picker.
+      se.barIdManual = true;
       synchronizeWarmups(se, C.barById(sel.value));
       save(); renderBody(body);
     });

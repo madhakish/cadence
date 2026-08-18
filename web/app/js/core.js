@@ -3268,9 +3268,13 @@ function linearStageSuggestions(program, sessions, evidenceKey) {
     if (!attempts.every((attempt) => attempt.missed)
         || plannedWeight - lightest >= 0.01
         || slot.baseWeightLb > plannedWeight * 0.925) return [];
-    const sessionID = attempts[0].sessionID;
     return [{
-      id: `program.slot.linear-triples.v1:${evidenceKey}-${sessionID}-${slot.id}`,
+      // Portable components only (cycle/rotation evidence key + slot id) —
+      // NEVER a session id, which is an IndexedDB autoincrement here but a
+      // UUID natively and is rewritten by any backup restore, resurfacing
+      // dismissed recommendations. Staleness is already guarded by the
+      // change's expectedBaseWeightLb. Mirrors CoachingEngine.
+      id: `program.slot.linear-triples.v1:${evidenceKey}-${slot.id}`,
       ruleID: "program.slot.linear-triples.v1", priority: 65,
       title: `Move ${slot.exerciseName} to triples`,
       explanation: `${slot.exerciseName}'s linear base was rebuilt from ${trim(plannedWeight)} to ${trim(slot.baseWeightLb)} lb after the last prescription was not met. Keep session-to-session loading, but change this slot from 3x5 to 5x3 so only rep structure changes.`,

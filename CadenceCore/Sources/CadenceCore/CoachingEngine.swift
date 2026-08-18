@@ -1147,7 +1147,6 @@ public enum CoachingEngine {
                   let plannedWeight = attempts.map(\.plannedWeight).max(),
                   abs(plannedWeight - lightest) < 0.01,
                   slot.baseWeightLb <= plannedWeight * 0.925 else { return nil }
-            let sessionID = attempts[0].sessionID
 
             return CoachingRecommendation(
                 ruleID: "program.slot.linear-triples.v1",
@@ -1159,7 +1158,12 @@ public enum CoachingEngine {
                     exerciseName: slot.exerciseName,
                     expectedBaseWeightLb: slot.baseWeightLb
                 ),
-                evidenceKey: "\(evidenceKey)-\(sessionID)-\(slot.id)"
+                // Portable components only (cycle/rotation evidence key +
+                // slot id) — NEVER a session id, which is a UUID here but an
+                // IndexedDB autoincrement on web and is rewritten by any
+                // backup restore, resurfacing dismissed recommendations.
+                // Staleness is already guarded by expectedBaseWeightLb.
+                evidenceKey: "\(evidenceKey)-\(slot.id)"
             )
         }
     }

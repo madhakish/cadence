@@ -342,9 +342,14 @@ function pickExerciseSheet(onPick) {
 }
 
 function removeDay(p, day) {
+  // nextDayIndex addresses a day by its ORDER VALUE, not a list position.
+  // Remember which day it points at before renumbering — clamping after a
+  // renumber silently re-addresses the schedule on sparse-order programs
+  // (imported files keep verbatim orders). Mirrors SettingsView.deleteDays.
+  const pointed = p.days.find((d) => d.order === p.nextDayIndex);
   p.days = p.days.filter((d) => d !== day);
   p.days.sort((a, b) => a.order - b.order).forEach((d, i) => { d.order = i; });
-  if (p.nextDayIndex >= p.days.length) p.nextDayIndex = 0;
+  p.nextDayIndex = pointed && pointed !== day ? pointed.order : 0;
 }
 
 function orderedSlots(slots = []) {
@@ -544,8 +549,10 @@ export async function programEditor(p) {
                 ui.h("span", { class: "title", text: day.name }),
                 ui.h("span", { class: "pill accent", text: C.DAY_TRAINING_INTENT_LABELS[day.trainingIntent || "general"] })),
               ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
-            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { if (moveSlot(p.days, day, -1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
-            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { if (moveSlot(p.days, day, 1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
+            // The schedule pointer follows ITS day through a renumbering
+            // move, never a clamped position (mirrors SettingsView.moveDays).
+            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, -1)) { if (pointed) p.nextDayIndex = pointed.order; await Programs.save(p); draw(); } } }),
+            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, 1)) { if (pointed) p.nextDayIndex = pointed.order; await Programs.save(p); draw(); } } }),
             ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { removeDay(p, day); await Programs.save(p); draw(); } })));
         }
         body.append(list);

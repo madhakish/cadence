@@ -301,16 +301,17 @@ struct ActiveSessionView: View {
                             // Completed WORK freezes the bar record (the
                             // prescription was performed on it); a tapped
                             // warmup alone must not pin a wrong-gym bar for
-                            // the rest of the session. A manual pick that
-                            // happens to equal the outgoing default is
-                            // indistinguishable from a stamp and follows the
-                            // switch — the accepted cost of not persisting a
-                            // picked-vs-stamped bit.
+                            // the rest of the session. A HAND-PICKED bar
+                            // (barIDIsManual) never follows the switch, even
+                            // when it equals the outgoing default — that
+                            // ambiguity is exactly what the V10 bit resolves.
                             let hasCompletedWork = entry.sets.contains { !$0.isWarmup && $0.status == .completed }
-                            if entry.barID != nil, entry.barID == previousBarID, !hasCompletedWork {
+                            if entry.barID != nil, entry.barID == previousBarID,
+                               !entry.barIDIsManual, !hasCompletedWork {
                                 entry.barID = selected.defaultBar.id
                             }
-                            if entry.barID == nil || entry.barID == selected.defaultBar.id {
+                            if entry.barID == nil
+                                || (entry.barID == selected.defaultBar.id && !entry.barIDIsManual) {
                                 synchronizeWarmups(entry, bar: selected.defaultBar, gym: selected,
                                                    enteredUnit: settingsList.first?.unitDisplay.primaryUnit ?? .lb,
                                                    context: context)
@@ -831,6 +832,10 @@ private struct ExerciseSection: View {
                     get: { effectiveBar },
                     set: {
                         entry.barID = $0.id
+                        // A hand-picked bar is a decision: it never follows a
+                        // mid-session gym switch, even when it happens to
+                        // equal a gym's default.
+                        entry.barIDIsManual = true
                         synchronizeWarmups(entry, bar: $0, gym: gym,
                                            enteredUnit: settings?.unitDisplay.primaryUnit ?? .lb,
                                            context: context)

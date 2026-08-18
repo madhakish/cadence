@@ -876,18 +876,27 @@ struct ProgramEditorView: View {
     }
 
     private func deleteDays(at offsets: IndexSet) {
+        // `nextDayIndex` addresses a day by its ORDER VALUE, not a list
+        // position. Remember which day it points at before renumbering —
+        // clamping after a renumber silently re-addresses the schedule on
+        // sparse-order programs (imported files keep verbatim orders).
+        let pointed = program.orderedDays.first { $0.order == program.nextDayIndex }
         let ordered = program.orderedDays
+        let removed = Set(offsets.map { ordered[$0].id })
         for i in offsets { context.delete(ordered[i]) }
         for (i, day) in program.orderedDays.enumerated() { day.order = i }
-        if program.nextDayIndex >= program.days.count { program.nextDayIndex = 0 }
+        program.nextDayIndex = pointed.flatMap { removed.contains($0.id) ? nil : $0.order } ?? 0
         PersistenceErrorCenter.shared.save(context, operation: "Deleting the program day")
     }
 
     private func moveDays(from offsets: IndexSet, to destination: Int) {
+        // Same rule as deleteDays: the pointer follows ITS day through the
+        // renumbering, never a clamped position.
+        let pointed = program.orderedDays.first { $0.order == program.nextDayIndex }
         var ordered = program.orderedDays
         ordered.move(fromOffsets: offsets, toOffset: destination)
         for (index, day) in ordered.enumerated() { day.order = index }
-        program.nextDayIndex = min(program.nextDayIndex, max(ordered.count - 1, 0))
+        program.nextDayIndex = pointed?.order ?? min(program.nextDayIndex, max(ordered.count - 1, 0))
         PersistenceErrorCenter.shared.save(context, operation: "Reordering program days")
     }
 
