@@ -5,7 +5,7 @@ import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet, localDayKey } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
-import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, neatProgramWeight, openSession, planningBase, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
+import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, openSession, planningBase, previewProgramPlan, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
 import { gymTagShownOn, markGymTagShown } from "../gym-tag.js";
 import { exerciseDetail } from "./settings.js";
 
@@ -174,17 +174,12 @@ export async function render(host) {
     const lifts = C.orderedProgramSlots(day.lifts);
     for (const l of lifts) {
       const ex = exMap.get(l.exerciseName);
-      // planningBase, not the stored base: the card must show the same honest
-      // plan the started session will store.
-      const plan = C.programPlanFor({ cycleNumber: program.cycleNumber,
-        baseWeightLb: planningBase(l, ex, program, completed),
-        nextPhase: program.currentWeek, incrementLb: 0 },
-        program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
-        { ...l, workingSets: l.doubleProgressionSets ?? 3 },
-        volumeFallbackSets(l, program));
-      // Preview the same snapped weight the session will store (secondary barbell lifts).
-      const targetWeightLb = plan.weightLb;
-      plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main" || C.buildsOwnSessionShape(l.prescription || "automatic"), barLb, program.roundingLb, gym, program.currentWeek);
+      // The shared preview pipeline: honest planningBase, volume-fallback
+      // sets, and the same snapped weight the started session will store.
+      const { plan, targetWeightLb } = previewProgramPlan(l, ex, program, program.currentWeek, {
+        base: planningBase(l, ex, program, completed),
+        addedSets: volumeFallbackSets(l, program), barLb, gym,
+      });
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
         ui.h("div", { class: "lead" },
           ex ? ui.h("button", { class: "title title-button", text: l.exerciseName,
@@ -317,16 +312,12 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
       if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No program lifts this day." }));
       for (const l of lifts) {
         const ex = exMap.get(l.exerciseName);
-        // planningBase — the preview and the started session must never
-        // disagree.
-        const plan = C.programPlanFor({ cycleNumber: program.cycleNumber,
-          baseWeightLb: planningBase(l, ex, program, completed),
-          nextPhase: program.currentWeek, incrementLb: 0 },
-          program.roundingLb, ex?.type, ex?.movementGroup, l.role, program.focus, l.prescription || "automatic",
-          { ...l, workingSets: l.doubleProgressionSets ?? 3 },
-          volumeFallbackSets(l, program));
-        const targetWeightLb = plan.weightLb;
-        plan.weightLb = neatProgramWeight(plan.weightLb, ex, l.role === "main" || C.buildsOwnSessionShape(l.prescription || "automatic"), barLb, program.roundingLb, gym, program.currentWeek);
+        // The shared preview pipeline — the preview and the started session
+        // must never disagree.
+        const { plan, targetWeightLb } = previewProgramPlan(l, ex, program, program.currentWeek, {
+          base: planningBase(l, ex, program, completed),
+          addedSets: volumeFallbackSets(l, program), barLb, gym,
+        });
         liftCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
           ui.h("div", { class: "lead" },
             ex ? ui.h("button", { class: "title title-button", text: l.exerciseName,

@@ -1367,15 +1367,14 @@ private struct ExercisePickerSheetView: View {
     let onPick: (String) -> Void
 
     private var visible: [Exercise] {
+        // The shared search rule (diacritic-insensitive POSIX folding), not a
+        // hand-rolled locale-collation predicate — this was the one picker
+        // left off the canonical matcher, so "degage" found an accented
+        // exercise everywhere except here.
         let available = exercises.filter(\.isAvailableForProgramming)
-        return search.isEmpty ? available : available.filter {
-            $0.name.localizedCaseInsensitiveContains(search)
-                || $0.movementGroup.localizedCaseInsensitiveContains(search)
-                || $0.movementPattern.name.localizedCaseInsensitiveContains(search)
-                || $0.typeRaw.localizedCaseInsensitiveContains(search)
-                || $0.aliases.contains(where: { $0.localizedCaseInsensitiveContains(search) })
-                || $0.strategyTags.contains(where: { $0.localizedCaseInsensitiveContains(search) })
-        }
+        guard !search.isEmpty else { return available }
+        let term = ExerciseSearch.preparedTerm(search)
+        return available.filter { $0.matchesSearch(preparedTerm: term) }
     }
 
     var body: some View {

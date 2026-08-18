@@ -261,13 +261,23 @@ export async function openSession(id) {
       : fullRamp;
     const warmups = desired.map((target, index) => {
       const set = existing[index] || mkSet(index, target.weightLb, target.reps, { warm: true, unit: exUnit(se), ...loadOptions(ex) });
-      set.weightLb = target.weightLb; set.reps = target.reps; set.isWarmup = true;
+      // Resync refreshes rows still PLANNED; a completed or skipped warmup
+      // is the athlete's performed record and its weight/reps are never
+      // reinterpreted against new equipment. Mirrors native.
+      if ((set.status || "planned") === "planned") {
+        set.weightLb = target.weightLb; set.reps = target.reps;
+      }
+      set.isWarmup = true;
       if (set.plannedWeightLb == null) set.plannedWeightLb = target.weightLb;
       if (set.plannedReps == null) set.plannedReps = target.reps;
       set.prescriptionBlock = "warmup";
       return set;
     });
-    se.sets = [...warmups, ...working];
+    // Only surplus PLANNED rows are dropped; performed rows survive the
+    // shrink — deleting logged work is never a resync's job.
+    const surplus = existing.slice(desired.length)
+      .filter((set) => (set.status || "planned") !== "planned");
+    se.sets = [...warmups, ...surplus, ...working];
     se.sets.forEach((set, index) => { set.order = index; });
   };
 
@@ -376,8 +386,13 @@ export async function openSession(id) {
         session.gymId = gymState.value?.id || null; session.gymName = gymState.value?.name || null;
         const bar = C.barById(gymState.value.defaultBarId);
         for (const se of session.exercises) {
-          const hasCompletedSet = (se.sets || []).some((set) => set.status === "completed");
-          if (se.barId && se.barId === previousBarId && !hasCompletedSet) se.barId = C.barId(bar);
+          // Completed WORK freezes the bar record; a tapped warmup alone
+          // must not pin a wrong-gym bar for the rest of the session. A
+          // manual pick equal to the outgoing default follows the switch —
+          // the accepted cost of not persisting a picked-vs-stamped bit.
+          // Mirrors ActiveSessionView.
+          const hasCompletedWork = (se.sets || []).some((set) => !set.isWarmup && set.status === "completed");
+          if (se.barId && se.barId === previousBarId && !hasCompletedWork) se.barId = C.barId(bar);
           if (!se.barId || se.barId === C.barId(bar)) synchronizeWarmups(se, bar);
         }
         save(); renderBody(body);
@@ -993,8 +1008,9 @@ export async function openSession(id) {
         const results = ui.h("div");
         const paint = () => {
           ui.clear(results);
-          const term = search.value.trim().toLowerCase();
-          const visible = term ? all.filter((exercise) => C.exerciseMatchesSearch(exercise, term)) : all;
+          // Raw query in: the shared matcher owns normalization and returns
+          // true on empty, so no pre-trim/lowercase or empty-branch here.
+          const visible = all.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
           for (const cat of CATEGORIES) {
             const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
             if (!inCat.length) continue;
@@ -1194,7 +1210,11 @@ async function completeSessionInner(session) {
   const workingSets = session.exercises.flatMap((exercise) => exercise.sets.filter((set) => !set.isWarmup));
   const completedSets = workingSets.filter((set) => set.status === "completed");
   const incompleteSets = workingSets.filter((set) => set.status !== "completed");
-  const adjusted = completedSets.some((set) => set.autoregReason || (set.flags || []).some((flag) => ["stopped early", "grindy", "wobble"].includes(flag)));
+  // Quality vocabulary is core-owned (SET_QUALITIES/setQuality) — no literal
+  // quality lists here; "stopped early" is a separate non-quality flag.
+  const adjusted = completedSets.some((set) => set.autoregReason
+    || (set.flags || []).includes("stopped early")
+    || ["grindy", "wobble"].includes(C.setQuality(set.flags)));
   const coachingNotes = [];
   if (incompleteSets.length) coachingNotes.push(`Modified session — ${completedSets.length} sets completed; unfinished or skipped sets were not credited as performed.`);
   else if (adjusted) coachingNotes.push("Completed with adjustments — progression was graded from the work actually logged.");
@@ -1870,6 +1890,26 @@ export function volumeFallbackSets(lift, program) {
   return C.volumeIncrementSets(lift.stallCount ?? 0, rank, program.maximumAddedSetsPerRotation ?? 6);
 }
 
+// One spelling of the preview pipeline every surface shares: honest planning
+// base → programPlanFor (with volume-fallback sets) → gym/bar snap. Returns
+// the snapped plan plus the pre-snap theoretical target (barbell views show
+// both), so the Home card, the workout preview, the exercise-detail cycle
+// table, and the stored prescription agree by construction. `base` and
+// `addedSets` are passed in so callers that render several rotations of one
+// lift compute them once. Mirrors ProgramSession.previewPlan.
+export function previewProgramPlan(lift, exercise, program, phase, { base, addedSets, barLb, gym }) {
+  const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: base,
+    nextPhase: phase, incrementLb: 0 },
+  program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
+  lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+  addedSets);
+  const targetWeightLb = plan.weightLb;
+  plan.weightLb = neatProgramWeight(plan.weightLb, exercise,
+    lift.role === "main" || C.buildsOwnSessionShape(lift.prescription || "automatic"),
+    barLb, program.roundingLb, gym, phase);
+  return { plan, targetWeightLb };
+}
+
 function sessionTargetsMatch(session, program, day, exMap, allSessions) {
   return C.orderedProgramSlots(day.lifts).every((lift) => {
     const exercise = exMap.get(lift.exerciseName);
@@ -1919,8 +1959,16 @@ export async function createSessionFromProgramDay(program, day) {
   // labels performed stacks against the bar the session loads.
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const barLb = C.barLb(bar);
+  // Composition (canResumeSession) is name-blind to the lift/accessory
+  // boundary, so a slot-identity check closes the hole a same-named
+  // recategorization opens: every entry the open session tied to a slot must
+  // point at a slot that still exists, or completion would bank the whole
+  // workout history-only. Session-local additions (null slot id) are
+  // untouched. Mirrors ProgramSession.createSession.
+  const daySlotIds = new Set([...(day.lifts || []), ...(day.accessories || [])].map((slot) => slot.id));
   const openForDay = allSessions.find((s) => !s.isCompleted && s.programTag
     && sessionBelongsToProgram(s, program)
+    && (s.exercises || []).every((entry) => entry.programSlotId == null || daySlotIds.has(entry.programSlotId))
     && C.canResumeSession(s.programTag.cycleNumber, s.programTag.week, s.programTag.dayIndex,
       program.cycleNumber, program.currentWeek, day.order,
       s.programTag.planNames || [], dayNames)

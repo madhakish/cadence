@@ -284,6 +284,12 @@ public struct CoachingProgramSlot: Hashable, Sendable {
     public var stallCount: Int
     /// The lifter has shelved the exercise this slot prescribes.
     public var exerciseIsShelved: Bool
+    /// Whether the client's apply path could actually rotate this slot to a
+    /// compatible variation under the program's equipment policy. `nil`
+    /// means the caller did not say (legacy snapshots): propose as before.
+    /// When `false`, the weekly max-effort rotation is suppressed — a
+    /// recommendation guaranteed to fail on Apply must not nag forever.
+    public var rotationCandidateAvailable: Bool?
 
     public init(
         id: String,
@@ -301,7 +307,8 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         workingSets: Int = 0,
         workingReps: Int = 0,
         stallCount: Int = 0,
-        exerciseIsShelved: Bool = false
+        exerciseIsShelved: Bool = false,
+        rotationCandidateAvailable: Bool? = nil
     ) {
         self.id = id
         self.exerciseName = exerciseName
@@ -319,6 +326,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         self.workingReps = max(0, workingReps)
         self.stallCount = max(0, stallCount)
         self.exerciseIsShelved = exerciseIsShelved
+        self.rotationCandidateAvailable = rotationCandidateAvailable
     }
 }
 
@@ -868,12 +876,33 @@ public enum CoachingEngine {
         var blockedEvidence: [String] = []
         for (pattern, target) in budgets {
             let current = planned[pattern, default: 0]
-            guard current < target, changes < capacity else { continue }
-            let amount = min(target - current, capacity - changes)
-            if let slot = program.slots.first(where: {
+            // capacity 0 is the athlete's opt-out of automatic capacity
+            // management — no additions AND no blocked notices.
+            guard current < target, capacity > 0 else { continue }
+            let slot = program.slots.first(where: {
                 $0.pattern == pattern && $0.capacityManaged && !$0.isMain
                     && supportsAddedCapacity($0) && $0.plannedSets < $0.maximumSets
-            }) {
+            })
+            var day: Int?
+            if slot == nil {
+                // A PERMANENTLY blocked floor is reported even when this
+                // rotation's budget is already spent — that is the whole
+                // point of the notice; a merely-unbudgeted fillable floor
+                // just waits for the next rotation.
+                if let available = program.patternsWithAvailableExercise,
+                   !available.contains(pattern) {
+                    blockedEvidence.append("\(pattern.name) \(current)/\(target) — no compatible exercise available")
+                    continue
+                }
+                day = preferredDay(for: pattern, slots: program.slots)
+                if day == nil {
+                    blockedEvidence.append("\(pattern.name) \(current)/\(target) — no eligible day (technique/explosive)")
+                    continue
+                }
+            }
+            guard changes < capacity else { continue }
+            let amount = min(target - current, capacity - changes)
+            if let slot {
                 let add = min(amount, slot.maximumSets - slot.plannedSets)
                 guard add > 0 else { continue }
                 capacityAdjustments.append(.addSet(
@@ -881,21 +910,12 @@ public enum CoachingEngine {
                 ))
                 capacityEvidence.append("\(pattern.name) \(current)/\(target) → +\(add)")
                 changes += add
-            } else if let available = program.patternsWithAvailableExercise,
-                      !available.contains(pattern) {
-                // The client's library/equipment policy cannot fill this
-                // pattern; proposing addPattern would only ever fail on Apply.
-                blockedEvidence.append("\(pattern.name) \(current)/\(target) — no compatible exercise available")
-            } else if let day = preferredDay(for: pattern, slots: program.slots) {
+            } else if let day {
                 capacityAdjustments.append(.addPattern(
                     pattern: pattern, dayIndex: day, sets: amount
                 ))
                 capacityEvidence.append("\(pattern.name) \(current)/\(target) → +\(amount)")
                 changes += amount
-            } else {
-                // Every candidate day is technique/explosive: the floor stays
-                // unmet, and silence would hide that from the athlete.
-                blockedEvidence.append("\(pattern.name) \(current)/\(target) — no eligible day (technique/explosive)")
             }
         }
         if !capacityAdjustments.isEmpty {
@@ -967,7 +987,11 @@ public enum CoachingEngine {
                 continue
             }
             if slot.prescriptionStyle == .maxEffort,
-               let latestExposure = newest.lazy.compactMap({ session -> (CoachingSessionSnapshot, CoachingExerciseSnapshot)? in
+               // Same principle as the capacity availability gate: a rotation
+               // the apply path cannot resolve must not be proposed weekly,
+               // forever. nil (legacy snapshot) keeps the old behavior.
+               slot.rotationCandidateAvailable != false,
+               let latestExposure = newest.lazy.compactMap({ session -> CoachingExerciseSnapshot? in
                    guard session.rotation != ProgramProgression.deloadWeek,
                          let exercise = session.exercises.first(where: { $0.slotID == slot.id }),
                          // Only work PERFORMED under a max-effort prescription
@@ -975,14 +999,16 @@ public enum CoachingEngine {
                          // the slot ran another style (or before it became
                          // maxEffort) must not rotate the slot away. The
                          // entry's stamped style is the session-time truth.
+                         // Only the entry matters from here — the
+                         // recommendation id is session-free.
                          exercise.prescriptionStyle == .maxEffort,
                          exercise.sets.contains(where: {
                              !$0.isWarmup && $0.completed && $0.actualReps == 1
                                  && $0.prescriptionBlock.countsAsPrescribedWork
                          }) else { return nil }
-                   return (session, exercise)
+                   return exercise
                }).first,
-               latestExposure.1.exerciseName == slot.exerciseName {
+               latestExposure.exerciseName == slot.exerciseName {
                 result.append(CoachingRecommendation(
                     ruleID: "program.slot.rotate.max-effort-weekly.v\(ruleVersion)",
                     priority: 65,

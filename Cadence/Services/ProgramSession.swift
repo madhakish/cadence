@@ -45,8 +45,18 @@ enum ProgramSession {
         let defaultGym = gyms.first(where: { $0.isDefault }) ?? gyms.first
         let selectedBar = defaultGym?.defaultBar ?? .bar45lb
         let dayNames = day.orderedLifts.map(\.exerciseName) + day.orderedAccessories.map(\.exerciseName)
+        // Composition (canResumeSession) is name-blind to the lift/accessory
+        // boundary, so a slot-identity check closes the hole a same-named
+        // recategorization opens: every entry the open session tied to a slot
+        // must point at a slot that still exists, or completion would bank
+        // the whole workout history-only. Session-local additions (nil slot
+        // id) are untouched. Mirrors web createSessionFromProgramDay.
+        let daySlotIDs = Set(day.lifts.map(\.id) + day.accessories.map(\.id))
         if let existing = try context.fetch(openDescriptor).first(where: { s in
             (s.programID == programID || (s.programID == nil && s.programName == programName)) &&
+            s.exercises.allSatisfy { entry in
+                entry.programSlotID.map(daySlotIDs.contains) ?? true
+            } &&
             ProgramProgression.canResumeSession(
                 // Missing tag fields → -1 sentinel (never equals a real
                 // 1-based cycle/week/day), so ambiguously-tagged legacy
@@ -434,6 +444,54 @@ enum ProgramSession {
             stallCount: lift.stallCount, stalledRank: rank,
             maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation
         )
+    }
+
+    /// One spelling of the preview pipeline every surface shares: honest
+    /// planning base → `ProgramEngine.programPlan` (with volume-fallback
+    /// sets) → gym/bar snap. Returns the pre-snap theoretical target
+    /// (`raw`, what the overview lists and barbell views annotate) and the
+    /// snapped plan the created session will store — so the Home card, the
+    /// workout preview, the exercise-detail cycle table, and the stored
+    /// prescription agree by construction. `planningBase` and
+    /// `addedVolumeSets` are parameters so callers that render several
+    /// rotations of one lift compute them once. Mirrors web
+    /// `previewProgramPlan` (session.js).
+    /// The theoretical half of the pipeline: honest base → programPlan. The
+    /// overview lists this directly (it never snaps to a gym's plates).
+    static func rawPreviewPlan(
+        for lift: ProgramLift, exercise: Exercise?, program: Program,
+        phase: CyclePhase, planningBase: Double, addedVolumeSets: Int
+    ) -> SessionPlan {
+        ProgramEngine.programPlan(
+            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: planningBase,
+                            nextPhase: phase, incrementLb: 0),
+            programRoundingLb: program.roundingLb,
+            exerciseType: exercise?.typeRaw,
+            movementGroup: exercise?.movementGroup,
+            role: lift.role,
+            focus: program.focus,
+            prescriptionStyle: lift.prescription,
+            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
+            addedVolumeSets: addedVolumeSets
+        )
+    }
+
+    static func previewPlan(
+        for lift: ProgramLift, exercise: Exercise?, program: Program,
+        phase: CyclePhase, planningBase: Double, addedVolumeSets: Int, gym: Gym?
+    ) -> (raw: SessionPlan, snapped: SessionPlan) {
+        let raw = rawPreviewPlan(
+            for: lift, exercise: exercise, program: program, phase: phase,
+            planningBase: planningBase, addedVolumeSets: addedVolumeSets
+        )
+        let weightLb = achievableWeight(
+            raw.weightLb, exercise: exercise,
+            isMain: lift.role == .main || lift.prescription.buildsOwnSessionShape,
+            gym: gym, bar: gym?.defaultBar ?? .bar45lb,
+            stepLb: program.roundingLb, phase: phase
+        )
+        return (raw, SessionPlan(weightLb: weightLb, sets: raw.sets, reps: raw.reps,
+                                 phase: raw.phase, cycleNumber: raw.cycleNumber))
     }
 
     /// Secondary/accessory barbell prescriptions snap to a neat bar-loadable

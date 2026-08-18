@@ -538,10 +538,13 @@ public enum ProgramEngine {
             return rotation == ProgramProgression.deloadWeek ? "Current recovery" : "Current"
         }
         if rotation == ProgramProgression.deloadWeek { return "Recovery" }
-        let previous = current == 1 || current == ProgramProgression.deloadWeek ? 3 : current - 1
+        // deloadWeek - 1 is the last work rotation; the cycle length has
+        // exactly one owner, so no literal wrap point here.
+        let lastWork = ProgramProgression.deloadWeek - 1
+        let previous = current == 1 || current == ProgramProgression.deloadWeek ? lastWork : current - 1
         if rotation == previous { return "Previous" }
-        let next = current >= 3 ? 1 : current + 1
-        if rotation == next { return current >= 3 ? "Next cycle" : "Next" }
+        let next = current >= lastWork ? 1 : current + 1
+        if rotation == next { return current >= lastWork ? "Next cycle" : "Next" }
         return "Later"
     }
 

@@ -1142,10 +1142,13 @@ eq(C.CARDIO_LOAD_INCREMENT_LB, 10, "[INV-RUCK-CARRIES-ITS-LOAD] packs move in 10
 ok(C.equipmentPolicyAllows("any", "machine"), "legacy programs may use any authored equipment");
 ok(!C.equipmentPolicyAllows("freeWeightsOnly", "machine"),
   "free-weight programs reject machine coaching substitutions");
-for (const type of ["barbell", "dumbbell", "kettlebell", "bodyweight"]) {
+// "timed" is a LOGGING type, not equipment — every timed movement in the
+// catalog is a bodyweight isometric (planks, holds), and excluding it made
+// the adductor volume floor permanently unfillable under this policy.
+for (const type of ["barbell", "dumbbell", "kettlebell", "bodyweight", "timed"]) {
   ok(C.equipmentPolicyAllows("freeWeightsOnly", type), `free-weight policy allows ${type}`);
 }
-for (const type of ["band", "timed", "conditioning"]) {
+for (const type of ["band", "conditioning"]) {
   ok(!C.equipmentPolicyAllows("freeWeightsOnly", type), `free-weight policy rejects ${type}`);
 }
 eq(C.cardioSetLabel(3, 2700, null, 20), "20 lb · 3 mi · 45:00 · 4 mph",
@@ -1450,6 +1453,18 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(!!constrainedBlocked && constrainedBlocked.explanation.includes("no compatible exercise available"),
     "the impossible pattern is reported as blocked instead of re-proposed forever");
 
+  // Permanently blocked floors report even when this rotation's budget is
+  // already spent — only fillable-but-unbudgeted floors wait silently.
+  const spentBudget = {
+    ...coachingProgram, maximumAddedSetsPerRotation: 3,
+    patternsWithAvailableExercise: ["kneeFlexion", "shoulderStability", "core"],
+  };
+  report = C.evaluateCoaching(spentBudget, sessions);
+  const spentBlocked = report.recommendations.find((candidate) =>
+    candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
+  eq((spentBlocked?.explanation.match(/no compatible exercise available/g) || []).length, 2,
+    "both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings");
+
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3));
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(2, dayIndex, 12 + dayIndex * 3, 105, dayIndex === 0 ? 90 : 105));
@@ -1540,6 +1555,16 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(!report.recommendations.some((candidate) =>
     candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
   "a single performed under another style never counts as a max-effort exposure");
+
+  // Same principle as the capacity availability gate: a rotation the apply
+  // path cannot resolve (no compatible variation under the equipment policy)
+  // must not be proposed weekly, forever.
+  report = C.evaluateCoaching(
+    withSlot("squat", { prescriptionStyle: "maxEffort", rotationCandidateAvailable: false }),
+    maxEffortSessions);
+  ok(!report.recommendations.some((candidate) =>
+    candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
+  "an unresolvable max-effort rotation is never proposed");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));

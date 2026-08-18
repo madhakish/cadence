@@ -37,7 +37,11 @@ public enum EquipmentPolicy: String, Codable, CaseIterable, Sendable {
 
     public func allows(exerciseType: String) -> Bool {
         guard self == .freeWeightsOnly else { return true }
-        return ["barbell", "dumbbell", "kettlebell", "bodyweight"]
+        // "timed" is a LOGGING type, not equipment: every timed movement in
+        // the catalog is a bodyweight isometric (planks, holds). Excluding it
+        // made the adductor volume floor permanently unfillable under this
+        // policy — a blocked notice no in-app action could ever satisfy.
+        return ["barbell", "dumbbell", "kettlebell", "bodyweight", "timed"]
             .contains(exerciseType.lowercased())
     }
 }

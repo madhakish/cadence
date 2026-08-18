@@ -22,37 +22,26 @@ struct WorkoutPreviewView: View {
     private var unitDisplay: UnitDisplay { settingsList.unitDisplay }
     private var phase: CyclePhase { CyclePhase(rawValue: program.currentWeek) ?? .volume }
 
-    private func targetPlan(for lift: ProgramLift) -> SessionPlan {
+    /// The shared preview pipeline — the preview and the started session
+    /// must never disagree.
+    private func previewPlans(for lift: ProgramLift) -> (raw: SessionPlan, snapped: SessionPlan) {
         let exercise = exercises.first { $0.name == lift.exerciseName }
-        // planningBase, not the stored base — the preview and the started
-        // session must never disagree.
-        let base = ProgramSession.planningBase(
-            for: lift, exercise: exercise, program: program, sessions: completedSessions
+        return ProgramSession.previewPlan(
+            for: lift, exercise: exercise, program: program, phase: phase,
+            planningBase: ProgramSession.planningBase(
+                for: lift, exercise: exercise, program: program, sessions: completedSessions
+            ),
+            addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program),
+            gym: defaultGym
         )
-        return ProgramEngine.programPlan(
-            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: base,
-                            nextPhase: phase, incrementLb: 0),
-            programRoundingLb: program.roundingLb,
-            exerciseType: exercise?.typeRaw,
-            movementGroup: exercise?.movementGroup,
-            role: lift.role,
-            focus: program.focus,
-            prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
-            addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program))
+    }
+
+    private func targetPlan(for lift: ProgramLift) -> SessionPlan {
+        previewPlans(for: lift).raw
     }
 
     private func plan(for lift: ProgramLift) -> SessionPlan {
-        let raw = targetPlan(for: lift)
-        let exercise = exercises.first { $0.name == lift.exerciseName }
-        let weightLb = ProgramSession.achievableWeight(
-            raw.weightLb, exercise: exercise,
-            isMain: lift.role.rawValue == "main" || lift.prescription.buildsOwnSessionShape,
-            gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb,
-            stepLb: program.roundingLb, phase: phase
-        )
-        return SessionPlan(weightLb: weightLb, sets: raw.sets, reps: raw.reps,
-                           phase: raw.phase, cycleNumber: raw.cycleNumber)
+        previewPlans(for: lift).snapped
     }
 
     var body: some View {

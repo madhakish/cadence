@@ -181,7 +181,10 @@ export const inferredImplementCount = (exerciseType) => exerciseType === "dumbbe
 // native and web coaching adapters enforce the same boundary.
 export function equipmentPolicyAllows(policy, exerciseType) {
   if (policy !== "freeWeightsOnly") return true;
-  return ["barbell", "dumbbell", "kettlebell", "bodyweight"]
+  // "timed" is a LOGGING type, not equipment: every timed movement in the
+  // catalog is a bodyweight isometric (planks, holds). Excluding it made the
+  // adductor volume floor permanently unfillable under this policy.
+  return ["barbell", "dumbbell", "kettlebell", "bodyweight", "timed"]
     .includes(String(exerciseType ?? "").toLowerCase());
 }
 export const resolvedLoadBasis = (exercise) => LOAD_BASES.includes(exercise?.loadBasis)
@@ -893,10 +896,12 @@ export function rotationContextLabel(rotation, currentRotation) {
     ? Math.min(Math.max(currentRotation, 1), DELOAD_WEEK) : 1;
   if (rotation === current) return rotation === DELOAD_WEEK ? "Current recovery" : "Current";
   if (rotation === DELOAD_WEEK) return "Recovery";
-  const previous = current === 1 || current === DELOAD_WEEK ? 3 : current - 1;
+  // DELOAD_WEEK - 1 is the last work rotation; the cycle length has exactly
+  // one owner, so no literal wrap point here.
+  const previous = current === 1 || current === DELOAD_WEEK ? DELOAD_WEEK - 1 : current - 1;
   if (rotation === previous) return "Previous";
-  const next = current >= 3 ? 1 : current + 1;
-  if (rotation === next) return current >= 3 ? "Next cycle" : "Next";
+  const next = current >= DELOAD_WEEK - 1 ? 1 : current + 1;
+  if (rotation === next) return current >= DELOAD_WEEK - 1 ? "Next cycle" : "Next";
   return "Later";
 }
 
@@ -1518,8 +1523,11 @@ export function sessionTagCurrent(tagCycle, tagWeek, tagDayIndex, cycleNumber, c
 export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, currentWeek, dayIndex, sessionPlanNames, dayPlanNames) {
   if (tagCycle !== cycleNumber || tagWeek !== currentWeek || tagDayIndex !== dayIndex) return false;
   if (!sessionPlanNames.length || sessionPlanNames.length !== dayPlanNames.length) return false;
-  const session = [...sessionPlanNames].sort();
-  const day = [...dayPlanNames].sort();
+  // NFC-normalize before comparing: Swift String equality is Unicode-
+  // canonical, so an NFD-entered name must resume on both clients, not just
+  // iOS.
+  const session = sessionPlanNames.map((name) => String(name).normalize()).sort();
+  const day = dayPlanNames.map((name) => String(name).normalize()).sort();
   return session.every((name, index) => name === day[index]);
 }
 
@@ -2809,6 +2817,17 @@ export function exerciseMatchesSearch(exercise, query) {
 export const isConditioningPattern = (pattern) =>
   ["easyAerobic", "intervals", "mixedConditioning"].includes(pattern);
 
+// Display names for the program-policy enums — one spelling for every picker
+// and pill. Mirrors DayTrainingIntent.name / EquipmentPolicy.name in
+// CadenceCore/ProgramPolicy.swift.
+export const DAY_TRAINING_INTENT_LABELS = {
+  general: "General", heavy: "Heavy", volume: "Volume",
+  technique: "Technique", explosive: "Explosive",
+};
+export const EQUIPMENT_POLICY_LABELS = {
+  any: "Any equipment", freeWeightsOnly: "Free weights + bodyweight",
+};
+
 const PATTERN_NAMES = {
   verticalPress: new Set(["Overhead Press", "Push Press", "Push Jerk", "Split Jerk", "Overhead DB Press", "Seated Upright DB Press", "Arnold Press", "Landmine Press", "KB Press"]),
   verticalPull: new Set(["Lat Pulldown", "Straight-arm Pulldown", "Pull-ups", "Chin-ups", "Assisted Pull-up",
@@ -3054,7 +3073,11 @@ function rotationSuggestions(program, sessions, evidenceKey) {
       });
       continue;
     }
-    if (slot.prescriptionStyle === "maxEffort") {
+    // rotationCandidateAvailable === false suppresses the weekly rotation:
+    // same principle as the capacity availability gate — a recommendation the
+    // apply path cannot resolve must not nag forever. null/undefined (legacy
+    // snapshot) keeps the old behavior.
+    if (slot.prescriptionStyle === "maxEffort" && slot.rotationCandidateAvailable !== false) {
       // First qualifying session wins — stop there instead of materializing
       // every match across years of history (mirrors native lazy .first).
       let latest = null;
@@ -3064,14 +3087,15 @@ function rotationSuggestions(program, sessions, evidenceKey) {
         // Only work PERFORMED under a max-effort prescription counts as an
         // exposure: a peak single logged while the slot ran another style (or
         // before it became maxEffort) must not rotate the slot away. The
-        // entry's stamped style is the session-time truth.
+        // entry's stamped style is the session-time truth. Only the entry
+        // matters from here — the recommendation id is session-free.
         const completedSingle = exercise?.prescriptionStyle === "maxEffort"
           && (exercise.sets || []).some((set) => !set.isWarmup
             && set.completed !== false && set.actualReps === 1
             && countsAsPrescribedWork(set.prescriptionBlock));
-        if (completedSingle) { latest = { session, exercise }; break; }
+        if (completedSingle) { latest = exercise; break; }
       }
-      if (latest?.exercise.exerciseName === slot.exerciseName) {
+      if (latest?.exerciseName === slot.exerciseName) {
         result.push({
           // The id carries only portable components (cycle/rotation evidence
           // key + slot id) — NEVER the session id, which is an IndexedDB
@@ -3263,31 +3287,38 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   const blockedEvidence = [];
   for (const [pattern, target] of budgets) {
     const current = planned[pattern] || 0;
-    if (current >= target || changes >= capacity) continue;
-    const amount = Math.min(target - current, capacity - changes);
+    // capacity 0 is the athlete's opt-out of automatic capacity management —
+    // no additions AND no blocked notices.
+    if (current >= target || capacity <= 0) continue;
     const slot = (program.slots || []).find((candidate) => candidate.pattern === pattern
       && candidate.capacityManaged !== false && !candidate.isMain
       && supportsAddedCapacity(candidate)
       && candidate.plannedSets < (candidate.maximumSets || DEFAULT_MAXIMUM_SETS));
+    let dayIndex = null;
+    if (!slot) {
+      // A PERMANENTLY blocked floor is reported even when this rotation's
+      // budget is already spent — that is the whole point of the notice; a
+      // merely-unbudgeted fillable floor just waits for the next rotation.
+      if (program.patternsWithAvailableExercise
+          && !program.patternsWithAvailableExercise.includes(pattern)) {
+        blockedEvidence.push(`${movementPatternName(pattern)} ${current}/${target} — no compatible exercise available`);
+        continue;
+      }
+      dayIndex = preferredCoachingDay(pattern, program.slots || []);
+      if (dayIndex === null) {
+        blockedEvidence.push(`${movementPatternName(pattern)} ${current}/${target} — no eligible day (technique/explosive)`);
+        continue;
+      }
+    }
+    if (changes >= capacity) continue;
+    const amount = Math.min(target - current, capacity - changes);
     if (slot) {
       const add = Math.min(amount, (slot.maximumSets || DEFAULT_MAXIMUM_SETS) - slot.plannedSets);
       if (add <= 0) continue;
       capacityAdjustments.push({ type: "addSet", slotID: slot.id, exerciseName: slot.exerciseName, count: add });
       capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${add}`);
       changes += add;
-    } else if (program.patternsWithAvailableExercise
-        && !program.patternsWithAvailableExercise.includes(pattern)) {
-      // The client told us its library/equipment policy cannot fill this
-      // pattern; proposing addPattern would only ever fail on Apply, forever.
-      blockedEvidence.push(`${movementPatternName(pattern)} ${current}/${target} — no compatible exercise available`);
     } else {
-      const dayIndex = preferredCoachingDay(pattern, program.slots || []);
-      if (dayIndex === null) {
-        // Every candidate day is technique/explosive: the floor stays unmet,
-        // and silence would hide that from the athlete entirely.
-        blockedEvidence.push(`${movementPatternName(pattern)} ${current}/${target} — no eligible day (technique/explosive)`);
-        continue;
-      }
       capacityAdjustments.push({ type: "addPattern", pattern, dayIndex, sets: amount });
       capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${amount}`);
       changes += amount;

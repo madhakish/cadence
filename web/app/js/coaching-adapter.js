@@ -6,6 +6,11 @@ import { iso, sessionBelongsToProgram } from "./db.js";
 
 export function coachingReport(program, sessions, exMap, checkins = []) {
   const id = program.uuid || program.id;
+  // The library the apply path can draw from (availability + equipment
+  // policy) — used both for pattern availability and for the per-slot
+  // rotation-candidate flag, so evaluation and Apply cannot disagree.
+  const policyExercises = [...exMap.values()].filter((item) => C.exerciseIsAvailableForProgramming(item)
+    && C.equipmentPolicyAllows(program.equipmentPolicy, item.type));
   const slots = (program.days || []).flatMap((day) => [
     ...(day.lifts || []).map((lift) => {
       const exercise = exMap.get(lift.exerciseName);
@@ -14,14 +19,25 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
         program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
         lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
       );
+      const resolvedStyle = C.resolvedPrescriptionStyle(
+        lift.prescription || "automatic", exercise?.movementGroup, lift.role, program.focus,
+      );
+      // Whether Apply could actually rotate this slot — the same
+      // swapCompatible filter applyCoachingRecommendation runs. Computed
+      // only for max-effort slots (the weekly rotation rule's audience).
+      // Mirrors CoachingService.report.
+      const rotationCandidateAvailable = resolvedStyle === "maxEffort"
+        ? !!exercise && policyExercises.some((candidate) => C.swapCompatible(
+          exercise, { ...candidate, isShelved: C.exerciseIsShelved(candidate) },
+        ))
+        : null;
       return { id: lift.id, exerciseName: lift.exerciseName, dayIndex: day.order,
         trainingIntent: day.trainingIntent || "general",
         pattern: exercise?.movementPattern || C.movementPattern(lift.exerciseName, exercise?.movementGroup),
         plannedSets: plan.sets, role: lift.role, isMain: lift.role === "main", capacityManaged: lift.capacityManaged !== false,
         maximumSets: lift.maximumSets || C.DEFAULT_MAXIMUM_SETS,
-        prescriptionStyle: C.resolvedPrescriptionStyle(
-          lift.prescription || "automatic", exercise?.movementGroup, lift.role, program.focus,
-        ),
+        prescriptionStyle: resolvedStyle,
+        rotationCandidateAvailable,
         baseWeightLb: lift.baseWeightLb,
         workingSets: lift.doubleProgressionSets ?? 3,
         workingReps: (lift.currentReps ?? 5) <= 3 ? 3 : 5,
@@ -74,22 +90,31 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
   // What the apply path could actually resolve for each pattern, so the
   // engine never proposes an addPattern that is guaranteed to throw on Apply
   // (a freeWeightsOnly program whose only candidates are machines, forever).
-  // Mirrors CoachingService.report and the resolution in
-  // applyCoachingRecommendation: preferred names first, then any exercise
-  // classified under the pattern.
-  const policyExercises = [...exMap.values()].filter((item) => C.exerciseIsAvailableForProgramming(item)
-    && C.equipmentPolicyAllows(program.equipmentPolicy, item.type));
-  const patternsWithAvailableExercise = [...new Set([
+  // Derived BY CALLING the same resolver Apply uses — a hand-copied
+  // approximation would silently diverge the moment resolution criteria
+  // change. Mirrors CoachingService.report.
+  const candidatePatterns = new Set([
     ...policyExercises.map((item) => item.movementPattern).filter(Boolean),
-    ...Object.keys(C.PREFERRED_EXERCISES).filter((pattern) => (C.PREFERRED_EXERCISES[pattern] || [])
-      .some((name) => policyExercises.some((item) => item.name === name))),
-  ])];
+    ...Object.keys(C.PREFERRED_EXERCISES),
+  ]);
+  const patternsWithAvailableExercise = [...candidatePatterns]
+    .filter((pattern) => resolveExercise(pattern, policyExercises));
   return C.evaluateCoaching({ id, expectedDayIndexes: (program.days || []).map((day) => day.order), slots,
     maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation ?? 6,
     patternsWithAvailableExercise }, history, program.reliableHistoryStart);
 }
 
-export async function applyCoachingRecommendation(program, recommendation, exercises, sessions = []) {
+// The ONE resolution rule for filling a movement-pattern gap: preferred names
+// first, then any available exercise classified under the pattern. Used both
+// to build the snapshot's available-pattern set and to execute Apply, so the
+// two can never disagree. Mirrors CoachingService.preferredExercise.
+function resolveExercise(pattern, available) {
+  return (C.PREFERRED_EXERCISES[pattern] || [])
+    .map((name) => available.find((item) => item.name === name)).find(Boolean)
+    || available.find((item) => item.movementPattern === pattern);
+}
+
+export async function applyCoachingRecommendation(program, recommendation, exercises, sessions) {
   const change = recommendation.change;
   let message = "Program held unchanged.";
   const automaticExercises = exercises.filter((item) => C.exerciseIsAvailableForProgramming(item)
@@ -98,9 +123,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     const available = automaticExercises;
     const resolved = (change.additions || []).map((adjustment) => {
       if (adjustment.type !== "addPattern") return { adjustment };
-      const exercise = (C.PREFERRED_EXERCISES[adjustment.pattern] || [])
-        .map((name) => available.find((item) => item.name === name)).find(Boolean)
-        || available.find((item) => item.movementPattern === adjustment.pattern);
+      const exercise = resolveExercise(adjustment.pattern, available);
       // Fallback = lowest ORDER, like native orderedDays.first — array
       // position is authoring history, not schedule position.
       const day = (program.days || []).find((item) => item.order === adjustment.dayIndex)
@@ -145,8 +168,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     }
   } else if (change.type === "addPattern") {
     const available = automaticExercises;
-    const exercise = (C.PREFERRED_EXERCISES[change.pattern] || []).map((name) => available.find((item) => item.name === name)).find(Boolean)
-      || available.find((item) => item.movementPattern === change.pattern);
+    const exercise = resolveExercise(change.pattern, available);
     // Fallback = lowest ORDER, like native orderedDays.first (see capacityPlan).
     const day = (program.days || []).find((item) => item.order === change.dayIndex)
       || [...(program.days || [])].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))[0];
@@ -227,6 +249,14 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     }
     if (!replacement) throw new Error(`No compatible variation of ${change.exerciseName} is available. Add one to the library, or unshelve an existing one.`);
     if (isMaxEffortLift) {
+      // Loud, not silent: the native mirror made history a required
+      // parameter because a forgotten argument silently seeds every
+      // returning variation at the 80% calibration ceiling instead of its
+      // own single. JS cannot require a parameter, so the max-effort path
+      // refuses to guess.
+      if (!Array.isArray(sessions)) {
+        throw new Error("A max-effort rotation needs the completed-session history (pass [] when none exists).");
+      }
       // reduce, not Math.max(...spread): spreading every matching set into
       // arguments can overflow the engine's argument limit on a long history.
       const priorBest = sessions.filter((session) => session.isCompleted)
@@ -235,7 +265,11 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
         .flatMap((entry) => entry.sets || [])
         .filter((set) => !set.isWarmup && set.status === "completed" && set.reps === 1
           && C.countsAsPrescribedWork(C.resolvedPrescriptionBlock(set))
-          && !(set.flags || []).some((flag) => ["stopped early", "grindy", "wobble"].includes(flag))
+          // The quality vocabulary is core-owned (SET_QUALITIES/setQuality);
+          // restating the strings here is how a new quality value would keep
+          // counting as clean. Mirrors the native enum checks.
+          && !(set.flags || []).includes("stopped early")
+          && !["grindy", "wobble"].includes(C.setQuality(set.flags))
           && !set.bodyFlagSite && !set.autoregReason)
         .reduce((best, set) => Math.max(best, set.weightLb || 0), 0);
       lift.baseWeightLb = C.maxEffortVariationTarget(

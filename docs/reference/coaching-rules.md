@@ -101,7 +101,7 @@ nothing compatible is available the proposal refuses with that reason rather
 than substituting something that does not fit.
 
 Candidates are ranked deterministically, and a `freeWeightsOnly` program
-filters them to barbell, dumbbell, kettlebell, and bodyweight work. Apply also
+filters them to barbell, dumbbell, kettlebell, bodyweight, and timed-hold work. Apply also
 checks that the named slot still contains the named exercise; a stale proposal
 cannot overwrite a manual edit made after the coach evaluated it.
 

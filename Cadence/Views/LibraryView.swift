@@ -12,7 +12,8 @@ struct LibraryView: View {
 
     private var visibleExercises: [Exercise] {
         guard !search.isEmpty else { return exercises }
-        return exercises.filter { $0.matchesSearch(search) }
+        let term = ExerciseSearch.preparedTerm(search)
+        return exercises.filter { $0.matchesSearch(preparedTerm: term) }
     }
 
     var body: some View {
@@ -120,40 +121,18 @@ struct ExerciseDetailView: View {
 
     private var defaultGym: Gym? { gyms.first(where: \.isDefault) ?? gyms.first }
 
+    /// The shared preview pipeline; base, fallback sets, and the gym are
+    /// phase-invariant, so the caller computes them once per membership
+    /// instead of once per rotation row.
     private func cyclePlan(
-        _ item: CycleMembership, phase: CyclePhase, planningBase: Double
+        _ item: CycleMembership, phase: CyclePhase,
+        planningBase: Double, addedVolumeSets: Int, gym: Gym?
     ) -> SessionPlan {
-        let lift = item.lift
-        let program = item.program
-        let raw = ProgramEngine.programPlan(
-            for: CycleState(
-                cycleNumber: program.cycleNumber,
-                baseWeightLb: planningBase,
-                nextPhase: phase,
-                incrementLb: 0
-            ),
-            programRoundingLb: program.roundingLb,
-            exerciseType: exercise.typeRaw,
-            movementGroup: exercise.movementGroup,
-            role: lift.role,
-            focus: program.focus,
-            prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(movementGroup: exercise.movementGroup),
-            addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program)
-        )
-        let weight = ProgramSession.achievableWeight(
-            raw.weightLb,
-            exercise: exercise,
-            isMain: lift.role == .main || lift.prescription.buildsOwnSessionShape,
-            gym: defaultGym,
-            bar: defaultGym?.defaultBar ?? .bar45lb,
-            stepLb: program.roundingLb,
-            phase: phase
-        )
-        return SessionPlan(
-            weightLb: weight, sets: raw.sets, reps: raw.reps,
-            phase: raw.phase, cycleNumber: raw.cycleNumber
-        )
+        ProgramSession.previewPlan(
+            for: item.lift, exercise: exercise, program: item.program,
+            phase: phase, planningBase: planningBase,
+            addedVolumeSets: addedVolumeSets, gym: gym
+        ).snapped
     }
 
     /// "Program · Day (role)" for every slot this exercise fills.
@@ -211,26 +190,38 @@ struct ExerciseDetailView: View {
                 }
             }
 
+            // One binding, one traversal: the computed property re-walks
+            // programs→days→lifts on every access, and this body needs the
+            // result four times.
+            let data = membershipData
+            let gym = defaultGym
+
             Section("In programs") {
-                if memberships.isEmpty {
+                if data.labels.isEmpty {
                     Text("None").foregroundStyle(.secondary)
                 } else {
-                    ForEach(memberships, id: \.self) { Text($0) }
+                    ForEach(data.labels, id: \.self) { Text($0) }
                 }
             }
 
-            if !cycleMemberships.isEmpty {
+            if !data.cycle.isEmpty {
                 Section("Program cycle") {
-                    ForEach(cycleMemberships) { item in
+                    ForEach(data.cycle) { item in
+                        // Base and fallback sets are phase-invariant: once
+                        // per membership row, not once per rotation line.
                         let planningBase = ProgramSession.planningBase(
                             for: item.lift, exercise: exercise,
                             program: item.program, sessions: completed
+                        )
+                        let addedVolumeSets = ProgramSession.volumeFallbackSets(
+                            for: item.lift, program: item.program
                         )
                         VStack(alignment: .leading, spacing: 8) {
                             Text("\(item.program.name) · \(item.day.name)")
                                 .font(.subheadline.bold())
                             ForEach(CyclePhase.allCases, id: \.rawValue) { phase in
-                                let plan = cyclePlan(item, phase: phase, planningBase: planningBase)
+                                let plan = cyclePlan(item, phase: phase, planningBase: planningBase,
+                                                     addedVolumeSets: addedVolumeSets, gym: gym)
                                 let phaseLabel = ProgramEngine.slotPhaseLabel(
                                     rotation: phase.rawValue,
                                     role: item.lift.role,

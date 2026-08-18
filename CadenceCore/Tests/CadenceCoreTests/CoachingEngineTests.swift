@@ -284,6 +284,48 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertTrue(blocked.explanation.contains("no eligible day (technique/explosive)"))
     }
 
+    func testUnresolvableMaxEffortRotationIsNotProposed() throws {
+        // Same principle as the capacity availability gate: a rotation the
+        // apply path cannot resolve (no compatible variation under the
+        // equipment policy) must not be proposed weekly, forever.
+        var sessions = greenRotations()
+        let latestSquatIndex = try XCTUnwrap(sessions.indices.last { sessions[$0].dayIndex == 0 })
+        sessions[latestSquatIndex].exercises[0].prescriptionStyle = .maxEffort
+        sessions[latestSquatIndex].exercises[0].sets = [
+            CoachingSetSnapshot(
+                actualWeightLb: 115, actualReps: 1,
+                plannedWeightLb: 115, plannedReps: 1,
+                prescriptionBlock: .work
+            )
+        ]
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") {
+                $0.prescriptionStyle = .maxEffort
+                $0.rotationCandidateAvailable = false
+            },
+            sessions: sessions
+        )
+        XCTAssertFalse(report.recommendations.contains {
+            $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
+        }, "an unresolvable max-effort rotation is never proposed")
+    }
+
+    func testBlockedFloorsReportEvenWithSpentBudget() throws {
+        // Permanently blocked floors report even when this rotation's budget
+        // is already spent — only fillable-but-unbudgeted floors wait.
+        var constrained = program()
+        constrained.maximumAddedSetsPerRotation = 3
+        constrained.patternsWithAvailableExercise = [.kneeFlexion, .shoulderStability, .core]
+        let report = CoachingEngine.evaluate(program: constrained, sessions: greenRotations())
+        let blocked = try XCTUnwrap(report.recommendations.first {
+            $0.ruleID == "capacity.rotation-plan.blocked.v\(CoachingEngine.ruleVersion)"
+        })
+        XCTAssertEqual(
+            blocked.explanation.components(separatedBy: "no compatible exercise available").count - 1, 2,
+            "both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings"
+        )
+    }
+
     func testUnfillablePatternIsBlockedNotProposed() throws {
         var constrained = program()
         // The client's library/equipment policy cannot fill vertical pull:

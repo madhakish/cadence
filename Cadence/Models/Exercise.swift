@@ -231,8 +231,14 @@ final class Exercise {
     var isMainLift: Bool { category == .main }
 
     func matchesSearch(_ query: String) -> Bool {
+        matchesSearch(preparedTerm: ExerciseSearch.preparedTerm(query))
+    }
+
+    /// Per-keystroke filters normalize the query once (ExerciseSearch
+    /// .preparedTerm) instead of once per exercise.
+    func matchesSearch(preparedTerm term: String) -> Bool {
         ExerciseSearch.matches(
-            query,
+            preparedTerm: term,
             name: name,
             movementGroup: movementGroup,
             movementPatternName: movementPattern.name,

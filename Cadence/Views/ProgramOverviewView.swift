@@ -135,22 +135,15 @@ struct ProgramOverviewView: View {
 
     private func plan(_ program: Program, _ lift: ProgramLift, _ exercise: Exercise?) -> SessionPlan {
         // "next" shows the honest plan (planningBase) beside the stored base,
-        // so the overview and the Today card can never quote different numbers.
-        return ProgramEngine.programPlan(
-            for: CycleState(
-                cycleNumber: program.cycleNumber,
-                baseWeightLb: ProgramSession.planningBase(
-                    for: lift, exercise: exercise, program: program, sessions: completedSessions
-                ),
-                nextPhase: CyclePhase(rawValue: program.currentWeek) ?? .volume, incrementLb: 0
+        // so the overview and the Today card can never quote different
+        // numbers. The overview deliberately lists the theoretical target
+        // (raw stage), never a gym-snapped stack.
+        ProgramSession.rawPreviewPlan(
+            for: lift, exercise: exercise, program: program,
+            phase: CyclePhase(rawValue: program.currentWeek) ?? .volume,
+            planningBase: ProgramSession.planningBase(
+                for: lift, exercise: exercise, program: program, sessions: completedSessions
             ),
-            programRoundingLb: program.roundingLb,
-            exerciseType: exercise?.typeRaw,
-            movementGroup: exercise?.movementGroup,
-            role: lift.role,
-            focus: program.focus,
-            prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
             addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program)
         )
     }

@@ -25,7 +25,7 @@ Version 9 adds two required strings to every newly written program tree:
 
 - **`program.equipmentPolicy`** is `"any"` or `"freeWeightsOnly"`.
   `freeWeightsOnly` limits automatic selection to barbell, dumbbell,
-  kettlebell, and bodyweight exercises. It does not rewrite manually authored
+  kettlebell, bodyweight, and timed (bodyweight-hold) exercises. It does not rewrite manually authored
   slots.
 - **`program.days[].trainingIntent`** is `"general"`, `"heavy"`,
   `"volume"`, `"technique"`, or `"explosive"`. Intent is explicit because

@@ -11,7 +11,7 @@ the standalone "Next up" tracks.
 |---|---|
 | `name` | Display name |
 | `focus` | `strength` / `hypertrophy` / `maintain` — see table below |
-| `equipmentPolicy` | `any` preserves unrestricted legacy selection; `freeWeightsOnly` limits automatic candidates to barbell, dumbbell, kettlebell, and bodyweight work |
+| `equipmentPolicy` | `any` preserves unrestricted legacy selection; `freeWeightsOnly` limits automatic candidates to barbell, dumbbell, kettlebell, bodyweight, and timed-hold work |
 | `cycleNumber` | Which mesocycle you're on (increments after recovery) |
 | `currentWeek` | Persisted compatibility name for the style-neutral rotation pointer (1…4); each lift prescription interprets the position itself |
 | `nextDayIndex` | The `order` of the day the Today screen offers next — a day's order value, not its position in the array |

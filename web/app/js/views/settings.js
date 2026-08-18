@@ -10,14 +10,7 @@ import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
 import { Sessions } from "../db.js";
 // Module cycle with session.js is safe: these are hoisted function exports
 // used only at runtime (session.js likewise imports exerciseDetail from here).
-import { neatProgramWeight, planningBase, volumeFallbackSets } from "./session.js";
-
-// One spelling of the day-intent display names (pill + editor select).
-// Mirrors DayTrainingIntent.name in CadenceCore/ProgramPolicy.swift.
-const INTENT_LABELS = {
-  general: "General", heavy: "Heavy", volume: "Volume",
-  technique: "Technique", explosive: "Explosive",
-};
+import { planningBase, previewProgramPlan, volumeFallbackSets } from "./session.js";
 
 // Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
 // Peak result would otherwise make the next rollover treat the skipped Peak as a
@@ -330,9 +323,10 @@ function pickExerciseSheet(onPick) {
       const results = ui.h("div");
       const paint = () => {
         ui.clear(results);
-        const term = search.value.trim().toLowerCase();
+        // Raw query in: the shared matcher owns normalization and returns
+        // true on empty, so no pre-trim/lowercase or empty-branch here.
         const available = all.filter(C.exerciseIsAvailableForProgramming);
-        const visible = term ? available.filter((exercise) => C.exerciseMatchesSearch(exercise, term)) : available;
+        const visible = available.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
           if (!inCat.length) continue;
@@ -371,9 +365,12 @@ function moveSlot(slots, slot, delta) {
   if (from < 0 || to < 0 || to >= ordered.length) return false;
   // Role-first ordering is enforced at display time: a move across the
   // main/complementary boundary would re-render in the same place while
-  // silently rewriting every authored order, so refuse it (no write) instead
-  // of churning a no-op. Mirrors SettingsView.moveLifts.
-  if ((ordered[from].role || null) !== (ordered[to].role || null)) return false;
+  // silently rewriting every authored order, so refuse it — with a reason,
+  // not a dead-feeling button. Mirrors SettingsView.moveLifts.
+  if ((ordered[from].role || null) !== (ordered[to].role || null)) {
+    ui.toast("Main work stays ahead of complementary work.");
+    return false;
+  }
   [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
   ordered.forEach((item, index) => { item.order = index; });
   return true;
@@ -493,10 +490,12 @@ export async function programEditor(p) {
         body.append(ui.field("Training focus", ui.seg(
           [{ value: "strength", label: "Strength" }, { value: "hypertrophy", label: "Hypertrophy" }, { value: "maintain", label: "Maintain" }],
           p.focus, async (v) => { p.focus = v; await Programs.save(p); })));
-        const equipment = ui.h("select", {}, ...[
-          ["any", "Any equipment"], ["freeWeightsOnly", "Free weights + bodyweight"],
-        ].map(([value, text]) => ui.h("option", {
-          value, text, selected: value === (p.equipmentPolicy || "any"),
+        // Values from the backup enum (the same list import/export validates
+        // against), labels from the core map — a third policy added to db.js
+        // must appear here without touching this view.
+        const equipment = ui.h("select", {}, ...BACKUP_ENUMS.equipmentPolicies.map((value) => ui.h("option", {
+          value, text: C.EQUIPMENT_POLICY_LABELS[value] || value,
+          selected: value === (p.equipmentPolicy || "any"),
         })));
         equipment.addEventListener("change", async () => {
           p.equipmentPolicy = equipment.value;
@@ -543,7 +542,7 @@ export async function programEditor(p) {
             ui.h("div", { class: "lead", style: { cursor: "pointer", flex: "1" }, onClick: () => programDayEditor(p, day) },
               ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
                 ui.h("span", { class: "title", text: day.name }),
-                ui.h("span", { class: "pill accent", text: INTENT_LABELS[day.trainingIntent || "general"] })),
+                ui.h("span", { class: "pill accent", text: C.DAY_TRAINING_INTENT_LABELS[day.trainingIntent || "general"] })),
               ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
             ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { if (moveSlot(p.days, day, -1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
             ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { if (moveSlot(p.days, day, 1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
@@ -598,7 +597,8 @@ async function programDayEditor(p, day) {
         nameInput.addEventListener("change", async () => { day.name = nameInput.value || day.name; api.setTitle(day.name); await Programs.save(p); });
         body.append(ui.field("Day name", nameInput));
         const intent = ui.h("select", {}, ...BACKUP_ENUMS.dayTrainingIntents.map((value) => ui.h("option", {
-          value, text: INTENT_LABELS[value], selected: value === (day.trainingIntent || "general"),
+          value, text: C.DAY_TRAINING_INTENT_LABELS[value] || value,
+          selected: value === (day.trainingIntent || "general"),
         })));
         intent.addEventListener("change", async () => {
           day.trainingIntent = intent.value;
@@ -829,8 +829,9 @@ function exerciseLibrary(exercises) {
       body.append(ui.h("button", { class: "btn primary wide", text: "+ New exercise", onClick: () => newExerciseSheet(exercises, () => paint()) }));
       const paint = () => {
         ui.clear(results);
-        const term = search.value.trim().toLowerCase();
-        const visible = term ? exercises.filter((exercise) => C.exerciseMatchesSearch(exercise, term)) : exercises;
+        // Raw query in: the shared matcher owns normalization and returns
+        // true on empty, so no pre-trim/lowercase or empty-branch here.
+        const visible = exercises.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
           if (!inCat.length) continue;
@@ -945,23 +946,15 @@ async function exerciseInsight(wrap, e) {
     for (const { program, day, lift } of cycleMemberships) {
       const cycle = ui.h("div", { class: "card" },
         ui.h("div", { class: "title", style: { marginBottom: "4px" }, text: `${program.name} · ${day.name}` }));
-      // planningBase + volume-fallback sets + gym snapping, exactly like the
-      // Home card and the session the app will create — the raw stored base
-      // showed a different table than every other surface (and than native
-      // ExerciseDetailView, which runs the same three repairs).
+      // The shared preview pipeline (planningBase + volume-fallback sets +
+      // gym snapping), exactly like the Home card and the session the app
+      // will create — the raw stored base showed a different table than
+      // every other surface. Base and fallback sets are phase-invariant, so
+      // compute them once per membership, not per rotation row.
       const base = planningBase(lift, e, program, completed);
+      const addedSets = volumeFallbackSets(lift, program);
       for (let rotation = 1; rotation <= C.DELOAD_WEEK; rotation++) {
-        const plan = C.programPlanFor({
-          cycleNumber: program.cycleNumber,
-          baseWeightLb: base,
-          nextPhase: rotation,
-          incrementLb: 0,
-        }, program.roundingLb, e.type, e.movementGroup, lift.role, program.focus,
-        lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
-        volumeFallbackSets(lift, program));
-        plan.weightLb = neatProgramWeight(plan.weightLb, e,
-          lift.role === "main" || C.buildsOwnSessionShape(lift.prescription || "automatic"),
-          barLb, program.roundingLb, gym, rotation);
+        const { plan } = previewProgramPlan(lift, e, program, rotation, { base, addedSets, barLb, gym });
         const phaseLabel = C.slotPhaseLabel(rotation, lift.role, lift.prescription || "automatic",
           e.movementGroup, program.focus) || `R${rotation}`;
         cycle.append(ui.h("div", { class: "row" },
