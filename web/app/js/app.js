@@ -28,7 +28,13 @@ async function navigate(id) {
   current = tab.id;
   document.getElementById("screen-title").textContent = tab.title;
   document.getElementById("topbar-actions").replaceChildren();
-  for (const b of document.querySelectorAll(".tab")) b.classList.toggle("active", b.dataset.id === tab.id);
+  for (const b of document.querySelectorAll(".tab")) {
+    const active = b.dataset.id === tab.id;
+    b.classList.toggle("active", active);
+    // Assistive tech gets the same "you are here" the active tint shows.
+    if (active) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  }
   const host = viewEl();
   host.replaceChildren(ui.h("div", { class: "muted", style: { padding: "24px 4px" }, text: "…" }));
   try {

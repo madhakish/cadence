@@ -4,7 +4,7 @@
 import * as C from "./core.js";
 import { iso, sessionBelongsToProgram } from "./db.js";
 
-export function coachingReport(program, sessions, exMap, checkins = []) {
+export function coachingReport(program, sessions, exMap, checkins = [], intervals = []) {
   const id = program.uuid || program.id;
   // The library the apply path can draw from (availability + equipment
   // policy) — used both for pattern availability and for the per-slot
@@ -101,7 +101,7 @@ export function coachingReport(program, sessions, exMap, checkins = []) {
     .filter((pattern) => resolveExercise(pattern, policyExercises));
   return C.evaluateCoaching({ id, expectedDayIndexes: (program.days || []).map((day) => day.order), slots,
     maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation ?? 6,
-    patternsWithAvailableExercise }, history, program.reliableHistoryStart);
+    patternsWithAvailableExercise }, history, program.reliableHistoryStart, intervals);
 }
 
 // The ONE resolution rule for filling a movement-pattern gap: preferred names

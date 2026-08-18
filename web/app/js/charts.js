@@ -115,11 +115,14 @@ export const ROLE_DASH = { main: null, complementary: "5 4" };
 //   lines it continues — a forecast on its own scale would be meaningless —
 //   but it is drawn dashed, thinner, behind a shaded future region and a
 //   "today" divider, so no glance confuses it with performed work.
+// intervals: [{ kind, startMs, endMs }] — declared training breaks, drawn as
+//   shaded bands behind everything else so a plateau or a drop carries its
+//   visible cause (issue #97). Mirrors native intervalBands.
 export function progressionChart({
   lines = [], bars = null, height = 220, fmtY = (v) => String(Math.round(v)),
   fmtBar = (v) => String(Math.round(v)), targetY = null, targetLabel = "Target",
   projection = null, area = true, caption = null,
-  onSelect = null,
+  onSelect = null, intervals = [],
 } = {}) {
   const W = 340, H = height, padL = 40, padT = 16, padB = 26;
   const padR = bars ? 42 : 14;
@@ -139,6 +142,20 @@ export function progressionChart({
   const tmin = Math.min(...everyPoint.map((p) => p.t));
   const tmax = Math.max(...everyPoint.map((p) => p.t));
   const xAt = (t) => padL + (W - padL - padR) * (tmax > tmin ? (t - tmin) / (tmax - tmin) : 0.5);
+
+  // Declared training breaks first, so every other mark draws over them.
+  // Clamped to the plotted span — a break outside it has nothing to explain.
+  if (tmax > tmin) {
+    for (const band of intervals) {
+      const from = Math.max(tmin, band.startMs), to = Math.min(tmax, band.endMs);
+      if (!(to > from)) continue;
+      const x = xAt(from);
+      const rect = el("rect", { class: "interval-band", x: x.toFixed(1), y: padT,
+        width: Math.max(1, xAt(to) - x).toFixed(1), height: H - padT - padB });
+      rect.append(el("title", {}, `${band.kind} break`));
+      svg.append(rect);
+    }
+  }
 
   // Load axis spans the load lines AND the projection that continues them —
   // a forecast clipped off the top of the plot is worse than none.

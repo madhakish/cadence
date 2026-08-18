@@ -171,6 +171,38 @@ decision record. Applying the same rotation twice is prevented by the decision
 identity; a later rotation produces a new evidence key and can be considered
 again.
 
+## Training breaks (declared intervals)
+
+The lifter can declare typed calendar spans in Settings — **deload**, **rest**,
+**away**, and **active recovery** — entered either as a day count or an
+explicit date range. The kinds stay distinct
+([INV-INTERVAL-KINDS-STAY-DISTINCT]): they differ in whether load was applied,
+whether the body was recovering, and what the engine should do afterwards.
+
+Declaring an interval never mutates program state
+([INV-INTERVAL-PRESERVES-SCHEDULE]); it changes how the calendar is read:
+
+- A day inside a rest, away, or active-recovery span is never a missed day
+  ([INV-INTERVAL-IS-NOT-A-GAP]). The Today spacing advisory stays quiet
+  through an excused gap, and the shorter-spacing trial drops any
+  session-to-session gap such a span overlaps — a vacation is not a frequency
+  observation. Deload deliberately does **not** excuse absence: deload days
+  still expect sessions.
+- A session banked inside an **active-recovery** span is real, saved history —
+  and explicitly off-program ([INV-RECOVERY-WORK-IS-OFF-PROGRAM]): it sets no
+  PR milestones, advances no standalone track, and never moves the program
+  schedule. The bank summary says so. The exclusion holds forever, not just
+  at bank time: an off-program session never joins the prior-history PR
+  baseline of later sessions, and the coaching engine leaves it out of
+  rotation grading and readiness baselines entirely. Sessions inside rest or
+  away spans are deliberate, ordinary training and grade normally.
+- For a week after an **away** span ends with nothing banked since, Today
+  offers a re-entry note instead of resuming as if nothing happened.
+
+Intervals appear as rows in the History log, as shaded bands behind the
+progression chart's lines (so a plateau or a drop carries its visible cause),
+and travel in backups (schema version 10, `intervals` collection).
+
 ## Equipment-aware prescriptions
 
 The engine keeps three separate values:

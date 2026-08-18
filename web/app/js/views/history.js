@@ -2,7 +2,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { lineChart, multiLineChart, progressionChart, smoothLinePath, ROTATION_COLORS, ROLE_DASH } from "../charts.js";
-import { Sessions, Milestones, Exercises, Programs, Checkins, topSet, workingVolume } from "../db.js";
+import { Sessions, Milestones, Exercises, Programs, Checkins, Intervals, intervalSnapshots, topSet, workingVolume } from "../db.js";
 import { coachingReport } from "../coaching-adapter.js";
 
 import { COPY } from "../constants.js";
@@ -10,8 +10,8 @@ import { COPY } from "../constants.js";
 let mode = "rotations";
 
 export async function render(host) {
-  const [sessions, milestones, exercises, program, checkins] = await Promise.all([
-    Sessions.completed(), Milestones.all(), Exercises.all(), Programs.active(), Checkins.all(),
+  const [sessions, milestones, exercises, program, checkins, intervals] = await Promise.all([
+    Sessions.completed(), Milestones.all(), Exercises.all(), Programs.active(), Checkins.all(), Intervals.all(),
   ]);
   const root = ui.h("div");
   root.append(ui.seg([{ value: "rotations", label: "Rotations" }, { value: "log", label: "Log" },
@@ -19,15 +19,15 @@ export async function render(host) {
   const panel = ui.h("div");
   root.append(panel);
 
-  if (mode === "rotations") renderRotations(panel, sessions, exercises, program, checkins);
-  else if (mode === "log") renderLog(panel, sessions, exercises);
-  else if (mode === "charts") renderCharts(panel, sessions, exercises, program);
+  if (mode === "rotations") renderRotations(panel, sessions, exercises, program, checkins, intervals);
+  else if (mode === "log") renderLog(panel, sessions, exercises, intervals);
+  else if (mode === "charts") renderCharts(panel, sessions, exercises, program, intervals);
   else renderMilestones(panel, milestones);
 
   host.replaceChildren(root);
 }
 
-function renderRotations(panel, sessions, exercises, program, checkins) {
+function renderRotations(panel, sessions, exercises, program, checkins, intervals = []) {
   const exMap = new Map(exercises.map((exercise) => [exercise.name, exercise]));
   const rolling = (days) => {
     const cutoff = Date.now() - days * 86_400_000;
@@ -48,7 +48,7 @@ function renderRotations(panel, sessions, exercises, program, checkins) {
       ui.h("div", { class: "row" }, ui.h("span", { text: "28 days" }), ui.h("span", { class: "mono", text: rolling(28) })),
       ui.h("div", { class: "sub", text: "Working sets and conditioning are separate; warm-ups are excluded." })));
   if (!program) { panel.append(ui.empty("📋", "Create a program to group training by rotation.")); return; }
-  const report = coachingReport(program, sessions, exMap, checkins);
+  const report = coachingReport(program, sessions, exMap, checkins, intervalSnapshots(intervals));
   if (!report.rotations.length) { panel.append(ui.empty("◌", "Complete program days to establish the first rotation baseline.")); return; }
   const rotationNumbers = [...new Set(report.rotations.map((rotation) => rotation.key.rotation))].sort((a, b) => a - b);
   const cycleNumbers = [...new Set(report.rotations.map((rotation) => rotation.key.cycleNumber))].sort((a, b) => b - a);
@@ -129,17 +129,42 @@ export const historySetPresentationForTest = (set, exerciseType = null) => {
   return { actual, planned, kind: historySetKind(set), state };
 };
 
-function renderLog(panel, sessions, exercises) {
-  if (!sessions.length) { panel.append(ui.empty("📋", COPY.emptyHistory)); return; }
+// Noon-anchored so a bare "yyyy-MM-dd" interval bound never renders as the
+// previous day in negative-offset time zones (same dodge db.js uses).
+const intervalDay = (s) => new Date(`${String(s).slice(0, 10)}T12:00:00`);
+
+function renderLog(panel, sessions, exercises, intervals = []) {
+  if (!sessions.length && !intervals.length) { panel.append(ui.empty("📋", COPY.emptyHistory)); return; }
   const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
   // Session volume relative to the biggest session on record — the thin bar
   // under each card makes trends scannable while scrolling.
   const volumeOf = (s) => (s.exercises || []).reduce((a, e) => a + workingVolume(e, exerciseByName.get(e.exerciseName)), 0);
   const maxVolume = Math.max(1, ...sessions.map(volumeOf));
+  // The log interleaves banked sessions with declared intervals — a break the
+  // lifter chose is part of the training story, not a hole in it
+  // (INV-INTERVAL-IS-NOT-A-GAP). Mirrors HistoryView.swift.
+  const rows = [
+    ...sessions.map((s) => ({ when: new Date(s.date), s })),
+    ...intervals.map((iv) => ({ when: intervalDay(iv.startDate), iv })),
+  ].sort((a, b) => b.when - a.when);
   let currentMonth = "";
-  for (const s of sessions) {
-    const my = ui.monthYear(s.date);
+  for (const row of rows) {
+    const my = ui.monthYear(row.when);
     if (my !== currentMonth) { currentMonth = my; panel.append(ui.h("div", { class: "section-title", text: my })); }
+    if (row.iv) {
+      const iv = row.iv;
+      const range = iv.startDate === iv.endDate
+        ? ui.fmtDate(intervalDay(iv.startDate))
+        : `${ui.fmtDate(intervalDay(iv.startDate))} – ${ui.fmtDate(intervalDay(iv.endDate))}`;
+      panel.append(ui.h("div", { class: "card list", style: { margin: "6px 0" } },
+        ui.h("div", { class: "row", style: { borderBottom: "0" } },
+          ui.h("div", { class: "lead" },
+            ui.h("span", { class: "title", text: C.TRAINING_INTERVAL_KIND_LABELS[iv.kind] || iv.kind }),
+            ui.h("span", { class: "sub", text: range }),
+            iv.note ? ui.h("span", { class: "sub", text: iv.note }) : null))));
+      continue;
+    }
+    const s = row.s;
     // Lead with the heaviest lift of the day; the rest ride in the sub line.
     const tops = (s.exercises || []).map((e) => ({ e, t: topSet(e) })).filter((x) => x.t);
     const lead = [...tops].sort((a, b) => b.t.weightLb - a.t.weightLb)[0];
@@ -399,7 +424,7 @@ const PROJECTION_COLOR = "#7aa7d9";
 
 let chartEx = null, chartMetric = "weight", chartIntent = "main";
 let chartHorizon = 0;
-function renderCharts(panel, sessions, exercises, program) {
+function renderCharts(panel, sessions, exercises, program, chartIntervals = []) {
   const mains = exercises.filter((e) => e.category === "Main").map((e) => e.name).sort();
   if (!mains.length) { panel.append(ui.empty("📈", COPY.emptyHistory)); return; }
   if (!chartEx || !mains.includes(chartEx)) {
@@ -552,6 +577,8 @@ function renderCharts(panel, sessions, exercises, program) {
       // single-rotation history in split mode drew the wash on web only.
       // (The split is now the "rotations" chart intent.)
       area: !splitByRotation,
+      // Declared breaks as shaded bands behind the lines (issue #97).
+      intervals: intervalSnapshots(chartIntervals),
     };
     const metricLabel = chartMetric === "weight" ? "Top working weight"
       : chartMetric === "e1rm" ? "Estimated 1RM"

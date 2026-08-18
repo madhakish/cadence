@@ -189,6 +189,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .chart .now-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; opacity: .7; }
 .chart .now-lbl { fill: var(--muted); font-size: 9px; letter-spacing: .04em; }
 .chart .future { fill: var(--muted); opacity: .05; }
+.chart .interval-band { fill: var(--muted); opacity: .12; }
 .chart .chart-hit { cursor: pointer; pointer-events: all; }
 .chart .chart-hit:focus-visible { stroke: var(--accent); stroke-width: 2; }
 .chart .selection-line { stroke: var(--text); stroke-width: 1; opacity: .25; pointer-events: none; }
@@ -205,6 +206,13 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .setrow .wt { font-size: 18px; font-weight: 700; min-width: 96px; }
 .flagbtns { display: flex; gap: 6px; margin-left: auto; }
 .flagbtn { width: 44px; height: 44px; border-radius: 9px; border: 0; background: var(--card2); color: var(--muted); font-weight: 700; cursor: pointer; }
+/* One labelling pattern for the grading buttons (quality + reps in reserve):
+   glyph over an always-visible micro-caption, inside the 44px tap target so
+   the label survives compact rows and never depends on hover or a screen
+   reader. */
+.flagbtn.labeled { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; line-height: 1.1; }
+.flagbtn.labeled .glyph { font-size: 15px; }
+.flagbtn.labeled .microlabel { font-size: 8px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.85; }
 .gym-tag-hero { margin-top: 2px; }
 .today-hero { padding: 10px; }
 .coach-summary { min-height: 58px; text-align: left; }

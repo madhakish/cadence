@@ -39,6 +39,9 @@ enum ExportService {
         let role: String?
         let programSlotId: String?
         let barId: String?
+        /// v10: emitted only when true — a hand-picked bar that never follows
+        /// a gym switch. Absent means stamped (follows the gym), matching web.
+        let barIdManual: Bool?
         let plannedWeightLb: Double?
         let targetWeightLb: Double?
         let plannedSets: Int?
@@ -89,6 +92,19 @@ enum ExportService {
         let exercises: [ExportExerciseDef]
         let settings: ExportSettings?
         let coachingDecisions: [ExportCoachingDecision]
+        /// v10: typed calendar spans (deload/rest/away/activeRecovery).
+        let intervals: [ExportInterval]
+    }
+
+    /// Web `intervals` store record shape — inclusive day-granular ISO dates.
+    struct ExportInterval: Codable {
+        let id: String
+        let kind: String
+        let startDate: String
+        let endDate: String
+        let enteredAsDays: Bool
+        let note: String
+        let programId: String?
     }
 
     /// Web `tracks` store record shape (imported verbatim there).
@@ -397,6 +413,9 @@ enum ExportService {
         let coachingDecisions = try context.fetch(
             FetchDescriptor<CoachingDecision>(sortBy: [SortDescriptor(\.date)])
         )
+        let intervals = try context.fetch(
+            FetchDescriptor<TrainingInterval>(sortBy: [SortDescriptor(\.startDate)])
+        )
 
         return ExportBundle(
             schemaVersion: BackupContract.currentSchemaVersion,
@@ -436,6 +455,7 @@ enum ExportService {
                             role: entry.programRole,
                             programSlotId: entry.programSlotID,
                             barId: entry.barID,
+                            barIdManual: entry.barIDIsManual ? true : nil,
                             plannedWeightLb: entry.plannedWeightLb,
                             targetWeightLb: entry.targetWeightLb,
                             plannedSets: entry.plannedSets,
@@ -612,6 +632,15 @@ enum ExportService {
                     action: decision.actionRaw, title: decision.title,
                     explanation: decision.explanation, evidence: decision.evidence,
                     beforeValue: decision.beforeValue, afterValue: decision.afterValue
+                )
+            },
+            intervals: intervals.map { interval in
+                ExportInterval(
+                    id: interval.id, kind: interval.kindRaw,
+                    startDate: IntervalDay.string(from: interval.startDate),
+                    endDate: IntervalDay.string(from: interval.endDate),
+                    enteredAsDays: interval.enteredAsDays,
+                    note: interval.note, programId: interval.programID
                 )
             }
         )

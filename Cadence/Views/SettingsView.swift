@@ -11,6 +11,8 @@ struct SettingsView: View {
     @Query private var settingsList: [AppSettings]
     @Query(sort: \Gym.name) private var gyms: [Gym]
     @Query(sort: \LiftTrack.exerciseName) private var tracks: [LiftTrack]
+    @Query(sort: \TrainingInterval.startDate, order: .reverse)
+    private var trainingIntervals: [TrainingInterval]
 
     @State private var exportJSON: Data?
     @State private var exportCSV: Data?
@@ -174,6 +176,34 @@ struct SettingsView: View {
                     }
                 }
 
+                Section {
+                    ForEach(trainingIntervals) { interval in
+                        NavigationLink {
+                            IntervalEditorView(interval: interval)
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(interval.kind.name)
+                                Text(Self.intervalRangeLabel(interval))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Button {
+                        let today = Calendar.current.startOfDay(for: .now)
+                        let interval = TrainingInterval(startDate: today, endDate: today)
+                        context.insert(interval)
+                        PersistenceErrorCenter.shared.save(context, operation: "Adding the break")
+                    } label: {
+                        Label("Add break", systemImage: "plus")
+                    }
+                } header: {
+                    Text("Training breaks")
+                } footer: {
+                    // [INV-INTERVAL-IS-NOT-A-GAP] [INV-RECOVERY-WORK-IS-OFF-PROGRAM]
+                    Text("Declared breaks — deload, rest, away, active recovery — keep a chosen gap from reading as a lapse. Work banked during an active-recovery break stays in history but never advances progression or PR baselines.")
+                }
+
                 Section("Library") {
                     NavigationLink("Exercise library") { LibraryView() }
                 }
@@ -321,6 +351,130 @@ struct SettingsView: View {
     private static var selectableBirthYears: [Int] {
         let thisYear = Calendar.current.component(.year, from: .now)
         return Array((thisYear - 120)...thisYear).reversed()
+    }
+
+    static func intervalRangeLabel(_ interval: TrainingInterval) -> String {
+        let start = interval.startDate.formatted(date: .abbreviated, time: .omitted)
+        let end = interval.endDate.formatted(date: .abbreviated, time: .omitted)
+        return start == end ? start : "\(start) – \(end)"
+    }
+}
+
+/// Editor for one declared training break. The two entry affordances — a day
+/// count or an explicit date range — write the same inclusive start/end day
+/// pair; `enteredAsDays` remembers which shape to reopen in. Mirrors web
+/// settings.js interval editing.
+struct IntervalEditorView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var interval: TrainingInterval
+    @State private var confirmDelete = false
+
+    private var dayCount: Int {
+        let calendar = Calendar.current
+        let days = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: interval.startDate),
+            to: calendar.startOfDay(for: interval.endDate)
+        ).day ?? 0
+        return days + 1
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Kind", selection: Binding(
+                    get: { interval.kind },
+                    set: { interval.kind = $0 }
+                )) {
+                    ForEach(TrainingIntervalKind.allCases, id: \.self) { kind in
+                        Text(kind.name).tag(kind)
+                    }
+                }
+            } footer: {
+                // The kinds stay distinct on purpose
+                // (INV-INTERVAL-KINDS-STAY-DISTINCT) — each reads differently
+                // to the engine, so each says what it means here.
+                Text(kindFooter(interval.kind))
+            }
+            Section("When") {
+                Picker("Enter as", selection: $interval.enteredAsDays) {
+                    Text("Number of days").tag(true)
+                    Text("Date range").tag(false)
+                }
+                .pickerStyle(.segmented)
+                DatePicker("Starts", selection: Binding(
+                    get: { interval.startDate },
+                    set: { newStart in
+                        let count = dayCount
+                        interval.startDate = newStart
+                        if interval.enteredAsDays {
+                            // Moving the start keeps the declared LENGTH; the
+                            // range shape keeps the end (clamped, never
+                            // inverted).
+                            interval.endDate = Calendar.current.date(
+                                byAdding: .day, value: count - 1, to: newStart
+                            ) ?? newStart
+                        } else if interval.endDate < newStart {
+                            interval.endDate = newStart
+                        }
+                    }
+                ), displayedComponents: .date)
+                if interval.enteredAsDays {
+                    Stepper(
+                        "\(dayCount) day\(dayCount == 1 ? "" : "s")",
+                        value: Binding(
+                            get: { dayCount },
+                            set: { newCount in
+                                interval.endDate = Calendar.current.date(
+                                    byAdding: .day, value: max(1, newCount) - 1,
+                                    to: interval.startDate
+                                ) ?? interval.startDate
+                            }
+                        ),
+                        in: 1...365
+                    )
+                } else {
+                    DatePicker("Ends", selection: Binding(
+                        get: { interval.endDate },
+                        set: { interval.endDate = max($0, interval.startDate) }
+                    ), displayedComponents: .date)
+                }
+            }
+            Section("Note") {
+                TextField("Optional note", text: $interval.note)
+            }
+            Section {
+                // Destructive, so it confirms first (matches the web editor).
+                Button("Delete break", role: .destructive) { confirmDelete = true }
+            }
+        }
+        .navigationTitle(interval.kind.name)
+        .confirmationDialog(
+            "Delete this break? Sessions and history are unchanged.",
+            isPresented: $confirmDelete, titleVisibility: .visible
+        ) {
+            Button("Delete break", role: .destructive) {
+                context.delete(interval)
+                PersistenceErrorCenter.shared.save(context, operation: "Deleting the break")
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .saveChangesOnDisappear(context, operation: "Saving the break")
+    }
+
+    private func kindFooter(_ kind: TrainingIntervalKind) -> String {
+        switch kind {
+        case .deload:
+            return "Reduced-load training inside the cycle. Sessions are still expected on deload days."
+        case .rest:
+            return "Planned days off. Not missed days."
+        case .away:
+            return "Travel, closure, illness, layoff. Not missed days — expect a re-entry suggestion when it ends."
+        case .activeRecovery:
+            return "Real work, deliberately off-program. Sessions banked inside it stay in history but never advance progression or PR baselines."
+        }
     }
 }
 
@@ -876,18 +1030,27 @@ struct ProgramEditorView: View {
     }
 
     private func deleteDays(at offsets: IndexSet) {
+        // `nextDayIndex` addresses a day by its ORDER VALUE, not a list
+        // position. Remember which day it points at before renumbering —
+        // clamping after a renumber silently re-addresses the schedule on
+        // sparse-order programs (imported files keep verbatim orders).
+        let pointed = program.orderedDays.first { $0.order == program.nextDayIndex }
         let ordered = program.orderedDays
+        let removed = Set(offsets.map { ordered[$0].id })
         for i in offsets { context.delete(ordered[i]) }
         for (i, day) in program.orderedDays.enumerated() { day.order = i }
-        if program.nextDayIndex >= program.days.count { program.nextDayIndex = 0 }
+        program.nextDayIndex = pointed.flatMap { removed.contains($0.id) ? nil : $0.order } ?? 0
         PersistenceErrorCenter.shared.save(context, operation: "Deleting the program day")
     }
 
     private func moveDays(from offsets: IndexSet, to destination: Int) {
+        // Same rule as deleteDays: the pointer follows ITS day through the
+        // renumbering, never a clamped position.
+        let pointed = program.orderedDays.first { $0.order == program.nextDayIndex }
         var ordered = program.orderedDays
         ordered.move(fromOffsets: offsets, toOffset: destination)
         for (index, day) in ordered.enumerated() { day.order = index }
-        program.nextDayIndex = min(program.nextDayIndex, max(ordered.count - 1, 0))
+        program.nextDayIndex = pointed?.order ?? min(program.nextDayIndex, max(ordered.count - 1, 0))
         PersistenceErrorCenter.shared.save(context, operation: "Reordering program days")
     }
 
@@ -1364,6 +1527,8 @@ private struct ExercisePickerSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var search = ""
+    @State private var typeFilter: ExerciseType?
+    @State private var detailExercise: Exercise?
     let onPick: (String) -> Void
 
     private var visible: [Exercise] {
@@ -1372,20 +1537,37 @@ private struct ExercisePickerSheetView: View {
         // left off the canonical matcher, so "degage" found an accented
         // exercise everywhere except here.
         let available = exercises.filter(\.isAvailableForProgramming)
-        guard !search.isEmpty else { return available }
+        let pool = typeFilter.map { filter in available.filter { $0.type == filter } } ?? available
+        guard !search.isEmpty else { return pool }
         let term = ExerciseSearch.preparedTerm(search)
-        return available.filter { $0.matchesSearch(preparedTerm: term) }
+        return pool.filter { $0.matchesSearch(preparedTerm: term) }
     }
 
     var body: some View {
         NavigationStack {
             List {
+                // Equipment filter + detail preview: the same picker surface
+                // as the logger's add-exercise sheet (issues #63/#66).
+                Section {
+                    ExerciseTypeFilterRow(typeFilter: $typeFilter)
+                }
                 ForEach(ExerciseCategory.allCases, id: \.self) { category in
                     let inCategory = visible.filter { $0.category == category }
                     if !inCategory.isEmpty {
                         Section(category.rawValue) {
                             ForEach(inCategory) { exercise in
-                                Button(exercise.name) { onPick(exercise.name); dismiss() }
+                                HStack {
+                                    Button(exercise.name) { onPick(exercise.name); dismiss() }
+                                    Spacer()
+                                    Button {
+                                        detailExercise = exercise
+                                    } label: {
+                                        Image(systemName: "info.circle")
+                                            .foregroundStyle(Theme.accent)
+                                    }
+                                    .accessibilityLabel("\(exercise.name) — muscles, history, and settings")
+                                }
+                                .buttonStyle(.borderless)
                             }
                         }
                     }
@@ -1394,6 +1576,11 @@ private struct ExercisePickerSheetView: View {
             .navigationTitle("Pick exercise")
             .searchable(text: $search, prompt: "Exercise, movement, or equipment")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .sheet(item: $detailExercise) { exercise in
+                NavigationStack {
+                    ExerciseDetailView(exercise: exercise)
+                }
+            }
         }
     }
 }

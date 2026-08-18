@@ -2559,5 +2559,113 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "an unknown status starts the cycle from planned, like Swift");
 }
 
+// ---- Training intervals (TrainingIntervalsTests.swift) ----
+{
+  const day = 86_400_000;
+  const snapshot = (kind, startDay, endDay) => ({ kind, startMs: startDay * day, endMs: endDay * day + day - 1 });
+
+  const rest = snapshot("rest", 10, 12);
+  ok(C.intervalContains(rest, 10 * day) && C.intervalContains(rest, 12 * day + day - 1),
+    "interval bounds are inclusive of both days");
+  ok(!C.intervalContains(rest, 10 * day - 1) && !C.intervalContains(rest, 13 * day),
+    "moments outside the day bounds are outside the interval");
+  const inverted = { kind: "rest", startMs: 5 * day, endMs: 2 * day };
+  ok(C.intervalContains(inverted, 5 * day) && !C.intervalContains(inverted, 3 * day),
+    "an inverted range collapses to its start rather than excusing time it does not cover");
+
+  const kindMix = [snapshot("deload", 1, 3), snapshot("away", 5, 8)];
+  ok(C.insideInterval(2 * day, kindMix) && C.insideInterval(2 * day, kindMix, ["deload"])
+    && !C.insideInterval(2 * day, kindMix, ["away"]) && !C.insideInterval(4 * day, kindMix),
+    "insideInterval filters by kind");
+
+  ok(!C.ABSENCE_EXCUSING_INTERVAL_KINDS.includes("deload")
+    && ["rest", "away", "activeRecovery"].every((kind) => C.ABSENCE_EXCUSING_INTERVAL_KINDS.includes(kind)),
+    "[INV-INTERVAL-KINDS-STAY-DISTINCT] deload does not excuse absence; rest, away, and active recovery do");
+  ok(!C.intervalGapExcused(9 * day, 15 * day, [snapshot("deload", 10, 14)]),
+    "a deload span never excuses a training gap");
+
+  const away = [snapshot("away", 10, 14)];
+  ok(C.intervalGapExcused(9 * day, 15 * day, away) && C.intervalGapExcused(13 * day, 20 * day, away)
+    && C.intervalGapExcused(5 * day, 11 * day, away) && C.intervalGapExcused(11 * day, 12 * day, away),
+    "[INV-INTERVAL-IS-NOT-A-GAP] any overlap with an excusing interval excuses the gap");
+  ok(!C.intervalGapExcused(20 * day, 25 * day, away) && !C.intervalGapExcused(15 * day, 15 * day, away)
+    && !C.intervalGapExcused(15 * day, 9 * day, away),
+    "disjoint, empty, and inverted gaps are never excused");
+
+  // Only activeRecovery makes banked work off-program; a session logged
+  // inside a rest span is ordinary training.
+  const offMix = [snapshot("activeRecovery", 10, 14), snapshot("rest", 20, 22)];
+  ok(C.isOffProgramTime(12 * day, offMix) && !C.isOffProgramTime(21 * day, offMix) && !C.isOffProgramTime(15 * day, offMix),
+    "[INV-RECOVERY-WORK-IS-OFF-PROGRAM] off-program time is active recovery only");
+
+  const returns = [snapshot("away", 10, 14), snapshot("away", 20, 24), snapshot("rest", 26, 27)];
+  eq(C.recentReturnFromAway(27 * day, 5 * day, returns)?.startMs, 20 * day,
+    "the newest qualifying away interval wins the re-entry suggestion");
+  ok(!C.recentReturnFromAway(27 * day, 26 * day, returns),
+    "a session banked after the away span ended clears the suggestion");
+  ok(!!C.recentReturnFromAway(27 * day, null, returns),
+    "no sessions at all still counts as not-banked-since");
+  ok(!C.recentReturnFromAway(24 * day + day - 1 + 8 * day, null, [snapshot("away", 20, 24)]),
+    "outside the window the return is old news");
+  ok(!C.recentReturnFromAway(28 * day, null, [snapshot("rest", 26, 27)]),
+    "rest intervals never trigger a re-entry suggestion");
+  ok(!C.recentReturnFromAway(22 * day, null, [snapshot("away", 20, 24)]),
+    "a still-open away span is not a return yet");
+
+  // Shorter-spacing trial mirror (CoachingEngineTests): a five-day cadence
+  // supports a four-day trial, but gaps excused by a declared break are not
+  // frequency observations and starve the trial of evidence.
+  const spacingProgram = {
+    id: "program", expectedDayIndexes: [0, 1, 2, 3],
+    slots: [
+      { id: "squat", exerciseName: "Back Squat", dayIndex: 0, pattern: "squat", plannedSets: 3, role: "main", isMain: true },
+      { id: "press-a", exerciseName: "Overhead Press", dayIndex: 1, pattern: "verticalPress", plannedSets: 3, role: "main", isMain: true },
+      { id: "deadlift", exerciseName: "Deadlift", dayIndex: 2, pattern: "hipHinge", plannedSets: 3, role: "main", isMain: true },
+      { id: "press-b", exerciseName: "Incline DB Press", dayIndex: 3, pattern: "horizontalPress", plannedSets: 3, role: "main", isMain: true },
+    ],
+  };
+  const spacingSession = (rotation, dayIndex, dayOffset, weight) => {
+    const names = ["Back Squat", "Overhead Press", "Deadlift", "Incline DB Press"];
+    const patterns = ["squat", "verticalPress", "hipHinge", "horizontalPress"];
+    const slotIDs = ["squat", "press-a", "deadlift", "press-b"];
+    return {
+      id: `1-${rotation}-${dayIndex}`, date: new Date(1_700_000_000_000 + dayOffset * day).toISOString(),
+      programID: "program", cycleNumber: 1, rotation, dayIndex, completed: true,
+      exercises: [{ slotID: slotIDs[dayIndex], programRole: "main", exerciseName: names[dayIndex],
+        pattern: patterns[dayIndex], plannedSets: 3, plannedWeightLb: weight, plannedReps: 5,
+        sets: Array.from({ length: 3 }, () => ({ actualWeightLb: weight, actualReps: 5,
+          plannedWeightLb: weight, plannedReps: 5, completed: true })) }],
+    };
+  };
+  const spacingSessions = [];
+  for (let rotation = 1; rotation <= 3; rotation++) {
+    for (let dayIndex = 0; dayIndex < 4; dayIndex++) {
+      spacingSessions.push(spacingSession(rotation, dayIndex, (rotation - 1) * 20 + dayIndex * 5, 100 + (rotation - 1) * 5));
+    }
+  }
+  const unexcusedReport = C.evaluateCoaching(spacingProgram, spacingSessions);
+  ok(unexcusedReport.recommendations.some((r) => r.change.type === "tryShorterSpacing" && r.change.days === 4),
+    "steady five-day spacing supports a four-day trial");
+  const excusedReport = C.evaluateCoaching(spacingProgram, spacingSessions, null,
+    [{ kind: "away", startMs: 1_700_000_000_000, endMs: 1_700_000_000_000 + 60 * day }]);
+  ok(!excusedReport.recommendations.some((r) => r.change.type === "tryShorterSpacing"),
+    "[INV-INTERVAL-IS-NOT-A-GAP] a declared break is not a training-frequency observation");
+  ok(excusedReport.currentReadiness === unexcusedReport.currentReadiness
+    && excusedReport.greenRotationStreak === unexcusedReport.greenRotationStreak
+    && excusedReport.rotations.length === unexcusedReport.rotations.length
+    && excusedReport.rotations.every((rotation, index) =>
+      rotation.readiness === unexcusedReport.rotations[index].readiness
+      && rotation.isComplete === unexcusedReport.rotations[index].isComplete),
+    "[INV-INTERVAL-PRESERVES-SCHEDULE] a rest/away interval changes advisory reads only — rotations and readiness are untouched");
+
+  // An ACTIVE-RECOVERY span is different: the sessions it covers are
+  // off-program work, so they never complete a rotation or seed a readiness
+  // baseline — completion already refused to advance the schedule for them.
+  const gradedReport = C.evaluateCoaching(spacingProgram, spacingSessions, null,
+    [{ kind: "activeRecovery", startMs: 1_700_000_000_000 + 40 * day, endMs: 1_700_000_000_000 + 60 * day }]);
+  ok(gradedReport.rotations.length === unexcusedReport.rotations.length - 1,
+    "[INV-RECOVERY-WORK-IS-OFF-PROGRAM] a rotation banked entirely inside active recovery is not graded");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -160,6 +160,8 @@ const exercises = [
   ex("Sit-ups", "Accessory", "bodyweight", "core", { defaultRestSeconds: 45 }),
   ex("Farmer Carry", "Accessory", "dumbbell", "carry"),
   ex("Suitcase Carry", "Accessory", "dumbbell", "carry", { implementCount: 1, isUnilateral: true }),
+  ex("Front-rack Carry", "Accessory", "kettlebell", "carry", { implementCount: 2 }),
+  ex("Overhead Carry", "Accessory", "dumbbell", "carry", { implementCount: 1, isUnilateral: true }),
   ex("Hang Clean", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180 }),
   ex("Hang Snatch", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180 }),
   ex("Muscle Clean", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180 }),
@@ -168,6 +170,9 @@ const exercises = [
   ex("Snatch High Pull", "Accessory", "barbell", "olympic", { defaultRestSeconds: 180 }),
   ex("KB Press", "Accessory", "kettlebell", "press", { isUnilateral: true }),
   ex("KB Row", "Accessory", "kettlebell", "pull", { isUnilateral: true }),
+  ex("KB Snatch", "Accessory", "kettlebell", "olympic", { isUnilateral: true, aliases: ["Kettlebell Snatch"] }),
+  ex("Thruster", "Accessory", "barbell", "press", { aliases: ["Squat to Press"], defaultRestSeconds: 120 }),
+  ex("Wall Sit", "Accessory", "timed", "squat"),
   ex("Banded Row", "Accessory", "band", "pull"),
   ex("Banded Chest Press", "Accessory", "band", "press"),
   ex("Monster Walk", "Accessory", "band", "squat", { isUnilateral: true }),
@@ -187,6 +192,8 @@ const exercises = [
   ex("Run-Walk Intervals", "Conditioning", "conditioning", "conditioning", { notes: "Jog min / walk min × rounds" }),
   ex("Bike", "Conditioning", "conditioning", "conditioning"),
   ex("Ruck", "Conditioning", "conditioning", "conditioning"),
+  ex("Run", "Conditioning", "conditioning", "conditioning", { aliases: ["Running", "Jog"] }),
+  ex("Bear Crawl", "Conditioning", "bodyweight", "conditioning", { defaultRestSeconds: 45 }),
 ];
 
 const gyms = [{

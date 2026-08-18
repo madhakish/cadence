@@ -3,11 +3,11 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
-import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram } from "../db.js";
+import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram , Intervals, intervalSnapshots } from "../db.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
 import * as ProgrammingDefaults from "../programming-defaults.js";
-import { exerciseDetail } from "./settings.js";
+import { exerciseDetail, exercisePickerList } from "./settings.js";
 import { writeClockRecord, clearClockRecord, storedClockStart } from "../workout-clock.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
@@ -388,12 +388,12 @@ export async function openSession(id) {
         for (const se of session.exercises) {
           // Completed WORK freezes the bar record; a tapped warmup alone
           // must not pin a wrong-gym bar for the rest of the session. A
-          // manual pick equal to the outgoing default follows the switch —
-          // the accepted cost of not persisting a picked-vs-stamped bit.
-          // Mirrors ActiveSessionView.
+          // HAND-PICKED bar (barIdManual) never follows the switch, even
+          // when it equals the outgoing default — that ambiguity is exactly
+          // what the V10 bit resolves. Mirrors ActiveSessionView.
           const hasCompletedWork = (se.sets || []).some((set) => !set.isWarmup && set.status === "completed");
-          if (se.barId && se.barId === previousBarId && !hasCompletedWork) se.barId = C.barId(bar);
-          if (!se.barId || se.barId === C.barId(bar)) synchronizeWarmups(se, bar);
+          if (se.barId && se.barId === previousBarId && !se.barIdManual && !hasCompletedWork) se.barId = C.barId(bar);
+          if (!se.barId || (se.barId === C.barId(bar) && !se.barIdManual)) synchronizeWarmups(se, bar);
         }
         save(); renderBody(body);
       });
@@ -471,15 +471,37 @@ export async function openSession(id) {
       } }),
       ui.h("button", { class: "btn sm ghost", text: "Rest", onClick: () => { currentSE = se; armRest(restFor(ex, se.programRole), se.exerciseName); } }),
       ui.h("button", { class: "btn sm ghost warn", text: "↓ Dropping load", onClick: () => dropLoad(se, body) }),
+      // Session-only reorder (issue #64): pulling a lift forward today does
+      // not edit the program day. Mirrors native moveExercise.
+      ui.h("button", { class: "btn sm ghost", text: "↑", "aria-label": `Move ${se.exerciseName} up`,
+        disabled: session.exercises.indexOf(se) === 0,
+        onClick: () => { moveExercise(se, -1); save(); renderBody(body); } }),
+      ui.h("button", { class: "btn sm ghost", text: "↓", "aria-label": `Move ${se.exerciseName} down`,
+        disabled: session.exercises.indexOf(se) === session.exercises.length - 1,
+        onClick: () => { moveExercise(se, 1); save(); renderBody(body); } }),
       // Remove the exercise from THIS session (program slot untouched).
-      ui.h("button", { class: "btn sm ghost danger", text: "✕ Remove", onClick: () => {
-        session.exercises = session.exercises.filter((x) => x !== se);
-        if (currentSE === se) currentSE = null;
-        save(); renderBody(body);
-      } })));
+      ui.h("button", { class: "btn sm ghost danger", text: "✕ Remove", "aria-label": `Remove ${se.exerciseName} from this session`,
+        onClick: () => {
+          session.exercises = session.exercises.filter((x) => x !== se);
+          if (currentSE === se) currentSE = null;
+          save(); renderBody(body);
+        } })));
 
     if (ex && ex.watchSite) card.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: `Watch: ${ex.watchSite.toLowerCase()} — ${watchNote(ex.watchSite)}` }));
     return card;
+  }
+
+  // Session-only exercise reorder — the program day's authored order stays
+  // untouched. renderBody (and every later open) re-sorts by the persisted
+  // `order` values, so the move must renumber them or it silently snaps back
+  // on the very next paint. Mirrors native moveExercise's renumber.
+  function moveExercise(se, direction) {
+    const index = session.exercises.indexOf(se);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= session.exercises.length) return;
+    session.exercises.splice(index, 1);
+    session.exercises.splice(target, 0, se);
+    session.exercises.forEach((entry, position) => { entry.order = position; });
   }
 
   function editRest(se, ex, body) {
@@ -513,6 +535,10 @@ export async function openSession(id) {
       ...C.ALL_BARS.map((b) => ui.h("option", { value: C.barId(b), text: C.barLabel(b), selected: C.barId(b) === C.barId(barFor(se)) })));
     sel.addEventListener("change", () => {
       se.barId = sel.value;
+      // A hand-picked bar is a decision: it never follows a mid-session gym
+      // switch, even when it happens to equal a gym's default. Mirrors
+      // ActiveSessionView's bar picker.
+      se.barIdManual = true;
       synchronizeWarmups(se, C.barById(sel.value));
       save(); renderBody(body);
     });
@@ -571,23 +597,31 @@ export async function openSession(id) {
       },
       onContextMenu: (event) => { event.preventDefault(); chooseStatus(se, s, body); },
     });
+    // ONE labelling pattern for both grading buttons (issue #61): glyph on
+    // top, an always-visible micro-caption underneath — the control's name
+    // when ungraded, the graded VALUE in words once set. The caption lives
+    // inside the button, so it survives the compact collapsed rows too.
     const quality = C.setQuality(s.flags);
     const qualityButton = ui.h("button", {
-      class: `flagbtn${quality ? ` on-${quality}` : ""}`,
-      text: quality === "clean" ? "✓" : (quality ? quality[0].toUpperCase() : "Q"),
+      class: `flagbtn labeled${quality ? ` on-${quality}` : ""}`,
       "aria-label": `Set quality: ${quality || "not graded"}`,
       onClick: () => chooseQuality(s, body),
-    });
+    },
+    ui.h("span", { class: "glyph", text: quality === "clean" ? "✓" : (quality ? quality[0].toUpperCase() : "Q") }),
+    ui.h("span", { class: "microlabel", "aria-hidden": "true", text: quality || "quality" }));
     // Reps in reserve, beside quality rather than folded into it: quality says
     // how the bar moved, RIR says how close to failure it was. A set can be
     // clean at 3+ in reserve or clean at 1, and those mean different things.
     const rir = C.setRIR(s.flags);
     const rirButton = ui.h("button", {
-      class: `flagbtn${rir ? " on-rir" : ""}`,
-      text: rir ? rir.replace("rir", "").replace("3plus", "3+") : "R",
+      class: `flagbtn labeled${rir ? " on-rir" : ""}`,
       "aria-label": `Reps in reserve: ${rir ? C.SET_RIR_LABELS[rir] : "not graded"}`,
       onClick: () => chooseRIR(s, body),
-    });
+    },
+    ui.h("span", { class: "glyph", text: rir ? rir.replace("rir", "").replace("3plus", "3+") : "R" }),
+    // Graded, the caption completes the value ("2" + "left"); ungraded it
+    // names the control, same as the quality button.
+    ui.h("span", { class: "microlabel", "aria-hidden": "true", text: rir ? "left" : "reserve" }));
     // The set you're ON — the first WORKING set with no verdict yet — gets
     // the accent rail; warmups sit quiet (and often go unflagged, so they
     // must not hold the rail hostage).
@@ -1004,32 +1038,15 @@ export async function openSession(id) {
     ui.sheet({
       title: "Add exercise",
       build: (c, api) => {
-        const search = ui.h("input", { type: "search", placeholder: "Exercise or movement" });
-        const results = ui.h("div");
-        const paint = () => {
-          ui.clear(results);
-          // Raw query in: the shared matcher owns normalization and returns
-          // true on empty, so no pre-trim/lowercase or empty-branch here.
-          const visible = all.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
-          for (const cat of CATEGORIES) {
-            const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-            if (!inCat.length) continue;
-            results.append(ui.h("div", { class: "section-title", text: cat }));
-            for (const e of inCat) {
-              results.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px", justifyContent: "space-between" },
-                onClick: () => {
-                  session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null,
-                    barId: barStamp(e, C.barById(gymState.value?.defaultBarId)),
-                    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
-                  api.close(); save(); renderBody(body);
-                } },
-                ui.h("span", { text: e.name }), e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : ui.h("span")));
-            }
-          }
-        };
-        search.addEventListener("input", paint);
-        c.append(search, results);
-        paint();
+        // The shared picker surface (issues #63/#66): search, equipment
+        // filters, and a detail preview that opens over the sheet so the
+        // search/filter state survives the inspection.
+        c.append(exercisePickerList(all, (e) => {
+          session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null,
+            barId: barStamp(e, C.barById(gymState.value?.defaultBarId)),
+            plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+          api.close(); save(); renderBody(body);
+        }));
       },
     });
   }
@@ -1115,7 +1132,18 @@ export async function completeSession(session) {
 }
 
 async function completeSessionInner(session) {
-  const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date));
+  // Work logged inside an ACTIVE-RECOVERY span is real, banked history — and
+  // explicitly off-program: it never feeds PR baselines, standalone tracks,
+  // or program progression (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Mirrors
+  // SessionCompletion.finish.
+  const intervalSnaps = intervalSnapshots(await Intervals.all());
+  const offProgram = C.isOffProgramTime(new Date(session.date).getTime(), intervalSnaps);
+  // An active-recovery session never joins the PR baseline either —
+  // suppressing its OWN milestones at bank time is not enough, because a
+  // heavy recovery set left in history would suppress every later legitimate
+  // PR forever. Mirrors SessionCompletion.priorHistory's exclusion.
+  const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date)
+    && !C.isOffProgramTime(new Date(s.date).getTime(), intervalSnaps));
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const lines = [], milestones = [], milestoneRecords = [];
   // Keyed by lift: one banked exposure can advance a standalone track at most
@@ -1152,8 +1180,10 @@ async function completeSessionInner(session) {
         const top = C.prTopScheme(w); if (top) historySchemes.add(`${top.sets}×${top.reps}`);
       }
     }
-    const events = C.prEvaluate({ exercise: se.exerciseName, sessionSets: working, historySets, historyVolumes, historySchemes, formatWeight: ui.fmtWeight });
-    for (const e of events) { milestoneRecords.push({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
+    if (!offProgram) {
+      const events = C.prEvaluate({ exercise: se.exerciseName, sessionSets: working, historySets, historyVolumes, historySchemes, formatWeight: ui.fmtWeight });
+      for (const e of events) { milestoneRecords.push({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
+    }
 
     const top = working.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
     const topLabel = top.loadBasis === "bodyweight" ? `${top.reps} reps`
@@ -1169,7 +1199,7 @@ async function completeSessionInner(session) {
     if (!standaloneByName.has(se.exerciseName)) standaloneByName.set(se.exerciseName, []);
     standaloneByName.get(se.exerciseName).push(se);
   }
-  for (const [exerciseName, entries] of standaloneByName) {
+  for (const [exerciseName, entries] of offProgram ? [] : standaloneByName) {
     const track = await Tracks.byName(exerciseName);
     if (!track) continue;
     const performed = entries.filter((se) => se.sets.some((set) => !set.isWarmup
@@ -1194,7 +1224,7 @@ async function completeSessionInner(session) {
     return candidates.slice(0, se.plannedSets ?? candidates.length)
       .some((set) => set.status === "completed");
   });
-  const prog = session.programTag && hasCompletedProgramInstruction
+  const prog = !offProgram && session.programTag && hasCompletedProgramInstruction
     ? await advanceProgram(session, milestones) : null;
   if (prog) milestoneRecords.push(...prog.noteRecords);
 
@@ -1216,7 +1246,8 @@ async function completeSessionInner(session) {
     || (set.flags || []).includes("stopped early")
     || ["grindy", "wobble"].includes(C.setQuality(set.flags)));
   const coachingNotes = [];
-  if (incompleteSets.length) coachingNotes.push(`Modified session — ${completedSets.length} sets completed; unfinished or skipped sets were not credited as performed.`);
+  if (offProgram) coachingNotes.push("Active recovery break — real work, banked as history; program progression and PR baselines were deliberately not advanced.");
+  else if (incompleteSets.length) coachingNotes.push(`Modified session — ${completedSets.length} sets completed; unfinished or skipped sets were not credited as performed.`);
   else if (adjusted) coachingNotes.push("Completed with adjustments — progression was graded from the work actually logged.");
   else if (completedSets.length) coachingNotes.push("Completed as planned — progression advanced from the banked work.");
   if (heldStandaloneTracks.length) coachingNotes.push(`Held progression for ${heldStandaloneTracks.sort().join(", ")} — actual work was saved, but the original prescription was not fully met.`);

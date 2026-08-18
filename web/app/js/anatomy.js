@@ -266,6 +266,13 @@ export const MUSCLE_MAP = {
   "Sled Pull": { primary: ["hamstrings", "glutes"], secondary: ["lats", "biceps", "calves"] },
   "Battle Ropes": { primary: ["delts", "forearms"], secondary: ["abs", "lats"] },
   "Swimming": { primary: ["lats", "delts"], secondary: ["triceps", "abs", "glutes"] },
+  "Front-rack Carry": { primary: ["abs", "forearms"], secondary: ["traps", "delts", "quads"] },
+  "Overhead Carry": { primary: ["delts", "obliques"], secondary: ["traps", "abs", "forearms"] },
+  "KB Snatch": { primary: ["glutes", "hamstrings", "delts"], secondary: ["traps", "forearms", "abs"] },
+  "Thruster": { primary: ["quads", "delts"], secondary: ["glutes", "triceps", "abs"] },
+  "Wall Sit": { primary: ["quads"], secondary: ["glutes", "calves"] },
+  "Run": { primary: ["quads", "calves"], secondary: ["hamstrings", "glutes"] },
+  "Bear Crawl": { primary: ["delts", "abs"], secondary: ["quads", "triceps"] },
 };
 
 // Movement-group fallback for exercises the map doesn't know (user-created).

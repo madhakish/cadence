@@ -76,6 +76,21 @@ enum SessionCompletion {
         session.completedAt = .now
         let unitDisplay = ((try? context.fetch(FetchDescriptor<AppSettings>())) ?? []).unitDisplay
 
+        // Work logged inside an ACTIVE-RECOVERY span is real, banked history —
+        // and explicitly off-program: it never feeds PR baselines, standalone
+        // tracks, or program progression (INV-RECOVERY-WORK-IS-OFF-PROGRAM).
+        // The fetch propagates like every other read in this method: a store
+        // that cannot say whether this time is off-program must fail visibly
+        // rather than silently advancing progression. Mirrors web
+        // completeSessionInner.
+        let intervalSnapshots: [TrainingIntervalSnapshot]
+        do { intervalSnapshots = try context.fetch(FetchDescriptor<TrainingInterval>()).map(\.snapshot) }
+        catch { context.rollback(); throw SaveFailure(underlying: error) }
+        let offProgram = TrainingIntervals.isOffProgramTime(
+            session.date.timeIntervalSince1970 * 1000,
+            intervals: intervalSnapshots
+        )
+
         var lines: [SessionSummary.LiftLine] = []
         var allEvents: [PREvent] = []
 
@@ -107,26 +122,28 @@ enum SessionCompletion {
                 ))
             }
 
-            let history: (sets: [SetSample], volumes: [Double], schemes: Set<String>)
-            do { history = try priorHistory(for: exercise.name, basis: working[0].loadBasis,
-                                            before: session.date, context: context) }
-            catch { context.rollback(); throw SaveFailure(underlying: error) }
-            let events = PRDetection.evaluate(
-                exercise: exercise.name,
-                sessionSets: working,
-                historySets: history.sets,
-                historyVolumes: history.volumes,
-                historySchemes: history.schemes,
-                formatWeight: { unitDisplay.format(lb: $0) }
-            )
-            for event in events {
-                context.insert(Milestone(
-                    date: session.date, exerciseName: exercise.name,
-                    kind: event.kind, label: event.label
-                ))
+            if !offProgram {
+                let history: (sets: [SetSample], volumes: [Double], schemes: Set<String>)
+                do { history = try priorHistory(for: exercise.name, basis: working[0].loadBasis,
+                                                before: session.date, context: context,
+                                                excludingOffProgram: intervalSnapshots) }
+                catch { context.rollback(); throw SaveFailure(underlying: error) }
+                let events = PRDetection.evaluate(
+                    exercise: exercise.name,
+                    sessionSets: working,
+                    historySets: history.sets,
+                    historyVolumes: history.volumes,
+                    historySchemes: history.schemes,
+                    formatWeight: { unitDisplay.format(lb: $0) }
+                )
+                for event in events {
+                    context.insert(Milestone(
+                        date: session.date, exerciseName: exercise.name,
+                        kind: event.kind, label: event.label
+                    ))
+                }
+                allEvents.append(contentsOf: events)
             }
-            allEvents.append(contentsOf: events)
-
         }
 
         // Grade standalone tracks from all occurrences together. Actual reps,
@@ -134,11 +151,15 @@ enum SessionCompletion {
         // snapshots determine whether the lift advances. A duplicated exercise
         // is still one exposure and therefore advances at most once.
         let heldStandaloneTracks: [String]
-        do { heldStandaloneTracks = try advanceStandaloneTracks(in: session, context: context) }
-        catch { context.rollback(); throw SaveFailure(underlying: error) }
+        if offProgram {
+            heldStandaloneTracks = []
+        } else {
+            do { heldStandaloneTracks = try advanceStandaloneTracks(in: session, context: context) }
+            catch { context.rollback(); throw SaveFailure(underlying: error) }
+        }
 
         let isProgramSession = session.programID != nil || session.programName != nil
-        if isProgramSession && hasCompletedProgramInstruction(in: session) {
+        if !offProgram && isProgramSession && hasCompletedProgramInstruction(in: session) {
             do { try advanceProgram(session, context: context, unitDisplay: unitDisplay, events: &allEvents) }
             catch { context.rollback(); throw SaveFailure(underlying: error) }
         }
@@ -208,7 +229,9 @@ enum SessionCompletion {
             $0.autoregReason != nil || $0.flags.contains(.stoppedEarly) || $0.quality == .grindy || $0.quality == .wobble
         }
         var coachingNotes: [String] = []
-        if !plannedSets.isEmpty || !skippedSets.isEmpty {
+        if offProgram {
+            coachingNotes.append("Active recovery break — real work, banked as history; program progression and PR baselines were deliberately not advanced.")
+        } else if !plannedSets.isEmpty || !skippedSets.isEmpty {
             coachingNotes.append("Modified session — \(completedSets.count) sets completed; unfinished or skipped sets were not credited as performed.")
         } else if adjusted {
             coachingNotes.append("Completed with adjustments — progression was graded from the work actually logged.")
@@ -218,7 +241,7 @@ enum SessionCompletion {
         if !heldStandaloneTracks.isEmpty {
             coachingNotes.append("Held progression for \(heldStandaloneTracks.sorted().joined(separator: ", ")) — actual work was saved, but the original prescription was not fully met.")
         }
-        if isProgramSession,
+        if !offProgram, isProgramSession,
            let programs = try? context.fetch(FetchDescriptor<Program>()),
            let program = programs.matching(sessionProgramID: session.programID, name: session.programName),
            let nextDay = program.nextDay {
@@ -464,7 +487,8 @@ enum SessionCompletion {
             program: program,
             sessions: sessions,
             exercises: try context.fetch(FetchDescriptor<Exercise>()),
-            checkIns: try context.fetch(FetchDescriptor<CheckIn>())
+            checkIns: try context.fetch(FetchDescriptor<CheckIn>()),
+            intervals: (try context.fetch(FetchDescriptor<TrainingInterval>())).map(\.snapshot)
         )
         // Verified rotations only — an as-run rotation is complete by
         // construction, so trusting one would launder an unknown into recovery.
@@ -1159,12 +1183,22 @@ enum SessionCompletion {
         for exerciseName: String,
         basis: LoadBasis,
         before date: Date,
-        context: ModelContext
+        context: ModelContext,
+        excludingOffProgram intervals: [TrainingIntervalSnapshot] = []
     ) throws -> (sets: [SetSample], volumes: [Double], schemes: Set<String>) {
         let descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { $0.isCompleted && $0.date < date }
         )
-        let sessions = try context.fetch(descriptor)
+        // An active-recovery session never joins the PR baseline either —
+        // suppressing its OWN milestones at bank time is not enough, because a
+        // heavy recovery set left in history would suppress every later
+        // legitimate PR forever (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Mirrors
+        // web completeSessionInner's prior filter.
+        let sessions = try context.fetch(descriptor).filter {
+            !TrainingIntervals.isOffProgramTime(
+                $0.date.timeIntervalSince1970 * 1000, intervals: intervals
+            )
+        }
 
         var sets: [SetSample] = []
         var volumes: [Double] = []

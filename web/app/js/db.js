@@ -8,8 +8,8 @@ import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 6;
-export const BACKUP_SCHEMA_VERSION = 9;
+const DB_VERSION = 7;
+export const BACKUP_SCHEMA_VERSION = 10;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -22,6 +22,9 @@ const STORES = {
   programs: { keyPath: "id", autoIncrement: true },
   checkpoints: { keyPath: "id", autoIncrement: true },
   coachingDecisions: { keyPath: "id" },
+  // V7: typed calendar spans (deload/rest/away/activeRecovery). Portable
+  // UUID keys so an interval survives backup restore with its identity.
+  intervals: { keyPath: "id" },
 };
 
 let _db = null;
@@ -403,6 +406,40 @@ export const CoachingDecisions = {
   save: (decision) => put("coachingDecisions", decision),
   del: (id) => del("coachingDecisions", id),
 };
+// Typed calendar spans. Kind vocabulary is core-owned
+// (C.TRAINING_INTERVAL_KINDS); inclusive day-granular ISO date bounds; the
+// entry affordance (days count vs date range) is remembered so editing
+// reopens in the shape it was created with. Mirrors native TrainingInterval.
+export function normalizeInterval(interval) {
+  const kind = C.TRAINING_INTERVAL_KINDS.includes(interval?.kind) ? interval.kind : "rest";
+  const startDate = interval?.startDate || iso(new Date());
+  const endDate = interval?.endDate && interval.endDate >= startDate ? interval.endDate : startDate;
+  return {
+    id: isPortableUUID(interval?.id) ? interval.id : crypto.randomUUID(),
+    kind, startDate, endDate,
+    enteredAsDays: interval?.enteredAsDays !== false,
+    note: interval?.note || "",
+    programId: interval?.programId || null,
+    createdAt: interval?.createdAt || iso(new Date()),
+  };
+}
+export const Intervals = {
+  async all() {
+    return (await getAll("intervals")).map(normalizeInterval)
+      .sort((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0));
+  },
+  save: (interval) => put("intervals", normalizeInterval(interval)),
+  del: (id) => del("intervals", id),
+};
+// The engine-facing snapshot shape: inclusive day-bounded epoch millis so the
+// shared core stays pure number math (start-of-day local → end-of-day local).
+export function intervalSnapshots(intervals) {
+  return (intervals || []).map((interval) => ({
+    kind: interval.kind,
+    startMs: new Date(`${interval.startDate}T00:00:00`).getTime(),
+    endMs: new Date(`${interval.endDate}T23:59:59.999`).getTime(),
+  }));
+}
 export const Programs = {
   async all() {
     const all = await getAll("programs");
@@ -661,11 +698,12 @@ export async function exportBundle() {
   });
   const portableSessionID = (session) => isPortableUUID(session.id)
     ? session.id : stableID(`session:${session.id ?? sessionFingerprint(session)}`);
-  const [sessions, bodyweight, checkins, milestones, programs, tracks, gyms, exercises, settings, coachingDecisions] = await Promise.all([
+  const [sessions, bodyweight, checkins, milestones, programs, tracks, gyms, exercises, settings, coachingDecisions, intervals] = await Promise.all([
     Sessions.all().then((all) => all.sort((a, b) => new Date(b.date) - new Date(a.date)
       || portableSessionID(a).localeCompare(portableSessionID(b)))),
     Bodyweight.all(), Checkins.all(), Milestones.all(), Programs.all(),
     Tracks.all(), Gyms.all(), Exercises.all(), Settings.get(), CoachingDecisions.all(),
+    Intervals.all(),
   ]);
   const programsById = new Map(programs.flatMap((p) => [[p.id, p], [p.uuid, p]]));
   const programsByName = new Map(programs.map((p) => [p.name, p]));
@@ -707,6 +745,7 @@ export async function exportBundle() {
         role: e.programRole || null,
         programSlotId: e.programSlotId || null,
         barId: e.barId || null,
+        ...(e.barIdManual ? { barIdManual: true } : {}),
         plannedWeightLb: e.plannedWeightLb ?? null, targetWeightLb: e.targetWeightLb ?? null,
         plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
         plannedDurationSeconds: e.plannedDurationSeconds ?? null,
@@ -774,6 +813,14 @@ export async function exportBundle() {
         })),
         accessories: authoredExportSlots(d.accessories).map((a) => ({ id: a.id, exerciseName: a.exerciseName, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, capacityManaged: a.capacityManaged !== false, maximumSets: a.maximumSets ?? 6, conditioningEffort: a.conditioningEffort || "easy", targetRPE: a.targetRPE ?? 0, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
       })),
+    })),
+    // V10: typed calendar spans. Inclusive day-granular dates; ids are
+    // portable UUIDs so restore preserves identity.
+    intervals: intervals.map((interval) => ({
+      id: interval.id, kind: interval.kind,
+      startDate: interval.startDate, endDate: interval.endDate,
+      enteredAsDays: interval.enteredAsDays !== false,
+      note: interval.note || "", programId: interval.programId || null,
     })),
     tracks, gyms: gyms.map(normalizeGym),
     exercises: exercises.map((exercise) => ({ ...exercise,
@@ -890,6 +937,7 @@ export const BACKUP_ENUMS = {
   exerciseTypes: ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"],
   focuses: ["strength", "hypertrophy", "maintain"], modes: ["cycle", "linear"],
   equipmentPolicies: EQUIPMENT_POLICIES, dayTrainingIntents: DAY_TRAINING_INTENTS,
+  trainingIntervalKinds: C.TRAINING_INTERVAL_KINDS,
   prescriptions: ["automatic", "wave", "offsetWave", "secondary", "hypertrophy", "technique", "doubleProgression",
     "linearFives", "texasVolume", "texasLight", "texasIntensity", "fiveThreeOne", "maxEffort", "dynamicEffort"],
   warmupPolicies: ["automatic", "full", "short", "none"],
@@ -960,6 +1008,22 @@ export function validateBackup(bundle) {
     });
   };
   const each = (records, path, fn) => records?.forEach((record, index) => fn(object(record, `${path}[${index}]`), `${path}[${index}]`));
+
+  // V10 typed calendar spans. Present values validate at any version (the
+  // vocabulary is closed); the kind is required on v10 bundles.
+  const intervals = array(bundle, "intervals");
+  each(intervals, "intervals", (interval, path) => {
+    portableID(interval.id, `${path}.id`);
+    enumValue(interval.kind, C.TRAINING_INTERVAL_KINDS, `${path}.kind`, schemaVersion >= 10);
+    dateValue(interval.startDate, `${path}.startDate`, true);
+    dateValue(interval.endDate, `${path}.endDate`, true);
+    if (Date.parse(interval.endDate) < Date.parse(interval.startDate)) {
+      invalid(`${path}.endDate`, "expected endDate on or after startDate");
+    }
+    textValue(interval.note, `${path}.note`);
+    if (interval.programId != null) portableID(interval.programId, `${path}.programId`, true);
+  });
+  if (intervals) unique(intervals, (interval) => interval.id, "intervals");
 
   const sessions = array(bundle, "sessions");
   each(sessions, "sessions", (session, path) => {
@@ -1269,6 +1333,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, notes: e.notes || "", phase: recoverPhase(e.phase),
         programRole: e.role || null, programSlotId: e.programSlotId || null, barId: e.barId || null,
+        barIdManual: e.barIdManual === true,
         plannedWeightLb: e.plannedWeightLb ?? null, targetWeightLb: e.targetWeightLb ?? null,
         plannedSets: e.plannedSets ?? null, plannedReps: e.plannedReps ?? null,
         plannedDurationSeconds: e.plannedDurationSeconds ?? null,
@@ -1299,6 +1364,8 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   if (bundle.milestones) writes.set("milestones", bundle.milestones.map((m) => ({ date: m.date, exerciseName: m.exercise || null, kind: m.kind, label: m.label })));
   if (importedPrograms) writes.set("programs", importedPrograms);
   if (bundle.tracks) writes.set("tracks", bundle.tracks);
+  // V10 spans; a v<=9 bundle has none and leaves current intervals alone.
+  if (bundle.intervals) writes.set("intervals", bundle.intervals.map((interval) => normalizeInterval(interval)));
   // Gyms are kept as-is except barcodeImage, which must be an inline base64
   // data:image/* URL — exactly what the gym editor's FileReader produces. A
   // remote URL smuggled into a backup would otherwise beacon the user's IP to

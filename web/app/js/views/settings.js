@@ -2,8 +2,8 @@
 // and data export/import (the safety net against Safari storage eviction).
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
-import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
+import { CATEGORIES, EX_TYPES, BODY_SITES, COPY } from "../constants.js";
+import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary, localDayKey } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
@@ -47,7 +47,7 @@ async function positionAtRotation(program, rotation) {
 }
 
 export async function render(host) {
-  const [settings, gyms, tracks, exercises, programs, checkpoints] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all(), Programs.all(), Checkpoints.all()]);
+  const [settings, gyms, tracks, exercises, programs, checkpoints, intervals] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all(), Programs.all(), Checkpoints.all(), Intervals.all()]);
   const root = ui.h("div");
   const saveS = async () => { await Settings.save(settings); ui.prefs.unitDisplay = settings.unitDisplay; };
 
@@ -138,6 +138,28 @@ export async function render(host) {
       ui.h("span", { class: "chev" })));
   }
   root.append(trackList);
+
+  // Training breaks — declared spans over the calendar. A chosen gap must
+  // never read as a lapse (INV-INTERVAL-IS-NOT-A-GAP). Mirrors SettingsView.
+  root.append(ui.h("div", { class: "section-title", text: "Training breaks" }));
+  const intervalList = ui.h("div", { class: "card list" });
+  if (!intervals.length) intervalList.append(ui.h("div", { class: "muted", text: "No declared breaks." }));
+  for (const interval of [...intervals].reverse()) {
+    const range = interval.startDate === interval.endDate
+      ? interval.startDate : `${interval.startDate} – ${interval.endDate}`;
+    intervalList.append(ui.h("div", { class: "row", onClick: () => intervalEditor(interval) },
+      ui.h("div", { class: "lead" },
+        ui.h("span", { class: "title", text: C.TRAINING_INTERVAL_KIND_LABELS[interval.kind] || interval.kind }),
+        ui.h("span", { class: "sub", text: range + (interval.note ? ` · ${interval.note}` : "") })),
+      ui.h("span", { class: "chev" })));
+  }
+  root.append(intervalList);
+  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add break", onClick: async () => {
+    const today = localDayKey(new Date());
+    await Intervals.save({ kind: "rest", startDate: today, endDate: today, enteredAsDays: true, note: "" });
+    ui.nav.refresh();
+  } }));
+  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Declared breaks — deload, rest, away, active recovery — keep a chosen gap from reading as a lapse. Work banked during an active-recovery break stays in history but never advances progression or PR baselines." }));
 
   // Library
   root.append(ui.h("div", { class: "section-title", text: "Library" }));
@@ -316,35 +338,74 @@ function gymEditor(g) {
   });
 }
 
+// One picker surface for every selection workflow (issues #63/#66): search
+// (always available), equipment filter chips, shelved marking, and a detail
+// preview (ⓘ) that opens OVER the picker — the search text and active filter
+// survive the inspection, so picking after reading never restarts the hunt.
+// Shared by the program editor's slot pickers and the logger's add-exercise
+// sheet.
+export function exercisePickerList(all, onPick, { availableOnly = false } = {}) {
+  const wrap = ui.h("div");
+  const search = ui.h("input", { type: "search", placeholder: "Exercise, movement, or equipment" });
+  const chips = ui.h("div", { class: "btn-row", style: { flexWrap: "wrap", gap: "6px", margin: "8px 0" }, role: "group", "aria-label": "Filter by equipment" });
+  const results = ui.h("div");
+  let typeFilter = null;
+  const paint = () => {
+    ui.clear(chips);
+    for (const type of [null, ...EX_TYPES]) {
+      chips.append(ui.h("button", {
+        class: `btn sm ${typeFilter === type ? "primary" : "ghost"}`,
+        text: type === null ? "All" : type,
+        "aria-pressed": String(typeFilter === type),
+        onClick: () => { typeFilter = typeFilter === type ? null : type; paint(); },
+      }));
+    }
+    ui.clear(results);
+    // Raw query in: the shared matcher owns normalization and returns true on
+    // empty, so no pre-trim/lowercase or empty-branch here.
+    const pool = availableOnly ? all.filter(C.exerciseIsAvailableForProgramming) : all;
+    const visible = pool.filter((exercise) => (typeFilter === null || exercise.type === typeFilter)
+      && C.exerciseMatchesSearch(exercise, search.value));
+    for (const cat of CATEGORIES) {
+      const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
+      if (!inCat.length) continue;
+      results.append(ui.h("div", { class: "section-title", text: cat }));
+      for (const e of inCat) {
+        results.append(ui.h("div", { class: "row", style: { borderBottom: "0", gap: "6px", padding: "3px 0" } },
+          ui.h("button", { class: "btn wide ghost", style: { flex: "1", justifyContent: "space-between" },
+            onClick: () => onPick(e) },
+          ui.h("span", { text: e.name }),
+          e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : ui.h("span")),
+          ui.h("button", { class: "btn sm ghost", text: "ⓘ",
+            "aria-label": `${e.name} — muscles, history, and settings`,
+            onClick: () => exerciseDetail(e) })));
+      }
+    }
+    if (!visible.length) results.append(ui.h("div", { class: "muted", text: "No exercises match." }));
+  };
+  search.addEventListener("input", paint);
+  wrap.append(search, chips, results);
+  paint();
+  return wrap;
+}
+
 function pickExerciseSheet(onPick) {
   Exercises.all().then((all) => {
     ui.sheet({ title: "Pick exercise", build: (c, api) => {
-      const search = ui.h("input", { type: "search", placeholder: "Exercise, movement, or equipment" });
-      const results = ui.h("div");
-      const paint = () => {
-        ui.clear(results);
-        // Raw query in: the shared matcher owns normalization and returns
-        // true on empty, so no pre-trim/lowercase or empty-branch here.
-        const available = all.filter(C.exerciseIsAvailableForProgramming);
-        const visible = available.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
-        for (const cat of CATEGORIES) {
-          const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-          if (!inCat.length) continue;
-          results.append(ui.h("div", { class: "section-title", text: cat }));
-          for (const e of inCat) results.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px" }, text: e.name, onClick: () => { api.close(); onPick(e); } }));
-        }
-      };
-      search.addEventListener("input", paint);
-      c.append(search, results);
-      paint();
+      c.append(exercisePickerList(all, (e) => { api.close(); onPick(e); }, { availableOnly: true }));
     } });
   });
 }
 
 function removeDay(p, day) {
+  // nextDayIndex addresses a day by its ORDER VALUE, not a list position.
+  // Remember which day it points at before renumbering — clamping after a
+  // renumber silently re-addresses the schedule on sparse-order programs
+  // (imported files keep verbatim orders). Mirrors SettingsView.deleteDays.
+  const pointed = p.days.find((d) => d.order === p.nextDayIndex);
   p.days = p.days.filter((d) => d !== day);
   p.days.sort((a, b) => a.order - b.order).forEach((d, i) => { d.order = i; });
-  if (p.nextDayIndex >= p.days.length) p.nextDayIndex = 0;
+  p.nextDayIndex = pointed && pointed !== day ? pointed.order : 0;
 }
 
 function orderedSlots(slots = []) {
@@ -544,8 +605,10 @@ export async function programEditor(p) {
                 ui.h("span", { class: "title", text: day.name }),
                 ui.h("span", { class: "pill accent", text: C.DAY_TRAINING_INTENT_LABELS[day.trainingIntent || "general"] })),
               ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
-            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { if (moveSlot(p.days, day, -1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
-            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { if (moveSlot(p.days, day, 1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
+            // The schedule pointer follows ITS day through a renumbering
+            // move, never a clamped position (mirrors SettingsView.moveDays).
+            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, -1)) { if (pointed) p.nextDayIndex = pointed.order; await Programs.save(p); draw(); } } }),
+            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, 1)) { if (pointed) p.nextDayIndex = pointed.order; await Programs.save(p); draw(); } } }),
             ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { removeDay(p, day); await Programs.save(p); draw(); } })));
         }
         body.append(list);
@@ -814,6 +877,80 @@ function trackEditor(t) {
         body.append(sug);
         function refreshSug() { const p = t.mode === "cycle" ? C.planFor(t) : C.linearPlan(t.baseWeightLb); sug.textContent = `${ui.fmtWeight(p.weightLb)} · ${p.sets}×${p.reps}`; }
         refreshSug();
+      };
+      draw();
+    },
+  });
+}
+
+// Editor for one declared training break. The two entry affordances — a day
+// count or an explicit date range — write the same inclusive "yyyy-MM-dd"
+// start/end pair; `enteredAsDays` remembers which shape to reopen in.
+// Mirrors native IntervalEditorView.
+function intervalEditor(interval) {
+  // Noon-anchored so date math never slips a day at a DST edge.
+  const dayMs = (s) => new Date(`${s}T12:00:00`).getTime();
+  const shiftDay = (s, days) => localDayKey(new Date(dayMs(s) + days * 86_400_000));
+  const dayCount = () => Math.round((dayMs(interval.endDate) - dayMs(interval.startDate)) / 86_400_000) + 1;
+  const kindFooter = {
+    deload: "Reduced-load training inside the cycle. Sessions are still expected on deload days.",
+    rest: "Planned days off. Not missed days.",
+    away: "Travel, closure, illness, layoff. Not missed days — expect a re-entry suggestion when it ends.",
+    activeRecovery: "Real work, deliberately off-program. Sessions banked inside it stay in history but never advance progression or PR baselines.",
+  };
+  ui.pushScreen({
+    title: "Training break",
+    onClose: () => ui.nav.refresh(),
+    build: (body, api) => {
+      const draw = () => {
+        ui.clear(body);
+        const save = async () => { await Intervals.save(interval); };
+        body.append(ui.field("Kind", ui.seg(
+          C.TRAINING_INTERVAL_KINDS.map((kind) => ({ value: kind, label: C.TRAINING_INTERVAL_KIND_LABELS[kind] })),
+          interval.kind, async (kind) => { interval.kind = kind; await save(); draw(); })));
+        // The kinds stay distinct on purpose (INV-INTERVAL-KINDS-STAY-DISTINCT)
+        // — each reads differently to the engine, so each says what it means.
+        body.append(ui.h("div", { class: "muted", text: kindFooter[interval.kind] || "" }));
+        body.append(ui.field("Enter as", ui.seg(
+          [{ value: "days", label: "Number of days" }, { value: "range", label: "Date range" }],
+          interval.enteredAsDays === false ? "range" : "days",
+          async (mode) => { interval.enteredAsDays = mode === "days"; await save(); draw(); })));
+        const startInput = ui.h("input", { class: "input", type: "date", value: interval.startDate });
+        startInput.addEventListener("change", async () => {
+          if (!startInput.value) return;
+          const count = dayCount();
+          interval.startDate = startInput.value;
+          // Moving the start keeps the declared LENGTH in days mode; the
+          // range shape keeps the end (clamped, never inverted).
+          if (interval.enteredAsDays !== false) interval.endDate = shiftDay(interval.startDate, count - 1);
+          else if (interval.endDate < interval.startDate) interval.endDate = interval.startDate;
+          await save(); draw();
+        });
+        body.append(ui.field("Starts", startInput));
+        if (interval.enteredAsDays !== false) {
+          body.append(ui.h("div", { class: "card" }, ui.h("div", { class: "row", style: { borderBottom: "0" } },
+            ui.h("span", { text: "Length" }),
+            ui.stepper(dayCount(), { min: 1, max: 365, step: 1,
+              format: (v) => `${v} day${v === 1 ? "" : "s"}`,
+              onChange: async (v) => { interval.endDate = shiftDay(interval.startDate, Math.max(1, v) - 1); await save(); } }))));
+        } else {
+          const endInput = ui.h("input", { class: "input", type: "date", value: interval.endDate });
+          endInput.addEventListener("change", async () => {
+            if (!endInput.value) return;
+            interval.endDate = endInput.value < interval.startDate ? interval.startDate : endInput.value;
+            await save(); draw();
+          });
+          body.append(ui.field("Ends", endInput));
+        }
+        const noteInput = ui.h("input", { class: "input", type: "text", placeholder: "Optional note", value: interval.note || "" });
+        noteInput.addEventListener("change", async () => { interval.note = noteInput.value; await save(); });
+        body.append(ui.field("Note", noteInput));
+        body.append(ui.h("button", { class: "btn ghost danger wide", text: "Delete break", onClick: () => {
+          ui.actionSheet("Delete this break? Sessions and history are unchanged.", [
+            { label: "Delete break", role: "destructive", onClick: async () => { await Intervals.del(interval.id); api.close(); } },
+            { label: "Cancel", role: "cancel", onClick: () => {} },
+          ]);
+        } }));
       };
       draw();
     },

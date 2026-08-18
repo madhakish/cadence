@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **9**. A missing version means the legacy version-0 shape.
+version **10**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,31 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 10 training-context intervals and manual bar picks
+
+Version 10 adds one collection and one per-session-exercise marker:
+
+- **`intervals`** is a list of typed calendar spans the lifter declared over
+  their timeline: `{ id, kind, startDate, endDate, enteredAsDays, note,
+  programId }`. `kind` is `"deload"`, `"rest"`, `"away"`, or
+  `"activeRecovery"` — deliberately distinct, never collapsed into one
+  "break". Dates are inclusive day-granular ISO strings (`yyyy-MM-dd`); `id`
+  is a portable UUID so restore preserves identity; `programId` is optional
+  linkage to the program the span interrupts. A day inside a rest, away, or
+  active-recovery span is never a missed day; work logged inside an
+  active-recovery span is banked history that never feeds program
+  progression.
+- **`barIdManual`** on a session exercise is emitted **only when `true`**: the
+  entry's bar was picked by hand and never follows a mid-session gym switch,
+  even when it equals the outgoing gym's default. Absent means stamped.
+
+Both are additive. A version-9-or-older bundle restores with no intervals
+(existing declared breaks in the store are left alone — only collections
+present in a bundle are replaced) and every bar treated as stamped, exactly
+the pre-v10 behavior. Older importers reject a v10 bundle on the version
+gate, which is correct: silently dropping a declared break would turn it back
+into an apparent lapse after a restore.
 
 ## Version 9 programming semantics
 

@@ -301,16 +301,17 @@ struct ActiveSessionView: View {
                             // Completed WORK freezes the bar record (the
                             // prescription was performed on it); a tapped
                             // warmup alone must not pin a wrong-gym bar for
-                            // the rest of the session. A manual pick that
-                            // happens to equal the outgoing default is
-                            // indistinguishable from a stamp and follows the
-                            // switch — the accepted cost of not persisting a
-                            // picked-vs-stamped bit.
+                            // the rest of the session. A HAND-PICKED bar
+                            // (barIDIsManual) never follows the switch, even
+                            // when it equals the outgoing default — that
+                            // ambiguity is exactly what the V10 bit resolves.
                             let hasCompletedWork = entry.sets.contains { !$0.isWarmup && $0.status == .completed }
-                            if entry.barID != nil, entry.barID == previousBarID, !hasCompletedWork {
+                            if entry.barID != nil, entry.barID == previousBarID,
+                               !entry.barIDIsManual, !hasCompletedWork {
                                 entry.barID = selected.defaultBar.id
                             }
-                            if entry.barID == nil || entry.barID == selected.defaultBar.id {
+                            if entry.barID == nil
+                                || (entry.barID == selected.defaultBar.id && !entry.barIDIsManual) {
                                 synchronizeWarmups(entry, bar: selected.defaultBar, gym: selected,
                                                    enteredUnit: settingsList.first?.unitDisplay.primaryUnit ?? .lb,
                                                    context: context)
@@ -338,7 +339,8 @@ struct ActiveSessionView: View {
                 lastTime: recallLine(for: entry, in: recall),
                 onDropLoad: { autoregEntry = entry },
                 onWork: { currentEntry = $0 },
-                onRemove: { removeExercise(entry) }
+                onRemove: { removeExercise(entry) },
+                onMove: { moveExercise(entry, direction: $0) }
             )
         }
     }
@@ -357,6 +359,20 @@ struct ActiveSessionView: View {
         if currentEntry?.persistentModelID == entry.persistentModelID { currentEntry = nil }
         context.delete(entry)
         PersistenceErrorCenter.shared.save(context, operation: "Removing the exercise")
+    }
+
+    /// Reorder within THIS session only — the program day's authored order is
+    /// untouched, like removal and session-scoped swaps. Renumbers the whole
+    /// ordered list so duplicate or gapped order values (imports, removals)
+    /// cannot make a move silently no-op. Mirrors web moveExercise.
+    private func moveExercise(_ entry: SessionExercise, direction: Int) {
+        var ordered = session.orderedExercises
+        guard let index = ordered.firstIndex(where: { $0.persistentModelID == entry.persistentModelID }) else { return }
+        let target = index + direction
+        guard target >= 0, target < ordered.count else { return }
+        ordered.swapAt(index, target)
+        for (position, item) in ordered.enumerated() { item.order = position }
+        PersistenceErrorCenter.shared.save(context, operation: "Reordering the exercises")
     }
 
     private func pushActivityContext() {
@@ -558,6 +574,9 @@ private struct ExerciseSection: View {
     /// Remove this exercise from the session. Unlike a swap, removal leaves no
     /// performed entry carrying the program slot identity.
     let onRemove: () -> Void
+    /// Move this exercise one position up (-1) or down (+1) in THIS session's
+    /// order. Session-only, like removal — the program day is untouched.
+    let onMove: (Int) -> Void
 
     /// How long a swap outlives this session (issue 20). Session-only is the
     /// default: the program's exercise name is untouched, while today's entry
@@ -831,6 +850,10 @@ private struct ExerciseSection: View {
                     get: { effectiveBar },
                     set: {
                         entry.barID = $0.id
+                        // A hand-picked bar is a decision: it never follows a
+                        // mid-session gym switch, even when it happens to
+                        // equal a gym's default.
+                        entry.barIDIsManual = true
                         synchronizeWarmups(entry, bar: $0, gym: gym,
                                            enteredUnit: settings?.unitDisplay.primaryUnit ?? .lb,
                                            context: context)
@@ -902,6 +925,10 @@ private struct ExerciseSection: View {
                             }
                         } label: { Label("Swap exercise", systemImage: "arrow.left.arrow.right") }
                     }
+                    // Session-only reorder (issue #64): a complementary lift
+                    // pulled forward today does not edit the program day.
+                    Button { onMove(-1) } label: { Label("Move up", systemImage: "arrow.up") }
+                    Button { onMove(1) } label: { Label("Move down", systemImage: "arrow.down") }
                     Button(role: .destructive, action: onRemove) {
                         Label("Remove from session", systemImage: "trash")
                     }
@@ -1611,16 +1638,19 @@ private struct SetVerdictControl: View {
                 }
             }
         } label: {
-            ZStack(alignment: .topTrailing) {
+            // One labelling pattern with the web logger (issue #61): the
+            // glyph, with the graded verdicts spelled out in WORDS underneath
+            // — never a bare G/W badge, and reps-in-reserve is visible too,
+            // not menu-only. The caption is part of the control, so it
+            // survives any compact row treatment.
+            VStack(spacing: 1) {
                 Image(systemName: statusIcon(set.status))
                     .font(.title3)
-                if let quality = set.quality, quality != .clean {
-                    Text(quality == .grindy ? "G" : "W")
-                        .font(.caption2.bold())
-                        .padding(2)
-                        .background(Theme.warn, in: Circle())
-                        .foregroundStyle(.black)
-                        .offset(x: 6, y: -6)
+                if let caption = verdictCaption {
+                    Text(caption)
+                        .font(.system(size: 8, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
             }
                 .frame(width: 48, height: 48)
@@ -1630,8 +1660,25 @@ private struct SetVerdictControl: View {
             apply(set.status == .completed ? .planned : .completed)
         }
         .accessibilityLabel("Set status")
-        .accessibilityValue(statusLabel(set.status))
+        .accessibilityValue(accessibilityVerdict)
         .accessibilityHint("Tap to complete or undo. Touch and hold for skipped, quality, and reps-in-reserve options.")
+    }
+
+    /// The graded verdicts in words — "grindy", "2 left", or both. Nil when
+    /// nothing notable is graded, so the ordinary tap-to-complete flow stays
+    /// visually quiet.
+    private var verdictCaption: String? {
+        var parts: [String] = []
+        if let quality = set.quality, quality != .clean { parts.append(quality == .grindy ? "grindy" : "wobble") }
+        if let rir = set.rir { parts.append(rir.name.lowercased()) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var accessibilityVerdict: String {
+        var parts = [statusLabel(set.status)]
+        if let quality = set.quality { parts.append("quality \(quality.name.lowercased())") }
+        if let rir = set.rir { parts.append("reps in reserve \(rir.name.lowercased())") }
+        return parts.joined(separator: ", ")
     }
 
     private func apply(_ status: SetStatus) {
@@ -1996,20 +2043,31 @@ private struct ExercisePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var search = ""
+    @State private var typeFilter: ExerciseType?
+    @State private var detailExercise: Exercise?
     let onPick: (Exercise) -> Void
 
     private var visible: [Exercise] {
-        guard !search.isEmpty else { return exercises }
+        let pool = typeFilter.map { filter in exercises.filter { $0.type == filter } } ?? exercises
+        guard !search.isEmpty else { return pool }
         let term = ExerciseSearch.preparedTerm(search)
-        return exercises.filter { $0.matchesSearch(preparedTerm: term) }
+        return pool.filter { $0.matchesSearch(preparedTerm: term) }
     }
 
     var body: some View {
         NavigationStack {
             List {
+                // Equipment filter (issue #63): the catalog is too long for
+                // one flat list; search stays available above at all times.
+                Section {
+                    ExerciseTypeFilterRow(typeFilter: $typeFilter)
+                }
                 ForEach(ExerciseCategory.allCases, id: \.self) { category in
+                    let inCategory = visible.filter { $0.category == category }
+                    if !inCategory.isEmpty {
                     Section(category.rawValue) {
-                        ForEach(visible.filter { $0.category == category }) { exercise in
+                        ForEach(inCategory) { exercise in
+                            HStack {
                             Button {
                                 onPick(exercise)
                                 dismiss()
@@ -2024,14 +2082,63 @@ private struct ExercisePickerSheet: View {
                                     Spacer()
                                 }
                             }
+                            // Detail preview OVER the picker (issue #66): the
+                            // sheet keeps the search text and active filter, so
+                            // inspecting never restarts the hunt.
+                            Button {
+                                detailExercise = exercise
+                            } label: {
+                                Image(systemName: "info.circle")
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            .accessibilityLabel("\(exercise.name) — muscles, history, and settings")
+                            }
+                            .buttonStyle(.borderless)
                         }
+                    }
                     }
                 }
             }
             .navigationTitle("Add exercise")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $search, prompt: "Exercise, movement, or equipment")
+            .sheet(item: $detailExercise) { exercise in
+                NavigationStack {
+                    ExerciseDetailView(exercise: exercise)
+                }
+            }
         }
+    }
+}
+
+/// Horizontal equipment-filter chips shared by the pickers. A second tap on
+/// the active chip clears the filter, mirroring the web picker.
+struct ExerciseTypeFilterRow: View {
+    @Binding var typeFilter: ExerciseType?
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                chip(nil, label: "All")
+                ForEach(ExerciseType.allCases, id: \.self) { type in
+                    chip(type, label: type.rawValue)
+                }
+            }
+        }
+    }
+
+    private func chip(_ type: ExerciseType?, label: String) -> some View {
+        let active = typeFilter == type
+        return Button(label) {
+            typeFilter = (type != nil && active) ? nil : type
+        }
+        .font(.caption.bold())
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(active ? Theme.accent.opacity(0.25) : Color(.tertiarySystemFill),
+                    in: Capsule())
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 

@@ -2168,6 +2168,63 @@ export function sessionSpacingShortfall(daysSinceLastSession, preferredDays) {
   return shortfall > 0 ? shortfall : null;
 }
 
+// ---- Training-context intervals (one spelling) ------------------------------
+// A typed calendar span the lifter declares over their timeline. The kinds
+// are deliberately distinct — they differ in whether load was applied,
+// whether the body was recovering, and what the engine should do afterwards
+// (INV-INTERVAL-KINDS-STAY-DISTINCT). Nothing collapses them into a single
+// "break". Callers pass inclusive day-bounded epoch milliseconds
+// (start-of-day / end-of-day) so time zones resolve at the edge and the
+// shared logic stays pure number comparison. Mirrors CadenceCore
+// TrainingIntervals.
+export const TRAINING_INTERVAL_KINDS = ["deload", "rest", "away", "activeRecovery"];
+export const TRAINING_INTERVAL_KIND_LABELS = {
+  deload: "Deload", rest: "Rest", away: "Away", activeRecovery: "Active recovery",
+};
+// The kinds that excuse an absence: a day inside one is never a missed day,
+// never breaks a streak, and never reads as a lapse
+// (INV-INTERVAL-IS-NOT-A-GAP). Deload deliberately does NOT excuse absence —
+// deload days still expect sessions.
+export const ABSENCE_EXCUSING_INTERVAL_KINDS = ["rest", "away", "activeRecovery"];
+
+const intervalEndMs = (interval) => Math.max(interval.startMs, interval.endMs);
+
+export function intervalContains(interval, timeMs) {
+  return timeMs >= interval.startMs && timeMs <= intervalEndMs(interval);
+}
+
+export function insideInterval(timeMs, intervals = [], kinds = null) {
+  return intervals.some((interval) => (kinds == null || kinds.includes(interval.kind))
+    && intervalContains(interval, timeMs));
+}
+
+// Whether the gap between two trained moments is excused: some
+// absence-excusing interval overlaps the open time between them. The spacing
+// advisory and the shorter-spacing trial must not read a declared break as a
+// training-frequency signal.
+export function intervalGapExcused(fromMs, toMs, intervals = []) {
+  if (!(toMs > fromMs)) return false;
+  return intervals.some((interval) => ABSENCE_EXCUSING_INTERVAL_KINDS.includes(interval.kind)
+    && interval.startMs <= toMs && intervalEndMs(interval) >= fromMs);
+}
+
+// Work logged inside an active-recovery interval is real, banked history —
+// and explicitly off-program (INV-RECOVERY-WORK-IS-OFF-PROGRAM).
+export function isOffProgramTime(timeMs, intervals = []) {
+  return insideInterval(timeMs, intervals, ["activeRecovery"]);
+}
+
+// The away interval most recently ended before now, when it ended within the
+// window and no session has been banked since it ended — the moment to
+// suggest re-entry rather than straight continuation.
+export function recentReturnFromAway(nowMs, lastSessionMs, intervals = [], windowMs = 7 * 86_400_000) {
+  return intervals
+    .filter((interval) => interval.kind === "away"
+      && intervalEndMs(interval) < nowMs && nowMs - intervalEndMs(interval) <= windowMs
+      && (lastSessionMs == null || lastSessionMs <= intervalEndMs(interval)))
+    .reduce((latest, interval) => (!latest || intervalEndMs(interval) > intervalEndMs(latest) ? interval : latest), null);
+}
+
 // Accessory double progression. state: { sets, minReps, maxReps, currentReps,
 // weightLb, incrementLb, stallCount }; perf: { completedSets, minRepsAchieved, anyStoppedEarly }
 export function advanceAccessory(state, perf) {
@@ -3030,11 +3087,18 @@ const preferredCoachingDay = (pattern, slots) => {
   return eligible.length ? Math.min(...eligible.map((slot) => slot.dayIndex)) : null;
 };
 
-const shorterSpacingTrial = (sessions) => {
+const shorterSpacingTrial = (sessions, declaredBreaks = []) => {
   const ordered = [...sessions].sort((a, b) => epoch(a.date) - epoch(b.date));
   if (ordered.length < 4) return null;
-  const intervals = ordered.slice(1).map((session, index) =>
-    Math.floor((epoch(session.date) - epoch(ordered[index].date)) / 86_400_000)).filter((days) => days > 0).sort((a, b) => a - b);
+  // A gap the lifter declared (rest/away/active recovery overlapping the open
+  // time) is not a frequency observation — including it would read a vacation
+  // as the athlete's chosen spacing (INV-INTERVAL-IS-NOT-A-GAP). Mirrors
+  // CoachingEngine.shorterSpacingTrial.
+  const intervals = ordered.slice(1)
+    .map((session, index) => [epoch(ordered[index].date), epoch(session.date)])
+    .filter(([fromMs, toMs]) => !intervalGapExcused(fromMs, toMs, declaredBreaks))
+    .map(([fromMs, toMs]) => Math.floor((toMs - fromMs) / 86_400_000))
+    .filter((days) => days > 0).sort((a, b) => a - b);
   if (intervals.length < 3) return null;
   const median = intervals[Math.floor(intervals.length / 2)];
   return median >= 4 ? Math.max(2, median - 1) : null;
@@ -3211,9 +3275,13 @@ function linearStageSuggestions(program, sessions, evidenceKey) {
     if (!attempts.every((attempt) => attempt.missed)
         || plannedWeight - lightest >= 0.01
         || slot.baseWeightLb > plannedWeight * 0.925) return [];
-    const sessionID = attempts[0].sessionID;
     return [{
-      id: `program.slot.linear-triples.v1:${evidenceKey}-${sessionID}-${slot.id}`,
+      // Portable components only (cycle/rotation evidence key + slot id) —
+      // NEVER a session id, which is an IndexedDB autoincrement here but a
+      // UUID natively and is rewritten by any backup restore, resurfacing
+      // dismissed recommendations. Staleness is already guarded by the
+      // change's expectedBaseWeightLb. Mirrors CoachingEngine.
+      id: `program.slot.linear-triples.v1:${evidenceKey}-${slot.id}`,
       ruleID: "program.slot.linear-triples.v1", priority: 65,
       title: `Move ${slot.exerciseName} to triples`,
       explanation: `${slot.exerciseName}'s linear base was rebuilt from ${trim(plannedWeight)} to ${trim(slot.baseWeightLb)} lb after the last prescription was not met. Keep session-to-session loading, but change this slot from 3x5 to 5x3 so only rep structure changes.`,
@@ -3225,7 +3293,7 @@ function linearStageSuggestions(program, sessions, evidenceKey) {
   });
 }
 
-function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions) {
+function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions, intervals = []) {
   if (!latest) return [];
   const evidenceKey = `c${latest.key.cycleNumber}-r${latest.key.rotation}`;
   // Rotation suggestions are program hygiene, not capacity: a slot pointing at
@@ -3338,7 +3406,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
     explanation: `Two rotations were green, but some movement floors cannot be raised automatically: ${blockedEvidence.join("; ")}.`,
     change: { type: "hold" },
   });
-  const shorter = shorterSpacingTrial(sessions);
+  const shorter = shorterSpacingTrial(sessions, intervals);
   if (shorter !== null) result.push({
     id: `cadence.shorter-trial.v${COACHING_RULE_VERSION}:${evidenceKey}`,
     ruleID: `cadence.shorter-trial.v${COACHING_RULE_VERSION}`, priority: 20,
@@ -3349,10 +3417,16 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   return result.sort(byPriority);
 }
 
-export function evaluateCoaching(program, sessions, reliableHistoryStart = null) {
+export function evaluateCoaching(program, sessions, reliableHistoryStart = null, intervals = []) {
   const reliable = reliableHistoryStart == null ? -Infinity : epoch(reliableHistoryStart);
+  // A session banked inside an active-recovery span is off-program work
+  // (INV-RECOVERY-WORK-IS-OFF-PROGRAM): completion already refused to advance
+  // the schedule for it, so letting it complete a rotation or seed a
+  // readiness baseline here would grade the program on work the program
+  // never prescribed. Mirrors CoachingEngine.evaluate.
   const relevant = sessions.filter((session) => session.completed !== false
-    && session.programID === program.id && epoch(session.date) >= reliable)
+    && session.programID === program.id && epoch(session.date) >= reliable
+    && !isOffProgramTime(epoch(session.date), intervals))
     .map((session) => programmedCoachingSession(session, program.slots || []));
   const groups = new Map();
   for (const session of relevant) {
@@ -3405,6 +3479,6 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null)
     // The rotation before the latest verified one, so a red that persists can
     // escalate past a red that is one bad week.
     recommendations: coachingRecommendations(program, completed.at(-1),
-      completed.at(-2)?.readiness ?? "unknown", greenRotationStreak, relevant),
+      completed.at(-2)?.readiness ?? "unknown", greenRotationStreak, relevant, intervals),
   };
 }
