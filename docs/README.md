@@ -28,6 +28,7 @@ section that matches what you're trying to do.
 - [See what a lift works — muscles, history, programs](how-to/exercise-details.md)
 - [Load a bar with the plate calculator](how-to/plate-calculator.md)
 - [Edit a program mid-cycle](how-to/edit-a-program-mid-cycle.md)
+- [Declare a training break](how-to/declare-a-training-break.md)
 - [Back up and restore your data](how-to/back-up-and-restore.md)
 
 ## Reference — look something up
