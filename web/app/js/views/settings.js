@@ -2,7 +2,7 @@
 // and data export/import (the safety net against Safari storage eviction).
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
+import { CATEGORIES, EX_TYPES, BODY_SITES, COPY } from "../constants.js";
 import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary, localDayKey } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
@@ -338,27 +338,61 @@ function gymEditor(g) {
   });
 }
 
+// One picker surface for every selection workflow (issues #63/#66): search
+// (always available), equipment filter chips, shelved marking, and a detail
+// preview (ⓘ) that opens OVER the picker — the search text and active filter
+// survive the inspection, so picking after reading never restarts the hunt.
+// Shared by the program editor's slot pickers and the logger's add-exercise
+// sheet.
+export function exercisePickerList(all, onPick, { availableOnly = false } = {}) {
+  const wrap = ui.h("div");
+  const search = ui.h("input", { type: "search", placeholder: "Exercise, movement, or equipment" });
+  const chips = ui.h("div", { class: "btn-row", style: { flexWrap: "wrap", gap: "6px", margin: "8px 0" }, role: "group", "aria-label": "Filter by equipment" });
+  const results = ui.h("div");
+  let typeFilter = null;
+  const paint = () => {
+    ui.clear(chips);
+    for (const type of [null, ...EX_TYPES]) {
+      chips.append(ui.h("button", {
+        class: `btn sm ${typeFilter === type ? "primary" : "ghost"}`,
+        text: type === null ? "All" : type,
+        "aria-pressed": String(typeFilter === type),
+        onClick: () => { typeFilter = typeFilter === type ? null : type; paint(); },
+      }));
+    }
+    ui.clear(results);
+    // Raw query in: the shared matcher owns normalization and returns true on
+    // empty, so no pre-trim/lowercase or empty-branch here.
+    const pool = availableOnly ? all.filter(C.exerciseIsAvailableForProgramming) : all;
+    const visible = pool.filter((exercise) => (typeFilter === null || exercise.type === typeFilter)
+      && C.exerciseMatchesSearch(exercise, search.value));
+    for (const cat of CATEGORIES) {
+      const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
+      if (!inCat.length) continue;
+      results.append(ui.h("div", { class: "section-title", text: cat }));
+      for (const e of inCat) {
+        results.append(ui.h("div", { class: "row", style: { borderBottom: "0", gap: "6px", padding: "3px 0" } },
+          ui.h("button", { class: "btn wide ghost", style: { flex: "1", justifyContent: "space-between" },
+            onClick: () => onPick(e) },
+          ui.h("span", { text: e.name }),
+          e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : ui.h("span")),
+          ui.h("button", { class: "btn sm ghost", text: "ⓘ",
+            "aria-label": `${e.name} — muscles, history, and settings`,
+            onClick: () => exerciseDetail(e) })));
+      }
+    }
+    if (!visible.length) results.append(ui.h("div", { class: "muted", text: "No exercises match." }));
+  };
+  search.addEventListener("input", paint);
+  wrap.append(search, chips, results);
+  paint();
+  return wrap;
+}
+
 function pickExerciseSheet(onPick) {
   Exercises.all().then((all) => {
     ui.sheet({ title: "Pick exercise", build: (c, api) => {
-      const search = ui.h("input", { type: "search", placeholder: "Exercise, movement, or equipment" });
-      const results = ui.h("div");
-      const paint = () => {
-        ui.clear(results);
-        // Raw query in: the shared matcher owns normalization and returns
-        // true on empty, so no pre-trim/lowercase or empty-branch here.
-        const available = all.filter(C.exerciseIsAvailableForProgramming);
-        const visible = available.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
-        for (const cat of CATEGORIES) {
-          const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-          if (!inCat.length) continue;
-          results.append(ui.h("div", { class: "section-title", text: cat }));
-          for (const e of inCat) results.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px" }, text: e.name, onClick: () => { api.close(); onPick(e); } }));
-        }
-      };
-      search.addEventListener("input", paint);
-      c.append(search, results);
-      paint();
+      c.append(exercisePickerList(all, (e) => { api.close(); onPick(e); }, { availableOnly: true }));
     } });
   });
 }

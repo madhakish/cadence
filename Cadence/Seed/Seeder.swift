@@ -176,6 +176,10 @@ enum Seeder {
             Exercise(name: "Farmer Carry", category: .accessory, type: .dumbbell, movementGroup: "carry"),
             Exercise(name: "Suitcase Carry", category: .accessory, type: .dumbbell, movementGroup: "carry",
                      implementCount: 1, isUnilateral: true),
+            Exercise(name: "Front-rack Carry", category: .accessory, type: .kettlebell, movementGroup: "carry",
+                     implementCount: 2),
+            Exercise(name: "Overhead Carry", category: .accessory, type: .dumbbell, movementGroup: "carry",
+                     implementCount: 1, isUnilateral: true),
             Exercise(name: "Hang Clean", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
             Exercise(name: "Hang Snatch", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
             Exercise(name: "Muscle Clean", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
@@ -184,6 +188,11 @@ enum Seeder {
             Exercise(name: "Snatch High Pull", category: .accessory, type: .barbell, movementGroup: "olympic", defaultRestSeconds: 180),
             Exercise(name: "KB Press", category: .accessory, type: .kettlebell, movementGroup: "press", isUnilateral: true),
             Exercise(name: "KB Row", category: .accessory, type: .kettlebell, movementGroup: "pull", isUnilateral: true),
+            Exercise(name: "KB Snatch", category: .accessory, type: .kettlebell, movementGroup: "olympic",
+                     aliases: ["Kettlebell Snatch"], isUnilateral: true),
+            Exercise(name: "Thruster", category: .accessory, type: .barbell, movementGroup: "press",
+                     aliases: ["Squat to Press"], defaultRestSeconds: 120),
+            Exercise(name: "Wall Sit", category: .accessory, type: .timed, movementGroup: "squat"),
             Exercise(name: "Banded Row", category: .accessory, type: .band, movementGroup: "pull"),
             Exercise(name: "Banded Chest Press", category: .accessory, type: .band, movementGroup: "press"),
             Exercise(name: "Monster Walk", category: .accessory, type: .band, movementGroup: "squat", isUnilateral: true),
@@ -203,6 +212,10 @@ enum Seeder {
             Exercise(name: "Run-Walk Intervals", category: .conditioning, type: .conditioning, movementGroup: "conditioning", notes: "Jog min / walk min × rounds"),
             Exercise(name: "Bike", category: .conditioning, type: .conditioning, movementGroup: "conditioning"),
             Exercise(name: "Ruck", category: .conditioning, type: .conditioning, movementGroup: "conditioning"),
+            Exercise(name: "Run", category: .conditioning, type: .conditioning, movementGroup: "conditioning",
+                     aliases: ["Running", "Jog"]),
+            Exercise(name: "Bear Crawl", category: .conditioning, type: .bodyweight, movementGroup: "conditioning",
+                     defaultRestSeconds: 45),
         ]
     }
 

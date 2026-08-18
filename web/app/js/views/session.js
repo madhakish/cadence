@@ -7,7 +7,7 @@ import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, Coac
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
 import * as ProgrammingDefaults from "../programming-defaults.js";
-import { exerciseDetail } from "./settings.js";
+import { exerciseDetail, exercisePickerList } from "./settings.js";
 import { writeClockRecord, clearClockRecord, storedClockStart } from "../workout-clock.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
@@ -1035,32 +1035,15 @@ export async function openSession(id) {
     ui.sheet({
       title: "Add exercise",
       build: (c, api) => {
-        const search = ui.h("input", { type: "search", placeholder: "Exercise or movement" });
-        const results = ui.h("div");
-        const paint = () => {
-          ui.clear(results);
-          // Raw query in: the shared matcher owns normalization and returns
-          // true on empty, so no pre-trim/lowercase or empty-branch here.
-          const visible = all.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
-          for (const cat of CATEGORIES) {
-            const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-            if (!inCat.length) continue;
-            results.append(ui.h("div", { class: "section-title", text: cat }));
-            for (const e of inCat) {
-              results.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "6px", justifyContent: "space-between" },
-                onClick: () => {
-                  session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null,
-                    barId: barStamp(e, C.barById(gymState.value?.defaultBarId)),
-                    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
-                  api.close(); save(); renderBody(body);
-                } },
-                ui.h("span", { text: e.name }), e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : ui.h("span")));
-            }
-          }
-        };
-        search.addEventListener("input", paint);
-        c.append(search, results);
-        paint();
+        // The shared picker surface (issues #63/#66): search, equipment
+        // filters, and a detail preview that opens over the sheet so the
+        // search/filter state survives the inspection.
+        c.append(exercisePickerList(all, (e) => {
+          session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null,
+            barId: barStamp(e, C.barById(gymState.value?.defaultBarId)),
+            plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+          api.close(); save(); renderBody(body);
+        }));
       },
     });
   }

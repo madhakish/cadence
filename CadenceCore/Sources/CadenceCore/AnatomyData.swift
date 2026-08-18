@@ -280,6 +280,13 @@ public enum AnatomyData {
         "Sled Pull": Profile(primary: ["hamstrings", "glutes"], secondary: ["lats", "biceps", "calves"]),
         "Battle Ropes": Profile(primary: ["delts", "forearms"], secondary: ["abs", "lats"]),
         "Swimming": Profile(primary: ["lats", "delts"], secondary: ["triceps", "abs", "glutes"]),
+        "Front-rack Carry": Profile(primary: ["abs", "forearms"], secondary: ["traps", "delts", "quads"]),
+        "Overhead Carry": Profile(primary: ["delts", "obliques"], secondary: ["traps", "abs", "forearms"]),
+        "KB Snatch": Profile(primary: ["glutes", "hamstrings", "delts"], secondary: ["traps", "forearms", "abs"]),
+        "Thruster": Profile(primary: ["quads", "delts"], secondary: ["glutes", "triceps", "abs"]),
+        "Wall Sit": Profile(primary: ["quads"], secondary: ["glutes", "calves"]),
+        "Run": Profile(primary: ["quads", "calves"], secondary: ["hamstrings", "glutes"]),
+        "Bear Crawl": Profile(primary: ["delts", "abs"], secondary: ["quads", "triceps"]),
     ]
 
     public static let groupDefaults: [String: Profile] = [

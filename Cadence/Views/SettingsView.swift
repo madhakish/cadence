@@ -1518,6 +1518,8 @@ private struct ExercisePickerSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var search = ""
+    @State private var typeFilter: ExerciseType?
+    @State private var detailExercise: Exercise?
     let onPick: (String) -> Void
 
     private var visible: [Exercise] {
@@ -1526,20 +1528,37 @@ private struct ExercisePickerSheetView: View {
         // left off the canonical matcher, so "degage" found an accented
         // exercise everywhere except here.
         let available = exercises.filter(\.isAvailableForProgramming)
-        guard !search.isEmpty else { return available }
+        let pool = typeFilter.map { filter in available.filter { $0.type == filter } } ?? available
+        guard !search.isEmpty else { return pool }
         let term = ExerciseSearch.preparedTerm(search)
-        return available.filter { $0.matchesSearch(preparedTerm: term) }
+        return pool.filter { $0.matchesSearch(preparedTerm: term) }
     }
 
     var body: some View {
         NavigationStack {
             List {
+                // Equipment filter + detail preview: the same picker surface
+                // as the logger's add-exercise sheet (issues #63/#66).
+                Section {
+                    ExerciseTypeFilterRow(typeFilter: $typeFilter)
+                }
                 ForEach(ExerciseCategory.allCases, id: \.self) { category in
                     let inCategory = visible.filter { $0.category == category }
                     if !inCategory.isEmpty {
                         Section(category.rawValue) {
                             ForEach(inCategory) { exercise in
-                                Button(exercise.name) { onPick(exercise.name); dismiss() }
+                                HStack {
+                                    Button(exercise.name) { onPick(exercise.name); dismiss() }
+                                    Spacer()
+                                    Button {
+                                        detailExercise = exercise
+                                    } label: {
+                                        Image(systemName: "info.circle")
+                                            .foregroundStyle(Theme.accent)
+                                    }
+                                    .accessibilityLabel("\(exercise.name) — muscles, history, and settings")
+                                }
+                                .buttonStyle(.borderless)
                             }
                         }
                     }
@@ -1548,6 +1567,11 @@ private struct ExercisePickerSheetView: View {
             .navigationTitle("Pick exercise")
             .searchable(text: $search, prompt: "Exercise, movement, or equipment")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .sheet(item: $detailExercise) { exercise in
+                NavigationStack {
+                    ExerciseDetailView(exercise: exercise)
+                }
+            }
         }
     }
 }
