@@ -11,6 +11,8 @@ struct SettingsView: View {
     @Query private var settingsList: [AppSettings]
     @Query(sort: \Gym.name) private var gyms: [Gym]
     @Query(sort: \LiftTrack.exerciseName) private var tracks: [LiftTrack]
+    @Query(sort: \TrainingInterval.startDate, order: .reverse)
+    private var trainingIntervals: [TrainingInterval]
 
     @State private var exportJSON: Data?
     @State private var exportCSV: Data?
@@ -174,6 +176,34 @@ struct SettingsView: View {
                     }
                 }
 
+                Section {
+                    ForEach(trainingIntervals) { interval in
+                        NavigationLink {
+                            IntervalEditorView(interval: interval)
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(interval.kind.name)
+                                Text(Self.intervalRangeLabel(interval))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Button {
+                        let today = Calendar.current.startOfDay(for: .now)
+                        let interval = TrainingInterval(startDate: today, endDate: today)
+                        context.insert(interval)
+                        PersistenceErrorCenter.shared.save(context, operation: "Adding the break")
+                    } label: {
+                        Label("Add break", systemImage: "plus")
+                    }
+                } header: {
+                    Text("Training breaks")
+                } footer: {
+                    // [INV-INTERVAL-IS-NOT-A-GAP] [INV-RECOVERY-WORK-IS-OFF-PROGRAM]
+                    Text("Declared breaks — deload, rest, away, active recovery — keep a chosen gap from reading as a lapse. Work banked during an active-recovery break stays in history but never advances progression or PR baselines.")
+                }
+
                 Section("Library") {
                     NavigationLink("Exercise library") { LibraryView() }
                 }
@@ -321,6 +351,121 @@ struct SettingsView: View {
     private static var selectableBirthYears: [Int] {
         let thisYear = Calendar.current.component(.year, from: .now)
         return Array((thisYear - 120)...thisYear).reversed()
+    }
+
+    static func intervalRangeLabel(_ interval: TrainingInterval) -> String {
+        let start = interval.startDate.formatted(date: .abbreviated, time: .omitted)
+        let end = interval.endDate.formatted(date: .abbreviated, time: .omitted)
+        return start == end ? start : "\(start) – \(end)"
+    }
+}
+
+/// Editor for one declared training break. The two entry affordances — a day
+/// count or an explicit date range — write the same inclusive start/end day
+/// pair; `enteredAsDays` remembers which shape to reopen in. Mirrors web
+/// settings.js interval editing.
+struct IntervalEditorView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var interval: TrainingInterval
+
+    private var dayCount: Int {
+        let calendar = Calendar.current
+        let days = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: interval.startDate),
+            to: calendar.startOfDay(for: interval.endDate)
+        ).day ?? 0
+        return days + 1
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Kind", selection: Binding(
+                    get: { interval.kind },
+                    set: { interval.kind = $0 }
+                )) {
+                    ForEach(TrainingIntervalKind.allCases, id: \.self) { kind in
+                        Text(kind.name).tag(kind)
+                    }
+                }
+            } footer: {
+                // The kinds stay distinct on purpose
+                // (INV-INTERVAL-KINDS-STAY-DISTINCT) — each reads differently
+                // to the engine, so each says what it means here.
+                Text(kindFooter(interval.kind))
+            }
+            Section("When") {
+                Picker("Enter as", selection: $interval.enteredAsDays) {
+                    Text("Number of days").tag(true)
+                    Text("Date range").tag(false)
+                }
+                .pickerStyle(.segmented)
+                DatePicker("Starts", selection: Binding(
+                    get: { interval.startDate },
+                    set: { newStart in
+                        let count = dayCount
+                        interval.startDate = newStart
+                        if interval.enteredAsDays {
+                            // Moving the start keeps the declared LENGTH; the
+                            // range shape keeps the end (clamped, never
+                            // inverted).
+                            interval.endDate = Calendar.current.date(
+                                byAdding: .day, value: count - 1, to: newStart
+                            ) ?? newStart
+                        } else if interval.endDate < newStart {
+                            interval.endDate = newStart
+                        }
+                    }
+                ), displayedComponents: .date)
+                if interval.enteredAsDays {
+                    Stepper(
+                        "\(dayCount) day\(dayCount == 1 ? "" : "s")",
+                        value: Binding(
+                            get: { dayCount },
+                            set: { newCount in
+                                interval.endDate = Calendar.current.date(
+                                    byAdding: .day, value: max(1, newCount) - 1,
+                                    to: interval.startDate
+                                ) ?? interval.startDate
+                            }
+                        ),
+                        in: 1...365
+                    )
+                } else {
+                    DatePicker("Ends", selection: Binding(
+                        get: { interval.endDate },
+                        set: { interval.endDate = max($0, interval.startDate) }
+                    ), displayedComponents: .date)
+                }
+            }
+            Section("Note") {
+                TextField("Optional note", text: $interval.note)
+            }
+            Section {
+                Button("Delete break", role: .destructive) {
+                    context.delete(interval)
+                    PersistenceErrorCenter.shared.save(context, operation: "Deleting the break")
+                    dismiss()
+                }
+            }
+        }
+        .navigationTitle(interval.kind.name)
+        .saveChangesOnDisappear(context, operation: "Saving the break")
+    }
+
+    private func kindFooter(_ kind: TrainingIntervalKind) -> String {
+        switch kind {
+        case .deload:
+            return "Reduced-load training inside the cycle. Sessions are still expected on deload days."
+        case .rest:
+            return "Planned days off. Not missed days."
+        case .away:
+            return "Travel, closure, illness, layoff. Not missed days — expect a re-entry suggestion when it ends."
+        case .activeRecovery:
+            return "Real work, deliberately off-program. Sessions banked inside it stay in history but never advance progression or PR baselines."
+        }
     }
 }
 

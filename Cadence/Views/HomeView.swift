@@ -25,6 +25,7 @@ struct HomeView: View {
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
     @Query private var checkIns: [CheckIn]
+    @Query(sort: \TrainingInterval.startDate) private var trainingIntervals: [TrainingInterval]
     @Query(filter: #Predicate<WorkoutSession> { !$0.isCompleted })
     private var openSessions: [WorkoutSession]
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date)
@@ -48,11 +49,15 @@ struct HomeView: View {
     private var prominentGymTag: Bool {
         defaultGym?.barcodeImageData == nil || gymTagLastShownDay != todayStamp
     }
+    private var intervalSnapshots: [TrainingIntervalSnapshot] {
+        trainingIntervals.map(\.snapshot)
+    }
     private var coachingReport: CoachingReport? {
         guard let program = activeProgram, program.coachEnabled else { return nil }
         return CoachingService.report(
             program: program, sessions: completedSessions,
-            exercises: exercises, checkIns: checkIns
+            exercises: exercises, checkIns: checkIns,
+            intervals: intervalSnapshots
         )
     }
     private var ownedLiftNames: Set<String> {
@@ -67,6 +72,15 @@ struct HomeView: View {
         // `completedSessions` is oldest → newest (`recentTops` relies on that
         // order), so the most recent banked session is the last element.
         guard let last = completedSessions.last?.date else { return nil }
+        // A declared break (rest/away/active recovery) overlapping the open
+        // time excuses the gap entirely — a chosen break is not a lapse, and
+        // nagging about spacing through it reads the calendar as a failure
+        // (INV-INTERVAL-IS-NOT-A-GAP). Mirrors web home.js.
+        if TrainingIntervals.gapExcused(
+            fromMs: last.timeIntervalSince1970 * 1000,
+            toMs: Date.now.timeIntervalSince1970 * 1000,
+            intervals: intervalSnapshots
+        ) { return nil }
         let elapsed = Calendar.current.dateComponents([.day], from: last, to: .now).day
         guard let shortfall = ProgramProgression.sessionSpacingShortfall(
             daysSinceLastSession: elapsed, preferredDays: program.preferredSessionSpacingDays
@@ -74,6 +88,18 @@ struct HomeView: View {
         let since = elapsed == 0 ? "Trained today" : "\(elapsed) day\(elapsed == 1 ? "" : "s") since your last session"
         return "\(since) · you prefer \(program.preferredSessionSpacingDays). "
             + "Train anyway if today is the day that works."
+    }
+
+    /// A just-ended away interval with no session banked since deserves a
+    /// re-entry suggestion, not silent resumption at full loading. Advisory
+    /// only — it never blocks starting anything. Mirrors web home.js.
+    private var returnFromAwayNote: String? {
+        guard TrainingIntervals.recentReturnFromAway(
+            nowMs: Date.now.timeIntervalSince1970 * 1000,
+            lastSessionMs: completedSessions.last.map { $0.date.timeIntervalSince1970 * 1000 },
+            intervals: intervalSnapshots
+        ) != nil else { return nil }
+        return "Back from time away — the first session back is re-entry, not a test. Ease in and let the log rebuild."
     }
 
     private func nextDay(_ program: Program) -> ProgramDay? {
@@ -248,6 +274,15 @@ struct HomeView: View {
                             .font(.subheadline.bold())
                             .foregroundStyle(Theme.accent)
                             .accessibilityLabel(Text(recoveryMessage))
+                    }
+                }
+
+                if let note = returnFromAwayNote {
+                    Section {
+                        Label(note, systemImage: "figure.walk.arrival")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(Text(note))
                     }
                 }
 

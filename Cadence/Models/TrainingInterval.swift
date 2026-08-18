@@ -44,6 +44,24 @@ final class TrainingInterval {
         get { TrainingIntervalKind(rawValue: kindRaw) ?? .rest }
         set { kindRaw = newValue.rawValue }
     }
+
+    /// Inclusive day-bounded engine snapshot: local start-of-day for the
+    /// start bound, end-of-day (last millisecond) for the end bound, so the
+    /// shared `TrainingIntervals` math stays a pure number comparison and
+    /// both clients resolve time zones identically at the edge. Mirrors web
+    /// `intervalSnapshots` in db.js.
+    var snapshot: TrainingIntervalSnapshot {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: startDate)
+        let endDayStart = calendar.startOfDay(for: endDate)
+        let end = calendar.date(byAdding: .day, value: 1, to: endDayStart)?
+            .addingTimeInterval(-0.001) ?? endDate
+        return TrainingIntervalSnapshot(
+            kind: kind,
+            startMs: start.timeIntervalSince1970 * 1000,
+            endMs: end.timeIntervalSince1970 * 1000
+        )
+    }
 }
 
 /// Day-granular ISO date strings ("yyyy-MM-dd") are the portable interval

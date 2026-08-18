@@ -12,6 +12,8 @@ struct HistoryView: View {
     @Query private var programs: [Program]
     @Query private var exercises: [Exercise]
     @Query private var checkIns: [CheckIn]
+    @Query(sort: \TrainingInterval.startDate, order: .reverse)
+    private var trainingIntervals: [TrainingInterval]
 
     @State private var view: ViewMode = .rotations
     @State private var rotationDetail: String?
@@ -55,7 +57,8 @@ struct HistoryView: View {
             if let program = programs.first(where: { $0.isActive }) ?? programs.first {
                 let report = CoachingService.report(
                     program: program, sessions: sessions,
-                    exercises: exercises, checkIns: checkIns
+                    exercises: exercises, checkIns: checkIns,
+                    intervals: trainingIntervals.map(\.snapshot)
                 )
                 Section("Rolling load") {
                     LabeledContent("14 days", value: rollingSummary(days: 14))
@@ -153,6 +156,50 @@ struct HistoryView: View {
             + "Conditioning: \(Int(rotation.conditioningMinutes.rounded())) min\n\n\(reasons)"
     }
 
+    /// The log interleaves banked sessions with declared intervals — a break
+    /// the lifter chose is part of the training story, not a hole in it
+    /// (INV-INTERVAL-IS-NOT-A-GAP). Mirrors web history.js.
+    private enum HistoryRow: Identifiable {
+        case session(WorkoutSession)
+        case interval(TrainingInterval)
+        var id: String {
+            switch self {
+            case .session(let session): return "s-\(session.id)"
+            case .interval(let interval): return "i-\(interval.id)"
+            }
+        }
+        var date: Date {
+            switch self {
+            case .session(let session): return session.date
+            case .interval(let interval): return interval.startDate
+            }
+        }
+    }
+
+    private func intervalRow(_ interval: TrainingInterval) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(interval.kind.name, systemImage: "calendar.badge.minus")
+                .font(.callout.bold())
+                .foregroundStyle(.secondary)
+            Text(intervalRangeLabel(interval))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if !interval.note.isEmpty {
+                Text(interval.note)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func intervalRangeLabel(_ interval: TrainingInterval) -> String {
+        let start = interval.startDate.formatted(date: .abbreviated, time: .omitted)
+        let end = interval.endDate.formatted(date: .abbreviated, time: .omitted)
+        return start == end ? start : "\(start) – \(end)"
+    }
+
     private var sessionList: some View {
         // Session volume relative to the biggest on record — the thin bar under
         // each row makes trends scannable while scrolling.
@@ -160,7 +207,11 @@ struct HistoryView: View {
         return List {
             ForEach(monthGroups, id: \.0) { month, items in
                 Section(month) {
-                    ForEach(items) { session in
+                    ForEach(items) { row in
+                        switch row {
+                        case .interval(let interval):
+                            intervalRow(interval)
+                        case .session(let session):
                         NavigationLink {
                             SessionDetailView(session: session)
                         } label: {
@@ -196,6 +247,7 @@ struct HistoryView: View {
                                     .padding(.top, 3)
                                 }
                             }
+                        }
                         }
                     }
                 }
@@ -245,11 +297,15 @@ struct HistoryView: View {
         }
     }
 
-    private var monthGroups: [(String, [WorkoutSession])] {
-        let groups = Dictionary(grouping: sessions) {
+    private var monthGroups: [(String, [HistoryRow])] {
+        let rows = sessions.map(HistoryRow.session)
+            + trainingIntervals.map(HistoryRow.interval)
+        let groups = Dictionary(grouping: rows) {
             $0.date.formatted(.dateTime.year().month(.wide))
         }
-        return groups.sorted { ($0.value.first?.date ?? .distantPast) > ($1.value.first?.date ?? .distantPast) }
+        return groups
+            .mapValues { $0.sorted { $0.date > $1.date } }
+            .sorted { ($0.value.first?.date ?? .distantPast) > ($1.value.first?.date ?? .distantPast) }
     }
 
     private func sessionLine(_ session: WorkoutSession) -> String {

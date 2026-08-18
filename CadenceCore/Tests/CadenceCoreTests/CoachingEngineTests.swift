@@ -604,6 +604,39 @@ final class CoachingEngineTests: XCTestCase {
         return nil
     }
 
+    func testShorterSpacingTrialIgnoresGapsExcusedByDeclaredBreaks() {
+        // Three green rotations at a steady five-day spacing: the trial
+        // proposes trimming one day.
+        var sessions: [CoachingSessionSnapshot] = []
+        for rotation in 1...3 {
+            for dayIndex in 0...3 {
+                sessions.append(session(cycle: 1, rotation: rotation, day: dayIndex,
+                                        date: Double((rotation - 1) * 20 + dayIndex * 5) * day,
+                                        weight: 100 + Double(rotation - 1) * 5))
+            }
+        }
+        let unexcused = CoachingEngine.evaluate(program: program(), sessions: sessions)
+        XCTAssertTrue(unexcused.recommendations.contains { $0.change == .tryShorterSpacing(days: 4) },
+                      "steady five-day spacing supports a four-day trial")
+
+        // The same log with a declared away span over the whole stretch: every
+        // gap is excused, so none of them is a frequency observation and the
+        // trial must not fire. [INV-INTERVAL-IS-NOT-A-GAP]
+        let away = TrainingIntervalSnapshot(kind: .away, startMs: 0, endMs: 60 * day * 1000)
+        let excused = CoachingEngine.evaluate(program: program(), sessions: sessions, intervals: [away])
+        XCTAssertFalse(excused.recommendations.contains {
+            if case .tryShorterSpacing = $0.change { return true }
+            return false
+        }, "a declared break is not a training-frequency observation")
+
+        // [INV-INTERVAL-PRESERVES-SCHEDULE] the interval changes advisory
+        // reads only — rotations, readiness, and streaks are untouched.
+        XCTAssertEqual(excused.currentReadiness, unexcused.currentReadiness)
+        XCTAssertEqual(excused.greenRotationStreak, unexcused.greenRotationStreak)
+        XCTAssertEqual(excused.rotations.map(\.readiness), unexcused.rotations.map(\.readiness))
+        XCTAssertEqual(excused.rotations.map(\.isComplete), unexcused.rotations.map(\.isComplete))
+    }
+
     private func greenRotations() -> [CoachingSessionSnapshot] {
         var sessions: [CoachingSessionSnapshot] = []
         for rotation in 1...3 {

@@ -3,7 +3,7 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { sparkline } from "../charts.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
-import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, topSet, localDayKey } from "../db.js";
+import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, Intervals, intervalSnapshots, topSet, localDayKey } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, openSession, planningBase, previewProgramPlan, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
 import { gymTagShownOn, markGymTagShown } from "../gym-tag.js";
@@ -21,9 +21,10 @@ const barbellPrescriptionView = (achievedLb, targetLb, unit, gym, stationDenomin
 };
 
 export async function render(host) {
-  const [openSessions, tracks, gym, settings, program, allExercises, completed, decisions, checkins] = await Promise.all([
-    Sessions.openAll(), Tracks.all(), Gyms.default(), Settings.get(), Programs.active(), Exercises.all(), Sessions.completed(), CoachingDecisions.all(), Checkins.all(),
+  const [openSessions, tracks, gym, settings, program, allExercises, completed, decisions, checkins, intervals] = await Promise.all([
+    Sessions.openAll(), Tracks.all(), Gyms.default(), Settings.get(), Programs.active(), Exercises.all(), Sessions.completed(), CoachingDecisions.all(), Checkins.all(), Intervals.all(),
   ]);
+  const intervalSnaps = intervalSnapshots(intervals);
   const recoveryCompletion = await reconcileRecoveryBridge(program, completed);
   // Last 8 top working weights for a lift, oldest→newest (sparkline source).
   const topsFor = (name) => completed
@@ -95,6 +96,20 @@ export async function render(host) {
         ui.h("span", { class: "accent", text: `↻ ${recoveryCompletion.message}` }))));
   }
 
+  // A just-ended away interval with no session banked since deserves a
+  // re-entry suggestion, not silent resumption at full loading. Advisory only
+  // — it never blocks starting anything. Mirrors HomeView.returnFromAwayNote.
+  if (C.recentReturnFromAway(
+    Date.now(),
+    completed[0]?.date ? new Date(completed[0].date).getTime() : null,
+    intervalSnaps,
+  )) {
+    root.append(ui.h("div", { class: "card" },
+      ui.h("div", { class: "row", style: { borderBottom: "0" } },
+        ui.h("span", { class: "sub",
+          text: "Back from time away — the first session back is re-entry, not a test. Ease in and let the log rebuild." }))));
+  }
+
   if (settings.gymTagFirstLaunchOfDay && gym?.barcodeImage && !gymTagShownOn(todayKey)) {
     markGymTagShown(todayKey);
     queueMicrotask(() => showGymTag(gym));
@@ -122,7 +137,7 @@ export async function render(host) {
   // the block below dereferences it unconditionally. An optional chain here
   // reads as a presence check but isn't one — `undefined !== false` is true.
   if (program && program.coachEnabled !== false) {
-    const report = coachingReport(program, completed, exMap, checkins);
+    const report = coachingReport(program, completed, exMap, checkins, intervalSnaps);
     const handled = new Set(decisions.filter((decision) => (decision.programId || decision.programID) === (program.uuid || program.id))
       .map((decision) => decision.recommendationId || decision.recommendationID));
     // No cap, matching native: the engine already prioritizes, and hiding a
@@ -151,7 +166,14 @@ export async function render(host) {
     const lastBanked = completed[0]?.date ? new Date(completed[0].date) : null;
     const daysSinceLast = lastBanked
       ? Math.floor((Date.now() - lastBanked.getTime()) / 86400000) : null;
-    const shortfall = C.sessionSpacingShortfall(daysSinceLast, program.preferredSessionSpacingDays ?? 0);
+    // A declared break (rest/away/active recovery) overlapping the open time
+    // excuses the gap entirely — a chosen break is not a lapse, and nagging
+    // about spacing through it reads the calendar as a failure
+    // (INV-INTERVAL-IS-NOT-A-GAP). Mirrors HomeView.spacingNote.
+    const gapExcused = lastBanked
+      && C.intervalGapExcused(lastBanked.getTime(), Date.now(), intervalSnaps);
+    const shortfall = gapExcused
+      ? null : C.sessionSpacingShortfall(daysSinceLast, program.preferredSessionSpacingDays ?? 0);
     const card = ui.h("div", { class: "card" },
       ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px", cursor: "pointer" },
         onClick: () => workoutPreview(program, day, { exMap, gym, barLb, completed }) },

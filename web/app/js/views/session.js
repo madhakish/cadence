@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
-import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram } from "../db.js";
+import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram , Intervals, intervalSnapshots } from "../db.js";
 import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
 import * as ProgrammingDefaults from "../programming-defaults.js";
@@ -1119,6 +1119,12 @@ export async function completeSession(session) {
 }
 
 async function completeSessionInner(session) {
+  // Work logged inside an ACTIVE-RECOVERY span is real, banked history — and
+  // explicitly off-program: it never feeds PR baselines, standalone tracks,
+  // or program progression (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Mirrors
+  // SessionCompletion.finish.
+  const offProgram = C.isOffProgramTime(
+    new Date(session.date).getTime(), intervalSnapshots(await Intervals.all()));
   const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date));
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const lines = [], milestones = [], milestoneRecords = [];
@@ -1156,8 +1162,10 @@ async function completeSessionInner(session) {
         const top = C.prTopScheme(w); if (top) historySchemes.add(`${top.sets}×${top.reps}`);
       }
     }
-    const events = C.prEvaluate({ exercise: se.exerciseName, sessionSets: working, historySets, historyVolumes, historySchemes, formatWeight: ui.fmtWeight });
-    for (const e of events) { milestoneRecords.push({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
+    if (!offProgram) {
+      const events = C.prEvaluate({ exercise: se.exerciseName, sessionSets: working, historySets, historyVolumes, historySchemes, formatWeight: ui.fmtWeight });
+      for (const e of events) { milestoneRecords.push({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
+    }
 
     const top = working.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
     const topLabel = top.loadBasis === "bodyweight" ? `${top.reps} reps`
@@ -1173,7 +1181,7 @@ async function completeSessionInner(session) {
     if (!standaloneByName.has(se.exerciseName)) standaloneByName.set(se.exerciseName, []);
     standaloneByName.get(se.exerciseName).push(se);
   }
-  for (const [exerciseName, entries] of standaloneByName) {
+  for (const [exerciseName, entries] of offProgram ? [] : standaloneByName) {
     const track = await Tracks.byName(exerciseName);
     if (!track) continue;
     const performed = entries.filter((se) => se.sets.some((set) => !set.isWarmup
@@ -1198,7 +1206,7 @@ async function completeSessionInner(session) {
     return candidates.slice(0, se.plannedSets ?? candidates.length)
       .some((set) => set.status === "completed");
   });
-  const prog = session.programTag && hasCompletedProgramInstruction
+  const prog = !offProgram && session.programTag && hasCompletedProgramInstruction
     ? await advanceProgram(session, milestones) : null;
   if (prog) milestoneRecords.push(...prog.noteRecords);
 
@@ -1220,7 +1228,8 @@ async function completeSessionInner(session) {
     || (set.flags || []).includes("stopped early")
     || ["grindy", "wobble"].includes(C.setQuality(set.flags)));
   const coachingNotes = [];
-  if (incompleteSets.length) coachingNotes.push(`Modified session — ${completedSets.length} sets completed; unfinished or skipped sets were not credited as performed.`);
+  if (offProgram) coachingNotes.push("Active recovery break — real work, banked as history; program progression and PR baselines were deliberately not advanced.");
+  else if (incompleteSets.length) coachingNotes.push(`Modified session — ${completedSets.length} sets completed; unfinished or skipped sets were not credited as performed.`);
   else if (adjusted) coachingNotes.push("Completed with adjustments — progression was graded from the work actually logged.");
   else if (completedSets.length) coachingNotes.push("Completed as planned — progression advanced from the banked work.");
   if (heldStandaloneTracks.length) coachingNotes.push(`Held progression for ${heldStandaloneTracks.sort().join(", ")} — actual work was saved, but the original prescription was not fully met.`);

@@ -518,7 +518,8 @@ public enum CoachingEngine {
     public static func evaluate(
         program: CoachingProgramSnapshot,
         sessions: [CoachingSessionSnapshot],
-        reliableHistoryStart: Date? = nil
+        reliableHistoryStart: Date? = nil,
+        intervals: [TrainingIntervalSnapshot] = []
     ) -> CoachingReport {
         let relevant = sessions.filter { session in
             guard session.completed, session.programID == program.id else { return false }
@@ -593,7 +594,8 @@ public enum CoachingEngine {
             // persists can escalate past a red that is one bad week.
             previousReadiness: completed.dropLast().last?.readiness ?? .unknown,
             greenStreak: greenStreak,
-            sessions: relevant
+            sessions: relevant,
+            intervals: intervals
         )
         return CoachingReport(
             rotations: rotations,
@@ -794,7 +796,8 @@ public enum CoachingEngine {
         latest: RotationAssessment?,
         previousReadiness: ReadinessState,
         greenStreak: Int,
-        sessions: [CoachingSessionSnapshot]
+        sessions: [CoachingSessionSnapshot],
+        intervals: [TrainingIntervalSnapshot] = []
     ) -> [CoachingRecommendation] {
         guard let latest else { return [] }
         let evidenceKey = "c\(latest.key.cycleNumber)-r\(latest.key.rotation)"
@@ -941,7 +944,7 @@ public enum CoachingEngine {
             ))
         }
 
-        if let shorter = shorterSpacingTrial(sessions: sessions) {
+        if let shorter = shorterSpacingTrial(sessions: sessions, intervals: intervals) {
             result.append(CoachingRecommendation(
                 ruleID: "cadence.shorter-trial.v\(ruleVersion)",
                 priority: 20,
@@ -1194,12 +1197,27 @@ public enum CoachingEngine {
     /// clean completed program sessions, trim one day from the median spacing,
     /// never recommending less than 48 hours. This is a proposal, not a claim
     /// about an unobservable "CNS" state.
-    private static func shorterSpacingTrial(sessions: [CoachingSessionSnapshot]) -> Int? {
+    private static func shorterSpacingTrial(
+        sessions: [CoachingSessionSnapshot],
+        intervals declaredBreaks: [TrainingIntervalSnapshot] = []
+    ) -> Int? {
         let ordered = sessions.sorted { $0.date < $1.date }
         guard ordered.count >= 4 else { return nil }
-        let intervals = zip(ordered, ordered.dropFirst()).map { pair in
-            Calendar(identifier: .gregorian).dateComponents([.day], from: pair.0.date, to: pair.1.date).day ?? 0
-        }.filter { $0 > 0 }
+        let intervals = zip(ordered, ordered.dropFirst())
+            // A gap the lifter declared (rest/away/active recovery overlapping
+            // the open time) is not a frequency observation — including it
+            // would read a vacation as the athlete's chosen spacing
+            // (INV-INTERVAL-IS-NOT-A-GAP). Mirrors web shorterSpacingTrial.
+            .filter { pair in
+                !TrainingIntervals.gapExcused(
+                    fromMs: pair.0.date.timeIntervalSince1970 * 1000,
+                    toMs: pair.1.date.timeIntervalSince1970 * 1000,
+                    intervals: declaredBreaks
+                )
+            }
+            .map { pair in
+                Calendar(identifier: .gregorian).dateComponents([.day], from: pair.0.date, to: pair.1.date).day ?? 0
+            }.filter { $0 > 0 }
         guard intervals.count >= 3 else { return nil }
         let sorted = intervals.sorted()
         let median = sorted[sorted.count / 2]

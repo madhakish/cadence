@@ -76,6 +76,16 @@ enum SessionCompletion {
         session.completedAt = .now
         let unitDisplay = ((try? context.fetch(FetchDescriptor<AppSettings>())) ?? []).unitDisplay
 
+        // Work logged inside an ACTIVE-RECOVERY span is real, banked history —
+        // and explicitly off-program: it never feeds PR baselines, standalone
+        // tracks, or program progression (INV-RECOVERY-WORK-IS-OFF-PROGRAM).
+        // Mirrors web completeSessionInner.
+        let intervals = (try? context.fetch(FetchDescriptor<TrainingInterval>())) ?? []
+        let offProgram = TrainingIntervals.isOffProgramTime(
+            session.date.timeIntervalSince1970 * 1000,
+            intervals: intervals.map(\.snapshot)
+        )
+
         var lines: [SessionSummary.LiftLine] = []
         var allEvents: [PREvent] = []
 
@@ -107,26 +117,27 @@ enum SessionCompletion {
                 ))
             }
 
-            let history: (sets: [SetSample], volumes: [Double], schemes: Set<String>)
-            do { history = try priorHistory(for: exercise.name, basis: working[0].loadBasis,
-                                            before: session.date, context: context) }
-            catch { context.rollback(); throw SaveFailure(underlying: error) }
-            let events = PRDetection.evaluate(
-                exercise: exercise.name,
-                sessionSets: working,
-                historySets: history.sets,
-                historyVolumes: history.volumes,
-                historySchemes: history.schemes,
-                formatWeight: { unitDisplay.format(lb: $0) }
-            )
-            for event in events {
-                context.insert(Milestone(
-                    date: session.date, exerciseName: exercise.name,
-                    kind: event.kind, label: event.label
-                ))
+            if !offProgram {
+                let history: (sets: [SetSample], volumes: [Double], schemes: Set<String>)
+                do { history = try priorHistory(for: exercise.name, basis: working[0].loadBasis,
+                                                before: session.date, context: context) }
+                catch { context.rollback(); throw SaveFailure(underlying: error) }
+                let events = PRDetection.evaluate(
+                    exercise: exercise.name,
+                    sessionSets: working,
+                    historySets: history.sets,
+                    historyVolumes: history.volumes,
+                    historySchemes: history.schemes,
+                    formatWeight: { unitDisplay.format(lb: $0) }
+                )
+                for event in events {
+                    context.insert(Milestone(
+                        date: session.date, exerciseName: exercise.name,
+                        kind: event.kind, label: event.label
+                    ))
+                }
+                allEvents.append(contentsOf: events)
             }
-            allEvents.append(contentsOf: events)
-
         }
 
         // Grade standalone tracks from all occurrences together. Actual reps,
@@ -134,11 +145,15 @@ enum SessionCompletion {
         // snapshots determine whether the lift advances. A duplicated exercise
         // is still one exposure and therefore advances at most once.
         let heldStandaloneTracks: [String]
-        do { heldStandaloneTracks = try advanceStandaloneTracks(in: session, context: context) }
-        catch { context.rollback(); throw SaveFailure(underlying: error) }
+        if offProgram {
+            heldStandaloneTracks = []
+        } else {
+            do { heldStandaloneTracks = try advanceStandaloneTracks(in: session, context: context) }
+            catch { context.rollback(); throw SaveFailure(underlying: error) }
+        }
 
         let isProgramSession = session.programID != nil || session.programName != nil
-        if isProgramSession && hasCompletedProgramInstruction(in: session) {
+        if !offProgram && isProgramSession && hasCompletedProgramInstruction(in: session) {
             do { try advanceProgram(session, context: context, unitDisplay: unitDisplay, events: &allEvents) }
             catch { context.rollback(); throw SaveFailure(underlying: error) }
         }
@@ -208,7 +223,9 @@ enum SessionCompletion {
             $0.autoregReason != nil || $0.flags.contains(.stoppedEarly) || $0.quality == .grindy || $0.quality == .wobble
         }
         var coachingNotes: [String] = []
-        if !plannedSets.isEmpty || !skippedSets.isEmpty {
+        if offProgram {
+            coachingNotes.append("Active recovery break — real work, banked as history; program progression and PR baselines were deliberately not advanced.")
+        } else if !plannedSets.isEmpty || !skippedSets.isEmpty {
             coachingNotes.append("Modified session — \(completedSets.count) sets completed; unfinished or skipped sets were not credited as performed.")
         } else if adjusted {
             coachingNotes.append("Completed with adjustments — progression was graded from the work actually logged.")
@@ -218,7 +235,7 @@ enum SessionCompletion {
         if !heldStandaloneTracks.isEmpty {
             coachingNotes.append("Held progression for \(heldStandaloneTracks.sorted().joined(separator: ", ")) — actual work was saved, but the original prescription was not fully met.")
         }
-        if isProgramSession,
+        if !offProgram, isProgramSession,
            let programs = try? context.fetch(FetchDescriptor<Program>()),
            let program = programs.matching(sessionProgramID: session.programID, name: session.programName),
            let nextDay = program.nextDay {
@@ -464,7 +481,8 @@ enum SessionCompletion {
             program: program,
             sessions: sessions,
             exercises: try context.fetch(FetchDescriptor<Exercise>()),
-            checkIns: try context.fetch(FetchDescriptor<CheckIn>())
+            checkIns: try context.fetch(FetchDescriptor<CheckIn>()),
+            intervals: (try context.fetch(FetchDescriptor<TrainingInterval>())).map(\.snapshot)
         )
         // Verified rotations only — an as-run rotation is complete by
         // construction, so trusting one would launder an unknown into recovery.

@@ -11,7 +11,8 @@ enum CoachingService {
         program: Program,
         sessions: [WorkoutSession],
         exercises: [Exercise],
-        checkIns: [CheckIn] = []
+        checkIns: [CheckIn] = [],
+        intervals: [TrainingIntervalSnapshot] = []
     ) -> CoachingReport {
         let exerciseByName = exercises.indexedByName()
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
@@ -179,7 +180,8 @@ enum CoachingService {
         return CoachingEngine.evaluate(
             program: snapshot,
             sessions: history,
-            reliableHistoryStart: program.reliableHistoryStart
+            reliableHistoryStart: program.reliableHistoryStart,
+            intervals: intervals
         )
     }
 

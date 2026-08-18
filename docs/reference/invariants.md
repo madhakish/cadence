@@ -686,6 +686,59 @@ zero.
 
 ---
 
+## Training intervals
+
+### INV-INTERVAL-IS-NOT-A-GAP
+*platforms: core*
+
+A day inside a declared rest, away, or active-recovery interval is never a
+missed day: it never breaks a streak, never fires the spacing advisory, and
+never counts as a training-frequency observation (the shorter-spacing trial
+drops any session gap an excusing interval overlaps). A gap the lifter chose
+must never read as a lapse.
+
+> Before intervals existed, a two-week vacation read as "14 days since your
+> last session" nagging and skewed the observed-spacing median the frequency
+> trial banded against.
+
+### INV-INTERVAL-KINDS-STAY-DISTINCT
+*platforms: core*
+
+The four interval kinds — deload, rest, away, active recovery — stay distinct
+in storage, display, and grading; nothing collapses them into a generic
+"break". In particular, deload does NOT excuse absence (deload days still
+expect sessions), and only away spans trigger the re-entry suggestion.
+
+> The kinds differ in whether load was applied, whether the body was
+> recovering, and what the engine should do afterwards. A merged "break" type
+> would have to pick one of those answers for all four.
+
+### INV-RECOVERY-WORK-IS-OFF-PROGRAM
+*platforms: core*
+
+Work logged inside an active-recovery interval is real, banked history — and
+explicitly off-program: it never feeds PR baselines, standalone-track
+advancement, or program progression. Only active recovery is off-program
+time; a session logged inside a rest or away span is deliberate, ordinary
+training and grades normally.
+
+> Recovery work is prescribed to be easy. Letting it set PR baselines or
+> advance the schedule punishes the lifter for following the prescription.
+
+### INV-INTERVAL-PRESERVES-SCHEDULE
+*platforms: core*
+
+Declaring, editing, or deleting an interval mutates nothing: the program's
+cycle, rotation, and day pointer, track state, and banked history are
+untouched. An interval only changes how the calendar is *read* — rotation
+assessments and readiness are identical with and without one; only the
+advisory reads (spacing, re-entry, frequency trial) differ.
+
+> An interval that rewrote the schedule could not be safely deleted, and a
+> mis-tapped kind would corrupt state instead of being a one-tap fix.
+
+---
+
 ## Delivery
 
 ### INV-WEB-APP-SCOPE

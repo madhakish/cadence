@@ -3087,11 +3087,18 @@ const preferredCoachingDay = (pattern, slots) => {
   return eligible.length ? Math.min(...eligible.map((slot) => slot.dayIndex)) : null;
 };
 
-const shorterSpacingTrial = (sessions) => {
+const shorterSpacingTrial = (sessions, declaredBreaks = []) => {
   const ordered = [...sessions].sort((a, b) => epoch(a.date) - epoch(b.date));
   if (ordered.length < 4) return null;
-  const intervals = ordered.slice(1).map((session, index) =>
-    Math.floor((epoch(session.date) - epoch(ordered[index].date)) / 86_400_000)).filter((days) => days > 0).sort((a, b) => a - b);
+  // A gap the lifter declared (rest/away/active recovery overlapping the open
+  // time) is not a frequency observation — including it would read a vacation
+  // as the athlete's chosen spacing (INV-INTERVAL-IS-NOT-A-GAP). Mirrors
+  // CoachingEngine.shorterSpacingTrial.
+  const intervals = ordered.slice(1)
+    .map((session, index) => [epoch(ordered[index].date), epoch(session.date)])
+    .filter(([fromMs, toMs]) => !intervalGapExcused(fromMs, toMs, declaredBreaks))
+    .map(([fromMs, toMs]) => Math.floor((toMs - fromMs) / 86_400_000))
+    .filter((days) => days > 0).sort((a, b) => a - b);
   if (intervals.length < 3) return null;
   const median = intervals[Math.floor(intervals.length / 2)];
   return median >= 4 ? Math.max(2, median - 1) : null;
@@ -3286,7 +3293,7 @@ function linearStageSuggestions(program, sessions, evidenceKey) {
   });
 }
 
-function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions) {
+function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions, intervals = []) {
   if (!latest) return [];
   const evidenceKey = `c${latest.key.cycleNumber}-r${latest.key.rotation}`;
   // Rotation suggestions are program hygiene, not capacity: a slot pointing at
@@ -3399,7 +3406,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
     explanation: `Two rotations were green, but some movement floors cannot be raised automatically: ${blockedEvidence.join("; ")}.`,
     change: { type: "hold" },
   });
-  const shorter = shorterSpacingTrial(sessions);
+  const shorter = shorterSpacingTrial(sessions, intervals);
   if (shorter !== null) result.push({
     id: `cadence.shorter-trial.v${COACHING_RULE_VERSION}:${evidenceKey}`,
     ruleID: `cadence.shorter-trial.v${COACHING_RULE_VERSION}`, priority: 20,
@@ -3410,7 +3417,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   return result.sort(byPriority);
 }
 
-export function evaluateCoaching(program, sessions, reliableHistoryStart = null) {
+export function evaluateCoaching(program, sessions, reliableHistoryStart = null, intervals = []) {
   const reliable = reliableHistoryStart == null ? -Infinity : epoch(reliableHistoryStart);
   const relevant = sessions.filter((session) => session.completed !== false
     && session.programID === program.id && epoch(session.date) >= reliable)
@@ -3466,6 +3473,6 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null)
     // The rotation before the latest verified one, so a red that persists can
     // escalate past a red that is one bad week.
     recommendations: coachingRecommendations(program, completed.at(-1),
-      completed.at(-2)?.readiness ?? "unknown", greenRotationStreak, relevant),
+      completed.at(-2)?.readiness ?? "unknown", greenRotationStreak, relevant, intervals),
   };
 }
