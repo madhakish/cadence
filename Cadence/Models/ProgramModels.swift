@@ -49,6 +49,9 @@ final class Program {
     var reliableHistoryStart: Date?
     var preferredSessionSpacingDays: Int = 3
     var maximumAddedSetsPerRotation: Int = 6
+    /// Automatic exercise selection may use any equipment unless a program
+    /// explicitly narrows itself to free-weight/bodyweight work.
+    var equipmentPolicyRaw: String = "any"
     @Relationship(deleteRule: .cascade, inverse: \ProgramDay.program)
     var days: [ProgramDay]
     var createdAt: Date
@@ -66,6 +69,7 @@ final class Program {
         self.reliableHistoryStart = nil
         self.preferredSessionSpacingDays = 3
         self.maximumAddedSetsPerRotation = 6
+        self.equipmentPolicyRaw = "any"
         self.days = []
         self.createdAt = .now
     }
@@ -73,6 +77,11 @@ final class Program {
     var focus: TrainingFocus {
         get { TrainingFocus(rawValue: focusRaw) ?? .strength }
         set { focusRaw = newValue.rawValue }
+    }
+
+    var equipmentPolicy: EquipmentPolicy {
+        get { EquipmentPolicy(rawValue: equipmentPolicyRaw) ?? .any }
+        set { equipmentPolicyRaw = newValue.rawValue }
     }
 
     var orderedDays: [ProgramDay] {
@@ -104,6 +113,8 @@ final class Program {
 final class ProgramDay {
     var name: String
     var order: Int
+    /// Explicit authoring intent. `general` preserves every existing program.
+    var trainingIntentRaw: String = "general"
     var program: Program?
     @Relationship(deleteRule: .cascade, inverse: \ProgramLift.day)
     var lifts: [ProgramLift]
@@ -113,24 +124,36 @@ final class ProgramDay {
     init(name: String, order: Int) {
         self.name = name
         self.order = order
+        self.trainingIntentRaw = "general"
         self.lifts = []
         self.accessories = []
     }
 
-    /// The coach's explicit order. Legacy stores whose slots predate the field
-    /// retain the old main-first behavior until the day is reordered once.
+    var trainingIntent: DayTrainingIntent {
+        get { DayTrainingIntent(rawValue: trainingIntentRaw) ?? .general }
+        set { trainingIntentRaw = newValue.rawValue }
+    }
+
+    /// Main work first, then complementary work. Explicit order is retained
+    /// inside each role so assistance cannot move ahead of the main lift.
     var orderedLifts: [ProgramLift] {
-        let unique = uniqueProgramModels(lifts)
-        if Set(unique.map(\.order)).count <= 1 {
-            return unique.sorted {
-                ($0.role == .main ? 0 : 1, $0.exerciseName)
-                    < ($1.role == .main ? 0 : 1, $1.exerciseName)
-            }
+        uniqueProgramModels(lifts).sorted {
+            ProgramEngine.programSlotPrecedes(
+                lhsRole: $0.roleRaw, lhsOrder: $0.order, lhsName: $0.exerciseName,
+                rhsRole: $1.roleRaw, rhsOrder: $1.order, rhsName: $1.exerciseName
+            )
         }
-        return unique.sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
     }
     var orderedAccessories: [ProgramAccessory] {
         uniqueProgramModels(accessories).sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
+    }
+
+    /// Authored order (order field, ordinal name tiebreak), role-blind — the
+    /// portable contracts (backup, program file) serialize the athlete's
+    /// authored sequence exactly as the web exporter does; role-first
+    /// `orderedLifts` is a display/session rule, not part of the bytes.
+    var authoredLifts: [ProgramLift] {
+        uniqueProgramModels(lifts).sorted { ($0.order, $0.exerciseName) < ($1.order, $1.exerciseName) }
     }
 }
 

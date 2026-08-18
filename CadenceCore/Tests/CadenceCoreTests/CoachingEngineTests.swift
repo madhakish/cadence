@@ -64,6 +64,18 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertTrue(plan.explanation.localizedCaseInsensitiveContains("hamstring"))
     }
 
+    func testTechniqueAndExplosiveDaysDoNotAccumulateAutomaticCapacity() {
+        var protected = program()
+        for index in protected.slots.indices {
+            protected.slots[index].trainingIntent = index.isMultiple(of: 2) ? .technique : .explosive
+        }
+        let report = CoachingEngine.evaluate(program: protected, sessions: greenRotations())
+        XCTAssertFalse(report.recommendations.contains {
+            if case .capacityPlan = $0.change { return true }
+            return false
+        }, "quality-intent days must not become accessory-volume sinks")
+    }
+
     func testAdjustedLowerWorkMakesRotationYellow() {
         var sessions = (0...3).map { session(cycle: 1, rotation: 1, day: $0, date: Double($0) * 3 * day) }
         sessions += (0...3).map {
@@ -232,6 +244,143 @@ final class CoachingEngineTests: XCTestCase {
         )
         let suggestion = try XCTUnwrap(report.recommendations.first { rotationSlotID($0) != nil })
         XCTAssertEqual(suggestion.ruleID, "program.slot.rotate.stalled.v\(CoachingEngine.ruleVersion)")
+    }
+
+    func testCompletedMaxEffortSingleProposesWeeklySpecialExerciseRotation() throws {
+        var sessions = greenRotations()
+        let latestSquatIndex = try XCTUnwrap(sessions.indices.last { sessions[$0].dayIndex == 0 })
+        sessions[latestSquatIndex].exercises[0].prescriptionStyle = .maxEffort
+        sessions[latestSquatIndex].exercises[0].sets = [
+            CoachingSetSnapshot(
+                actualWeightLb: 115, actualReps: 1,
+                plannedWeightLb: 115, plannedReps: 1,
+                prescriptionBlock: .work
+            )
+        ]
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") { $0.prescriptionStyle = .maxEffort },
+            sessions: sessions
+        )
+        let suggestion = try XCTUnwrap(report.recommendations.first {
+            $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
+        })
+        XCTAssertEqual(rotationSlotID(suggestion), "squat")
+        XCTAssertTrue(suggestion.explanation.contains("another special exercise"))
+        XCTAssertTrue(suggestion.id.hasSuffix("-squat"), "one suggestion per slot")
+        XCTAssertFalse(suggestion.id.contains(sessions[latestSquatIndex].id),
+                       "the id carries only portable components — a session id is client-local (web autoincrement vs UUID) and rewritten by backup restore, resurfacing dismissed prompts")
+    }
+
+    func testAllQualityDaysSurfaceBlockedVolumeFloors() throws {
+        var protected = program()
+        for index in protected.slots.indices {
+            protected.slots[index].trainingIntent = index.isMultiple(of: 2) ? .technique : .explosive
+        }
+        let report = CoachingEngine.evaluate(program: protected, sessions: greenRotations())
+        let blocked = try XCTUnwrap(report.recommendations.first {
+            $0.ruleID == "capacity.rotation-plan.blocked.v\(CoachingEngine.ruleVersion)"
+        }, "an unmet volume floor with no eligible day must be surfaced, not silently dropped")
+        XCTAssertEqual(blocked.change, .hold)
+        XCTAssertTrue(blocked.explanation.contains("no eligible day (technique/explosive)"))
+    }
+
+    func testUnresolvableMaxEffortRotationIsNotProposed() throws {
+        // Same principle as the capacity availability gate: a rotation the
+        // apply path cannot resolve (no compatible variation under the
+        // equipment policy) must not be proposed weekly, forever.
+        var sessions = greenRotations()
+        let latestSquatIndex = try XCTUnwrap(sessions.indices.last { sessions[$0].dayIndex == 0 })
+        sessions[latestSquatIndex].exercises[0].prescriptionStyle = .maxEffort
+        sessions[latestSquatIndex].exercises[0].sets = [
+            CoachingSetSnapshot(
+                actualWeightLb: 115, actualReps: 1,
+                plannedWeightLb: 115, plannedReps: 1,
+                prescriptionBlock: .work
+            )
+        ]
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") {
+                $0.prescriptionStyle = .maxEffort
+                $0.rotationCandidateAvailable = false
+            },
+            sessions: sessions
+        )
+        XCTAssertFalse(report.recommendations.contains {
+            $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
+        }, "an unresolvable max-effort rotation is never proposed")
+    }
+
+    func testBlockedFloorsReportEvenWithSpentBudget() throws {
+        // Permanently blocked floors report even when this rotation's budget
+        // is already spent — only fillable-but-unbudgeted floors wait.
+        var constrained = program()
+        constrained.maximumAddedSetsPerRotation = 3
+        constrained.patternsWithAvailableExercise = [.kneeFlexion, .shoulderStability, .core]
+        let report = CoachingEngine.evaluate(program: constrained, sessions: greenRotations())
+        let blocked = try XCTUnwrap(report.recommendations.first {
+            $0.ruleID == "capacity.rotation-plan.blocked.v\(CoachingEngine.ruleVersion)"
+        })
+        XCTAssertEqual(
+            blocked.explanation.components(separatedBy: "no compatible exercise available").count - 1, 2,
+            "both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings"
+        )
+    }
+
+    func testUnfillablePatternIsBlockedNotProposed() throws {
+        var constrained = program()
+        // The client's library/equipment policy cannot fill vertical pull:
+        // proposing addPattern for it would fail on Apply, every rotation.
+        constrained.patternsWithAvailableExercise = [.kneeFlexion, .shoulderStability, .adductor, .core]
+        let report = CoachingEngine.evaluate(program: constrained, sessions: greenRotations())
+        let plan = try XCTUnwrap(report.recommendations.first { recommendation in
+            if case .capacityPlan = recommendation.change { return true }
+            return false
+        })
+        guard case .capacityPlan(let additions) = plan.change else {
+            return XCTFail("Expected one bundled capacity plan")
+        }
+        XCTAssertFalse(additions.contains { adjustment in
+            if case .addPattern(let pattern, _, _) = adjustment { return pattern == .verticalPull }
+            return false
+        }, "a pattern with no policy-compatible exercise is never proposed")
+        let blocked = try XCTUnwrap(report.recommendations.first {
+            $0.ruleID == "capacity.rotation-plan.blocked.v\(CoachingEngine.ruleVersion)"
+        })
+        XCTAssertTrue(blocked.explanation.contains("no compatible exercise available"),
+                      "the impossible pattern is reported as blocked instead of re-proposed forever")
+    }
+
+    func testMaxEffortEntryWithoutACompletedWorkSingleDoesNotProposeRotation() {
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") { $0.prescriptionStyle = .maxEffort },
+            sessions: greenRotations()
+        )
+        XCTAssertFalse(report.recommendations.contains {
+            $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
+        }, "opening a session or completing volume work is not a max-effort exposure")
+    }
+
+    func testSingleUnderAnotherStyleIsNotAMaxEffortExposure() throws {
+        // A peak single (or work banked before the slot became maxEffort) is
+        // performed under another prescription; only the entry's stamped
+        // session-time style qualifies it as an exposure.
+        var sessions = greenRotations()
+        let latestSquatIndex = try XCTUnwrap(sessions.indices.last { sessions[$0].dayIndex == 0 })
+        sessions[latestSquatIndex].exercises[0].prescriptionStyle = .wave
+        sessions[latestSquatIndex].exercises[0].sets = [
+            CoachingSetSnapshot(
+                actualWeightLb: 115, actualReps: 1,
+                plannedWeightLb: 115, plannedReps: 1,
+                prescriptionBlock: .work
+            )
+        ]
+        let report = CoachingEngine.evaluate(
+            program: program(patching: "squat") { $0.prescriptionStyle = .maxEffort },
+            sessions: sessions
+        )
+        XCTAssertFalse(report.recommendations.contains {
+            $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
+        }, "a single performed under another style never counts as a max-effort exposure")
     }
 
     func testStallSuggestionSurvivesARedRotationButNeverLeadsIt() {

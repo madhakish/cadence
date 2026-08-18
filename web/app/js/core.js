@@ -175,6 +175,18 @@ export const inferredLoadBasis = (exerciseType) => {
   return "externalTotal";
 };
 export const inferredImplementCount = (exerciseType) => exerciseType === "dumbbell" ? 2 : 1;
+
+// A program policy constrains automatic substitutions, not the exercise
+// library or an athlete's deliberate manual edits. Keep this pure so the
+// native and web coaching adapters enforce the same boundary.
+export function equipmentPolicyAllows(policy, exerciseType) {
+  if (policy !== "freeWeightsOnly") return true;
+  // "timed" is a LOGGING type, not equipment: every timed movement in the
+  // catalog is a bodyweight isometric (planks, holds). Excluding it made the
+  // adductor volume floor permanently unfillable under this policy.
+  return ["barbell", "dumbbell", "kettlebell", "bodyweight", "timed"]
+    .includes(String(exerciseType ?? "").toLowerCase());
+}
 export const resolvedLoadBasis = (exercise) => LOAD_BASES.includes(exercise?.loadBasis)
   ? exercise.loadBasis : inferredLoadBasis(exercise?.type);
 export const resolvedImplementCount = (exercise) => resolvedLoadBasis(exercise) === "perImplement"
@@ -877,6 +889,22 @@ export function fitDescription(fitQuality) {
 export const rotationLabel = (rotation) =>
   `Rotation ${Number.isFinite(rotation) ? Math.min(Math.max(rotation, 1), DELOAD_WEEK) : 1} of ${DELOAD_WEEK}`;
 
+// Relative position for the exercise-detail four-rotation preview. Recovery
+// is separate from the next work rotation. Mirrors ProgramEngine.
+export function rotationContextLabel(rotation, currentRotation) {
+  const current = Number.isFinite(currentRotation)
+    ? Math.min(Math.max(currentRotation, 1), DELOAD_WEEK) : 1;
+  if (rotation === current) return rotation === DELOAD_WEEK ? "Current recovery" : "Current";
+  if (rotation === DELOAD_WEEK) return "Recovery";
+  // DELOAD_WEEK - 1 is the last work rotation; the cycle length has exactly
+  // one owner, so no literal wrap point here.
+  const previous = current === 1 || current === DELOAD_WEEK ? DELOAD_WEEK - 1 : current - 1;
+  if (rotation === previous) return "Previous";
+  const next = current >= DELOAD_WEEK - 1 ? 1 : current + 1;
+  if (rotation === next) return current >= DELOAD_WEEK - 1 ? "Next cycle" : "Next";
+  return "Later";
+}
+
 // What a slot does, for the badge beside its name: "Main · 5/3/1",
 // "Complementary · Secondary volume", "Main · Linear". Resolves "automatic"
 // first, so the badge names the style the engine will actually run rather than
@@ -1482,15 +1510,25 @@ export function sessionTagCurrent(tagCycle, tagWeek, tagDayIndex, cycleNumber, c
 }
 
 // Whether an OPEN session may be resumed on (re)Start vs built fresh: same
-// cycle/week/day tag AND the plan it was BUILT from still equals the day's
-// CURRENT plan. Snapshot-vs-current, not the live exercises — so a session-
-// local remove/swap is preserved (resumed), while a PROGRAM edit or position
-// move diverges the built-from plan → build fresh. Empty sessionPlanNames
-// (pre-snapshot session) never resumes. Mirrors CadenceCore canResumeSession.
+// cycle/week/day tag AND the plan it was BUILT from still has the SAME
+// COMPOSITION as the day's current plan. Snapshot-vs-current, not the live
+// exercises — so a session-local remove/swap is preserved (resumed), while a
+// PROGRAM edit (swap/add/remove) diverges the built-from plan → build fresh.
+// Composition, not sequence: display order is now derived role-first, so a
+// pure position move — and, critically, a pre-role-first snapshot written by
+// an older version — must not orphan an in-flight session with logged sets.
+// The sorted comparison is ordinal (code units), matching Swift's String `<`.
+// Empty sessionPlanNames (pre-snapshot session) never resumes. Mirrors
+// CadenceCore canResumeSession.
 export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, currentWeek, dayIndex, sessionPlanNames, dayPlanNames) {
-  return tagCycle === cycleNumber && tagWeek === currentWeek && tagDayIndex === dayIndex
-    && sessionPlanNames.length > 0 && sessionPlanNames.length === dayPlanNames.length
-    && sessionPlanNames.every((n, i) => n === dayPlanNames[i]);
+  if (tagCycle !== cycleNumber || tagWeek !== currentWeek || tagDayIndex !== dayIndex) return false;
+  if (!sessionPlanNames.length || sessionPlanNames.length !== dayPlanNames.length) return false;
+  // NFC-normalize before comparing: Swift String equality is Unicode-
+  // canonical, so an NFD-entered name must resume on both clients, not just
+  // iOS.
+  const session = sessionPlanNames.map((name) => String(name).normalize()).sort();
+  const day = dayPlanNames.map((name) => String(name).normalize()).sort();
+  return session.every((name, index) => name === day[index]);
 }
 
 // ---- Swap rules (issue 20) ----------------------------------------------
@@ -1501,19 +1539,16 @@ export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, cu
 // exercise records. Loadability follows the resolved load basis, not equipment
 // type: a weighted pull-up is bodyweight-typed but still carries external load.
 // ---- Program slot ordering (one spelling) ----------------------------------
-// The coach's explicit order; ties break on exerciseName with ORDINAL
-// comparison (Swift's tuple `<`), not locale collation. Slots from stores
-// that predate the order field (every order equal) keep the old main-first
-// presentation where the caller asks for it. Mirrors native
+// Main work always precedes complementary work; authored order is preserved
+// inside each role. Ties break on exerciseName with ORDINAL comparison
+// (Swift's tuple `<`), not locale collation. Accessory-only callers have no
+// main roles, so this is also their authored order. Mirrors native
 // ProgramDay.orderedLifts / orderedAccessories.
-export function orderedProgramSlots(slots = [], roleAwareLegacy = false) {
-  const allLegacy = slots.length > 1 && slots.every((slot) => (slot.order ?? 0) === (slots[0].order ?? 0));
+export function orderedProgramSlots(slots = []) {
   const byName = (a, b) => (a.exerciseName < b.exerciseName ? -1 : a.exerciseName > b.exerciseName ? 1 : 0);
   return [...slots].sort((a, b) => {
-    if (allLegacy && roleAwareLegacy) {
-      const role = (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1);
-      if (role) return role;
-    }
+    const role = (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1);
+    if (role) return role;
     return (a.order ?? 0) - (b.order ?? 0) || byName(a, b);
   });
 }
@@ -1735,6 +1770,24 @@ export function stagedIncrement(baseWeightLb, focus, regime, roundingLb = DEFAUL
     return Math.max(half, Math.round((inc / 2) / half) * half);
   }
   return inc;
+}
+
+// Target for a newly selected max-effort variation. Returning variations use
+// their own completed single plus the normal upper/lower increment. The
+// numeric-only model cannot derive one exercise's max from another, so an
+// unseen variation gets an 80% calibration ceiling, not a fabricated 90%
+// target. The old variation's TARGET is never inherited when any estimate
+// exists; the last-resort fallbackBaseLb (no prior single AND a zero
+// estimate — a hand-authored slot that never bootstrapped) IS the outgoing
+// slot's base: with no evidence of any kind, holding the bar where the
+// athlete was already working is the least-wrong seed, and the pre-rotation
+// behavior for exactly this case. Mirrors ProgramProgression.
+export function maxEffortVariationTarget(priorBestSingleLb, estimatedMaxLb, fallbackBaseLb,
+  movementGroup = null, roundingLb = DEFAULT_ROUNDING_LB) {
+  const increment = ["squat", "hinge"].includes(movementGroup) ? 10 : 5;
+  const seed = priorBestSingleLb > 0 ? priorBestSingleLb + increment
+    : estimatedMaxLb > 0 ? estimatedMaxLb * 0.80 : fallbackBaseLb;
+  return Math.max(0, roundTo(seed, roundingLb));
 }
 
 // Extra sets the next VOLUME rotation carries after a held cycle, so the
@@ -1979,9 +2032,8 @@ export function advanceProgramLift(state, perf, focus, style, movementGroup = nu
       next.stallCount = 0;
       next.baseWeightLb = roundTo(made + increment, roundingLb);
       next.lastIncrementLb = next.baseWeightLb - state.baseWeightLb;
-      // A real single is already a max-strength observation; Epley would
-      // inflate it by 3.3% merely because reps === 1.
-      next.estimatedMaxLb = Math.max(state.estimatedMaxLb, perf.topSetWeightLb);
+      // Keep the reference-lift estimate stable. Feeding this special
+      // exercise's single into it would leak one variation's max into the next.
       note = `Made the top single — next target +${trim(increment)} lb. Rotate the variation to keep it moving.`;
     } else {
       // Rotation, not accumulation, is this methodology's stall answer — no
@@ -2748,8 +2800,33 @@ export const movementPatternName = (pattern) => ({
   unknown: "Unclassified",
 }[pattern] || "Unclassified");
 
+// One matcher for the library, program pickers, and active logger. Exercise
+// availability is deliberately filtered by each caller: a gate is not search.
+const normalizedExerciseSearchText = (value) => String(value ?? "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+export function exerciseMatchesSearch(exercise, query) {
+  const term = normalizedExerciseSearchText(query).trim();
+  if (!term) return true;
+  return [exercise?.name, exercise?.movementGroup,
+    movementPatternName(exercise?.movementPattern), exercise?.type,
+    ...(exercise?.aliases || []), ...(exercise?.strategyTags || [])]
+    .some((value) => normalizedExerciseSearchText(value).includes(term));
+}
+
 export const isConditioningPattern = (pattern) =>
   ["easyAerobic", "intervals", "mixedConditioning"].includes(pattern);
+
+// Display names for the program-policy enums — one spelling for every picker
+// and pill. Mirrors DayTrainingIntent.name / EquipmentPolicy.name in
+// CadenceCore/ProgramPolicy.swift.
+export const DAY_TRAINING_INTENT_LABELS = {
+  general: "General", heavy: "Heavy", volume: "Volume",
+  technique: "Technique", explosive: "Explosive",
+};
+export const EQUIPMENT_POLICY_LABELS = {
+  any: "Any equipment", freeWeightsOnly: "Free weights + bodyweight",
+};
 
 const PATTERN_NAMES = {
   verticalPress: new Set(["Overhead Press", "Push Press", "Push Jerk", "Split Jerk", "Overhead DB Press", "Seated Upright DB Press", "Arnold Press", "Landmine Press", "KB Press"]),
@@ -2792,6 +2869,12 @@ export const PREFERRED_EXERCISES = {
   shoulderStability: ["Face Pulls", "Band External Rotation", "Y-T-W Raises"],
   adductor: ["Copenhagen Plank", "Cable Hip Adduction"],
   core: ["Hanging Knee Raise", "Dead Bug", "Plank"],
+};
+// Seeded special-exercise rotations for max-effort slots. Compatible custom
+// variations remain the fallback. Mirrors CoachingEngine.
+export const PREFERRED_MAX_EFFORT_EXERCISES = {
+  squat: ["Low Box Squat", "Front Box Squat", "Paused Box Squat"],
+  horizontalPress: ["Floor Press", "Close-Grip Floor Press"],
 };
 // The rep window a coach-added accessory slot opens with, by pattern.
 // Mirrors CoachingEngine.defaultRepRange(for:).
@@ -2929,16 +3012,22 @@ function assessCoachingRotation(key, sessions, expectedDayIndexes, priorPerforma
   };
 }
 
+// Technique and explosive days own quality, not fatigue accumulation.
+// Explicit intent is the proof; legacy `general` days retain the old capacity
+// behavior exactly. Mirrors CoachingEngine.supportsAddedCapacity.
+const supportsAddedCapacity = (slot) => !["technique", "explosive"].includes(slot.trainingIntent || "general");
+
 const preferredCoachingDay = (pattern, slots) => {
+  const eligible = slots.filter(supportsAddedCapacity);
   if (["kneeFlexion", "hipExtension"].includes(pattern)) {
-    const squat = slots.find((slot) => slot.isMain && slot.pattern === "squat");
+    const squat = eligible.find((slot) => slot.isMain && slot.pattern === "squat");
     if (squat) return squat.dayIndex;
   }
   if (["verticalPull", "shoulderStability"].includes(pattern)) {
-    const upper = slots.find((slot) => slot.isMain && ["horizontalPress", "verticalPress"].includes(slot.pattern));
+    const upper = eligible.find((slot) => slot.isMain && ["horizontalPress", "verticalPress"].includes(slot.pattern));
     if (upper) return upper.dayIndex;
   }
-  return slots.length ? Math.min(...slots.map((slot) => slot.dayIndex)) : 0;
+  return eligible.length ? Math.min(...eligible.map((slot) => slot.dayIndex)) : null;
 };
 
 const shorterSpacingTrial = (sessions) => {
@@ -2961,13 +3050,17 @@ export const ACCESSORY_STALL_ROTATION_THRESHOLD = 3;
 // been shelved, or the slot is stuck retrying a weight it is not making. Both
 // are suggestions — the engine names the slot, the client resolves a compatible
 // variation, and the athlete decides.
-function rotationSuggestions(program, evidenceKey) {
+function rotationSuggestions(program, sessions, evidenceKey) {
   const result = [];
   // Ordinal (code-unit) tiebreak, NOT localeCompare: Swift's String `<` is
   // ordinal, and the slot walk order feeds recommendation ids that must match
   // across clients regardless of the browser's locale/collation.
   const ordered = [...(program.slots || [])].sort((a, b) => a.dayIndex - b.dayIndex
     || (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
+  // Only the max-effort branch reads history; most programs have no such slot
+  // and must not pay a full-history copy+sort per report (mirrors native).
+  const newest = ordered.some((slot) => slot.prescriptionStyle === "maxEffort")
+    ? [...sessions].sort((a, b) => epoch(b.date) - epoch(a.date)) : [];
   for (const slot of ordered) {
     if (isConditioningPattern(slot.pattern)) continue;
     if (slot.exerciseIsShelved) {
@@ -2979,6 +3072,43 @@ function rotationSuggestions(program, evidenceKey) {
         change: { type: "rotateExercise", slotID: slot.id, exerciseName: slot.exerciseName },
       });
       continue;
+    }
+    // rotationCandidateAvailable === false suppresses the weekly rotation:
+    // same principle as the capacity availability gate — a recommendation the
+    // apply path cannot resolve must not nag forever. null/undefined (legacy
+    // snapshot) keeps the old behavior.
+    if (slot.prescriptionStyle === "maxEffort" && slot.rotationCandidateAvailable !== false) {
+      // First qualifying session wins — stop there instead of materializing
+      // every match across years of history (mirrors native lazy .first).
+      let latest = null;
+      for (const session of newest) {
+        if (session.rotation === DELOAD_WEEK) continue;
+        const exercise = (session.exercises || []).find((candidate) => candidate.slotID === slot.id);
+        // Only work PERFORMED under a max-effort prescription counts as an
+        // exposure: a peak single logged while the slot ran another style (or
+        // before it became maxEffort) must not rotate the slot away. The
+        // entry's stamped style is the session-time truth. Only the entry
+        // matters from here — the recommendation id is session-free.
+        const completedSingle = exercise?.prescriptionStyle === "maxEffort"
+          && (exercise.sets || []).some((set) => !set.isWarmup
+            && set.completed !== false && set.actualReps === 1
+            && countsAsPrescribedWork(set.prescriptionBlock));
+        if (completedSingle) { latest = exercise; break; }
+      }
+      if (latest?.exerciseName === slot.exerciseName) {
+        result.push({
+          // The id carries only portable components (cycle/rotation evidence
+          // key + slot id) — NEVER the session id, which is an IndexedDB
+          // autoincrement locally but a UUID natively and after any backup
+          // restore, so embedding it resurfaces dismissed recommendations.
+          id: `program.slot.rotate.max-effort-weekly.v${COACHING_RULE_VERSION}:${evidenceKey}-${slot.id}`,
+          ruleID: `program.slot.rotate.max-effort-weekly.v${COACHING_RULE_VERSION}`, priority: 65,
+          title: `Rotate ${slot.exerciseName}`,
+          explanation: `The latest completed max-effort single used ${slot.exerciseName}. Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.`,
+          change: { type: "rotateExercise", slotID: slot.id, exerciseName: slot.exerciseName },
+        });
+        continue;
+      }
     }
     const threshold = slot.role === "accessory" ? ACCESSORY_STALL_ROTATION_THRESHOLD : LIFT_STALL_ROTATION_THRESHOLD;
     const stalls = Math.max(0, slot.stallCount || 0);
@@ -3104,7 +3234,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   // rather than gated behind a green streak. They sort below every readiness
   // rule, so the light stays the headline.
   const programChanges = [
-    ...rotationSuggestions(program, evidenceKey),
+    ...rotationSuggestions(program, sessions, evidenceKey),
     ...linearStageSuggestions(program, sessions, evidenceKey),
     ...verticalPullPromotions(program),
   ];
@@ -3154,13 +3284,34 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   const result = [...programChanges];
   const capacityAdjustments = [];
   const capacityEvidence = [];
+  const blockedEvidence = [];
   for (const [pattern, target] of budgets) {
     const current = planned[pattern] || 0;
-    if (current >= target || changes >= capacity) continue;
-    const amount = Math.min(target - current, capacity - changes);
+    // capacity 0 is the athlete's opt-out of automatic capacity management —
+    // no additions AND no blocked notices.
+    if (current >= target || capacity <= 0) continue;
     const slot = (program.slots || []).find((candidate) => candidate.pattern === pattern
       && candidate.capacityManaged !== false && !candidate.isMain
+      && supportsAddedCapacity(candidate)
       && candidate.plannedSets < (candidate.maximumSets || DEFAULT_MAXIMUM_SETS));
+    let dayIndex = null;
+    if (!slot) {
+      // A PERMANENTLY blocked floor is reported even when this rotation's
+      // budget is already spent — that is the whole point of the notice; a
+      // merely-unbudgeted fillable floor just waits for the next rotation.
+      if (program.patternsWithAvailableExercise
+          && !program.patternsWithAvailableExercise.includes(pattern)) {
+        blockedEvidence.push(`${movementPatternName(pattern)} ${current}/${target} — no compatible exercise available`);
+        continue;
+      }
+      dayIndex = preferredCoachingDay(pattern, program.slots || []);
+      if (dayIndex === null) {
+        blockedEvidence.push(`${movementPatternName(pattern)} ${current}/${target} — no eligible day (technique/explosive)`);
+        continue;
+      }
+    }
+    if (changes >= capacity) continue;
+    const amount = Math.min(target - current, capacity - changes);
     if (slot) {
       const add = Math.min(amount, (slot.maximumSets || DEFAULT_MAXIMUM_SETS) - slot.plannedSets);
       if (add <= 0) continue;
@@ -3168,7 +3319,6 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
       capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${add}`);
       changes += add;
     } else {
-      const dayIndex = preferredCoachingDay(pattern, program.slots || []);
       capacityAdjustments.push({ type: "addPattern", pattern, dayIndex, sets: amount });
       capacityEvidence.push(`${movementPatternName(pattern)} ${current}/${target} → +${amount}`);
       changes += amount;
@@ -3180,6 +3330,13 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
     title: `Add ${changes} targeted set${changes === 1 ? "" : "s"}`,
     explanation: `Two rotations were green. ${capacityEvidence.join("; ")}.`,
     change: { type: "capacityPlan", additions: capacityAdjustments },
+  });
+  if (blockedEvidence.length) result.push({
+    id: `capacity.rotation-plan.blocked.v${COACHING_RULE_VERSION}:${evidenceKey}`,
+    ruleID: `capacity.rotation-plan.blocked.v${COACHING_RULE_VERSION}`, priority: 39,
+    title: "Volume floors need attention",
+    explanation: `Two rotations were green, but some movement floors cannot be raised automatically: ${blockedEvidence.join("; ")}.`,
+    change: { type: "hold" },
   });
   const shorter = shorterSpacingTrial(sessions);
   if (shorter !== null) result.push({

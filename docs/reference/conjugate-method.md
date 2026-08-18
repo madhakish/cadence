@@ -25,13 +25,24 @@ Method* bundle, pp. 50–51, and *The Book of Methods*, p. 101.
 - Use a special exercise rather than repeatedly testing the competition lift.
 - After ordinary warm-ups, Cadence prescribes up to three distinct singles:
   about 90%, a near-max single, and the day's target.
-- A clean made single sets the anchor and adds 10 lb for squat/hinge variations
-  or 5 lb for presses for the next exposure. A miss holds.
-- Change the special exercise weekly. The template supplies Low, Front, and
-  Paused Box Squats plus Floor Press and Close-Grip Floor Press as starter
-  pools. On iOS, use a session swap; on web, change the slot in the program
-  editor. The stable slot identity keeps the prescription and progression
-  attached while the exercise changes.
+- A clean made single sets that variation's anchor. When the variation returns,
+  Cadence adds 10 lb for squat/hinge variations or 5 lb for presses. A miss
+  does not raise the anchor.
+- Change the special exercise weekly. After a completed max-effort exposure,
+  Coach offers a reviewable rotation before the next max-effort day. The
+  template supplies Low, Front, and Paused Box Squats plus Floor Press and
+  Close-Grip Floor Press as starter pools; compatible custom variations remain
+  available when those pools do not fit. The recommendation's identity is
+  built from portable components only (cycle/rotation evidence key plus slot
+  id) so a dismissal or apply recorded on one client survives a backup
+  restore and matches the other client, like every other rotation rule.
+- A returning variation targets its own clean completed single plus the
+  smallest normal lower/upper increment. The supplied sources provide no valid
+  conversion from a competition lift to an unseen variation. Until Cadence can
+  store an explicit `Establish` exposure, the numeric plan shows 80% of the
+  stable reference estimate as a conservative calibration ceiling—not a
+  claimed variation max. Cadence never transfers one variation's max to another
+  exercise merely because they share a program slot.
 - After three max-effort exposures, Cadence's recovery bridge substitutes two
   moderate triples. This is the app's conservative implementation of the
   source recommendation to replace an exhausted max-effort session with
@@ -90,3 +101,22 @@ the controlling programming references:
 | Nine speed-bench triples; 40–50%; one-minute rests | *Bench Press Manual*, p. 13 |
 | Triceps, lat/upper-back, rear/side-delt assistance | *Bench Press Manual*, pp. 26–27 |
 | Repetition work when max-effort fatigue accumulates | *The Conjugate Method*, pp. 54–55 |
+
+The source library also contains sport- and population-specific manuals. They
+were reviewed as boundary checks, not treated as permission to copy every
+method into a general strength template:
+
+| Supplied ebook reviewed | Contribution or implementation boundary |
+|---|---|
+| *The Book of Methods* | Primary system overview: ME/DE/repetition methods, weekly organization, special exercises, and GPP. |
+| *Book of Methods* web/earlier edition | Cross-check of the system overview; treated as a variant edition, not independent evidence. |
+| *The Conjugate Method* bundle | Four-day weekly structure, extreme-work spacing, rotation, and recovery substitutions. |
+| *Westside Barbell Book of Squat and Deadlift* | Lower-body ME special-exercise rotation, high-intensity singles, and the three-week speed-squat wave. |
+| *Bench Press Manual* | Upper-body ME/DE loading, speed-bench triples, and triceps/upper-back/delt repetition work. |
+| *Iron Samurai* | Historical and practical corroboration of the ME/DE/repetition split, three-week waves, and GPP; anecdotes are not encoded as universal rules. |
+| *Special Strength Development for All Sports* | Supports selecting special exercises by transfer and weak point; sport-specific exercises and ratios are not generalized blindly. |
+| *Explosive Strength Development for Jumping* | Confirms the need for explosive/reactive qualities and event transfer; jumping prescriptions stay outside the base powerlifting template. |
+| *Thrower's Book* | Confirms transfer-specific special strength and sequencing; throwing volumes and implements are not applied to non-throwers. |
+| *Olympic Weightlifting Strength Manual* | Reinforces technical specificity and distinct strength qualities; Olympic programming remains in its separate technique-led template. |
+| *Strength Manual for Running* | Reinforces running-specific transfer, GPP, and fatigue management; running ratios are not imposed on strength-only users. |
+| *Children Exercise Book* | Establishes an age-specific boundary: broad GPP and development precede specialized loading; the advanced Conjugate template is not presented as youth programming. |

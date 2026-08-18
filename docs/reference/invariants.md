@@ -100,9 +100,11 @@ mirrors the main lift's 5×5 → 5×3 → 3×3 wave.
 *platforms: web*
 
 A complementary lift that **follows other work** bridges with the last two
-ramp steps only. A complementary slot ordered **first** in its day still ramps
-fully — nothing has warmed the lifter yet. An explicit per-slot warmup policy
-always wins over both.
+ramp steps only. Main work is always ordered ahead of complementary work, so a
+day containing both uses that bridge even if stale/authored order numbers put
+the complementary slot first. A complementary-only day still ramps fully —
+nothing has warmed the lifter yet. An explicit per-slot warmup policy always
+wins over both.
 
 ### INV-WARMUP-RESYNC-KEEPS-POLICY
 *platforms: native · unverifiable*

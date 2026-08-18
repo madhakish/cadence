@@ -716,6 +716,14 @@ struct ProgramEditorView: View {
                     Text("Hypertrophy").tag(TrainingFocus.hypertrophy)
                     Text("Maintain").tag(TrainingFocus.maintain)
                 }
+                Picker("Equipment", selection: Binding(
+                    get: { program.equipmentPolicy },
+                    set: { program.equipmentPolicy = $0 }
+                )) {
+                    ForEach(EquipmentPolicy.allCases, id: \.self) { policy in
+                        Text(policy.name).tag(policy)
+                    }
+                }
                 Stepper("Rounding: \(settingsList.unitDisplay.format(lb: program.roundingLb))", value: $program.roundingLb, in: 2.5...10, step: 2.5)
                 // Activation is exclusive — only one program drives Today.
                 Toggle("Active", isOn: Binding(get: { program.isActive }, set: { on in
@@ -769,7 +777,14 @@ struct ProgramEditorView: View {
                         ProgramDayEditorView(day: day, step: program.roundingLb)
                     } label: {
                         VStack(alignment: .leading) {
-                            Text(day.name)
+                            HStack {
+                                Text(day.name)
+                                Text(day.trainingIntent.name)
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Theme.accent.opacity(0.14), in: Capsule())
+                            }
                             // orderedLifts, not lifts: the SwiftData to-many
                             // array is unordered, so the raw list can show the
                             // complementary lift before the main.
@@ -882,12 +897,14 @@ struct ProgramEditorView: View {
             focus: program.focus, cycleNumber: program.cycleNumber, currentWeek: program.currentWeek,
             nextDayIndex: program.nextDayIndex, roundingLb: program.roundingLb, isActive: false)
         copy.coachEnabled = program.coachEnabled
+        copy.equipmentPolicy = program.equipmentPolicy
         copy.reliableHistoryStart = program.reliableHistoryStart
         copy.preferredSessionSpacingDays = program.preferredSessionSpacingDays
         copy.maximumAddedSetsPerRotation = program.maximumAddedSetsPerRotation
         context.insert(copy)
         for sourceDay in program.orderedDays {
             let dayCopy = ProgramDay(name: sourceDay.name, order: sourceDay.order)
+            dayCopy.trainingIntent = sourceDay.trainingIntent
             context.insert(dayCopy)
             copy.days.append(dayCopy)
             // Stamp the clone's slot orders from the enumerated DISPLAY order:
@@ -946,6 +963,14 @@ struct ProgramDayEditorView: View {
         Form {
             Section("Day") {
                 TextField("Name", text: $day.name)
+                Picker("Training intent", selection: Binding(
+                    get: { day.trainingIntent },
+                    set: { day.trainingIntent = $0 }
+                )) {
+                    ForEach(DayTrainingIntent.allCases, id: \.self) { intent in
+                        Text(intent.name).tag(intent)
+                    }
+                }
             }
             Section("Lifts") {
                 // Every row carries an explicit Remove button (mirroring the web
@@ -1070,6 +1095,14 @@ struct ProgramDayEditorView: View {
     private func moveLifts(from offsets: IndexSet, to destination: Int) {
         var ordered = day.orderedLifts
         ordered.move(fromOffsets: offsets, toOffset: destination)
+        // Role-first ordering is enforced at display time: a drop that lands
+        // complementary work ahead of a main would snap back visually while
+        // silently rewriting every authored order, so refuse it (no write)
+        // instead of churning a no-op. Mirrors web settings.js moveSlot.
+        let roles = ordered.map(\.roleRaw)
+        if let lastMain = roles.lastIndex(of: LiftRole.main.rawValue),
+           let firstOther = roles.firstIndex(where: { $0 != LiftRole.main.rawValue }),
+           firstOther < lastMain { return }
         for (index, lift) in ordered.enumerated() { lift.order = index }
         PersistenceErrorCenter.shared.save(context, operation: "Reordering program lifts")
     }
@@ -1334,15 +1367,14 @@ private struct ExercisePickerSheetView: View {
     let onPick: (String) -> Void
 
     private var visible: [Exercise] {
+        // The shared search rule (diacritic-insensitive POSIX folding), not a
+        // hand-rolled locale-collation predicate — this was the one picker
+        // left off the canonical matcher, so "degage" found an accented
+        // exercise everywhere except here.
         let available = exercises.filter(\.isAvailableForProgramming)
-        return search.isEmpty ? available : available.filter {
-            $0.name.localizedCaseInsensitiveContains(search)
-                || $0.movementGroup.localizedCaseInsensitiveContains(search)
-                || $0.movementPattern.name.localizedCaseInsensitiveContains(search)
-                || $0.typeRaw.localizedCaseInsensitiveContains(search)
-                || $0.aliases.contains(where: { $0.localizedCaseInsensitiveContains(search) })
-                || $0.strategyTags.contains(where: { $0.localizedCaseInsensitiveContains(search) })
-        }
+        guard !search.isEmpty else { return available }
+        let term = ExerciseSearch.preparedTerm(search)
+        return available.filter { $0.matchesSearch(preparedTerm: term) }
     }
 
     var body: some View {

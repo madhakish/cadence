@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **8**. A missing version means the legacy version-0 shape.
+version **9**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,23 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 9 programming semantics
+
+Version 9 adds two required strings to every newly written program tree:
+
+- **`program.equipmentPolicy`** is `"any"` or `"freeWeightsOnly"`.
+  `freeWeightsOnly` limits automatic selection to barbell, dumbbell,
+  kettlebell, bodyweight, and timed (bodyweight-hold) exercises. It does not rewrite manually authored
+  slots.
+- **`program.days[].trainingIntent`** is `"general"`, `"heavy"`,
+  `"volume"`, `"technique"`, or `"explosive"`. Intent is explicit because
+  neither a display name nor the first slot can classify a mixed day reliably.
+
+Both fields are additive. A version-8-or-older bundle restores missing values
+as the literal legacy behavior: `"any"` for the program and `"general"` for
+each day. Importers require and validate both values on version-9 bundles,
+rather than silently coercing an unknown policy or intent.
 
 ## Version 8 station plates
 
@@ -174,7 +191,10 @@ Every session carries:
 A program tag carries a stable portable `programId` plus the historical
 `programName` label. It also carries cycle, week, day index, and `planNames`,
 the immutable snapshot used to decide whether an open session may resume after
-a program edit. Renaming a program therefore cannot detach an open session.
+a program edit. The comparison is a name **multiset** (composition), not a
+sequence: display order is derived role-first, so a pure reorder — or a
+snapshot written before role-first ordering existed — never orphans an open
+session. Renaming a program therefore cannot detach an open session either.
 
 Every set carries a `status` of `planned`, `completed`, or `skipped`. Only
 completed sets contribute to volume, PRs, charts, HealthKit metadata, or
@@ -221,6 +241,9 @@ instead — see [program file](program-file.md).
 - Version-2 sessions, programs, and exercises gain version-3 defaults during
   import. Their logged weights/reps remain performed truth; missing per-set
   prescription snapshots stay null.
+- Version-8-and-older programs gain `equipmentPolicy: "any"` and days gain
+  `trainingIntent: "general"`; no name parsing or equipment filtering is
+  applied retroactively.
 - Missing top-level sections leave the corresponding local store untouched.
 - Import runs a full preflight before storage is touched. Missing identifiers,
   invalid dates or numbers, unknown enum values, duplicate keys, and impossible

@@ -103,7 +103,9 @@ final class WorkoutSession {
 final class SessionExercise {
     var order: Int
     var notes: String
-    /// Optional per-exercise override. Nil follows the session gym's default.
+    /// Bar actually selected for this entry. New barbell entries stamp the
+    /// current gym default so later gym-setting edits cannot reinterpret old
+    /// plate stacks. Nil remains valid for legacy/non-barbell history.
     var barID: String?
     var exercise: Exercise?
     var session: WorkoutSession?
@@ -131,6 +133,15 @@ final class SessionExercise {
         self.exercise = exercise
         self.notes = notes
         self.sets = []
+    }
+
+    /// One spelling of the bar-stamping rule for every entry-creation path:
+    /// barbell entries record the bar that builds them so later gym edits
+    /// cannot reinterpret logged stacks; every other type floats (nil).
+    /// A creation site that hand-rolls the stamp is a site a future rule
+    /// change will miss. Mirrors web session.js `barStamp`.
+    func stampBarID(for exercise: Exercise, bar: Bar) {
+        barID = exercise.type == .barbell ? bar.id : nil
     }
 
     var phase: CyclePhase? {

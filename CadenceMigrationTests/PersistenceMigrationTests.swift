@@ -37,7 +37,7 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
-    func testShippedV3StoreMigratesToV8WithoutDataLoss() throws {
+    func testShippedV3StoreMigratesToV9WithoutDataLoss() throws {
         try assertMigration(
             createStore: createV3Store,
             migrationPlan: CadenceV3MigrationPlan.self,
@@ -47,7 +47,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// An install that skipped the protein retirement and arrives two versions
     /// behind, so its store crosses both stages in one open.
-    func testShippedV4StoreMigratesToV8WithoutDataLoss() throws {
+    func testShippedV4StoreMigratesToV9WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV4Store(at: $0) },
             migrationPlan: CadenceV4MigrationPlan.self,
@@ -57,7 +57,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The common case for this upgrade: every install shipped since protein
     /// logging was retired carries the V5 checksum.
-    func testShippedV5StoreMigratesToV8WithoutDataLoss() throws {
+    func testShippedV5StoreMigratesToV9WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV5Store(at: $0) },
             migrationPlan: CadenceV5MigrationPlan.self,
@@ -67,7 +67,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The common case for THIS upgrade: every install shipped since
     /// conditioning learned to count flights carries the V6 checksum.
-    func testShippedV6StoreMigratesToV8WithoutDataLoss() throws {
+    func testShippedV6StoreMigratesToV9WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV6Store(at: $0) },
             migrationPlan: CadenceV6MigrationPlan.self,
@@ -77,12 +77,148 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The common case for THIS upgrade: every install shipped since vertical
     /// pulling was promoted carries the V7 checksum.
-    func testShippedV7StoreMigratesToV8WithoutDataLoss() throws {
+    func testShippedV7StoreMigratesToV9WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV7Store(at: $0) },
             migrationPlan: CadenceV7MigrationPlan.self,
             expectsExistingSessionID: true
         )
+    }
+
+    /// The common V9 upgrade: policy columns must reproduce V8 behavior on a
+    /// real on-disk store, then accept explicit values after migration.
+    func testV8StoreGainsLiteralLegacyProgrammingPolicies() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-v8-policy-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+        try createV8PolicyStore(at: storeURL)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
+        do {
+            let container = try ModelContainer(
+                for: schema,
+                migrationPlan: CadenceV8MigrationPlan.self,
+                configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+            )
+            let program = try XCTUnwrap(try container.mainContext.fetch(FetchDescriptor<Program>()).first)
+            XCTAssertEqual(program.name, "V8 Policy Program")
+            XCTAssertEqual(program.equipmentPolicy, .any,
+                           "legacy programs keep the unrestricted equipment behavior")
+            let day = try XCTUnwrap(program.orderedDays.first)
+            XCTAssertEqual(day.trainingIntent, .general,
+                           "legacy day names are not reinterpreted as programming intent")
+
+            program.equipmentPolicy = .freeWeightsOnly
+            day.trainingIntent = .explosive
+            try container.mainContext.save()
+        }
+
+        let reopened = try ModelContainer(
+            for: schema,
+            migrationPlan: CadenceV8MigrationPlan.self,
+            configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+        )
+        let program = try XCTUnwrap(try reopened.mainContext.fetch(FetchDescriptor<Program>()).first)
+        XCTAssertEqual(program.equipmentPolicy, .freeWeightsOnly)
+        XCTAssertEqual(program.orderedDays.first?.trainingIntent, .explosive)
+    }
+
+    func testNativeBackupRoundTripsProgrammingPoliciesAndDefaultsLegacyBundles() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
+        let source = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let program = Program(name: "Policy Round Trip", focus: .strength)
+        program.equipmentPolicy = .freeWeightsOnly
+        let day = ProgramDay(name: "Heavy Lower", order: 0)
+        day.trainingIntent = .heavy
+        program.days.append(day)
+        source.mainContext.insert(program)
+        source.mainContext.insert(day)
+        try source.mainContext.save()
+
+        let backup = try ExportService.jsonData(context: source.mainContext)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        XCTAssertEqual(json["schemaVersion"] as? Int, 9)
+        let exportedProgram = try XCTUnwrap((json["programs"] as? [[String: Any]])?.first)
+        XCTAssertEqual(exportedProgram["equipmentPolicy"] as? String, "freeWeightsOnly")
+        let exportedDay = try XCTUnwrap((exportedProgram["days"] as? [[String: Any]])?.first)
+        XCTAssertEqual(exportedDay["trainingIntent"] as? String, "heavy")
+
+        let restored = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        try ImportService.load(backup, into: restored.mainContext)
+        let roundTripped = try XCTUnwrap(try restored.mainContext.fetch(FetchDescriptor<Program>()).first)
+        XCTAssertEqual(roundTripped.equipmentPolicy, .freeWeightsOnly)
+        XCTAssertEqual(roundTripped.orderedDays.first?.trainingIntent, .heavy)
+
+        var legacyJSON = json
+        legacyJSON["schemaVersion"] = 8
+        var legacyPrograms = try XCTUnwrap(legacyJSON["programs"] as? [[String: Any]])
+        legacyPrograms[0].removeValue(forKey: "equipmentPolicy")
+        var legacyDays = try XCTUnwrap(legacyPrograms[0]["days"] as? [[String: Any]])
+        legacyDays[0].removeValue(forKey: "trainingIntent")
+        legacyPrograms[0]["days"] = legacyDays
+        legacyJSON["programs"] = legacyPrograms
+
+        let legacyRestored = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        try ImportService.load(
+            JSONSerialization.data(withJSONObject: legacyJSON),
+            into: legacyRestored.mainContext
+        )
+        let legacy = try XCTUnwrap(try legacyRestored.mainContext.fetch(FetchDescriptor<Program>()).first)
+        XCTAssertEqual(legacy.equipmentPolicy, .any)
+        XCTAssertEqual(legacy.orderedDays.first?.trainingIntent, .general)
+    }
+
+    func testNativeStandaloneProgramRoundTripsProgrammingPolicies() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
+        let source = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let program = Program(name: "Standalone Policy", focus: .strength)
+        program.equipmentPolicy = .freeWeightsOnly
+        let day = ProgramDay(name: "Speed Lower", order: 0)
+        day.trainingIntent = .explosive
+        let lift = ProgramLift(
+            exerciseName: "Back Squat",
+            role: .main,
+            baseWeightLb: 135,
+            estimatedMaxLb: 185
+        )
+        day.lifts.append(lift)
+        program.days.append(day)
+        source.mainContext.insert(program)
+        source.mainContext.insert(day)
+        source.mainContext.insert(lift)
+        try source.mainContext.save()
+
+        let data = try ProgramExportService.jsonData(for: program)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["programSchemaVersion"] as? Int, 2)
+        let payload = try XCTUnwrap(json["program"] as? [String: Any])
+        XCTAssertEqual(payload["equipmentPolicy"] as? String, "freeWeightsOnly")
+
+        let restored = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        restored.mainContext.insert(Exercise(name: "Back Squat", category: .main, type: .barbell))
+        try restored.mainContext.save()
+        try ProgramImportService.load(data, into: restored.mainContext)
+
+        let imported = try XCTUnwrap(try restored.mainContext.fetch(FetchDescriptor<Program>()).first)
+        XCTAssertEqual(imported.equipmentPolicy, .freeWeightsOnly)
+        XCTAssertEqual(imported.orderedDays.first?.trainingIntent, .explosive)
     }
 
     /// The whole point of V8: the station column arrives as nil — "use the gym
@@ -97,7 +233,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV7Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         do {
             let container = try ModelContainer(for: schema, migrationPlan: CadenceV7MigrationPlan.self,
@@ -140,7 +276,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV6Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(for: schema, migrationPlan: CadenceV6MigrationPlan.self,
                                            configurations: configuration)
@@ -211,7 +347,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// native omits this one, restoring its own post-migration backup promotes
     /// a pull-up the lifter deliberately moved back to Accessory.
     func testNativeBackupRoundTripKeepsVerticalPullPromotionStamp() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -250,7 +386,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// both restore as "gym inventory", matching web's wholesale-record
     /// replacement.
     func testRestoreClearsAStationPreferenceTheBackupDoesNotContain() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -296,7 +432,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV4Store(at: storeURL, proteinEntries: 12)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV4MigrationPlan.self, configurations: configuration
@@ -344,7 +480,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV5Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV5MigrationPlan.self, configurations: configuration
@@ -392,7 +528,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairRestoresIndependentLowerBDayAndIsIdempotent() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -468,7 +604,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairDoesNotGuessBetweenIdenticalCollidingSlots() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -509,7 +645,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testMirroredLowerBMatrixRestoresRolesFromItsTaggedProgramDay() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -605,11 +741,17 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     private func openUsingProductionStrategies(storeURL: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let configuration = {
             ModelConfiguration("migration", schema: schema, url: storeURL)
         }
         let attempts: [() throws -> ModelContainer] = [
+            { try ModelContainer(for: schema, migrationPlan: CadenceV8MigrationPlan.self,
+                                 configurations: configuration()) },
+            { try ModelContainer(for: schema, migrationPlan: CadenceV7MigrationPlan.self,
+                                 configurations: configuration()) },
+            { try ModelContainer(for: schema, migrationPlan: CadenceV6MigrationPlan.self,
+                                 configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadenceV5MigrationPlan.self,
                                  configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadenceV4MigrationPlan.self,
@@ -644,7 +786,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createStore(storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV9.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema,
@@ -703,6 +845,8 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(programs.first?.name, "Migration Program")
         XCTAssertEqual(programs.first?.coachEnabled, true)
         XCTAssertEqual(programs.first?.maximumAddedSetsPerRotation, 6)
+        XCTAssertEqual(programs.first?.equipmentPolicy, .any)
+        XCTAssertEqual(programs.first?.orderedDays.first?.trainingIntent, .general)
         XCTAssertEqual(programs.first?.orderedDays.first?.orderedLifts.first?.baseWeightLb, 175)
         XCTAssertEqual(programs.first?.orderedDays.first?.orderedAccessories.first?.sets, 3)
     }
@@ -1164,6 +1308,20 @@ final class PersistenceMigrationTests: XCTestCase {
         context.insert(CadenceSchemaV7.Gym(name: "Migration Gym"))
         context.insert(settings)
         insertV7Program(context)
+        try context.save()
+    }
+
+    private func createV8PolicyStore(at url: URL) throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV8.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: url)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+
+        let program = CadenceSchemaV8.Program(name: "V8 Policy Program")
+        let day = CadenceSchemaV8.ProgramDay(name: "Speed Lower", order: 4)
+        day.program = program
+        context.insert(program)
+        context.insert(day)
         try context.save()
     }
 

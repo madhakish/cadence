@@ -36,6 +36,12 @@ enum ProgramExportService {
             id: options.includeIdentity ? program.id : nil,
             name: program.name,
             focus: program.focusRaw,
+            // Through the coercing accessor, not the raw column: import
+            // validation rejects out-of-enum values, and an unknown raw
+            // (newer-binary downgrade, corruption) must not make a file the
+            // exporting app itself refuses to read back. Web exports the
+            // normalized value the same way.
+            equipmentPolicy: program.equipmentPolicy.rawValue,
             roundingLb: program.roundingLb,
             coachEnabled: program.coachEnabled,
             preferredSessionSpacingDays: program.preferredSessionSpacingDays,
@@ -53,7 +59,10 @@ enum ProgramExportService {
                 // session's programTag.dayIndex refers to; renumbering here
                 // would misattribute logged work on reimport.
                 order: day.order,
-                lifts: day.orderedLifts.map { lift in
+                trainingIntent: day.trainingIntent.rawValue,
+                // Authored order, matching web program-file.js — role-first
+                // is a display rule and must not change the exported bytes.
+                lifts: day.authoredLifts.map { lift in
                     ProgramFileContract.Lift(
                         id: options.includeIdentity ? lift.id : nil,
                         exerciseName: lift.exerciseName,

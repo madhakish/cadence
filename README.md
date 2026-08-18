@@ -30,7 +30,10 @@ no quotes.
   optional primers/top singles, and rotation-first readiness. Each lift keys
   off completed performed work, never the calendar. Rack-aware targets keep
   the theoretical prescription, achieved load, and final performed load
-  separate. Mid-session "Dropping load" uses a pre-computed fallback and logs
+  separate. Programs can constrain automatic selections to free weights and
+  bodyweight, and days carry explicit heavy/volume/technique/explosive intent
+  so quality days do not silently accumulate coaching volume. Mid-session
+  "Dropping load" uses a pre-computed fallback and logs
   why (bar speed / wobble / joint / heat / fatigue / not there).
 - **Session logging** — pre-filled warmup ramps (loaded steps for back squats/deadlifts; bar×10 +
   ~40/55/70/85%; two bridging steps for complementary lifts after the day's

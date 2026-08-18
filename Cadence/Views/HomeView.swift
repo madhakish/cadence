@@ -80,39 +80,27 @@ struct HomeView: View {
         program.nextDay
     }
 
-    private func rawProgramPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {
-        let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
+    /// The shared preview pipeline — the card must show the same honest,
+    /// snapped plan the started session will store.
+    private func previewPlans(_ program: Program, _ lift: ProgramLift) -> (raw: SessionPlan, snapped: SessionPlan) {
         let exercise = exercises.first { $0.name == lift.exerciseName }
-        // planningBase, not the stored base: the card must show the same
-        // honest plan the started session will store.
-        let base = ProgramSession.planningBase(
-            for: lift, exercise: exercise, program: program, sessions: completedSessions
+        return ProgramSession.previewPlan(
+            for: lift, exercise: exercise, program: program,
+            phase: CyclePhase(rawValue: program.currentWeek) ?? .volume,
+            planningBase: ProgramSession.planningBase(
+                for: lift, exercise: exercise, program: program, sessions: completedSessions
+            ),
+            addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program),
+            gym: defaultGym
         )
-        return ProgramEngine.programPlan(
-            for: CycleState(cycleNumber: program.cycleNumber, baseWeightLb: base, nextPhase: phase, incrementLb: 0),
-            programRoundingLb: program.roundingLb,
-            exerciseType: exercise?.typeRaw,
-            movementGroup: exercise?.movementGroup,
-            role: lift.role,
-            focus: program.focus,
-            prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
-            // Same volume-fallback derivation as the created session — the
-            // card and the stored prescription must never disagree.
-            addedVolumeSets: ProgramSession.volumeFallbackSets(for: lift, program: program))
+    }
+
+    private func rawProgramPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {
+        previewPlans(program, lift).raw
     }
 
     private func programPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {
-        let plan = rawProgramPlan(program, day, lift)
-        let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
-        let exercise = exercises.first { $0.name == lift.exerciseName }
-        // Preview the same snapped weight the session will store (secondary barbell lifts).
-        let weightLb = ProgramSession.achievableWeight(
-            plan.weightLb, exercise: exercise,
-            isMain: lift.role.rawValue == "main" || lift.prescription.buildsOwnSessionShape,
-            gym: defaultGym, bar: defaultGym?.defaultBar ?? .bar45lb,
-            stepLb: program.roundingLb, phase: phase)
-        return SessionPlan(weightLb: weightLb, sets: plan.sets, reps: plan.reps, phase: plan.phase, cycleNumber: plan.cycleNumber)
+        previewPlans(program, lift).snapped
     }
 
     private func trackPlan(_ track: LiftTrack) -> SessionPlan {
@@ -325,7 +313,13 @@ struct HomeView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(alignment: .firstTextBaseline) {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(lift.exerciseName).font(.subheadline.bold())
+                                        NavigationLink {
+                                            ExerciseDetailByNameView(name: lift.exerciseName)
+                                        } label: {
+                                            Text(lift.exerciseName).font(.subheadline.bold())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityHint("Shows exercise history, program cycle, and settings")
                                         SlotPrescriptionBadge(
                                             lift: lift, rotation: program.currentWeek,
                                             movementGroup: exercises.first { $0.name == lift.exerciseName }?.movementGroup,
@@ -532,6 +526,7 @@ struct HomeView: View {
                 recommendation,
                 for: program,
                 exercises: exercises,
+                sessions: completedSessions,
                 evidence: report.rotations.last?.reasons ?? [],
                 context: context
             )
@@ -626,6 +621,7 @@ struct HomeView: View {
         context.insert(session)
 
         let entry = SessionExercise(order: 0, exercise: exercise)
+        entry.stampBarID(for: exercise, bar: defaultGym?.defaultBar ?? .bar45lb)
         let plan = trackPlan(track)
         entry.targetWeightLb = track.suggestion.weightLb
         entry.plannedWeightLb = plan.weightLb

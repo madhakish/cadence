@@ -127,6 +127,12 @@ const otherDomains = async () => ({
     ["blank program name", JSON.stringify((() => { const f = validFile(); f.program.name = "   "; return f; })())],
     ["no days", JSON.stringify((() => { const f = validFile(); f.program.days = []; return f; })())],
     ["unknown focus", JSON.stringify((() => { const f = validFile(); f.program.focus = "powerbuilding"; return f; })())],
+    ["unknown equipment policy", JSON.stringify((() => {
+      const f = validFile(); f.program.equipmentPolicy = "machinesOnly"; return f;
+    })())],
+    ["unknown day intent", JSON.stringify((() => {
+      const f = validFile(); f.program.days[0].trainingIntent = "maximum"; return f;
+    })())],
     ["unknown role", JSON.stringify((() => { const f = validFile(); f.program.days[0].lifts[0].role = "tertiary"; return f; })())],
     ["duplicate day order", JSON.stringify((() => {
       const f = validFile(); f.program.days.push({ ...f.program.days[0], name: "Day B" }); return f;
@@ -247,6 +253,8 @@ const otherDomains = async () => ({
   ok(reloaded?.days.length === active.days.length, "the previously active program was not modified");
   const imported = (await db.Programs.all()).find((p) => p.uuid === report.programId);
   ok(imported?.isActive === false, "the imported program did not activate itself");
+  ok(imported?.equipmentPolicy === "any" && imported?.days?.[0]?.trainingIntent === "general",
+    "a V1 file normalizes to literal legacy equipment and day semantics");
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +263,9 @@ const otherDomains = async () => ({
 {
   const source = (await db.Programs.all()).find((p) => p.name === "Fixture Alongside History");
   ok(source != null, "the round-trip source program exists");
+  source.equipmentPolicy = "freeWeightsOnly";
+  source.days[0].trainingIntent = "heavy";
+  await db.Programs.save(source);
 
   // A true round trip imports into a store that does not already hold the
   // program. Leaving the source in place would trip the collision rename —
@@ -264,6 +275,9 @@ const otherDomains = async () => ({
   const report = await pf.importProgramText(first);
   const second = pf.exportProgramText((await db.Programs.all()).find((p) => p.uuid === report.programId));
   ok(first === second, "export -> import -> export is byte-identical");
+  ok(/"programSchemaVersion": 2/.test(first), "the writer emits the policy-aware program schema");
+  ok(/"equipmentPolicy": "freeWeightsOnly"/.test(first), "the equipment policy survives export");
+  ok(/"trainingIntent": "heavy"/.test(first), "the day intent survives export");
   ok(!/"id"/.test(first), "the default file carries no slot or program identity");
   ok(!/exportedAt|generatedAt/.test(first), "the default file carries no timestamp");
   ok(pf.programFilename({ name: "日本語" }) === "cadence-program-日本語.json",

@@ -24,7 +24,7 @@ Importing one never reads or writes those domains either. It adds a program.
 The root carries two fields that identify it:
 
 ```json
-{ "kind": "cadence.program", "programSchemaVersion": 1, "program": { … } }
+{ "kind": "cadence.program", "programSchemaVersion": 2, "program": { … } }
 ```
 
 `kind` keeps the two importers from accepting each other's files. A backup
@@ -34,7 +34,7 @@ before anything is read.
 `programSchemaVersion` is an integer and versions **independently of the
 backup's `schemaVersion`**. A change to the program format does not move the
 backup version, and a change to the backup format does not move this one.
-Current writers emit version **1**.
+Current writers emit version **2**.
 
 Importers accept their current version and older versions they know. They
 reject a newer or invalid version before opening a write. Updating Cadence is
@@ -47,12 +47,25 @@ The source-of-truth constants are:
 
 These values must change together.
 
+## Version 2
+
+Version 2 adds the program's `equipmentPolicy` (`any` or `freeWeightsOnly`)
+and each day's `trainingIntent` (`general`, `heavy`, `volume`, `technique`, or
+`explosive`). They are plan semantics, so both plan-only and stateful exports
+carry them and both import paths preserve them.
+
+Version-1 files remain supported. A missing equipment policy decodes as
+`any`, and a missing day intent decodes as `general`—the exact behavior every
+version-1 program had. The same missing-field defaults keep hand-authored
+version-2 plans additive; an explicitly unknown value still fails validation
+before a write.
+
 ## Version 1
 
 Version 1 is the plan shape, plus two optional groups.
 
 **The plan** — always present. Program name, focus, rounding, coaching
-preferences, and the ordered days. Each day carries its lifts and accessories
+preferences, and the ordered days. Each day carries lifts and accessories
 with their full progression configuration: role, prescription style, warm-up
 policy, load and peak offsets, deload multiplier, rep windows, set counts,
 base weight, and estimated max.

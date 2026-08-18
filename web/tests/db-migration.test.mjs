@@ -94,6 +94,9 @@ const check = (condition, message) => { if (!condition) failures.push(message); 
 check(exercise?.movementPattern === "squat", "exercise taxonomy default was not migrated");
 check(exercise?.gateStatus === "open", "exercise gate default was not migrated");
 check(program?.coachEnabled === true, "program coaching default was not migrated");
+check(program?.equipmentPolicy === "any", "legacy program equipment policy was not migrated literally");
+check(program?.days?.every((day) => day.trainingIntent === "general"),
+  "legacy program-day intents were not migrated literally");
 check(program?.days?.[0]?.lifts?.[0]?.phasePrimerEnabled === true, "lift defaults were not migrated");
 check(program?.days?.[0]?.accessories?.[0]?.maximumSets === 6, "accessory defaults were not migrated");
 check(session?.exercises?.[0]?.sets?.[0]?.weightLb === 185, "performed weight changed during migration");

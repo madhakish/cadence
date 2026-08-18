@@ -321,6 +321,30 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(ProgramEngine.authoredSlotOrders([]), [])
     }
 
+    func testProgramSlotOrderingKeepsMainWorkBeforeComplementaryWork() {
+        XCTAssertTrue(ProgramEngine.programSlotPrecedes(
+            lhsRole: "main", lhsOrder: 5, lhsName: "A Main",
+            rhsRole: "complementary", rhsOrder: 0, rhsName: "B Complement"
+        ))
+        XCTAssertTrue(ProgramEngine.programSlotPrecedes(
+            lhsRole: "main", lhsOrder: 1, lhsName: "First Main",
+            rhsRole: "main", rhsOrder: 2, rhsName: "Second Main"
+        ), "authored order still wins within the same role")
+        XCTAssertFalse(ProgramEngine.programSlotPrecedes(
+            lhsRole: "complementary", lhsOrder: 0, lhsName: "B Complement",
+            rhsRole: "main", rhsOrder: 5, rhsName: "A Main"
+        ))
+    }
+
+    func testRotationContextLabelsPastCurrentFutureAndRecovery() {
+        XCTAssertEqual(ProgramEngine.rotationContextLabel(rotation: 1, currentRotation: 2), "Previous")
+        XCTAssertEqual(ProgramEngine.rotationContextLabel(rotation: 2, currentRotation: 2), "Current")
+        XCTAssertEqual(ProgramEngine.rotationContextLabel(rotation: 3, currentRotation: 2), "Next")
+        XCTAssertEqual(ProgramEngine.rotationContextLabel(rotation: 4, currentRotation: 2), "Recovery")
+        XCTAssertEqual(ProgramEngine.rotationContextLabel(rotation: 1, currentRotation: 3), "Next cycle")
+        XCTAssertEqual(ProgramEngine.rotationContextLabel(rotation: 4, currentRotation: 4), "Current recovery")
+    }
+
     // MARK: - Deload intensity knob (mirrors core.test.mjs)
 
     // [INV-DELOAD-IS-THE-SLOTS-KNOB]

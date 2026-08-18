@@ -100,10 +100,22 @@ same movement group, same programming tier, same loadability, not shelved. If
 nothing compatible is available the proposal refuses with that reason rather
 than substituting something that does not fit.
 
-An applied rotation keeps the slot's load and estimate — a compatible candidate
-trains the same pattern at the same tier, so those remain the best prior — but
-clears the stall counter, because inheriting the countdown would deload a lift
-that has not yet missed anything.
+Candidates are ranked deterministically, and a `freeWeightsOnly` program
+filters them to barbell, dumbbell, kettlebell, bodyweight, and timed-hold work. Apply also
+checks that the named slot still contains the named exercise; a stale proposal
+cannot overwrite a manual edit made after the coach evaluated it.
+
+An ordinary applied rotation keeps the slot's load and estimate — a compatible
+candidate trains the same pattern at the same tier, so those remain the best
+prior — but clears the stall counter. Max-effort variations are different: a
+returning variation uses its own clean completed single plus the normal
+increment, while an unseen one gets the documented calibration ceiling. The
+slot's stable reference estimate is not overwritten by the outgoing special
+exercise.
+
+A weekly max-effort rotation is offered only after the session contains a
+completed, prescribed work single for that slot. Opening the session, skipping
+the lift, or completing only volume work is not an exposure.
 
 ## Vertical-pull tier promotion
 
@@ -133,6 +145,20 @@ default). Default minimums per rotation are three vertical-pull sets, three
 hamstring-isolation sets, two rear-delt/cuff sets, two adductor sets, and four
 core sets. Existing capacity-managed slots grow only to their configured
 maximum; otherwise Cadence proposes an available exercise from the library.
+Automatic capacity never grows a day explicitly authored as `technique` or
+`explosive`; those days own execution quality rather than fatigue accumulation.
+Programs with the legacy `general` intent behave exactly as before. The
+program's equipment policy also filters any new exercise proposed for a gap —
+and it filters at **evaluation** time, not only on Apply: the snapshot carries
+the set of patterns the library can actually fill under the policy, so the
+coach never proposes an addition that is guaranteed to fail (a
+`freeWeightsOnly` program whose only adductor candidates are machines).
+
+A floor that cannot be raised automatically — every candidate day is
+`technique`/`explosive`, or no policy-compatible exercise exists — is not
+silently dropped. A separate informational recommendation
+(`capacity.rotation-plan.blocked`, a `hold` change) names each blocked
+pattern and why, so an unmet minimum is always visible to the athlete.
 
 Hamstring isolation and hip-extension additions are placed on the squat-led
 day, preserving the posterior-chain budget of the deadlift-led day. Program

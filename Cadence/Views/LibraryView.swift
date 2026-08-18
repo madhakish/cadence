@@ -12,14 +12,8 @@ struct LibraryView: View {
 
     private var visibleExercises: [Exercise] {
         guard !search.isEmpty else { return exercises }
-        return exercises.filter {
-            $0.name.localizedCaseInsensitiveContains(search)
-                || $0.movementGroup.localizedCaseInsensitiveContains(search)
-                || $0.movementPattern.name.localizedCaseInsensitiveContains(search)
-                || $0.typeRaw.localizedCaseInsensitiveContains(search)
-                || $0.aliases.contains(where: { $0.localizedCaseInsensitiveContains(search) })
-                || $0.strategyTags.contains(where: { $0.localizedCaseInsensitiveContains(search) })
-        }
+        let term = ExerciseSearch.preparedTerm(search)
+        return exercises.filter { $0.matchesSearch(preparedTerm: term) }
     }
 
     var body: some View {
@@ -87,6 +81,7 @@ struct ExerciseDetailView: View {
     @Bindable var exercise: Exercise
     @Query private var programs: [Program]
     @Query private var settingsList: [AppSettings]
+    @Query private var gyms: [Gym]
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted },
            sort: \WorkoutSession.date, order: .reverse)
     private var completed: [WorkoutSession]
@@ -95,21 +90,53 @@ struct ExerciseDetailView: View {
         AnatomyData.muscleProfile(name: exercise.name, movementGroup: exercise.movementGroup)
     }
 
-    /// "Program · Day (role)" for every slot this exercise fills.
-    private var memberships: [String] {
-        var out: [String] = []
-        for p in programs {
-            for d in p.orderedDays {
-                for l in d.orderedLifts where l.exerciseName == exercise.name {
-                    out.append("\(p.name) · \(d.name) (\(l.roleRaw))")
+    private struct CycleMembership: Identifiable {
+        let program: Program
+        let day: ProgramDay
+        let lift: ProgramLift
+        var id: String { "\(program.id):\(lift.id)" }
+    }
+
+    /// One traversal produces both the membership labels and the cycle rows —
+    /// two properties walking the same programs→days→lifts filter is how the
+    /// name-matching rule drifts. Mirrors web exerciseInsight's single loop.
+    private var membershipData: (labels: [String], cycle: [CycleMembership]) {
+        var labels: [String] = []
+        var cycle: [CycleMembership] = []
+        for program in programs {
+            for day in program.orderedDays {
+                for lift in day.orderedLifts where lift.exerciseName == exercise.name {
+                    labels.append("\(program.name) · \(day.name) (\(lift.roleRaw))")
+                    cycle.append(CycleMembership(program: program, day: day, lift: lift))
                 }
-                for a in d.accessories where a.exerciseName == exercise.name {
-                    out.append("\(p.name) · \(d.name) (accessory)")
+                for accessory in day.accessories where accessory.exerciseName == exercise.name {
+                    labels.append("\(program.name) · \(day.name) (accessory)")
                 }
             }
         }
-        return out
+        return (labels, cycle)
     }
+
+    private var cycleMemberships: [CycleMembership] { membershipData.cycle }
+
+    private var defaultGym: Gym? { gyms.first(where: \.isDefault) ?? gyms.first }
+
+    /// The shared preview pipeline; base, fallback sets, and the gym are
+    /// phase-invariant, so the caller computes them once per membership
+    /// instead of once per rotation row.
+    private func cyclePlan(
+        _ item: CycleMembership, phase: CyclePhase,
+        planningBase: Double, addedVolumeSets: Int, gym: Gym?
+    ) -> SessionPlan {
+        ProgramSession.previewPlan(
+            for: item.lift, exercise: exercise, program: item.program,
+            phase: phase, planningBase: planningBase,
+            addedVolumeSets: addedVolumeSets, gym: gym
+        ).snapped
+    }
+
+    /// "Program · Day (role)" for every slot this exercise fills.
+    private var memberships: [String] { membershipData.labels }
 
     /// Compact previous-performance context from the newest completed session
     /// containing this exercise.
@@ -163,11 +190,69 @@ struct ExerciseDetailView: View {
                 }
             }
 
+            // One binding, one traversal: the computed property re-walks
+            // programs→days→lifts on every access, and this body needs the
+            // result four times.
+            let data = membershipData
+            let gym = defaultGym
+
             Section("In programs") {
-                if memberships.isEmpty {
+                if data.labels.isEmpty {
                     Text("None").foregroundStyle(.secondary)
                 } else {
-                    ForEach(memberships, id: \.self) { Text($0) }
+                    ForEach(data.labels, id: \.self) { Text($0) }
+                }
+            }
+
+            if !data.cycle.isEmpty {
+                Section("Program cycle") {
+                    ForEach(data.cycle) { item in
+                        // Base and fallback sets are phase-invariant: once
+                        // per membership row, not once per rotation line.
+                        let planningBase = ProgramSession.planningBase(
+                            for: item.lift, exercise: exercise,
+                            program: item.program, sessions: completed
+                        )
+                        let addedVolumeSets = ProgramSession.volumeFallbackSets(
+                            for: item.lift, program: item.program
+                        )
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("\(item.program.name) · \(item.day.name)")
+                                .font(.subheadline.bold())
+                            ForEach(CyclePhase.allCases, id: \.rawValue) { phase in
+                                let plan = cyclePlan(item, phase: phase, planningBase: planningBase,
+                                                     addedVolumeSets: addedVolumeSets, gym: gym)
+                                let phaseLabel = ProgramEngine.slotPhaseLabel(
+                                    rotation: phase.rawValue,
+                                    role: item.lift.role,
+                                    prescriptionStyle: item.lift.prescription,
+                                    movementGroup: exercise.movementGroup,
+                                    focus: item.program.focus
+                                ) ?? "R\(phase.rawValue)"
+                                HStack(alignment: .firstTextBaseline) {
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(phaseLabel).font(.caption.bold())
+                                        Text(ProgramEngine.rotationContextLabel(
+                                            rotation: phase.rawValue,
+                                            currentRotation: item.program.currentWeek
+                                        ))
+                                            .font(.caption2)
+                                            .foregroundStyle(
+                                                phase.rawValue == item.program.currentWeek
+                                                    ? Theme.accent : .secondary
+                                            )
+                                    }
+                                    Spacer()
+                                    Text(plan.weightLb > 0 ? settingsList.unitDisplay.format(lb: plan.weightLb) : "Bodyweight")
+                                        .font(.subheadline.bold().monospacedDigit())
+                                    Text("\(plan.sets)×\(plan.reps)")
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
             }
 

@@ -31,8 +31,12 @@
 /// binary would parse the bundle happily and silently drop the preference,
 /// putting the lifter's kg deadlift station back on lb math after a restore,
 /// so the version gate has to refuse it first.
+///
+/// Version 9 adds the program-level `equipmentPolicy` and per-day
+/// `trainingIntent`. Both are additive, and older bundles restore with the
+/// literal legacy values `any` and `general` respectively.
 public enum BackupContract {
-    public static let currentSchemaVersion = 8
+    public static let currentSchemaVersion = 9
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

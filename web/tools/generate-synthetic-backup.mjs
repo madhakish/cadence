@@ -116,19 +116,20 @@ const acc = (exerciseName, weightLb, incrementLb = 5, sets = 3, minReps = 8, max
   ({ exerciseName, sets, minReps, maxReps, currentReps: minReps, weightLb, incrementLb, stallCount: 0 });
 
 await db.Programs.save({
-  name: "Fixture Strength 4-Day", focus: "strength", cycleNumber: 1, currentWeek: 1,
+  name: "Fixture Strength 4-Day", focus: "strength", equipmentPolicy: "any",
+  cycleNumber: 1, currentWeek: 1,
   nextDayIndex: 0, roundingLb: 5, isActive: true,
   days: [
-    { name: "Lower A", order: 0,
+    { name: "Lower A", order: 0, trainingIntent: "heavy",
       lifts: [cyc("Back Squat", "main", 100, 125), cyc("Deadlift", "complementary", 110, 140)],
       accessories: [acc("Walking Lunges", 0, 0), acc("GHD Sit-up", 0, 0), acc("Plank", 0, 0)] },
-    { name: "Upper A", order: 1,
+    { name: "Upper A", order: 1, trainingIntent: "volume",
       lifts: [cyc("Incline DB Press", "main", 30, 40), cyc("Single-arm DB Row", "complementary", 40, 55)],
       accessories: [acc("Face Pulls", 25), acc("DB Curls", 20), acc("Band Pull-aparts", 0, 0)] },
-    { name: "Lower B", order: 2,
+    { name: "Lower B", order: 2, trainingIntent: "explosive",
       lifts: [cyc("Deadlift", "main", 120, 150), cyc("Back Squat", "complementary", 90, 125)],
       accessories: [acc("KB Swing", 35), acc("Side Plank", 0, 0), acc("Walking Lunges", 0, 0)] },
-    { name: "Upper B", order: 3,
+    { name: "Upper B", order: 3, trainingIntent: "technique",
       lifts: [cyc("Overhead DB Press", "main", 25, 35), cyc("Chest-supported Row", "complementary", 50, 65)],
       accessories: [acc("Y-T-W Raises", 5), acc("DB Overhead Triceps Extension", 25), acc("Band External Rotation", 0, 0)] },
   ],

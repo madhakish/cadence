@@ -320,6 +320,7 @@ enum ProgramImportService {
         }
 
         program.focus = TrainingFocus(rawValue: payload.focus) ?? .strength
+        program.equipmentPolicyRaw = payload.equipmentPolicy
         program.roundingLb = payload.roundingLb
         program.coachEnabled = payload.coachEnabled
         program.preferredSessionSpacingDays = payload.preferredSessionSpacingDays
@@ -330,6 +331,7 @@ enum ProgramImportService {
 
         for dayPayload in payload.days {
             let day = ProgramDay(name: dayPayload.name, order: dayPayload.order)
+            day.trainingIntentRaw = dayPayload.trainingIntent
             context.insert(day)   // insert before appending children (Seeder pattern)
             // Mutate ONE side of each SwiftData relationship. Setting the
             // inverse and appending as well stores the same reference twice,

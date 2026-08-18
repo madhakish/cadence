@@ -64,11 +64,12 @@ final class ProgramFileContractTests: XCTestCase {
     // MARK: - Version gate
 
     func testVersionGate() {
-        XCTAssertEqual(ProgramFileContract.currentSchemaVersion, 1)
+        XCTAssertEqual(ProgramFileContract.currentSchemaVersion, 2)
         XCTAssertEqual(ProgramFileContract.kind, "cadence.program")
         XCTAssertTrue(ProgramFileContract.supports(schemaVersion: 1))
+        XCTAssertTrue(ProgramFileContract.supports(schemaVersion: 2))
         XCTAssertFalse(ProgramFileContract.supports(schemaVersion: 0))
-        XCTAssertFalse(ProgramFileContract.supports(schemaVersion: 2), "a newer file is refused, not guessed at")
+        XCTAssertFalse(ProgramFileContract.supports(schemaVersion: 3), "a newer file is refused, not guessed at")
         XCTAssertFalse(ProgramFileContract.supports(schemaVersion: nil))
     }
 
@@ -79,14 +80,34 @@ final class ProgramFileContractTests: XCTestCase {
             ProgramFileContract.kind, "cadence.backup",
             "the discriminator keeps the two importers from accepting each other's files"
         )
-        XCTAssertEqual(ProgramFileContract.currentSchemaVersion, 1,
-                       "program version 1 stands on its own regardless of BackupContract v\(BackupContract.currentSchemaVersion)")
+        XCTAssertEqual(ProgramFileContract.currentSchemaVersion, 2,
+                       "program version 2 stands on its own regardless of BackupContract v\(BackupContract.currentSchemaVersion)")
     }
 
     // MARK: - Acceptance
 
     func testValidPlanOnlyFilePasses() throws {
         XCTAssertNoThrow(try ProgramFileContract.validate(file()))
+    }
+
+    func testVersion1FileDecodesWithLiteralLegacyPolicies() throws {
+        let encoded = try JSONEncoder().encode(file())
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        json["programSchemaVersion"] = 1
+        var payload = try XCTUnwrap(json["program"] as? [String: Any])
+        payload.removeValue(forKey: "equipmentPolicy")
+        var days = try XCTUnwrap(payload["days"] as? [[String: Any]])
+        days[0].removeValue(forKey: "trainingIntent")
+        payload["days"] = days
+        json["program"] = payload
+
+        let legacy = try JSONDecoder().decode(
+            ProgramFileContract.File.self,
+            from: JSONSerialization.data(withJSONObject: json)
+        )
+        XCTAssertEqual(legacy.program.equipmentPolicy, EquipmentPolicy.any.rawValue)
+        XCTAssertEqual(legacy.program.days[0].trainingIntent, DayTrainingIntent.general.rawValue)
+        XCTAssertNoThrow(try ProgramFileContract.validate(legacy))
     }
 
     func testValidStatefulFilePasses() throws {
@@ -144,6 +165,16 @@ final class ProgramFileContractTests: XCTestCase {
         var payload = program()
         payload.focus = "powerbuilding"
         assertRejects(payload, "unknown focus")
+    }
+
+    func testRejectsUnknownProgrammingPolicies() {
+        var payload = program()
+        payload.equipmentPolicy = "machinesOnly"
+        assertRejects(payload, "unknown equipment policy")
+
+        payload = program()
+        payload.days[0].trainingIntent = "maximum"
+        assertRejects(payload, "unknown day training intent")
     }
 
     func testRejectsEmptyDays() {
@@ -428,6 +459,8 @@ final class ProgramFileContractTests: XCTestCase {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         var payload = program()
+        payload.equipmentPolicy = EquipmentPolicy.freeWeightsOnly.rawValue
+        payload.days[0].trainingIntent = DayTrainingIntent.heavy.rawValue
         payload.id = "11111111-2222-3333-4444-555555555555"
         payload.cycleNumber = 4
         payload.currentWeek = 3

@@ -90,7 +90,8 @@
           }
         ],
         "name": "Fixture Lower",
-        "order": 0
+        "order": 0,
+        "trainingIntent": "heavy"
       },
       {
         "accessories": [
@@ -143,9 +144,11 @@
           }
         ],
         "name": "Fixture Upper",
-        "order": 2
+        "order": 2,
+        "trainingIntent": "volume"
       }
     ],
+    "equipmentPolicy": "freeWeightsOnly",
     "focus": "strength",
     "id": "f0000000-0000-4000-8000-000000000000",
     "maximumAddedSetsPerRotation": 6,
@@ -154,5 +157,5 @@
     "preferredSessionSpacingDays": 3,
     "roundingLb": 5
   },
-  "programSchemaVersion": 1
+  "programSchemaVersion": 2
 }

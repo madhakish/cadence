@@ -353,17 +353,23 @@ public enum ProgramProgression {
     /// exercises: a session-local remove or a "just this session" swap changes
     /// the live exercises but not the built-from plan, so that customized
     /// session is still resumed (its edits preserved). Only a PROGRAM edit
-    /// (swap/add/remove in the editor) or a position move diverges the
-    /// built-from plan from the current one → build fresh, never resurface the
-    /// stale content. `sessionPlanNames` empty (a pre-snapshot session) never
-    /// resumes.
+    /// (swap/add/remove in the editor) diverges the built-from plan from the
+    /// current one → build fresh, never resurface the stale content.
+    ///
+    /// The match is COMPOSITION (a sorted-name multiset), not sequence:
+    /// display order is derived role-first, so a pure position move — and,
+    /// critically, a snapshot written by a pre-role-first version whose
+    /// authored order interleaved roles — must not orphan an in-flight
+    /// session with logged sets behind a freshly built duplicate.
+    /// `sessionPlanNames` empty (a pre-snapshot session) never resumes.
     public static func canResumeSession(
         tagCycle: Int, tagWeek: Int, tagDayIndex: Int,
         cycleNumber: Int, currentWeek: Int, dayIndex: Int,
         sessionPlanNames: [String], dayPlanNames: [String]
     ) -> Bool {
         tagCycle == cycleNumber && tagWeek == currentWeek && tagDayIndex == dayIndex
-            && !sessionPlanNames.isEmpty && sessionPlanNames == dayPlanNames
+            && !sessionPlanNames.isEmpty
+            && sessionPlanNames.sorted() == dayPlanNames.sorted()
     }
 
     /// Where the schedule goes after banking the day with `bankedDayOrder`.
@@ -597,6 +603,39 @@ public enum ProgramProgression {
             let half = roundingLb / 2
             return Swift.max(half, ((inc / 2) / half).rounded() * half)
         }
+    }
+
+    /// Target for a newly selected max-effort variation. A returning special
+    /// exercise resumes from its own completed single plus the normal
+    /// upper/lower increment. Cadence cannot derive an unseen variation's max
+    /// from another exercise, so the numeric-only model supplies an 80%
+    /// calibration ceiling rather than pretending 90% is a variation-specific
+    /// target. The first clean single becomes that variation's own evidence.
+    ///
+    /// The old variation's TARGET is never inherited when any estimate
+    /// exists. The last-resort `fallbackBaseLb` (no prior single AND a zero
+    /// estimate — e.g. a hand-authored slot that never bootstrapped) IS the
+    /// outgoing slot's base: with no evidence of any kind, holding the bar
+    /// where the athlete was already working is the least-wrong seed, and the
+    /// pre-rotation behavior for exactly this case. The planned
+    /// `establish | progress` state removes this edge by refusing to fabricate
+    /// a number at all. Mirrors web `maxEffortVariationTarget`.
+    public static func maxEffortVariationTarget(
+        priorBestSingleLb: Double?, estimatedMaxLb: Double,
+        fallbackBaseLb: Double, movementGroup: String?,
+        roundingLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> Double {
+        let lower = movementGroup == "squat" || movementGroup == "hinge"
+        let increment = lower ? 10.0 : 5.0
+        let seed: Double
+        if let priorBestSingleLb, priorBestSingleLb > 0 {
+            seed = priorBestSingleLb + increment
+        } else if estimatedMaxLb > 0 {
+            seed = estimatedMaxLb * 0.80
+        } else {
+            seed = fallbackBaseLb
+        }
+        return Swift.max(0, Weight.round(seed, to: roundingLb))
     }
 
     /// Extra sets the next VOLUME rotation carries after a held cycle, so the
@@ -927,9 +966,9 @@ public enum ProgramProgression {
                 next.stallCount = 0
                 next.baseWeightLb = Weight.round(made + increment, to: roundingLb)
                 next.lastIncrementLb = next.baseWeightLb - state.baseWeightLb
-                // A real single is already a max-strength observation; Epley
-                // would inflate it by 3.3% merely because reps == 1.
-                next.estimatedMaxLb = Swift.max(state.estimatedMaxLb, perf.topSetWeightLb)
+                // Keep the slot's reference-lift estimate stable. Feeding this
+                // special exercise's single into it would leak one variation's
+                // max into the next through a different field.
                 note = "Made the top single — next target +\(Weight.trim(increment)) lb. Rotate the variation to keep it moving."
             } else {
                 // Rotation, not accumulation, is this methodology's stall

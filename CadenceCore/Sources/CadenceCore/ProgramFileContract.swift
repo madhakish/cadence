@@ -15,11 +15,13 @@ import Foundation
 /// app-model-agnostic and Linux-testable.
 ///
 /// Version 1 is the plan shape plus optional runtime state and optional
-/// identity. A file is plan-only unless it explicitly carries them.
+/// identity. A file is plan-only unless it explicitly carries them. Version 2
+/// adds the program equipment policy and each day's training intent. Version-1
+/// files decode to the literal legacy values `any` and `general`.
 public enum ProgramFileContract {
 
     public static let kind = "cadence.program"
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public static func supports(schemaVersion: Int?) -> Bool {
         guard let schemaVersion else { return false }
@@ -32,6 +34,8 @@ public enum ProgramFileContract {
     public static let roles: Set<String> = ["main", "complementary"]
     public static let conditioningEfforts: Set<String> = ["easy", "interval", "mixed"]
     public static let warmupPolicies: Set<String> = ["automatic", "full", "short", "none"]
+    public static let equipmentPolicies: Set<String> = Set(EquipmentPolicy.allCases.map(\.rawValue))
+    public static let dayTrainingIntents: Set<String> = Set(DayTrainingIntent.allCases.map(\.rawValue))
 
     // MARK: - Shape
 
@@ -184,14 +188,31 @@ public enum ProgramFileContract {
         /// Verbatim, never renumbered — a day's order is the identity every
         /// banked session's `programTag.dayIndex` refers to.
         public var order: Int
+        public var trainingIntent: String
         public var lifts: [Lift]
         public var accessories: [Accessory]
 
-        public init(name: String, order: Int, lifts: [Lift], accessories: [Accessory]) {
+        public init(
+            name: String, order: Int, trainingIntent: String = DayTrainingIntent.general.rawValue,
+            lifts: [Lift], accessories: [Accessory]
+        ) {
             self.name = name
             self.order = order
+            self.trainingIntent = trainingIntent
             self.lifts = lifts
             self.accessories = accessories
+        }
+
+        private enum CodingKeys: String, CodingKey { case name, order, trainingIntent, lifts, accessories }
+
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            name = try values.decode(String.self, forKey: .name)
+            order = try values.decode(Int.self, forKey: .order)
+            trainingIntent = try values.decodeIfPresent(String.self, forKey: .trainingIntent)
+                ?? DayTrainingIntent.general.rawValue
+            lifts = try values.decode([Lift].self, forKey: .lifts)
+            accessories = try values.decode([Accessory].self, forKey: .accessories)
         }
     }
 
@@ -199,6 +220,7 @@ public enum ProgramFileContract {
         public var id: String?
         public var name: String
         public var focus: String
+        public var equipmentPolicy: String
         public var roundingLb: Double
         public var coachEnabled: Bool
         public var preferredSessionSpacingDays: Int
@@ -216,7 +238,9 @@ public enum ProgramFileContract {
         }
 
         public init(
-            id: String? = nil, name: String, focus: String, roundingLb: Double, coachEnabled: Bool,
+            id: String? = nil, name: String, focus: String,
+            equipmentPolicy: String = EquipmentPolicy.any.rawValue,
+            roundingLb: Double, coachEnabled: Bool,
             preferredSessionSpacingDays: Int, maximumAddedSetsPerRotation: Int,
             cycleNumber: Int? = nil, currentWeek: Int? = nil, nextDayIndex: Int? = nil,
             days: [Day]
@@ -224,6 +248,7 @@ public enum ProgramFileContract {
             self.id = id
             self.name = name
             self.focus = focus
+            self.equipmentPolicy = equipmentPolicy
             self.roundingLb = roundingLb
             self.coachEnabled = coachEnabled
             self.preferredSessionSpacingDays = preferredSessionSpacingDays
@@ -232,6 +257,29 @@ public enum ProgramFileContract {
             self.currentWeek = currentWeek
             self.nextDayIndex = nextDayIndex
             self.days = days
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, name, focus, equipmentPolicy, roundingLb, coachEnabled
+            case preferredSessionSpacingDays, maximumAddedSetsPerRotation
+            case cycleNumber, currentWeek, nextDayIndex, days
+        }
+
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            id = try values.decodeIfPresent(String.self, forKey: .id)
+            name = try values.decode(String.self, forKey: .name)
+            focus = try values.decode(String.self, forKey: .focus)
+            equipmentPolicy = try values.decodeIfPresent(String.self, forKey: .equipmentPolicy)
+                ?? EquipmentPolicy.any.rawValue
+            roundingLb = try values.decode(Double.self, forKey: .roundingLb)
+            coachEnabled = try values.decode(Bool.self, forKey: .coachEnabled)
+            preferredSessionSpacingDays = try values.decode(Int.self, forKey: .preferredSessionSpacingDays)
+            maximumAddedSetsPerRotation = try values.decode(Int.self, forKey: .maximumAddedSetsPerRotation)
+            cycleNumber = try values.decodeIfPresent(Int.self, forKey: .cycleNumber)
+            currentWeek = try values.decodeIfPresent(Int.self, forKey: .currentWeek)
+            nextDayIndex = try values.decodeIfPresent(Int.self, forKey: .nextDayIndex)
+            days = try values.decode([Day].self, forKey: .days)
         }
     }
 
@@ -329,6 +377,7 @@ public enum ProgramFileContract {
         let program = file.program
         try text(program.name, "program.name")
         try known(program.focus, focuses, "program.focus", "focus")
+        try known(program.equipmentPolicy, equipmentPolicies, "program.equipmentPolicy", "equipment policy")
         try number(program.roundingLb, "program.roundingLb", 0.5, 50)
         // Matches the backup contract's range. Accepting 0 or 1 here would let
         // a program file import cleanly and then fail its own backup.
@@ -356,6 +405,7 @@ public enum ProgramFileContract {
             let path = "program.days[\(dayIndex)]"
             try text(day.name, "\(path).name")
             try integer(day.order, "\(path).order", 0, 99)
+            try known(day.trainingIntent, dayTrainingIntents, "\(path).trainingIntent", "training intent")
             try check(dayOrders.insert(day.order).inserted, "\(path).order", "duplicate day order \(day.order)")
             try check(!day.lifts.isEmpty || !day.accessories.isEmpty, path,
                       "expected at least one lift or accessory")

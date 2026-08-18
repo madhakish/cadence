@@ -289,6 +289,50 @@ for (const track of [
     }, seededExercises);
   } catch { refused = true; }
   ok(refused, "an exercise the library no longer has refuses rather than guessing a replacement");
+
+  const manuallyChanged = structuredClone(original);
+  const liveSlot = manuallyChanged.days.flatMap((day) => day.lifts || [])
+    .find((item) => item.id === slot.id);
+  const manualReplacement = seededExercises.find((candidate) =>
+    candidate.name !== before.name && C.swapCompatible(from, candidate));
+  ok(!!manualReplacement, "the fixture has a compatible manual replacement");
+  liveSlot.exerciseName = manualReplacement.name;
+  refused = false;
+  try {
+    await coach.applyCoachingRecommendation(manuallyChanged, {
+      id: "rotate-stale", ruleID: "program.slot.rotate.stalled", title: "Stuck",
+      explanation: "Fixture recommendation",
+      change: { type: "rotateExercise", slotID: slot.id, exerciseName: before.name },
+    }, seededExercises);
+  } catch { refused = true; }
+  ok(refused && liveSlot.exerciseName === manualReplacement.name,
+    "a stale recommendation never overwrites a manual slot change");
+}
+
+// A program-level equipment boundary applies to automatic coaching changes.
+// The alphabetically first compatible candidate is deliberately a machine so
+// this proves the adapter filters before its deterministic ranking.
+{
+  const program = {
+    equipmentPolicy: "freeWeightsOnly", roundingLb: 5,
+    days: [{ name: "Anchor", lifts: [{
+      id: "policy-lift", exerciseName: "Current Squat", role: "main",
+      prescription: "automatic", baseWeightLb: 100, estimatedMaxLb: 150,
+      stallCount: 1, lastIncrementLb: 0,
+    }], accessories: [] }],
+  };
+  const exercises = [
+    { name: "Current Squat", category: "Main", type: "barbell", movementGroup: "squat" },
+    { name: "A Machine Squat", category: "Main", type: "machine", movementGroup: "squat" },
+    { name: "Z Free Squat", category: "Main", type: "barbell", movementGroup: "squat" },
+  ];
+  await coach.applyCoachingRecommendation(program, {
+    id: "rotate-policy", ruleID: "program.slot.rotate.stalled", title: "Stuck",
+    explanation: "Fixture recommendation",
+    change: { type: "rotateExercise", slotID: "policy-lift", exerciseName: "Current Squat" },
+  }, exercises);
+  ok(program.days[0].lifts[0].exerciseName === "Z Free Squat",
+    "a free-weight program never accepts a machine coaching substitution");
 }
 
 // The vertical-pull promotion crosses the tier: the machine accessory retires
@@ -353,6 +397,37 @@ for (const track of [
     }, seededExercises.filter((item) => item.name !== "Pull-ups"));
   } catch { refused = true; }
   ok(refused, "a library without pull-ups refuses the promotion");
+}
+
+// Max-effort rotation follows the seeded special-exercise sequence and gives
+// the replacement its own target instead of inheriting the outgoing lift.
+{
+  const proposed = {
+    roundingLb: 5,
+    days: [{ name: "ME Lower", lifts: [{
+      id: "me-lower", exerciseName: "Low Box Squat", role: "main",
+      prescription: "maxEffort", baseWeightLb: 365, estimatedMaxLb: 405,
+      stallCount: 0, lastIncrementLb: 10,
+    }], accessories: [] }],
+  };
+  const history = [{ isCompleted: true, exercises: [{ exerciseName: "Front Box Squat", sets: [
+    { weightLb: 350, reps: 1, isWarmup: false, status: "completed",
+      prescriptionBlock: "work", flags: ["grindy"] },
+    { weightLb: 315, reps: 1, isWarmup: false, status: "completed",
+      prescriptionBlock: "work", flags: ["clean"] },
+  ] }] }];
+  await coach.applyCoachingRecommendation(proposed, {
+    id: "rotate-me-weekly", ruleID: "program.slot.rotate.max-effort-weekly.v2",
+    title: "Rotate Low Box Squat", explanation: "Fixture recommendation",
+    change: { type: "rotateExercise", slotID: "me-lower", exerciseName: "Low Box Squat" },
+  }, seededExercises, history);
+  const rotated = proposed.days[0].lifts[0];
+  ok(rotated.exerciseName === "Front Box Squat",
+    "max-effort rotation follows the authored special-exercise sequence");
+  ok(rotated.baseWeightLb === 325,
+    "a returning variation uses its clean 315 single, not the outgoing target or a grindy 350");
+  ok(rotated.stallCount === 0 && rotated.lastIncrementLb === 0,
+    "the new variation starts without inherited stall or earned-increment state");
 }
 
 // An accepted linear-stage recommendation mutates only the proposed slot and
@@ -550,6 +625,12 @@ for (let i = 0; i < 10; i++) {
   const prog = await db.Programs.active();
   const day = [...prog.days].sort((a, b) => a.order - b.order)[0]; // Lower A: Back Squat main, Deadlift complementary
   const sid = await session.createSessionFromProgramDay(prog, day);
+  const builtProgramSession = await db.Sessions.get(sid);
+  const defaultGym = await db.Gyms.default();
+  ok(builtProgramSession.exercises.filter((entry) =>
+    seededExercises.find((exercise) => exercise.name === entry.exerciseName)?.type === "barbell")
+    .every((entry) => entry.barId === defaultGym.defaultBarId),
+  "program sessions stamp the bar that built every barbell prescription");
   await session.openSession(sid); await tick();
   const logger = [...document.querySelectorAll("#overlays .overlay")].at(-1);
   ok(logger.querySelector(".overlay-head h2")?.textContent === day.name,
@@ -916,6 +997,8 @@ await tick();
 const dl = (await db.Tracks.all()).find((t) => t.exerciseName === "Deadlift");
 const id = await session.createSessionFromTrack(dl);
 const created = await db.Sessions.get(id);
+ok(created.exercises[0].barId === (await db.Gyms.default()).defaultBarId,
+  "tracked barbell sessions preserve the bar used to build their history");
 const work = created.exercises[0].sets.filter((s) => !s.isWarmup);
 const warm = created.exercises[0].sets.filter((s) => s.isWarmup);
 const achievedDeadlift = created.exercises[0].plannedWeightLb;
@@ -973,7 +1056,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // Every other assertion here compares against the constant, so a JS-only bump
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
-ok(db.BACKUP_SCHEMA_VERSION === 8, `backup schema is pinned at 8 (got ${db.BACKUP_SCHEMA_VERSION})`);
+ok(db.BACKUP_SCHEMA_VERSION === 9, `backup schema is pinned at 9 (got ${db.BACKUP_SCHEMA_VERSION})`);
 
 // An app must never write a backup it cannot itself restore. A corrupted or
 // out-of-range birthYear is clamped to the not-set sentinel on the way through
@@ -1436,7 +1519,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 8, "climbed flights ship inside the current backup schema");
+    ok(climbBundle.schemaVersion === 9, "climbed flights ship inside the current backup schema");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -2172,7 +2255,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.Programs.del(program.id);
 }
 
-// ---- complementary ordered first still ramps fully (nothing warmed the lifter) ----
+// ---- main-first ordering makes a stale first complementary slot bridge ----
 {
   const name = "Fixture Cold Complementary";
   await db.Programs.save({
@@ -2188,11 +2271,29 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const prog = (await db.Programs.all()).find((candidate) => candidate.name === name);
   const sId = await session.createSessionFromProgramDay(prog, prog.days[0]);
   const built = await db.Sessions.get(sId);
+  ok(built.exercises[0].programRole === "main",
+    "a main lift executes before a complementary lift despite crossed authored orders");
   const cold = built.exercises.find((entry) => entry.programRole === "complementary");
-  ok(cold.sets.filter((set) => set.isWarmup).length > 2,
-    "[INV-COMP-WARMUP-BRIDGE] a complementary lift with no earlier work keeps its full warmup ramp");
+  ok(cold.sets.filter((set) => set.isWarmup).length === 2,
+    "[INV-COMP-WARMUP-BRIDGE] role-first ordering lets the complementary lift use its two-step bridge");
   await db.Sessions.del(sId);
   await db.Programs.del(prog.id);
+
+  const onlyName = "Fixture Cold Complementary Only";
+  await db.Programs.save({
+    name: onlyName, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Lower", order: 0,
+      lifts: [{ ...cyc("Deadlift", "complementary", 185, 255), order: 0 }],
+      accessories: [] }],
+  });
+  const onlyProgram = (await db.Programs.all()).find((candidate) => candidate.name === onlyName);
+  const onlySessionID = await session.createSessionFromProgramDay(onlyProgram, onlyProgram.days[0]);
+  const onlyBuilt = await db.Sessions.get(onlySessionID);
+  ok(onlyBuilt.exercises[0].sets.filter((set) => set.isWarmup).length > 2,
+    "[INV-COMP-WARMUP-BRIDGE] a complementary-only day keeps the full cold ramp");
+  await db.Sessions.del(onlySessionID);
+  await db.Programs.del(onlyProgram.id);
 }
 
 // ---- a gap in day orders must not strand the schedule ----
@@ -3239,7 +3340,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const stable = (v) => (v && typeof v === "object" && !Array.isArray(v))
     ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])]))
     : Array.isArray(v) ? v.map(stable) : v;
-  // The generated fixture is the current V3 portable contract. Importing and
+  // The generated fixture is the current portable contract. Importing and
   // re-exporting it must preserve every field, including coaching decisions
   // and immutable target/planned/performed snapshots.
   const canon = (bundle) => {
@@ -3737,11 +3838,11 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 // user's own next backup.
 {
   const bundle = (program) => ({ schemaVersion: db.BACKUP_SCHEMA_VERSION, programs: [program] });
-  const base = { id: "33333333-3333-4333-8333-333333333333", name: "P", focus: "strength", cycleNumber: 1 };
+  const base = { id: "33333333-3333-4333-8333-333333333333", name: "P", focus: "strength", equipmentPolicy: "any", cycleNumber: 1 };
   const rejects = (program, why) => {
     try { db.validateBackup(bundle(program)); return ok(false, why); } catch { return ok(true, why); }
   };
-  const lifts = (fields) => [{ name: "D", order: 0, lifts: [{ exerciseName: "X", role: "main", ...fields }] }];
+  const lifts = (fields) => [{ name: "D", order: 0, trainingIntent: "general", lifts: [{ exerciseName: "X", role: "main", ...fields }] }];
   db.validateBackup(bundle({ ...base, currentWeek: 4 }));
   ok(true, "currentWeek 4 (deload) is a valid rotation pointer");
   db.validateBackup(bundle({ ...base, days: lifts({ doubleProgressionSets: 100, maximumSets: 100 }) }));

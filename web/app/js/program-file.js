@@ -22,7 +22,7 @@ import { BACKUP_ENUMS, Exercises, Programs } from "./db.js";
 import * as C from "./core.js";
 
 export const PROGRAM_FILE_KIND = "cadence.program";
-export const PROGRAM_SCHEMA_VERSION = 1;
+export const PROGRAM_SCHEMA_VERSION = 2;
 
 // Allowed values come from the backup validator's table, not a second copy —
 // adding a prescription style there must not leave program files rejecting it.
@@ -31,6 +31,8 @@ const ROLES = BACKUP_ENUMS.liftRoles;
 const CONDITIONING_EFFORTS = BACKUP_ENUMS.conditioningEfforts;
 const WARMUP_POLICIES = BACKUP_ENUMS.warmupPolicies;
 const PRESCRIPTIONS = BACKUP_ENUMS.prescriptions;
+const EQUIPMENT_POLICIES = BACKUP_ENUMS.equipmentPolicies;
+const DAY_TRAINING_INTENTS = BACKUP_ENUMS.dayTrainingIntents;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -102,6 +104,7 @@ const PENDING_STATE_FIELDS = [
 const PROGRAM_PLAN_FIELDS = [
   ["name", "text"],
   ["focus", "focus"],
+  ["equipmentPolicy", "equipmentPolicy"],
   ["roundingLb", "num:0.5:50"],
   ["coachEnabled", "bool"],
   // Matches the backup contract's range. Accepting 0 or 1 here would let a
@@ -134,6 +137,7 @@ const DEFAULTS = {
   sets: 3, minReps: 8, maxReps: 12, roundingLb: 5, coachEnabled: true,
   preferredSessionSpacingDays: 3, maximumAddedSetsPerRotation: 6,
   cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, focus: "strength",
+  equipmentPolicy: "any", trainingIntent: "general",
 };
 
 const pick = (source, fields) => {
@@ -169,8 +173,13 @@ export function exportProgramFile(program, { includeState = false, includeIdenti
       // what banked sessions refer to through programTag.dayIndex.
       name: day.name ?? "",
       order,
+      trainingIntent: day.trainingIntent ?? DEFAULTS.trainingIntent,
       lifts: [...(day.lifts || [])]
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.exerciseName).localeCompare(String(b.exerciseName)))
+        // Ordinal name tiebreak (Swift tuple `<`), not locale collation — the
+        // native exporter must produce identical bytes for the same program.
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+          || (String(a.exerciseName) < String(b.exerciseName) ? -1
+            : String(a.exerciseName) > String(b.exerciseName) ? 1 : 0))
         .map((lift) => ({
           ...(includeIdentity && lift.id ? { id: lift.id } : {}),
           ...pick(lift, liftFields),
@@ -188,7 +197,9 @@ export function exportProgramFile(program, { includeState = false, includeIdenti
             ? { revertToExerciseName: lift.revertToExerciseName } : {}),
         })),
       accessories: [...(day.accessories || [])]
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.exerciseName).localeCompare(String(b.exerciseName)))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+          || (String(a.exerciseName) < String(b.exerciseName) ? -1
+            : String(a.exerciseName) > String(b.exerciseName) ? 1 : 0))
         .map((accessory) => ({
           ...(includeIdentity && accessory.id ? { id: accessory.id } : {}),
           ...pick(accessory, accessoryFields),
@@ -263,6 +274,14 @@ const checkValue = (value, kind, path) => {
     if (!FOCUSES.includes(value)) invalid(path, `unknown focus ${JSON.stringify(value)}`);
     return;
   }
+  if (kind === "equipmentPolicy") {
+    if (!EQUIPMENT_POLICIES.includes(value)) invalid(path, `unknown equipment policy ${JSON.stringify(value)}`);
+    return;
+  }
+  if (kind === "trainingIntent") {
+    if (!DAY_TRAINING_INTENTS.includes(value)) invalid(path, `unknown training intent ${JSON.stringify(value)}`);
+    return;
+  }
   if (kind === "effort") {
     if (!CONDITIONING_EFFORTS.includes(value)) invalid(path, `unknown conditioning effort ${JSON.stringify(value)}`);
     return;
@@ -303,8 +322,21 @@ export function validateProgramFile(file) {
     invalid("programSchemaVersion", `version ${version} is newer than this app supports (${PROGRAM_SCHEMA_VERSION})`);
   }
 
-  const program = file.program;
-  if (!program || typeof program !== "object" || Array.isArray(program)) invalid("program", "expected an object");
+  const rawProgram = file.program;
+  if (!rawProgram || typeof rawProgram !== "object" || Array.isArray(rawProgram)) invalid("program", "expected an object");
+  // Normalize only missing fields to literal legacy values; an explicitly
+  // unknown value still fails. This also keeps hand-authored V2 files that
+  // omit the new optional semantics aligned with Swift's Codable defaults.
+  const program = {
+    ...rawProgram,
+    equipmentPolicy: rawProgram.equipmentPolicy ?? "any",
+    days: Array.isArray(rawProgram.days)
+      ? rawProgram.days.map((day) => ({
+        ...day,
+        trainingIntent: day?.trainingIntent ?? "general",
+      }))
+      : rawProgram.days,
+  };
   checkFields(program, PROGRAM_PLAN_FIELDS, "program");
   if (program.id !== undefined && !UUID_RE.test(program.id)) invalid("program.id", "expected a UUID");
   // State keys are optional as a group, but a file that carries one carries all.
@@ -325,6 +357,7 @@ export function validateProgramFile(file) {
     if (!day || typeof day !== "object" || Array.isArray(day)) invalid(path, "expected an object");
     checkValue(day.name, "text", `${path}.name`);
     checkValue(day.order, "int:0:99", `${path}.order`);
+    checkValue(day.trainingIntent, "trainingIntent", `${path}.trainingIntent`);
     if (dayOrders.has(day.order)) invalid(`${path}.order`, `duplicate day order ${day.order}`);
     dayOrders.add(day.order);
 
@@ -602,6 +635,7 @@ export async function importProgramFile(file, { preserveIdentity = false } = {})
     ...(!existing && keepIdentity && program.id ? { uuid: program.id } : {}),
     name,
     focus: program.focus,
+    equipmentPolicy: program.equipmentPolicy,
     roundingLb: program.roundingLb,
     coachEnabled: program.coachEnabled,
     preferredSessionSpacingDays: program.preferredSessionSpacingDays,
@@ -622,6 +656,7 @@ export async function importProgramFile(file, { preserveIdentity = false } = {})
       return {
         name: day.name,
         order: day.order,
+        trainingIntent: day.trainingIntent,
         lifts: day.lifts.map((lift, i) => ({
           ...buildSlot(lift, resolved, LIFT_PLAN_FIELDS,
             { keepIdentity, keepState, extraState: LIFT_STATE_FIELDS }),

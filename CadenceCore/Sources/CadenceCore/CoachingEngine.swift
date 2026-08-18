@@ -264,6 +264,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
     public var id: String
     public var exerciseName: String
     public var dayIndex: Int
+    public var trainingIntent: DayTrainingIntent
     public var pattern: MovementPattern
     public var plannedSets: Int
     public var role: String
@@ -283,11 +284,18 @@ public struct CoachingProgramSlot: Hashable, Sendable {
     public var stallCount: Int
     /// The lifter has shelved the exercise this slot prescribes.
     public var exerciseIsShelved: Bool
+    /// Whether the client's apply path could actually rotate this slot to a
+    /// compatible variation under the program's equipment policy. `nil`
+    /// means the caller did not say (legacy snapshots): propose as before.
+    /// When `false`, the weekly max-effort rotation is suppressed — a
+    /// recommendation guaranteed to fail on Apply must not nag forever.
+    public var rotationCandidateAvailable: Bool?
 
     public init(
         id: String,
         exerciseName: String,
         dayIndex: Int,
+        trainingIntent: DayTrainingIntent = .general,
         pattern: MovementPattern,
         plannedSets: Int,
         role: String? = nil,
@@ -299,11 +307,13 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         workingSets: Int = 0,
         workingReps: Int = 0,
         stallCount: Int = 0,
-        exerciseIsShelved: Bool = false
+        exerciseIsShelved: Bool = false,
+        rotationCandidateAvailable: Bool? = nil
     ) {
         self.id = id
         self.exerciseName = exerciseName
         self.dayIndex = dayIndex
+        self.trainingIntent = trainingIntent
         self.pattern = pattern
         self.plannedSets = plannedSets
         self.role = role ?? (isMain ? LiftRole.main.rawValue : "accessory")
@@ -316,6 +326,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         self.workingReps = max(0, workingReps)
         self.stallCount = max(0, stallCount)
         self.exerciseIsShelved = exerciseIsShelved
+        self.rotationCandidateAvailable = rotationCandidateAvailable
     }
 }
 
@@ -324,13 +335,22 @@ public struct CoachingProgramSnapshot: Hashable, Sendable {
     public var expectedDayIndexes: Set<Int>
     public var slots: [CoachingProgramSlot]
     public var maximumAddedSetsPerRotation: Int
+    /// Patterns the client's apply path can actually resolve to an exercise
+    /// under the program's equipment policy. `nil` means the caller did not
+    /// say (legacy snapshots): propose as before. When present, the capacity
+    /// rule never proposes an `addPattern` that is guaranteed to fail on
+    /// Apply — a freeWeightsOnly program whose only candidates are machines
+    /// would otherwise be offered the same impossible plan every rotation.
+    public var patternsWithAvailableExercise: Set<MovementPattern>?
 
     public init(id: String, expectedDayIndexes: Set<Int>, slots: [CoachingProgramSlot],
-                maximumAddedSetsPerRotation: Int = 6) {
+                maximumAddedSetsPerRotation: Int = 6,
+                patternsWithAvailableExercise: Set<MovementPattern>? = nil) {
         self.id = id
         self.expectedDayIndexes = expectedDayIndexes
         self.slots = slots
         self.maximumAddedSetsPerRotation = max(0, maximumAddedSetsPerRotation)
+        self.patternsWithAvailableExercise = patternsWithAvailableExercise
     }
 }
 
@@ -461,6 +481,15 @@ public enum CoachingEngine {
         .shoulderStability: ["Face Pulls", "Band External Rotation", "Y-T-W Raises"],
         .adductor: ["Copenhagen Plank", "Cable Hip Adduction"],
         .core: ["Hanging Knee Raise", "Dead Bug", "Plank"],
+    ]
+
+    /// Seeded special-exercise rotations for max-effort slots. This is a
+    /// deliberately small methodology catalog, not a generic swap list:
+    /// compatible custom variations remain the fallback. Mirrors web
+    /// `PREFERRED_MAX_EFFORT_EXERCISES`.
+    public static let preferredMaxEffortExerciseNames: [MovementPattern: [String]] = [
+        .squat: ["Low Box Squat", "Front Box Squat", "Paused Box Squat"],
+        .horizontalPress: ["Floor Press", "Close-Grip Floor Press"],
     ]
 
     /// The rep window a coach-added accessory slot opens with, by pattern.
@@ -775,7 +804,7 @@ public enum CoachingEngine {
         // readiness verdict rather than gated behind a green streak. They sort
         // below every readiness rule, so the light stays the headline.
         let programChanges = (
-            rotationSuggestions(program: program, evidenceKey: evidenceKey)
+            rotationSuggestions(program: program, sessions: sessions, evidenceKey: evidenceKey)
             + linearStageSuggestions(program: program, sessions: sessions, evidenceKey: evidenceKey)
             + verticalPullPromotions(program: program)
         )
@@ -844,13 +873,36 @@ public enum CoachingEngine {
         var result: [CoachingRecommendation] = programChanges
         var capacityAdjustments: [CoachingCapacityAdjustment] = []
         var capacityEvidence: [String] = []
+        var blockedEvidence: [String] = []
         for (pattern, target) in budgets {
             let current = planned[pattern, default: 0]
-            guard current < target, changes < capacity else { continue }
+            // capacity 0 is the athlete's opt-out of automatic capacity
+            // management — no additions AND no blocked notices.
+            guard current < target, capacity > 0 else { continue }
+            let slot = program.slots.first(where: {
+                $0.pattern == pattern && $0.capacityManaged && !$0.isMain
+                    && supportsAddedCapacity($0) && $0.plannedSets < $0.maximumSets
+            })
+            var day: Int?
+            if slot == nil {
+                // A PERMANENTLY blocked floor is reported even when this
+                // rotation's budget is already spent — that is the whole
+                // point of the notice; a merely-unbudgeted fillable floor
+                // just waits for the next rotation.
+                if let available = program.patternsWithAvailableExercise,
+                   !available.contains(pattern) {
+                    blockedEvidence.append("\(pattern.name) \(current)/\(target) — no compatible exercise available")
+                    continue
+                }
+                day = preferredDay(for: pattern, slots: program.slots)
+                if day == nil {
+                    blockedEvidence.append("\(pattern.name) \(current)/\(target) — no eligible day (technique/explosive)")
+                    continue
+                }
+            }
+            guard changes < capacity else { continue }
             let amount = min(target - current, capacity - changes)
-            if let slot = program.slots.first(where: {
-                $0.pattern == pattern && $0.capacityManaged && !$0.isMain && $0.plannedSets < $0.maximumSets
-            }) {
+            if let slot {
                 let add = min(amount, slot.maximumSets - slot.plannedSets)
                 guard add > 0 else { continue }
                 capacityAdjustments.append(.addSet(
@@ -858,8 +910,7 @@ public enum CoachingEngine {
                 ))
                 capacityEvidence.append("\(pattern.name) \(current)/\(target) → +\(add)")
                 changes += add
-            } else {
-                let day = preferredDay(for: pattern, slots: program.slots)
+            } else if let day {
                 capacityAdjustments.append(.addPattern(
                     pattern: pattern, dayIndex: day, sets: amount
                 ))
@@ -875,6 +926,17 @@ public enum CoachingEngine {
                 title: "Add \(total) targeted set\(total == 1 ? "" : "s")",
                 explanation: "Two rotations were green. " + capacityEvidence.joined(separator: "; ") + ".",
                 change: .capacityPlan(capacityAdjustments),
+                evidenceKey: evidenceKey
+            ))
+        }
+        if !blockedEvidence.isEmpty {
+            result.append(CoachingRecommendation(
+                ruleID: "capacity.rotation-plan.blocked.v\(ruleVersion)",
+                priority: 39,
+                title: "Volume floors need attention",
+                explanation: "Two rotations were green, but some movement floors cannot be raised automatically: "
+                    + blockedEvidence.joined(separator: "; ") + ".",
+                change: .hold,
                 evidenceKey: evidenceKey
             ))
         }
@@ -902,9 +964,15 @@ public enum CoachingEngine {
     /// making. Both are suggestions — the engine names the slot, the client
     /// resolves a compatible variation, and the athlete decides.
     private static func rotationSuggestions(
-        program: CoachingProgramSnapshot, evidenceKey: String
+        program: CoachingProgramSnapshot, sessions: [CoachingSessionSnapshot], evidenceKey: String
     ) -> [CoachingRecommendation] {
         var result: [CoachingRecommendation] = []
+        // Only the max-effort branch reads history; most programs have no
+        // such slot and must not pay a full-history sort per report (the
+        // report already recomputes per Home render on both clients).
+        let newest: [CoachingSessionSnapshot] = program.slots
+            .contains { $0.prescriptionStyle == .maxEffort }
+            ? sessions.sorted { $0.date > $1.date } : []
         for slot in program.slots.sorted(by: { ($0.dayIndex, $0.id) < ($1.dayIndex, $1.id) }) {
             guard !slot.pattern.isConditioning else { continue }
             if slot.exerciseIsShelved {
@@ -914,6 +982,44 @@ public enum CoachingEngine {
                     title: "\(slot.exerciseName) is shelved but still programmed",
                     explanation: "This slot still prescribes \(slot.exerciseName), which you have shelved. Rotate it to a compatible variation of the same movement, or reopen the exercise.",
                     change: .rotateExercise(slotID: slot.id, exerciseName: slot.exerciseName),
+                    evidenceKey: "\(evidenceKey)-\(slot.id)"
+                ))
+                continue
+            }
+            if slot.prescriptionStyle == .maxEffort,
+               // Same principle as the capacity availability gate: a rotation
+               // the apply path cannot resolve must not be proposed weekly,
+               // forever. nil (legacy snapshot) keeps the old behavior.
+               slot.rotationCandidateAvailable != false,
+               let latestExposure = newest.lazy.compactMap({ session -> CoachingExerciseSnapshot? in
+                   guard session.rotation != ProgramProgression.deloadWeek,
+                         let exercise = session.exercises.first(where: { $0.slotID == slot.id }),
+                         // Only work PERFORMED under a max-effort prescription
+                         // counts as an exposure: a peak single logged while
+                         // the slot ran another style (or before it became
+                         // maxEffort) must not rotate the slot away. The
+                         // entry's stamped style is the session-time truth.
+                         // Only the entry matters from here — the
+                         // recommendation id is session-free.
+                         exercise.prescriptionStyle == .maxEffort,
+                         exercise.sets.contains(where: {
+                             !$0.isWarmup && $0.completed && $0.actualReps == 1
+                                 && $0.prescriptionBlock.countsAsPrescribedWork
+                         }) else { return nil }
+                   return exercise
+               }).first,
+               latestExposure.exerciseName == slot.exerciseName {
+                result.append(CoachingRecommendation(
+                    ruleID: "program.slot.rotate.max-effort-weekly.v\(ruleVersion)",
+                    priority: 65,
+                    title: "Rotate \(slot.exerciseName)",
+                    explanation: "The latest completed max-effort single used \(slot.exerciseName). Rotate to another special exercise before the next max-effort day so the effort stays specific without repeatedly testing the same lift.",
+                    change: .rotateExercise(slotID: slot.id, exerciseName: slot.exerciseName),
+                    // Portable components only (cycle/rotation key + slot id)
+                    // — NEVER the session id, which is a UUID here but an
+                    // IndexedDB autoincrement on web and is rewritten by any
+                    // backup restore, so embedding it resurfaces dismissed
+                    // recommendations. Mirrors web rotationSuggestions.
                     evidenceKey: "\(evidenceKey)-\(slot.id)"
                 ))
                 continue
@@ -1058,18 +1164,26 @@ public enum CoachingEngine {
         }
     }
 
-    private static func preferredDay(for pattern: MovementPattern, slots: [CoachingProgramSlot]) -> Int {
+    /// Technique and explosive days own quality, not fatigue accumulation.
+    /// Explicit intent is the proof; legacy `.general` days retain the old
+    /// capacity behavior exactly.
+    private static func supportsAddedCapacity(_ slot: CoachingProgramSlot) -> Bool {
+        slot.trainingIntent != .technique && slot.trainingIntent != .explosive
+    }
+
+    private static func preferredDay(for pattern: MovementPattern, slots: [CoachingProgramSlot]) -> Int? {
+        let eligible = slots.filter(supportsAddedCapacity)
         if pattern == .kneeFlexion || pattern == .hipExtension {
-            if let squatDay = slots.first(where: { $0.isMain && $0.pattern == .squat })?.dayIndex {
+            if let squatDay = eligible.first(where: { $0.isMain && $0.pattern == .squat })?.dayIndex {
                 return squatDay
             }
         }
         if pattern == .verticalPull || pattern == .shoulderStability {
-            if let upperDay = slots.first(where: {
+            if let upperDay = eligible.first(where: {
                 $0.isMain && ($0.pattern == .horizontalPress || $0.pattern == .verticalPress)
             })?.dayIndex { return upperDay }
         }
-        return slots.map(\.dayIndex).min() ?? 0
+        return eligible.map(\.dayIndex).min()
     }
 
     /// A conservative individualized frequency experiment: after at least four

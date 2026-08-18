@@ -279,6 +279,7 @@ enum ExportService {
     struct ExportProgramDay: Codable {
         let name: String
         let order: Int
+        let trainingIntent: String
         let lifts: [ExportProgramLift]
         let accessories: [ExportProgramAccessory]
     }
@@ -287,6 +288,7 @@ enum ExportService {
         let id: String
         let name: String
         let focus: String
+        let equipmentPolicy: String
         let cycleNumber: Int
         let currentWeek: Int
         let nextDayIndex: Int
@@ -483,15 +485,23 @@ enum ExportService {
             },
             programs: programs.map { p in
                 ExportProgram(
-                    id: p.id, name: p.name, focus: p.focusRaw, cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
+                    // equipmentPolicy/trainingIntent go through the coercing
+                    // accessors: import validation rejects out-of-enum values,
+                    // and an unknown raw (newer-binary downgrade, corruption)
+                    // must not produce a backup this same app refuses to
+                    // restore. Web exports the normalized value the same way.
+                    id: p.id, name: p.name, focus: p.focusRaw, equipmentPolicy: p.equipmentPolicy.rawValue,
+                    cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
                     nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: p.isActive,
                     coachEnabled: p.coachEnabled, reliableHistoryStart: p.reliableHistoryStart,
                     preferredSessionSpacingDays: p.preferredSessionSpacingDays,
                     maximumAddedSetsPerRotation: p.maximumAddedSetsPerRotation,
                     days: p.orderedDays.map { d in
                         ExportProgramDay(
-                            name: d.name, order: d.order,
-                            lifts: d.orderedLifts.map { l in
+                            name: d.name, order: d.order, trainingIntent: d.trainingIntent.rawValue,
+                            // Authored order, matching the web backup export —
+                            // role-first display must not change the bytes.
+                            lifts: d.authoredLifts.map { l in
                                 ExportProgramLift(
                                     id: l.id, exerciseName: l.exerciseName, role: l.roleRaw, order: l.order,
                                     prescription: l.prescriptionRaw, warmupPolicy: l.warmupPolicyRaw,

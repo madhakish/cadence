@@ -287,12 +287,34 @@ struct ActiveSessionView: View {
                     get: { gym?.id ?? "" },
                     set: { id in
                         guard let selected = gyms.first(where: { $0.id == id }) else { return }
+                        // Entries still tracking the OUTGOING gym's default
+                        // bar follow the explicit switch (restamp + warmup
+                        // resync); a manually chosen bar, an entry with
+                        // logged sets, or a legacy nil entry keeps its
+                        // record — the nil-only resync went dead the moment
+                        // creation started stamping every barbell entry.
+                        // Mirrors the web session gym select.
+                        let previousBarID = gym?.defaultBar.id
                         session.gymID = selected.id
                         session.gymName = selected.name
-                        for entry in session.exercises where entry.barID == nil {
-                            synchronizeWarmups(entry, bar: selected.defaultBar, gym: selected,
-                                               enteredUnit: settingsList.first?.unitDisplay.primaryUnit ?? .lb,
-                                               context: context)
+                        for entry in session.exercises {
+                            // Completed WORK freezes the bar record (the
+                            // prescription was performed on it); a tapped
+                            // warmup alone must not pin a wrong-gym bar for
+                            // the rest of the session. A manual pick that
+                            // happens to equal the outgoing default is
+                            // indistinguishable from a stamp and follows the
+                            // switch — the accepted cost of not persisting a
+                            // picked-vs-stamped bit.
+                            let hasCompletedWork = entry.sets.contains { !$0.isWarmup && $0.status == .completed }
+                            if entry.barID != nil, entry.barID == previousBarID, !hasCompletedWork {
+                                entry.barID = selected.defaultBar.id
+                            }
+                            if entry.barID == nil || entry.barID == selected.defaultBar.id {
+                                synchronizeWarmups(entry, bar: selected.defaultBar, gym: selected,
+                                                   enteredUnit: settingsList.first?.unitDisplay.primaryUnit ?? .lb,
+                                                   context: context)
+                            }
                         }
                         PersistenceErrorCenter.shared.save(context, operation: "Changing the session gym")
                     }
@@ -440,6 +462,7 @@ struct ActiveSessionView: View {
 
     private func addExercise(_ exercise: Exercise) {
         let entry = SessionExercise(order: session.exercises.count, exercise: exercise)
+        entry.stampBarID(for: exercise, bar: gym?.defaultBar ?? .bar45lb)
         context.insert(entry)
         session.exercises.append(entry)
         PersistenceErrorCenter.shared.save(context, operation: "Adding the exercise")
@@ -614,6 +637,15 @@ private struct ExerciseSection: View {
             }
         }
         entry.exercise = newExercise
+        // The swap is an entry mutation like creation: a barbell substitute
+        // must carry a bar record (keep an existing pick, else stamp the gym
+        // default) and a non-barbell substitute must not keep a stale one —
+        // an unstamped swapped entry is exactly the legacy-nil row the
+        // gym-change resync would keep reinterpreting. One spelling: the
+        // stamp helper owns the rule; only "keep an existing pick" is local.
+        if entry.barID == nil || newExercise.type != .barbell {
+            entry.stampBarID(for: newExercise, bar: gym?.defaultBar ?? .bar45lb)
+        }
         entry.sets.forEach { set in
             set.isPerSide = newExercise.isUnilateral
             if set.status == .planned {
@@ -1029,8 +1061,13 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
     var rebuilt: [SetEntry] = []
     for (index, target) in desired.enumerated() {
         if index < existing.count {
-            existing[index].weightLb = target.weightLb
-            existing[index].reps = target.reps
+            // Resync refreshes rows still PLANNED; a completed or skipped
+            // warmup is the athlete's performed record and its weight/reps
+            // are never reinterpreted against new equipment.
+            if existing[index].status == .planned {
+                existing[index].weightLb = target.weightLb
+                existing[index].reps = target.reps
+            }
             rebuilt.append(existing[index])
         } else {
             let set = SetEntry(order: index, weightLb: target.weightLb, reps: target.reps,
@@ -1046,7 +1083,11 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
         }
     }
     if existing.count > desired.count {
-        for set in existing.dropFirst(desired.count) { context.delete(set) }
+        // Only surplus PLANNED rows are dropped; performed rows survive the
+        // shrink — deleting logged work is never a resync's job.
+        for set in existing.dropFirst(desired.count) {
+            if set.status == .planned { context.delete(set) } else { rebuilt.append(set) }
+        }
     }
     let working = entry.orderedSets.filter { !$0.isWarmup }
     entry.sets = rebuilt + working
@@ -1958,11 +1999,9 @@ private struct ExercisePickerSheet: View {
     let onPick: (Exercise) -> Void
 
     private var visible: [Exercise] {
-        search.isEmpty ? exercises : exercises.filter {
-            $0.name.localizedCaseInsensitiveContains(search)
-                || $0.movementGroup.localizedCaseInsensitiveContains(search)
-                || $0.typeRaw.localizedCaseInsensitiveContains(search)
-        }
+        guard !search.isEmpty else { return exercises }
+        let term = ExerciseSearch.preparedTerm(search)
+        return exercises.filter { $0.matchesSearch(preparedTerm: term) }
     }
 
     var body: some View {

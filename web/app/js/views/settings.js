@@ -3,11 +3,14 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES } from "../constants.js";
-import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
+import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
 import { Sessions } from "../db.js";
+// Module cycle with session.js is safe: these are hoisted function exports
+// used only at runtime (session.js likewise imports exerciseDetail from here).
+import { planningBase, previewProgramPlan, volumeFallbackSets } from "./session.js";
 
 // Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
 // Peak result would otherwise make the next rollover treat the skipped Peak as a
@@ -320,11 +323,10 @@ function pickExerciseSheet(onPick) {
       const results = ui.h("div");
       const paint = () => {
         ui.clear(results);
-        const term = search.value.trim().toLowerCase();
+        // Raw query in: the shared matcher owns normalization and returns
+        // true on empty, so no pre-trim/lowercase or empty-branch here.
         const available = all.filter(C.exerciseIsAvailableForProgramming);
-        const visible = term ? available.filter((exercise) => [exercise.name, exercise.movementGroup, exercise.type,
-          C.movementPatternName(exercise.movementPattern), ...(exercise.aliases || []), ...(exercise.strategyTags || [])]
-          .some((value) => String(value || "").toLowerCase().includes(term))) : available;
+        const visible = available.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
           if (!inCat.length) continue;
@@ -346,8 +348,14 @@ function removeDay(p, day) {
 }
 
 function orderedSlots(slots = []) {
+  // Program slots (lifts AND accessories) always go through the shared
+  // role-aware ordering — its ordinal tiebreak is deliberate so the editor
+  // shows the same sequence as home/session/native/export regardless of the
+  // browser's collation. Only day lists (name-keyed, no exerciseName) keep a
+  // local sort.
+  if (slots.some((slot) => slot.exerciseName != null)) return C.orderedProgramSlots(slots);
   return [...slots].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
-    || String(a.exerciseName || a.name || "").localeCompare(String(b.exerciseName || b.name || "")));
+    || String(a.name || "").localeCompare(String(b.name || "")));
 }
 
 function moveSlot(slots, slot, delta) {
@@ -355,6 +363,14 @@ function moveSlot(slots, slot, delta) {
   const from = ordered.indexOf(slot);
   const to = from + delta;
   if (from < 0 || to < 0 || to >= ordered.length) return false;
+  // Role-first ordering is enforced at display time: a move across the
+  // main/complementary boundary would re-render in the same place while
+  // silently rewriting every authored order, so refuse it — with a reason,
+  // not a dead-feeling button. Mirrors SettingsView.moveLifts.
+  if ((ordered[from].role || null) !== (ordered[to].role || null)) {
+    ui.toast("Main work stays ahead of complementary work.");
+    return false;
+  }
   [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
   ordered.forEach((item, index) => { item.order = index; });
   return true;
@@ -474,6 +490,18 @@ export async function programEditor(p) {
         body.append(ui.field("Training focus", ui.seg(
           [{ value: "strength", label: "Strength" }, { value: "hypertrophy", label: "Hypertrophy" }, { value: "maintain", label: "Maintain" }],
           p.focus, async (v) => { p.focus = v; await Programs.save(p); })));
+        // Values from the backup enum (the same list import/export validates
+        // against), labels from the core map — a third policy added to db.js
+        // must appear here without touching this view.
+        const equipment = ui.h("select", {}, ...BACKUP_ENUMS.equipmentPolicies.map((value) => ui.h("option", {
+          value, text: C.EQUIPMENT_POLICY_LABELS[value] || value,
+          selected: value === (p.equipmentPolicy || "any"),
+        })));
+        equipment.addEventListener("change", async () => {
+          p.equipmentPolicy = equipment.value;
+          await Programs.save(p);
+        });
+        body.append(ui.field("Equipment", equipment));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Rounding" }),
             ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: ui.fmtWeight, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
@@ -512,7 +540,9 @@ export async function programEditor(p) {
         for (const day of days) {
           list.append(ui.h("div", { class: "row" },
             ui.h("div", { class: "lead", style: { cursor: "pointer", flex: "1" }, onClick: () => programDayEditor(p, day) },
-              ui.h("span", { class: "title", text: day.name }),
+              ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
+                ui.h("span", { class: "title", text: day.name }),
+                ui.h("span", { class: "pill accent", text: C.DAY_TRAINING_INTENT_LABELS[day.trainingIntent || "general"] })),
               ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
             ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { if (moveSlot(p.days, day, -1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
             ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { if (moveSlot(p.days, day, 1)) { p.nextDayIndex = Math.min(p.nextDayIndex, p.days.length - 1); await Programs.save(p); draw(); } } }),
@@ -520,7 +550,8 @@ export async function programEditor(p) {
         }
         body.append(list);
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add day", onClick: async () => {
-          p.days.push({ name: `Day ${p.days.length + 1}`, order: p.days.length, lifts: [], accessories: [] });
+          p.days.push({ name: `Day ${p.days.length + 1}`, order: p.days.length,
+            trainingIntent: "general", lifts: [], accessories: [] });
           await Programs.save(p); draw();
         } }));
         // The plan, not a snapshot: no stall counters, no stashed peak grade,
@@ -565,6 +596,15 @@ async function programDayEditor(p, day) {
         const nameInput = ui.h("input", { type: "text", value: day.name });
         nameInput.addEventListener("change", async () => { day.name = nameInput.value || day.name; api.setTitle(day.name); await Programs.save(p); });
         body.append(ui.field("Day name", nameInput));
+        const intent = ui.h("select", {}, ...BACKUP_ENUMS.dayTrainingIntents.map((value) => ui.h("option", {
+          value, text: C.DAY_TRAINING_INTENT_LABELS[value] || value,
+          selected: value === (day.trainingIntent || "general"),
+        })));
+        intent.addEventListener("change", async () => {
+          day.trainingIntent = intent.value;
+          await Programs.save(p);
+        });
+        body.append(ui.field("Training intent", intent));
 
         body.append(ui.h("div", { class: "section-title", text: "Lifts" }));
         // The editor's exercise edits (rest, load basis, station plates)
@@ -789,10 +829,9 @@ function exerciseLibrary(exercises) {
       body.append(ui.h("button", { class: "btn primary wide", text: "+ New exercise", onClick: () => newExerciseSheet(exercises, () => paint()) }));
       const paint = () => {
         ui.clear(results);
-        const term = search.value.trim().toLowerCase();
-        const visible = term ? exercises.filter((e) => [e.name, e.movementGroup, e.type,
-          C.movementPatternName(e.movementPattern), ...(e.aliases || []), ...(e.strategyTags || [])]
-          .some((value) => String(value || "").toLowerCase().includes(term))) : exercises;
+        // Raw query in: the shared matcher owns normalization and returns
+        // true on empty, so no pre-trim/lowercase or empty-branch here.
+        const visible = exercises.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
           if (!inCat.length) continue;
@@ -862,11 +901,16 @@ function newExerciseSheet(exercises, onSaved) {
 // Program membership, last-performed, and progress for one exercise —
 // assembled async and filled into `wrap` so the screen renders instantly.
 async function exerciseInsight(wrap, e) {
-  const [programs, completed] = await Promise.all([Programs.all(), Sessions.completed()]);
+  const [programs, completed, gym] = await Promise.all([Programs.all(), Sessions.completed(), Gyms.default()]);
+  const barLb = C.barLb(gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb);
   const memberships = [];
+  const cycleMemberships = [];
   for (const p of programs) {
     for (const d of p.days || []) {
-      for (const l of d.lifts || []) if (l.exerciseName === e.name) memberships.push(`${p.name} · ${d.name} (${l.role})`);
+      for (const l of d.lifts || []) if (l.exerciseName === e.name) {
+        memberships.push(`${p.name} · ${d.name} (${l.role})`);
+        cycleMemberships.push({ program: p, day: d, lift: l });
+      }
       for (const a of d.accessories || []) if (a.exerciseName === e.name) memberships.push(`${p.name} · ${d.name} (accessory)`);
     }
   }
@@ -896,6 +940,35 @@ async function exerciseInsight(wrap, e) {
       ui.h("span", { text: `Top set, last ${series.length}` }), ui.spark(series)));
   }
   wrap.append(card);
+
+  if (cycleMemberships.length) {
+    wrap.append(ui.h("div", { class: "section-title", text: "Program cycle" }));
+    for (const { program, day, lift } of cycleMemberships) {
+      const cycle = ui.h("div", { class: "card" },
+        ui.h("div", { class: "title", style: { marginBottom: "4px" }, text: `${program.name} · ${day.name}` }));
+      // The shared preview pipeline (planningBase + volume-fallback sets +
+      // gym snapping), exactly like the Home card and the session the app
+      // will create — the raw stored base showed a different table than
+      // every other surface. Base and fallback sets are phase-invariant, so
+      // compute them once per membership, not per rotation row.
+      const base = planningBase(lift, e, program, completed);
+      const addedSets = volumeFallbackSets(lift, program);
+      for (let rotation = 1; rotation <= C.DELOAD_WEEK; rotation++) {
+        const { plan } = previewProgramPlan(lift, e, program, rotation, { base, addedSets, barLb, gym });
+        const phaseLabel = C.slotPhaseLabel(rotation, lift.role, lift.prescription || "automatic",
+          e.movementGroup, program.focus) || `R${rotation}`;
+        cycle.append(ui.h("div", { class: "row" },
+          ui.h("div", { class: "lead" },
+            ui.h("span", { class: "sub", text: phaseLabel }),
+            ui.h("span", { class: rotation === program.currentWeek ? "sub accent" : "sub",
+              text: C.rotationContextLabel(rotation, program.currentWeek) })),
+          ui.h("div", { style: { textAlign: "right" } },
+            ui.h("div", { class: "title mono", text: plan.weightLb > 0 ? ui.fmtWeight(plan.weightLb) : "Bodyweight" }),
+            ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
+      }
+      wrap.append(cycle);
+    }
+  }
 }
 
 // Exported: the logger's exercise titles open the same lift info screen the

@@ -15,12 +15,41 @@ enum CoachingService {
     ) -> CoachingReport {
         let exerciseByName = exercises.indexedByName()
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
+        // The library the apply path can draw from (availability + equipment
+        // policy) — used both for pattern availability and for the per-slot
+        // rotation-candidate flag, so evaluation and Apply cannot disagree.
+        let policyExercises = exercises.filter {
+            $0.isAvailableForProgramming
+                && program.equipmentPolicy.allows(exerciseType: $0.typeRaw)
+        }
         let slots = program.days.flatMap { day -> [CoachingProgramSlot] in
-            let liftSlots = day.lifts.map { lift in
+            let liftSlots = day.lifts.map { lift -> CoachingProgramSlot in
                 let exercise = exerciseByName[lift.exerciseName]
                 let configuration = lift.prescriptionConfiguration(
                     movementGroup: exercise?.movementGroup ?? ""
                 )
+                let resolvedStyle = ProgramEngine.resolvedStyle(
+                    lift.prescription,
+                    movementGroup: exercise?.movementGroup,
+                    role: lift.role,
+                    focus: program.focus
+                )
+                // Whether Apply could actually rotate this slot — the same
+                // SwapRules filter accept() runs. Computed only for
+                // max-effort slots (the weekly rotation rule's audience).
+                let rotationCandidateAvailable: Bool? = resolvedStyle == .maxEffort
+                    ? exercise.map { current in
+                        policyExercises.contains { candidate in
+                            SwapRules.compatible(
+                                currentName: current.name, currentCategory: current.categoryRaw,
+                                currentLoadBasis: current.loadBasis, currentGroup: current.movementGroup,
+                                candidateName: candidate.name, candidateCategory: candidate.categoryRaw,
+                                candidateLoadBasis: candidate.loadBasis, candidateGroup: candidate.movementGroup,
+                                candidateShelved: candidate.isShelved || candidate.gateStatus == .shelved
+                            )
+                        }
+                    } ?? false
+                    : nil
                 let plan = ProgramEngine.programPlan(
                     for: CycleState(
                         cycleNumber: program.cycleNumber,
@@ -40,18 +69,14 @@ enum CoachingService {
                     id: lift.id,
                     exerciseName: lift.exerciseName,
                     dayIndex: day.order,
+                    trainingIntent: day.trainingIntent,
                     pattern: exercise?.movementPattern ?? .unknown,
                     plannedSets: plan.sets,
                     role: lift.role.rawValue,
                     isMain: lift.role == .main,
                     capacityManaged: lift.capacityManaged,
                     maximumSets: lift.maximumSets,
-                    prescriptionStyle: ProgramEngine.resolvedStyle(
-                        lift.prescription,
-                        movementGroup: exercise?.movementGroup,
-                        role: lift.role,
-                        focus: program.focus
-                    ),
+                    prescriptionStyle: resolvedStyle,
                     baseWeightLb: lift.baseWeightLb,
                     workingSets: lift.doubleProgressionSets,
                     workingReps: lift.currentReps <= 3 ? 3 : 5,
@@ -59,7 +84,8 @@ enum CoachingService {
                     // Reading only the settled count would hide a stall for a
                     // whole cycle — exactly the cycle worth rotating out of.
                     stallCount: lift.pendingStallCount ?? lift.stallCount,
-                    exerciseIsShelved: exercise?.gateStatus == .shelved
+                    exerciseIsShelved: exercise?.gateStatus == .shelved,
+                    rotationCandidateAvailable: rotationCandidateAvailable
                 )
             }
             let accessorySlots = day.accessories.map { accessory in
@@ -67,6 +93,7 @@ enum CoachingService {
                     id: accessory.id,
                     exerciseName: accessory.exerciseName,
                     dayIndex: day.order,
+                    trainingIntent: day.trainingIntent,
                     pattern: exerciseByName[accessory.exerciseName]?.movementPattern ?? .unknown,
                     plannedSets: accessory.sets,
                     role: "accessory",
@@ -78,11 +105,21 @@ enum CoachingService {
             }
             return liftSlots + accessorySlots
         }
+        // What the apply path could actually resolve for each pattern, so the
+        // engine never proposes an addPattern that is guaranteed to throw on
+        // Apply (a freeWeightsOnly program whose only candidates are
+        // machines, forever). Derived BY CALLING the same resolver Apply
+        // uses — a hand-copied approximation would silently diverge the
+        // moment resolution criteria change. Mirrors the web adapter.
+        let availablePatterns = Set(MovementPattern.allCases.filter {
+            preferredExercise(for: $0, in: policyExercises) != nil
+        })
         let snapshot = CoachingProgramSnapshot(
             id: program.id,
             expectedDayIndexes: Set(program.days.map(\.order)),
             slots: slots,
-            maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation
+            maximumAddedSetsPerRotation: program.maximumAddedSetsPerRotation,
+            patternsWithAvailableExercise: availablePatterns
         )
         let history = sessions.compactMap { session -> CoachingSessionSnapshot? in
             guard session.isCompleted,
@@ -151,12 +188,19 @@ enum CoachingService {
         _ recommendation: CoachingRecommendation,
         for program: Program,
         exercises: [Exercise],
+        // Required, not defaulted: history feeds the max-effort rotation
+        // seed, and a forgotten argument would compile cleanly while every
+        // returning variation silently fell to the 80% calibration ceiling.
+        sessions: [WorkoutSession],
         evidence: [String],
         context: ModelContext
     ) throws -> String {
         let before = programDescription(program)
         var decisionAfterValue: String?
         var result = "Recommendation recorded."
+        let automaticExercises = exercises.filter {
+            program.equipmentPolicy.allows(exerciseType: $0.typeRaw)
+        }
         switch recommendation.change {
         case .addSet(let slotID, let count):
             if let accessory = program.days.flatMap(\.accessories).first(where: { $0.id == slotID }) {
@@ -177,7 +221,7 @@ enum CoachingService {
             }
         case .addPattern(let pattern, let dayIndex, let sets):
             guard let day = program.day(order: dayIndex) ?? program.orderedDays.first,
-                  let exercise = preferredExercise(for: pattern, in: exercises) else {
+                  let exercise = preferredExercise(for: pattern, in: automaticExercises) else {
                 throw CoachingApplyError.noExercise(pattern.name)
             }
             let accessory = ProgramAccessory(
@@ -201,7 +245,7 @@ enum CoachingService {
             for adjustment in adjustments {
                 guard case .addPattern(let pattern, let dayIndex, let sets) = adjustment else { continue }
                 guard let day = program.day(order: dayIndex) ?? program.orderedDays.first,
-                      let exercise = preferredExercise(for: pattern, in: exercises) else {
+                      let exercise = preferredExercise(for: pattern, in: automaticExercises) else {
                     throw CoachingApplyError.noExercise(pattern.name)
                 }
                 resolvedPatterns.append((pattern, dayIndex, sets, day, exercise))
@@ -285,7 +329,7 @@ enum CoachingService {
             // The replacement is the template's own choice — pull-ups on a
             // double-progression window that grows into weighted pull-ups —
             // not a SwapRules candidate: crossing the tier is the point.
-            guard let pullUps = exercises.first(where: {
+            guard let pullUps = automaticExercises.first(where: {
                 $0.name == "Pull-ups" && $0.gateStatus != .shelved
             }) else {
                 throw CoachingApplyError.exerciseUnavailable("Pull-ups")
@@ -325,7 +369,15 @@ enum CoachingService {
             guard let current = exercises.first(where: { $0.name == exerciseName }) else {
                 throw CoachingApplyError.unknownExercise(exerciseName)
             }
-            guard let replacement = exercises.first(where: {
+            let lift = program.days.flatMap(\.lifts).first(where: { $0.id == slotID })
+            let accessory = program.days.flatMap(\.accessories).first(where: { $0.id == slotID })
+            guard lift != nil || accessory != nil else {
+                throw CoachingApplyError.unknownSlot(exerciseName)
+            }
+            guard (lift?.exerciseName ?? accessory?.exerciseName) == exerciseName else {
+                throw CoachingApplyError.slotChanged(exerciseName)
+            }
+            let compatible = automaticExercises.filter {
                 SwapRules.compatible(
                     currentName: current.name, currentCategory: current.categoryRaw,
                     currentLoadBasis: current.loadBasis, currentGroup: current.movementGroup,
@@ -333,16 +385,27 @@ enum CoachingService {
                     candidateLoadBasis: $0.loadBasis, candidateGroup: $0.movementGroup,
                     candidateShelved: $0.isShelved || $0.gateStatus == .shelved
                 )
-            }) else {
+            }.sorted { $0.name < $1.name }
+            let replacement = lift?.prescription == .maxEffort
+                ? preferredMaxEffortVariation(after: current, compatible: compatible)
+                : compatible.first
+            guard let replacement else {
                 throw CoachingApplyError.noVariation(exerciseName)
             }
-            // Same policy as the manual swap gesture: the slot keeps its load
-            // and estimate, because a compatible candidate trains the same
-            // pattern at the same tier and those remain the best prior. The
-            // stall counter does NOT carry — rotating is the answer to the
-            // stall, so inheriting its countdown would deload a lift that has
-            // not yet missed anything.
-            if let lift = program.days.flatMap(\.lifts).first(where: { $0.id == slotID }) {
+            if let lift {
+                if lift.prescription == .maxEffort {
+                    let priorBest = bestCompletedMaxEffortSingle(
+                        for: replacement.name,
+                        sessions: sessions
+                    )
+                    lift.baseWeightLb = ProgramProgression.maxEffortVariationTarget(
+                        priorBestSingleLb: priorBest,
+                        estimatedMaxLb: lift.estimatedMaxLb,
+                        fallbackBaseLb: lift.baseWeightLb,
+                        movementGroup: replacement.movementGroup,
+                        roundingLb: program.roundingLb
+                    )
+                }
                 lift.exerciseName = replacement.name
                 lift.revertToExerciseName = nil
                 lift.stallCount = 0
@@ -363,12 +426,10 @@ enum CoachingService {
                 lift.pendingStallCount = nil
                 lift.pendingLastIncrementLb = nil
                 lift.pendingNote = nil
-            } else if let accessory = program.days.flatMap(\.accessories).first(where: { $0.id == slotID }) {
+            } else if let accessory {
                 accessory.exerciseName = replacement.name
                 accessory.revertToExerciseName = nil
                 accessory.stallCount = 0
-            } else {
-                throw CoachingApplyError.unknownSlot(exerciseName)
             }
             result = "\(exerciseName) → \(replacement.name) for this slot."
         case .hold:
@@ -425,6 +486,42 @@ enum CoachingService {
         return available.first { $0.movementPattern == pattern }
     }
 
+    private static func preferredMaxEffortVariation(
+        after current: Exercise, compatible: [Exercise]
+    ) -> Exercise? {
+        guard let names = CoachingEngine.preferredMaxEffortExerciseNames[current.movementPattern],
+              !names.isEmpty else { return compatible.first }
+        let start = names.firstIndex(of: current.name).map { ($0 + 1) % names.count } ?? 0
+        for offset in 0..<names.count {
+            let name = names[(start + offset) % names.count]
+            if let exercise = compatible.first(where: { $0.name == name }) { return exercise }
+        }
+        return compatible.first
+    }
+
+    private static func bestCompletedMaxEffortSingle(
+        for exerciseName: String,
+        sessions: [WorkoutSession]
+    ) -> Double? {
+        var best: Double?
+        for session in sessions where session.isCompleted {
+            for exercise in session.exercises where exercise.exercise?.name == exerciseName {
+                for set in exercise.orderedSets where !set.isWarmup
+                    && set.status == .completed
+                    && set.reps == 1
+                    && set.prescriptionBlock.countsAsPrescribedWork
+                    && !set.flags.contains(.stoppedEarly)
+                    && set.quality != .grindy
+                    && set.quality != .wobble
+                    && set.bodyFlagSite == nil
+                    && set.autoregReason == nil {
+                    best = max(best ?? set.weightLb, set.weightLb)
+                }
+            }
+        }
+        return best
+    }
+
     private static func defaultRepRange(_ pattern: MovementPattern) -> (Int, Int) {
         CoachingEngine.defaultRepRange(for: pattern)
     }
@@ -442,6 +539,7 @@ enum CoachingService {
         case noVariation(String)
         case unknownExercise(String)
         case unknownSlot(String)
+        case slotChanged(String)
         case prescriptionChanged(String)
         /// The named exercise is missing OR shelved — distinct from
         /// unknownExercise, whose rotate-flavored copy ("a compatible
@@ -458,6 +556,8 @@ enum CoachingService {
                 return "\(name) is no longer in the library, so a compatible variation cannot be chosen."
             case .unknownSlot(let name):
                 return "The program slot for \(name) no longer exists."
+            case .slotChanged(let name):
+                return "The program slot changed after the \(name) recommendation, so no rotation was applied."
             case .prescriptionChanged(let name):
                 return "The program slot for \(name) changed after this recommendation, so triples were not applied."
             case .exerciseUnavailable(let name):

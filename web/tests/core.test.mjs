@@ -609,6 +609,10 @@ eq(C.sessionTagCurrent(2, 1, 3, 2, 1, 0), false, "stale day → not current");
   eq(C.canResumeSession(1, 1, 3, 2, 1, 3, plan, plan), false, "stale cycle → build fresh");
   eq(C.canResumeSession(2, 2, 3, 2, 1, 3, plan, plan), false, "stale week → build fresh");
   eq(C.canResumeSession(2, 1, 3, 2, 1, 3, [], plan), false, "pre-snapshot session (no plan names) → build fresh");
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Dips", "Overhead Press", "Incline DB Press"], plan), true,
+    "same composition in a different order resumes — role-first display reordering (and pre-role-first snapshots) must not orphan an in-flight session");
+  eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Dips", "Dips", "Overhead Press"], plan), false,
+    "plan names compare as a multiset, not a set — duplicates must match");
 }
 
 // RestClock.add shrinks as well as extends, flooring at 0 (subtract control)
@@ -1135,6 +1139,18 @@ eq(C.cardioDefaultLoadLb("Ruck"), 20, "[INV-RUCK-CARRIES-ITS-LOAD] a ruck starts
 eq(C.cardioDefaultLoadLb("Sled Push"), null, "sleds vary too much to have an honest default");
 eq(C.cardioDefaultLoadLb("Walk"), null, "unloaded work has no default load");
 eq(C.CARDIO_LOAD_INCREMENT_LB, 10, "[INV-RUCK-CARRIES-ITS-LOAD] packs move in 10 lb steps");
+ok(C.equipmentPolicyAllows("any", "machine"), "legacy programs may use any authored equipment");
+ok(!C.equipmentPolicyAllows("freeWeightsOnly", "machine"),
+  "free-weight programs reject machine coaching substitutions");
+// "timed" is a LOGGING type, not equipment — every timed movement in the
+// catalog is a bodyweight isometric (planks, holds), and excluding it made
+// the adductor volume floor permanently unfillable under this policy.
+for (const type of ["barbell", "dumbbell", "kettlebell", "bodyweight", "timed"]) {
+  ok(C.equipmentPolicyAllows("freeWeightsOnly", type), `free-weight policy allows ${type}`);
+}
+for (const type of ["band", "conditioning"]) {
+  ok(!C.equipmentPolicyAllows("freeWeightsOnly", type), `free-weight policy rejects ${type}`);
+}
 eq(C.cardioSetLabel(3, 2700, null, 20), "20 lb · 3 mi · 45:00 · 4 mph",
   "[INV-RUCK-CARRIES-ITS-LOAD] the pack weight leads the label");
 eq(C.cardioSetLabel(3, 2700, null, 0), "3 mi · 45:00 · 4 mph", "unloaded work shows no load");
@@ -1289,6 +1305,16 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(C.movementPattern("Back Extension", "hinge"), "hipExtension", "back extensions classify as hip extension");
   eq(C.movementPattern("Overhead Press", "press"), "verticalPress", "OHP classifies vertically");
 
+  const searchable = { name: "Nordic Hamstring Curl", movementGroup: "hinge", movementPattern: "kneeFlexion",
+    type: "bodyweight", aliases: ["Nordic curl"], strategyTags: ["posterior-chain"] };
+  for (const term of ["nordic ham", "HINGE", "isolation", "body", "nordic curl", "posterior"]) {
+    ok(C.exerciseMatchesSearch(searchable, term), `shared exercise search matches ${term}`);
+  }
+  ok(C.exerciseMatchesSearch({ name: "Dégagé Step", movementGroup: "squat", movementPattern: "unilateralKnee", type: "bodyweight" }, "degage"),
+    "exercise search is diacritic-insensitive");
+  ok(C.exerciseMatchesSearch(searchable, "  ") && !C.exerciseMatchesSearch(searchable, "row"),
+    "empty search includes everything and unrelated text is rejected");
+
   const coachingProgram = {
     id: "program", expectedDayIndexes: [0, 1, 2, 3],
     slots: [
@@ -1395,6 +1421,50 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(!!hamstrings, "hamstring isolation gap is proposed");
   eq(hamstrings.dayIndex, 0, "hamstrings slot onto the squat-led day");
 
+  const qualityOnlyProgram = {
+    ...coachingProgram,
+    slots: coachingProgram.slots.map((slot, index) => ({
+      ...slot, trainingIntent: index % 2 === 0 ? "technique" : "explosive",
+    })),
+  };
+  report = C.evaluateCoaching(qualityOnlyProgram, sessions);
+  ok(!report.recommendations.some((candidate) => candidate.change.type === "capacityPlan"),
+    "technique and explosive days never become automatic accessory-volume sinks");
+  const blocked = report.recommendations.find((candidate) =>
+    candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
+  ok(!!blocked && blocked.change.type === "hold",
+    "an unmet volume floor with no eligible day is surfaced, not silently dropped");
+  ok(blocked.explanation.includes("no eligible day (technique/explosive)"),
+    "the blocked evidence names why the floor cannot be raised");
+
+  // The client can declare which patterns its library/equipment policy can
+  // actually fill; the engine must never propose an addPattern that is
+  // guaranteed to fail on Apply (and must say so instead).
+  const constrainedProgram = {
+    ...coachingProgram,
+    patternsWithAvailableExercise: ["kneeFlexion", "shoulderStability", "adductor", "core"],
+  };
+  report = C.evaluateCoaching(constrainedProgram, sessions);
+  const constrainedPlan = report.recommendations.find((r) => r.change.type === "capacityPlan");
+  ok(!!constrainedPlan && !constrainedPlan.change.additions.some((a) => a.pattern === "verticalPull"),
+    "a pattern with no policy-compatible exercise is never proposed");
+  const constrainedBlocked = report.recommendations.find((candidate) =>
+    candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
+  ok(!!constrainedBlocked && constrainedBlocked.explanation.includes("no compatible exercise available"),
+    "the impossible pattern is reported as blocked instead of re-proposed forever");
+
+  // Permanently blocked floors report even when this rotation's budget is
+  // already spent — only fillable-but-unbudgeted floors wait silently.
+  const spentBudget = {
+    ...coachingProgram, maximumAddedSetsPerRotation: 3,
+    patternsWithAvailableExercise: ["kneeFlexion", "shoulderStability", "core"],
+  };
+  report = C.evaluateCoaching(spentBudget, sessions);
+  const spentBlocked = report.recommendations.find((candidate) =>
+    candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
+  eq((spentBlocked?.explanation.match(/no compatible exercise available/g) || []).length, 2,
+    "both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings");
+
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3));
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(2, dayIndex, 12 + dayIndex * 3, 105, dayIndex === 0 ? 90 : 105));
@@ -1453,6 +1523,48 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   suggestion = report.recommendations.find(rotationOf);
   ok(!!suggestion, "one non-success cycle on a lift slot proposes a rotation");
   eq(suggestion.ruleID, `program.slot.rotate.stalled.v${C.COACHING_RULE_VERSION}`, "stalled slots get their own rule");
+
+  const maxEffortSessions = structuredClone(greenSessions);
+  const latestSquat = maxEffortSessions.filter((session) => session.dayIndex === 0).at(-1);
+  latestSquat.exercises[0].prescriptionStyle = "maxEffort";
+  latestSquat.exercises[0].sets = [{
+    actualWeightLb: 115, actualReps: 1, plannedWeightLb: 115, plannedReps: 1,
+    completed: true, prescriptionBlock: "work",
+  }];
+  report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), maxEffortSessions);
+  suggestion = report.recommendations.find((candidate) =>
+    candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`);
+  ok(!!suggestion && suggestion.change.slotID === "squat",
+    "a completed max-effort exposure proposes a weekly special-exercise rotation");
+  ok(suggestion.id.endsWith("-squat") && !suggestion.id.includes(latestSquat.id),
+    "the rotation id carries only portable components — a client-local session id would resurface dismissed prompts after a backup restore");
+
+  report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), greenSessions);
+  ok(!report.recommendations.some((candidate) =>
+    candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
+  "opening a session or completing volume work is not a max-effort exposure");
+
+  // A completed single performed under ANOTHER prescription style (a peak
+  // single, or work banked before the slot became maxEffort) is not a
+  // max-effort exposure either — only the entry's stamped session-time style
+  // qualifies it.
+  const foreignStyleSessions = structuredClone(maxEffortSessions);
+  foreignStyleSessions.filter((session) => session.dayIndex === 0).at(-1)
+    .exercises[0].prescriptionStyle = "wave";
+  report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), foreignStyleSessions);
+  ok(!report.recommendations.some((candidate) =>
+    candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
+  "a single performed under another style never counts as a max-effort exposure");
+
+  // Same principle as the capacity availability gate: a rotation the apply
+  // path cannot resolve (no compatible variation under the equipment policy)
+  // must not be proposed weekly, forever.
+  report = C.evaluateCoaching(
+    withSlot("squat", { prescriptionStyle: "maxEffort", rotationCandidateAvailable: false }),
+    maxEffortSessions);
+  ok(!report.recommendations.some((candidate) =>
+    candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
+  "an unresolvable max-effort rotation is never proposed");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
@@ -1703,9 +1815,10 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   const meMiss2 = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);
   eq(meMiss2.state.stallCount, 0, "ME misses never accrue a counter another style could trip over");
   const madeSingle = { ...cleanTop, prescribedReps: 1, topSetWeightLb: 325, topSetReps: 1 };
-  const meUp = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, madeSingle, "strength", "maxEffort", "press", 5);
+  const meUp = C.advanceProgramLift({ ...tmState, baseWeightLb: 315, estimatedMaxLb: 300 }, madeSingle, "strength", "maxEffort", "press", 5);
   eq(meUp.state.baseWeightLb, 330, "ME anchors a heavier made single before adding the next step");
-  eq(meUp.state.estimatedMaxLb, 330, "a single is not inflated through a rep-max formula");
+  eq(meUp.state.estimatedMaxLb, 300,
+    "a special-exercise single never replaces the stable reference estimate");
   const meMiss = C.advanceProgramLift({ ...tmState, baseWeightLb: 315 }, missedTop, "strength", "maxEffort", "press", 5);
   eq(meMiss.state.baseWeightLb, 315, "ME missed single holds — rotate instead");
   const deHold = C.advanceProgramLift({ ...tmState, baseWeightLb: 150 }, cleanTop, "strength", "dynamicEffort", "squat", 5);
@@ -2326,16 +2439,42 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     { exerciseName: "B Lift", role: "complementary", order: 2 },
     { exerciseName: "A Lift", role: "main", order: 5 },
   ];
-  ok(C.orderedProgramSlots(authored).map((s) => s.exerciseName).join(",") === "B Lift,A Lift",
-    "authored orders win over roles and names");
+  ok(C.orderedProgramSlots(authored).map((s) => s.exerciseName).join(",") === "A Lift,B Lift",
+    "main work stays ahead of complementary work even when authored orders cross roles");
   const legacy = [
     { exerciseName: "Z Complement", role: "complementary", order: 0 },
     { exerciseName: "A Main", role: "main", order: 0 },
   ];
-  ok(C.orderedProgramSlots(legacy, true)[0].exerciseName === "A Main",
-    "legacy all-equal orders keep main-first when the caller asks");
   ok(C.orderedProgramSlots(legacy)[0].exerciseName === "A Main",
-    "without role awareness, equal orders tie-break on ordinal name");
+    "legacy all-equal orders keep main-first");
+  const sameRole = [
+    { exerciseName: "Second Main", role: "main", order: 2 },
+    { exerciseName: "First Main", role: "main", order: 1 },
+  ];
+  ok(C.orderedProgramSlots(sameRole)[0].exerciseName === "First Main",
+    "authored order still wins within the same role");
+}
+
+// ---- Exercise-detail rotation context ----
+{
+  eq(C.rotationContextLabel(1, 2), "Previous", "R1 is previous while R2 is current");
+  eq(C.rotationContextLabel(2, 2), "Current", "R2 is current");
+  eq(C.rotationContextLabel(3, 2), "Next", "R3 is next");
+  eq(C.rotationContextLabel(4, 2), "Recovery", "R4 is always the recovery row");
+  eq(C.rotationContextLabel(1, 3), "Next cycle", "R1 follows R3 after recovery");
+  eq(C.rotationContextLabel(4, 4), "Current recovery", "current R4 is named as recovery");
+}
+
+// ---- Max-effort variation targets: exercise-specific, never inherited ----
+{
+  eq(C.maxEffortVariationTarget(315, 405, 365, "squat", 5), 325,
+    "a returning lower-body variation adds 10 to its own best single");
+  eq(C.maxEffortVariationTarget(225, 300, 275, "press", 5), 230,
+    "a returning upper-body variation adds 5 to its own best single");
+  eq(C.maxEffortVariationTarget(null, 405, 365, "squat", 5), 325,
+    "an unseen variation gets a conservative 80% calibration ceiling");
+  eq(C.maxEffortVariationTarget(null, 0, 275, "press", 5), 275,
+    "missing estimates use the explicit fallback base");
 }
 
 // ---- Vertical-pull tier promotion (mirrors CoachingEngineTests) ----

@@ -229,6 +229,24 @@ final class Exercise {
     var isAvailableForProgramming: Bool { gateStatus != .shelved }
 
     var isMainLift: Bool { category == .main }
+
+    func matchesSearch(_ query: String) -> Bool {
+        matchesSearch(preparedTerm: ExerciseSearch.preparedTerm(query))
+    }
+
+    /// Per-keystroke filters normalize the query once (ExerciseSearch
+    /// .preparedTerm) instead of once per exercise.
+    func matchesSearch(preparedTerm term: String) -> Bool {
+        ExerciseSearch.matches(
+            preparedTerm: term,
+            name: name,
+            movementGroup: movementGroup,
+            movementPatternName: movementPattern.name,
+            exerciseType: typeRaw,
+            aliases: aliases,
+            strategyTags: strategyTags
+        )
+    }
 }
 
 extension Array where Element == Exercise {

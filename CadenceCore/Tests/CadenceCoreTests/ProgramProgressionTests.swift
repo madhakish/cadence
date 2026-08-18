@@ -14,6 +14,25 @@ final class ProgramProgressionTests: XCTestCase {
         ProgramLiftState(baseWeightLb: 175, estimatedMaxLb: 226, stallCount: 0, role: .main, lastIncrementLb: 0)
     }
 
+    func testMaxEffortVariationTargetUsesThatVariationsOwnHistory() {
+        XCTAssertEqual(P.maxEffortVariationTarget(
+            priorBestSingleLb: 315, estimatedMaxLb: 405, fallbackBaseLb: 365,
+            movementGroup: "squat", roundingLb: 5
+        ), 325)
+        XCTAssertEqual(P.maxEffortVariationTarget(
+            priorBestSingleLb: 225, estimatedMaxLb: 300, fallbackBaseLb: 275,
+            movementGroup: "press", roundingLb: 5
+        ), 230)
+        XCTAssertEqual(P.maxEffortVariationTarget(
+            priorBestSingleLb: nil, estimatedMaxLb: 405, fallbackBaseLb: 365,
+            movementGroup: "squat", roundingLb: 5
+        ), 325, "an unseen variation gets a conservative 80% calibration ceiling")
+        XCTAssertEqual(P.maxEffortVariationTarget(
+            priorBestSingleLb: nil, estimatedMaxLb: 0, fallbackBaseLb: 275,
+            movementGroup: "press", roundingLb: 5
+        ), 275, "missing estimates fall back without carrying a different PR")
+    }
+
     // [INV-PLATES-ARE-THE-CURRENCY] The twin stack grades AT plan — closing
     // the stall trap where a kg gym's honest session read as a below-plan miss.
     func testTwinStackGradesAtPlan() {
@@ -369,6 +388,10 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertFalse(resume(3, 3, plan, plan, tagCycle: 1), "stale cycle → build fresh")
         XCTAssertFalse(resume(3, 3, plan, plan, tagWeek: 2), "stale week → build fresh")
         XCTAssertFalse(resume(3, 3, [], plan), "pre-snapshot session → build fresh")
+        XCTAssertTrue(resume(3, 3, ["Dips", "Overhead Press", "Incline DB Press"], plan),
+                      "same composition in a different order → resume: role-first display reordering (and pre-role-first snapshots) must not orphan an in-flight session")
+        XCTAssertFalse(resume(3, 3, ["Dips", "Dips", "Overhead Press"], plan),
+                       "plan names compare as a multiset — duplicates must match")
     }
 
     func testBelowPlanWorkFailsCycle() {
@@ -667,7 +690,7 @@ final class ProgramProgressionTests: XCTestCase {
     }
 
     func testMaxEffortAddsAfterMadeSinglesAndHoldsOnMisses() {
-        let state = ProgramLiftState(baseWeightLb: 315, estimatedMaxLb: 330)
+        let state = ProgramLiftState(baseWeightLb: 315, estimatedMaxLb: 300)
         let madeSingle = CycleLiftPerformance(
             prescribedSets: 1, prescribedReps: 1, completedSets: 1,
             anyStoppedEarly: false, anyDroppedLoad: false, grindyOrWobbleSets: 0,
@@ -676,7 +699,8 @@ final class ProgramProgressionTests: XCTestCase {
         let up = ProgramProgression.advanceProgramLift(state, perf: madeSingle, focus: .strength,
                                                        style: .maxEffort, movementGroup: "press", roundingLb: 5)
         XCTAssertEqual(up.state.baseWeightLb, 330, "a heavier made single becomes the anchor before adding the next step")
-        XCTAssertEqual(up.state.estimatedMaxLb, 330, "a single is not inflated through a rep-max formula")
+        XCTAssertEqual(up.state.estimatedMaxLb, 300,
+                       "a special-exercise single never replaces the stable reference estimate")
         let miss = ProgramProgression.advanceProgramLift(state, perf: topSetPerf(made: false), focus: .strength,
                                                          style: .maxEffort, movementGroup: "press", roundingLb: 5)
         XCTAssertEqual(miss.state.baseWeightLb, 315)

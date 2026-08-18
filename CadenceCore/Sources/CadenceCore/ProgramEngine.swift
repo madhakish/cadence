@@ -464,6 +464,17 @@ public enum ProgramEngine {
         return Array(0..<orders.count)
     }
 
+    /// Main work always precedes complementary work; the athlete's authored
+    /// order is preserved inside each role. Mirrors web `orderedProgramSlots`.
+    public static func programSlotPrecedes(
+        lhsRole: String, lhsOrder: Int, lhsName: String,
+        rhsRole: String, rhsOrder: Int, rhsName: String
+    ) -> Bool {
+        let lhs = (lhsRole == LiftRole.main.rawValue ? 0 : 1, lhsOrder, lhsName)
+        let rhs = (rhsRole == LiftRole.main.rawValue ? 0 : 1, rhsOrder, rhsName)
+        return lhs < rhs
+    }
+
     /// Movement-aware offset defaults for `offsetWave`. A stored zero means
     /// "use the default"; an explicit value stays user-owned.
     ///
@@ -515,6 +526,26 @@ public enum ProgramEngine {
     public static func rotationLabel(rotation: Int) -> String {
         let clamped = Swift.min(Swift.max(rotation, 1), ProgramProgression.deloadWeek)
         return "Rotation \(clamped) of \(ProgramProgression.deloadWeek)"
+    }
+
+    /// Relative position used by the exercise-detail four-rotation preview.
+    /// Recovery is called out separately so R3 can name both the recovery
+    /// bridge and the first work rotation of the next cycle honestly.
+    /// Mirrors web `rotationContextLabel`.
+    public static func rotationContextLabel(rotation: Int, currentRotation: Int) -> String {
+        let current = Swift.min(Swift.max(currentRotation, 1), ProgramProgression.deloadWeek)
+        if rotation == current {
+            return rotation == ProgramProgression.deloadWeek ? "Current recovery" : "Current"
+        }
+        if rotation == ProgramProgression.deloadWeek { return "Recovery" }
+        // deloadWeek - 1 is the last work rotation; the cycle length has
+        // exactly one owner, so no literal wrap point here.
+        let lastWork = ProgramProgression.deloadWeek - 1
+        let previous = current == 1 || current == ProgramProgression.deloadWeek ? lastWork : current - 1
+        if rotation == previous { return "Previous" }
+        let next = current >= lastWork ? 1 : current + 1
+        if rotation == next { return current >= lastWork ? "Next cycle" : "Next" }
+        return "Later"
     }
 
     /// What a slot does, for the badge beside its name: `Main · 5/3/1`,
