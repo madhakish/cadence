@@ -2168,6 +2168,63 @@ export function sessionSpacingShortfall(daysSinceLastSession, preferredDays) {
   return shortfall > 0 ? shortfall : null;
 }
 
+// ---- Training-context intervals (one spelling) ------------------------------
+// A typed calendar span the lifter declares over their timeline. The kinds
+// are deliberately distinct — they differ in whether load was applied,
+// whether the body was recovering, and what the engine should do afterwards
+// (INV-INTERVAL-KINDS-STAY-DISTINCT). Nothing collapses them into a single
+// "break". Callers pass inclusive day-bounded epoch milliseconds
+// (start-of-day / end-of-day) so time zones resolve at the edge and the
+// shared logic stays pure number comparison. Mirrors CadenceCore
+// TrainingIntervals.
+export const TRAINING_INTERVAL_KINDS = ["deload", "rest", "away", "activeRecovery"];
+export const TRAINING_INTERVAL_KIND_LABELS = {
+  deload: "Deload", rest: "Rest", away: "Away", activeRecovery: "Active recovery",
+};
+// The kinds that excuse an absence: a day inside one is never a missed day,
+// never breaks a streak, and never reads as a lapse
+// (INV-INTERVAL-IS-NOT-A-GAP). Deload deliberately does NOT excuse absence —
+// deload days still expect sessions.
+export const ABSENCE_EXCUSING_INTERVAL_KINDS = ["rest", "away", "activeRecovery"];
+
+const intervalEndMs = (interval) => Math.max(interval.startMs, interval.endMs);
+
+export function intervalContains(interval, timeMs) {
+  return timeMs >= interval.startMs && timeMs <= intervalEndMs(interval);
+}
+
+export function insideInterval(timeMs, intervals = [], kinds = null) {
+  return intervals.some((interval) => (kinds == null || kinds.includes(interval.kind))
+    && intervalContains(interval, timeMs));
+}
+
+// Whether the gap between two trained moments is excused: some
+// absence-excusing interval overlaps the open time between them. The spacing
+// advisory and the shorter-spacing trial must not read a declared break as a
+// training-frequency signal.
+export function intervalGapExcused(fromMs, toMs, intervals = []) {
+  if (!(toMs > fromMs)) return false;
+  return intervals.some((interval) => ABSENCE_EXCUSING_INTERVAL_KINDS.includes(interval.kind)
+    && interval.startMs <= toMs && intervalEndMs(interval) >= fromMs);
+}
+
+// Work logged inside an active-recovery interval is real, banked history —
+// and explicitly off-program (INV-RECOVERY-WORK-IS-OFF-PROGRAM).
+export function isOffProgramTime(timeMs, intervals = []) {
+  return insideInterval(timeMs, intervals, ["activeRecovery"]);
+}
+
+// The away interval most recently ended before now, when it ended within the
+// window and no session has been banked since it ended — the moment to
+// suggest re-entry rather than straight continuation.
+export function recentReturnFromAway(nowMs, lastSessionMs, intervals = [], windowMs = 7 * 86_400_000) {
+  return intervals
+    .filter((interval) => interval.kind === "away"
+      && intervalEndMs(interval) < nowMs && nowMs - intervalEndMs(interval) <= windowMs
+      && (lastSessionMs == null || lastSessionMs <= intervalEndMs(interval)))
+    .reduce((latest, interval) => (!latest || intervalEndMs(interval) > intervalEndMs(latest) ? interval : latest), null);
+}
+
 // Accessory double progression. state: { sets, minReps, maxReps, currentReps,
 // weightLb, incrementLb, stallCount }; perf: { completedSets, minRepsAchieved, anyStoppedEarly }
 export function advanceAccessory(state, perf) {

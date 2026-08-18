@@ -35,8 +35,16 @@
 /// Version 9 adds the program-level `equipmentPolicy` and per-day
 /// `trainingIntent`. Both are additive, and older bundles restore with the
 /// literal legacy values `any` and `general` respectively.
+///
+/// Version 10 adds the `intervals` collection (typed calendar spans: deload,
+/// rest, away, active recovery) and the per-session-exercise `barIdManual`
+/// marker (emitted only when true). Both are additive: a v≤9 bundle restores
+/// with no intervals and every bar treated as stamped — exactly the pre-v10
+/// behavior. Older importers reject a v10 bundle on the version gate, which
+/// is correct: silently dropping a declared break would turn it back into an
+/// apparent lapse after a restore.
 public enum BackupContract {
-    public static let currentSchemaVersion = 9
+    public static let currentSchemaVersion = 10
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

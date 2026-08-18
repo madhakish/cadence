@@ -107,6 +107,12 @@ final class SessionExercise {
     /// current gym default so later gym-setting edits cannot reinterpret old
     /// plate stacks. Nil remains valid for legacy/non-barbell history.
     var barID: String?
+    /// Whether `barID` was picked BY HAND rather than stamped from the gym
+    /// default. A manual pick never follows a mid-session gym switch, even
+    /// when it happens to equal the outgoing gym's default bar — the
+    /// ambiguity that was previously an accepted cost. `false` reproduces
+    /// every pre-V10 row exactly (stamps follow the gym, as they always did).
+    var barIDIsManual: Bool = false
     var exercise: Exercise?
     var session: WorkoutSession?
     @Relationship(deleteRule: .cascade, inverse: \SetEntry.sessionExercise)

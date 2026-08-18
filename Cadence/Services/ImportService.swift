@@ -41,6 +41,11 @@ enum ImportService {
         var checkIns: [CheckInDTO]?; var milestones: [MilestoneDTO]?; var programs: [ProgramDTO]?
         var tracks: [Track]?; var gyms: [GymDTO]?; var exercises: [ExerciseDef]?; var settings: SettingsDTO?
         var coachingDecisions: [CoachingDecisionDTO]?
+        var intervals: [IntervalDTO]?
+    }
+    private struct IntervalDTO: Decodable {
+        var id: String?; var kind: String?; var startDate: String?; var endDate: String?
+        var enteredAsDays: Bool?; var note: String?; var programId: String?
     }
     private struct Session: Decodable {
         var id: String?; var date: Date?; var notes: String?; var gym: String?; var gymId: String?; var isCompleted: Bool?
@@ -65,7 +70,7 @@ enum ImportService {
     }
     private struct ExerciseEntry: Decodable {
         var name: String?; var notes: String?; var phase: String?; var role: String?
-        var programSlotId: String?; var barId: String?
+        var programSlotId: String?; var barId: String?; var barIdManual: Bool?
         var plannedWeightLb: Double?; var targetWeightLb: Double?; var plannedSets: Int?; var plannedReps: Int?
         var plannedDurationSeconds: Int?; var fallbackWeightLb: Double?; var prescriptionStyle: String?
         var sets: [SetDTO]?
@@ -511,6 +516,28 @@ enum ImportService {
         }
         try unique((bundle.coachingDecisions ?? []).compactMap(\.id), "coachingDecisions.id")
 
+        // V10 typed calendar spans. Present values validate at any version
+        // (the vocabulary is closed); the kind is required on v10 bundles.
+        for (i, interval) in (bundle.intervals ?? []).enumerated() {
+            let path = "intervals[\(i)]"
+            _ = try portableID(interval.id, "\(path).id")
+            try known(interval.kind, Set(TrainingIntervalKind.allCases.map(\.rawValue)),
+                      "\(path).kind", required: schemaVersion >= 10)
+            guard let start = interval.startDate.flatMap(IntervalDay.date(from:)) else {
+                throw ImportError.invalidData("\(path).startDate: expected an ISO date")
+            }
+            guard let end = interval.endDate.flatMap(IntervalDay.date(from:)) else {
+                throw ImportError.invalidData("\(path).endDate: expected an ISO date")
+            }
+            if end < start {
+                throw ImportError.invalidData("\(path).endDate: expected endDate on or after startDate")
+            }
+            if interval.programId != nil {
+                _ = try portableID(interval.programId, "\(path).programId", allowLegacy: true)
+            }
+        }
+        try unique((bundle.intervals ?? []).compactMap(\.id), "intervals.id")
+
         if let settings = bundle.settings {
             try known(settings.unitDisplay, ["lbPrimary", "kgPrimary", "both"], "settings.unitDisplay", required: schemaVersion >= 1)
             try known(settings.theme, ["memento", "carbon", "slate", "system"], "settings.theme", required: schemaVersion >= 1)
@@ -640,6 +667,21 @@ enum ImportService {
             if let decisions = bundle.coachingDecisions {
                 try context.delete(model: CoachingDecision.self)
                 for value in decisions { context.insert(makeCoachingDecision(value)) }
+            }
+            if let intervals = bundle.intervals {
+                try context.delete(model: TrainingInterval.self)
+                for value in intervals {
+                    let record = TrainingInterval(
+                        kindRaw: value.kind ?? "rest",
+                        startDate: value.startDate.flatMap(IntervalDay.date(from:)) ?? .now,
+                        endDate: value.endDate.flatMap(IntervalDay.date(from:)) ?? .now,
+                        enteredAsDays: value.enteredAsDays ?? true,
+                        note: value.note ?? "",
+                        programID: value.programId
+                    )
+                    if let id = value.id { record.id = id }
+                    context.insert(record)
+                }
             }
             if let st = bundle.settings {
                 try applySettings(st, restoredExercises: bundle.exercises != nil, in: context)
@@ -911,6 +953,7 @@ enum ImportService {
             entry.programRole = e.role.flatMap { $0.isEmpty ? nil : $0 }
             entry.programSlotID = e.programSlotId
             entry.barID = e.barId
+            entry.barIDIsManual = e.barIdManual ?? false
             entry.plannedWeightLb = e.plannedWeightLb
             entry.targetWeightLb = e.targetWeightLb
             entry.plannedSets = e.plannedSets
