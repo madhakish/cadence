@@ -27,7 +27,9 @@ you meant it.
   when a rest, away, or active-recovery span covers the gap.
 - The coach's shorter-spacing trial ignores gaps a declared break overlaps —
   a vacation is not evidence about your preferred training frequency.
-- The History log shows the break as its own row among your sessions.
+- The History log shows the break as its own row among your sessions, and the
+  progression charts shade the break's days behind the lines — a plateau or a
+  drop carries its visible cause.
 - Nothing about the program itself moves: cycle, rotation, and the next-day
   pointer are exactly where you left them, and deleting a break simply
   restores the ordinary reading of those days.

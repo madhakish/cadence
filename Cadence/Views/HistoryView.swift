@@ -891,6 +891,8 @@ struct ProgressionChartsView: View {
     private var mainLifts: [Exercise]
     @Query private var settingsList: [AppSettings]
     @Query private var programs: [Program]
+    @Query(sort: \TrainingInterval.startDate)
+    private var trainingIntervals: [TrainingInterval]
 
     // Defaults to the first main lift in the library on appear — no
     // hardcoded exercise name (the library is user data).
@@ -1233,6 +1235,29 @@ struct ProgressionChartsView: View {
         return pts.filter { abs($0.date.timeIntervalSince(nearest.date)) < 1 }
     }
 
+    /// Declared training breaks as shaded bands BEHIND the lines (issue #97):
+    /// a plateau or a drop should carry its visible cause. Clamped to the
+    /// plotted span — a break outside it has nothing to explain here.
+    /// Mirrors web progressionChart's interval bands.
+    @ChartContentBuilder
+    private func intervalBands(_ pts: [Point]) -> some ChartContent {
+        let dates = pts.map(\.date)
+        if let minDate = dates.min(), let maxDate = dates.max(), minDate < maxDate {
+            ForEach(trainingIntervals) { interval in
+                let snapshot = interval.snapshot
+                let start = Date(timeIntervalSince1970: snapshot.startMs / 1000)
+                let end = Date(timeIntervalSince1970: snapshot.endMs / 1000)
+                if start < maxDate && end > minDate {
+                    RectangleMark(
+                        xStart: .value("Break start", max(start, minDate)),
+                        xEnd: .value("Break end", min(end, maxDate))
+                    )
+                    .foregroundStyle(Color.secondary.opacity(0.12))
+                }
+            }
+        }
+    }
+
     @ChartContentBuilder
     private func futureBand(_ pts: [Point], _ trend: Projection?) -> some ChartContent {
         if let trend, let range = loadRange(in: pts, including: trend) {
@@ -1432,6 +1457,7 @@ struct ProgressionChartsView: View {
                                        ? nil : Text("Rep PRs for this lift are under the Rep PRs plot."))
         } else {
             Chart {
+                intervalBands(pts)
                 futureBand(pts, trend)
                 performedMarks(pts)
                 peakTargetMark

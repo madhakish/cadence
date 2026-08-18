@@ -196,8 +196,9 @@ Declaring an interval never mutates program state
 - For a week after an **away** span ends with nothing banked since, Today
   offers a re-entry note instead of resuming as if nothing happened.
 
-Intervals appear as rows in the History log and travel in backups (schema
-version 10, `intervals` collection). Chart bands are not yet drawn.
+Intervals appear as rows in the History log, as shaded bands behind the
+progression chart's lines (so a plateau or a drop carries its visible cause),
+and travel in backups (schema version 10, `intervals` collection).
 
 ## Equipment-aware prescriptions
 

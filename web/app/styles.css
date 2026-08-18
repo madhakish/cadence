@@ -189,6 +189,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .chart .now-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; opacity: .7; }
 .chart .now-lbl { fill: var(--muted); font-size: 9px; letter-spacing: .04em; }
 .chart .future { fill: var(--muted); opacity: .05; }
+.chart .interval-band { fill: var(--muted); opacity: .12; }
 .chart .chart-hit { cursor: pointer; pointer-events: all; }
 .chart .chart-hit:focus-visible { stroke: var(--accent); stroke-width: 2; }
 .chart .selection-line { stroke: var(--text); stroke-width: 1; opacity: .25; pointer-events: none; }

@@ -21,7 +21,7 @@ export async function render(host) {
 
   if (mode === "rotations") renderRotations(panel, sessions, exercises, program, checkins, intervals);
   else if (mode === "log") renderLog(panel, sessions, exercises, intervals);
-  else if (mode === "charts") renderCharts(panel, sessions, exercises, program);
+  else if (mode === "charts") renderCharts(panel, sessions, exercises, program, intervals);
   else renderMilestones(panel, milestones);
 
   host.replaceChildren(root);
@@ -424,7 +424,7 @@ const PROJECTION_COLOR = "#7aa7d9";
 
 let chartEx = null, chartMetric = "weight", chartIntent = "main";
 let chartHorizon = 0;
-function renderCharts(panel, sessions, exercises, program) {
+function renderCharts(panel, sessions, exercises, program, chartIntervals = []) {
   const mains = exercises.filter((e) => e.category === "Main").map((e) => e.name).sort();
   if (!mains.length) { panel.append(ui.empty("📈", COPY.emptyHistory)); return; }
   if (!chartEx || !mains.includes(chartEx)) {
@@ -577,6 +577,8 @@ function renderCharts(panel, sessions, exercises, program) {
       // single-rotation history in split mode drew the wash on web only.
       // (The split is now the "rotations" chart intent.)
       area: !splitByRotation,
+      // Declared breaks as shaded bands behind the lines (issue #97).
+      intervals: intervalSnapshots(chartIntervals),
     };
     const metricLabel = chartMetric === "weight" ? "Top working weight"
       : chartMetric === "e1rm" ? "Estimated 1RM"
