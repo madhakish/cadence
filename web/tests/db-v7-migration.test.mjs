@@ -44,7 +44,7 @@ const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
 
 // The new store exists and round-trips a record through the CRUD surface.
-const saved = await db.Intervals.save({
+await db.Intervals.save({
   kind: "away", startDate: "2026-07-10", endDate: "2026-07-20", note: "trip",
 });
 const intervals = await db.Intervals.all();

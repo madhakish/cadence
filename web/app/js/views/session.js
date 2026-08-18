@@ -491,14 +491,17 @@ export async function openSession(id) {
     return card;
   }
 
-  // Session-only exercise reorder: the array IS the session's order, so a
-  // move is a splice — the program day's authored order stays untouched.
+  // Session-only exercise reorder — the program day's authored order stays
+  // untouched. renderBody (and every later open) re-sorts by the persisted
+  // `order` values, so the move must renumber them or it silently snaps back
+  // on the very next paint. Mirrors native moveExercise's renumber.
   function moveExercise(se, direction) {
     const index = session.exercises.indexOf(se);
     const target = index + direction;
     if (index < 0 || target < 0 || target >= session.exercises.length) return;
     session.exercises.splice(index, 1);
     session.exercises.splice(target, 0, se);
+    session.exercises.forEach((entry, position) => { entry.order = position; });
   }
 
   function editRest(se, ex, body) {
@@ -1133,9 +1136,14 @@ async function completeSessionInner(session) {
   // explicitly off-program: it never feeds PR baselines, standalone tracks,
   // or program progression (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Mirrors
   // SessionCompletion.finish.
-  const offProgram = C.isOffProgramTime(
-    new Date(session.date).getTime(), intervalSnapshots(await Intervals.all()));
-  const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date));
+  const intervalSnaps = intervalSnapshots(await Intervals.all());
+  const offProgram = C.isOffProgramTime(new Date(session.date).getTime(), intervalSnaps);
+  // An active-recovery session never joins the PR baseline either —
+  // suppressing its OWN milestones at bank time is not enough, because a
+  // heavy recovery set left in history would suppress every later legitimate
+  // PR forever. Mirrors SessionCompletion.priorHistory's exclusion.
+  const prior = (await Sessions.completed()).filter((s) => new Date(s.date) < new Date(session.date)
+    && !C.isOffProgramTime(new Date(s.date).getTime(), intervalSnaps));
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const lines = [], milestones = [], milestoneRecords = [];
   // Keyed by lift: one banked exposure can advance a standalone track at most

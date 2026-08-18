@@ -3419,8 +3419,14 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
 
 export function evaluateCoaching(program, sessions, reliableHistoryStart = null, intervals = []) {
   const reliable = reliableHistoryStart == null ? -Infinity : epoch(reliableHistoryStart);
+  // A session banked inside an active-recovery span is off-program work
+  // (INV-RECOVERY-WORK-IS-OFF-PROGRAM): completion already refused to advance
+  // the schedule for it, so letting it complete a rotation or seed a
+  // readiness baseline here would grade the program on work the program
+  // never prescribed. Mirrors CoachingEngine.evaluate.
   const relevant = sessions.filter((session) => session.completed !== false
-    && session.programID === program.id && epoch(session.date) >= reliable)
+    && session.programID === program.id && epoch(session.date) >= reliable
+    && !isOffProgramTime(epoch(session.date), intervals))
     .map((session) => programmedCoachingSession(session, program.slots || []));
   const groups = new Map();
   for (const session of relevant) {

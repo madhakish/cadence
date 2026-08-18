@@ -2656,7 +2656,15 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     && excusedReport.rotations.every((rotation, index) =>
       rotation.readiness === unexcusedReport.rotations[index].readiness
       && rotation.isComplete === unexcusedReport.rotations[index].isComplete),
-    "[INV-INTERVAL-PRESERVES-SCHEDULE] an interval changes advisory reads only — rotations and readiness are untouched");
+    "[INV-INTERVAL-PRESERVES-SCHEDULE] a rest/away interval changes advisory reads only — rotations and readiness are untouched");
+
+  // An ACTIVE-RECOVERY span is different: the sessions it covers are
+  // off-program work, so they never complete a rotation or seed a readiness
+  // baseline — completion already refused to advance the schedule for them.
+  const gradedReport = C.evaluateCoaching(spacingProgram, spacingSessions, null,
+    [{ kind: "activeRecovery", startMs: 1_700_000_000_000 + 40 * day, endMs: 1_700_000_000_000 + 60 * day }]);
+  ok(gradedReport.rotations.length === unexcusedReport.rotations.length - 1,
+    "[INV-RECOVERY-WORK-IS-OFF-PROGRAM] a rotation banked entirely inside active recovery is not graded");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

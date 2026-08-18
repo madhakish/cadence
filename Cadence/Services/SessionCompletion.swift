@@ -79,11 +79,16 @@ enum SessionCompletion {
         // Work logged inside an ACTIVE-RECOVERY span is real, banked history —
         // and explicitly off-program: it never feeds PR baselines, standalone
         // tracks, or program progression (INV-RECOVERY-WORK-IS-OFF-PROGRAM).
-        // Mirrors web completeSessionInner.
-        let intervals = (try? context.fetch(FetchDescriptor<TrainingInterval>())) ?? []
+        // The fetch propagates like every other read in this method: a store
+        // that cannot say whether this time is off-program must fail visibly
+        // rather than silently advancing progression. Mirrors web
+        // completeSessionInner.
+        let intervalSnapshots: [TrainingIntervalSnapshot]
+        do { intervalSnapshots = try context.fetch(FetchDescriptor<TrainingInterval>()).map(\.snapshot) }
+        catch { context.rollback(); throw SaveFailure(underlying: error) }
         let offProgram = TrainingIntervals.isOffProgramTime(
             session.date.timeIntervalSince1970 * 1000,
-            intervals: intervals.map(\.snapshot)
+            intervals: intervalSnapshots
         )
 
         var lines: [SessionSummary.LiftLine] = []
@@ -120,7 +125,8 @@ enum SessionCompletion {
             if !offProgram {
                 let history: (sets: [SetSample], volumes: [Double], schemes: Set<String>)
                 do { history = try priorHistory(for: exercise.name, basis: working[0].loadBasis,
-                                                before: session.date, context: context) }
+                                                before: session.date, context: context,
+                                                excludingOffProgram: intervalSnapshots) }
                 catch { context.rollback(); throw SaveFailure(underlying: error) }
                 let events = PRDetection.evaluate(
                     exercise: exercise.name,
@@ -1177,12 +1183,22 @@ enum SessionCompletion {
         for exerciseName: String,
         basis: LoadBasis,
         before date: Date,
-        context: ModelContext
+        context: ModelContext,
+        excludingOffProgram intervals: [TrainingIntervalSnapshot] = []
     ) throws -> (sets: [SetSample], volumes: [Double], schemes: Set<String>) {
         let descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { $0.isCompleted && $0.date < date }
         )
-        let sessions = try context.fetch(descriptor)
+        // An active-recovery session never joins the PR baseline either —
+        // suppressing its OWN milestones at bank time is not enough, because a
+        // heavy recovery set left in history would suppress every later
+        // legitimate PR forever (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Mirrors
+        // web completeSessionInner's prior filter.
+        let sessions = try context.fetch(descriptor).filter {
+            !TrainingIntervals.isOffProgramTime(
+                $0.date.timeIntervalSince1970 * 1000, intervals: intervals
+            )
+        }
 
         var sets: [SetSample] = []
         var volumes: [Double] = []

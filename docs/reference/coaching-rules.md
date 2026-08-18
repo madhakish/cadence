@@ -191,8 +191,11 @@ Declaring an interval never mutates program state
 - A session banked inside an **active-recovery** span is real, saved history —
   and explicitly off-program ([INV-RECOVERY-WORK-IS-OFF-PROGRAM]): it sets no
   PR milestones, advances no standalone track, and never moves the program
-  schedule. The bank summary says so. Sessions inside rest or away spans are
-  deliberate, ordinary training and grade normally.
+  schedule. The bank summary says so. The exclusion holds forever, not just
+  at bank time: an off-program session never joins the prior-history PR
+  baseline of later sessions, and the coaching engine leaves it out of
+  rotation grading and readiness baselines entirely. Sessions inside rest or
+  away spans are deliberate, ordinary training and grade normally.
 - For a week after an **away** span ends with nothing banked since, Today
   offers a re-entry note instead of resuming as if nothing happened.
 

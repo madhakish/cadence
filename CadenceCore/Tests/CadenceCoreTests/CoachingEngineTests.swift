@@ -629,12 +629,24 @@ final class CoachingEngineTests: XCTestCase {
             return false
         }, "a declared break is not a training-frequency observation")
 
-        // [INV-INTERVAL-PRESERVES-SCHEDULE] the interval changes advisory
-        // reads only — rotations, readiness, and streaks are untouched.
+        // [INV-INTERVAL-PRESERVES-SCHEDULE] a rest/away interval changes
+        // advisory reads only — rotations, readiness, and streaks are
+        // untouched.
         XCTAssertEqual(excused.currentReadiness, unexcused.currentReadiness)
         XCTAssertEqual(excused.greenRotationStreak, unexcused.greenRotationStreak)
         XCTAssertEqual(excused.rotations.map(\.readiness), unexcused.rotations.map(\.readiness))
         XCTAssertEqual(excused.rotations.map(\.isComplete), unexcused.rotations.map(\.isComplete))
+
+        // An ACTIVE-RECOVERY span is different: the sessions it covers are
+        // off-program work, so they never complete a rotation or seed a
+        // readiness baseline — completion already refused to advance the
+        // schedule for them. [INV-RECOVERY-WORK-IS-OFF-PROGRAM]
+        let recovery = TrainingIntervalSnapshot(
+            kind: .activeRecovery, startMs: 40 * day * 1000, endMs: 60 * day * 1000
+        )
+        let graded = CoachingEngine.evaluate(program: program(), sessions: sessions, intervals: [recovery])
+        XCTAssertEqual(graded.rotations.count, unexcused.rotations.count - 1,
+                       "the rotation banked entirely inside active recovery is not graded")
     }
 
     private func greenRotations() -> [CoachingSessionSnapshot] {

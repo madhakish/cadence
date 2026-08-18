@@ -523,6 +523,14 @@ public enum CoachingEngine {
     ) -> CoachingReport {
         let relevant = sessions.filter { session in
             guard session.completed, session.programID == program.id else { return false }
+            // A session banked inside an active-recovery span is off-program
+            // work (INV-RECOVERY-WORK-IS-OFF-PROGRAM): completion already
+            // refused to advance the schedule for it, so letting it complete
+            // a rotation or seed a readiness baseline here would grade the
+            // program on work the program never prescribed.
+            guard !TrainingIntervals.isOffProgramTime(
+                session.date.timeIntervalSince1970 * 1000, intervals: intervals
+            ) else { return false }
             return reliableHistoryStart.map { session.date >= $0 } ?? true
         }.map { programmedSnapshot($0, slots: program.slots) }
         let grouped = Dictionary(grouping: relevant) {

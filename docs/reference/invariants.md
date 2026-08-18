@@ -718,9 +718,12 @@ expect sessions), and only away spans trigger the re-entry suggestion.
 
 Work logged inside an active-recovery interval is real, banked history — and
 explicitly off-program: it never feeds PR baselines, standalone-track
-advancement, or program progression. Only active recovery is off-program
-time; a session logged inside a rest or away span is deliberate, ordinary
-training and grades normally.
+advancement, program progression, or coaching rotations/readiness. That
+exclusion holds FOREVER, not just at bank time — an off-program session
+never joins the prior-history PR baseline of later sessions, and never
+completes a rotation or seeds a readiness comparison. Only active recovery
+is off-program time; a session logged inside a rest or away span is
+deliberate, ordinary training and grades normally.
 
 > Recovery work is prescribed to be easy. Letting it set PR baselines or
 > advance the schedule punishes the lifter for following the prescription.
@@ -730,9 +733,13 @@ training and grades normally.
 
 Declaring, editing, or deleting an interval mutates nothing: the program's
 cycle, rotation, and day pointer, track state, and banked history are
-untouched. An interval only changes how the calendar is *read* — rotation
-assessments and readiness are identical with and without one; only the
-advisory reads (spacing, re-entry, frequency trial) differ.
+untouched. An interval only changes how the calendar is *read*. For rest,
+away, and deload spans, rotation assessments and readiness are identical
+with and without the interval; only the advisory reads (spacing, re-entry,
+frequency trial) differ. An active-recovery span additionally removes the
+sessions it covers from program grading — a read consequence of
+INV-RECOVERY-WORK-IS-OFF-PROGRAM, never a mutation, and deleting the span
+restores the ordinary reading.
 
 > An interval that rewrote the schedule could not be safely deleted, and a
 > mis-tapped kind would corrupt state instead of being a one-tap fix.

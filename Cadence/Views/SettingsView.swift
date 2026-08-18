@@ -368,6 +368,7 @@ struct IntervalEditorView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Bindable var interval: TrainingInterval
+    @State private var confirmDelete = false
 
     private var dayCount: Int {
         let calendar = Calendar.current
@@ -444,14 +445,22 @@ struct IntervalEditorView: View {
                 TextField("Optional note", text: $interval.note)
             }
             Section {
-                Button("Delete break", role: .destructive) {
-                    context.delete(interval)
-                    PersistenceErrorCenter.shared.save(context, operation: "Deleting the break")
-                    dismiss()
-                }
+                // Destructive, so it confirms first (matches the web editor).
+                Button("Delete break", role: .destructive) { confirmDelete = true }
             }
         }
         .navigationTitle(interval.kind.name)
+        .confirmationDialog(
+            "Delete this break? Sessions and history are unchanged.",
+            isPresented: $confirmDelete, titleVisibility: .visible
+        ) {
+            Button("Delete break", role: .destructive) {
+                context.delete(interval)
+                PersistenceErrorCenter.shared.save(context, operation: "Deleting the break")
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        }
         .saveChangesOnDisappear(context, operation: "Saving the break")
     }
 
