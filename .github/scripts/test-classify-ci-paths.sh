@@ -42,6 +42,16 @@ assert_classification \
   'CadenceCore/Sources/CadenceCore/Progression.swift'
 
 assert_classification \
+  "backup and program-file codec changes run the migration suite" \
+  $'native=true\nmigrations=true\nweb=false' \
+  $'Cadence/Services/ExportService.swift\nCadence/Services/ProgramImportService.swift'
+
+assert_classification \
+  "seed template catalog changes run the migration suite" \
+  $'native=true\nmigrations=true\nweb=false' \
+  'Cadence/Seed/ProgramTemplates.swift'
+
+assert_classification \
   "web-only changes" \
   $'native=false\nmigrations=false\nweb=true' \
   'web/app/js/app.js'

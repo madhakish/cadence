@@ -19,7 +19,11 @@ while IFS= read -r path; do
   esac
 
   case "$path" in
-    Cadence/Models/*|Cadence/Seed/Seeder.swift|CadenceMigrationTests/*|project.yml|.github/scripts/generate-shipped-stores.sh)
+    # Every source compiled into the hostless CadenceMigrationTests target
+    # (see project.yml) is compatibility-bearing: the backup and program-file
+    # codecs plus the template/seed catalogs are proven only by that suite,
+    # so a change to any of them must run it.
+    Cadence/Models/*|Cadence/Seed/Seeder.swift|Cadence/Seed/ProgramTemplates.swift|Cadence/Services/ExportService.swift|Cadence/Services/ImportService.swift|Cadence/Services/ProgramExportService.swift|Cadence/Services/ProgramImportService.swift|CadenceMigrationTests/*|project.yml|.github/scripts/generate-shipped-stores.sh)
       migrations=true
       ;;
   esac
