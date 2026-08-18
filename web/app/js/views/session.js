@@ -471,15 +471,34 @@ export async function openSession(id) {
       } }),
       ui.h("button", { class: "btn sm ghost", text: "Rest", onClick: () => { currentSE = se; armRest(restFor(ex, se.programRole), se.exerciseName); } }),
       ui.h("button", { class: "btn sm ghost warn", text: "↓ Dropping load", onClick: () => dropLoad(se, body) }),
+      // Session-only reorder (issue #64): pulling a lift forward today does
+      // not edit the program day. Mirrors native moveExercise.
+      ui.h("button", { class: "btn sm ghost", text: "↑", "aria-label": `Move ${se.exerciseName} up`,
+        disabled: session.exercises.indexOf(se) === 0,
+        onClick: () => { moveExercise(se, -1); save(); renderBody(body); } }),
+      ui.h("button", { class: "btn sm ghost", text: "↓", "aria-label": `Move ${se.exerciseName} down`,
+        disabled: session.exercises.indexOf(se) === session.exercises.length - 1,
+        onClick: () => { moveExercise(se, 1); save(); renderBody(body); } }),
       // Remove the exercise from THIS session (program slot untouched).
-      ui.h("button", { class: "btn sm ghost danger", text: "✕ Remove", onClick: () => {
-        session.exercises = session.exercises.filter((x) => x !== se);
-        if (currentSE === se) currentSE = null;
-        save(); renderBody(body);
-      } })));
+      ui.h("button", { class: "btn sm ghost danger", text: "✕ Remove", "aria-label": `Remove ${se.exerciseName} from this session`,
+        onClick: () => {
+          session.exercises = session.exercises.filter((x) => x !== se);
+          if (currentSE === se) currentSE = null;
+          save(); renderBody(body);
+        } })));
 
     if (ex && ex.watchSite) card.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: `Watch: ${ex.watchSite.toLowerCase()} — ${watchNote(ex.watchSite)}` }));
     return card;
+  }
+
+  // Session-only exercise reorder: the array IS the session's order, so a
+  // move is a splice — the program day's authored order stays untouched.
+  function moveExercise(se, direction) {
+    const index = session.exercises.indexOf(se);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= session.exercises.length) return;
+    session.exercises.splice(index, 1);
+    session.exercises.splice(target, 0, se);
   }
 
   function editRest(se, ex, body) {

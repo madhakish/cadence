@@ -339,7 +339,8 @@ struct ActiveSessionView: View {
                 lastTime: recallLine(for: entry, in: recall),
                 onDropLoad: { autoregEntry = entry },
                 onWork: { currentEntry = $0 },
-                onRemove: { removeExercise(entry) }
+                onRemove: { removeExercise(entry) },
+                onMove: { moveExercise(entry, direction: $0) }
             )
         }
     }
@@ -358,6 +359,20 @@ struct ActiveSessionView: View {
         if currentEntry?.persistentModelID == entry.persistentModelID { currentEntry = nil }
         context.delete(entry)
         PersistenceErrorCenter.shared.save(context, operation: "Removing the exercise")
+    }
+
+    /// Reorder within THIS session only — the program day's authored order is
+    /// untouched, like removal and session-scoped swaps. Renumbers the whole
+    /// ordered list so duplicate or gapped order values (imports, removals)
+    /// cannot make a move silently no-op. Mirrors web moveExercise.
+    private func moveExercise(_ entry: SessionExercise, direction: Int) {
+        var ordered = session.orderedExercises
+        guard let index = ordered.firstIndex(where: { $0.persistentModelID == entry.persistentModelID }) else { return }
+        let target = index + direction
+        guard target >= 0, target < ordered.count else { return }
+        ordered.swapAt(index, target)
+        for (position, item) in ordered.enumerated() { item.order = position }
+        PersistenceErrorCenter.shared.save(context, operation: "Reordering the exercises")
     }
 
     private func pushActivityContext() {
@@ -559,6 +574,9 @@ private struct ExerciseSection: View {
     /// Remove this exercise from the session. Unlike a swap, removal leaves no
     /// performed entry carrying the program slot identity.
     let onRemove: () -> Void
+    /// Move this exercise one position up (-1) or down (+1) in THIS session's
+    /// order. Session-only, like removal — the program day is untouched.
+    let onMove: (Int) -> Void
 
     /// How long a swap outlives this session (issue 20). Session-only is the
     /// default: the program's exercise name is untouched, while today's entry
@@ -907,6 +925,10 @@ private struct ExerciseSection: View {
                             }
                         } label: { Label("Swap exercise", systemImage: "arrow.left.arrow.right") }
                     }
+                    // Session-only reorder (issue #64): a complementary lift
+                    // pulled forward today does not edit the program day.
+                    Button { onMove(-1) } label: { Label("Move up", systemImage: "arrow.up") }
+                    Button { onMove(1) } label: { Label("Move down", systemImage: "arrow.down") }
                     Button(role: .destructive, action: onRemove) {
                         Label("Remove from session", systemImage: "trash")
                     }
