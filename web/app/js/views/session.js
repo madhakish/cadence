@@ -575,23 +575,31 @@ export async function openSession(id) {
       },
       onContextMenu: (event) => { event.preventDefault(); chooseStatus(se, s, body); },
     });
+    // ONE labelling pattern for both grading buttons (issue #61): glyph on
+    // top, an always-visible micro-caption underneath — the control's name
+    // when ungraded, the graded VALUE in words once set. The caption lives
+    // inside the button, so it survives the compact collapsed rows too.
     const quality = C.setQuality(s.flags);
     const qualityButton = ui.h("button", {
-      class: `flagbtn${quality ? ` on-${quality}` : ""}`,
-      text: quality === "clean" ? "✓" : (quality ? quality[0].toUpperCase() : "Q"),
+      class: `flagbtn labeled${quality ? ` on-${quality}` : ""}`,
       "aria-label": `Set quality: ${quality || "not graded"}`,
       onClick: () => chooseQuality(s, body),
-    });
+    },
+    ui.h("span", { class: "glyph", text: quality === "clean" ? "✓" : (quality ? quality[0].toUpperCase() : "Q") }),
+    ui.h("span", { class: "microlabel", "aria-hidden": "true", text: quality || "quality" }));
     // Reps in reserve, beside quality rather than folded into it: quality says
     // how the bar moved, RIR says how close to failure it was. A set can be
     // clean at 3+ in reserve or clean at 1, and those mean different things.
     const rir = C.setRIR(s.flags);
     const rirButton = ui.h("button", {
-      class: `flagbtn${rir ? " on-rir" : ""}`,
-      text: rir ? rir.replace("rir", "").replace("3plus", "3+") : "R",
+      class: `flagbtn labeled${rir ? " on-rir" : ""}`,
       "aria-label": `Reps in reserve: ${rir ? C.SET_RIR_LABELS[rir] : "not graded"}`,
       onClick: () => chooseRIR(s, body),
-    });
+    },
+    ui.h("span", { class: "glyph", text: rir ? rir.replace("rir", "").replace("3plus", "3+") : "R" }),
+    // Graded, the caption completes the value ("2" + "left"); ungraded it
+    // names the control, same as the quality button.
+    ui.h("span", { class: "microlabel", "aria-hidden": "true", text: rir ? "left" : "reserve" }));
     // The set you're ON — the first WORKING set with no verdict yet — gets
     // the accent rail; warmups sit quiet (and often go unflagged, so they
     // must not hold the rail hostage).

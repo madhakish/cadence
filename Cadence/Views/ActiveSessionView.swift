@@ -1616,16 +1616,19 @@ private struct SetVerdictControl: View {
                 }
             }
         } label: {
-            ZStack(alignment: .topTrailing) {
+            // One labelling pattern with the web logger (issue #61): the
+            // glyph, with the graded verdicts spelled out in WORDS underneath
+            // — never a bare G/W badge, and reps-in-reserve is visible too,
+            // not menu-only. The caption is part of the control, so it
+            // survives any compact row treatment.
+            VStack(spacing: 1) {
                 Image(systemName: statusIcon(set.status))
                     .font(.title3)
-                if let quality = set.quality, quality != .clean {
-                    Text(quality == .grindy ? "G" : "W")
-                        .font(.caption2.bold())
-                        .padding(2)
-                        .background(Theme.warn, in: Circle())
-                        .foregroundStyle(.black)
-                        .offset(x: 6, y: -6)
+                if let caption = verdictCaption {
+                    Text(caption)
+                        .font(.system(size: 8, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
             }
                 .frame(width: 48, height: 48)
@@ -1635,8 +1638,25 @@ private struct SetVerdictControl: View {
             apply(set.status == .completed ? .planned : .completed)
         }
         .accessibilityLabel("Set status")
-        .accessibilityValue(statusLabel(set.status))
+        .accessibilityValue(accessibilityVerdict)
         .accessibilityHint("Tap to complete or undo. Touch and hold for skipped, quality, and reps-in-reserve options.")
+    }
+
+    /// The graded verdicts in words — "grindy", "2 left", or both. Nil when
+    /// nothing notable is graded, so the ordinary tap-to-complete flow stays
+    /// visually quiet.
+    private var verdictCaption: String? {
+        var parts: [String] = []
+        if let quality = set.quality, quality != .clean { parts.append(quality == .grindy ? "grindy" : "wobble") }
+        if let rir = set.rir { parts.append(rir.name.lowercased()) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var accessibilityVerdict: String {
+        var parts = [statusLabel(set.status)]
+        if let quality = set.quality { parts.append("quality \(quality.name.lowercased())") }
+        if let rir = set.rir { parts.append("reps in reserve \(rir.name.lowercased())") }
+        return parts.joined(separator: ", ")
     }
 
     private func apply(_ status: SetStatus) {
