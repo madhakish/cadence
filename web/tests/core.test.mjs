@@ -907,10 +907,50 @@ ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minReps
 ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "adjusted-lower accessory work never earns progression");
 ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minRepsAchieved: 10, anyStoppedEarly: false, grindyOrWobbleSets: 2 });
 ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "poor-quality accessory work holds progression");
+// The reported log: a dumbbell row prescribed at 3×5 @ 80 came back at 3×8 @ 85
+// after ONE clean exposure — a rep jump and a load step in the same session,
+// which double progression exists to prevent. The slot's rep window had been
+// edited so its endpoints crossed (min 8, max 5), which made
+// `currentReps >= maxReps` true at the BOTTOM of the window and reset reps UP
+// to the minimum while adding the load. Mirrors CadenceCore.
+let crossed = { sets: 3, minReps: 8, maxReps: 5, currentReps: 5, weightLb: 80, incrementLb: 5, stallCount: 0 };
+let crossedAdvance = C.advanceAccessory(crossed, { completedSets: 3, minRepsAchieved: 5, anyStoppedEarly: false });
+ok(crossedAdvance.weightLb === 80 && crossedAdvance.currentReps === 6 && crossedAdvance.stallCount === 0,
+  "[INV-WINDOW-BEFORE-LOAD] a crossed rep window never moves reps and load in the same exposure");
+let crossedWindow = C.repWindow(8, 5, 5);
+ok(crossedWindow.low === 5 && crossedWindow.high === 8 && crossedWindow.current === 5,
+  "crossed endpoints read as the same window with its ends swapped");
+let crossedTop = C.advanceAccessory({ ...crossed, currentReps: 8 }, { completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false });
+ok(crossedTop.weightLb === 85 && crossedTop.currentReps === 5,
+  "reaching that window's top still earns the load and resets to its bottom");
+// A target stranded outside its own window is clamped into it, so the number
+// that gets prescribed is the number that gets graded.
+let stranded = { sets: 3, minReps: 8, maxReps: 12, currentReps: 3, weightLb: 40, incrementLb: 5, stallCount: 0 };
+let strandedAdvance = C.advanceAccessory(stranded, { completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false });
+ok(strandedAdvance.currentReps === 9 && strandedAdvance.weightLb === 40,
+  "[INV-WINDOW-BEFORE-LOAD] a stranded target enters at the window bottom, then climbs");
+let strandedMiss = C.advanceAccessory(stranded, { completedSets: 2, minRepsAchieved: 8, anyStoppedEarly: false });
+ok(strandedMiss.currentReps === 8 && strandedMiss.stallCount === 1, "a miss holds the clamped target, not the stranded one");
+let fixedWindow = C.repWindow(8, 8, 8);
+ok(fixedWindow.low === 8 && fixedWindow.high === 8 && fixedWindow.current === 8,
+  "a degenerate window is a fixed-rep linear slot, and stays one");
+let unsetWindow = C.repWindow(0, 0, 0);
+ok(unsetWindow.low === 1 && unsetWindow.high === 1 && unsetWindow.current === 1,
+  "an unconfigured window is one rep, not a prescription of nothing");
 // bodyweight/timed accessory (0 increment) climbs reps past max — no reset, no weight added
 let bw = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0, stallCount: 0 };
 let bwa = C.advanceAccessory(bw, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
 ok(bwa.weightLb === 0 && bwa.currentReps === 13 && bwa.stallCount === 0, "bodyweight accessory climbs past max, no reset");
+// It keeps climbing from ABOVE the window top. Clamping the target back into
+// the window here would peg an unloadable slot at max + 1 forever, which is
+// the one slot that has nothing else to progress with.
+let bwAbove = C.advanceAccessory({ ...bw, currentReps: 13 }, { completedSets: 3, minRepsAchieved: 13, anyStoppedEarly: false });
+ok(bwAbove.currentReps === 14 && bwAbove.weightLb === 0,
+  "[INV-WINDOW-BEFORE-LOAD] an unloadable slot keeps climbing from above its window top");
+let bwBelow = C.advanceAccessory({ ...bw, currentReps: 3 }, { completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false });
+ok(bwBelow.currentReps === 9, "a stranded unloadable target still enters at the window bottom");
+ok(C.repWindow(8, 12, 15, false).current === 15, "an uncapped window floors the target without capping it");
+ok(C.repWindow(8, 12, 15, true).current === 12, "a capped window pulls the target back to its top");
 // A LOADED accessory with a zero increment falls into the same branch: it
 // climbs reps past its own maximum and the weight never moves. That is a
 // misconfiguration, not a choice, so the program editor flags it.

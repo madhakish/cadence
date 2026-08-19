@@ -1405,9 +1405,26 @@ private struct ProgramLiftRow: View {
             }
             if lift.prescription == .doubleProgression {
                 Stepper("Sets: \(lift.doubleProgressionSets)", value: $lift.doubleProgressionSets, in: 1...8)
-                Stepper("Minimum reps: \(lift.minimumReps)", value: $lift.minimumReps, in: 1...20)
-                Stepper("Maximum reps: \(lift.maximumReps)", value: $lift.maximumReps, in: lift.minimumReps...30)
-                Text("Current target: \(lift.currentReps) reps · add \(settingsList.unitDisplay.format(lb: loadStep)) only after every set reaches the top of the window.")
+                // The endpoints carry each other rather than crossing; the
+                // maximum stepper's own lower bound cannot do that alone,
+                // because raising the minimum past it is what crosses them.
+                Stepper("Minimum reps: \(lift.minimumReps)", value: Binding(
+                    get: { lift.minimumReps },
+                    set: { (value: Int) in
+                        lift.minimumReps = value
+                        lift.maximumReps = max(lift.maximumReps, value)
+                        lift.currentReps = min(max(lift.currentReps, value), lift.maximumReps)
+                    }
+                ), in: 1...20)
+                Stepper("Maximum reps: \(lift.maximumReps)", value: Binding(
+                    get: { lift.maximumReps },
+                    set: { (value: Int) in
+                        lift.maximumReps = value
+                        lift.minimumReps = min(lift.minimumReps, value)
+                        lift.currentReps = min(max(lift.currentReps, lift.minimumReps), value)
+                    }
+                ), in: 1...30)
+                Text("Current target: \(lift.repWindow().current) reps · add \(settingsList.unitDisplay.format(lb: loadStep)) only after every set reaches the top of the window.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if lift.prescription.advancesPerExposure
@@ -1514,8 +1531,26 @@ private struct ProgramAccessoryRow: View {
                 }
             } else {
                 Stepper("Weight: \(settingsList.unitDisplay.format(lb: accessory.weightLb))", value: $accessory.weightLb, in: 0...500, step: 2.5)
-                Stepper("Min reps: \(accessory.minReps)", value: $accessory.minReps, in: 1...20)
-                Stepper("Max reps: \(accessory.maxReps)", value: $accessory.maxReps, in: 1...30)
+                // The endpoints carry each other rather than crossing. A
+                // crossed window is a state the engine has to guess at, and
+                // the guess used to hand the lifter a rep jump and a load
+                // step in the same exposure.
+                Stepper("Min reps: \(accessory.minReps)", value: Binding(
+                    get: { accessory.minReps },
+                    set: { (value: Int) in
+                        accessory.minReps = value
+                        accessory.maxReps = max(accessory.maxReps, value)
+                        accessory.currentReps = min(max(accessory.currentReps, value), accessory.maxReps)
+                    }
+                ), in: 1...20)
+                Stepper("Max reps: \(accessory.maxReps)", value: Binding(
+                    get: { accessory.maxReps },
+                    set: { (value: Int) in
+                        accessory.maxReps = value
+                        accessory.minReps = min(accessory.minReps, value)
+                        accessory.currentReps = min(max(accessory.currentReps, accessory.minReps), value)
+                    }
+                ), in: 1...30)
                 Stepper("Load step: +\(settingsList.unitDisplay.format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
             }
         }

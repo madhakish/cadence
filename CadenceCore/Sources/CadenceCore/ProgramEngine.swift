@@ -733,7 +733,11 @@ public enum ProgramEngine {
                 return SessionPlan(
                     weightLb: Weight.round(state.baseWeightLb * 0.80, to: roundingLb),
                     sets: 1,
-                    reps: Swift.min(5, Swift.max(1, configuration.minimumReps)),
+                    reps: Swift.min(5, ProgramProgression.repWindow(
+                        minReps: configuration.minimumReps,
+                        maxReps: configuration.maximumReps,
+                        currentReps: configuration.minimumReps
+                    ).low),
                     phase: phase,
                     cycleNumber: state.cycleNumber
                 )
@@ -741,7 +745,13 @@ public enum ProgramEngine {
             return SessionPlan(
                 weightLb: Weight.round(state.baseWeightLb, to: roundingLb),
                 sets: max(1, configuration.workingSets),
-                reps: min(max(configuration.currentReps, configuration.minimumReps), configuration.maximumReps),
+                // One owner for the window, shared with the advance, so the
+                // prescription and the grade can never disagree about it.
+                reps: ProgramProgression.repWindow(
+                    minReps: configuration.minimumReps,
+                    maxReps: configuration.maximumReps,
+                    currentReps: configuration.currentReps
+                ).current,
                 phase: phase,
                 cycleNumber: state.cycleNumber
             )
@@ -957,19 +967,23 @@ public enum ProgramEngine {
         )
         // Normalize the rep window BEFORE the first prescription, not inside
         // the double-progression branch that advances it. A slot whose window
-        // was never configured carries zeroes, and `plan` computes
-        // `min(max(currentReps, minimumReps), maximumReps)` — which is 0 reps,
-        // a prescription of nothing. The app layer clamps these on the way in
+        // was never configured carries zeroes, which is a prescription of
+        // nothing, and crossed endpoints would otherwise let the preview show
+        // a rep jump and a load step landing together. `repWindow` owns both
+        // readings; the app layer clamps on the way in
         // (`ProgramLift.prescriptionConfiguration`), so only a direct core
-        // caller can reach here unclamped; doing it here as well is what keeps
-        // this function honest on its own and identical to core.js.
+        // caller can reach here unclamped, and doing it here as well is what
+        // keeps this function honest on its own and identical to core.js.
         var config = configuration
         config.workingSets = Swift.max(1, config.workingSets)
-        config.minimumReps = Swift.max(1, config.minimumReps)
-        config.maximumReps = Swift.max(config.minimumReps, config.maximumReps)
+        let window = ProgramProgression.repWindow(
+            minReps: config.minimumReps, maxReps: config.maximumReps, currentReps: config.currentReps
+        )
+        config.minimumReps = window.low
+        config.maximumReps = window.high
         config.currentReps = style == .linearFives
             ? (config.currentReps <= 3 ? 3 : 5)
-            : Swift.max(config.minimumReps, config.currentReps)
+            : window.current
         var cycle = Swift.max(1, cycleNumber)
         var phase = CyclePhase(rawValue: rotation) ?? .volume
         // Graded styles stash the new base at the Peak and apply it at the

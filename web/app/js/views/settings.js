@@ -779,8 +779,10 @@ async function programDayEditor(p, day) {
             l.prescription === "doubleProgression" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Sets / rep window" }),
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } }),
-                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; await Programs.save(p); refresh(); } }),
-                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; await Programs.save(p); refresh(); } }))) : null,
+                // The endpoints carry each other rather than crossing. Mirrors
+                // the native steppers and the accessory window above.
+                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; l.maximumReps = Math.max(l.maximumReps ?? 8, v); l.currentReps = Math.min(Math.max(l.currentReps ?? v, v), l.maximumReps); await Programs.save(p); refresh(); } }),
+                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; l.minimumReps = Math.min(l.minimumReps ?? 5, v); l.currentReps = Math.min(Math.max(l.currentReps ?? l.minimumReps, l.minimumReps), v); await Programs.save(p); refresh(); } }))) : null,
             l.prescription === "maxEffort" ? ui.h("div", { class: "sub", text: "The base is today's top-single target. Build through 90% and a near-max single, then rotate to a different special variation next week." }) : null,
             l.prescription === "dynamicEffort" ? ui.h("div", { class: "sub", text: "The base is wave week 1: 50% for squat/pull or 40% for bench. Speed work waves for three weeks, then resets." }) : null,
             !C.buildsOwnSessionShape(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
@@ -826,8 +828,12 @@ async function programDayEditor(p, day) {
             isTimed ? ui.h("div", { class: "row" }, ui.h("span", { text: isConditioning ? "Duration" : "Hold time" }),
               ui.stepper(a.targetSeconds || 30, { min: 5, max: 1800, step: 5, format: C.cardioDurationLabel, onChange: async (v) => { a.targetSeconds = v; await Programs.save(p); } })) : ui.h("div", { class: "row" }, ui.h("span", { text: "Rep range" }),
               ui.h("div", { class: "btn-row" },
-                ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => { a.minReps = v; if (a.currentReps < v) a.currentReps = v; await Programs.save(p); } }),
-                ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => { a.maxReps = v; await Programs.save(p); } }))),
+                // The endpoints carry each other rather than crossing. A crossed
+                // window is a state the engine has to guess at, and the guess used
+                // to hand the lifter a rep jump and a load step in the same
+                // exposure. Mirrors the native steppers.
+                ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => { a.minReps = v; a.maxReps = Math.max(a.maxReps, v); a.currentReps = Math.min(Math.max(a.currentReps, v), a.maxReps); await Programs.save(p); } }),
+                ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => { a.maxReps = v; a.minReps = Math.min(a.minReps, v); a.currentReps = Math.min(Math.max(a.currentReps, a.minReps), v); await Programs.save(p); } }))),
             isConditioning ? ui.h("div", { class: "card" },
               ui.h("div", { class: "row" }, ui.h("span", { text: "Effort" }), (() => {
                 const select = ui.h("select", {}, ...[["easy", "Easy / conversational"], ["interval", "Intervals"], ["mixed", "Mixed"]]

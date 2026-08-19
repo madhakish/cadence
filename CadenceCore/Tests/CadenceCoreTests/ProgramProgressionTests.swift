@@ -495,13 +495,95 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(c.stallCount, 1)
     }
 
+    /// The reported log: a dumbbell row prescribed at 3×5 @ 80 came back at
+    /// 3×8 @ 85 after ONE clean exposure — a rep jump and a load step in the
+    /// same session, which double progression exists to prevent. The slot's
+    /// rep window had been edited so its endpoints crossed (min 8, max 5),
+    /// which made `currentReps >= maxReps` true at the bottom of the window
+    /// and reset reps UP to the minimum while adding the load.
+    func testCrossedRepWindowNeverMovesRepsAndLoadTogether() {
+        let crossed = AccessoryState(sets: 3, minReps: 8, maxReps: 5, currentReps: 5,
+                                     weightLb: 80, incrementLb: 5)
+        let a = P.advanceAccessory(
+            crossed, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 5, anyStoppedEarly: false)
+        )
+        // [INV-WINDOW-BEFORE-LOAD]
+        XCTAssertEqual(a.weightLb, 80, accuracy: 1e-9, "the load holds — the window top was not earned")
+        XCTAssertEqual(a.currentReps, 6, "and the target climbs one rep inside the 5–8 window")
+        XCTAssertEqual(a.stallCount, 0)
+
+        // Crossed endpoints read as the same window with its ends swapped, so
+        // the runway the lifter configured survives.
+        let window = P.repWindow(minReps: 8, maxReps: 5, currentReps: 5)
+        XCTAssertEqual(window.low, 5)
+        XCTAssertEqual(window.high, 8)
+        XCTAssertEqual(window.current, 5)
+
+        // Reaching the top of that window still earns the load and resets to
+        // the bottom, exactly as a coherent window does.
+        var atTop = crossed
+        atTop.currentReps = 8
+        let b = P.advanceAccessory(
+            atTop, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(b.weightLb, 85, accuracy: 1e-9)
+        XCTAssertEqual(b.currentReps, 5)
+    }
+
+    /// A target stranded outside its own window is clamped into it, so the
+    /// number that gets prescribed is the number that gets graded.
+    func testRepWindowClampsAStrandedTarget() {
+        let stranded = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 3,
+                                      weightLb: 40, incrementLb: 5)
+        let a = P.advanceAccessory(
+            stranded, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false)
+        )
+        // [INV-WINDOW-BEFORE-LOAD]
+        XCTAssertEqual(a.currentReps, 9, "the target enters at the window bottom, then climbs")
+        XCTAssertEqual(a.weightLb, 40, accuracy: 1e-9)
+
+        // A miss still holds the clamped target rather than the stranded one.
+        let missed = P.advanceAccessory(
+            stranded, perf: AccessoryPerformance(completedSets: 2, minRepsAchieved: 8, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(missed.currentReps, 8)
+        XCTAssertEqual(missed.stallCount, 1)
+
+        // A degenerate window is a fixed-rep linear slot, and stays one.
+        let fixed = P.repWindow(minReps: 8, maxReps: 8, currentReps: 8)
+        XCTAssertEqual(fixed.low, 8)
+        XCTAssertEqual(fixed.high, 8)
+        XCTAssertEqual(fixed.current, 8)
+
+        // An unconfigured window is one rep, not zero — a prescription of
+        // nothing is not a prescription.
+        let unset = P.repWindow(minReps: 0, maxReps: 0, currentReps: 0)
+        XCTAssertEqual(unset.low, 1)
+        XCTAssertEqual(unset.high, 1)
+        XCTAssertEqual(unset.current, 1)
+    }
+
     func testBodyweightAccessoryClimbsPastMax() {
         // No loadable increment → keep adding reps, never reset, never add weight.
-        let bw = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0)
+        var bw = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0)
         let a = P.advanceAccessory(bw, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false))
         XCTAssertEqual(a.weightLb, 0, accuracy: 1e-9)
         XCTAssertEqual(a.currentReps, 13)
         XCTAssertEqual(a.stallCount, 0)
+
+        // It keeps climbing from ABOVE the window top. Clamping the target
+        // back into the window here would peg an unloadable slot at max + 1
+        // forever, which is the one slot that has nothing else to progress
+        // with. [INV-WINDOW-BEFORE-LOAD]
+        bw.currentReps = 13
+        let b = P.advanceAccessory(bw, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 13, anyStoppedEarly: false))
+        XCTAssertEqual(b.currentReps, 14)
+        XCTAssertEqual(b.weightLb, 0, accuracy: 1e-9)
+
+        // A stranded target below the window still enters at its bottom.
+        bw.currentReps = 3
+        let c = P.advanceAccessory(bw, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false))
+        XCTAssertEqual(c.currentReps, 9)
     }
 
     /// A loaded accessory with a zero increment silently behaves like

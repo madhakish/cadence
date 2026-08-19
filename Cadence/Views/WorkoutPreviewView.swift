@@ -119,8 +119,8 @@ struct WorkoutPreviewView: View {
                             Text(isTimed
                                  ? "\(acc.sets) × \(CardioFormat.durationLabel(seconds: acc.targetSeconds))"
                                  : (acc.weightLb > 0
-                                    ? "\(acc.sets)×\(acc.currentReps) @ \(unitDisplay.format(lb: acc.weightLb))"
-                                    : "\(acc.sets)×\(acc.currentReps)"))
+                                    ? "\(acc.sets)×\(acc.prescribedReps) @ \(unitDisplay.format(lb: acc.weightLb))"
+                                    : "\(acc.sets)×\(acc.prescribedReps)"))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }

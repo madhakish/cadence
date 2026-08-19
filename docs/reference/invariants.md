@@ -538,6 +538,31 @@ once the base crosses 85% of capability.
 > should be a volume increment … I'll get there fast and then need change
 > plates to make smaller and smaller gains but we're not there right now."
 
+### INV-WINDOW-BEFORE-LOAD
+*platforms: core*
+
+Double progression moves reps **or** load in an exposure, never both. The rep
+window's endpoints are two independently edited numbers, so the lifter can
+cross them; the engine therefore reads them as an **unordered pair** and
+clamps the current target inside the resulting window, which makes the number
+that is prescribed and the number that is graded the same number by
+construction. Read literally instead, a crossed window (minimum 8, maximum 5)
+puts the target at the top of its own range while it sits at the bottom: one
+clean exposure of a slot showing 3×5 @ 80 returned 3×8 @ 85 — a 60% volume
+jump stacked on a load step, neither of them earned. Swapping the ends
+preserves the runway that was configured; collapsing the maximum up to the
+minimum would leave a window with no runway at all, where every clean exposure
+adds load. Stored endpoints are not rewritten — the crossed pair is the
+lifter's to correct, and the editor already warns about it — and a window
+whose ends are deliberately equal stays what it is, a fixed-rep linear slot.
+A slot with no loadable increment is floored at the window bottom but never
+capped at its top: reps are the only way it progresses, so it keeps climbing
+past the top rather than being pegged one rep above it forever.
+
+> The lifter's own report: "db bent over row had me at 80# 3x5 last cycle,
+> this cycle has me at 85# and 3x8 — too much of a weight jump plus volume
+> jump."
+
 ### INV-ADVANCE-BUYS-PLATES
 *platforms: core*
 

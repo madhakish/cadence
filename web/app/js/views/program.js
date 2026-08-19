@@ -49,8 +49,11 @@ export async function render(host) {
             ui.h("span", { class: "sub mono", text: `Base ${ui.fmtWeight(lift.baseWeightLb)} · next ${ui.fmtWeight(plan.weightLb)} · ${plan.sets}×${plan.reps}` }))));
       }
       const accessories = ordered(day.accessories);
-      const stalled = accessories.some((item) => (item.currentReps || 0) >= (item.maxReps || Infinity)
-        && !(item.incrementLb > 0) && !(item.durationStepSeconds > 0));
+      const stalled = accessories.some((item) => {
+        const window = C.repWindow(item.minReps, item.maxReps, item.currentReps, item.incrementLb > 0);
+        return window.current >= window.high
+          && !(item.incrementLb > 0) && !(item.durationStepSeconds > 0);
+      });
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
         ui.h("span", { class: "sub", text: `${accessories.length} accessories` }),
         stalled ? ui.h("span", { class: "pill warn", text: "Needs progression" }) : null));

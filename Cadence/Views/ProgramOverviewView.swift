@@ -151,7 +151,7 @@ struct ProgramOverviewView: View {
     private func cannotProgress(_ accessory: ProgramAccessory) -> Bool {
         let type = exercises.first { $0.name == accessory.exerciseName }?.type
         if type == .timed || type == .conditioning { return accessory.durationStepSeconds <= 0 }
-        return accessory.currentReps >= accessory.maxReps && accessory.incrementLb <= 0
+        return accessory.repWindow.current >= accessory.repWindow.high && accessory.incrementLb <= 0
     }
 
     private func format(_ lb: Double) -> String {
