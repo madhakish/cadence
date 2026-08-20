@@ -522,9 +522,8 @@ final class ProgramProgressionTests: XCTestCase {
                         checked += 1
                         XCTAssertFalse(
                             after.currentReps > prescribed && after.weightLb > slot.weightLb,
-                            """
-                            window \(minReps)–\(maxReps), target \(currentReps), step \(incrementLb):                             3×\(prescribed) @ 80 → 3×\(after.currentReps) @ \(after.weightLb)                             raised reps and load together
-                            """
+                            "window \(minReps)-\(maxReps) target \(currentReps) step \(incrementLb): "
+                                + "3x\(prescribed) @ 80 became 3x\(after.currentReps) @ \(after.weightLb)"
                         )
                     }
                 }
