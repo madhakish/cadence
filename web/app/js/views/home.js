@@ -376,7 +376,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
               : ui.h("span", { class: "title", text: a.exerciseName }),
             ui.h("span", { class: "sub mono", text: isTimed
               ? `${a.sets} × ${C.cardioDurationLabel(a.targetSeconds || 30)}`
-              : (a.weightLb > 0 ? `${a.sets}×${a.currentReps} @ ${ui.fmtWeight(a.weightLb)}` : `${a.sets}×${a.currentReps}`) })));
+              : (a.weightLb > 0 ? `${a.sets}×${C.repWindow(a.minReps, a.maxReps, a.currentReps, a.incrementLb > 0).current} @ ${ui.fmtWeight(a.weightLb)}` : `${a.sets}×${C.repWindow(a.minReps, a.maxReps, a.currentReps, a.incrementLb > 0).current}`) })));
         }
         body.append(accCard);
       }

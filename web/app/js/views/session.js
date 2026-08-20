@@ -1633,9 +1633,16 @@ async function advanceProgram(session, milestones) {
     // switching to the weighted identity (Weighted Pull-up), not
     // incrementing this one. Mirrors SessionCompletion.
     const increment = liftExercise && C.resolvedLoadBasis(liftExercise) === "bodyweight" ? 0 : loadStep;
+    // The window the slot is actually running on — the same reading the
+    // prescription used, so banking cannot disagree with what was prescribed.
+    // Mirrors SessionCompletion.
+    const window = C.repWindow(
+      lift.minimumReps || 5, lift.maximumReps || 8, lift.currentReps || lift.minimumReps || 5,
+      increment > 0,
+    );
     const state = {
-      sets: lift.doubleProgressionSets || 3, minReps: lift.minimumReps || 5,
-      maxReps: lift.maximumReps || 8, currentReps: lift.currentReps || lift.minimumReps || 5,
+      sets: lift.doubleProgressionSets || 3, minReps: window.low,
+      maxReps: window.high, currentReps: window.current,
       weightLb: lift.baseWeightLb, incrementLb: increment, stallCount: lift.stallCount || 0,
     };
     const next = C.advanceAccessory(state, accPerf(se, loadStep));
@@ -2093,12 +2100,16 @@ export async function createSessionFromProgramDay(program, day) {
     // Recovery retains movement familiarity but not a full accessory session.
     // Banking this exposure cannot advance the slot's rep/load target.
     const effectiveSets = program.currentWeek === C.DELOAD_WEEK ? 1 : ordinarySets;
+    // The target clamped into the slot's own window, so the card, the built
+    // session, and the advance all read the same number. Mirrors
+    // ProgramAccessory.prescribedReps.
+    const accReps = C.repWindow(acc.minReps, acc.maxReps, acc.currentReps, acc.incrementLb > 0).current;
     const sets = [];
     for (let i = 0; i < effectiveSets; i += 1) {
-      const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : acc.currentReps, {
+      const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : accReps, {
         perSide: ex && ex.isUnilateral, unit,
         targetWeightLb: isTimed ? 0 : acc.weightLb, plannedWeightLb: isTimed ? 0 : weightLb,
-        plannedReps: isTimed ? 1 : acc.currentReps,
+        plannedReps: isTimed ? 1 : accReps,
         plannedDurationSeconds: isTimed ? (acc.targetSeconds || 30) : null,
         prescriptionBlock: ex?.type === "conditioning" ? "conditioning" : "work",
         ...loadOptions(ex),
@@ -2109,7 +2120,7 @@ export async function createSessionFromProgramDay(program, day) {
     exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null,
       barId: barStamp(ex, bar),
       targetWeightLb: isTimed ? 0 : acc.weightLb, plannedWeightLb: isTimed ? 0 : weightLb,
-      plannedSets: effectiveSets, plannedReps: isTimed ? 1 : acc.currentReps,
+      plannedSets: effectiveSets, plannedReps: isTimed ? 1 : accReps,
       plannedDurationSeconds: isTimed ? (acc.targetSeconds || 30) : null,
       programRole: "accessory", programSlotId: acc.id, sets });
   }

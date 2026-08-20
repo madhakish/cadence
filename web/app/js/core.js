@@ -1043,13 +1043,17 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
     const phase = PHASES[p];
     return { weightLb: roundTo(weight, roundingLb), sets: phase.sets + extraSets, reps: phase.reps, phase: p, cycleNumber: state.cycleNumber };
   }
-  if (style === "doubleProgression") return {
-    weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
-    sets: p === 4 ? 1 : Math.max(1, config.workingSets),
-    reps: p === 4 ? Math.min(5, Math.max(1, config.minimumReps))
-      : Math.min(Math.max(config.currentReps, config.minimumReps), config.maximumReps),
-    phase: p, cycleNumber: state.cycleNumber,
-  };
+  if (style === "doubleProgression") {
+    // One owner for the window, shared with the advance, so the prescription
+    // and the grade can never disagree about it.
+    const window = repWindow(config.minimumReps, config.maximumReps, config.currentReps);
+    return {
+      weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
+      sets: p === 4 ? 1 : Math.max(1, config.workingSets),
+      reps: p === 4 ? Math.min(5, window.low) : window.current,
+      phase: p, cycleNumber: state.cycleNumber,
+    };
+  }
   const byStyle = {
     wave: {
       1: [5, 5, 1.0], 2: [5, 3, 1.10], 3: [3, 3, 1.175], 4: [2, 3, 0.775],
@@ -2227,22 +2231,77 @@ export function recentReturnFromAway(nowMs, lastSessionMs, intervals = [], windo
 
 // Accessory double progression. state: { sets, minReps, maxReps, currentReps,
 // weightLb, incrementLb, stallCount }; perf: { completedSets, minRepsAchieved, anyStoppedEarly }
+// The rep window a double-progression slot actually runs on, and the target
+// inside it.
+//
+// The stored endpoints are two independent numbers that the editors let the
+// lifter move past each other, so `minReps > maxReps` is a reachable state —
+// the program editor already warns about it. Reading those endpoints literally
+// is what made it destructive: with a window of 8–5 and a target of 5,
+// `currentReps >= maxReps` is immediately true, so a slot prescribed at 3×5
+// banked one clean exposure and came back at 3×8 with the load stepped as well
+// — the whole point of double progression is that reps and load never move in
+// the same exposure.
+//
+// The endpoints are therefore read as an UNORDERED pair: crossed steppers are
+// the same window with its ends swapped, which preserves the runway the lifter
+// configured. Collapsing `max` up to `min` instead would keep the window
+// degenerate, and a degenerate window has no rep runway at all — every clean
+// exposure would add load, which is the behaviour being fixed. The target is
+// then clamped into that window, so what gets prescribed and what gets graded
+// are the same number by construction.
+//
+// Stored endpoints are deliberately NOT rewritten: the crossed pair is the
+// lifter's to correct, and the editor warning is what tells them.
+//
+// `capped` is what a slot WITHOUT a loadable increment turns off. Its window
+// top is advisory — with no weight to add, the only way to progress is more
+// reps, so it climbs past the top and the target must not be pulled back down
+// to it. It is still floored at the bottom.
+// Mirrored 1:1 in CadenceCore ProgramProgression.repWindow.
+export function repWindow(minReps, maxReps, currentReps, capped = true) {
+  const lo = Number.isFinite(minReps) ? minReps : 1;
+  const hi = Number.isFinite(maxReps) ? maxReps : lo;
+  const current = Number.isFinite(currentReps) ? currentReps : lo;
+  const low = Math.max(1, Math.min(lo, hi));
+  const high = Math.max(low, Math.max(lo, hi));
+  const floored = Math.max(current, low);
+  return { low, high, current: capped ? Math.min(floored, high) : floored };
+}
+
+// Accessory double progression. Two guarantees hold for EVERY input, including
+// a slot whose stored window is incoherent:
+//   - the rep target rises only at a held load; and
+//   - the load rises only with the rep target held or dropped.
+// They are enforced by construction rather than by reasoning about which
+// configurations are reachable — the reported failure (a slot prescribed at
+// 3×5 @ 80 returning 3×8 @ 85 in one exposure) was a state nobody had
+// enumerated, and the next one will be too.
 export function advanceAccessory(state, perf) {
   const next = { ...state };
-  const hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= state.currentReps
+  const weighted = state.incrementLb > 0;
+  const window = repWindow(state.minReps, state.maxReps, state.currentReps, weighted);
+  next.currentReps = window.current;
+  const hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= window.current
     && !perf.anyStoppedEarly && perf.performedAtPlannedLoad !== false
     && (perf.grindyOrWobbleSets || 0) <= 1 && (perf.bodyFlagSets || 0) === 0;
-  const weighted = state.incrementLb > 0;
   if (!hitAll) {
     next.stallCount = state.stallCount + 1;
-  } else if (weighted && state.currentReps >= state.maxReps) {
+  } else if (weighted && window.current >= window.high) {
     next.weightLb = state.weightLb + state.incrementLb; // earned the rep range → add load, reset reps
-    next.currentReps = state.minReps;
+    // A load step may drop the rep target or hold it. It may never RAISE it:
+    // that is the structural half of the rule, and it holds whatever the
+    // stored window says. Reading `low` alone was the bug — with the endpoints
+    // crossed, the bottom of the window sat above the target the lifter had
+    // just performed, so the "reset" moved reps UP while the load moved up
+    // too. Nothing below this line has to reason about which states can do
+    // that.
+    next.currentReps = Math.min(window.low, window.current);
     next.stallCount = 0;
   } else {
     // weighted: climb to the cap. bodyweight/timed (no loadable increment): keep
-    // climbing reps — maxReps is advisory, since there's no weight to add.
-    next.currentReps = weighted ? Math.min(state.currentReps + 1, state.maxReps) : state.currentReps + 1;
+    // climbing reps — the window top is advisory, since there's no weight to add.
+    next.currentReps = weighted ? Math.min(window.current + 1, window.high) : window.current + 1;
     next.stallCount = 0;
   }
   return next;
@@ -2284,16 +2343,22 @@ export function exposurePreview({
   // rep-window fields existed (and every freshly added lift) carries them as
   // `undefined`, and an explicit undefined WINS an object spread. That would
   // reach advanceAccessory as NaN and preview a rep window of nothing.
-  // Same clamps the native side applies in ProgramLift.prescriptionConfiguration,
-  // so both platforms read a malformed slot identically.
+  // `repWindow` then owns the reading — including crossed endpoints, which
+  // would otherwise let the preview show a rep jump and a load step landing
+  // together. Same clamps the native side applies, so both platforms read a
+  // malformed slot identically.
   const config = { ...configuration };
   const num = (value, fallback) => (Number.isFinite(value) ? value : fallback);
   config.workingSets = Math.max(1, num(config.workingSets, 3));
-  config.minimumReps = Math.max(1, num(config.minimumReps, 5));
-  config.maximumReps = Math.max(config.minimumReps, num(config.maximumReps, 8));
+  const configuredWindow = repWindow(
+    num(config.minimumReps, 5), num(config.maximumReps, 8),
+    num(config.currentReps, num(config.minimumReps, 5)),
+  );
+  config.minimumReps = configuredWindow.low;
+  config.maximumReps = configuredWindow.high;
   config.currentReps = style === "linearFives"
     ? (num(config.currentReps, 5) <= 3 ? 3 : 5)
-    : Math.max(config.minimumReps, num(config.currentReps, config.minimumReps));
+    : configuredWindow.current;
   let state = { baseWeightLb, estimatedMaxLb, stallCount, role, lastIncrementLb: 0 };
   let cycle = Math.max(1, cycleNumber);
   let phase = PHASES[rotation] ? rotation : 1;

@@ -805,18 +805,22 @@ enum SessionCompletion {
                 programRoundingLb: program.roundingLb,
                 exerciseType: entry.exercise?.typeRaw
             )
+            // A bodyweight-basis slot progresses by reps alone — its identity
+            // carries no external load, so a numeric increment would store
+            // weight that history, tonnage, and PR detection all ignore.
+            // Adding a belt is switching to the weighted identity (Weighted
+            // Pull-up), not incrementing this one.
+            let increment = entry.exercise?.loadBasis == .bodyweight ? 0 : loadStep
+            // The window the slot is actually running on — the same reading
+            // `prescriptionConfiguration` gave the session it just banked.
+            let window = lift.repWindow(loadable: increment > 0)
             let prior = AccessoryState(
                 sets: max(1, lift.doubleProgressionSets),
-                minReps: max(1, lift.minimumReps),
-                maxReps: max(lift.minimumReps, lift.maximumReps),
-                currentReps: max(lift.minimumReps, lift.currentReps),
+                minReps: window.low,
+                maxReps: window.high,
+                currentReps: window.current,
                 weightLb: lift.baseWeightLb,
-                // A bodyweight-basis slot progresses by reps alone — its
-                // identity carries no external load, so a numeric increment
-                // would store weight that history, tonnage, and PR detection
-                // all ignore. Adding a belt is switching to the weighted
-                // identity (Weighted Pull-up), not incrementing this one.
-                incrementLb: entry.exercise?.loadBasis == .bodyweight ? 0 : loadStep,
+                incrementLb: increment,
                 stallCount: lift.stallCount
             )
             let next = ProgramProgression.advanceAccessory(

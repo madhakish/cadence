@@ -241,6 +241,32 @@ signal** → target +1 rep. At the top of the range with a load step → add
 the step, reset to the range bottom. Load step 0 (bodyweight) keeps
 adding reps; the range top is advisory.
 
+Reps and load never move in the same exposure, whatever the slot's stored
+window says: the rep target rises only at a held load, and the load rises only
+with the target held or dropped. The load-step branch takes the lower of the
+window bottom and the target it just graded, so it cannot raise reps even from
+a nonsensical window — the guarantee does not depend on enumerating which
+configurations are reachable.
+
+Alongside that, the rep window is read as an **unordered pair** of endpoints
+and the current target is clamped inside it, so the number that is prescribed
+is the number that is graded. The endpoints are two independently edited
+values and the editors let them cross; read literally, a crossed window
+(minimum 8, maximum 5) put the target at the top of its own range while it sat
+at the bottom, so a slot showing 3×5 banked one clean exposure and came back
+at 3×8 with the load stepped as well. Swapping
+the ends preserves the runway the lifter configured — collapsing the maximum
+up to the minimum would leave a window with no rep runway, where every clean
+exposure adds load. The stored endpoints are not rewritten; the program
+editor's existing "minimum reps exceed its maximum" warning is what asks the
+lifter to correct them, and the steppers now carry one endpoint with the other
+so new crossings are not created. A window whose ends are deliberately equal
+is a fixed-rep linear slot and keeps working as one. A slot with **no loadable
+increment** is floored at the window bottom but never capped at its top: with
+no weight to add, reps are the only way it progresses, so it keeps climbing —
+pulling its target back into the window would peg it one rep above the maximum
+forever.
+
 Anything short of that holds the target and counts a stall. A rotation
 deliberately cut by an accepted red-readiness proposal is a hold, not a
 missed exposure — it never counts against the accessory. Phase-4 recovery

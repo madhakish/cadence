@@ -231,16 +231,16 @@ enum ProgramSession {
             // its rep/load target (see SessionCompletion).
             let effectiveSets = phase == .deload ? 1 : ordinarySets
             entry.plannedSets = effectiveSets
-            entry.plannedReps = isTimed ? 1 : acc.currentReps
+            entry.plannedReps = isTimed ? 1 : acc.prescribedReps
             entry.plannedDurationSeconds = isTimed ? acc.targetSeconds : nil
             context.insert(entry)
             session.exercises.append(entry)
             for i in 0..<effectiveSets {
-                insertSet(entry, order: i, weight: isTimed ? carryLb : weightLb, reps: isTimed ? 1 : acc.currentReps,
+                insertSet(entry, order: i, weight: isTimed ? carryLb : weightLb, reps: isTimed ? 1 : acc.prescribedReps,
                           warmup: false, perSide: exercise.isUnilateral, enteredUnit: entryUnit,
                           durationSeconds: isTimed ? acc.targetSeconds : nil,
                           targetWeight: isTimed ? 0 : acc.weightLb, plannedWeight: isTimed ? 0 : weightLb,
-                          plannedReps: isTimed ? 1 : acc.currentReps,
+                          plannedReps: isTimed ? 1 : acc.prescribedReps,
                           plannedDurationSeconds: isTimed ? acc.targetSeconds : nil,
                           block: exercise.type == .conditioning ? .conditioning : .work,
                           context: context)
