@@ -495,6 +495,44 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(c.stallCount, 1)
     }
 
+    /// The guarantee, proven over every window/target/increment combination
+    /// rather than over the configurations someone thought to enumerate: a
+    /// clean exposure raises the rep target OR the load, never both, and never
+    /// raises reps while adding load. The reported failure was a state nobody
+    /// had enumerated, and the pre-fix engine violated this in 1365 of the
+    /// 12,544 combinations swept here. [INV-WINDOW-BEFORE-LOAD]
+    func testNoStateRaisesRepsAndLoadTogether() {
+        var checked = 0
+        for minReps in 1...14 {
+            for maxReps in 1...14 {
+                for currentReps in 1...16 {
+                    for incrementLb in [0.0, 2.5, 5.0, 10.0] {
+                        let slot = AccessoryState(
+                            sets: 3, minReps: minReps, maxReps: maxReps, currentReps: currentReps,
+                            weightLb: 80, incrementLb: incrementLb
+                        )
+                        // A clean exposure of whatever this slot actually prescribes.
+                        let prescribed = P.repWindow(
+                            minReps: minReps, maxReps: maxReps,
+                            currentReps: currentReps, capped: incrementLb > 0
+                        ).current
+                        let after = P.advanceAccessory(slot, perf: AccessoryPerformance(
+                            completedSets: 3, minRepsAchieved: prescribed, anyStoppedEarly: false
+                        ))
+                        checked += 1
+                        XCTAssertFalse(
+                            after.currentReps > prescribed && after.weightLb > slot.weightLb,
+                            """
+                            window \(minReps)–\(maxReps), target \(currentReps), step \(incrementLb):                             3×\(prescribed) @ 80 → 3×\(after.currentReps) @ \(after.weightLb)                             raised reps and load together
+                            """
+                        )
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(checked, 14 * 14 * 16 * 4)
+    }
+
     /// The reported log: a dumbbell row prescribed at 3×5 @ 80 came back at
     /// 3×8 @ 85 after ONE clean exposure — a rep jump and a load step in the
     /// same session, which double progression exists to prevent. The slot's

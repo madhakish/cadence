@@ -241,13 +241,20 @@ signal** → target +1 rep. At the top of the range with a load step → add
 the step, reset to the range bottom. Load step 0 (bodyweight) keeps
 adding reps; the range top is advisory.
 
-Reps and load never move in the same exposure. The rep window is read as an
-**unordered pair** of endpoints, and the current target is clamped inside it,
-so the number that is prescribed is the number that is graded. The endpoints
-are two independently edited values and the editors let them cross; read
-literally, a crossed window (minimum 8, maximum 5) put the target at the top
-of its own range while it sat at the bottom, so a slot showing 3×5 banked one
-clean exposure and came back at 3×8 with the load stepped as well. Swapping
+Reps and load never move in the same exposure, whatever the slot's stored
+window says: the rep target rises only at a held load, and the load rises only
+with the target held or dropped. The load-step branch takes the lower of the
+window bottom and the target it just graded, so it cannot raise reps even from
+a nonsensical window — the guarantee does not depend on enumerating which
+configurations are reachable.
+
+Alongside that, the rep window is read as an **unordered pair** of endpoints
+and the current target is clamped inside it, so the number that is prescribed
+is the number that is graded. The endpoints are two independently edited
+values and the editors let them cross; read literally, a crossed window
+(minimum 8, maximum 5) put the target at the top of its own range while it sat
+at the bottom, so a slot showing 3×5 banked one clean exposure and came back
+at 3×8 with the load stepped as well. Swapping
 the ends preserves the runway the lifter configured — collapsing the maximum
 up to the minimum would leave a window with no rep runway, where every clean
 exposure adds load. The stored endpoints are not rewritten; the program

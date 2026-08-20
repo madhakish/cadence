@@ -907,6 +907,35 @@ ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minReps
 ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "adjusted-lower accessory work never earns progression");
 ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minRepsAchieved: 10, anyStoppedEarly: false, grindyOrWobbleSets: 2 });
 ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "poor-quality accessory work holds progression");
+// The guarantee, proven over every window/target/increment combination rather
+// than over the configurations someone thought to enumerate: a clean exposure
+// raises the rep target OR the load, never both, and never raises reps while
+// adding load. The reported failure was a state nobody had enumerated.
+let sweepChecked = 0;
+let sweepBothRose = null;
+for (let minReps = 1; minReps <= 14 && !sweepBothRose; minReps += 1) {
+  for (let maxReps = 1; maxReps <= 14 && !sweepBothRose; maxReps += 1) {
+    for (let currentReps = 1; currentReps <= 16 && !sweepBothRose; currentReps += 1) {
+      for (const incrementLb of [0, 2.5, 5, 10]) {
+        const slot = { sets: 3, minReps, maxReps, currentReps, weightLb: 80, incrementLb, stallCount: 0 };
+        // A clean exposure of whatever this slot actually prescribes.
+        const prescribed = C.repWindow(minReps, maxReps, currentReps, incrementLb > 0).current;
+        const after = C.advanceAccessory(slot, {
+          completedSets: 3, minRepsAchieved: prescribed, anyStoppedEarly: false,
+          performedAtPlannedLoad: true, grindyOrWobbleSets: 0, bodyFlagSets: 0,
+        });
+        sweepChecked += 1;
+        if (after.currentReps > prescribed && after.weightLb > slot.weightLb) {
+          sweepBothRose = { minReps, maxReps, currentReps, incrementLb, prescribed, after };
+          break;
+        }
+      }
+    }
+  }
+}
+ok(sweepBothRose === null && sweepChecked === 14 * 14 * 16 * 4,
+  `[INV-WINDOW-BEFORE-LOAD] no window/target/increment combination raises reps and load together (${sweepChecked} checked)${sweepBothRose ? ` — ${JSON.stringify(sweepBothRose)}` : ""}`);
+
 // The reported log: a dumbbell row prescribed at 3×5 @ 80 came back at 3×8 @ 85
 // after ONE clean exposure — a rep jump and a load step in the same session,
 // which double progression exists to prevent. The slot's rep window had been

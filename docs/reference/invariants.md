@@ -541,23 +541,33 @@ once the base crosses 85% of capability.
 ### INV-WINDOW-BEFORE-LOAD
 *platforms: core*
 
-Double progression moves reps **or** load in an exposure, never both. The rep
-window's endpoints are two independently edited numbers, so the lifter can
-cross them; the engine therefore reads them as an **unordered pair** and
-clamps the current target inside the resulting window, which makes the number
-that is prescribed and the number that is graded the same number by
-construction. Read literally instead, a crossed window (minimum 8, maximum 5)
-puts the target at the top of its own range while it sits at the bottom: one
-clean exposure of a slot showing 3×5 @ 80 returned 3×8 @ 85 — a 60% volume
-jump stacked on a load step, neither of them earned. Swapping the ends
-preserves the runway that was configured; collapsing the maximum up to the
-minimum would leave a window with no runway at all, where every clean exposure
-adds load. Stored endpoints are not rewritten — the crossed pair is the
-lifter's to correct, and the editor already warns about it — and a window
-whose ends are deliberately equal stays what it is, a fixed-rep linear slot.
-A slot with no loadable increment is floored at the window bottom but never
-capped at its top: reps are the only way it progresses, so it keeps climbing
-past the top rather than being pegged one rep above it forever.
+Double progression moves reps **or** load in an exposure, never both. For
+every input, including a slot whose stored window is incoherent: the rep
+target rises only at a held load, and the load rises only with the rep target
+held or dropped. This is enforced **by construction** — the branch that adds
+load takes the lower of the window bottom and the target it just graded, so it
+can drop the target or hold it but never raise it — rather than by reasoning
+about which configurations are reachable. The failure that prompted the rule
+was a state nobody had enumerated, and the next one will be too. Both suites
+sweep every window/target/increment combination rather than a chosen handful;
+the pre-fix engine violated the rule in 1365 of them.
+
+The reachable path that was found: the window's endpoints are two
+independently edited numbers, so a lifter can cross them. Read literally, a
+crossed window (minimum 8, maximum 5) puts the target at the top of its own
+range while it sits at the bottom, and one clean exposure of a slot showing
+3×5 @ 80 returned 3×8 @ 85 — a 60% volume jump stacked on a load step, neither
+earned. So the endpoints are also read as an **unordered pair** and the target
+is clamped inside the result, which makes the number that is prescribed and
+the number that is graded the same number. Swapping the ends preserves the
+runway that was configured; collapsing the maximum up to the minimum would
+leave a window with no runway at all, where every clean exposure adds load.
+Stored endpoints are not rewritten — the crossed pair is the lifter's to
+correct, and the editor already warns about it — and a window whose ends are
+deliberately equal stays what it is, a fixed-rep linear slot. A slot with no
+loadable increment is floored at the window bottom but never capped at its
+top: reps are the only way it progresses, so it keeps climbing past the top
+rather than being pegged one rep above it forever.
 
 > The lifter's own report: "db bent over row had me at 80# 3x5 last cycle,
 > this cycle has me at 85# and 3x8 — too much of a weight jump plus volume
