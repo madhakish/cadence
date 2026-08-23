@@ -753,6 +753,15 @@ struct ProgramEditorView: View {
                    exerciseByName[lift.exerciseName]?.supportsLoadableIncrement ?? true {
                     messages.append("\(lift.exerciseName) needs a rotation-1 base weight.")
                 }
+                // A crossed window warns on EVERY lift, resolved exercise or
+                // not: `ProgramFileContract` rejects the stored pair on every
+                // style, the endpoints are deliberately never repaired, and
+                // the engine's swapped reading means training gives no other
+                // sign. Gating this on double progression left wave/automatic
+                // slots exporting into a contract error with no editor trail.
+                if lift.minimumReps > lift.maximumReps {
+                    messages.append("\(lift.exerciseName)'s minimum reps exceed its maximum; program export will reject it.")
+                }
                 if lift.estimatedMaxLb > 0, lift.baseWeightLb > lift.estimatedMaxLb {
                     messages.append("\(lift.exerciseName)'s base is above its estimated 1RM.")
                 } else if lift.estimatedMaxLb > 0, program.focus.tmFraction > 0,
@@ -783,15 +792,6 @@ struct ProgramEditorView: View {
                     if exercise.movementPattern == .olympicPower, plan.reps > 3 {
                         messages.append("\(lift.exerciseName) is power work; keep programmed sets at 1–3 reps.")
                     }
-                    // A crossed window on a LIFT went unflagged while the same
-                    // state on an accessory was called out. The engine reads
-                    // the endpoints as an unordered pair so training is
-                    // unaffected, but `ProgramFileContract` rejects the stored
-                    // pair, so exporting the program fails until it is fixed.
-                    if lift.prescription == .doubleProgression,
-                       lift.minimumReps > lift.maximumReps {
-                        messages.append("\(lift.exerciseName)'s minimum reps exceed its maximum; program export will reject it.")
-                    }
                 }
             }
             for accessory in day.orderedAccessories {
@@ -821,10 +821,14 @@ struct ProgramEditorView: View {
                 }
                 // A loaded accessory with no increment can never add weight —
                 // it climbs reps past its own maximum forever. Flag it here
-                // rather than let the slot quietly stop progressing.
-                if let exercise = exerciseByName[accessory.exerciseName],
-                   ProgramProgression.accessoryCannotProgressLoad(
-                       exerciseType: exercise.typeRaw, loadBasis: exercise.loadBasis,
+                // rather than let the slot quietly stop progressing. A missing
+                // exercise must not fail OPEN: fall back to the inferred
+                // (external) basis, the same reading web's resolvedLoadBasis
+                // gives an unknown exercise.
+                if ProgramProgression.accessoryCannotProgressLoad(
+                       exerciseType: exercise?.typeRaw,
+                       loadBasis: exercise?.loadBasis
+                           ?? LoadSemantics.inferredBasis(exerciseType: nil),
                        weightLb: accessory.weightLb, incrementLb: accessory.incrementLb) {
                     messages.append("\(accessory.exerciseName) carries load but has no increment, so it can never add weight. Set an increment.")
                 }
@@ -1449,12 +1453,12 @@ private struct ProgramLiftRow: View {
                     set: { (value: Int) in
                         lift.minimumReps = value
                         lift.maximumReps = max(lift.maximumReps, value)
-                        // Floor the target into the new window; never cap it.
-                        // A slot with no loadable increment climbs past its
-                        // top on purpose, and capping here would delete reps
-                        // the lifter earned. The engine caps at prescription
-                        // time for the slots that should be capped.
-                        lift.currentReps = max(lift.currentReps, value)
+                        // The endpoints are the ONLY fields a stepper moves.
+                        // `repWindow` floors the target into the window at
+                        // every read, so writing it here would only inject
+                        // reps the lifter never earned — an exploratory
+                        // up-and-back-down tap used to ratchet the target up
+                        // with no way back.
                     }
                 ), in: 1...20)
                 Stepper("Maximum reps: \(lift.maximumReps)", value: Binding(
@@ -1462,7 +1466,6 @@ private struct ProgramLiftRow: View {
                     set: { (value: Int) in
                         lift.maximumReps = value
                         lift.minimumReps = min(lift.minimumReps, value)
-                        lift.currentReps = max(lift.currentReps, lift.minimumReps)
                     }
                 ), in: 1...30)
                 // An unloadable slot has no load to add and climbs past its
@@ -1588,8 +1591,7 @@ private struct ProgramAccessoryRow: View {
                     set: { (value: Int) in
                         accessory.minReps = value
                         accessory.maxReps = max(accessory.maxReps, value)
-                        // Floor only — see the lift window above.
-                        accessory.currentReps = max(accessory.currentReps, value)
+                        // Endpoints only — see the lift window above.
                     }
                 ), in: 1...20)
                 Stepper("Max reps: \(accessory.maxReps)", value: Binding(
@@ -1597,7 +1599,6 @@ private struct ProgramAccessoryRow: View {
                     set: { (value: Int) in
                         accessory.maxReps = value
                         accessory.minReps = min(accessory.minReps, value)
-                        accessory.currentReps = max(accessory.currentReps, accessory.minReps)
                     }
                 ), in: 1...30)
                 Stepper("Load step: +\(settingsList.unitDisplay.format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)

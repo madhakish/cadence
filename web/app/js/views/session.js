@@ -1621,10 +1621,14 @@ async function advanceProgram(session, milestones) {
       // nothing measures AND capped the rep window, stopping the slot
       // progressing at all. Mirrors ProgramAccessory.coreState.
       const accExercise = exerciseByName.get(acc.exerciseName);
-      Object.assign(acc, C.advanceAccessory(
+      // The gated zero is for the ADVANCE only: write back just the fields
+      // the advance moves, never the gated increment — the stored step is
+      // warned about in the editor, not destroyed. Mirrors SessionCompletion.
+      const next = C.advanceAccessory(
         { ...acc, incrementLb: C.hasLoadStep(acc.incrementLb, accExercise) ? acc.incrementLb : 0 },
         accPerf(se, loadStep),
-      ));
+      );
+      acc.weightLb = next.weightLb; acc.currentReps = next.currentReps; acc.stallCount = next.stallCount;
     }
   }
   // Lift slots can opt into rep-window progression instead of phase grading.
@@ -1644,12 +1648,16 @@ async function advanceProgram(session, milestones) {
     // The window the slot is actually running on — the same reading the
     // prescription used, so banking cannot disagree with what was prescribed.
     // Mirrors SessionCompletion.
+    // RAW stored values, exactly as the prescription read them — repWindow
+    // owns every default and floor. View-layer `|| 5` fallbacks rewrote a
+    // stored 0 into a window the prescription never used, so a performed
+    // prescription could fail its own grade.
     const window = C.repWindow(
-      lift.minimumReps || 5, lift.maximumReps || 8, lift.currentReps || lift.minimumReps || 5,
+      lift.minimumReps, lift.maximumReps, lift.currentReps,
       increment > 0,
     );
     const state = {
-      sets: lift.doubleProgressionSets || 3, minReps: window.low,
+      sets: Math.max(1, lift.doubleProgressionSets ?? 3), minReps: window.low,
       maxReps: window.high, currentReps: window.current,
       weightLb: lift.baseWeightLb, incrementLb: increment, stallCount: lift.stallCount || 0,
     };

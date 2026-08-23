@@ -42,6 +42,14 @@ public enum LoadBasis: String, Codable, CaseIterable, Sendable {
     }
 
     public var supportsVolume: Bool { supportsLoadPR }
+
+    /// Whether a double-progression slot on this basis has a load step to
+    /// earn. A bodyweight identity carries no external load, so its rep-window
+    /// top is advisory — it climbs past it because reps are the only way it
+    /// progresses (see `ProgramProgression.repWindow`'s `capped`). Adding a
+    /// belt is switching to the weighted identity, not incrementing this one.
+    /// Mirrored in web/app/js/core.js `supportsLoadableIncrement`.
+    public var supportsLoadableIncrement: Bool { self != .bodyweight }
 }
 
 public enum LoadSemantics {

@@ -192,13 +192,13 @@ export const resolvedLoadBasis = (exercise) => LOAD_BASES.includes(exercise?.loa
 // Whether a double-progression slot on this exercise has a load step to earn.
 // A bodyweight identity carries no external load, so its rep-window top is
 // advisory — it climbs past it because reps are the only way it progresses.
-// See `repWindow`'s `capped`. Mirrors Cadence Exercise.supportsLoadableIncrement.
+// See `repWindow`'s `capped`. Mirrors CadenceCore LoadBasis.supportsLoadableIncrement.
 export const supportsLoadableIncrement = (exercise) => resolvedLoadBasis(exercise) !== "bodyweight";
 
 // Whether a slot actually has a load step to earn. BOTH halves are required
 // and only one of them was ever checked: a numeric increment is not a load step
-// on an identity that carries no external load. Mirrors
-// ProgramAccessory.hasLoadStep.
+// on an identity that carries no external load. Mirrors CadenceCore
+// ProgramProgression.hasLoadStep.
 export const hasLoadStep = (incrementLb, exercise) =>
   supportsLoadableIncrement(exercise) && incrementLb > 0;
 

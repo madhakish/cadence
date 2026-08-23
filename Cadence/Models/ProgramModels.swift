@@ -238,7 +238,7 @@ final class ProgramLift {
     /// `loadable` is false for a slot whose double progression has no weight
     /// to add (a bodyweight-basis identity), which climbs past its window top
     /// instead of resetting.
-    func repWindow(loadable: Bool = true) -> (low: Int, high: Int, current: Int) {
+    func repWindow(loadable: Bool) -> (low: Int, high: Int, current: Int) {
         ProgramProgression.repWindow(
             minReps: minimumReps, maxReps: maximumReps, currentReps: currentReps,
             capped: loadable
@@ -251,7 +251,7 @@ final class ProgramLift {
     /// while being prescribed a capped one can never satisfy its own grade and
     /// stalls forever. Callers pass `exercise.supportsLoadableIncrement`.
     func prescriptionConfiguration(
-        movementGroup: String, loadable: Bool = true
+        movementGroup: String, loadable: Bool
     ) -> LiftPrescriptionConfiguration {
         // Resolved in CadenceCore so both clients agree — see resolvedOffsets.
         let window = repWindow(loadable: loadable)
@@ -347,15 +347,20 @@ final class ProgramAccessory {
     /// tonnage, and PR detection all ignore — and, worse, it capped the rep
     /// window, stopping the slot progressing in the one dimension that counts
     /// for it. That is the same mistake the lift path made, in the accessory
-    /// path. `loadable` comes from `Exercise.supportsLoadableIncrement`;
-    /// callers that cannot see the exercise keep the old reading.
-    /// Mirrored in web/app/js/core.js `hasLoadStep`.
-    func hasLoadStep(loadable: Bool = true) -> Bool { loadable && incrementLb > 0 }
+    /// path. The rule is core-owned (`ProgramProgression.hasLoadStep`,
+    /// mirrored in web/app/js/core.js and asserted by both suites); `loadable`
+    /// comes from `Exercise.supportsLoadableIncrement`, and callers that
+    /// cannot see the exercise keep the old reading by passing `true`.
+    func hasLoadStep(loadable: Bool) -> Bool {
+        ProgramProgression.hasLoadStep(
+            incrementLb: incrementLb, supportsLoadableIncrement: loadable
+        )
+    }
 
     /// The slot's effective rep window. See `ProgramProgression.repWindow`.
     /// A slot with no load step climbs past its window top, so its target is
     /// floored but never capped.
-    func repWindow(loadable: Bool = true) -> (low: Int, high: Int, current: Int) {
+    func repWindow(loadable: Bool) -> (low: Int, high: Int, current: Int) {
         ProgramProgression.repWindow(
             minReps: minReps, maxReps: maxReps, currentReps: currentReps,
             capped: hasLoadStep(loadable: loadable)
@@ -365,23 +370,13 @@ final class ProgramAccessory {
     /// What this slot prescribes right now — the target clamped into its own
     /// window, so the card, the built session, and the advance all read the
     /// same number even when the stored endpoints are crossed.
-    func prescribedReps(loadable: Bool = true) -> Int { repWindow(loadable: loadable).current }
+    func prescribedReps(loadable: Bool) -> Int { repWindow(loadable: loadable).current }
 
-    func coreState(loadable: Bool = true) -> AccessoryState {
+    func coreState(loadable: Bool) -> AccessoryState {
         AccessoryState(sets: sets, minReps: minReps, maxReps: maxReps, currentReps: currentReps,
                        weightLb: weightLb,
                        incrementLb: hasLoadStep(loadable: loadable) ? incrementLb : 0,
                        stallCount: stallCount)
-    }
-
-    func apply(_ s: AccessoryState) {
-        sets = s.sets
-        minReps = s.minReps
-        maxReps = s.maxReps
-        currentReps = s.currentReps
-        weightLb = s.weightLb
-        incrementLb = s.incrementLb
-        stallCount = s.stallCount
     }
 }
 

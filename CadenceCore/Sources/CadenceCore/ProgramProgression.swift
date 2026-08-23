@@ -1089,6 +1089,19 @@ public enum ProgramProgression {
         return (low, high, capped ? Swift.min(floored, high) : floored)
     }
 
+    /// Whether a slot actually has a load step to earn. BOTH halves are
+    /// required: a numeric increment is not a load step on an identity that
+    /// carries no external load — there is nothing to add it to. `loadable`
+    /// is `LoadBasis.supportsLoadableIncrement` for the slot's exercise;
+    /// callers that cannot resolve the exercise keep the increment's own
+    /// reading by passing `true`.
+    /// Mirrored 1:1 in web/app/js/core.js `hasLoadStep`.
+    public static func hasLoadStep(
+        incrementLb: Double, supportsLoadableIncrement: Bool
+    ) -> Bool {
+        supportsLoadableIncrement && incrementLb > 0
+    }
+
     /// Accessory double progression: earn the top of the rep range across all
     /// sets, then add the smallest increment and reset reps. Never adds weight
     /// that wasn't earned.

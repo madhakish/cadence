@@ -1246,4 +1246,24 @@ final class ProgramProgressionTests: XCTestCase {
                        "when every set is a long one, rank them anyway rather than reporting none")
         XCTAssertNil(P.strengthSampleIndex(weightsLb: [], reps: []))
     }
+
+    // Mirrors the load-step gate block in web/tests/core.test.mjs (hasLoadStep /
+    // supportsLoadableIncrement): whether a slot has a load step to earn is
+    // shared domain logic, owned by CadenceCore so both suites can pin it.
+    func testLoadStepGateIsSharedDomainLogic() {
+        XCTAssertTrue(P.hasLoadStep(incrementLb: 5, supportsLoadableIncrement: true),
+                      "an increment on a loadable identity is a load step")
+        XCTAssertFalse(P.hasLoadStep(incrementLb: 0, supportsLoadableIncrement: true),
+                       "no increment, no load step")
+        XCTAssertFalse(P.hasLoadStep(incrementLb: 5, supportsLoadableIncrement: false),
+                       "an increment on a bodyweight identity has nothing to add itself to")
+        XCTAssertFalse(LoadBasis.bodyweight.supportsLoadableIncrement)
+        for basis in LoadBasis.allCases where basis != .bodyweight {
+            XCTAssertTrue(basis.supportsLoadableIncrement,
+                          "\(basis) carries external load, so a step is addable")
+        }
+        XCTAssertFalse(LoadSemantics.inferredBasis(exerciseType: "bodyweight").supportsLoadableIncrement)
+        XCTAssertTrue(LoadSemantics.inferredBasis(exerciseType: nil).supportsLoadableIncrement,
+                      "an unknown exercise keeps the increment's own reading")
+    }
 }

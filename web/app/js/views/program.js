@@ -39,7 +39,9 @@ export async function render(host) {
             baseWeightLb: planningBase(lift, exercise, program, completed),
             nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
-          lift.prescription || "automatic", lift,
+          lift.prescription || "automatic",
+          { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+            loadableIncrement: C.supportsLoadableIncrement(exercise) },
           volumeFallbackSets(lift, program),
         );
         card.append(ui.h("div", { class: "row program-slot" },
@@ -56,12 +58,15 @@ export async function render(host) {
       // — and timed work with no duration step. Mirrors ProgramOverviewView.
       const stalled = accessories.some((item) => {
         const exercise = exByName.get(item.exerciseName);
-        if (!exercise) return false;
-        if (exercise.type === "timed" || exercise.type === "conditioning") {
+        if (exercise && (exercise.type === "timed" || exercise.type === "conditioning")) {
           return !(item.durationStepSeconds > 0);
         }
+        // A missing exercise must not fail OPEN — the quietly stuck slot is
+        // exactly what this pill exists to flag. resolvedLoadBasis hands an
+        // unknown exercise the inferred (external) basis, so a loaded
+        // no-increment slot stays visible. Mirrors ProgramOverviewView.
         return C.accessoryCannotProgressLoad(
-          exercise.type, C.resolvedLoadBasis(exercise), item.weightLb, item.incrementLb,
+          exercise?.type, C.resolvedLoadBasis(exercise), item.weightLb, item.incrementLb,
         );
       });
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },

@@ -157,13 +157,18 @@ struct ProgramOverviewView: View {
     /// can never add to, and timed work with no duration step — and the first
     /// of those already has an owner the program editor uses.
     private func cannotProgress(_ accessory: ProgramAccessory) -> Bool {
-        guard let exercise = exercises.first(where: { $0.name == accessory.exerciseName })
-        else { return false }
-        if exercise.type == .timed || exercise.type == .conditioning {
+        // A missing exercise must not fail OPEN — the quietly stuck slot is
+        // exactly what this pill exists to flag. Fall back to the inferred
+        // (external) basis, the same reading web's resolvedLoadBasis gives an
+        // unknown exercise, so a loaded no-increment slot stays visible even
+        // when an import references a name the library no longer holds.
+        let exercise = exercises.first(where: { $0.name == accessory.exerciseName })
+        if let exercise, exercise.type == .timed || exercise.type == .conditioning {
             return accessory.durationStepSeconds <= 0
         }
         return ProgramProgression.accessoryCannotProgressLoad(
-            exerciseType: exercise.typeRaw, loadBasis: exercise.loadBasis,
+            exerciseType: exercise?.typeRaw,
+            loadBasis: exercise?.loadBasis ?? LoadSemantics.inferredBasis(exerciseType: nil),
             weightLb: accessory.weightLb, incrementLb: accessory.incrementLb
         )
     }
