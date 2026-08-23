@@ -460,10 +460,15 @@ export async function programEditor(p) {
         // design, so the missing-base warning would fire forever on a slot
         // that is configured exactly right.
         const liftExercise = exerciseByName.get(lift.exerciseName);
-        if (!(lift.baseWeightLb > 0)
-          && (!liftExercise || C.resolvedLoadBasis(liftExercise) !== "bodyweight")) {
+        if (!(lift.baseWeightLb > 0) && C.supportsLoadableIncrement(liftExercise)) {
           warnings.push(`${lift.exerciseName} needs a rotation-1 base weight.`);
         }
+        // A crossed window warns on EVERY lift, resolved exercise or not:
+        // the program-file contract rejects the stored pair on every style,
+        // the endpoints are deliberately never repaired, and the engine's
+        // swapped reading means training gives no other sign. Mirrors
+        // SettingsView.
+        if ((lift.minimumReps ?? 5) > (lift.maximumReps ?? 8)) warnings.push(`${lift.exerciseName}'s minimum reps exceed its maximum; program export will reject it.`);
         if (lift.estimatedMaxLb > 0 && lift.baseWeightLb > lift.estimatedMaxLb) warnings.push(`${lift.exerciseName}'s base is above its estimated 1RM.`);
         else {
           const ceiling = C.focusParams(p.focus).tm;
@@ -474,7 +479,8 @@ export async function programEditor(p) {
           const plan = C.programPlanFor(
           { cycleNumber: 1, baseWeightLb: lift.baseWeightLb, nextPhase: 1, incrementLb: 0 },
           p.roundingLb, exercise.type, exercise.movementGroup, lift.role, p.focus, lift.prescription || "automatic",
-          { ...lift, workingSets: lift.doubleProgressionSets ?? 3 });
+          { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+            loadableIncrement: C.supportsLoadableIncrement(exercise) });
           // Published methodology slots deliberately shape their own weekly
           // balance (squat 3×/week, one heavy pull); the press/pull and
           // squat/hinge heuristics would permanently flag the canon, so those
@@ -491,15 +497,29 @@ export async function programEditor(p) {
       for (const accessory of day.accessories || []) {
         const exercise = exerciseByName.get(accessory.exerciseName);
         const durationBased = exercise?.type === "timed" || exercise?.type === "conditioning";
+        // A slot with no load step climbs PAST its window top on purpose —
+        // reps are its only progression. Calling that "outside its rep range"
+        // told a correctly-progressing bodyweight accessory it was
+        // misconfigured, every rotation, forever. Only a target below the
+        // window, or above it on a slot that really does cap, is worth saying.
+        // Mirrors SettingsView.
+        const capped = C.hasLoadStep(accessory.incrementLb, exercise);
         if (!durationBased && accessory.minReps > accessory.maxReps) warnings.push(`${accessory.exerciseName}'s minimum reps exceed its maximum.`);
-        else if (!durationBased && (accessory.currentReps < accessory.minReps || accessory.currentReps > accessory.maxReps)) warnings.push(`${accessory.exerciseName}'s current reps are outside its rep range.`);
+        else if (!durationBased && (accessory.currentReps < accessory.minReps || (capped && accessory.currentReps > accessory.maxReps))) warnings.push(`${accessory.exerciseName}'s current reps are outside its rep range.`);
+        // A load step on an identity that carries no external load is ignored,
+        // so say so rather than letting the stepper imply it does something.
+        if (exercise && !C.supportsLoadableIncrement(exercise) && accessory.incrementLb > 0) warnings.push(`${accessory.exerciseName} carries no external load, so its load step is ignored. Use the weighted variant to add load.`);
         // A loaded accessory with no increment can never add weight — it
         // climbs reps past its own maximum forever. Flag it rather than let
         // the slot quietly stop progressing.
         // resolvedLoadBasis mirrors the native Exercise.loadBasis getter:
         // explicit value, else inferred from equipment. A raw read would be
         // undefined for records that predate the explicit field.
-        if (exercise && C.accessoryCannotProgressLoad(exercise.type, C.resolvedLoadBasis(exercise), accessory.weightLb, accessory.incrementLb)) {
+        // A missing exercise must not fail OPEN — resolvedLoadBasis hands an
+        // unknown exercise the inferred (external) basis, so the warning
+        // survives an import that references a name the library lost.
+        // Mirrors SettingsView.
+        if (C.accessoryCannotProgressLoad(exercise?.type, C.resolvedLoadBasis(exercise), accessory.weightLb, accessory.incrementLb)) {
           warnings.push(`${accessory.exerciseName} carries load but has no increment, so it can never add weight. Set an increment.`);
         }
         const pattern = exercise?.movementPattern || C.movementPattern(accessory.exerciseName, exercise?.movementGroup);
@@ -777,10 +797,32 @@ async function programDayEditor(p, day) {
                   (l.currentReps ?? 5) <= 3 ? 3 : 5,
                   async (v) => { l.currentReps = v; await Programs.save(p); refresh(); })) : null,
             l.prescription === "doubleProgression" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Sets / rep window" }),
-              ui.h("div", { class: "btn-row" },
-                ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } }),
-                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; await Programs.save(p); refresh(); } }),
-                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; await Programs.save(p); refresh(); } }))) : null,
+              (() => {
+                // The endpoints carry each other rather than crossing: a
+                // stored crossed window fails ProgramFileContract export
+                // validation. The endpoints are the ONLY fields these move —
+                // repWindow floors the banked target at every read, so
+                // writing it here would ratchet unearned reps in with no way
+                // back. A carry rebuilds only the SIBLING stepper in place:
+                // a full draw() replaced the control under the finger
+                // pressing it, and every further tap past the top re-carried
+                // and redrew again. Mirrors the native steppers.
+                let minNode; let maxNode;
+                const makeMin = () => ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => {
+                  l.minimumReps = v;
+                  if ((l.maximumReps ?? 8) < v) { l.maximumReps = v; const swap = makeMax(); maxNode.replaceWith(swap); maxNode = swap; }
+                  await Programs.save(p); refresh();
+                } });
+                const makeMax = () => ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => {
+                  l.maximumReps = v;
+                  if ((l.minimumReps ?? 5) > v) { l.minimumReps = v; const swap = makeMin(); minNode.replaceWith(swap); minNode = swap; }
+                  await Programs.save(p); refresh();
+                } });
+                minNode = makeMin(); maxNode = makeMax();
+                return ui.h("div", { class: "btn-row" },
+                  ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } }),
+                  minNode, maxNode);
+              })()) : null,
             l.prescription === "maxEffort" ? ui.h("div", { class: "sub", text: "The base is today's top-single target. Build through 90% and a near-max single, then rotate to a different special variation next week." }) : null,
             l.prescription === "dynamicEffort" ? ui.h("div", { class: "sub", text: "The base is wave week 1: 50% for squat/pull or 40% for bench. Speed work waves for three weeks, then resets." }) : null,
             !C.buildsOwnSessionShape(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
@@ -825,9 +867,24 @@ async function programDayEditor(p, day) {
               ui.stepper(a.sets, { min: 1, max: 8, format: (v) => `${v}`, onChange: async (v) => { a.sets = v; await Programs.save(p); } })),
             isTimed ? ui.h("div", { class: "row" }, ui.h("span", { text: isConditioning ? "Duration" : "Hold time" }),
               ui.stepper(a.targetSeconds || 30, { min: 5, max: 1800, step: 5, format: C.cardioDurationLabel, onChange: async (v) => { a.targetSeconds = v; await Programs.save(p); } })) : ui.h("div", { class: "row" }, ui.h("span", { text: "Rep range" }),
-              ui.h("div", { class: "btn-row" },
-                ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => { a.minReps = v; if (a.currentReps < v) a.currentReps = v; await Programs.save(p); } }),
-                ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => { a.maxReps = v; await Programs.save(p); } }))),
+              (() => {
+                // Same rules as the lift window above: endpoints only, and a
+                // carry swaps the sibling stepper in place — never a full
+                // draw() that replaces the control under the lifter's finger.
+                let minNode; let maxNode;
+                const makeMin = () => ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => {
+                  a.minReps = v;
+                  if (a.maxReps < v) { a.maxReps = v; const swap = makeMax(); maxNode.replaceWith(swap); maxNode = swap; }
+                  await Programs.save(p);
+                } });
+                const makeMax = () => ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => {
+                  a.maxReps = v;
+                  if (a.minReps > v) { a.minReps = v; const swap = makeMin(); minNode.replaceWith(swap); minNode = swap; }
+                  await Programs.save(p);
+                } });
+                minNode = makeMin(); maxNode = makeMax();
+                return ui.h("div", { class: "btn-row" }, minNode, maxNode);
+              })()),
             isConditioning ? ui.h("div", { class: "card" },
               ui.h("div", { class: "row" }, ui.h("span", { text: "Effort" }), (() => {
                 const select = ui.h("select", {}, ...[["easy", "Easy / conversational"], ["interval", "Intervals"], ["mixed", "Mixed"]]

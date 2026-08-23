@@ -1052,25 +1052,104 @@ public enum ProgramProgression {
         return shortfall > 0 ? shortfall : nil
     }
 
+    /// The rep window a double-progression slot actually runs on, and the
+    /// target inside it.
+    ///
+    /// The stored endpoints are two independent numbers that the editors let
+    /// the lifter move past each other, so `minReps > maxReps` is a reachable
+    /// state — `SettingsView` already warns about it. Reading those endpoints
+    /// literally is what made it destructive: with a window of 8–5 and a
+    /// target of 5, `currentReps >= maxReps` is immediately true, so a slot
+    /// prescribed at 3×5 banked one clean exposure and came back at 3×8 with
+    /// the load stepped as well — the whole point of double progression is
+    /// that reps and load never move in the same exposure.
+    ///
+    /// The endpoints are therefore read as an UNORDERED pair: crossed steppers
+    /// are the same window with its ends swapped, which preserves the runway
+    /// the lifter configured. Collapsing `max` up to `min` instead would keep
+    /// the window degenerate, and a degenerate window has no rep runway at all
+    /// — every clean exposure would add load, which is the behaviour being
+    /// fixed. The target is then clamped into that window, so what gets
+    /// prescribed and what gets graded are the same number by construction.
+    ///
+    /// Stored endpoints are deliberately NOT rewritten: the crossed pair is
+    /// the lifter's to correct, and the editor warning is what tells them.
+    ///
+    /// `capped` is what a slot WITHOUT a loadable increment turns off. Its
+    /// window top is advisory — with no weight to add, the only way to
+    /// progress is more reps, so it climbs past the top and the target must
+    /// not be pulled back down to it. It is still floored at the bottom.
+    /// Mirrored 1:1 in web/app/js/core.js `repWindow`.
+    public static func repWindow(
+        minReps: Int, maxReps: Int, currentReps: Int, capped: Bool = true
+    ) -> (low: Int, high: Int, current: Int) {
+        let low = Swift.max(1, Swift.min(minReps, maxReps))
+        let high = Swift.max(low, Swift.max(minReps, maxReps))
+        let floored = Swift.max(currentReps, low)
+        return (low, high, capped ? Swift.min(floored, high) : floored)
+    }
+
+    /// Whether a slot actually has a load step to earn. BOTH halves are
+    /// required: a numeric increment is not a load step on an identity that
+    /// carries no external load — there is nothing to add it to. `loadable`
+    /// is `LoadBasis.supportsLoadableIncrement` for the slot's exercise;
+    /// callers that cannot resolve the exercise keep the increment's own
+    /// reading by passing `true`.
+    /// Mirrored 1:1 in web/app/js/core.js `hasLoadStep`.
+    public static func hasLoadStep(
+        incrementLb: Double, supportsLoadableIncrement: Bool
+    ) -> Bool {
+        supportsLoadableIncrement && incrementLb > 0
+    }
+
     /// Accessory double progression: earn the top of the rep range across all
     /// sets, then add the smallest increment and reset reps. Never adds weight
     /// that wasn't earned.
+    ///
+    /// Two guarantees hold for EVERY input, including a slot whose stored
+    /// window is incoherent:
+    /// - the rep target rises only at a held load; and
+    /// - the load rises only with the rep target held or dropped.
+    ///
+    /// They rest entirely on `repWindow` returning `low <= current <= high`
+    /// (`high` only when capped): every branch below reads the clamped window
+    /// rather than the stored fields, so no stored combination can put the
+    /// target outside the range the branches assume. That is a narrow enough
+    /// foundation to be worth stating — the reported failure (a slot
+    /// prescribed at 3×5 @ 80 returning 3×8 @ 85 in one exposure) came from
+    /// reading the stored fields directly. Both suites sweep the whole input
+    /// space rather than trusting this argument.
     public static func advanceAccessory(_ state: AccessoryState, perf: AccessoryPerformance) -> AccessoryState {
         var next = state
-        let hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= state.currentReps
+        let weighted = state.incrementLb > 0
+        let window = repWindow(
+            minReps: state.minReps, maxReps: state.maxReps,
+            currentReps: state.currentReps, capped: weighted
+        )
+        next.currentReps = window.current
+        let hitAll = perf.completedSets >= state.sets && perf.minRepsAchieved >= window.current
             && !perf.anyStoppedEarly && perf.performedAtPlannedLoad
             && perf.grindyOrWobbleSets <= qualityFlagTolerance && perf.bodyFlagSets == 0
-        let weighted = state.incrementLb > 0
         if !hitAll {
             next.stallCount = state.stallCount + 1
-        } else if weighted && state.currentReps >= state.maxReps {
+        } else if weighted && window.current >= window.high {
             next.weightLb = state.weightLb + state.incrementLb   // earned the rep range → add load, reset reps
-            next.currentReps = state.minReps
+            // The reset lands on the window BOTTOM, and this is the line that
+            // used to raise reps while adding load: with the stored endpoints
+            // crossed, `state.minReps` was above the target that had just been
+            // performed. It is safe now for one reason and it is worth naming
+            // — `repWindow` guarantees `low <= current`, so the reset can only
+            // hold or lower the target, never raise it. Anything that weakens
+            // that clamp reopens the bug here.
+            next.currentReps = window.low
             next.stallCount = 0
         } else {
             // weighted: climb to the cap. bodyweight/timed (no loadable increment):
-            // keep climbing reps — maxReps is advisory, since there's no weight to add.
-            next.currentReps = weighted ? Swift.min(state.currentReps + 1, state.maxReps) : state.currentReps + 1
+            // keep climbing reps — the window top is advisory, since there's no
+            // weight to add.
+            next.currentReps = weighted
+                ? Swift.min(window.current + 1, window.high)
+                : window.current + 1
             next.stallCount = 0
         }
         return next

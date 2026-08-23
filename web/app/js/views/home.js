@@ -368,6 +368,11 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
         for (const a of C.orderedProgramSlots(day.accessories)) {
           const accessoryExercise = exMap.get(a.exerciseName);
           const type = accessoryExercise?.type;
+          // The target clamped into the window this slot actually runs on — a
+          // bodyweight identity has no load step, so its window top is
+          // advisory and the card must show the reps it earned.
+          const accReps = C.repWindow(a.minReps, a.maxReps, a.currentReps,
+            C.hasLoadStep(a.incrementLb, accessoryExercise)).current;
           const isTimed = type === "timed" || type === "conditioning";
           accCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
             accessoryExercise ? ui.h("button", { class: "title title-button", text: a.exerciseName,
@@ -376,7 +381,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
               : ui.h("span", { class: "title", text: a.exerciseName }),
             ui.h("span", { class: "sub mono", text: isTimed
               ? `${a.sets} × ${C.cardioDurationLabel(a.targetSeconds || 30)}`
-              : (a.weightLb > 0 ? `${a.sets}×${a.currentReps} @ ${ui.fmtWeight(a.weightLb)}` : `${a.sets}×${a.currentReps}`) })));
+              : (a.weightLb > 0 ? `${a.sets}×${accReps} @ ${ui.fmtWeight(a.weightLb)}` : `${a.sets}×${accReps}`) })));
         }
         body.append(accCard);
       }

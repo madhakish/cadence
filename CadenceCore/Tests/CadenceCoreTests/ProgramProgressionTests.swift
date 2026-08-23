@@ -495,13 +495,210 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(c.stallCount, 1)
     }
 
+    /// "Does this slot have a load step to earn" needs BOTH halves, and only
+    /// one of them was ever checked in the accessory path. A numeric increment
+    /// on a bodyweight identity is not a load step: there is nothing to add it
+    /// to, so it accrued weight that volume and PR detection ignore AND capped
+    /// the rep window, stopping the slot progressing in the one dimension that
+    /// counts for it. The app layer gates the increment
+    /// (`ProgramAccessory.hasLoadStep`); this pins what the engine then does.
+    /// [INV-WINDOW-BEFORE-LOAD]
+    func testUnloadableAccessoryClimbsRepsRatherThanAccruingLoad() {
+        let stored = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12,
+                                    weightLb: 0, incrementLb: 5)
+        var gated = stored
+        gated.incrementLb = 0            // what an unloadable identity resolves to
+        let after = P.advanceAccessory(
+            gated, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(after.weightLb, 0, accuracy: 1e-9, "no load it cannot carry is accrued")
+        XCTAssertEqual(after.currentReps, 13, "and the window top stays advisory, so reps climb")
+
+        // Ungated, the same stored slot would have done the opposite.
+        let ungated = P.advanceAccessory(
+            stored, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(ungated.weightLb, 5, accuracy: 1e-9)
+        XCTAssertEqual(ungated.currentReps, 8, "which is the behaviour the gate exists to prevent")
+
+        // "Needs progression" is about having no way to move the needle at
+        // all. A bodyweight slot climbing past its window top always has one.
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "bodyweight", loadBasis: .bodyweight, weightLb: 0, incrementLb: 0
+        ), "a healthy bodyweight accessory is never flagged as stuck")
+        XCTAssertTrue(P.accessoryCannotProgressLoad(
+            exerciseType: "dumbbell", loadBasis: .perImplement, weightLb: 40, incrementLb: 0
+        ), "a loaded slot with no increment is")
+    }
+
+    /// A bodyweight-basis double-progression LIFT (the coach's
+    /// promote-vertical-pull creates exactly this) has no load to add, so it
+    /// climbs past its window top by design. That reading has to reach the
+    /// PRESCRIPTION and not only the advance: prescribing a capped target
+    /// while grading against an uncapped one means the slot can never satisfy
+    /// its own grade, and it stalls forever. [INV-WINDOW-BEFORE-LOAD]
+    func testUnloadableSlotIsPrescribedTheTargetItIsGradedAgainst() {
+        let climbed = LiftPrescriptionConfiguration(
+            workingSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 9,
+            loadableIncrement: false
+        )
+        let plan = ProgramEngine.programPlan(
+            for: CycleState(cycleNumber: 1, baseWeightLb: 0, nextPhase: .volume, incrementLb: 0),
+            programRoundingLb: 5, exerciseType: "bodyweight", movementGroup: "pull",
+            role: .complementary, focus: .strength,
+            prescriptionStyle: .doubleProgression, configuration: climbed
+        )
+        let window = P.repWindow(minReps: 5, maxReps: 8, currentReps: 9, capped: false)
+        XCTAssertEqual(plan.reps, 9)
+        XCTAssertEqual(window.current, 9, "prescription and grade read the same target")
+
+        let after = P.advanceAccessory(
+            AccessoryState(sets: 3, minReps: window.low, maxReps: window.high,
+                           currentReps: window.current, weightLb: 0, incrementLb: 0),
+            perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: plan.reps, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(after.currentReps, 10, "a clean exposure advances instead of stalling")
+        XCTAssertEqual(after.stallCount, 0)
+
+        // A LOADABLE lift still caps at its window top, where the step is earned.
+        let loadable = LiftPrescriptionConfiguration(
+            workingSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 9
+        )
+        let loadablePlan = ProgramEngine.programPlan(
+            for: CycleState(cycleNumber: 1, baseWeightLb: 80, nextPhase: .volume, incrementLb: 0),
+            programRoundingLb: 5, exerciseType: "dumbbell", movementGroup: "pull",
+            role: .complementary, focus: .strength,
+            prescriptionStyle: .doubleProgression, configuration: loadable
+        )
+        XCTAssertEqual(loadablePlan.reps, 8)
+    }
+
+    /// The guarantee, proven over every window/target/increment combination
+    /// rather than over the configurations someone thought to enumerate: a
+    /// clean exposure raises the rep target OR the load, never both, and never
+    /// raises reps while adding load. The reported failure was a state nobody
+    /// had enumerated, and the pre-fix engine violated this in 1365 of the
+    /// 12,544 combinations swept here. [INV-WINDOW-BEFORE-LOAD]
+    func testNoStateRaisesRepsAndLoadTogether() {
+        var checked = 0
+        for minReps in 1...14 {
+            for maxReps in 1...14 {
+                for currentReps in 1...16 {
+                    for incrementLb in [0.0, 2.5, 5.0, 10.0] {
+                        let slot = AccessoryState(
+                            sets: 3, minReps: minReps, maxReps: maxReps, currentReps: currentReps,
+                            weightLb: 80, incrementLb: incrementLb
+                        )
+                        // A clean exposure of whatever this slot actually prescribes.
+                        let prescribed = P.repWindow(
+                            minReps: minReps, maxReps: maxReps,
+                            currentReps: currentReps, capped: incrementLb > 0
+                        ).current
+                        let after = P.advanceAccessory(slot, perf: AccessoryPerformance(
+                            completedSets: 3, minRepsAchieved: prescribed, anyStoppedEarly: false
+                        ))
+                        checked += 1
+                        XCTAssertFalse(
+                            after.currentReps > prescribed && after.weightLb > slot.weightLb,
+                            "window \(minReps)-\(maxReps) target \(currentReps) step \(incrementLb): "
+                                + "3x\(prescribed) @ 80 became 3x\(after.currentReps) @ \(after.weightLb)"
+                        )
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(checked, 14 * 14 * 16 * 4)
+    }
+
+    /// The reported log: a dumbbell row prescribed at 3×5 @ 80 came back at
+    /// 3×8 @ 85 after ONE clean exposure — a rep jump and a load step in the
+    /// same session, which double progression exists to prevent. The slot's
+    /// rep window had been edited so its endpoints crossed (min 8, max 5),
+    /// which made `currentReps >= maxReps` true at the bottom of the window
+    /// and reset reps UP to the minimum while adding the load.
+    func testCrossedRepWindowNeverMovesRepsAndLoadTogether() {
+        let crossed = AccessoryState(sets: 3, minReps: 8, maxReps: 5, currentReps: 5,
+                                     weightLb: 80, incrementLb: 5)
+        let a = P.advanceAccessory(
+            crossed, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 5, anyStoppedEarly: false)
+        )
+        // [INV-WINDOW-BEFORE-LOAD]
+        XCTAssertEqual(a.weightLb, 80, accuracy: 1e-9, "the load holds — the window top was not earned")
+        XCTAssertEqual(a.currentReps, 6, "and the target climbs one rep inside the 5–8 window")
+        XCTAssertEqual(a.stallCount, 0)
+
+        // Crossed endpoints read as the same window with its ends swapped, so
+        // the runway the lifter configured survives.
+        let window = P.repWindow(minReps: 8, maxReps: 5, currentReps: 5)
+        XCTAssertEqual(window.low, 5)
+        XCTAssertEqual(window.high, 8)
+        XCTAssertEqual(window.current, 5)
+
+        // Reaching the top of that window still earns the load and resets to
+        // the bottom, exactly as a coherent window does.
+        var atTop = crossed
+        atTop.currentReps = 8
+        let b = P.advanceAccessory(
+            atTop, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(b.weightLb, 85, accuracy: 1e-9)
+        XCTAssertEqual(b.currentReps, 5)
+    }
+
+    /// A target stranded outside its own window is clamped into it, so the
+    /// number that gets prescribed is the number that gets graded.
+    func testRepWindowClampsAStrandedTarget() {
+        let stranded = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 3,
+                                      weightLb: 40, incrementLb: 5)
+        let a = P.advanceAccessory(
+            stranded, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false)
+        )
+        // [INV-WINDOW-BEFORE-LOAD]
+        XCTAssertEqual(a.currentReps, 9, "the target enters at the window bottom, then climbs")
+        XCTAssertEqual(a.weightLb, 40, accuracy: 1e-9)
+
+        // A miss still holds the clamped target rather than the stranded one.
+        let missed = P.advanceAccessory(
+            stranded, perf: AccessoryPerformance(completedSets: 2, minRepsAchieved: 8, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(missed.currentReps, 8)
+        XCTAssertEqual(missed.stallCount, 1)
+
+        // A degenerate window is a fixed-rep linear slot, and stays one.
+        let fixed = P.repWindow(minReps: 8, maxReps: 8, currentReps: 8)
+        XCTAssertEqual(fixed.low, 8)
+        XCTAssertEqual(fixed.high, 8)
+        XCTAssertEqual(fixed.current, 8)
+
+        // An unconfigured window is one rep, not zero — a prescription of
+        // nothing is not a prescription.
+        let unset = P.repWindow(minReps: 0, maxReps: 0, currentReps: 0)
+        XCTAssertEqual(unset.low, 1)
+        XCTAssertEqual(unset.high, 1)
+        XCTAssertEqual(unset.current, 1)
+    }
+
     func testBodyweightAccessoryClimbsPastMax() {
         // No loadable increment → keep adding reps, never reset, never add weight.
-        let bw = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0)
+        var bw = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0)
         let a = P.advanceAccessory(bw, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false))
         XCTAssertEqual(a.weightLb, 0, accuracy: 1e-9)
         XCTAssertEqual(a.currentReps, 13)
         XCTAssertEqual(a.stallCount, 0)
+
+        // It keeps climbing from ABOVE the window top. Clamping the target
+        // back into the window here would peg an unloadable slot at max + 1
+        // forever, which is the one slot that has nothing else to progress
+        // with. [INV-WINDOW-BEFORE-LOAD]
+        bw.currentReps = 13
+        let b = P.advanceAccessory(bw, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 13, anyStoppedEarly: false))
+        XCTAssertEqual(b.currentReps, 14)
+        XCTAssertEqual(b.weightLb, 0, accuracy: 1e-9)
+
+        // A stranded target below the window still enters at its bottom.
+        bw.currentReps = 3
+        let c = P.advanceAccessory(bw, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false))
+        XCTAssertEqual(c.currentReps, 9)
     }
 
     /// A loaded accessory with a zero increment silently behaves like
@@ -1048,5 +1245,25 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(P.strengthSampleIndex(weightsLb: [95, 95], reps: [20, 25]), 1,
                        "when every set is a long one, rank them anyway rather than reporting none")
         XCTAssertNil(P.strengthSampleIndex(weightsLb: [], reps: []))
+    }
+
+    // Mirrors the load-step gate block in web/tests/core.test.mjs (hasLoadStep /
+    // supportsLoadableIncrement): whether a slot has a load step to earn is
+    // shared domain logic, owned by CadenceCore so both suites can pin it.
+    func testLoadStepGateIsSharedDomainLogic() {
+        XCTAssertTrue(P.hasLoadStep(incrementLb: 5, supportsLoadableIncrement: true),
+                      "an increment on a loadable identity is a load step")
+        XCTAssertFalse(P.hasLoadStep(incrementLb: 0, supportsLoadableIncrement: true),
+                       "no increment, no load step")
+        XCTAssertFalse(P.hasLoadStep(incrementLb: 5, supportsLoadableIncrement: false),
+                       "an increment on a bodyweight identity has nothing to add itself to")
+        XCTAssertFalse(LoadBasis.bodyweight.supportsLoadableIncrement)
+        for basis in LoadBasis.allCases where basis != .bodyweight {
+            XCTAssertTrue(basis.supportsLoadableIncrement,
+                          "\(basis) carries external load, so a step is addable")
+        }
+        XCTAssertFalse(LoadSemantics.inferredBasis(exerciseType: "bodyweight").supportsLoadableIncrement)
+        XCTAssertTrue(LoadSemantics.inferredBasis(exerciseType: nil).supportsLoadableIncrement,
+                      "an unknown exercise keeps the increment's own reading")
     }
 }

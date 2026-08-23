@@ -538,6 +538,62 @@ once the base crosses 85% of capability.
 > should be a volume increment … I'll get there fast and then need change
 > plates to make smaller and smaller gains but we're not there right now."
 
+### INV-WINDOW-BEFORE-LOAD
+*platforms: core*
+
+Double progression moves reps **or** load in an exposure, never both. For
+every input, including a slot whose stored window is incoherent: the rep
+target rises only at a held load, and the load rises only with the rep target
+held or dropped. Both rest on one narrow foundation: `repWindow` returns
+`low <= current <= high` (`high` only when capped), and every branch of the
+advance reads that clamped window rather than the stored fields, so no stored
+combination can put the target outside the range the branches assume. The
+failure that prompted the rule came from reading the stored fields directly.
+Weaken that clamp and the load-step branch's reset can raise reps again. Both
+suites sweep every window/target/increment combination rather than trusting
+the argument; the pre-fix engine violated the rule in 1365 of them.
+
+The prescription and the advance must also agree on **`capped`**, not only on
+the endpoints. A slot with no loadable increment climbs past its window top,
+so prescribing it a capped target while grading it against an uncapped one
+means it can never satisfy its own grade: it is prescribed at the top, graded
+against a higher number, and stalls forever with a climbing stall count. The
+slot's loadability therefore reaches `ProgramEngine.plan` through
+`LiftPrescriptionConfiguration.loadableIncrement`, not just the banking layer.
+Reachable today via the coach's promote-vertical-pull, which creates a
+bodyweight double-progression Pull-ups slot.
+
+"Has a load step to earn" is one fact with **two** halves — a numeric increment
+AND an identity that can hold external load — and every reader asks the same
+owner for it (`Exercise.supportsLoadableIncrement` / `hasLoadStep`, mirrored).
+Checking only the increment let a bodyweight slot accrue weight nothing
+measures while its rep window went capped, which stops it progressing at all.
+Downstream, an unloadable window's top is advisory: a target above it is
+correct progress, not a misconfiguration, and a slot climbing there still has a
+way to move the needle — so neither the editor's rep-range warning nor the
+overview's "needs progression" flag fires on one.
+
+The reachable path that was found: the window's endpoints are two
+independently edited numbers, so a lifter can cross them. Read literally, a
+crossed window (minimum 8, maximum 5) puts the target at the top of its own
+range while it sits at the bottom, and one clean exposure of a slot showing
+3×5 @ 80 returned 3×8 @ 85 — a 60% volume jump stacked on a load step, neither
+earned. So the endpoints are also read as an **unordered pair** and the target
+is clamped inside the result, which makes the number that is prescribed and
+the number that is graded the same number. Swapping the ends preserves the
+runway that was configured; collapsing the maximum up to the minimum would
+leave a window with no runway at all, where every clean exposure adds load.
+Stored endpoints are not rewritten — the crossed pair is the lifter's to
+correct, and the editor already warns about it — and a window whose ends are
+deliberately equal stays what it is, a fixed-rep linear slot. A slot with no
+loadable increment is floored at the window bottom but never capped at its
+top: reps are the only way it progresses, so it keeps climbing past the top
+rather than being pegged one rep above it forever.
+
+> The lifter's own report: "db bent over row had me at 80# 3x5 last cycle,
+> this cycle has me at 85# and 3x8 — too much of a weight jump plus volume
+> jump."
+
 ### INV-ADVANCE-BUYS-PLATES
 *platforms: core*
 

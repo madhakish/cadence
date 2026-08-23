@@ -178,6 +178,12 @@ final class Exercise {
         set { loadBasisRaw = newValue.rawValue }
     }
 
+    /// Whether a double-progression slot on this exercise has a load step to
+    /// earn. The rule itself lives in CadenceCore (`LoadBasis
+    /// .supportsLoadableIncrement`, asserted by both test suites); this is
+    /// only the app-model accessor for it.
+    var supportsLoadableIncrement: Bool { loadBasis.supportsLoadableIncrement }
+
     var stationDenomination: WeightUnit? {
         get { stationDenominationRaw.flatMap(WeightUnit.init(rawValue:)) }
         set { stationDenominationRaw = newValue?.rawValue }

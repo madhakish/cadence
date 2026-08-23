@@ -106,8 +106,12 @@ struct WorkoutPreviewView: View {
             if !day.accessories.isEmpty {
                 Section("Accessories") {
                     ForEach(day.orderedAccessories) { acc in
-                        let type = exercises.first(where: { $0.name == acc.exerciseName })?.type
+                        let exercise = exercises.first(where: { $0.name == acc.exerciseName })
+                        let type = exercise?.type
                         let isTimed = type == .timed || type == .conditioning
+                        let accReps = acc.prescribedReps(
+                            loadable: exercise?.supportsLoadableIncrement ?? true
+                        )
                         HStack {
                             NavigationLink {
                                 ExerciseDetailByNameView(name: acc.exerciseName)
@@ -119,8 +123,8 @@ struct WorkoutPreviewView: View {
                             Text(isTimed
                                  ? "\(acc.sets) × \(CardioFormat.durationLabel(seconds: acc.targetSeconds))"
                                  : (acc.weightLb > 0
-                                    ? "\(acc.sets)×\(acc.currentReps) @ \(unitDisplay.format(lb: acc.weightLb))"
-                                    : "\(acc.sets)×\(acc.currentReps)"))
+                                    ? "\(acc.sets)×\(accReps) @ \(unitDisplay.format(lb: acc.weightLb))"
+                                    : "\(acc.sets)×\(accReps)"))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }

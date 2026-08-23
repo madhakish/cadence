@@ -907,10 +907,171 @@ ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minReps
 ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "adjusted-lower accessory work never earns progression");
 ac = C.advanceAccessory({ ...acc, currentReps: 10 }, { completedSets: 3, minRepsAchieved: 10, anyStoppedEarly: false, grindyOrWobbleSets: 2 });
 ok(ac.weightLb === 50 && ac.currentReps === 10 && ac.stallCount === 1, "poor-quality accessory work holds progression");
+// The guarantee, proven over every window/target/increment combination rather
+// than over the configurations someone thought to enumerate: a clean exposure
+// raises the rep target OR the load, never both, and never raises reps while
+// adding load. The reported failure was a state nobody had enumerated.
+let sweepChecked = 0;
+let sweepBothRose = null;
+for (let minReps = 1; minReps <= 14 && !sweepBothRose; minReps += 1) {
+  for (let maxReps = 1; maxReps <= 14 && !sweepBothRose; maxReps += 1) {
+    for (let currentReps = 1; currentReps <= 16 && !sweepBothRose; currentReps += 1) {
+      for (const incrementLb of [0, 2.5, 5, 10]) {
+        const slot = { sets: 3, minReps, maxReps, currentReps, weightLb: 80, incrementLb, stallCount: 0 };
+        // A clean exposure of whatever this slot actually prescribes.
+        const prescribed = C.repWindow(minReps, maxReps, currentReps, incrementLb > 0).current;
+        const after = C.advanceAccessory(slot, {
+          completedSets: 3, minRepsAchieved: prescribed, anyStoppedEarly: false,
+          performedAtPlannedLoad: true, grindyOrWobbleSets: 0, bodyFlagSets: 0,
+        });
+        sweepChecked += 1;
+        if (after.currentReps > prescribed && after.weightLb > slot.weightLb) {
+          sweepBothRose = { minReps, maxReps, currentReps, incrementLb, prescribed, after };
+          break;
+        }
+      }
+    }
+  }
+}
+ok(sweepBothRose === null && sweepChecked === 14 * 14 * 16 * 4,
+  `[INV-WINDOW-BEFORE-LOAD] no window/target/increment combination raises reps and load together (${sweepChecked} checked)${sweepBothRose ? ` — ${JSON.stringify(sweepBothRose)}` : ""}`);
+
+// "Does this slot have a load step to earn" needs BOTH halves, and only one of
+// them was ever checked. A numeric increment on a bodyweight identity is not a
+// load step: there is nothing to add it to, so it accrued weight that volume
+// and PR detection ignore AND capped the rep window, stopping the slot
+// progressing in the one dimension that counts for it. [INV-WINDOW-BEFORE-LOAD]
+ok(C.hasLoadStep(5, { type: "dumbbell" }) === true, "a dumbbell slot with an increment has a load step");
+ok(C.hasLoadStep(0, { type: "dumbbell" }) === false, "no increment, no load step");
+ok(C.hasLoadStep(5, { type: "bodyweight" }) === false,
+  "an increment on a bodyweight identity is not a load step");
+ok(C.hasLoadStep(5, { type: "bodyweight", loadBasis: "externalTotal" }) === true,
+  "a belt-loaded bodyweight slot does have one");
+ok(C.hasLoadStep(5, undefined) === true, "an unknown exercise keeps the increment's own reading");
+// Composed: that slot climbs reps instead of accruing phantom load.
+const bwAccessory = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0,
+  incrementLb: 5, stallCount: 0 };
+const bwExercise = { type: "bodyweight", loadBasis: "bodyweight" };
+const bwGated = C.advanceAccessory(
+  { ...bwAccessory, incrementLb: C.hasLoadStep(bwAccessory.incrementLb, bwExercise) ? bwAccessory.incrementLb : 0 },
+  { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false, performedAtPlannedLoad: true,
+    grindyOrWobbleSets: 0, bodyFlagSets: 0 });
+ok(bwGated.weightLb === 0 && bwGated.currentReps === 13,
+  "[INV-WINDOW-BEFORE-LOAD] a bodyweight accessory climbs reps rather than accruing load it cannot carry");
+// "Needs progression" is about having no way to move the needle at all. A
+// bodyweight slot climbing past its window top always has one, so flagging it
+// there was permanently wrong; a slot carrying load with no increment does not.
+ok(C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0, 0) === false,
+  "a healthy bodyweight accessory is never flagged as stuck");
+ok(C.accessoryCannotProgressLoad("dumbbell", "perImplement", 40, 0) === true,
+  "a loaded slot with no increment is");
+
+// The exposure preview runs the real engine, so it has to be handed the SLOT'S
+// increment and not the program's rounding step. Hardcoding the step made the
+// preview announce "add 5 lb and drop back to 5 reps" and show the base
+// climbing 0 → 5 → 10 for a bodyweight slot that only ever earns reps — and in
+// one exposure it both reset reps and added load, which is the whole bug.
+// [INV-PREVIEW-RUNS-THE-REAL-ENGINE] [INV-WINDOW-BEFORE-LOAD]
+const bwPreview = C.exposurePreview({
+  count: 3, baseWeightLb: 0, programRoundingLb: 5,
+  exerciseType: "bodyweight", movementGroup: "pull", role: "complementary",
+  focus: "strength", prescriptionStyle: "doubleProgression",
+  configuration: { doubleProgressionSets: 3, workingSets: 3, minimumReps: 5, maximumReps: 8,
+    currentReps: 9, loadableIncrement: false },
+});
+ok(bwPreview.every((entry) => entry.prescription.mainWork.weightLb === 0),
+  "[INV-WINDOW-BEFORE-LOAD] an unloadable slot's preview never adds load");
+ok(bwPreview.map((entry) => entry.prescription.mainWork.reps).join(",") === "9,10,11",
+  "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] it climbs reps past the window top, as banking does");
+ok(bwPreview.every((entry) => !(entry.advanceNote || "").includes("add ")),
+  "and never promises a load step it cannot take");
+// A LOADABLE slot's preview is unchanged: climb the window, then step the load.
+const dbPreview = C.exposurePreview({
+  count: 3, baseWeightLb: 80, programRoundingLb: 5,
+  exerciseType: "dumbbell", movementGroup: "pull", role: "complementary",
+  focus: "strength", prescriptionStyle: "doubleProgression",
+  configuration: { doubleProgressionSets: 3, workingSets: 3, minimumReps: 5, maximumReps: 8,
+    currentReps: 7, loadableIncrement: true },
+});
+ok(dbPreview.map((e) => `${e.prescription.mainWork.reps}@${e.prescription.mainWork.weightLb}`).join(" ")
+  === "7@80 8@80 5@85", "a loadable slot still climbs the window, then steps the load");
+
+// A bodyweight-basis doubleProgression LIFT (the coach's promote-vertical-pull
+// creates exactly this) has no load to add, so it climbs past its window top by
+// design. That reading has to reach the PRESCRIPTION and not only the advance:
+// prescribing a capped target while grading against an uncapped one means the
+// slot can never satisfy its own grade, and it stalls forever. [INV-WINDOW-BEFORE-LOAD]
+const pullUps = { type: "bodyweight", loadBasis: "bodyweight", movementGroup: "pull" };
+ok(C.supportsLoadableIncrement(pullUps) === false, "a bodyweight identity has no load step to earn");
+ok(C.supportsLoadableIncrement({ type: "bodyweight", loadBasis: "externalTotal" }) === true,
+  "a belt-loaded bodyweight slot does have one");
+const climbedLift = { doubleProgressionSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 9 };
+const climbedPlan = C.programPlanFor(
+  { cycleNumber: 1, baseWeightLb: 0, nextPhase: 1, incrementLb: 0 },
+  5, pullUps.type, pullUps.movementGroup, "complementary", "strength", "doubleProgression",
+  { ...climbedLift, workingSets: 3, loadableIncrement: C.supportsLoadableIncrement(pullUps) });
+const climbedWindow = C.repWindow(climbedLift.minimumReps, climbedLift.maximumReps,
+  climbedLift.currentReps, C.supportsLoadableIncrement(pullUps));
+ok(climbedPlan.reps === 9 && climbedWindow.current === 9,
+  "[INV-WINDOW-BEFORE-LOAD] an unloadable lift is prescribed the target it is graded against");
+const climbedAfter = C.advanceAccessory(
+  { sets: 3, minReps: climbedWindow.low, maxReps: climbedWindow.high, currentReps: climbedWindow.current,
+    weightLb: 0, incrementLb: 0, stallCount: 0 },
+  { completedSets: 3, minRepsAchieved: climbedPlan.reps, anyStoppedEarly: false,
+    performedAtPlannedLoad: true, grindyOrWobbleSets: 0, bodyFlagSets: 0 });
+ok(climbedAfter.currentReps === 10 && climbedAfter.stallCount === 0,
+  "a clean exposure of it advances instead of stalling forever");
+// A LOADABLE lift still caps at its window top, where the load step is earned.
+const loadablePlan = C.programPlanFor(
+  { cycleNumber: 1, baseWeightLb: 80, nextPhase: 1, incrementLb: 0 },
+  5, "dumbbell", "pull", "complementary", "strength", "doubleProgression",
+  { ...climbedLift, workingSets: 3, loadableIncrement: true });
+ok(loadablePlan.reps === 8, "a loadable lift is still capped at its window top");
+
+// The reported log: a dumbbell row prescribed at 3×5 @ 80 came back at 3×8 @ 85
+// after ONE clean exposure — a rep jump and a load step in the same session,
+// which double progression exists to prevent. The slot's rep window had been
+// edited so its endpoints crossed (min 8, max 5), which made
+// `currentReps >= maxReps` true at the BOTTOM of the window and reset reps UP
+// to the minimum while adding the load. Mirrors CadenceCore.
+let crossed = { sets: 3, minReps: 8, maxReps: 5, currentReps: 5, weightLb: 80, incrementLb: 5, stallCount: 0 };
+let crossedAdvance = C.advanceAccessory(crossed, { completedSets: 3, minRepsAchieved: 5, anyStoppedEarly: false });
+ok(crossedAdvance.weightLb === 80 && crossedAdvance.currentReps === 6 && crossedAdvance.stallCount === 0,
+  "[INV-WINDOW-BEFORE-LOAD] a crossed rep window never moves reps and load in the same exposure");
+let crossedWindow = C.repWindow(8, 5, 5);
+ok(crossedWindow.low === 5 && crossedWindow.high === 8 && crossedWindow.current === 5,
+  "crossed endpoints read as the same window with its ends swapped");
+let crossedTop = C.advanceAccessory({ ...crossed, currentReps: 8 }, { completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false });
+ok(crossedTop.weightLb === 85 && crossedTop.currentReps === 5,
+  "reaching that window's top still earns the load and resets to its bottom");
+// A target stranded outside its own window is clamped into it, so the number
+// that gets prescribed is the number that gets graded.
+let stranded = { sets: 3, minReps: 8, maxReps: 12, currentReps: 3, weightLb: 40, incrementLb: 5, stallCount: 0 };
+let strandedAdvance = C.advanceAccessory(stranded, { completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false });
+ok(strandedAdvance.currentReps === 9 && strandedAdvance.weightLb === 40,
+  "[INV-WINDOW-BEFORE-LOAD] a stranded target enters at the window bottom, then climbs");
+let strandedMiss = C.advanceAccessory(stranded, { completedSets: 2, minRepsAchieved: 8, anyStoppedEarly: false });
+ok(strandedMiss.currentReps === 8 && strandedMiss.stallCount === 1, "a miss holds the clamped target, not the stranded one");
+let fixedWindow = C.repWindow(8, 8, 8);
+ok(fixedWindow.low === 8 && fixedWindow.high === 8 && fixedWindow.current === 8,
+  "a degenerate window is a fixed-rep linear slot, and stays one");
+let unsetWindow = C.repWindow(0, 0, 0);
+ok(unsetWindow.low === 1 && unsetWindow.high === 1 && unsetWindow.current === 1,
+  "an unconfigured window is one rep, not a prescription of nothing");
 // bodyweight/timed accessory (0 increment) climbs reps past max — no reset, no weight added
 let bw = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0, incrementLb: 0, stallCount: 0 };
 let bwa = C.advanceAccessory(bw, { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
 ok(bwa.weightLb === 0 && bwa.currentReps === 13 && bwa.stallCount === 0, "bodyweight accessory climbs past max, no reset");
+// It keeps climbing from ABOVE the window top. Clamping the target back into
+// the window here would peg an unloadable slot at max + 1 forever, which is
+// the one slot that has nothing else to progress with.
+let bwAbove = C.advanceAccessory({ ...bw, currentReps: 13 }, { completedSets: 3, minRepsAchieved: 13, anyStoppedEarly: false });
+ok(bwAbove.currentReps === 14 && bwAbove.weightLb === 0,
+  "[INV-WINDOW-BEFORE-LOAD] an unloadable slot keeps climbing from above its window top");
+let bwBelow = C.advanceAccessory({ ...bw, currentReps: 3 }, { completedSets: 3, minRepsAchieved: 8, anyStoppedEarly: false });
+ok(bwBelow.currentReps === 9, "a stranded unloadable target still enters at the window bottom");
+ok(C.repWindow(8, 12, 15, false).current === 15, "an uncapped window floors the target without capping it");
+ok(C.repWindow(8, 12, 15, true).current === 12, "a capped window pulls the target back to its top");
 // A LOADED accessory with a zero increment falls into the same branch: it
 // climbs reps past its own maximum and the weight never moves. That is a
 // misconfiguration, not a choice, so the program editor flags it.

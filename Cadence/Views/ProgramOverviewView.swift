@@ -148,10 +148,29 @@ struct ProgramOverviewView: View {
         )
     }
 
+    /// Whether a slot has no way left to move the needle.
+    ///
+    /// This used to read "at the top of its rep window with no increment",
+    /// which flagged every healthy bodyweight accessory: reps ARE its
+    /// progression, so it climbs past its window top forever and the flag
+    /// was permanently on. The real stuck cases are a slot carrying load it
+    /// can never add to, and timed work with no duration step — and the first
+    /// of those already has an owner the program editor uses.
     private func cannotProgress(_ accessory: ProgramAccessory) -> Bool {
-        let type = exercises.first { $0.name == accessory.exerciseName }?.type
-        if type == .timed || type == .conditioning { return accessory.durationStepSeconds <= 0 }
-        return accessory.currentReps >= accessory.maxReps && accessory.incrementLb <= 0
+        // A missing exercise must not fail OPEN — the quietly stuck slot is
+        // exactly what this pill exists to flag. Fall back to the inferred
+        // (external) basis, the same reading web's resolvedLoadBasis gives an
+        // unknown exercise, so a loaded no-increment slot stays visible even
+        // when an import references a name the library no longer holds.
+        let exercise = exercises.first(where: { $0.name == accessory.exerciseName })
+        if let exercise, exercise.type == .timed || exercise.type == .conditioning {
+            return accessory.durationStepSeconds <= 0
+        }
+        return ProgramProgression.accessoryCannotProgressLoad(
+            exerciseType: exercise?.typeRaw,
+            loadBasis: exercise?.loadBasis ?? LoadSemantics.inferredBasis(exerciseType: nil),
+            weightLb: accessory.weightLb, incrementLb: accessory.incrementLb
+        )
     }
 
     private func format(_ lb: Double) -> String {

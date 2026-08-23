@@ -1616,7 +1616,19 @@ async function advanceProgram(session, milestones) {
       }
     } else {
       const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(acc.exerciseName)?.type);
-      Object.assign(acc, C.advanceAccessory(acc, accPerf(se, loadStep)));
+      // A stored increment on a bodyweight identity is not a load step —
+      // there is nothing to add it to. Reading it as one accrued weight
+      // nothing measures AND capped the rep window, stopping the slot
+      // progressing at all. Mirrors ProgramAccessory.coreState.
+      const accExercise = exerciseByName.get(acc.exerciseName);
+      // The gated zero is for the ADVANCE only: write back just the fields
+      // the advance moves, never the gated increment — the stored step is
+      // warned about in the editor, not destroyed. Mirrors SessionCompletion.
+      const next = C.advanceAccessory(
+        { ...acc, incrementLb: C.hasLoadStep(acc.incrementLb, accExercise) ? acc.incrementLb : 0 },
+        accPerf(se, loadStep),
+      );
+      acc.weightLb = next.weightLb; acc.currentReps = next.currentReps; acc.stallCount = next.stallCount;
     }
   }
   // Lift slots can opt into rep-window progression instead of phase grading.
@@ -1632,10 +1644,21 @@ async function advanceProgram(session, milestones) {
     // history, tonnage, and PR detection all ignore. Adding a belt is
     // switching to the weighted identity (Weighted Pull-up), not
     // incrementing this one. Mirrors SessionCompletion.
-    const increment = liftExercise && C.resolvedLoadBasis(liftExercise) === "bodyweight" ? 0 : loadStep;
+    const increment = C.supportsLoadableIncrement(liftExercise) ? loadStep : 0;
+    // The window the slot is actually running on — the same reading the
+    // prescription used, so banking cannot disagree with what was prescribed.
+    // Mirrors SessionCompletion.
+    // RAW stored values, exactly as the prescription read them — repWindow
+    // owns every default and floor. View-layer `|| 5` fallbacks rewrote a
+    // stored 0 into a window the prescription never used, so a performed
+    // prescription could fail its own grade.
+    const window = C.repWindow(
+      lift.minimumReps, lift.maximumReps, lift.currentReps,
+      increment > 0,
+    );
     const state = {
-      sets: lift.doubleProgressionSets || 3, minReps: lift.minimumReps || 5,
-      maxReps: lift.maximumReps || 8, currentReps: lift.currentReps || lift.minimumReps || 5,
+      sets: Math.max(1, lift.doubleProgressionSets ?? 3), minReps: window.low,
+      maxReps: window.high, currentReps: window.current,
       weightLb: lift.baseWeightLb, incrementLb: increment, stallCount: lift.stallCount || 0,
     };
     const next = C.advanceAccessory(state, accPerf(se, loadStep));
@@ -1932,7 +1955,9 @@ export function previewProgramPlan(lift, exercise, program, phase, { base, added
   const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: base,
     nextPhase: phase, incrementLb: 0 },
   program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
-  lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+  lift.prescription || "automatic",
+  { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+    loadableIncrement: C.supportsLoadableIncrement(exercise) },
   addedSets);
   const targetWeightLb = plan.weightLb;
   plan.weightLb = neatProgramWeight(plan.weightLb, exercise,
@@ -1952,7 +1977,8 @@ function sessionTargetsMatch(session, program, day, exMap, allSessions) {
         nextPhase: program.currentWeek, incrementLb: 0 },
       program.roundingLb, exercise?.type, exercise?.movementGroup,
       lift.role, program.focus, lift.prescription || "automatic",
-      { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+      { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+        loadableIncrement: C.supportsLoadableIncrement(exercise) },
     ).weightLb;
     if ((session.exercises || []).some((candidate) =>
       candidate.programSlotId === lift.id && candidate.programRole !== lift.role)) return false;
@@ -2016,7 +2042,8 @@ export async function createSessionFromProgramDay(program, day) {
   for (const [liftIndex, lift] of lifts.entries()) {
     const ex = exMap.get(lift.exerciseName);
     const loadStep = C.programLoadStep(program.roundingLb, ex?.type);
-    const configuration = { ...lift, workingSets: lift.doubleProgressionSets ?? 3 };
+    const configuration = { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+      loadableIncrement: C.supportsLoadableIncrement(ex) };
     const prescription = C.sessionPrescription(
       { cycleNumber: program.cycleNumber,
         baseWeightLb: planningBase(lift, ex, program, allSessions),
@@ -2093,12 +2120,19 @@ export async function createSessionFromProgramDay(program, day) {
     // Recovery retains movement familiarity but not a full accessory session.
     // Banking this exposure cannot advance the slot's rep/load target.
     const effectiveSets = program.currentWeek === C.DELOAD_WEEK ? 1 : ordinarySets;
+    // The target clamped into the slot's own window, so the card, the built
+    // session, and the advance all read the same number. Mirrors
+    // ProgramAccessory.prescribedReps.
+    // The target clamped into the window this slot actually runs on — a
+    // bodyweight identity has no load step, so its window top is advisory.
+    const accReps = C.repWindow(acc.minReps, acc.maxReps, acc.currentReps,
+      C.hasLoadStep(acc.incrementLb, ex)).current;
     const sets = [];
     for (let i = 0; i < effectiveSets; i += 1) {
-      const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : acc.currentReps, {
+      const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : accReps, {
         perSide: ex && ex.isUnilateral, unit,
         targetWeightLb: isTimed ? 0 : acc.weightLb, plannedWeightLb: isTimed ? 0 : weightLb,
-        plannedReps: isTimed ? 1 : acc.currentReps,
+        plannedReps: isTimed ? 1 : accReps,
         plannedDurationSeconds: isTimed ? (acc.targetSeconds || 30) : null,
         prescriptionBlock: ex?.type === "conditioning" ? "conditioning" : "work",
         ...loadOptions(ex),
@@ -2109,7 +2143,7 @@ export async function createSessionFromProgramDay(program, day) {
     exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null,
       barId: barStamp(ex, bar),
       targetWeightLb: isTimed ? 0 : acc.weightLb, plannedWeightLb: isTimed ? 0 : weightLb,
-      plannedSets: effectiveSets, plannedReps: isTimed ? 1 : acc.currentReps,
+      plannedSets: effectiveSets, plannedReps: isTimed ? 1 : accReps,
       plannedDurationSeconds: isTimed ? (acc.targetSeconds || 30) : null,
       programRole: "accessory", programSlotId: acc.id, sets });
   }

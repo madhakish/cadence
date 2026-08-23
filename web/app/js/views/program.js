@@ -39,7 +39,9 @@ export async function render(host) {
             baseWeightLb: planningBase(lift, exercise, program, completed),
             nextPhase: program.currentWeek, incrementLb: 0 },
           program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
-          lift.prescription || "automatic", lift,
+          lift.prescription || "automatic",
+          { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+            loadableIncrement: C.supportsLoadableIncrement(exercise) },
           volumeFallbackSets(lift, program),
         );
         card.append(ui.h("div", { class: "row program-slot" },
@@ -49,8 +51,24 @@ export async function render(host) {
             ui.h("span", { class: "sub mono", text: `Base ${ui.fmtWeight(lift.baseWeightLb)} · next ${ui.fmtWeight(plan.weightLb)} · ${plan.sets}×${plan.reps}` }))));
       }
       const accessories = ordered(day.accessories);
-      const stalled = accessories.some((item) => (item.currentReps || 0) >= (item.maxReps || Infinity)
-        && !(item.incrementLb > 0) && !(item.durationStepSeconds > 0));
+      // "At the top of its rep window with no increment" flagged every healthy
+      // bodyweight accessory: reps ARE its progression, so it climbs past its
+      // top forever and the pill was permanently on. The real stuck cases are
+      // a slot carrying load it can never add to — which already has an owner
+      // — and timed work with no duration step. Mirrors ProgramOverviewView.
+      const stalled = accessories.some((item) => {
+        const exercise = exByName.get(item.exerciseName);
+        if (exercise && (exercise.type === "timed" || exercise.type === "conditioning")) {
+          return !(item.durationStepSeconds > 0);
+        }
+        // A missing exercise must not fail OPEN — the quietly stuck slot is
+        // exactly what this pill exists to flag. resolvedLoadBasis hands an
+        // unknown exercise the inferred (external) basis, so a loaded
+        // no-increment slot stays visible. Mirrors ProgramOverviewView.
+        return C.accessoryCannotProgressLoad(
+          exercise?.type, C.resolvedLoadBasis(exercise), item.weightLb, item.incrementLb,
+        );
+      });
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
         ui.h("span", { class: "sub", text: `${accessories.length} accessories` }),
         stalled ? ui.h("span", { class: "pill warn", text: "Needs progression" }) : null));

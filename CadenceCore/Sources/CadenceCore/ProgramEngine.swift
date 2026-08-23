@@ -313,6 +313,13 @@ public struct LiftPrescriptionConfiguration: Codable, Hashable, Sendable {
     public var lastPeakSingleLb: Double
     public var peakSingleIncrementLb: Double
     public var phasePrimerEnabled: Bool
+    /// Whether this slot's double progression has a load step to earn. False
+    /// for a bodyweight-basis identity, whose window top is advisory: it
+    /// climbs past it because reps are the only way it can progress. The
+    /// PRESCRIPTION has to know this, not just the advance — a slot graded
+    /// against an uncapped target while being prescribed a capped one can
+    /// never satisfy its own grade, and stalls forever.
+    public var loadableIncrement: Bool
 
     public init(
         loadOffsetLb: Double = 10,
@@ -325,7 +332,8 @@ public struct LiftPrescriptionConfiguration: Codable, Hashable, Sendable {
         peakSingleEnabled: Bool = false,
         lastPeakSingleLb: Double = 0,
         peakSingleIncrementLb: Double = 5,
-        phasePrimerEnabled: Bool = true
+        phasePrimerEnabled: Bool = true,
+        loadableIncrement: Bool = true
     ) {
         self.loadOffsetLb = loadOffsetLb
         self.peakOffsetLb = peakOffsetLb
@@ -338,6 +346,7 @@ public struct LiftPrescriptionConfiguration: Codable, Hashable, Sendable {
         self.lastPeakSingleLb = lastPeakSingleLb
         self.peakSingleIncrementLb = peakSingleIncrementLb
         self.phasePrimerEnabled = phasePrimerEnabled
+        self.loadableIncrement = loadableIncrement
     }
 }
 
@@ -733,7 +742,11 @@ public enum ProgramEngine {
                 return SessionPlan(
                     weightLb: Weight.round(state.baseWeightLb * 0.80, to: roundingLb),
                     sets: 1,
-                    reps: Swift.min(5, Swift.max(1, configuration.minimumReps)),
+                    reps: Swift.min(5, ProgramProgression.repWindow(
+                        minReps: configuration.minimumReps,
+                        maxReps: configuration.maximumReps,
+                        currentReps: configuration.minimumReps
+                    ).low),
                     phase: phase,
                     cycleNumber: state.cycleNumber
                 )
@@ -741,7 +754,16 @@ public enum ProgramEngine {
             return SessionPlan(
                 weightLb: Weight.round(state.baseWeightLb, to: roundingLb),
                 sets: max(1, configuration.workingSets),
-                reps: min(max(configuration.currentReps, configuration.minimumReps), configuration.maximumReps),
+                // One owner for the window, shared with the advance, so the
+                // prescription and the grade can never disagree about it —
+                // including on `capped`, which is why the slot's loadability
+                // has to reach the prescription and not only the advance.
+                reps: ProgramProgression.repWindow(
+                    minReps: configuration.minimumReps,
+                    maxReps: configuration.maximumReps,
+                    currentReps: configuration.currentReps,
+                    capped: configuration.loadableIncrement
+                ).current,
                 phase: phase,
                 cycleNumber: state.cycleNumber
             )
@@ -957,19 +979,24 @@ public enum ProgramEngine {
         )
         // Normalize the rep window BEFORE the first prescription, not inside
         // the double-progression branch that advances it. A slot whose window
-        // was never configured carries zeroes, and `plan` computes
-        // `min(max(currentReps, minimumReps), maximumReps)` — which is 0 reps,
-        // a prescription of nothing. The app layer clamps these on the way in
+        // was never configured carries zeroes, which is a prescription of
+        // nothing, and crossed endpoints would otherwise let the preview show
+        // a rep jump and a load step landing together. `repWindow` owns both
+        // readings; the app layer clamps on the way in
         // (`ProgramLift.prescriptionConfiguration`), so only a direct core
-        // caller can reach here unclamped; doing it here as well is what keeps
-        // this function honest on its own and identical to core.js.
+        // caller can reach here unclamped, and doing it here as well is what
+        // keeps this function honest on its own and identical to core.js.
         var config = configuration
         config.workingSets = Swift.max(1, config.workingSets)
-        config.minimumReps = Swift.max(1, config.minimumReps)
-        config.maximumReps = Swift.max(config.minimumReps, config.maximumReps)
+        let window = ProgramProgression.repWindow(
+            minReps: config.minimumReps, maxReps: config.maximumReps,
+            currentReps: config.currentReps, capped: config.loadableIncrement
+        )
+        config.minimumReps = window.low
+        config.maximumReps = window.high
         config.currentReps = style == .linearFives
             ? (config.currentReps <= 3 ? 3 : 5)
-            : Swift.max(config.minimumReps, config.currentReps)
+            : window.current
         var cycle = Swift.max(1, cycleNumber)
         var phase = CyclePhase(rawValue: rotation) ?? .volume
         // Graded styles stash the new base at the Peak and apply it at the
@@ -1032,10 +1059,19 @@ public enum ProgramEngine {
                 if phase != .deload {
                     // `config` was normalized on the way in, so the window is
                     // already coherent here.
+                    //
+                    // The increment is the SLOT'S, not the program's step. A
+                    // bodyweight identity has no load to add, and handing this
+                    // walk a non-zero step made the preview disagree with the
+                    // banking layer it exists to mirror: it announced "add 5 lb
+                    // and drop back to 5 reps" and showed the base climbing
+                    // 0 → 5 → 10 for a slot that only ever earns reps.
+                    let increment = config.loadableIncrement ? step : 0
                     let prior = AccessoryState(
                         sets: config.workingSets, minReps: config.minimumReps,
                         maxReps: config.maximumReps, currentReps: config.currentReps,
-                        weightLb: state.baseWeightLb, incrementLb: step, stallCount: state.stallCount
+                        weightLb: state.baseWeightLb, incrementLb: increment,
+                        stallCount: state.stallCount
                     )
                     let next = ProgramProgression.advanceAccessory(
                         prior,
@@ -1046,7 +1082,7 @@ public enum ProgramEngine {
                         )
                     )
                     note = next.weightLb > prior.weightLb
-                        ? "Top of the window earned — add \(Weight.trim(step)) lb and drop back to \(next.currentReps) reps."
+                        ? "Top of the window earned — add \(Weight.trim(increment)) lb and drop back to \(next.currentReps) reps."
                         : "Earned the reps — \(next.currentReps) next time at the same load."
                     state.lastIncrementLb = next.weightLb - prior.weightLb
                     state.baseWeightLb = next.weightLb

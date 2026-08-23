@@ -781,14 +781,31 @@ enum SessionCompletion {
                         acc.targetSeconds += acc.durationStepSeconds
                     }
                 } else {
+                    // Loadability resolves the way the PRESCRIPTION resolved
+                    // it — from the library by name — with the entry's own
+                    // link as the fallback, so an imported session whose link
+                    // went nil cannot flip a bodyweight slot loadable and add
+                    // phantom load. (Web has only the library map; the paths
+                    // agree whenever the library holds the exercise.)
+                    let exercise = exerciseByName[acc.exerciseName] ?? entry.exercise
                     let loadStep = ProgramEngine.loadStep(
                         programRoundingLb: program.roundingLb,
-                        exerciseType: entry.exercise?.typeRaw
+                        exerciseType: exercise?.typeRaw
                     )
-                    acc.apply(ProgramProgression.advanceAccessory(
-                        acc.coreState,
+                    // A stored increment on a bodyweight identity is not a
+                    // load step — there is nothing to add it to. Reading it
+                    // as one accrued weight nothing measures AND capped the
+                    // rep window, stopping the slot progressing at all.
+                    // The gated zero is for the ADVANCE only: write back just
+                    // the fields the advance moves, never the gated increment
+                    // — the stored step is warned about, not destroyed.
+                    let next = ProgramProgression.advanceAccessory(
+                        acc.coreState(loadable: exercise?.supportsLoadableIncrement ?? true),
                         perf: accPerf(entry, roundingLb: loadStep)
-                    ))
+                    )
+                    acc.weightLb = next.weightLb
+                    acc.currentReps = next.currentReps
+                    acc.stallCount = next.stallCount
                 }
             }
         }
@@ -801,22 +818,31 @@ enum SessionCompletion {
                 for: lift.id, exerciseName: lift.exerciseName,
                 role: lift.role.rawValue, in: session
             ), !prescribedWork(entry).isEmpty else { continue }
+            // Loadability resolves the way the PRESCRIPTION resolved it —
+            // from the library by name — with the entry's own link as the
+            // fallback (see the accessory loop above).
+            let exercise = exerciseByName[lift.exerciseName] ?? entry.exercise
             let loadStep = ProgramEngine.loadStep(
                 programRoundingLb: program.roundingLb,
-                exerciseType: entry.exercise?.typeRaw
+                exerciseType: exercise?.typeRaw
             )
+            // A bodyweight-basis slot progresses by reps alone — its identity
+            // carries no external load, so a numeric increment would store
+            // weight that history, tonnage, and PR detection all ignore.
+            // Adding a belt is switching to the weighted identity (Weighted
+            // Pull-up), not incrementing this one. One owner for that fact:
+            // `Exercise.supportsLoadableIncrement`.
+            let increment = (exercise?.supportsLoadableIncrement ?? true) ? loadStep : 0
+            // The window the slot is actually running on — the same reading
+            // `prescriptionConfiguration` gave the session it just banked.
+            let window = lift.repWindow(loadable: increment > 0)
             let prior = AccessoryState(
                 sets: max(1, lift.doubleProgressionSets),
-                minReps: max(1, lift.minimumReps),
-                maxReps: max(lift.minimumReps, lift.maximumReps),
-                currentReps: max(lift.minimumReps, lift.currentReps),
+                minReps: window.low,
+                maxReps: window.high,
+                currentReps: window.current,
                 weightLb: lift.baseWeightLb,
-                // A bodyweight-basis slot progresses by reps alone — its
-                // identity carries no external load, so a numeric increment
-                // would store weight that history, tonnage, and PR detection
-                // all ignore. Adding a belt is switching to the weighted
-                // identity (Weighted Pull-up), not incrementing this one.
-                incrementLb: entry.exercise?.loadBasis == .bodyweight ? 0 : loadStep,
+                incrementLb: increment,
                 stallCount: lift.stallCount
             )
             let next = ProgramProgression.advanceAccessory(

@@ -279,7 +279,8 @@ export function exposurePreview(lift, program, exercise, count = 4, schedule = n
     role: lift.role || "main",
     focus: program.focus,
     prescriptionStyle: lift.prescription || "automatic",
-    configuration: { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+    configuration: { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+      loadableIncrement: C.supportsLoadableIncrement(exercise) },
     pendingState,
     schedule,
   });

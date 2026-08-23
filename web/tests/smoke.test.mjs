@@ -2065,6 +2065,213 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// A non-loadable slot's stored load step is IGNORED at advance time, never
+// destroyed. Banking gates the increment to zero for the advance, but writing
+// that zero back would silently delete a step the lifter configured (staged
+// for the weighted variant, or a basis fix away from mattering) — and the
+// editor warning that explains it would vanish with the data.
+{
+  const name = "Fixture Stored Step Survives";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Upper", order: 0,
+      lifts: [{ exerciseName: "Overhead Press", role: "main", prescription: "wave",
+        baseWeightLb: 95, estimatedMaxLb: 130, stallCount: 0, lastIncrementLb: 0 }],
+      accessories: [{ exerciseName: "Pull-ups", sets: 3, minReps: 8, maxReps: 12,
+        currentReps: 8, weightLb: 0, incrementLb: 5, stallCount: 0 }] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const id = await session.createSessionFromProgramDay(program, program.days[0]);
+  const workout = await db.Sessions.get(id);
+  for (const entry of workout.exercises) for (const set of entry.sets) set.status = "completed";
+  await session.completeSession(workout);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const pullups = program.days[0].accessories[0];
+  ok(pullups.incrementLb === 5,
+    `banking ignores a bodyweight slot's stored step without destroying it (got ${pullups.incrementLb})`);
+  ok(pullups.weightLb === 0 && pullups.currentReps === 9,
+    `and the slot still progresses by reps alone (got ${pullups.weightLb} @ ${pullups.currentReps})`);
+
+  await db.importBundle(parsed);
+}
+
+// The banking bridge reads a lift's rep window exactly the way the
+// prescription did — raw stored values through repWindow, no view-layer
+// defaults. A legacy record with zeroed endpoints prescribed its floored
+// window; grading it against `|| 5` defaults failed a performed prescription.
+{
+  const name = "Fixture Legacy Zero Window";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Upper", order: 0, accessories: [],
+      lifts: [
+        { exerciseName: "Overhead Press", role: "main", prescription: "wave",
+          baseWeightLb: 95, estimatedMaxLb: 130, stallCount: 0, lastIncrementLb: 0 },
+        { exerciseName: "Incline DB Press", role: "complementary", prescription: "doubleProgression",
+          doubleProgressionSets: 3, minimumReps: 0, maximumReps: 0, currentReps: 2,
+          baseWeightLb: 45, estimatedMaxLb: 60, stallCount: 0, lastIncrementLb: 0 },
+      ] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const id = await session.createSessionFromProgramDay(program, program.days[0]);
+  const workout = await db.Sessions.get(id);
+  const dbEntry = workout.exercises.find((entry) => entry.exerciseName === "Incline DB Press");
+  const workReps = dbEntry.sets.filter((set) => !set.isWarmup).map((set) => set.reps);
+  ok(workReps.every((reps) => reps === 1),
+    `a zeroed window prescribes its floor, not a default (got ${workReps})`);
+  for (const entry of workout.exercises) for (const set of entry.sets) set.status = "completed";
+  await session.completeSession(workout);
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const lift = program.days[0].lifts.find((l) => l.exerciseName === "Incline DB Press");
+  ok(lift.stallCount === 0,
+    `a performed prescription can never fail its own grade (stallCount ${lift.stallCount})`);
+
+  await db.importBundle(parsed);
+}
+
+// The program overview runs the same engine reading as every other surface:
+// the slot's loadability and set count reach the plan, so the overview and
+// the Today card can never quote different numbers for the same slot.
+{
+  const name = "Fixture Overview Parity";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Upper", order: 0, accessories: [],
+      lifts: [
+        { exerciseName: "Overhead Press", role: "main", prescription: "wave",
+          baseWeightLb: 95, estimatedMaxLb: 130, stallCount: 0, lastIncrementLb: 0 },
+        { exerciseName: "Pull-ups", role: "complementary", prescription: "doubleProgression",
+          doubleProgressionSets: 5, minimumReps: 5, maximumReps: 8, currentReps: 9,
+          baseWeightLb: 0, estimatedMaxLb: 0, stallCount: 0, lastIncrementLb: 0 },
+      ] }],
+  });
+  await programView.render(host());
+  const card = [...host().querySelectorAll(".program-day-card")]
+    .find((row) => row.textContent.includes("Pull-ups"));
+  ok(card && card.textContent.includes("5×9"),
+    `the overview quotes the uncapped bodyweight target the lifter is graded against (got ${card && card.textContent.match(/\d+×\d+/g)})`);
+
+  await db.importBundle(parsed);
+}
+
+// A slot whose exercise is missing from the library must not fail OPEN: the
+// "Needs progression" pill and the editor's no-increment warning both fall
+// back to the inferred (external) basis instead of going silent — the quietly
+// stuck slot is exactly what they exist to flag. A crossed rep window is also
+// warned about on EVERY lift, not just double-progression ones, because the
+// program-file contract rejects the stored pair regardless of style.
+{
+  const name = "Fixture Ghost And Crossed";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Upper", order: 0,
+      lifts: [
+        { exerciseName: "Overhead Press", role: "main", prescription: "wave",
+          baseWeightLb: 95, estimatedMaxLb: 130, stallCount: 0, lastIncrementLb: 0,
+          minimumReps: 9, maximumReps: 5, currentReps: 5 },
+      ],
+      accessories: [{ exerciseName: "Ghost Cable Row", sets: 3, minReps: 8, maxReps: 12,
+        currentReps: 12, weightLb: 40, incrementLb: 0, stallCount: 0 }] }],
+  });
+  const program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  await programView.render(host());
+  const card = [...host().querySelectorAll(".program-day-card")]
+    .find((row) => row.textContent.includes("1 accessories"));
+  ok(card && card.textContent.includes("Needs progression"),
+    "a loaded no-increment slot is flagged even when its exercise is missing from the library");
+
+  settings.programEditor(program); await tick();
+  const editor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  ok(editor && editor.textContent.includes("Ghost Cable Row carries load but has no increment"),
+    "the editor's no-increment warning survives a missing exercise");
+  ok(editor && editor.textContent.includes("Overhead Press's minimum reps exceed its maximum; program export will reject it."),
+    "a crossed window warns on every lift the export contract rejects, whatever its style");
+  document.getElementById("overlays").replaceChildren();
+
+  await db.importBundle(parsed);
+}
+
+// The rep-window steppers never touch the slot's banked target: exploring the
+// endpoints up and back down must not inject reps the lifter never earned.
+// And a carry updates only the SIBLING stepper node — never a full editor
+// redraw that replaces the control under the finger pressing it.
+{
+  const name = "Fixture Stepper Honesty";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Upper", order: 0,
+      lifts: [
+        { exerciseName: "Overhead Press", role: "main", prescription: "wave",
+          baseWeightLb: 95, estimatedMaxLb: 130, stallCount: 0, lastIncrementLb: 0 },
+        { exerciseName: "Incline DB Press", role: "complementary", prescription: "doubleProgression",
+          doubleProgressionSets: 3, minimumReps: 8, maximumReps: 10, currentReps: 8,
+          baseWeightLb: 45, estimatedMaxLb: 60, stallCount: 0, lastIncrementLb: 0 },
+      ],
+      accessories: [{ exerciseName: "Face Pulls", sets: 3, minReps: 8, maxReps: 12,
+        currentReps: 8, weightLb: 40, incrementLb: 5, stallCount: 0 }] }],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  settings.programEditor(program); await tick();
+  const editorOverlay = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const dayLead = [...editorOverlay.querySelectorAll(".lead")].find((el) => el.textContent.includes("Upper"));
+  dayLead.click(); await tick();
+  let dayEditor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const windowRow = () => [...dayEditor.querySelectorAll(".row")]
+    .find((r) => r.textContent.includes("Sets / rep window"));
+  let steppers = windowRow().querySelectorAll(".stepper");
+  const minStepper = steppers[1];
+  const minUp = () => [...minStepper.querySelectorAll("button")].at(-1);
+  const minDown = () => minStepper.querySelectorAll("button")[0];
+
+  // 8 → 9 → 10: inside the window, nothing carried, nothing else moves.
+  minUp().click(); await tick();
+  minUp().click(); await tick();
+  // 10 → 11: crosses the maximum. The maximum carries; the tapped stepper
+  // itself must survive (no full redraw).
+  minUp().click(); await tick();
+  ok(document.contains(minStepper),
+    "a carry redraws only the sibling stepper, not the editor under the lifter's finger");
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  let lift = program.days[0].lifts.find((l) => l.exerciseName === "Incline DB Press");
+  ok(lift.minimumReps === 11 && lift.maximumReps === 11,
+    `the maximum carries with the minimum (got ${lift.minimumReps}-${lift.maximumReps})`);
+  ok(windowRow().textContent.includes("11"),
+    "the carried maximum is visible without a manual refresh");
+  // Back down to 8: the window returns, and the banked target was NEVER
+  // touched — the old setters ratcheted it to 11 here.
+  minDown().click(); await tick();
+  minDown().click(); await tick();
+  minDown().click(); await tick();
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  lift = program.days[0].lifts.find((l) => l.exerciseName === "Incline DB Press");
+  ok(lift.currentReps === 8,
+    `exploring the endpoints injects no unearned reps into a lift (got currentReps ${lift.currentReps})`);
+  ok(lift.minimumReps === 8 && lift.maximumReps === 11,
+    `endpoints land where they were tapped (got ${lift.minimumReps}-${lift.maximumReps})`);
+
+  // The accessory pair follows the same rules.
+  dayEditor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const repRange = [...dayEditor.querySelectorAll(".row")].find((r) => r.textContent.includes("Rep range"));
+  const accSteppers = repRange.querySelectorAll(".stepper");
+  const accMinUp = [...accSteppers[0].querySelectorAll("button")].at(-1);
+  const accMinDown = accSteppers[0].querySelectorAll("button")[0];
+  accMinUp.click(); await tick();
+  accMinDown.click(); await tick();
+  program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const accessory = program.days[0].accessories[0];
+  ok(accessory.currentReps === 8,
+    `exploring the endpoints injects no unearned reps into an accessory (got currentReps ${accessory.currentReps})`);
+  document.getElementById("overlays").replaceChildren();
+
+  await db.importBundle(parsed);
+}
+
+
 // A 5/3/1 day is ALL amrap and ramp blocks — it has no ordinary `work` set at
 // all. Every gate that asked "is this `work`" therefore answered no, so the
 // session banked as history and the schedule never advanced. The template was
