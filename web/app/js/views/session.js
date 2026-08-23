@@ -1616,7 +1616,15 @@ async function advanceProgram(session, milestones) {
       }
     } else {
       const loadStep = C.programLoadStep(program.roundingLb, exerciseByName.get(acc.exerciseName)?.type);
-      Object.assign(acc, C.advanceAccessory(acc, accPerf(se, loadStep)));
+      // A stored increment on a bodyweight identity is not a load step —
+      // there is nothing to add it to. Reading it as one accrued weight
+      // nothing measures AND capped the rep window, stopping the slot
+      // progressing at all. Mirrors ProgramAccessory.coreState.
+      const accExercise = exerciseByName.get(acc.exerciseName);
+      Object.assign(acc, C.advanceAccessory(
+        { ...acc, incrementLb: C.hasLoadStep(acc.incrementLb, accExercise) ? acc.incrementLb : 0 },
+        accPerf(se, loadStep),
+      ));
     }
   }
   // Lift slots can opt into rep-window progression instead of phase grading.
@@ -1632,7 +1640,7 @@ async function advanceProgram(session, milestones) {
     // history, tonnage, and PR detection all ignore. Adding a belt is
     // switching to the weighted identity (Weighted Pull-up), not
     // incrementing this one. Mirrors SessionCompletion.
-    const increment = liftExercise && C.resolvedLoadBasis(liftExercise) === "bodyweight" ? 0 : loadStep;
+    const increment = C.supportsLoadableIncrement(liftExercise) ? loadStep : 0;
     // The window the slot is actually running on — the same reading the
     // prescription used, so banking cannot disagree with what was prescribed.
     // Mirrors SessionCompletion.
@@ -2107,7 +2115,10 @@ export async function createSessionFromProgramDay(program, day) {
     // The target clamped into the slot's own window, so the card, the built
     // session, and the advance all read the same number. Mirrors
     // ProgramAccessory.prescribedReps.
-    const accReps = C.repWindow(acc.minReps, acc.maxReps, acc.currentReps, acc.incrementLb > 0).current;
+    // The target clamped into the window this slot actually runs on — a
+    // bodyweight identity has no load step, so its window top is advisory.
+    const accReps = C.repWindow(acc.minReps, acc.maxReps, acc.currentReps,
+      C.hasLoadStep(acc.incrementLb, ex)).current;
     const sets = [];
     for (let i = 0; i < effectiveSets; i += 1) {
       const set = mkSet(i, isTimed ? 0 : weightLb, isTimed ? 1 : accReps, {

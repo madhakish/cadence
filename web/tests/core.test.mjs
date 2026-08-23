@@ -936,6 +936,36 @@ for (let minReps = 1; minReps <= 14 && !sweepBothRose; minReps += 1) {
 ok(sweepBothRose === null && sweepChecked === 14 * 14 * 16 * 4,
   `[INV-WINDOW-BEFORE-LOAD] no window/target/increment combination raises reps and load together (${sweepChecked} checked)${sweepBothRose ? ` — ${JSON.stringify(sweepBothRose)}` : ""}`);
 
+// "Does this slot have a load step to earn" needs BOTH halves, and only one of
+// them was ever checked. A numeric increment on a bodyweight identity is not a
+// load step: there is nothing to add it to, so it accrued weight that volume
+// and PR detection ignore AND capped the rep window, stopping the slot
+// progressing in the one dimension that counts for it. [INV-WINDOW-BEFORE-LOAD]
+ok(C.hasLoadStep(5, { type: "dumbbell" }) === true, "a dumbbell slot with an increment has a load step");
+ok(C.hasLoadStep(0, { type: "dumbbell" }) === false, "no increment, no load step");
+ok(C.hasLoadStep(5, { type: "bodyweight" }) === false,
+  "an increment on a bodyweight identity is not a load step");
+ok(C.hasLoadStep(5, { type: "bodyweight", loadBasis: "externalTotal" }) === true,
+  "a belt-loaded bodyweight slot does have one");
+ok(C.hasLoadStep(5, undefined) === true, "an unknown exercise keeps the increment's own reading");
+// Composed: that slot climbs reps instead of accruing phantom load.
+const bwAccessory = { sets: 3, minReps: 8, maxReps: 12, currentReps: 12, weightLb: 0,
+  incrementLb: 5, stallCount: 0 };
+const bwExercise = { type: "bodyweight", loadBasis: "bodyweight" };
+const bwGated = C.advanceAccessory(
+  { ...bwAccessory, incrementLb: C.hasLoadStep(bwAccessory.incrementLb, bwExercise) ? bwAccessory.incrementLb : 0 },
+  { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false, performedAtPlannedLoad: true,
+    grindyOrWobbleSets: 0, bodyFlagSets: 0 });
+ok(bwGated.weightLb === 0 && bwGated.currentReps === 13,
+  "[INV-WINDOW-BEFORE-LOAD] a bodyweight accessory climbs reps rather than accruing load it cannot carry");
+// "Needs progression" is about having no way to move the needle at all. A
+// bodyweight slot climbing past its window top always has one, so flagging it
+// there was permanently wrong; a slot carrying load with no increment does not.
+ok(C.accessoryCannotProgressLoad("bodyweight", "bodyweight", 0, 0) === false,
+  "a healthy bodyweight accessory is never flagged as stuck");
+ok(C.accessoryCannotProgressLoad("dumbbell", "perImplement", 40, 0) === true,
+  "a loaded slot with no increment is");
+
 // The exposure preview runs the real engine, so it has to be handed the SLOT'S
 // increment and not the program's rounding step. Hardcoding the step made the
 // preview announce "add 5 lb and drop back to 5 reps" and show the base

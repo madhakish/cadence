@@ -49,10 +49,20 @@ export async function render(host) {
             ui.h("span", { class: "sub mono", text: `Base ${ui.fmtWeight(lift.baseWeightLb)} · next ${ui.fmtWeight(plan.weightLb)} · ${plan.sets}×${plan.reps}` }))));
       }
       const accessories = ordered(day.accessories);
+      // "At the top of its rep window with no increment" flagged every healthy
+      // bodyweight accessory: reps ARE its progression, so it climbs past its
+      // top forever and the pill was permanently on. The real stuck cases are
+      // a slot carrying load it can never add to — which already has an owner
+      // — and timed work with no duration step. Mirrors ProgramOverviewView.
       const stalled = accessories.some((item) => {
-        const window = C.repWindow(item.minReps, item.maxReps, item.currentReps, item.incrementLb > 0);
-        return window.current >= window.high
-          && !(item.incrementLb > 0) && !(item.durationStepSeconds > 0);
+        const exercise = exByName.get(item.exerciseName);
+        if (!exercise) return false;
+        if (exercise.type === "timed" || exercise.type === "conditioning") {
+          return !(item.durationStepSeconds > 0);
+        }
+        return C.accessoryCannotProgressLoad(
+          exercise.type, C.resolvedLoadBasis(exercise), item.weightLb, item.incrementLb,
+        );
       });
       card.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
         ui.h("span", { class: "sub", text: `${accessories.length} accessories` }),

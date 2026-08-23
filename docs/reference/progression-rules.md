@@ -253,6 +253,16 @@ capped target while grading it against an uncapped one would leave it unable to
 satisfy its own grade — prescribed at the top, graded against a higher number,
 stalling forever. Loadability reaches the prescription, not just the advance.
 
+"Has a load step to earn" needs **both** halves: a numeric increment, and an
+identity that can hold external load. A stored increment on a bodyweight
+identity is not a load step — there is nothing to add it to, so reading it as
+one accrues weight that volume and PR detection ignore and, worse, caps the rep
+window and stops the slot progressing in the only dimension that counts for it.
+Adding a belt is switching to the weighted identity, not incrementing this one.
+Because the top of an unloadable window is advisory, a target above it is
+correct progress rather than a misconfiguration, and a slot climbing there
+still has a way to move the needle — neither is flagged.
+
 Alongside that, the rep window is read as an **unordered pair** of endpoints
 and the current target is clamped inside it, so the number that is prescribed
 is the number that is graded. The endpoints are two independently edited

@@ -195,6 +195,13 @@ export const resolvedLoadBasis = (exercise) => LOAD_BASES.includes(exercise?.loa
 // See `repWindow`'s `capped`. Mirrors Cadence Exercise.supportsLoadableIncrement.
 export const supportsLoadableIncrement = (exercise) => resolvedLoadBasis(exercise) !== "bodyweight";
 
+// Whether a slot actually has a load step to earn. BOTH halves are required
+// and only one of them was ever checked: a numeric increment is not a load step
+// on an identity that carries no external load. Mirrors
+// ProgramAccessory.hasLoadStep.
+export const hasLoadStep = (incrementLb, exercise) =>
+  supportsLoadableIncrement(exercise) && incrementLb > 0;
+
 export const resolvedImplementCount = (exercise) => resolvedLoadBasis(exercise) === "perImplement"
   ? Math.max(1, Number.isInteger(exercise?.implementCount) && exercise.implementCount > 0
     ? exercise.implementCount : inferredImplementCount(exercise?.type)) : 1;

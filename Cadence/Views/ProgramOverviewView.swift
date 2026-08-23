@@ -148,10 +148,24 @@ struct ProgramOverviewView: View {
         )
     }
 
+    /// Whether a slot has no way left to move the needle.
+    ///
+    /// This used to read "at the top of its rep window with no increment",
+    /// which flagged every healthy bodyweight accessory: reps ARE its
+    /// progression, so it climbs past its window top forever and the flag
+    /// was permanently on. The real stuck cases are a slot carrying load it
+    /// can never add to, and timed work with no duration step — and the first
+    /// of those already has an owner the program editor uses.
     private func cannotProgress(_ accessory: ProgramAccessory) -> Bool {
-        let type = exercises.first { $0.name == accessory.exerciseName }?.type
-        if type == .timed || type == .conditioning { return accessory.durationStepSeconds <= 0 }
-        return accessory.repWindow.current >= accessory.repWindow.high && accessory.incrementLb <= 0
+        guard let exercise = exercises.first(where: { $0.name == accessory.exerciseName })
+        else { return false }
+        if exercise.type == .timed || exercise.type == .conditioning {
+            return accessory.durationStepSeconds <= 0
+        }
+        return ProgramProgression.accessoryCannotProgressLoad(
+            exerciseType: exercise.typeRaw, loadBasis: exercise.loadBasis,
+            weightLb: accessory.weightLb, incrementLb: accessory.incrementLb
+        )
     }
 
     private func format(_ lb: Double) -> String {

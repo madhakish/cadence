@@ -232,17 +232,21 @@ enum ProgramSession {
             // slot is enough exposure; completion deliberately cannot advance
             // its rep/load target (see SessionCompletion).
             let effectiveSets = phase == .deload ? 1 : ordinarySets
+            // The target clamped into the window this slot actually runs on —
+            // a bodyweight identity has no load step, so its window top is
+            // advisory and the prescription must follow the reps it earned.
+            let accessoryReps = acc.prescribedReps(loadable: exercise.supportsLoadableIncrement)
             entry.plannedSets = effectiveSets
-            entry.plannedReps = isTimed ? 1 : acc.prescribedReps
+            entry.plannedReps = isTimed ? 1 : accessoryReps
             entry.plannedDurationSeconds = isTimed ? acc.targetSeconds : nil
             context.insert(entry)
             session.exercises.append(entry)
             for i in 0..<effectiveSets {
-                insertSet(entry, order: i, weight: isTimed ? carryLb : weightLb, reps: isTimed ? 1 : acc.prescribedReps,
+                insertSet(entry, order: i, weight: isTimed ? carryLb : weightLb, reps: isTimed ? 1 : accessoryReps,
                           warmup: false, perSide: exercise.isUnilateral, enteredUnit: entryUnit,
                           durationSeconds: isTimed ? acc.targetSeconds : nil,
                           targetWeight: isTimed ? 0 : acc.weightLb, plannedWeight: isTimed ? 0 : weightLb,
-                          plannedReps: isTimed ? 1 : acc.prescribedReps,
+                          plannedReps: isTimed ? 1 : accessoryReps,
                           plannedDurationSeconds: isTimed ? acc.targetSeconds : nil,
                           block: exercise.type == .conditioning ? .conditioning : .work,
                           context: context)

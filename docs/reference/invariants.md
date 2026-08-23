@@ -563,6 +563,16 @@ slot's loadability therefore reaches `ProgramEngine.plan` through
 Reachable today via the coach's promote-vertical-pull, which creates a
 bodyweight double-progression Pull-ups slot.
 
+"Has a load step to earn" is one fact with **two** halves — a numeric increment
+AND an identity that can hold external load — and every reader asks the same
+owner for it (`Exercise.supportsLoadableIncrement` / `hasLoadStep`, mirrored).
+Checking only the increment let a bodyweight slot accrue weight nothing
+measures while its rep window went capped, which stops it progressing at all.
+Downstream, an unloadable window's top is advisory: a target above it is
+correct progress, not a misconfiguration, and a slot climbing there still has a
+way to move the needle — so neither the editor's rep-range warning nor the
+overview's "needs progression" flag fires on one.
+
 The reachable path that was found: the window's endpoints are two
 independently edited numbers, so a lifter can cross them. Read literally, a
 crossed window (minimum 8, maximum 5) puts the target at the top of its own

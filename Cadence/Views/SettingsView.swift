@@ -750,7 +750,7 @@ struct ProgramEditorView: View {
                 // by design, so the missing-base warning would fire forever
                 // on a slot that is configured exactly right.
                 if lift.baseWeightLb <= 0,
-                   exerciseByName[lift.exerciseName]?.loadBasis != .bodyweight {
+                   exerciseByName[lift.exerciseName]?.supportsLoadableIncrement ?? true {
                     messages.append("\(lift.exerciseName) needs a rotation-1 base weight.")
                 }
                 if lift.estimatedMaxLb > 0, lift.baseWeightLb > lift.estimatedMaxLb {
@@ -795,12 +795,29 @@ struct ProgramEditorView: View {
                 }
             }
             for accessory in day.orderedAccessories {
-                let type = exerciseByName[accessory.exerciseName]?.type
+                let exercise = exerciseByName[accessory.exerciseName]
+                let type = exercise?.type
                 let isTimed = type == .timed || type == .conditioning
+                // A slot with no load step climbs PAST its window top on
+                // purpose — reps are its only progression. Calling that
+                // "outside its rep range" told a correctly-progressing
+                // bodyweight accessory it was misconfigured, every rotation,
+                // forever. Only a target below the window, or above it on a
+                // slot that really does cap, is worth saying.
+                let capped = accessory.hasLoadStep(
+                    loadable: exercise?.supportsLoadableIncrement ?? true
+                )
                 if !isTimed, accessory.minReps > accessory.maxReps {
                     messages.append("\(accessory.exerciseName)'s minimum reps exceed its maximum.")
-                } else if !isTimed, !(accessory.minReps...accessory.maxReps).contains(accessory.currentReps) {
+                } else if !isTimed, accessory.currentReps < accessory.minReps
+                            || (capped && accessory.currentReps > accessory.maxReps) {
                     messages.append("\(accessory.exerciseName)'s current reps are outside its rep range.")
+                }
+                // A load step on an identity that carries no external load is
+                // ignored, so say so rather than letting the stepper imply it
+                // does something.
+                if let exercise, !exercise.supportsLoadableIncrement, accessory.incrementLb > 0 {
+                    messages.append("\(accessory.exerciseName) carries no external load, so its load step is ignored. Use the weighted variant to add load.")
                 }
                 // A loaded accessory with no increment can never add weight —
                 // it climbs reps past its own maximum forever. Flag it here

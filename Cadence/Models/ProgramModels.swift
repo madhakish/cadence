@@ -339,24 +339,39 @@ final class ProgramAccessory {
         self.stallCount = stallCount
     }
 
+    /// Whether this slot actually has a load step to earn.
+    ///
+    /// BOTH halves are required and only one of them was ever checked. A
+    /// numeric increment is not enough: on a bodyweight identity there is no
+    /// external load to add, so the increment stored weight that history,
+    /// tonnage, and PR detection all ignore — and, worse, it capped the rep
+    /// window, stopping the slot progressing in the one dimension that counts
+    /// for it. That is the same mistake the lift path made, in the accessory
+    /// path. `loadable` comes from `Exercise.supportsLoadableIncrement`;
+    /// callers that cannot see the exercise keep the old reading.
+    /// Mirrored in web/app/js/core.js `hasLoadStep`.
+    func hasLoadStep(loadable: Bool = true) -> Bool { loadable && incrementLb > 0 }
+
     /// The slot's effective rep window. See `ProgramProgression.repWindow`.
-    /// A slot with no loadable increment climbs past its window top, so its
-    /// target is floored but never capped.
-    var repWindow: (low: Int, high: Int, current: Int) {
+    /// A slot with no load step climbs past its window top, so its target is
+    /// floored but never capped.
+    func repWindow(loadable: Bool = true) -> (low: Int, high: Int, current: Int) {
         ProgramProgression.repWindow(
             minReps: minReps, maxReps: maxReps, currentReps: currentReps,
-            capped: incrementLb > 0
+            capped: hasLoadStep(loadable: loadable)
         )
     }
 
     /// What this slot prescribes right now — the target clamped into its own
     /// window, so the card, the built session, and the advance all read the
     /// same number even when the stored endpoints are crossed.
-    var prescribedReps: Int { repWindow.current }
+    func prescribedReps(loadable: Bool = true) -> Int { repWindow(loadable: loadable).current }
 
-    var coreState: AccessoryState {
+    func coreState(loadable: Bool = true) -> AccessoryState {
         AccessoryState(sets: sets, minReps: minReps, maxReps: maxReps, currentReps: currentReps,
-                       weightLb: weightLb, incrementLb: incrementLb, stallCount: stallCount)
+                       weightLb: weightLb,
+                       incrementLb: hasLoadStep(loadable: loadable) ? incrementLb : 0,
+                       stallCount: stallCount)
     }
 
     func apply(_ s: AccessoryState) {

@@ -785,8 +785,12 @@ enum SessionCompletion {
                         programRoundingLb: program.roundingLb,
                         exerciseType: entry.exercise?.typeRaw
                     )
+                    // A stored increment on a bodyweight identity is not a
+                    // load step — there is nothing to add it to. Reading it
+                    // as one accrued weight nothing measures AND capped the
+                    // rep window, stopping the slot progressing at all.
                     acc.apply(ProgramProgression.advanceAccessory(
-                        acc.coreState,
+                        acc.coreState(loadable: entry.exercise?.supportsLoadableIncrement ?? true),
                         perf: accPerf(entry, roundingLb: loadStep)
                     ))
                 }
@@ -809,8 +813,9 @@ enum SessionCompletion {
             // carries no external load, so a numeric increment would store
             // weight that history, tonnage, and PR detection all ignore.
             // Adding a belt is switching to the weighted identity (Weighted
-            // Pull-up), not incrementing this one.
-            let increment = entry.exercise?.loadBasis == .bodyweight ? 0 : loadStep
+            // Pull-up), not incrementing this one. One owner for that fact:
+            // `Exercise.supportsLoadableIncrement`.
+            let increment = (entry.exercise?.supportsLoadableIncrement ?? true) ? loadStep : 0
             // The window the slot is actually running on — the same reading
             // `prescriptionConfiguration` gave the session it just banked.
             let window = lift.repWindow(loadable: increment > 0)

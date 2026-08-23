@@ -495,6 +495,42 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(c.stallCount, 1)
     }
 
+    /// "Does this slot have a load step to earn" needs BOTH halves, and only
+    /// one of them was ever checked in the accessory path. A numeric increment
+    /// on a bodyweight identity is not a load step: there is nothing to add it
+    /// to, so it accrued weight that volume and PR detection ignore AND capped
+    /// the rep window, stopping the slot progressing in the one dimension that
+    /// counts for it. The app layer gates the increment
+    /// (`ProgramAccessory.hasLoadStep`); this pins what the engine then does.
+    /// [INV-WINDOW-BEFORE-LOAD]
+    func testUnloadableAccessoryClimbsRepsRatherThanAccruingLoad() {
+        let stored = AccessoryState(sets: 3, minReps: 8, maxReps: 12, currentReps: 12,
+                                    weightLb: 0, incrementLb: 5)
+        var gated = stored
+        gated.incrementLb = 0            // what an unloadable identity resolves to
+        let after = P.advanceAccessory(
+            gated, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(after.weightLb, 0, accuracy: 1e-9, "no load it cannot carry is accrued")
+        XCTAssertEqual(after.currentReps, 13, "and the window top stays advisory, so reps climb")
+
+        // Ungated, the same stored slot would have done the opposite.
+        let ungated = P.advanceAccessory(
+            stored, perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(ungated.weightLb, 5, accuracy: 1e-9)
+        XCTAssertEqual(ungated.currentReps, 8, "which is the behaviour the gate exists to prevent")
+
+        // "Needs progression" is about having no way to move the needle at
+        // all. A bodyweight slot climbing past its window top always has one.
+        XCTAssertFalse(P.accessoryCannotProgressLoad(
+            exerciseType: "bodyweight", loadBasis: .bodyweight, weightLb: 0, incrementLb: 0
+        ), "a healthy bodyweight accessory is never flagged as stuck")
+        XCTAssertTrue(P.accessoryCannotProgressLoad(
+            exerciseType: "dumbbell", loadBasis: .perImplement, weightLb: 40, incrementLb: 0
+        ), "a loaded slot with no increment is")
+    }
+
     /// A bodyweight-basis double-progression LIFT (the coach's
     /// promote-vertical-pull creates exactly this) has no load to add, so it
     /// climbs past its window top by design. That reading has to reach the

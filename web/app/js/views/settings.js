@@ -460,8 +460,7 @@ export async function programEditor(p) {
         // design, so the missing-base warning would fire forever on a slot
         // that is configured exactly right.
         const liftExercise = exerciseByName.get(lift.exerciseName);
-        if (!(lift.baseWeightLb > 0)
-          && (!liftExercise || C.resolvedLoadBasis(liftExercise) !== "bodyweight")) {
+        if (!(lift.baseWeightLb > 0) && C.supportsLoadableIncrement(liftExercise)) {
           warnings.push(`${lift.exerciseName} needs a rotation-1 base weight.`);
         }
         if (lift.estimatedMaxLb > 0 && lift.baseWeightLb > lift.estimatedMaxLb) warnings.push(`${lift.exerciseName}'s base is above its estimated 1RM.`);
@@ -498,8 +497,18 @@ export async function programEditor(p) {
       for (const accessory of day.accessories || []) {
         const exercise = exerciseByName.get(accessory.exerciseName);
         const durationBased = exercise?.type === "timed" || exercise?.type === "conditioning";
+        // A slot with no load step climbs PAST its window top on purpose —
+        // reps are its only progression. Calling that "outside its rep range"
+        // told a correctly-progressing bodyweight accessory it was
+        // misconfigured, every rotation, forever. Only a target below the
+        // window, or above it on a slot that really does cap, is worth saying.
+        // Mirrors SettingsView.
+        const capped = C.hasLoadStep(accessory.incrementLb, exercise);
         if (!durationBased && accessory.minReps > accessory.maxReps) warnings.push(`${accessory.exerciseName}'s minimum reps exceed its maximum.`);
-        else if (!durationBased && (accessory.currentReps < accessory.minReps || accessory.currentReps > accessory.maxReps)) warnings.push(`${accessory.exerciseName}'s current reps are outside its rep range.`);
+        else if (!durationBased && (accessory.currentReps < accessory.minReps || (capped && accessory.currentReps > accessory.maxReps))) warnings.push(`${accessory.exerciseName}'s current reps are outside its rep range.`);
+        // A load step on an identity that carries no external load is ignored,
+        // so say so rather than letting the stepper imply it does something.
+        if (exercise && !C.supportsLoadableIncrement(exercise) && accessory.incrementLb > 0) warnings.push(`${accessory.exerciseName} carries no external load, so its load step is ignored. Use the weighted variant to add load.`);
         // A loaded accessory with no increment can never add weight — it
         // climbs reps past its own maximum forever. Flag it rather than let
         // the slot quietly stop progressing.
