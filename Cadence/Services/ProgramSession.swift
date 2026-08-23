@@ -99,7 +99,9 @@ enum ProgramSession {
             let exercise = try findExercise(named: lift.exerciseName, context: context)
             let loadStep = ProgramEngine.loadStep(programRoundingLb: program.roundingLb,
                                                   exerciseType: exercise.typeRaw)
-            let configuration = lift.prescriptionConfiguration(movementGroup: exercise.movementGroup)
+            let configuration = lift.prescriptionConfiguration(
+                movementGroup: exercise.movementGroup, loadable: exercise.supportsLoadableIncrement
+            )
             let prescription = ProgramEngine.sessionPrescription(
                 for: CycleState(cycleNumber: program.cycleNumber,
                                 baseWeightLb: planningBase(for: lift, exercise: exercise,
@@ -277,7 +279,8 @@ enum ProgramSession {
                 focus: program.focus,
                 prescriptionStyle: lift.prescription,
                 configuration: lift.prescriptionConfiguration(
-                    movementGroup: exercise?.movementGroup ?? ""
+                    movementGroup: exercise?.movementGroup ?? "",
+                    loadable: exercise?.supportsLoadableIncrement ?? true
                 )
             ).weightLb
             if session.exercises.contains(where: {
@@ -471,7 +474,10 @@ enum ProgramSession {
             role: lift.role,
             focus: program.focus,
             prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
+            configuration: lift.prescriptionConfiguration(
+                movementGroup: exercise?.movementGroup ?? "",
+                loadable: exercise?.supportsLoadableIncrement ?? true
+            ),
             addedVolumeSets: addedVolumeSets
         )
     }

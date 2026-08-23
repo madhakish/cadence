@@ -243,10 +243,15 @@ adding reps; the range top is advisory.
 
 Reps and load never move in the same exposure, whatever the slot's stored
 window says: the rep target rises only at a held load, and the load rises only
-with the target held or dropped. The load-step branch takes the lower of the
-window bottom and the target it just graded, so it cannot raise reps even from
-a nonsensical window — the guarantee does not depend on enumerating which
-configurations are reachable.
+with the target held or dropped. Both rest on the window reading below —
+the target is always clamped to at least the window bottom, so the load step's
+reset to that bottom can only hold or lower it.
+
+The prescription and the advance also agree on whether the window top is a
+**cap**. A slot with no loadable increment climbs past it, so prescribing it a
+capped target while grading it against an uncapped one would leave it unable to
+satisfy its own grade — prescribed at the top, graded against a higher number,
+stalling forever. Loadability reaches the prescription, not just the advance.
 
 Alongside that, the rep window is read as an **unordered pair** of endpoints
 and the current target is clamped inside it, so the number that is prescribed

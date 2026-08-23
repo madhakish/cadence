@@ -245,9 +245,16 @@ final class ProgramLift {
         )
     }
 
-    func prescriptionConfiguration(movementGroup: String) -> LiftPrescriptionConfiguration {
+    /// `loadable` is false for a slot whose double progression has no weight
+    /// to add (a bodyweight-basis identity). It has to reach the PRESCRIPTION,
+    /// not only the advance: a slot graded against an uncapped rep target
+    /// while being prescribed a capped one can never satisfy its own grade and
+    /// stalls forever. Callers pass `exercise.supportsLoadableIncrement`.
+    func prescriptionConfiguration(
+        movementGroup: String, loadable: Bool = true
+    ) -> LiftPrescriptionConfiguration {
         // Resolved in CadenceCore so both clients agree — see resolvedOffsets.
-        let window = repWindow()
+        let window = repWindow(loadable: loadable)
         let offsets = ProgramEngine.resolvedOffsets(
             loadOffsetLb: loadOffsetLb, peakOffsetLb: peakOffsetLb, movementGroup: movementGroup
         )
@@ -268,7 +275,8 @@ final class ProgramLift {
             peakSingleEnabled: peakSingleEnabled,
             lastPeakSingleLb: lastPeakSingleLb,
             peakSingleIncrementLb: peakSingleIncrementLb,
-            phasePrimerEnabled: phasePrimerEnabled
+            phasePrimerEnabled: phasePrimerEnabled,
+            loadableIncrement: loadable
         )
     }
 

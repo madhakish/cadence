@@ -189,6 +189,12 @@ export function equipmentPolicyAllows(policy, exerciseType) {
 }
 export const resolvedLoadBasis = (exercise) => LOAD_BASES.includes(exercise?.loadBasis)
   ? exercise.loadBasis : inferredLoadBasis(exercise?.type);
+// Whether a double-progression slot on this exercise has a load step to earn.
+// A bodyweight identity carries no external load, so its rep-window top is
+// advisory — it climbs past it because reps are the only way it progresses.
+// See `repWindow`'s `capped`. Mirrors Cadence Exercise.supportsLoadableIncrement.
+export const supportsLoadableIncrement = (exercise) => resolvedLoadBasis(exercise) !== "bodyweight";
+
 export const resolvedImplementCount = (exercise) => resolvedLoadBasis(exercise) === "perImplement"
   ? Math.max(1, Number.isInteger(exercise?.implementCount) && exercise.implementCount > 0
     ? exercise.implementCount : inferredImplementCount(exercise?.type)) : 1;
@@ -1045,8 +1051,11 @@ export function planForStyle(state, roundingLb = DEFAULT_ROUNDING_LB, style = "w
   }
   if (style === "doubleProgression") {
     // One owner for the window, shared with the advance, so the prescription
-    // and the grade can never disagree about it.
-    const window = repWindow(config.minimumReps, config.maximumReps, config.currentReps);
+    // and the grade can never disagree about it — including on `capped`, which
+    // is why the slot's loadability has to reach the prescription and not only
+    // the advance.
+    const window = repWindow(config.minimumReps, config.maximumReps, config.currentReps,
+      config.loadableIncrement !== false);
     return {
       weightLb: roundTo(state.baseWeightLb * (p === 4 ? 0.80 : 1.0), roundingLb),
       sets: p === 4 ? 1 : Math.max(1, config.workingSets),
@@ -2273,10 +2282,13 @@ export function repWindow(minReps, maxReps, currentReps, capped = true) {
 // a slot whose stored window is incoherent:
 //   - the rep target rises only at a held load; and
 //   - the load rises only with the rep target held or dropped.
-// They are enforced by construction rather than by reasoning about which
-// configurations are reachable — the reported failure (a slot prescribed at
-// 3×5 @ 80 returning 3×8 @ 85 in one exposure) was a state nobody had
-// enumerated, and the next one will be too.
+// They rest entirely on `repWindow` returning `low <= current <= high` (`high`
+// only when capped): every branch below reads the clamped window rather than
+// the stored fields, so no stored combination can put the target outside the
+// range the branches assume. The reported failure (a slot prescribed at 3×5 @
+// 80 returning 3×8 @ 85 in one exposure) came from reading the stored fields
+// directly. Both suites sweep the whole input space rather than trusting this
+// argument.
 export function advanceAccessory(state, perf) {
   const next = { ...state };
   const weighted = state.incrementLb > 0;
@@ -2289,14 +2301,13 @@ export function advanceAccessory(state, perf) {
     next.stallCount = state.stallCount + 1;
   } else if (weighted && window.current >= window.high) {
     next.weightLb = state.weightLb + state.incrementLb; // earned the rep range → add load, reset reps
-    // A load step may drop the rep target or hold it. It may never RAISE it:
-    // that is the structural half of the rule, and it holds whatever the
-    // stored window says. Reading `low` alone was the bug — with the endpoints
-    // crossed, the bottom of the window sat above the target the lifter had
-    // just performed, so the "reset" moved reps UP while the load moved up
-    // too. Nothing below this line has to reason about which states can do
-    // that.
-    next.currentReps = Math.min(window.low, window.current);
+    // The reset lands on the window BOTTOM, and this is the line that used to
+    // raise reps while adding load: with the stored endpoints crossed,
+    // `state.minReps` was above the target that had just been performed. It is
+    // safe now for one reason and it is worth naming — `repWindow` guarantees
+    // `low <= current`, so the reset can only hold or lower the target, never
+    // raise it. Anything that weakens that clamp reopens the bug here.
+    next.currentReps = window.low;
     next.stallCount = 0;
   } else {
     // weighted: climb to the cap. bodyweight/timed (no loadable increment): keep
@@ -2353,6 +2364,7 @@ export function exposurePreview({
   const configuredWindow = repWindow(
     num(config.minimumReps, 5), num(config.maximumReps, 8),
     num(config.currentReps, num(config.minimumReps, 5)),
+    config.loadableIncrement !== false,
   );
   config.minimumReps = configuredWindow.low;
   config.maximumReps = configuredWindow.high;

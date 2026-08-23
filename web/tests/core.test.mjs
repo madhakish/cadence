@@ -936,6 +936,38 @@ for (let minReps = 1; minReps <= 14 && !sweepBothRose; minReps += 1) {
 ok(sweepBothRose === null && sweepChecked === 14 * 14 * 16 * 4,
   `[INV-WINDOW-BEFORE-LOAD] no window/target/increment combination raises reps and load together (${sweepChecked} checked)${sweepBothRose ? ` — ${JSON.stringify(sweepBothRose)}` : ""}`);
 
+// A bodyweight-basis doubleProgression LIFT (the coach's promote-vertical-pull
+// creates exactly this) has no load to add, so it climbs past its window top by
+// design. That reading has to reach the PRESCRIPTION and not only the advance:
+// prescribing a capped target while grading against an uncapped one means the
+// slot can never satisfy its own grade, and it stalls forever. [INV-WINDOW-BEFORE-LOAD]
+const pullUps = { type: "bodyweight", loadBasis: "bodyweight", movementGroup: "pull" };
+ok(C.supportsLoadableIncrement(pullUps) === false, "a bodyweight identity has no load step to earn");
+ok(C.supportsLoadableIncrement({ type: "bodyweight", loadBasis: "externalTotal" }) === true,
+  "a belt-loaded bodyweight slot does have one");
+const climbedLift = { doubleProgressionSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 9 };
+const climbedPlan = C.programPlanFor(
+  { cycleNumber: 1, baseWeightLb: 0, nextPhase: 1, incrementLb: 0 },
+  5, pullUps.type, pullUps.movementGroup, "complementary", "strength", "doubleProgression",
+  { ...climbedLift, workingSets: 3, loadableIncrement: C.supportsLoadableIncrement(pullUps) });
+const climbedWindow = C.repWindow(climbedLift.minimumReps, climbedLift.maximumReps,
+  climbedLift.currentReps, C.supportsLoadableIncrement(pullUps));
+ok(climbedPlan.reps === 9 && climbedWindow.current === 9,
+  "[INV-WINDOW-BEFORE-LOAD] an unloadable lift is prescribed the target it is graded against");
+const climbedAfter = C.advanceAccessory(
+  { sets: 3, minReps: climbedWindow.low, maxReps: climbedWindow.high, currentReps: climbedWindow.current,
+    weightLb: 0, incrementLb: 0, stallCount: 0 },
+  { completedSets: 3, minRepsAchieved: climbedPlan.reps, anyStoppedEarly: false,
+    performedAtPlannedLoad: true, grindyOrWobbleSets: 0, bodyFlagSets: 0 });
+ok(climbedAfter.currentReps === 10 && climbedAfter.stallCount === 0,
+  "a clean exposure of it advances instead of stalling forever");
+// A LOADABLE lift still caps at its window top, where the load step is earned.
+const loadablePlan = C.programPlanFor(
+  { cycleNumber: 1, baseWeightLb: 80, nextPhase: 1, incrementLb: 0 },
+  5, "dumbbell", "pull", "complementary", "strength", "doubleProgression",
+  { ...climbedLift, workingSets: 3, loadableIncrement: true });
+ok(loadablePlan.reps === 8, "a loadable lift is still capped at its window top");
+
 // The reported log: a dumbbell row prescribed at 3×5 @ 80 came back at 3×8 @ 85
 // after ONE clean exposure — a rep jump and a load step in the same session,
 // which double progression exists to prevent. The slot's rep window had been

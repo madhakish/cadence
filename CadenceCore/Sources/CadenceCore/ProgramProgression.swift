@@ -1098,10 +1098,14 @@ public enum ProgramProgression {
     /// - the rep target rises only at a held load; and
     /// - the load rises only with the rep target held or dropped.
     ///
-    /// They are enforced by construction rather than by reasoning about which
-    /// configurations are reachable — the reported failure (a slot prescribed
-    /// at 3×5 @ 80 returning 3×8 @ 85 in one exposure) was a state nobody had
-    /// enumerated, and the next one will be too.
+    /// They rest entirely on `repWindow` returning `low <= current <= high`
+    /// (`high` only when capped): every branch below reads the clamped window
+    /// rather than the stored fields, so no stored combination can put the
+    /// target outside the range the branches assume. That is a narrow enough
+    /// foundation to be worth stating — the reported failure (a slot
+    /// prescribed at 3×5 @ 80 returning 3×8 @ 85 in one exposure) came from
+    /// reading the stored fields directly. Both suites sweep the whole input
+    /// space rather than trusting this argument.
     public static func advanceAccessory(_ state: AccessoryState, perf: AccessoryPerformance) -> AccessoryState {
         var next = state
         let weighted = state.incrementLb > 0
@@ -1117,14 +1121,14 @@ public enum ProgramProgression {
             next.stallCount = state.stallCount + 1
         } else if weighted && window.current >= window.high {
             next.weightLb = state.weightLb + state.incrementLb   // earned the rep range → add load, reset reps
-            // A load step may drop the rep target or hold it. It may never
-            // RAISE it: that is the structural half of the rule, and it holds
-            // whatever the stored window says. Reading `low` alone was the
-            // bug — with the endpoints crossed, the bottom of the window sat
-            // above the target the lifter had just performed, so the "reset"
-            // moved reps UP while the load moved up too. Nothing below this
-            // line has to reason about which states can do that.
-            next.currentReps = Swift.min(window.low, window.current)
+            // The reset lands on the window BOTTOM, and this is the line that
+            // used to raise reps while adding load: with the stored endpoints
+            // crossed, `state.minReps` was above the target that had just been
+            // performed. It is safe now for one reason and it is worth naming
+            // — `repWindow` guarantees `low <= current`, so the reset can only
+            // hold or lower the target, never raise it. Anything that weakens
+            // that clamp reopens the bug here.
+            next.currentReps = window.low
             next.stallCount = 0
         } else {
             // weighted: climb to the cap. bodyweight/timed (no loadable increment):

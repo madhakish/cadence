@@ -17,7 +17,9 @@ export function coachingReport(program, sessions, exMap, checkins = [], interval
       const plan = C.programPlanFor(
         { cycleNumber: program.cycleNumber, baseWeightLb: lift.baseWeightLb, nextPhase: program.currentWeek, incrementLb: 0 },
         program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
-        lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+        lift.prescription || "automatic",
+        { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+          loadableIncrement: C.supportsLoadableIncrement(exercise) },
       );
       const resolvedStyle = C.resolvedPrescriptionStyle(
         lift.prescription || "automatic", exercise?.movementGroup, lift.role, program.focus,

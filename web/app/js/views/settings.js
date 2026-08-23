@@ -474,7 +474,8 @@ export async function programEditor(p) {
           const plan = C.programPlanFor(
           { cycleNumber: 1, baseWeightLb: lift.baseWeightLb, nextPhase: 1, incrementLb: 0 },
           p.roundingLb, exercise.type, exercise.movementGroup, lift.role, p.focus, lift.prescription || "automatic",
-          { ...lift, workingSets: lift.doubleProgressionSets ?? 3 });
+          { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+            loadableIncrement: C.supportsLoadableIncrement(exercise) });
           // Published methodology slots deliberately shape their own weekly
           // balance (squat 3×/week, one heavy pull); the press/pull and
           // squat/hinge heuristics would permanently flag the canon, so those
@@ -486,6 +487,12 @@ export async function programEditor(p) {
           if (!methodologySlot) addSets(exercise.movementGroup, pattern, plan.sets);
           else addSets(null, pattern, plan.sets);
           if ((exercise.movementPattern || C.movementPattern(exercise.name, exercise.movementGroup)) === "olympicPower" && plan.reps > 3) warnings.push(`${lift.exerciseName} is power work; keep programmed sets at 1–3 reps.`);
+          // A crossed window on a LIFT went unflagged while the same state on
+          // an accessory was called out. The engine reads the endpoints as an
+          // unordered pair so training is unaffected, but the program-file
+          // contract rejects the stored pair, so export fails until it is
+          // fixed. Mirrors SettingsView.
+          if (lift.prescription === "doubleProgression" && (lift.minimumReps ?? 5) > (lift.maximumReps ?? 8)) warnings.push(`${lift.exerciseName}'s minimum reps exceed its maximum; program export will reject it.`);
         }
       }
       for (const accessory of day.accessories || []) {
@@ -779,10 +786,28 @@ async function programDayEditor(p, day) {
             l.prescription === "doubleProgression" ? ui.h("div", { class: "row" }, ui.h("span", { text: "Sets / rep window" }),
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.doubleProgressionSets ?? 3, { min: 1, max: 8, onChange: async (v) => { l.doubleProgressionSets = v; await Programs.save(p); refresh(); } }),
-                // The endpoints carry each other rather than crossing. Mirrors
-                // the native steppers and the accessory window above.
-                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => { l.minimumReps = v; l.maximumReps = Math.max(l.maximumReps ?? 8, v); l.currentReps = Math.min(Math.max(l.currentReps ?? v, v), l.maximumReps); await Programs.save(p); refresh(); } }),
-                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => { l.maximumReps = v; l.minimumReps = Math.min(l.minimumReps ?? 5, v); l.currentReps = Math.min(Math.max(l.currentReps ?? l.minimumReps, l.minimumReps), v); await Programs.save(p); refresh(); } }))) : null,
+                // The endpoints carry each other rather than crossing: a stored
+                // crossed window fails ProgramFileContract export validation.
+                // The target is FLOORED into the new window and never capped —
+                // a slot with no loadable increment climbs past its top on
+                // purpose, and capping here would delete earned reps.
+                // `refresh()` only swaps the preview node, so when a carry
+                // actually moves the sibling endpoint the row is redrawn to
+                // clear that stepper's stale internal value. When nothing was
+                // carried the redraw is skipped, because replacing a control
+                // under the hand pressing it is its own bug.
+                ui.stepper(l.minimumReps ?? 5, { min: 1, max: 20, onChange: async (v) => {
+                  const carried = (l.maximumReps ?? 8) < v;
+                  l.minimumReps = v; l.maximumReps = Math.max(l.maximumReps ?? 8, v);
+                  l.currentReps = Math.max(l.currentReps ?? v, v);
+                  await Programs.save(p); if (carried) draw(); else refresh();
+                } }),
+                ui.stepper(l.maximumReps ?? 8, { min: 1, max: 30, onChange: async (v) => {
+                  const carried = (l.minimumReps ?? 5) > v;
+                  l.maximumReps = v; l.minimumReps = Math.min(l.minimumReps ?? 5, v);
+                  l.currentReps = Math.max(l.currentReps ?? l.minimumReps, l.minimumReps);
+                  await Programs.save(p); if (carried) draw(); else refresh();
+                } }))) : null,
             l.prescription === "maxEffort" ? ui.h("div", { class: "sub", text: "The base is today's top-single target. Build through 90% and a near-max single, then rotate to a different special variation next week." }) : null,
             l.prescription === "dynamicEffort" ? ui.h("div", { class: "sub", text: "The base is wave week 1: 50% for squat/pull or 40% for bench. Speed work waves for three weeks, then resets." }) : null,
             !C.buildsOwnSessionShape(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
@@ -828,12 +853,25 @@ async function programDayEditor(p, day) {
             isTimed ? ui.h("div", { class: "row" }, ui.h("span", { text: isConditioning ? "Duration" : "Hold time" }),
               ui.stepper(a.targetSeconds || 30, { min: 5, max: 1800, step: 5, format: C.cardioDurationLabel, onChange: async (v) => { a.targetSeconds = v; await Programs.save(p); } })) : ui.h("div", { class: "row" }, ui.h("span", { text: "Rep range" }),
               ui.h("div", { class: "btn-row" },
-                // The endpoints carry each other rather than crossing. A crossed
-                // window is a state the engine has to guess at, and the guess used
-                // to hand the lifter a rep jump and a load step in the same
-                // exposure. Mirrors the native steppers.
-                ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => { a.minReps = v; a.maxReps = Math.max(a.maxReps, v); a.currentReps = Math.min(Math.max(a.currentReps, v), a.maxReps); await Programs.save(p); } }),
-                ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => { a.maxReps = v; a.minReps = Math.min(a.minReps, v); a.currentReps = Math.min(Math.max(a.currentReps, a.minReps), v); await Programs.save(p); } }))),
+                // The endpoints carry each other rather than crossing: a stored
+                // crossed window fails ProgramFileContract export validation.
+                // Floor the target into the new window, never cap it — an
+                // unloadable slot climbs past its top on purpose. Redraw only
+                // when a carry actually moved the sibling stepper, so its
+                // stale internal value cannot be written back on the next tap.
+                // Mirrors the native steppers.
+                ui.stepper(a.minReps, { min: 1, max: 20, format: (v) => `${v}`, onChange: async (v) => {
+                  const carried = a.maxReps < v;
+                  a.minReps = v; a.maxReps = Math.max(a.maxReps, v);
+                  a.currentReps = Math.max(a.currentReps, v);
+                  await Programs.save(p); if (carried) draw();
+                } }),
+                ui.stepper(a.maxReps, { min: 1, max: 30, format: (v) => `${v}`, onChange: async (v) => {
+                  const carried = a.minReps > v;
+                  a.maxReps = v; a.minReps = Math.min(a.minReps, v);
+                  a.currentReps = Math.max(a.currentReps, a.minReps);
+                  await Programs.save(p); if (carried) draw();
+                } }))),
             isConditioning ? ui.h("div", { class: "card" },
               ui.h("div", { class: "row" }, ui.h("span", { text: "Effort" }), (() => {
                 const select = ui.h("select", {}, ...[["easy", "Easy / conversational"], ["interval", "Intervals"], ["mixed", "Mixed"]]

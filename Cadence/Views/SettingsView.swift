@@ -765,7 +765,9 @@ struct ProgramEditorView: View {
                         programRoundingLb: program.roundingLb, exerciseType: exercise.typeRaw,
                         movementGroup: exercise.movementGroup, role: lift.role, focus: program.focus,
                         prescriptionStyle: lift.prescription,
-                        configuration: lift.prescriptionConfiguration(movementGroup: exercise.movementGroup))
+                        configuration: lift.prescriptionConfiguration(
+                            movementGroup: exercise.movementGroup,
+                            loadable: exercise.supportsLoadableIncrement))
                     // Published methodology slots deliberately shape their
                     // own weekly balance (squat 3×/week, one heavy pull); the
                     // press/pull and squat/hinge heuristics would permanently
@@ -780,6 +782,15 @@ struct ProgramEditorView: View {
                     patternSets[exercise.movementPattern, default: 0] += plan.sets
                     if exercise.movementPattern == .olympicPower, plan.reps > 3 {
                         messages.append("\(lift.exerciseName) is power work; keep programmed sets at 1–3 reps.")
+                    }
+                    // A crossed window on a LIFT went unflagged while the same
+                    // state on an accessory was called out. The engine reads
+                    // the endpoints as an unordered pair so training is
+                    // unaffected, but `ProgramFileContract` rejects the stored
+                    // pair, so exporting the program fails until it is fixed.
+                    if lift.prescription == .doubleProgression,
+                       lift.minimumReps > lift.maximumReps {
+                        messages.append("\(lift.exerciseName)'s minimum reps exceed its maximum; program export will reject it.")
                     }
                 }
             }
@@ -1413,7 +1424,12 @@ private struct ProgramLiftRow: View {
                     set: { (value: Int) in
                         lift.minimumReps = value
                         lift.maximumReps = max(lift.maximumReps, value)
-                        lift.currentReps = min(max(lift.currentReps, value), lift.maximumReps)
+                        // Floor the target into the new window; never cap it.
+                        // A slot with no loadable increment climbs past its
+                        // top on purpose, and capping here would delete reps
+                        // the lifter earned. The engine caps at prescription
+                        // time for the slots that should be capped.
+                        lift.currentReps = max(lift.currentReps, value)
                     }
                 ), in: 1...20)
                 Stepper("Maximum reps: \(lift.maximumReps)", value: Binding(
@@ -1421,7 +1437,7 @@ private struct ProgramLiftRow: View {
                     set: { (value: Int) in
                         lift.maximumReps = value
                         lift.minimumReps = min(lift.minimumReps, value)
-                        lift.currentReps = min(max(lift.currentReps, lift.minimumReps), value)
+                        lift.currentReps = max(lift.currentReps, lift.minimumReps)
                     }
                 ), in: 1...30)
                 Text("Current target: \(lift.repWindow().current) reps · add \(settingsList.unitDisplay.format(lb: loadStep)) only after every set reaches the top of the window.")
@@ -1540,7 +1556,8 @@ private struct ProgramAccessoryRow: View {
                     set: { (value: Int) in
                         accessory.minReps = value
                         accessory.maxReps = max(accessory.maxReps, value)
-                        accessory.currentReps = min(max(accessory.currentReps, value), accessory.maxReps)
+                        // Floor only — see the lift window above.
+                        accessory.currentReps = max(accessory.currentReps, value)
                     }
                 ), in: 1...20)
                 Stepper("Max reps: \(accessory.maxReps)", value: Binding(
@@ -1548,7 +1565,7 @@ private struct ProgramAccessoryRow: View {
                     set: { (value: Int) in
                         accessory.maxReps = value
                         accessory.minReps = min(accessory.minReps, value)
-                        accessory.currentReps = min(max(accessory.currentReps, accessory.minReps), value)
+                        accessory.currentReps = max(accessory.currentReps, accessory.minReps)
                     }
                 ), in: 1...30)
                 Stepper("Load step: +\(settingsList.unitDisplay.format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)

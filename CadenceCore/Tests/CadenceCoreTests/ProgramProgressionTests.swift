@@ -495,6 +495,48 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(c.stallCount, 1)
     }
 
+    /// A bodyweight-basis double-progression LIFT (the coach's
+    /// promote-vertical-pull creates exactly this) has no load to add, so it
+    /// climbs past its window top by design. That reading has to reach the
+    /// PRESCRIPTION and not only the advance: prescribing a capped target
+    /// while grading against an uncapped one means the slot can never satisfy
+    /// its own grade, and it stalls forever. [INV-WINDOW-BEFORE-LOAD]
+    func testUnloadableSlotIsPrescribedTheTargetItIsGradedAgainst() {
+        let climbed = LiftPrescriptionConfiguration(
+            workingSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 9,
+            loadableIncrement: false
+        )
+        let plan = ProgramEngine.programPlan(
+            for: CycleState(cycleNumber: 1, baseWeightLb: 0, nextPhase: .volume, incrementLb: 0),
+            programRoundingLb: 5, exerciseType: "bodyweight", movementGroup: "pull",
+            role: .complementary, focus: .strength,
+            prescriptionStyle: .doubleProgression, configuration: climbed
+        )
+        let window = P.repWindow(minReps: 5, maxReps: 8, currentReps: 9, capped: false)
+        XCTAssertEqual(plan.reps, 9)
+        XCTAssertEqual(window.current, 9, "prescription and grade read the same target")
+
+        let after = P.advanceAccessory(
+            AccessoryState(sets: 3, minReps: window.low, maxReps: window.high,
+                           currentReps: window.current, weightLb: 0, incrementLb: 0),
+            perf: AccessoryPerformance(completedSets: 3, minRepsAchieved: plan.reps, anyStoppedEarly: false)
+        )
+        XCTAssertEqual(after.currentReps, 10, "a clean exposure advances instead of stalling")
+        XCTAssertEqual(after.stallCount, 0)
+
+        // A LOADABLE lift still caps at its window top, where the step is earned.
+        let loadable = LiftPrescriptionConfiguration(
+            workingSets: 3, minimumReps: 5, maximumReps: 8, currentReps: 9
+        )
+        let loadablePlan = ProgramEngine.programPlan(
+            for: CycleState(cycleNumber: 1, baseWeightLb: 80, nextPhase: .volume, incrementLb: 0),
+            programRoundingLb: 5, exerciseType: "dumbbell", movementGroup: "pull",
+            role: .complementary, focus: .strength,
+            prescriptionStyle: .doubleProgression, configuration: loadable
+        )
+        XCTAssertEqual(loadablePlan.reps, 8)
+    }
+
     /// The guarantee, proven over every window/target/increment combination
     /// rather than over the configurations someone thought to enumerate: a
     /// clean exposure raises the rep target OR the load, never both, and never

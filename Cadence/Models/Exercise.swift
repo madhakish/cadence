@@ -178,6 +178,13 @@ final class Exercise {
         set { loadBasisRaw = newValue.rawValue }
     }
 
+    /// Whether a double-progression slot on this exercise has a load step to
+    /// earn. A bodyweight identity carries no external load, so its rep-window
+    /// top is advisory — it climbs past it because reps are the only way it
+    /// progresses. See `ProgramProgression.repWindow`'s `capped`. Adding a
+    /// belt is switching to the weighted identity, not incrementing this one.
+    var supportsLoadableIncrement: Bool { loadBasis != .bodyweight }
+
     var stationDenomination: WeightUnit? {
         get { stationDenominationRaw.flatMap(WeightUnit.init(rawValue:)) }
         set { stationDenominationRaw = newValue?.rawValue }

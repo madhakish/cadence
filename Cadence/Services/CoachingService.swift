@@ -27,7 +27,8 @@ enum CoachingService {
             let liftSlots = day.lifts.map { lift -> CoachingProgramSlot in
                 let exercise = exerciseByName[lift.exerciseName]
                 let configuration = lift.prescriptionConfiguration(
-                    movementGroup: exercise?.movementGroup ?? ""
+                    movementGroup: exercise?.movementGroup ?? "",
+                    loadable: exercise?.supportsLoadableIncrement ?? true
                 )
                 let resolvedStyle = ProgramEngine.resolvedStyle(
                     lift.prescription,

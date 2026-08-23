@@ -65,7 +65,10 @@ struct ExposurePreviewView: View {
             role: lift.role,
             focus: focus,
             prescriptionStyle: lift.prescription,
-            configuration: lift.prescriptionConfiguration(movementGroup: exercise?.movementGroup ?? ""),
+            configuration: lift.prescriptionConfiguration(
+                movementGroup: exercise?.movementGroup ?? "",
+                loadable: exercise?.supportsLoadableIncrement ?? true
+            ),
             pendingState: pendingState,
             schedule: schedule
         )

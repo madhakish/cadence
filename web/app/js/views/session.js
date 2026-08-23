@@ -1939,7 +1939,9 @@ export function previewProgramPlan(lift, exercise, program, phase, { base, added
   const plan = C.programPlanFor({ cycleNumber: program.cycleNumber, baseWeightLb: base,
     nextPhase: phase, incrementLb: 0 },
   program.roundingLb, exercise?.type, exercise?.movementGroup, lift.role, program.focus,
-  lift.prescription || "automatic", { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+  lift.prescription || "automatic",
+  { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+    loadableIncrement: C.supportsLoadableIncrement(exercise) },
   addedSets);
   const targetWeightLb = plan.weightLb;
   plan.weightLb = neatProgramWeight(plan.weightLb, exercise,
@@ -1959,7 +1961,8 @@ function sessionTargetsMatch(session, program, day, exMap, allSessions) {
         nextPhase: program.currentWeek, incrementLb: 0 },
       program.roundingLb, exercise?.type, exercise?.movementGroup,
       lift.role, program.focus, lift.prescription || "automatic",
-      { ...lift, workingSets: lift.doubleProgressionSets ?? 3 },
+      { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+        loadableIncrement: C.supportsLoadableIncrement(exercise) },
     ).weightLb;
     if ((session.exercises || []).some((candidate) =>
       candidate.programSlotId === lift.id && candidate.programRole !== lift.role)) return false;
@@ -2023,7 +2026,8 @@ export async function createSessionFromProgramDay(program, day) {
   for (const [liftIndex, lift] of lifts.entries()) {
     const ex = exMap.get(lift.exerciseName);
     const loadStep = C.programLoadStep(program.roundingLb, ex?.type);
-    const configuration = { ...lift, workingSets: lift.doubleProgressionSets ?? 3 };
+    const configuration = { ...lift, workingSets: lift.doubleProgressionSets ?? 3,
+      loadableIncrement: C.supportsLoadableIncrement(ex) };
     const prescription = C.sessionPrescription(
       { cycleNumber: program.cycleNumber,
         baseWeightLb: planningBase(lift, ex, program, allSessions),

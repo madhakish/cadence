@@ -313,6 +313,13 @@ public struct LiftPrescriptionConfiguration: Codable, Hashable, Sendable {
     public var lastPeakSingleLb: Double
     public var peakSingleIncrementLb: Double
     public var phasePrimerEnabled: Bool
+    /// Whether this slot's double progression has a load step to earn. False
+    /// for a bodyweight-basis identity, whose window top is advisory: it
+    /// climbs past it because reps are the only way it can progress. The
+    /// PRESCRIPTION has to know this, not just the advance — a slot graded
+    /// against an uncapped target while being prescribed a capped one can
+    /// never satisfy its own grade, and stalls forever.
+    public var loadableIncrement: Bool
 
     public init(
         loadOffsetLb: Double = 10,
@@ -325,7 +332,8 @@ public struct LiftPrescriptionConfiguration: Codable, Hashable, Sendable {
         peakSingleEnabled: Bool = false,
         lastPeakSingleLb: Double = 0,
         peakSingleIncrementLb: Double = 5,
-        phasePrimerEnabled: Bool = true
+        phasePrimerEnabled: Bool = true,
+        loadableIncrement: Bool = true
     ) {
         self.loadOffsetLb = loadOffsetLb
         self.peakOffsetLb = peakOffsetLb
@@ -338,6 +346,7 @@ public struct LiftPrescriptionConfiguration: Codable, Hashable, Sendable {
         self.lastPeakSingleLb = lastPeakSingleLb
         self.peakSingleIncrementLb = peakSingleIncrementLb
         self.phasePrimerEnabled = phasePrimerEnabled
+        self.loadableIncrement = loadableIncrement
     }
 }
 
@@ -746,11 +755,14 @@ public enum ProgramEngine {
                 weightLb: Weight.round(state.baseWeightLb, to: roundingLb),
                 sets: max(1, configuration.workingSets),
                 // One owner for the window, shared with the advance, so the
-                // prescription and the grade can never disagree about it.
+                // prescription and the grade can never disagree about it —
+                // including on `capped`, which is why the slot's loadability
+                // has to reach the prescription and not only the advance.
                 reps: ProgramProgression.repWindow(
                     minReps: configuration.minimumReps,
                     maxReps: configuration.maximumReps,
-                    currentReps: configuration.currentReps
+                    currentReps: configuration.currentReps,
+                    capped: configuration.loadableIncrement
                 ).current,
                 phase: phase,
                 cycleNumber: state.cycleNumber
@@ -977,7 +989,8 @@ public enum ProgramEngine {
         var config = configuration
         config.workingSets = Swift.max(1, config.workingSets)
         let window = ProgramProgression.repWindow(
-            minReps: config.minimumReps, maxReps: config.maximumReps, currentReps: config.currentReps
+            minReps: config.minimumReps, maxReps: config.maximumReps,
+            currentReps: config.currentReps, capped: config.loadableIncrement
         )
         config.minimumReps = window.low
         config.maximumReps = window.high

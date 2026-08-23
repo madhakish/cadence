@@ -544,13 +544,24 @@ once the base crosses 85% of capability.
 Double progression moves reps **or** load in an exposure, never both. For
 every input, including a slot whose stored window is incoherent: the rep
 target rises only at a held load, and the load rises only with the rep target
-held or dropped. This is enforced **by construction** — the branch that adds
-load takes the lower of the window bottom and the target it just graded, so it
-can drop the target or hold it but never raise it — rather than by reasoning
-about which configurations are reachable. The failure that prompted the rule
-was a state nobody had enumerated, and the next one will be too. Both suites
-sweep every window/target/increment combination rather than a chosen handful;
-the pre-fix engine violated the rule in 1365 of them.
+held or dropped. Both rest on one narrow foundation: `repWindow` returns
+`low <= current <= high` (`high` only when capped), and every branch of the
+advance reads that clamped window rather than the stored fields, so no stored
+combination can put the target outside the range the branches assume. The
+failure that prompted the rule came from reading the stored fields directly.
+Weaken that clamp and the load-step branch's reset can raise reps again. Both
+suites sweep every window/target/increment combination rather than trusting
+the argument; the pre-fix engine violated the rule in 1365 of them.
+
+The prescription and the advance must also agree on **`capped`**, not only on
+the endpoints. A slot with no loadable increment climbs past its window top,
+so prescribing it a capped target while grading it against an uncapped one
+means it can never satisfy its own grade: it is prescribed at the top, graded
+against a higher number, and stalls forever with a climbing stall count. The
+slot's loadability therefore reaches `ProgramEngine.plan` through
+`LiftPrescriptionConfiguration.loadableIncrement`, not just the banking layer.
+Reachable today via the coach's promote-vertical-pull, which creates a
+bodyweight double-progression Pull-ups slot.
 
 The reachable path that was found: the window's endpoints are two
 independently edited numbers, so a lifter can cross them. Read literally, a
