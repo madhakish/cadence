@@ -936,6 +936,36 @@ for (let minReps = 1; minReps <= 14 && !sweepBothRose; minReps += 1) {
 ok(sweepBothRose === null && sweepChecked === 14 * 14 * 16 * 4,
   `[INV-WINDOW-BEFORE-LOAD] no window/target/increment combination raises reps and load together (${sweepChecked} checked)${sweepBothRose ? ` — ${JSON.stringify(sweepBothRose)}` : ""}`);
 
+// The exposure preview runs the real engine, so it has to be handed the SLOT'S
+// increment and not the program's rounding step. Hardcoding the step made the
+// preview announce "add 5 lb and drop back to 5 reps" and show the base
+// climbing 0 → 5 → 10 for a bodyweight slot that only ever earns reps — and in
+// one exposure it both reset reps and added load, which is the whole bug.
+// [INV-PREVIEW-RUNS-THE-REAL-ENGINE] [INV-WINDOW-BEFORE-LOAD]
+const bwPreview = C.exposurePreview({
+  count: 3, baseWeightLb: 0, programRoundingLb: 5,
+  exerciseType: "bodyweight", movementGroup: "pull", role: "complementary",
+  focus: "strength", prescriptionStyle: "doubleProgression",
+  configuration: { doubleProgressionSets: 3, workingSets: 3, minimumReps: 5, maximumReps: 8,
+    currentReps: 9, loadableIncrement: false },
+});
+ok(bwPreview.every((entry) => entry.prescription.mainWork.weightLb === 0),
+  "[INV-WINDOW-BEFORE-LOAD] an unloadable slot's preview never adds load");
+ok(bwPreview.map((entry) => entry.prescription.mainWork.reps).join(",") === "9,10,11",
+  "[INV-PREVIEW-RUNS-THE-REAL-ENGINE] it climbs reps past the window top, as banking does");
+ok(bwPreview.every((entry) => !(entry.advanceNote || "").includes("add ")),
+  "and never promises a load step it cannot take");
+// A LOADABLE slot's preview is unchanged: climb the window, then step the load.
+const dbPreview = C.exposurePreview({
+  count: 3, baseWeightLb: 80, programRoundingLb: 5,
+  exerciseType: "dumbbell", movementGroup: "pull", role: "complementary",
+  focus: "strength", prescriptionStyle: "doubleProgression",
+  configuration: { doubleProgressionSets: 3, workingSets: 3, minimumReps: 5, maximumReps: 8,
+    currentReps: 7, loadableIncrement: true },
+});
+ok(dbPreview.map((e) => `${e.prescription.mainWork.reps}@${e.prescription.mainWork.weightLb}`).join(" ")
+  === "7@80 8@80 5@85", "a loadable slot still climbs the window, then steps the load");
+
 // A bodyweight-basis doubleProgression LIFT (the coach's promote-vertical-pull
 // creates exactly this) has no load to add, so it climbs past its window top by
 // design. That reading has to reach the PRESCRIPTION and not only the advance:

@@ -703,6 +703,28 @@ final class ProgramEngineTests: XCTestCase {
                        "a clean cycle adds +5 to an upper-body training max at the rollover")
     }
 
+    /// The preview runs the real engine, so it has to be handed the SLOT'S
+    /// increment and not the program's rounding step. Hardcoding the step made
+    /// it announce "add 5 lb and drop back to 5 reps" and show the base
+    /// climbing 0 → 5 → 10 for a bodyweight slot that only ever earns reps —
+    /// and in one exposure it both reset reps and added load, which is the
+    /// whole bug. [INV-PREVIEW-RUNS-THE-REAL-ENGINE] [INV-WINDOW-BEFORE-LOAD]
+    func testUnloadablePreviewClimbsRepsAndNeverPromisesLoad() {
+        let preview = ProgramEngine.exposurePreview(
+            count: 3, baseWeightLb: 0, programRoundingLb: 5, exerciseType: "bodyweight",
+            movementGroup: "pull", role: .complementary,
+            prescriptionStyle: .doubleProgression,
+            configuration: .init(workingSets: 3, minimumReps: 5, maximumReps: 8,
+                                 currentReps: 9, loadableIncrement: false)
+        )
+        XCTAssertTrue(preview.allSatisfy { $0.prescription.mainWork.weightLb == 0 },
+                      "an unloadable slot's preview never adds load")
+        XCTAssertEqual(preview.map(\.prescription.mainWork.reps), [9, 10, 11],
+                       "it climbs reps past the window top, as banking does")
+        XCTAssertTrue(preview.allSatisfy { !($0.advanceNote ?? "").contains("add ") },
+                      "and never promises a load step it cannot take")
+    }
+
     func testDoubleProgressionClimbsTheRepWindowBeforeTheLoad() {
         let preview = ProgramEngine.exposurePreview(
             count: 4, baseWeightLb: 60, programRoundingLb: 10, exerciseType: "dumbbell",

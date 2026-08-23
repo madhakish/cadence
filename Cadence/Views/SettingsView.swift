@@ -1337,6 +1337,14 @@ private struct ProgramLiftRow: View {
                                exerciseType: exercises.first { $0.name == lift.exerciseName }?.typeRaw)
     }
 
+    /// Whether this slot's double progression has a load step to earn. A
+    /// bodyweight identity has none, so its window top is advisory and the
+    /// target climbs past it. An unknown exercise reads loadable, matching the
+    /// `?? true` the prescription call sites use.
+    private var loadableIncrement: Bool {
+        exercises.first { $0.name == lift.exerciseName }?.supportsLoadableIncrement ?? true
+    }
+
     private var deloadKnobApplies: Bool {
         resolvedPrescription == .wave || resolvedPrescription == .offsetWave
     }
@@ -1440,7 +1448,14 @@ private struct ProgramLiftRow: View {
                         lift.currentReps = max(lift.currentReps, lift.minimumReps)
                     }
                 ), in: 1...30)
-                Text("Current target: \(lift.repWindow().current) reps · add \(settingsList.unitDisplay.format(lb: loadStep)) only after every set reaches the top of the window.")
+                // An unloadable slot has no load to add and climbs past its
+                // window top, so it must be shown its real target — reading
+                // the window as capped told a bodyweight slot sitting at 11
+                // reps that it was stuck at 8 and owed a load step it can
+                // never take.
+                Text(loadableIncrement
+                     ? "Current target: \(lift.repWindow(loadable: true).current) reps · add \(settingsList.unitDisplay.format(lb: loadStep)) only after every set reaches the top of the window."
+                     : "Current target: \(lift.repWindow(loadable: false).current) reps · no external load to add, so this slot keeps earning reps past the top of the window.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if lift.prescription.advancesPerExposure

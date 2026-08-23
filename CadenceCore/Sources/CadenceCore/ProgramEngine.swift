@@ -1059,10 +1059,19 @@ public enum ProgramEngine {
                 if phase != .deload {
                     // `config` was normalized on the way in, so the window is
                     // already coherent here.
+                    //
+                    // The increment is the SLOT'S, not the program's step. A
+                    // bodyweight identity has no load to add, and handing this
+                    // walk a non-zero step made the preview disagree with the
+                    // banking layer it exists to mirror: it announced "add 5 lb
+                    // and drop back to 5 reps" and showed the base climbing
+                    // 0 → 5 → 10 for a slot that only ever earns reps.
+                    let increment = config.loadableIncrement ? step : 0
                     let prior = AccessoryState(
                         sets: config.workingSets, minReps: config.minimumReps,
                         maxReps: config.maximumReps, currentReps: config.currentReps,
-                        weightLb: state.baseWeightLb, incrementLb: step, stallCount: state.stallCount
+                        weightLb: state.baseWeightLb, incrementLb: increment,
+                        stallCount: state.stallCount
                     )
                     let next = ProgramProgression.advanceAccessory(
                         prior,
@@ -1073,7 +1082,7 @@ public enum ProgramEngine {
                         )
                     )
                     note = next.weightLb > prior.weightLb
-                        ? "Top of the window earned — add \(Weight.trim(step)) lb and drop back to \(next.currentReps) reps."
+                        ? "Top of the window earned — add \(Weight.trim(increment)) lb and drop back to \(next.currentReps) reps."
                         : "Earned the reps — \(next.currentReps) next time at the same load."
                     state.lastIncrementLb = next.weightLb - prior.weightLb
                     state.baseWeightLb = next.weightLb

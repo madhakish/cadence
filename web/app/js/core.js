@@ -2433,19 +2433,25 @@ export function exposurePreview({
       // Rep window first, load second — and never on the recovery rotation,
       // which is non-progressive by contract.
       if (phase !== DELOAD_WEEK) {
+        // The increment is the SLOT'S, not the program's step. A bodyweight
+        // identity has no load to add, and handing this walk a non-zero step
+        // made the preview disagree with the banking layer it exists to mirror:
+        // it announced "add 5 lb and drop back to 5 reps" and showed the base
+        // climbing 0 → 5 → 10 for a slot that only ever earns reps.
+        const increment = config.loadableIncrement !== false ? step : 0;
+        // `config` was normalized on the way in, so the window is already
+        // coherent here — re-clamping would drift from the Swift mirror.
         const prior = {
-          sets: Math.max(1, config.workingSets),
-          minReps: Math.max(1, config.minimumReps),
-          maxReps: Math.max(config.minimumReps, config.maximumReps),
-          currentReps: Math.max(config.minimumReps, config.currentReps),
-          weightLb: state.baseWeightLb, incrementLb: step, stallCount: state.stallCount,
+          sets: config.workingSets, minReps: config.minimumReps,
+          maxReps: config.maximumReps, currentReps: config.currentReps,
+          weightLb: state.baseWeightLb, incrementLb: increment, stallCount: state.stallCount,
         };
         const next = advanceAccessory(prior, {
           completedSets: work.sets, minRepsAchieved: work.reps, anyStoppedEarly: false,
           performedAtPlannedLoad: true, grindyOrWobbleSets: 0, bodyFlagSets: 0,
         });
         note = next.weightLb > prior.weightLb
-          ? `Top of the window earned — add ${trim(step)} lb and drop back to ${next.currentReps} reps.`
+          ? `Top of the window earned — add ${trim(increment)} lb and drop back to ${next.currentReps} reps.`
           : `Earned the reps — ${next.currentReps} next time at the same load.`;
         state.lastIncrementLb = next.weightLb - prior.weightLb;
         state.baseWeightLb = next.weightLb;
