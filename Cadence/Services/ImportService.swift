@@ -564,11 +564,13 @@ enum ImportService {
     }
 
     @discardableResult
-    static func load(_ data: Data, into context: ModelContext) throws -> Summary {
+    /// Accept BOTH ISO-8601 forms: native ExportService writes no fractional
+    /// seconds, the web PWA's Date.toISOString() writes ".000Z". A single
+    /// strategy that rejects fractions would fail every web-origin backup.
+    /// Shared by `load` and `namedRestorePreview` so the preview reads dates
+    /// exactly as the restore it previews will.
+    private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
-        // Accept BOTH ISO-8601 forms: native ExportService writes no fractional
-        // seconds, the web PWA's Date.toISOString() writes ".000Z". A single
-        // strategy that rejects fractions would fail every web-origin backup.
         let fractional = ISO8601DateFormatter(); fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let plain = ISO8601DateFormatter(); plain.formatOptions = [.withInternetDateTime]
         decoder.dateDecodingStrategy = .custom { d in
@@ -576,7 +578,11 @@ enum ImportService {
             if let date = fractional.date(from: s) ?? plain.date(from: s) { return date }
             throw DecodingError.dataCorrupted(.init(codingPath: d.codingPath, debugDescription: "Unrecognised date: \(s)"))
         }
-        guard let bundle = try? decoder.decode(Bundle.self, from: data) else { throw ImportError.notABackup }
+        return decoder
+    }
+
+    static func load(_ data: Data, into context: ModelContext) throws -> Summary {
+        guard let bundle = try? makeDecoder().decode(Bundle.self, from: data) else { throw ImportError.notABackup }
         let schemaVersion = bundle.schemaVersion ?? 0
         guard BackupContract.supports(schemaVersion: schemaVersion) else {
             throw ImportError.unsupportedSchemaVersion(schemaVersion)
