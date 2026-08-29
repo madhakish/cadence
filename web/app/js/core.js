@@ -3621,3 +3621,63 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null,
       completed.at(-2)?.readiness ?? "unknown", greenRotationStreak, relevant, intervals),
   };
 }
+
+// ---- Restore preview: per-item named diff ----
+// Mirrors CadenceCore's BackupContract.NamedEntity family. `id` is the store
+// identity (a gym/session/program's own id; an exercise/track's own name,
+// since neither has a separate id), `name` is what the user reads, and
+// `signature` is a caller-built fingerprint of the remaining fields —
+// callers own how that's derived per collection so this stays a generic
+// id/name/signature diff.
+
+// Classifies each incoming entity against the current store's matching id:
+// an id absent from the current store is new; a matching id whose name and
+// signature both match is unchanged; anything else — a rename or any other
+// field edit — is changed.
+//
+// `includeRemoved` decides whether a current id the bundle omits is reported
+// as `removed`. Every collection's restore write clears the store and
+// re-inserts only the bundle's records, so an omitted id is genuinely
+// dropped — pass `false` only for a collection whose write instead upserts
+// by id/name and never deletes.
+export function namedRestoreDiff(current, incoming, includeRemoved = true) {
+  const byID = new Map(current.map((entity) => [entity.id, entity]));
+  const matchedIDs = new Set();
+  const result = incoming.map((entity) => {
+    matchedIDs.add(entity.id);
+    const existing = byID.get(entity.id);
+    if (!existing) return { name: entity.name, id: entity.id, status: "new" };
+    const unchanged = existing.name === entity.name && existing.signature === entity.signature;
+    return { name: entity.name, id: entity.id, status: unchanged ? "unchanged" : "changed" };
+  });
+  if (!includeRemoved) return result;
+  for (const entity of current) {
+    if (!matchedIDs.has(entity.id)) result.push({ name: entity.name, id: entity.id, status: "removed" });
+  }
+  return result;
+}
+
+// Per-collection named restore diff for the five collections a restore
+// preview names individually: exercises, lift tracks, gyms, sessions, and
+// programs.
+export function namedRestorePreview({
+  currentExercises, incomingExercises, currentTracks, incomingTracks, currentGyms, incomingGyms,
+  currentSessions, incomingSessions, currentPrograms, incomingPrograms,
+  includeRemovedExercises = true,
+}) {
+  return {
+    exercises: namedRestoreDiff(currentExercises, incomingExercises, includeRemovedExercises),
+    tracks: namedRestoreDiff(currentTracks, incomingTracks),
+    gyms: namedRestoreDiff(currentGyms, incomingGyms),
+    sessions: namedRestoreDiff(currentSessions, incomingSessions),
+    programs: namedRestoreDiff(currentPrograms, incomingPrograms),
+  };
+}
+
+// True only when every classified item across all five collections is
+// unchanged — the signal a restore UI uses to skip its destructive confirm
+// gate entirely.
+export function isNamedRestoreNoOp(preview) {
+  return [preview.exercises, preview.tracks, preview.gyms, preview.sessions, preview.programs]
+    .every((collection) => collection.every((item) => item.status === "unchanged"));
+}

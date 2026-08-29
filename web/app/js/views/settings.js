@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES, COPY } from "../constants.js";
-import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary, localDayKey, intervalSnapshots } from "../db.js";
+import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, namedRestorePreview, wipeAll, ensureSeeded, syncLibrary, localDayKey, intervalSnapshots } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
@@ -1313,39 +1313,22 @@ function importData() {
     const f = file.files[0]; if (!f) return;
     const r = new FileReader();
     r.onload = async () => {
-      // syncLibrary right after the restore: a pre-migration backup re-arms
-      // the retired-rest-stamp clear, which otherwise wouldn't run until the
-      // next full page load — leaving the rest steppers dead in the meantime.
+      let bundle;
+      try { bundle = JSON.parse(r.result); }
+      catch (error) { ui.toast(`Import failed: ${error?.message || error}`); return; }
       try {
-        const summary = await importBundle(JSON.parse(r.result));
-        await syncLibrary();
-        // Say so rather than repair silently — the backup carried a slot id on
-        // two programs, and the later one has been re-issued.
-        const repaired = summary?.repairedSlotIDs || 0;
-        const message = repaired
-          ? `Imported. Repaired ${repaired} duplicate slot ${repaired === 1 ? "id" : "ids"} the backup reused across programs.`
-          : "Imported.";
-        ui.nav.refresh();
-        // Offer the pre-import checkpoint right at completion — same
-        // db.js helper the general "Restore latest" control uses — so
-        // undoing a bad import doesn't require finding it there.
-        ui.actionSheet(message, [
-          { label: "Revert to checkpoint from before this import", role: "danger", onClick: async () => {
-            try {
-              await Checkpoints.restoreLatest();
-              await syncLibrary();
-              ui.nav.refresh();
-              ui.toast("Reverted to the checkpoint from before this import.");
-            } catch (error) {
-              console.error("Cadence checkpoint revert failed", error);
-              ui.toast(`Revert failed: ${error?.message || error}`);
-            }
-          } },
-          { label: "Keep it", onClick: () => {} },
-        ]);
+        const preview = await namedRestorePreview(bundle);
+        // Every previewed collection already matches — skip the destructive
+        // confirm gate entirely rather than confirm a restore that changes
+        // nothing.
+        if (C.isNamedRestoreNoOp(preview)) {
+          ui.toast("Nothing to restore — bundle matches your current data");
+          return;
+        }
+        confirmRestore(preview, bundle);
       }
       catch (error) {
-        console.error("Cadence import failed", error);
+        console.error("Cadence restore preview failed", error);
         ui.toast(`Import failed: ${error?.message || error}`);
       }
     };
@@ -1357,6 +1340,77 @@ function importData() {
     c.append(ui.field("Backup file", file));
     c.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Close", onClick: () => api.close() }));
   } });
+}
+
+// A restore preview can name hundreds of banked sessions; showing all of them
+// would turn the confirm sheet into an unreadable wall of text, so a
+// collection past this cap shows its first few names plus a count.
+const RESTORE_PREVIEW_NAME_LIMIT = 8;
+
+// Changed/new/removed item names per collection, unchanged items omitted —
+// the confirm dialog's whole point is showing what would actually move.
+function restorePreviewLines(preview) {
+  const line = (label, diffs) => {
+    const notable = diffs.filter((d) => d.status !== "unchanged");
+    if (!notable.length) return null;
+    const shown = notable.slice(0, RESTORE_PREVIEW_NAME_LIMIT).map((d) => `${d.name} (${d.status})`);
+    const remaining = notable.length - shown.length;
+    const names = remaining > 0 ? [...shown, `and ${remaining} more`] : shown;
+    return `${label}: ${names.join(", ")}`;
+  };
+  return [
+    line("Exercises", preview.exercises), line("Tracks", preview.tracks), line("Gyms", preview.gyms),
+    line("Sessions", preview.sessions), line("Programs", preview.programs),
+  ].filter(Boolean);
+}
+
+function confirmRestore(preview, bundle) {
+  ui.sheet({ title: "Restore this backup?", build: (c, api) => {
+    for (const text of restorePreviewLines(preview)) c.append(ui.h("div", { class: "muted", text }));
+    c.append(ui.h("button", {
+      class: "btn wide danger", style: { marginTop: "12px" }, text: "Restore",
+      onClick: () => { api.close(); commitRestore(bundle); },
+    }));
+    c.append(ui.h("button", { class: "btn wide ghost", style: { marginTop: "8px" }, text: "Cancel", onClick: () => api.close() }));
+  } });
+}
+
+// syncLibrary right after the restore: a pre-migration backup re-arms the
+// retired-rest-stamp clear, which otherwise wouldn't run until the next
+// full page load — leaving the rest steppers dead in the meantime.
+async function commitRestore(bundle) {
+  try {
+    const summary = await importBundle(bundle);
+    await syncLibrary();
+    // Say so rather than repair silently — the backup carried a slot id on
+    // two programs, and the later one has been re-issued.
+    const repaired = summary?.repairedSlotIDs || 0;
+    const message = repaired
+      ? `Imported. Repaired ${repaired} duplicate slot ${repaired === 1 ? "id" : "ids"} the backup reused across programs.`
+      : "Imported.";
+    ui.nav.refresh();
+    // Offer the pre-import checkpoint right at completion — same db.js
+    // helper the general "Restore latest" control uses — so undoing a bad
+    // import doesn't require finding it there.
+    ui.actionSheet(message, [
+      { label: "Revert to checkpoint from before this import", role: "danger", onClick: async () => {
+        try {
+          await Checkpoints.restoreLatest();
+          await syncLibrary();
+          ui.nav.refresh();
+          ui.toast("Reverted to the checkpoint from before this import.");
+        } catch (error) {
+          console.error("Cadence checkpoint revert failed", error);
+          ui.toast(`Revert failed: ${error?.message || error}`);
+        }
+      } },
+      { label: "Keep it", onClick: () => {} },
+    ]);
+  }
+  catch (error) {
+    console.error("Cadence import failed", error);
+    ui.toast(`Import failed: ${error?.message || error}`);
+  }
 }
 
 /// Import a single program. Deliberately separate from importData: this adds

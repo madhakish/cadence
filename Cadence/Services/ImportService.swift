@@ -706,6 +706,167 @@ enum ImportService {
                        repairedSlotIDs: repairedSlotIDs)
     }
 
+    // MARK: - Restore preview
+
+    /// Named-entity restore preview: per-item new/changed/unchanged/removed
+    /// for the backup's exercises, lift tracks, gyms, sessions, and programs
+    /// against the current store. Reads the bundle's own field values
+    /// directly rather than running them through
+    /// `makeExercise`/`makeTrack`/`makeGym`/`makeSession`/`makeProgram`'s
+    /// import-time defaulting, so an older bundle that omits a field previews
+    /// as it will actually read, not as the restore would backfill it.
+    /// Returns nil only when `data` isn't decodable as a backup at all.
+    ///
+    /// A collection the bundle omits entirely is left out of both sides
+    /// (`[]`, `[]`): `load` above only touches a store when the bundle key is
+    /// present at all, so fetching the CURRENT records for an omitted
+    /// collection would wrongly preview every one of them as `removed` for a
+    /// restore that will not touch it.
+    static func namedRestorePreview(_ data: Data, context: ModelContext) throws -> BackupContract.NamedRestorePreview? {
+        guard let bundle = try? makeDecoder().decode(Bundle.self, from: data) else { return nil }
+        let schemaVersion = bundle.schemaVersion ?? 0
+
+        func trimmed(_ s: String?) -> String { (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        let incomingExercises = (bundle.exercises ?? []).compactMap { d -> BackupContract.NamedEntity? in
+            let name = trimmed(d.name)
+            // Exercise.name is @Attribute(.unique); an unnamed def can't own a
+            // restore-preview identity either — `load` skips it the same way.
+            guard !name.isEmpty else { return nil }
+            return BackupContract.NamedEntity(id: name, name: name, signature: exerciseSignature(
+                category: d.category, type: d.type, movementGroup: d.movementGroup,
+                movementPattern: d.movementPattern, secondaryMovementPattern: d.secondaryMovementPattern,
+                loadBasis: d.loadBasis, implementCount: d.implementCount, isUnilateral: d.isUnilateral,
+                defaultRestSeconds: d.defaultRestSeconds, notes: d.notes, isShelved: d.isShelved,
+                stationDenomination: d.stationDenomination))
+        }
+        // Native exercises are upserted by name and never deleted (see `load`
+        // above), so their current records are only fetched when the bundle
+        // actually carries the key — otherwise there is nothing to diff.
+        let currentExercises: [BackupContract.NamedEntity] = bundle.exercises == nil ? [] :
+            try context.fetch(FetchDescriptor<Exercise>()).map { e in
+                BackupContract.NamedEntity(id: e.name, name: e.name, signature: exerciseSignature(
+                    category: e.categoryRaw, type: e.typeRaw, movementGroup: e.movementGroup,
+                    movementPattern: e.movementPatternRaw, secondaryMovementPattern: e.secondaryMovementPatternRaw,
+                    loadBasis: e.loadBasisRaw, implementCount: e.implementCount, isUnilateral: e.isUnilateral,
+                    defaultRestSeconds: e.defaultRestSeconds, notes: e.notes, isShelved: e.isShelved,
+                    stationDenomination: e.stationDenominationRaw))
+            }
+
+        let incomingTracks = (bundle.tracks ?? []).compactMap { t -> BackupContract.NamedEntity? in
+            let name = trimmed(t.exerciseName)
+            guard !name.isEmpty else { return nil }
+            return BackupContract.NamedEntity(id: name, name: name, signature: trackSignature(
+                mode: t.mode, cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb,
+                nextPhase: t.nextPhase, incrementLb: t.incrementLb, roundingLb: t.roundingLb))
+        }
+        let currentTracks: [BackupContract.NamedEntity] = bundle.tracks == nil ? [] :
+            try context.fetch(FetchDescriptor<LiftTrack>()).map { t in
+                BackupContract.NamedEntity(id: t.exerciseName, name: t.exerciseName, signature: trackSignature(
+                    mode: t.modeRaw, cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb,
+                    nextPhase: t.nextPhaseRaw, incrementLb: t.incrementLb, roundingLb: t.roundingLb))
+            }
+
+        // A gym missing an id can never match a current one by id (`load`
+        // mints it a fresh random id the same way), so it always previews as
+        // new — matching what the restore will actually do.
+        let incomingGyms = (bundle.gyms ?? []).map { g in
+            BackupContract.NamedEntity(id: g.id ?? "", name: trimmed(g.name), signature: gymSignature(
+                isDefault: g.isDefault, defaultBarId: g.defaultBarId, collarWeightLb: g.collarWeightLb,
+                loadingPolicy: g.loadingPolicy, barcodeLabel: g.barcodeLabel))
+        }
+        let currentGyms: [BackupContract.NamedEntity] = bundle.gyms == nil ? [] :
+            try context.fetch(FetchDescriptor<Gym>()).map { g in
+                BackupContract.NamedEntity(id: g.id, name: g.name, signature: gymSignature(
+                    isDefault: g.isDefault, defaultBarId: g.defaultBarID, collarWeightLb: g.collarWeightLb,
+                    loadingPolicy: g.loadingPolicyRaw, barcodeLabel: g.barcodeLabel))
+            }
+
+        // A session id that isn't a valid UUID can never match a current
+        // one (`makeSession` mints a fresh random id the same way), so it
+        // always previews as new.
+        let incomingSessions = (bundle.sessions ?? []).map { s -> BackupContract.NamedEntity in
+            let id = s.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? ""
+            let name = s.date.map { isoSessionName($0) } ?? "Untitled session"
+            return BackupContract.NamedEntity(id: id, name: name, signature: sessionSignature(
+                date: s.date, programId: s.programTag?.programId, exerciseCount: (s.exercises ?? []).count))
+        }
+        let currentSessions: [BackupContract.NamedEntity] = bundle.sessions == nil ? [] :
+            try context.fetch(FetchDescriptor<WorkoutSession>()).map { session in
+                BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: sessionSignature(
+                    date: session.date, programId: session.programID, exerciseCount: session.exercises.count))
+            }
+
+        // Mirrors `load`'s own program id derivation exactly (a v2+ bundle's
+        // own id rides along verbatim; anything else — including a pre-v2
+        // bundle — mints a fresh random id `makeProgram` the same way), so
+        // the preview classifies a program the same way the restore will
+        // actually key it.
+        let incomingPrograms = (bundle.programs ?? []).map { p -> BackupContract.NamedEntity in
+            let id = (schemaVersion >= 2 ? p.id : nil) ?? ""
+            let dayCount = p.days?.count ?? 0
+            let slotCount = (p.days ?? []).reduce(0) { $0 + ($1.lifts?.count ?? 0) + ($1.accessories?.count ?? 0) }
+            return BackupContract.NamedEntity(id: id, name: trimmed(p.name), signature: programSignature(dayCount: dayCount, slotCount: slotCount))
+        }
+        let currentPrograms: [BackupContract.NamedEntity] = bundle.programs == nil ? [] :
+            try context.fetch(FetchDescriptor<Program>()).map { program in
+                let slotCount = program.days.reduce(0) { $0 + $1.lifts.count + $1.accessories.count }
+                return BackupContract.NamedEntity(id: program.id, name: program.name, signature: programSignature(dayCount: program.days.count, slotCount: slotCount))
+            }
+
+        return BackupContract.namedRestorePreview(
+            currentExercises: currentExercises, incomingExercises: incomingExercises,
+            currentTracks: currentTracks, incomingTracks: incomingTracks,
+            currentGyms: currentGyms, incomingGyms: incomingGyms,
+            currentSessions: currentSessions, incomingSessions: incomingSessions,
+            currentPrograms: currentPrograms, incomingPrograms: incomingPrograms,
+            // The native exercise importer upserts by name and never
+            // deletes — see the `currentExercises` comment above.
+            includeRemovedExercises: false
+        )
+    }
+
+    private static func isoSessionName(_ date: Date) -> String {
+        ISO8601DateFormatter().string(from: date)
+    }
+
+    private static func sessionSignature(date: Date?, programId: String?, exerciseCount: Int) -> String {
+        [date.map { ISO8601DateFormatter().string(from: $0) } ?? "", programId ?? "", String(exerciseCount)]
+            .joined(separator: "\u{1F}")
+    }
+
+    private static func programSignature(dayCount: Int, slotCount: Int) -> String {
+        [String(dayCount), String(slotCount)].joined(separator: "\u{1F}")
+    }
+
+    private static func exerciseSignature(
+        category: String?, type: String?, movementGroup: String?, movementPattern: String?,
+        secondaryMovementPattern: String?, loadBasis: String?, implementCount: Int?,
+        isUnilateral: Bool?, defaultRestSeconds: Int?, notes: String?, isShelved: Bool?,
+        stationDenomination: String?
+    ) -> String {
+        [category ?? "", type ?? "", movementGroup ?? "", movementPattern ?? "",
+         secondaryMovementPattern ?? "", loadBasis ?? "", String(implementCount ?? 0),
+         (isUnilateral ?? false) ? "1" : "0", String(defaultRestSeconds ?? 0), notes ?? "",
+         (isShelved ?? false) ? "1" : "0", stationDenomination ?? ""].joined(separator: "\u{1F}")
+    }
+
+    private static func trackSignature(
+        mode: String?, cycleNumber: Int?, baseWeightLb: Double?,
+        nextPhase: Int?, incrementLb: Double?, roundingLb: Double?
+    ) -> String {
+        [mode ?? "", String(cycleNumber ?? 0), String(baseWeightLb ?? 0),
+         String(nextPhase ?? 0), String(incrementLb ?? 0), String(roundingLb ?? 0)].joined(separator: "\u{1F}")
+    }
+
+    private static func gymSignature(
+        isDefault: Bool?, defaultBarId: String?, collarWeightLb: Double?,
+        loadingPolicy: String?, barcodeLabel: String?
+    ) -> String {
+        [(isDefault ?? false) ? "1" : "0", defaultBarId ?? "", String(collarWeightLb ?? 0),
+         loadingPolicy ?? "", barcodeLabel ?? ""].joined(separator: "\u{1F}")
+    }
+
     // MARK: - Makers
 
     private static func makeExercise(_ d: ExerciseDef) -> Exercise {

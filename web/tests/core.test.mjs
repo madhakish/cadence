@@ -2870,5 +2870,116 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-RECOVERY-WORK-IS-OFF-PROGRAM] a rotation banked entirely inside active recovery is not graded");
 }
 
+// ---- Named restore preview ----
+{
+  const entity = (id, name, signature) => ({ id, name, signature });
+  const deq = (a, b, msg) => ok(JSON.stringify(a) === JSON.stringify(b), `${msg} (got ${JSON.stringify(a)}, want ${JSON.stringify(b)})`);
+
+  deq(C.namedRestoreDiff([], [entity("bench-press", "Bench Press", "barbell")]),
+    [{ name: "Bench Press", id: "bench-press", status: "new" }], "absent id is new");
+
+  deq(C.namedRestoreDiff(
+    [entity("bench-press", "Bench Press", "barbell")],
+    [entity("bench-press", "Bench Press", "barbell")],
+  ), [{ name: "Bench Press", id: "bench-press", status: "unchanged" }], "matching id/name/signature is unchanged");
+
+  deq(C.namedRestoreDiff(
+    [entity("gym-1", "Old Gym", "closest")],
+    [entity("gym-1", "New Gym", "closest")],
+  ), [{ name: "New Gym", id: "gym-1", status: "changed" }], "same id different name is changed");
+
+  deq(C.namedRestoreDiff(
+    [entity("bench-press", "Bench Press", "barbell")],
+    [entity("bench-press", "Bench Press", "dumbbell")],
+  ), [{ name: "Bench Press", id: "bench-press", status: "changed" }], "same id/name different signature is changed");
+
+  // A restore clears each collection's store and re-inserts only the
+  // bundle's records, so a current-only id is genuinely dropped — the
+  // default behavior reports that as "removed" rather than staying silent.
+  deq(C.namedRestoreDiff([entity("squat", "Squat", "barbell")], []),
+    [{ name: "Squat", id: "squat", status: "removed" }], "current-only entity is removed by default");
+
+  // The native exercise importer upserts by name and never deletes; its
+  // caller opts out of removal reporting the same way here.
+  deq(C.namedRestoreDiff([entity("squat", "Squat", "barbell")], [], false),
+    [], "current-only entity is omitted when removal is disabled");
+
+  deq(C.namedRestoreDiff([entity("session-1", "2026-01-01", "2026-01-01|program-a|3")], []),
+    [{ name: "2026-01-01", id: "session-1", status: "removed" }], "session removed when bundle omits a previously banked session");
+
+  deq(C.namedRestoreDiff([], [entity("session-2", "2026-02-02", "2026-02-02|program-a|4")]),
+    [{ name: "2026-02-02", id: "session-2", status: "new" }], "session new when id is unseen");
+
+  deq(C.namedRestoreDiff(
+    [entity("session-1", "2026-01-01", "2026-01-01|program-a|3")],
+    [entity("session-1", "2026-01-01", "2026-01-01|program-a|4")],
+  ), [{ name: "2026-01-01", id: "session-1", status: "changed" }], "session changed when exercise count differs");
+
+  deq(C.namedRestoreDiff(
+    [entity("session-1", "2026-01-01", "2026-01-01|program-a|3")],
+    [entity("session-1", "2026-01-01", "2026-01-01|program-a|3")],
+  ), [{ name: "2026-01-01", id: "session-1", status: "unchanged" }], "session unchanged when date/program/count match");
+
+  deq(C.namedRestoreDiff([entity("program-1", "5/3/1", "4|8")], []),
+    [{ name: "5/3/1", id: "program-1", status: "removed" }], "program removed when bundle omits an existing program");
+
+  deq(C.namedRestoreDiff(
+    [entity("program-1", "5/3/1", "4|8")],
+    [entity("program-1", "5/3/1", "4|9")],
+  ), [{ name: "5/3/1", id: "program-1", status: "changed" }], "program changed when slot count differs");
+
+  deq(C.namedRestoreDiff([], [entity("program-2", "Texas Method", "3|6")]),
+    [{ name: "Texas Method", id: "program-2", status: "new" }], "program new when id is unseen");
+
+  const allUnchanged = C.namedRestorePreview({
+    currentExercises: [entity("squat", "Squat", "barbell")], incomingExercises: [entity("squat", "Squat", "barbell")],
+    currentTracks: [entity("squat", "Squat", "cycle|1|315")], incomingTracks: [entity("squat", "Squat", "cycle|1|315")],
+    currentGyms: [entity("gym-1", "Home", "closest")], incomingGyms: [entity("gym-1", "Home", "closest")],
+    currentSessions: [entity("session-1", "2026-01-01", "2026-01-01|program-a|3")],
+    incomingSessions: [entity("session-1", "2026-01-01", "2026-01-01|program-a|3")],
+    currentPrograms: [entity("program-1", "5/3/1", "4|8")], incomingPrograms: [entity("program-1", "5/3/1", "4|8")],
+  });
+  ok(C.isNamedRestoreNoOp(allUnchanged), "all-unchanged preview is a no-op");
+
+  const singleChange = C.namedRestorePreview({
+    currentExercises: [entity("squat", "Squat", "barbell")], incomingExercises: [entity("squat", "Squat", "barbell")],
+    currentTracks: [], incomingTracks: [entity("deadlift", "Deadlift", "linear|1|405")],
+    currentGyms: [entity("gym-1", "Home", "closest")], incomingGyms: [entity("gym-1", "Home", "closest")],
+    currentSessions: [], incomingSessions: [], currentPrograms: [], incomingPrograms: [],
+  });
+  ok(!C.isNamedRestoreNoOp(singleChange), "any single change breaks no-op");
+  deq(singleChange.tracks, [{ name: "Deadlift", id: "deadlift", status: "new" }], "single-change preview names the new track");
+
+  // A bundle that drops a previously-banked session breaks the no-op check
+  // exactly like a rename would — the restore is about to delete it.
+  const removedSession = C.namedRestorePreview({
+    currentExercises: [], incomingExercises: [], currentTracks: [], incomingTracks: [],
+    currentGyms: [], incomingGyms: [],
+    currentSessions: [entity("session-1", "2026-01-01", "2026-01-01|program-a|3")], incomingSessions: [],
+    currentPrograms: [], incomingPrograms: [],
+  });
+  ok(!C.isNamedRestoreNoOp(removedSession), "a removed session breaks no-op");
+  deq(removedSession.sessions, [{ name: "2026-01-01", id: "session-1", status: "removed" }], "removed session is named");
+
+  // Deviation from the parent turn-2 design: exercises now default to
+  // reporting removals too, since web's exercise restore also
+  // wholesale-replaces the store. Only the native caller opts out.
+  const exercisesDefault = C.namedRestorePreview({
+    currentExercises: [entity("Squat", "Squat", "barbell")], incomingExercises: [],
+    currentTracks: [], incomingTracks: [], currentGyms: [], incomingGyms: [],
+    currentSessions: [], incomingSessions: [], currentPrograms: [], incomingPrograms: [],
+  });
+  deq(exercisesDefault.exercises, [{ name: "Squat", id: "Squat", status: "removed" }],
+    "exercises report removal when includeRemovedExercises defaults true");
+
+  const exercisesOptOut = C.namedRestorePreview({
+    currentExercises: [entity("Squat", "Squat", "barbell")], incomingExercises: [],
+    currentTracks: [], incomingTracks: [], currentGyms: [], incomingGyms: [],
+    currentSessions: [], incomingSessions: [], currentPrograms: [], incomingPrograms: [],
+    includeRemovedExercises: false,
+  });
+  deq(exercisesOptOut.exercises, [], "exercises omit removal when includeRemovedExercises is false");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
