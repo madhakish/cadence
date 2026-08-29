@@ -4327,5 +4327,133 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.Sessions.del(sid);
 }
 
+
+// ---- Stage 0 characterization (epic #155): correcting a banked session ----
+// Pins exactly which projections follow the canonical sets after a session
+// correction and which persisted ones go stale. Topology from the epic: a
+// programmed 5x5 deadlift day banks with the final work set never completed;
+// the editor then corrects it to completed 5x5. Assertions labeled STALE
+// document today's behavior deliberately — they are the Stage 6 work list.
+await withCleanup(async (keep) => {
+  const name = "Fixture 5x5 Correction";
+  await db.Programs.save({
+    // Week 3 (peak): the one week whose bank writes the lift's pending
+    // grade/state, so the correction's staleness surface is fully on record.
+    name, focus: "strength", cycleNumber: 1, currentWeek: 3, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [{ name: "Pull", order: 0, lifts: [cyc("Deadlift", "main", 235, 320)], accessories: [] }],
+  });
+  let program = (await db.Programs.all()).find((p) => p.name === name);
+  keep(db.Programs, program.id);
+  const milestoneIdsBefore = new Set((await db.Milestones.all()).map((m) => m.id));
+
+  const sid = keep(db.Sessions, await session.createSessionFromProgramDay(program, program.days[0]));
+  const s = await db.Sessions.get(sid);
+  const main = s.exercises.find((e) => e.exerciseName === "Deadlift");
+  // Normalize the generated prescription to the epic's exact topology: five
+  // work sets of five at 235. A lifter can add, remove, and edit sets
+  // mid-session, so this is a legitimate pre-bank state — and banking still
+  // runs the full production completeSession path.
+  const warmups = main.sets.filter((set) => set.isWarmup);
+  const template = main.sets.find((set) => !set.isWarmup);
+  const work = Array.from({ length: 5 }, (_, i) => ({
+    ...template, order: warmups.length + i, weightLb: 235, reps: 5,
+    plannedWeightLb: 235, plannedReps: 5,
+    // The fifth set never got its checkmark mid-workout.
+    status: i < 4 ? "completed" : "planned",
+  }));
+  main.sets = [...warmups, ...work];
+  s.notes = "fixture-5x5-correction";
+  await session.completeSession(s);
+
+  program = (await db.Programs.all()).find((p) => p.name === name);
+  const banked = await db.Sessions.get(sid);
+  const liftAfterBank = JSON.parse(JSON.stringify(program.days[0].lifts[0]));
+  const cursorAfterBank = { currentWeek: program.currentWeek, nextDayIndex: program.nextDayIndex, cycleNumber: program.cycleNumber };
+  const milestonesAfterBank = (await db.Milestones.all()).filter((m) => !milestoneIdsBefore.has(m.id));
+  for (const m of milestonesAfterBank) keep(db.Milestones, m.id);
+  const bankedWork = banked.exercises[0].sets.filter((set) => !set.isWarmup);
+  ok(bankedWork.filter((set) => set.status === "completed").length === 4,
+    "characterization baseline: the bank saw four completed work sets");
+  // The un-ticked fifth set graded the peak as a FAIL at bank time: stall
+  // count up, pending e1RM cut from 320 to 306.25, hold note attached.
+  ok(liftAfterBank.pending?.grade === "fail"
+      && liftAfterBank.pending?.state.stallCount === 1
+      && liftAfterBank.pending?.state.estimatedMaxLb === 306.25,
+    "characterization baseline: the four-set bank graded fail with a stall and an e1RM cut");
+  ok(milestonesAfterBank.some((m) => m.kind === "firstScheme" && m.label.includes("4×5"))
+      && milestonesAfterBank.some((m) => m.kind === "volumePR" && m.label.includes("4700")),
+    "characterization baseline: milestones recorded the four-set session (First 4×5, 4700 lb volume PR)");
+
+  // The correction: mark the fifth set completed, through the extracted
+  // shared boundary (the same call views/history.js delegates to).
+  const fifth = bankedWork[4];
+  await db.Sessions.applyCorrections(banked, [{ set: fifth, correction: { status: "completed" } }]);
+
+  // 1. Canonical session follows the correction.
+  const corrected = await db.Sessions.get(sid);
+  const correctedWork = corrected.exercises[0].sets.filter((set) => !set.isWarmup);
+  ok(correctedWork.length === 5 && correctedWork.every((set) => set.status === "completed" && set.reps === 5 && set.weightLb === 235),
+    "canonical record: exactly five completed 235x5 work sets after the correction");
+
+  // 2. Export reads the canonical sets — corrected values, nothing stale.
+  // Export keys sessions by portable id and exercises by `name`, so find
+  // the fixture by its unique notes marker.
+  const bundle = JSON.parse(await db.exportJSON());
+  const exported = bundle.sessions.find((es) => es.notes === "fixture-5x5-correction");
+  const exportedWork = exported.exercises.find((e) => e.name === "Deadlift").sets.filter((set) => !set.isWarmup);
+  ok(exportedWork.length === 5 && exportedWork.every((set) => set.status === "completed" && set.reps === 5 && set.weightLb === 235),
+    "export follows the corrected canonical sets (no stale copy)");
+
+  // 3+4. Volume and chart e1RM inputs are computed from canonical sets at
+  // read time, so they follow the correction too.
+  const tonnage = correctedWork.reduce((sum, set) => sum + set.weightLb * set.reps, 0);
+  ok(tonnage === 5 * 5 * 235, "volume computed from canonical sets sees all five corrected sets");
+  ok(correctedWork.every((set) => C.epleyE1RM(set.weightLb, set.reps) === C.epleyE1RM(235, 5)),
+    "chart e1RM samples (computed at render) see the corrected sets");
+
+  // 5. STALE: milestones were written at bank time and the correction adds,
+  // removes, and rewrites none of them.
+  const milestonesAfterCorrection = (await db.Milestones.all()).filter((m) => !milestoneIdsBefore.has(m.id));
+  ok(JSON.stringify(milestonesAfterCorrection) === JSON.stringify(milestonesAfterBank),
+    "STALE (Stage 6): persisted milestones are untouched by the correction");
+  ok(milestonesAfterCorrection.some((m) => m.kind === "firstScheme" && m.label.includes("4×5"))
+      && !milestonesAfterCorrection.some((m) => m.label.includes("5×5")),
+    "STALE (Stage 6): 'First 4×5' stands and no 5×5 milestone is ever earned, though the canonical record now says 5x5");
+
+  // 6. STALE: the lift's banked pending grade and state are untouched — the
+  // grade that fired at bank time (four of five sets) stands.
+  program = (await db.Programs.all()).find((p) => p.name === name);
+  const liftAfterCorrection = program.days[0].lifts[0];
+  ok(JSON.stringify(liftAfterCorrection) === JSON.stringify(liftAfterBank),
+    "STALE (Stage 6): the lift's pending grade/state are untouched by the correction");
+  ok(liftAfterCorrection.pending?.grade === "fail"
+      && liftAfterCorrection.pending?.state.stallCount === 1
+      && liftAfterCorrection.pending?.state.estimatedMaxLb === 306.25,
+    "STALE (Stage 6): the fail grade, stall, and 320→306.25 e1RM cut all stand despite the corrected 5x5 — and will apply at rollover");
+
+  // 7. Program cursor banked exactly once and the correction leaves it alone.
+  ok(program.currentWeek === cursorAfterBank.currentWeek
+      && program.nextDayIndex === cursorAfterBank.nextDayIndex
+      && program.cycleNumber === cursorAfterBank.cycleNumber,
+    "program cursor advanced once at bank time; the correction does not move it");
+
+  // 8. The correction boundary is idempotent: reapplying the same correction
+  // changes nothing.
+  const snapshot = JSON.stringify(corrected);
+  await db.Sessions.applyCorrections(corrected, [{ set: corrected.exercises[0].sets.filter((set) => !set.isWarmup)[4], correction: { status: "completed" } }]);
+  ok(JSON.stringify(await db.Sessions.get(sid)) === snapshot,
+    "reapplying the identical correction is a no-op (idempotent)");
+
+  // 9. Re-running completion after a correction must not double-bank.
+  await session.completeSession(await db.Sessions.get(sid));
+  const reProgram = (await db.Programs.all()).find((p) => p.name === name);
+  const reMilestones = (await db.Milestones.all()).filter((m) => !milestoneIdsBefore.has(m.id));
+  ok(JSON.stringify(reProgram.days[0].lifts[0]) === JSON.stringify(liftAfterBank)
+      && reProgram.currentWeek === cursorAfterBank.currentWeek
+      && JSON.stringify(reMilestones) === JSON.stringify(milestonesAfterBank),
+    "completeSession's idempotence latch holds after a correction — no duplicate advancement or milestones");
+})();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
