@@ -11,20 +11,25 @@ import CadenceCore
 /// without a canImport guard — recorded as a Stage 6 prerequisite.
 @MainActor
 final class SessionCorrectionTests: XCTestCase {
-    private func makeContext() throws -> ModelContext {
+    // The container must outlive every context handed to a test — a context
+    // whose container deallocates is a crash, not an error.
+    private func makeContainer() throws -> ModelContainer {
         let schema = Schema(versionedSchema: CadenceSchemaV10.self)
-        let container = try ModelContainer(
+        return try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         )
-        return container.mainContext
     }
 
+    /// Mirrors ProgramSession.make's construction order exactly: insert the
+    /// session, insert each entry then append it, insert each set then
+    /// append it.
     private func makeBankedFiveByFive(context: ModelContext) -> (WorkoutSession, [SetEntry]) {
         let session = WorkoutSession(date: .now)
-        session.isCompleted = true
-        session.completedAt = .now
+        context.insert(session)
         let entry = SessionExercise(order: 0, exercise: nil)
+        context.insert(entry)
+        session.exercises.append(entry)
         var sets: [SetEntry] = []
         for index in 0..<5 {
             // The epic's topology: the fifth work set never got its checkmark.
@@ -35,13 +40,14 @@ final class SessionCorrectionTests: XCTestCase {
             entry.sets.append(set)
             sets.append(set)
         }
-        context.insert(session)
-        session.exercises.append(entry)
+        session.isCompleted = true
+        session.completedAt = .now
         return (session, sets)
     }
 
     func testCompletingTheMissedSetChangesOnlyItsStatus() throws {
-        let context = try makeContext()
+        let container = try makeContainer()
+        let context = container.mainContext
         let (_, sets) = makeBankedFiveByFive(context: context)
 
         SessionCorrectionService.apply([(set: sets[4], correction: SetLifecycle.SetCorrection(status: .completed))])
@@ -52,7 +58,8 @@ final class SessionCorrectionTests: XCTestCase {
     }
 
     func testRepsCorrectionCannotResetWeight() throws {
-        let context = try makeContext()
+        let container = try makeContainer()
+        let context = container.mainContext
         let (_, sets) = makeBankedFiveByFive(context: context)
 
         SessionCorrectionService.apply([(set: sets[3], correction: SetLifecycle.SetCorrection(reps: 8))])
@@ -64,7 +71,8 @@ final class SessionCorrectionTests: XCTestCase {
     }
 
     func testReapplyingTheSameCorrectionIsIdempotent() throws {
-        let context = try makeContext()
+        let container = try makeContainer()
+        let context = container.mainContext
         let (_, sets) = makeBankedFiveByFive(context: context)
         let correction = SetLifecycle.SetCorrection(status: .completed)
 
@@ -77,7 +85,8 @@ final class SessionCorrectionTests: XCTestCase {
     }
 
     func testEmptyCorrectionWritesNothing() throws {
-        let context = try makeContext()
+        let container = try makeContainer()
+        let context = container.mainContext
         let (_, sets) = makeBankedFiveByFive(context: context)
         try context.save()
 
