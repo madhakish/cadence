@@ -3717,7 +3717,15 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 
   // A total-bar movement is floored at the bar in hand: the catalog says
   // 20 lb for a skull crusher (assuming a lighter bar), but a set on the
-  // gym's 45 lb bar cannot weigh less than its own bar.
+  // gym's 45 lb bar cannot weigh less than its own bar. This exercises the
+  // no-history branch specifically, so clear any Skull Crusher exposure the
+  // synthetic fixture imported earlier in this suite left banked — an
+  // ad-hoc suggestion from real history is the whole point of that feature
+  // and must not be mistaken for a broken floor here.
+  for (const stale of (await db.Sessions.completed())
+    .filter((s) => (s.exercises || []).some((e) => e.exerciseName === "Skull Crusher"))) {
+    await db.Sessions.del(stale.id);
+  }
   const bid = await session.createBlankSession();
   const b = await db.Sessions.get(bid);
   b.exercises.push({ order: 0, exerciseName: "Skull Crusher", notes: "", phase: null,
@@ -3729,6 +3737,48 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(barbell.exercises[0].sets[0].weightLb === 45,
     `a barbell add is floored at the active bar, never below it (got ${barbell.exercises[0].sets[0].weightLb})`);
   await db.Sessions.del(gid); await db.Sessions.del(bid);
+}
+
+// The history-based first-set suggestion above is silent about where its
+// number came from unless the UI discloses it: secondary text under the
+// first working set, present only when a real exposure shaped the
+// suggestion — never for the generic catalog-default fallback.
+{
+  const priorId = await db.Sessions.save({
+    date: new Date(Date.now() - 21 * 86_400_000).toISOString(), notes: "", isCompleted: true,
+    gymName: null, exercises: [{ order: 0, exerciseName: "Cable Fly", notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null,
+      sets: [{ order: 0, weightLb: 30, reps: 10, isWarmup: false, status: "completed",
+        loadBasis: "externalTotal", flags: ["clean"] }] }],
+  });
+  const hid = await session.createBlankSession();
+  const h = await db.Sessions.get(hid);
+  h.exercises.push({ order: 0, exerciseName: "Cable Fly", notes: "", phase: null,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+  await db.Sessions.save(h);
+  await session.openSession(hid); await tick();
+  const historyOverlay = [...document.querySelectorAll("#overlays .overlay")].pop();
+  [...historyOverlay.querySelectorAll("button")].find((b) => b.textContent === "+ Set").click(); await tick();
+  const provenance = [...historyOverlay.querySelectorAll(".sub")]
+    .map((n) => (n.textContent || "").trim())
+    .find((t) => t.startsWith("from your last exposure"));
+  ok(provenance === "from your last exposure, 3w ago",
+    `the first working set discloses where its history-based suggestion came from (got ${provenance})`);
+  await db.Sessions.del(priorId); await db.Sessions.del(hid);
+
+  // A never-before-seen off-program exercise has no history to disclose —
+  // the catalog-default fallback stays silent, as before.
+  const nid = await session.createBlankSession();
+  const n = await db.Sessions.get(nid);
+  n.exercises.push({ order: 0, exerciseName: "Reverse Hyperextension", notes: "", phase: null,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+  await db.Sessions.save(n);
+  await session.openSession(nid); await tick();
+  const freshOverlay = [...document.querySelectorAll("#overlays .overlay")].pop();
+  [...freshOverlay.querySelectorAll("button")].find((b) => b.textContent === "+ Set").click(); await tick();
+  ok(![...freshOverlay.querySelectorAll(".sub")].some((el) => (el.textContent || "").startsWith("from your last exposure")),
+    "no provenance line for the catalog-default fallback");
+  await db.Sessions.del(nid);
 }
 
 // Tapping the lift's name inside the logger opens the lift info screen —

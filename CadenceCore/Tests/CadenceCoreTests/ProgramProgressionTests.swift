@@ -1266,4 +1266,95 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertTrue(LoadSemantics.inferredBasis(exerciseType: nil).supportsLoadableIncrement,
                       "an unknown exercise keeps the increment's own reading")
     }
+
+    // MARK: - Off-program first-set suggestion
+    // Mirrors the `suggestedAdHocFirstSetTarget` block in web/tests/core.test.mjs.
+
+    func testNoHistoryReturnsNil() {
+        XCTAssertNil(P.suggestedAdHocFirstSetTarget(fromLastTopExposure: nil))
+    }
+
+    func testRepeatsWeightAndRepsByDefault() {
+        let exposure = RecentTopExposure(weightLb: 135, reps: 8, loadBasis: .totalBar,
+                                         quality: "grindy", rir: "rir1")
+        let target = P.suggestedAdHocFirstSetTarget(fromLastTopExposure: exposure)
+        XCTAssertEqual(target, AdHocFirstSetTarget(weightLb: 135, reps: 8))
+    }
+
+    func testUpgradesWeightOnlyWhenCleanAndRoomInReserve() {
+        for rir in ["rir2", "rir3plus"] {
+            let exposure = RecentTopExposure(weightLb: 135, reps: 8, loadBasis: .totalBar,
+                                             quality: "clean", rir: rir)
+            XCTAssertEqual(
+                P.suggestedAdHocFirstSetTarget(fromLastTopExposure: exposure, incrementLb: 5),
+                AdHocFirstSetTarget(weightLb: 140, reps: 8),
+                "clean + \(rir) shows room in reserve"
+            )
+        }
+    }
+
+    func testHoldsFlatWhenQualityOrRIRDoNotShowRoomInReserve() {
+        let cases: [(String?, String?)] = [
+            ("grindy", "rir2"), ("wobble", "rir3plus"), ("clean", "rir1"), (nil, nil), ("clean", nil),
+        ]
+        for (quality, rir) in cases {
+            let exposure = RecentTopExposure(weightLb: 135, reps: 8, loadBasis: .totalBar,
+                                             quality: quality, rir: rir)
+            XCTAssertEqual(
+                P.suggestedAdHocFirstSetTarget(fromLastTopExposure: exposure, incrementLb: 5),
+                AdHocFirstSetTarget(weightLb: 135, reps: 8),
+                "quality=\(quality ?? "nil") rir=\(rir ?? "nil") must hold flat"
+            )
+        }
+    }
+
+    func testBodyweightAndAssistedBasesNeverGetAWeightBumpOnlyReps() {
+        for basis: LoadBasis in [.bodyweight, .assisted] {
+            let exposure = RecentTopExposure(weightLb: basis == .assisted ? 40 : 0, reps: 10,
+                                             loadBasis: basis, quality: "clean", rir: "rir3plus")
+            XCTAssertEqual(
+                P.suggestedAdHocFirstSetTarget(fromLastTopExposure: exposure, incrementLb: 5),
+                AdHocFirstSetTarget(weightLb: exposure.weightLb, reps: 10),
+                "\(basis) never receives a fabricated weight change, even with room in reserve"
+            )
+        }
+    }
+
+    // MARK: - Ad-hoc suggestion provenance
+    // Mirrors the `historyProvenanceLabel` block in web/tests/core.test.mjs.
+
+    func testProvenanceLabelSameDay() {
+        let day = makeDate(year: 2026, month: 3, day: 10)
+        XCTAssertEqual(
+            P.historyProvenanceLabel(exposureDate: day, asOf: day),
+            "from your last exposure, today"
+        )
+    }
+
+    func testProvenanceLabelNDaysAgo() {
+        let exposure = makeDate(year: 2026, month: 3, day: 5)
+        let asOf = makeDate(year: 2026, month: 3, day: 10)
+        XCTAssertEqual(
+            P.historyProvenanceLabel(exposureDate: exposure, asOf: asOf),
+            "from your last exposure, 5d ago"
+        )
+    }
+
+    func testProvenanceLabelNWeeksAgo() {
+        let exposure = makeDate(year: 2026, month: 2, day: 17)
+        let asOf = makeDate(year: 2026, month: 3, day: 10)
+        XCTAssertEqual(
+            P.historyProvenanceLabel(exposureDate: exposure, asOf: asOf),
+            "from your last exposure, 3w ago"
+        )
+    }
+
+    private func makeDate(year: Int, month: Int, day: Int) -> Date {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = 12
+        return Calendar(identifier: .gregorian).date(from: components)!
+    }
 }

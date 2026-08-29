@@ -153,6 +153,40 @@ public struct AccessoryPerformance: Hashable, Sendable {
     }
 }
 
+/// A lifter's most recent completed top-of-session performance for one
+/// exercise+load-basis pairing, the shape `suggestedAdHocFirstSetTarget`
+/// needs to propose today's off-program first set. Quality and RIR mirror the
+/// `SetLifecycle` flag vocabulary ("clean"/"grindy"/"wobble",
+/// "rir1"/"rir2"/"rir3plus") but are passed as plain strings so this type
+/// carries no dependency on how a caller stores flags. `date` is the exposure's
+/// own session date, carried only so a caller can disclose where a suggested
+/// number came from (`ProgramProgression.historyProvenanceLabel`); it plays no
+/// part in the suggestion math itself.
+public struct RecentTopExposure: Hashable, Codable, Sendable {
+    public let weightLb: Double
+    public let reps: Int
+    public let loadBasis: LoadBasis
+    public let quality: String?
+    public let rir: String?
+    public let date: Date
+
+    public init(weightLb: Double, reps: Int, loadBasis: LoadBasis,
+                quality: String? = nil, rir: String? = nil, date: Date = .distantPast) {
+        self.weightLb = weightLb
+        self.reps = reps
+        self.loadBasis = loadBasis
+        self.quality = quality
+        self.rir = rir
+        self.date = date
+    }
+}
+
+/// What to prefill an off-program exercise's first set with.
+public struct AdHocFirstSetTarget: Hashable, Codable, Sendable {
+    public let weightLb: Double
+    public let reps: Int
+}
+
 public enum ProgramProgression {
     public static let qualityFlagTolerance = 1     // ≤1 grindy/wobble set still SUCCESS
     public static let stallLimit = 2               // 2 consecutive non-success → auto deload
@@ -1153,5 +1187,57 @@ public enum ProgramProgression {
             next.stallCount = 0
         }
         return next
+    }
+
+    /// A history-aware first-set target for an off-program (ad-hoc/accessory)
+    /// exercise, replacing the generic catalog default whenever the lifter has
+    /// already performed this exact exercise+load-basis pairing.
+    ///
+    /// Repeats the prior top-of-session weight/reps by default. Adds one
+    /// `incrementLb` step ONLY when the prior top-weight sets were both clean
+    /// AND left reps in reserve (rir2/rir3plus) — the one state that actually
+    /// shows headroom. Grindy, wobbly, rir1, or unflagged exposures hold flat:
+    /// history without a legible "there was more in the tank" signal must not
+    /// be read as one.
+    ///
+    /// Bodyweight and assisted work follow the same suppression PRDetection
+    /// already applies to load PRs (`LoadBasis.supportsLoadPR`): there is no
+    /// honest external-load bump to offer, so weight is always repeated and
+    /// only the rep count carries the suggestion.
+    ///
+    /// Returns nil when there is no prior exposure, so the caller's existing
+    /// generic-catalog fallback still applies. Mirrored 1:1 in
+    /// web/app/js/core.js as `suggestedAdHocFirstSetTarget`.
+    public static func suggestedAdHocFirstSetTarget(
+        fromLastTopExposure exposure: RecentTopExposure?,
+        incrementLb: Double = ProgramEngine.defaultRoundingLb
+    ) -> AdHocFirstSetTarget? {
+        guard let exposure else { return nil }
+        guard exposure.loadBasis.supportsLoadPR else {
+            return AdHocFirstSetTarget(weightLb: exposure.weightLb, reps: exposure.reps)
+        }
+        let roomInReserve = exposure.quality == "clean"
+            && (exposure.rir == "rir2" || exposure.rir == "rir3plus")
+        let weightLb = roomInReserve ? exposure.weightLb + incrementLb : exposure.weightLb
+        return AdHocFirstSetTarget(weightLb: weightLb, reps: exposure.reps)
+    }
+
+    /// A short "where did this number come from" disclosure for a
+    /// history-based ad-hoc first-set suggestion — the suggestion itself
+    /// (`suggestedAdHocFirstSetTarget`) is otherwise silent about its origin.
+    /// Reuses the app's existing relative-time wording (`agoLabel` in
+    /// `ActiveSessionView.swift` / `views/session.js`) rather than inventing a
+    /// second "how long ago" vocabulary the lifter would have to learn.
+    /// Mirrored 1:1 in web/app/js/core.js as `historyProvenanceLabel`.
+    public static func historyProvenanceLabel(exposureDate: Date, asOf now: Date) -> String {
+        let days = Swift.max(0, Calendar(identifier: .gregorian)
+            .dateComponents([.day], from: exposureDate, to: now).day ?? 0)
+        let when: String
+        if days == 0 { when = "today" }
+        else if days == 1 { when = "yesterday" }
+        else if days < 14 { when = "\(days)d ago" }
+        else if days < 70 { when = "\(days / 7)w ago" }
+        else { when = "\(days / 30)mo ago" }
+        return "from your last exposure, \(when)"
     }
 }
