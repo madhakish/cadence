@@ -116,37 +116,36 @@ enum ProgramTemplates {
     private struct HistorySnapshot {
         var bestE1RM: [String: Double] = [:]
         var latestWeight: [String: Double] = [:]
-        var latestDate: [String: Date] = [:]
     }
 
     /// Known main-lift capacity plus the most recent completed accessory load.
     /// Only workout history is athlete state; defaults remain pure reference
-    /// data. Mirrors web recordedHistory.
+    /// data. This is now an adapter: it normalizes the store's working sets
+    /// into samples and delegates the fold (recency ties, lifetime Epley max)
+    /// to the shared `AthleteHistory.index`, which web recordedHistory
+    /// mirrors through `athleteHistoryIndex`.
     private static func recordedHistory(for names: Set<String>, context: ModelContext) throws -> HistorySnapshot {
         guard !names.isEmpty else { return HistorySnapshot() }
-        var result = HistorySnapshot()
         let sessions = try context.fetch(
             FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.isCompleted })
         )
+        var samples: [AthleteHistory.CompletedSetSample] = []
         for session in sessions {
-            let timestamp = session.effectiveCompletionDate
+            let timestampMs = session.effectiveCompletionDate.timeIntervalSince1970 * 1000
             for entry in session.exercises {
                 guard let name = entry.exercise?.name, names.contains(name) else { continue }
-                let working = entry.workingSets.filter { $0.weightLb > 0 && $0.reps >= 1 }
-                let previousDate = result.latestDate[name] ?? .distantPast
-                if let sessionWeight = working.map(\.weightLb).max(), timestamp >= previousDate {
-                    if timestamp == previousDate {
-                        result.latestWeight[name] = Swift.max(result.latestWeight[name] ?? 0, sessionWeight)
-                    } else {
-                        result.latestWeight[name] = sessionWeight
-                        result.latestDate[name] = timestamp
-                    }
-                }
-                for set in working {
-                    let sample = ProgramProgression.epleyE1RM(weightLb: set.weightLb, reps: set.reps)
-                    if sample > result.bestE1RM[name] ?? 0 { result.bestE1RM[name] = sample }
+                for set in entry.workingSets where set.weightLb > 0 && set.reps >= 1 {
+                    samples.append(AthleteHistory.CompletedSetSample(
+                        exerciseName: name, timestampMs: timestampMs,
+                        weightLb: set.weightLb, reps: set.reps
+                    ))
                 }
             }
+        }
+        var result = HistorySnapshot()
+        for (name, profile) in AthleteHistory.index(samples) {
+            if let best = profile.allTimeBestE1RMLb { result.bestE1RM[name] = best }
+            if let latest = profile.latestCompletedLoadLb { result.latestWeight[name] = latest }
         }
         return result
     }

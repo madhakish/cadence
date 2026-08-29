@@ -4455,5 +4455,42 @@ await withCleanup(async (keep) => {
     "completeSession's idempotence latch holds after a correction — no duplicate advancement or milestones");
 })();
 
+
+// ---- Stage 1 pin (epic #155): history-driven slot seeding stays exact ----
+// Pins bootstrapLiftFromHistory / bootstrapAccessoryFromHistory against
+// synthetic history BEFORE recordedHistory is refactored onto the shared
+// C.athleteHistoryIndex fold; the native twin is
+// CadenceMigrationTests/AthleteHistorySeedingTests.swift.
+await withCleanup(async (keep) => {
+  const { bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } = await import("../app/js/templates.js");
+  const gm = await db.Exercises.byName("Good Morning");
+  ok(gm, "seed sanity: Good Morning exists and no other suite block logs it");
+  const gmSession = (date, sets) => ({
+    date: db.iso(date), completedAt: db.iso(date), isCompleted: true, notes: "",
+    exercises: [{ exerciseName: "Good Morning", order: 0, sets }],
+  });
+  // Older but heavier: 200x5 (Epley 233.33) is the lifetime best...
+  keep(db.Sessions, await db.Sessions.save(gmSession(new Date("2030-01-01T10:00:00Z"), [
+    { order: 0, weightLb: 200, reps: 5, isWarmup: false, status: "completed", enteredUnit: "lb" },
+  ])));
+  // ...the newer exposure is lighter (180x3), with a warmup and an
+  // unfinished planned set that must both stay invisible to seeding.
+  keep(db.Sessions, await db.Sessions.save(gmSession(new Date("2030-02-01T10:00:00Z"), [
+    { order: 0, weightLb: 135, reps: 5, isWarmup: true, status: "completed", enteredUnit: "lb" },
+    { order: 1, weightLb: 180, reps: 3, isWarmup: false, status: "completed", enteredUnit: "lb" },
+    { order: 2, weightLb: 500, reps: 5, isWarmup: false, status: "planned", enteredUnit: "lb" },
+  ])));
+
+  const accessory = await bootstrapAccessoryFromHistory(gm);
+  ok(accessory.weightLb === 180, "accessory seeding takes the LATEST completed load (180), not the lifetime best");
+
+  const lift = await bootstrapLiftFromHistory(gm, { role: "complementary", focus: "strength", roundingLb: 5 });
+  ok(lift.estimatedMaxLb === 233, `lift seeding estimates max from the lifetime best set (200x5 -> 233, got ${lift.estimatedMaxLb})`);
+  const style = C.resolvedPrescriptionStyle("automatic", gm.movementGroup || null, "complementary", "strength");
+  const expectedBase = Math.floor((C.templateStartFraction(style) * (200 * (1 + 5 / 30))) / 5 + 1e-9) * 5;
+  ok(lift.baseWeightLb >= expectedBase && lift.baseWeightLb % 5 === 0,
+    `lift base seeds from fraction x best e1RM floored to the step (>= ${expectedBase}, got ${lift.baseWeightLb})`);
+})();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
