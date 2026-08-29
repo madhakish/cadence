@@ -438,6 +438,7 @@ struct SessionDetailView: View {
     /// basis can never move mid-typing because typing never touches the model.
     private func commitCorrections() {
         let unit = unitDisplay.primaryUnit
+        var corrections: [(set: SetEntry, correction: SetLifecycle.SetCorrection)] = []
         for entry in session.orderedExercises where isCorrectable(entry) {
             for set in entry.orderedSets {
                 guard let draft = setDrafts[set.persistentModelID] else { continue }
@@ -454,17 +455,10 @@ struct SessionDetailView: View {
                 if let text = draft.secondsText, text != (set.durationSeconds.map(String.init) ?? "") {
                     correction.durationSeconds = Int(text)
                 }
-                let corrected = SetLifecycle.correctedSetValues(
-                    weightLb: set.weightLb, reps: set.reps,
-                    durationSeconds: set.durationSeconds, status: set.status,
-                    correction: correction
-                )
-                if set.weightLb != corrected.weightLb { set.weightLb = corrected.weightLb }
-                if set.reps != corrected.reps { set.reps = corrected.reps }
-                if set.durationSeconds != corrected.durationSeconds { set.durationSeconds = corrected.durationSeconds }
-                if set.status != corrected.status { set.status = corrected.status }
+                corrections.append((set: set, correction: correction))
             }
         }
+        SessionCorrectionService.apply(corrections)
     }
 
     var body: some View {

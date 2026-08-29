@@ -186,7 +186,7 @@ function renderLog(panel, sessions, exercises, intervals = []) {
 }
 
 // The stored weight's display form in the entry unit — what an untouched
-// field reads, and what the no-edit comparison in applyDrafts uses. C.trim on
+// field reads, and what the no-edit comparison in draftCorrections uses. C.trim on
 // both branches, like native Weight.trim: a kg-entered weight stores float
 // noise, and the raw float string must never leak into the editor.
 const displayWeightText = (set, unit) => (set.weightLb > 0
@@ -198,7 +198,7 @@ const statusGlyph = (status) => (status === "completed" ? "✓" : status === "sk
 
 // One banked set in correction mode: cycle the status, retype the weight or
 // reps (or the hold for timed work). The row edits a DRAFT — the stored
-// record is untouched until applyDrafts pushes every draft through the shared
+// record is untouched until draftCorrections routes every draft through the shared
 // C.correctedSetValues rule, so a half-typed number is never written, an
 // empty or garbage field keeps the stored value, and nothing beyond the four
 // performed fields is reachable. The weight edits in the display's primary
@@ -254,8 +254,9 @@ function openDetail(s, exerciseByName) {
   // still reading the stored value's display form (including a kg string
   // whose round-trip would drift the canonical pounds) is not an edit, and
   // the comparison basis can never move mid-typing.
-  const applyDrafts = () => {
+  const draftCorrections = () => {
     const unit = C.primaryUnit(ui.prefs.unitDisplay);
+    const entries = [];
     for (const [set, draft] of drafts) {
       const correction = {};
       if (draft.weightText != null && draft.weightText !== displayWeightText(set, unit)) {
@@ -269,12 +270,12 @@ function openDetail(s, exerciseByName) {
         correction.durationSeconds = parseFloat(draft.secondsText);
       }
       if (draft.status && draft.status !== set.status) correction.status = draft.status;
-      Object.assign(set, C.correctedSetValues(set, correction));
+      entries.push({ set, correction });
     }
+    return entries;
   };
   const saveCorrections = async () => {
-    applyDrafts();
-    await Sessions.save(s);
+    await Sessions.applyCorrections(s, draftCorrections());
     drafts.clear();
     // The log list and rolling load behind this overlay were rendered from
     // the pre-edit record; refresh them so the correction is visible the

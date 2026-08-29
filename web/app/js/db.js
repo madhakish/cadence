@@ -380,6 +380,18 @@ export const Sessions = {
   // (backups and restores preserve ids). Ownership-checked: another
   // session's running clock is never touched.
   del: async (id) => { await del("sessions", id); clearClockRecord(id); },
+  // The banked-correction boundary (epic #155 Stage 0): apply every buffered
+  // correction through the shared rule, then persist the session in one
+  // write. Mirrors native SessionCorrectionService. Deliberately does NOT
+  // re-run bank-time grading, milestones, or program advancement — that
+  // reconciliation is Stage 6; charts, exports, recalls, and prior-best
+  // evidence read the canonical sets and follow the correction on their own.
+  async applyCorrections(session, entries) {
+    for (const { set, correction } of entries || []) {
+      Object.assign(set, C.correctedSetValues(set, correction));
+    }
+    await Sessions.save(session);
+  },
   async openAll() { const all = await Sessions.all(); return all.filter((s) => !s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date)); },
   async open() { const all = await Sessions.all(); return all.filter((s) => !s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null; },
   async completed() { const all = await Sessions.all(); return all.filter((s) => s.isCompleted).sort((a, b) => new Date(b.date) - new Date(a.date)); },
@@ -400,6 +412,7 @@ export const Checkins = {
 export const Milestones = {
   all: () => getAll("milestones"),
   add: (m) => put("milestones", m),
+  del: (id) => del("milestones", id),
 };
 export const CoachingDecisions = {
   all: () => getAll("coachingDecisions"),
