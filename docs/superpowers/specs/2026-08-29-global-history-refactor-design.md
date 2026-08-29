@@ -26,12 +26,22 @@ Further confirmed debt (#155):
   (`ProgramTemplates.recordedHistory`, chart e1RM, prior-best grading,
   recall lines, plus web mirrors).
 - `SessionDetailView.commitCorrections` intentionally does not re-run
-  progression grading or PR detection — a corrected 5×5 deadlift still
-  exported as 235×8.
+  progression grading or PR detection. Per code inspection it DOES write
+  the canonical `SetEntry` fields that `ExportService.buildBundle`
+  serializes, so exports of corrected sets are expected correct; the
+  stale-state risk is confined to separately persisted progression,
+  milestone, and cursor state. The 235×8-after-correction anomaly seen in
+  a real export is therefore a finding to reproduce in Stage 0, not an
+  assumed baseline failure.
 
 Separately (user requirement, not in #155): prescriptions emit gym-hostile
 loads — 1.25 lb plates sneaking into lower lifts, 130 lb warmups, working
-weights like 260 that load worse than 255/265.
+weights like 260 that load worse than 255/265. A `PlateMath` policy
+already exists in CadenceCore (mirrored in core.js) and is applied
+per-prescription via `ProgramSession.achievableWeight` /
+`achievableWarmups`; the defect is policy (all standard denominations
+enabled by default, no small-plate avoidance, no warmup snapping), not a
+missing engine.
 
 ## Design principle (load-bearing)
 
@@ -82,8 +92,14 @@ version.
    proven against the existing template set — linear-style progression
    (current behavior, byte-for-byte gate) plus one frozen-training-max
    methodology — before any new styles are authored.
-6. **Plate-math quantization builds once, inside the resolver stage**
-   (Stage 3 / P4). No early standalone version.
+6. **Plate-math quantization lives at prescription materialization,
+   never in capability resolution** (PR #156 review, blocking). The
+   resolver's output is gym-independent athlete capability; quantization
+   extends the existing `PlateMath` policy at the
+   `ProgramSession.achievableWeight`/`achievableWarmups` call sites,
+   after methodology conversion. Quantized loads are never written back
+   into `baseWeightLb` or any global state — cursor rounding uses the
+   program's existing `roundingLb` policy. No early standalone version.
 
 ## Phase map
 
@@ -97,7 +113,9 @@ spec → plan → implementation cycle; PR titles follow #155's sequence.
   restore preview with confirm gate, (5) ad-hoc history targets +
   provenance captions (scope-bug-free t1-r2 worktree), (6) release-notes
   docs page with break-kind names corrected. Then conclude the Chiron run
-  and sweep all probe worktrees.
+  and sweep all probe worktrees. P0 is NOT a dependency of the refactor:
+  P1/P2 may start in parallel; the harvest merges first only where
+  convenient, never as an architectural gate.
 - **P1 — Stage 0: characterize banked correction.**
   `test/fix: characterize banked-session correction projections`.
   Extract `SessionCorrectionService` (native) + web mirror so the view
@@ -152,15 +170,43 @@ spec → plan → implementation cycle; PR titles follow #155's sequence.
   C&J or strict press; Olympic variants exact-first, low-confidence
   strength fallback), coefficients in data with tests, no substring
   matching. Methodology conversion per style; resume never auto-refreshes
-  a suspended program. **PlateMath quantizer as the final stage**:
-  inventory-aware (default 45/25/10/5/2.5 per side, no 1.25s, 45 bar;
-  per-gym inventory on the Gym model). Warmups snap to large-plate loads
-  only (130 → 135, never a 2.5). Working sets: within ±5 lb prefer fewest
-  small plates per side (260 → 265 progressing, → 255 backing off).
-  Near-max singles/doubles keep full resolution. Property test: never
-  emit a load the inventory cannot build. Gate: parity tests for exact /
-  related / family / default / bodyweight / per-implement dumbbell /
-  shelved paths.
+  a suspended program.
+
+  **Load quantization (separate layer, same phase).** The pipeline keeps
+  capability and equipment strictly apart:
+
+  ```text
+  AthleteHistoryIndex
+      ↓
+  TrainingAnchorResolver     — gym-independent capability + provenance
+      ↓
+  methodology conversion     — training max / working cursor / percentages
+      ↓
+  LoadQuantizer / PlateMath  — gym + bar + denomination policy
+      ↓
+  session prescription
+  ```
+
+  The same history resolves to the same anchor regardless of selected
+  gym; quantized loads are never persisted into `baseWeightLb` or any
+  cursor (cursor rounding stays on the program's existing `roundingLb`).
+  Implementation extends the EXISTING `PlateMath`/`Plates` policy in
+  CadenceCore (+ core.js mirror) at the per-prescription call sites
+  `ProgramSession.achievableWeight` and `achievableWarmups` — which
+  already run for every generated session, so progressed loads and
+  warmups both get the new policy, and warmups are distinguishable from
+  near-max singles at that boundary. Policy changes: default denomination
+  policy excludes 1.25s; warmups snap to large-plate-friendly loads only
+  (130 → 135, never a 2.5); working sets within ±5 lb prefer fewest
+  small plates per side (260 → 265 progressing, → 255 backing off);
+  near-max singles/doubles keep full resolution. `Gym.plateToggles`
+  records denomination availability, not counts, so the property test
+  proves loads are constructible under the enabled-denomination model
+  (unlimited pairs of enabled plates), not physical-rack availability;
+  per-plate quantities are a possible later extension. Gate: parity
+  tests for exact / related / family / default / bodyweight /
+  per-implement dumbbell / shelved paths, plus the quantizer property
+  test above.
 - **P5 — Stage 4: explicit program switching.**
   `feat: add resumable program switcher and new-block flow`.
   `ProgramActivationService` + web mirror replaces direct `isActive`
@@ -214,8 +260,8 @@ spec → plan → implementation cycle; PR titles follow #155's sequence.
 Owned by #155 (file map for shared core / native / web / tests / docs;
 the seven INV-* invariants; the eight-PR sequence). This document does
 not duplicate them; treat #155 as the source of truth for those lists.
-The quantizer adds one shared-core file pair to that map
-(`PlateMath.swift` + core.js mirror) and its docs land with
+The quantizer work modifies the existing `PlateMath.swift`/`Plates.swift`
+(+ core.js mirror) and the `ProgramSession` call sites; its docs land with
 `docs/reference/progression-rules.md`.
 
 ## Testing strategy
