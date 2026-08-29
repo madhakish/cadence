@@ -1460,6 +1460,36 @@ export const focusParams = (focus) => FOCUS[focus] || FOCUS.strength;
 
 export const epleyE1RM = (weightLb, reps) => (reps >= 1 ? weightLb * (1 + reps / 30.0) : weightLb);
 
+// The shared athlete-history fold (epic #155 Stage 1): one projection from
+// completed performed work to per-lift strength facts, consumed by template
+// seeding on both clients. Pure and order-independent; callers normalize
+// their own store's sets into samples (completed, non-warmup, positive load,
+// at least one rep) because those filters live with each client's data layer.
+// latestCompletedLoadLb is recency-first (same-moment ties take the heavier
+// load, "what did they lift last"); allTimeBestE1RMLb is the lifetime Epley
+// max with no rep ceiling ("capacity for seeding a brand-new slot") — the
+// anchored rep-capped priorBestE1RM, slot-scoped recall, basis-partitioned PR
+// baselines, and chart series deliberately keep their own scans.
+// Mirrors CadenceCore AthleteHistory.index.
+export function athleteHistoryIndex(samples) {
+  const result = {};
+  for (const sample of samples || []) {
+    const profile = result[sample.exerciseName]
+      || (result[sample.exerciseName] = {
+        latestCompletedLoadLb: null, latestExposureMs: null, allTimeBestE1RMLb: null,
+      });
+    if (profile.latestExposureMs == null || sample.timestampMs > profile.latestExposureMs) {
+      profile.latestExposureMs = sample.timestampMs;
+      profile.latestCompletedLoadLb = sample.weightLb;
+    } else if (sample.timestampMs === profile.latestExposureMs) {
+      profile.latestCompletedLoadLb = Math.max(profile.latestCompletedLoadLb || 0, sample.weightLb);
+    }
+    const e1RM = epleyE1RM(sample.weightLb, sample.reps);
+    if (e1RM > (profile.allTimeBestE1RMLb || 0)) profile.allTimeBestE1RMLb = e1RM;
+  }
+  return result;
+}
+
 // Epley is accurate at roughly 2-10 reps and drifts high above that, so a long
 // back-off set is not allowed to masquerade as a strength sample.
 export const E1RM_SAMPLE_REP_CEILING = 10;

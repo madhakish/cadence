@@ -271,32 +271,27 @@ const uniqueName = (base, taken) => {
 /// Known main-lift capacity plus the most recent completed accessory load.
 /// Only workout history is athlete state; defaults remain pure reference data.
 async function recordedHistory(names) {
+  // Adapter over the shared fold: normalize this store's working sets into
+  // samples, delegate recency ties and the lifetime Epley max to
+  // C.athleteHistoryIndex (mirrored by CadenceCore AthleteHistory.index).
   const wanted = new Set(names);
-  const best = new Map();
-  const latestWeight = new Map();
-  const latestDate = new Map();
+  const samples = [];
   for (const session of await Sessions.all()) {
     if (!session.isCompleted) continue;
-    const timestamp = new Date(session.completedAt || session.date).getTime();
+    const timestampMs = new Date(session.completedAt || session.date).getTime();
     for (const entry of session.exercises || []) {
       if (!wanted.has(entry.exerciseName)) continue;
-      const working = (entry.sets || []).filter((set) => !set.isWarmup && set.status === "completed"
-        && set.weightLb > 0 && set.reps >= 1);
-      const sessionWeight = Math.max(0, ...working.map((set) => set.weightLb));
-      if (sessionWeight > 0 && timestamp >= (latestDate.get(entry.exerciseName) ?? -Infinity)) {
-        if (timestamp === latestDate.get(entry.exerciseName)) {
-          latestWeight.set(entry.exerciseName,
-            Math.max(latestWeight.get(entry.exerciseName) || 0, sessionWeight));
-        } else {
-          latestWeight.set(entry.exerciseName, sessionWeight);
-          latestDate.set(entry.exerciseName, timestamp);
-        }
-      }
-      for (const set of working) {
-        const sample = C.epleyE1RM(set.weightLb, set.reps);
-        if (sample > (best.get(entry.exerciseName) || 0)) best.set(entry.exerciseName, sample);
+      for (const set of entry.sets || []) {
+        if (set.isWarmup || set.status !== "completed" || !(set.weightLb > 0) || !(set.reps >= 1)) continue;
+        samples.push({ exerciseName: entry.exerciseName, timestampMs, weightLb: set.weightLb, reps: set.reps });
       }
     }
+  }
+  const best = new Map();
+  const latestWeight = new Map();
+  for (const [name, profile] of Object.entries(C.athleteHistoryIndex(samples))) {
+    if (profile.allTimeBestE1RMLb > 0) best.set(name, profile.allTimeBestE1RMLb);
+    if (profile.latestCompletedLoadLb > 0) latestWeight.set(name, profile.latestCompletedLoadLb);
   }
   return { bestE1RM: best, latestWeight };
 }

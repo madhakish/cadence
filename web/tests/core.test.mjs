@@ -3017,5 +3017,37 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   deq(exercisesOptOut.exercises, [], "exercises omit removal when includeRemovedExercises is false");
 }
 
+
+// ---- athleteHistoryIndex: the shared history fold (epic #155 Stage 1) ----
+// Mirrors CadenceCoreTests/AthleteHistoryTests.swift — fixtures and
+// expectations must stay identical across the two suites.
+{
+  const s = (exerciseName, timestampMs, weightLb, reps) => ({ exerciseName, timestampMs, weightLb, reps });
+  const deq = (a, b, msg) => ok(JSON.stringify(a) === JSON.stringify(b), `${msg} (got ${JSON.stringify(a)}, want ${JSON.stringify(b)})`);
+  const recency = C.athleteHistoryIndex([s("Deadlift", 1000, 315, 5), s("Deadlift", 2000, 275, 5)]);
+  eq(recency.Deadlift.latestCompletedLoadLb, 275, "latest load follows recency, not magnitude");
+  eq(recency.Deadlift.latestExposureMs, 2000, "latest exposure is the newest timestamp");
+
+  const tie = C.athleteHistoryIndex([
+    s("Deadlift", 2000, 275, 5), s("Deadlift", 2000, 305, 3), s("Deadlift", 1000, 315, 5),
+  ]);
+  eq(tie.Deadlift.latestCompletedLoadLb, 305, "same-timestamp tie takes the heavier load");
+
+  const best = C.athleteHistoryIndex([
+    s("Deadlift", 1000, 315, 5), s("Deadlift", 2000, 275, 12), s("Deadlift", 3000, 345, 1),
+  ]);
+  eq(best.Deadlift.allTimeBestE1RMLb, 275 * (1 + 12 / 30), "best e1RM is the lifetime Epley max");
+
+  const samples = [
+    s("Deadlift", 3000, 225, 8), s("Deadlift", 1000, 315, 5),
+    s("Squat", 2000, 285, 5), s("Deadlift", 3000, 245, 5),
+  ];
+  deq(C.athleteHistoryIndex(samples), C.athleteHistoryIndex([...samples].reverse()),
+    "the fold is order-independent");
+
+  deq(C.athleteHistoryIndex([]), {}, "no samples, no profiles");
+  eq(C.athleteHistoryIndex([s("Deadlift", 1, 100, 1)]).Squat, undefined, "unseen exercise is absent");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
