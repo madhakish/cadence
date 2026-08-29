@@ -1215,6 +1215,13 @@ struct ProgressionChartsView: View {
         )
     }
 
+    /// Whether the fit-description caption should call this trend out as flat.
+    /// Separate from `projectionSummary`'s own "Holding flat" wording, which
+    /// fires on the rounded rate alone regardless of how noisy the fit is.
+    private func isTrendPlateaued(_ projection: Projection) -> Bool {
+        TrendProjection.isPlateaued(perWeek: projection.result.perWeek, fitQuality: projection.result.fitQuality)
+    }
+
     /// A single series, drawn on its own, is the only case where an area fill
     /// is depth rather than clutter. Rotation split and the combined metric
     /// both put several lines on the plot, and translucent areas over each
@@ -1483,7 +1490,7 @@ struct ProgressionChartsView: View {
                     Text(projectionSummary(trend))
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(Self.projectionColor)
-                    Text("\(TrendProjection.fitDescription(trend.result.fitQuality)) · fitted from performed sessions — a continuation of the past, not a plan.")
+                    Text("\(TrendProjection.fitDescription(trend.result.fitQuality))\(isTrendPlateaued(trend) ? " · Plateaued" : "") · fitted from performed sessions — a continuation of the past, not a plan.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

@@ -892,6 +892,20 @@ export function fitDescription(fitQuality) {
   return "very noisy — treat as a guess";
 }
 
+// Whether the line is worth calling flat AND worth trusting as flat.
+// trendSummary already rounds the magnitude to one decimal and prints
+// "Holding flat" whenever that rounds to zero — even when fitDescription is
+// simultaneously saying "very noisy". A slope that rounds to zero because the
+// line is genuinely flat and a slope that rounds to zero because the fit
+// can't find a direction in the noise read identically today; this tells the
+// two apart by requiring the same fitQuality floor fitDescription uses for
+// "rough trend" (0.4, inclusive).
+// Mirrored 1:1 in CadenceCore TrendProjection.isPlateaued.
+export function isPlateaued(perWeek, fitQuality) {
+  const magnitude = Math.round(Math.abs(perWeek) * 10) / 10;
+  return magnitude === 0 && fitQuality >= 0.4;
+}
+
 // Where the program is in its rotation, said without claiming the rotation is a
 // weight wave. The program-level indicator is shared by slots that have nothing
 // to do with each other's prescriptions, so it can only honestly report

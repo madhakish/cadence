@@ -166,4 +166,23 @@ final class TrendProjectionTests: XCTestCase {
         XCTAssertEqual(TrendProjection.Horizon.allCases.map(\.rawValue), [0, 30, 90])
         XCTAssertEqual(TrendProjection.Horizon.allCases.map(\.label), ["Off", "1 month", "3 months"])
     }
+
+    // "Holding flat" should not also read as trustworthy when the fit behind
+    // it is noise — isPlateaued adds the same fitQuality floor fitDescription
+    // uses for "rough trend" on top of summary()'s rounding rule.
+    // [INV-PROJECTION-DECLARES-ITS-FIT]
+    func testIsPlateauedRequiresBothAZeroRoundedSlopeAndAnAdequateFit() {
+        // Zero-rounded slope with an adequate fit: plateaued.
+        XCTAssertTrue(TrendProjection.isPlateaued(perWeek: 0, fitQuality: 0.5))
+        XCTAssertTrue(TrendProjection.isPlateaued(perWeek: 0.04, fitQuality: 1))
+        // Zero-rounded slope but a fit too noisy to trust as flat: not plateaued.
+        XCTAssertFalse(TrendProjection.isPlateaued(perWeek: 0, fitQuality: 0.39))
+        XCTAssertFalse(TrendProjection.isPlateaued(perWeek: -0.04, fitQuality: 0))
+        // Nonzero-rounded slope, either sign: never plateaued, regardless of fit.
+        XCTAssertFalse(TrendProjection.isPlateaued(perWeek: 5, fitQuality: 1))
+        XCTAssertFalse(TrendProjection.isPlateaued(perWeek: -5, fitQuality: 1))
+        XCTAssertFalse(TrendProjection.isPlateaued(perWeek: 0.06, fitQuality: 1))
+        // Boundary: fitQuality == 0.4 is inclusive, same as fitDescription's floor.
+        XCTAssertTrue(TrendProjection.isPlateaued(perWeek: 0, fitQuality: 0.4))
+    }
 }

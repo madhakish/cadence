@@ -205,4 +205,20 @@ public enum TrendProjection {
         default: return "very noisy — treat as a guess"
         }
     }
+
+    /// Whether the line is worth calling flat AND worth trusting as flat.
+    ///
+    /// `summary()` already rounds the magnitude to one decimal and prints
+    /// "Holding flat" whenever that rounds to zero — even when `fitDescription`
+    /// is simultaneously saying "very noisy". A slope that rounds to zero
+    /// because the line is genuinely flat and a slope that rounds to zero
+    /// because the fit can't find a direction in the noise read identically
+    /// today; this tells the two apart by requiring the same `fitQuality`
+    /// floor `fitDescription` uses for "rough trend" (0.4, inclusive).
+    ///
+    /// Mirrored 1:1 in web/app/js/core.js `isPlateaued`.
+    public static func isPlateaued(perWeek: Double, fitQuality: Double) -> Bool {
+        let magnitude = (abs(perWeek) * 10).rounded() / 10
+        return magnitude == 0 && fitQuality >= 0.4
+    }
 }
