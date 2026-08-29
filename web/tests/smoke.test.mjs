@@ -1130,6 +1130,67 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// ---- named restore preview ----
+// The store already matches `parsed` (it was just re-imported above), so a
+// preview of the SAME bundle across all five collections must be a no-op —
+// and, being a preview, must not itself write anything.
+{
+  const beforeSessions = (await db.Sessions.all()).length;
+  const beforePrograms = (await db.Programs.all()).length;
+  const beforeTracks = (await db.Tracks.all()).length;
+  const beforeGyms = (await db.Gyms.all()).length;
+  const beforeExercises = (await db.Exercises.all()).length;
+
+  const samePreview = await db.namedRestorePreview(parsed);
+  ok(C.isNamedRestoreNoOp(samePreview), "previewing the bundle already resident is a no-op");
+  for (const key of ["exercises", "tracks", "gyms", "sessions", "programs"]) {
+    ok(samePreview[key].every((d) => d.status === "unchanged"), `${key} preview against itself is all-unchanged`);
+  }
+
+  ok((await db.Sessions.all()).length === beforeSessions
+    && (await db.Programs.all()).length === beforePrograms
+    && (await db.Tracks.all()).length === beforeTracks
+    && (await db.Gyms.all()).length === beforeGyms
+    && (await db.Exercises.all()).length === beforeExercises,
+    "computing a preview reads only — no store is touched");
+
+  // Drop a session, add a brand-new one, and grow the fixture program's slot
+  // count — a preview must name each one under the status the eventual
+  // restore would actually apply.
+  const modified = structuredClone(parsed);
+  const droppedSession = modified.sessions.shift();
+  const changedProgram = modified.programs.find((p) => p.name === "Fixture Upper/Lower");
+  const originalSlotCount = changedProgram.days.reduce((sum, d) => sum + d.lifts.length + d.accessories.length, 0);
+  changedProgram.days[0].accessories.push({ exerciseName: "Face Pulls", order: 99, sets: 3, minReps: 12, maxReps: 15 });
+  const newSession = { ...structuredClone(droppedSession), id: "brand-new-session-id", date: "2099-01-01T00:00:00.000Z" };
+  modified.sessions.push(newSession);
+
+  const diffPreview = await db.namedRestorePreview(modified);
+  ok(!C.isNamedRestoreNoOp(diffPreview), "a modified bundle is not a no-op");
+  ok(diffPreview.sessions.some((d) => d.status === "removed" && d.id === droppedSession.id),
+    "a session the modified bundle omits previews as removed");
+  ok(diffPreview.sessions.some((d) => d.status === "new" && d.name === newSession.date),
+    "a brand-new session id previews as new");
+  ok(diffPreview.programs.some((d) => d.status === "changed" && d.id === changedProgram.id),
+    `a program with a different slot count (was ${originalSlotCount}) previews as changed`);
+
+  // A bundle that keeps the `programs` key but empties it wholesale-replaces
+  // the store with nothing — every current program previews as removed.
+  const emptied = { ...structuredClone(parsed), programs: [] };
+  const removalPreview = await db.namedRestorePreview(emptied);
+  const currentProgramIDs = (await db.Programs.all()).map((p) => p.uuid);
+  ok(currentProgramIDs.length > 0
+    && currentProgramIDs.every((id) => removalPreview.programs.some((d) => d.id === id && d.status === "removed")),
+    "emptying the bundle's programs key previews every current program as removed");
+
+  // The write path is untouched by any of the above: importing the
+  // UNCHANGED original bundle after computing two different previews still
+  // restores exactly the original session/program counts.
+  await db.importBundle(parsed);
+  ok((await db.Sessions.all()).length === beforeSessions && (await db.Programs.all()).length === beforePrograms,
+    "confirmed-restore write behavior is unaffected by having computed a preview first");
+}
+
 // Version-1 web backups used numeric IndexedDB program IDs. They migrate to
 // portable UUIDs, and name-tagged sessions are rebound without retaining the
 // local integer as cross-platform linkage.

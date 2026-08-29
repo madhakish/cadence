@@ -19,6 +19,9 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var importAlert: String?
     @State private var canRevertImport = false
+    /// A decoded, checkpointed restore waiting on the user's second, explicit
+    /// confirmation before ImportService.load actually commits it.
+    @State private var pendingRestore: PendingRestore?
     @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
     @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
     /// Device-local on purpose — a Health read grant must not ride in a backup.
@@ -285,7 +288,22 @@ struct SettingsView: View {
         .saveChangesOnDisappear(context, operation: "Saving settings")
         .navigationTitle("Settings")
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
-                importAlert = restore(from: result)
+                stageRestore(from: result)
+            }
+            .confirmationDialog(
+                "Restore this backup?",
+                isPresented: Binding(get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Restore", role: .destructive) {
+                    if let pending = pendingRestore {
+                        pendingRestore = nil
+                        importAlert = commitRestore(pending.data)
+                    }
+                }
+                Button("Cancel", role: .cancel) { pendingRestore = nil }
+            } message: {
+                Text(pendingRestore.map(Self.previewSummary) ?? "")
             }
             .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil; canRevertImport = false } })) {
                 if canRevertImport {
@@ -307,44 +325,94 @@ struct SettingsView: View {
         }
     }
 
-    private func restore(from result: Result<URL, Error>) -> String {
+    private struct PendingRestore {
+        let data: Data
+        let preview: BackupContract.NamedRestorePreview
+    }
+
+    /// Reads the picked file and computes the named restore preview. A
+    /// no-change bundle reports itself and leaves the store untouched;
+    /// anything else stages the preview for the user's explicit confirmation.
+    /// No SwiftData write happens until that confirmation.
+    private func stageRestore(from result: Result<URL, Error>) {
         switch result {
         case .failure(let err):
-            canRevertImport = false
-            return err.localizedDescription
+            importAlert = err.localizedDescription
         case .success(let url):
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
                 let data = try Data(contentsOf: url)
-                // A valid but unwanted restore is still destructive. Keep the
-                // current state locally before replacing any sections.
-                try BackupCheckpointService.create(context: context, reason: "before-import")
-                let s = try ImportService.load(data, into: context)
-                // A restore replaces the sessions store wholesale, and
-                // backups preserve session IDs — a running clock, its
-                // durable record, and any rest countdown all belong to the
-                // pre-import world. Left alive, the record (or a surviving
-                // activity) would graft the old stopwatch onto whatever
-                // restored session reuses the ID.
-                restTimer.stop()
-                workoutClock.end()
-                // syncLibrary right after the restore: a pre-migration backup
-                // re-arms the retired-rest-stamp clear, which otherwise
-                // wouldn't run until the next app launch — leaving the rest
-                // steppers dead in the meantime.
-                try Seeder.syncLibrary(context: context)
-                let restored = "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
-                canRevertImport = true
-                guard s.repairedSlotIDs > 0 else { return restored }
-                // Say so rather than repair silently — the backup carried a
-                // slot id on two programs, and the later one has been re-issued.
-                return restored + "\n\nRepaired \(s.repairedSlotIDs) duplicate slot "
-                    + "\(s.repairedSlotIDs == 1 ? "id" : "ids") the backup reused across programs."
+                guard let preview = try ImportService.namedRestorePreview(data, context: context) else {
+                    importAlert = "That file isn't a Cadence backup."
+                    return
+                }
+                guard !preview.isNoOp else {
+                    importAlert = "Nothing to restore — bundle matches your current data"
+                    return
+                }
+                pendingRestore = PendingRestore(data: data, preview: preview)
             } catch {
-                canRevertImport = false
-                return error.localizedDescription
+                importAlert = error.localizedDescription
             }
+        }
+    }
+
+    // A restore preview can name hundreds of banked sessions; showing all of
+    // them would turn the confirm dialog into an unreadable wall of text, so
+    // a collection past this cap shows its first few names plus a count.
+    private static let restorePreviewNameLimit = 8
+
+    /// Changed/new/removed item names per collection, unchanged items
+    /// omitted — the confirm dialog's whole point is showing what would
+    /// actually move.
+    private static func previewSummary(_ pending: PendingRestore) -> String {
+        func line(_ label: String, _ diffs: [BackupContract.NamedEntityDiff]) -> String? {
+            let notable = diffs.filter { $0.status != .unchanged }
+            guard !notable.isEmpty else { return nil }
+            let shown = notable.prefix(restorePreviewNameLimit).map { "\($0.name) (\($0.status.rawValue))" }
+            let remaining = notable.count - shown.count
+            let names = remaining > 0 ? shown + ["and \(remaining) more"] : shown
+            return "\(label): " + names.joined(separator: ", ")
+        }
+        let lines = [
+            line("Exercises", pending.preview.exercises),
+            line("Tracks", pending.preview.tracks),
+            line("Gyms", pending.preview.gyms),
+            line("Sessions", pending.preview.sessions),
+            line("Programs", pending.preview.programs),
+        ].compactMap { $0 }
+        return lines.joined(separator: "\n")
+    }
+
+    private func commitRestore(_ data: Data) -> String {
+        do {
+            // A valid but unwanted restore is still destructive. Keep the
+            // current state locally before replacing any sections.
+            try BackupCheckpointService.create(context: context, reason: "before-import")
+            let s = try ImportService.load(data, into: context)
+            // A restore replaces the sessions store wholesale, and
+            // backups preserve session IDs — a running clock, its
+            // durable record, and any rest countdown all belong to the
+            // pre-import world. Left alive, the record (or a surviving
+            // activity) would graft the old stopwatch onto whatever
+            // restored session reuses the ID.
+            restTimer.stop()
+            workoutClock.end()
+            // syncLibrary right after the restore: a pre-migration backup
+            // re-arms the retired-rest-stamp clear, which otherwise
+            // wouldn't run until the next app launch — leaving the rest
+            // steppers dead in the meantime.
+            try Seeder.syncLibrary(context: context)
+            let restored = "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+            canRevertImport = true
+            guard s.repairedSlotIDs > 0 else { return restored }
+            // Say so rather than repair silently — the backup carried a
+            // slot id on two programs, and the later one has been re-issued.
+            return restored + "\n\nRepaired \(s.repairedSlotIDs) duplicate slot "
+                + "\(s.repairedSlotIDs == 1 ? "id" : "ids") the backup reused across programs."
+        } catch {
+            return error.localizedDescription
         }
     }
 

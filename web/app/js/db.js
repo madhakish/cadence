@@ -1250,6 +1250,130 @@ export function validateBackup(bundle) {
   }
 }
 
+// ---- Restore preview: per-item named diff ----
+// Mirrors CadenceCore's BackupContract.NamedEntity family. `id` is the store
+// identity (a gym/session/program's own id; an exercise/track's own name,
+// since neither has a separate id), `name` is what the user reads, and
+// `signature` is a caller-built fingerprint of the remaining fields —
+// callers own how that's derived per collection so this stays a generic
+// id/name/signature diff.
+const strOrEmpty = (v) => (v === undefined || v === null ? "" : String(v));
+const numOrZero = (v) => String(Number.isFinite(v) ? v : 0);
+const boolFlag = (v) => (v ? "1" : "0");
+
+const exerciseSignature = (e) => [
+  strOrEmpty(e.category), strOrEmpty(e.type), strOrEmpty(e.movementGroup),
+  strOrEmpty(e.movementPattern), strOrEmpty(e.secondaryMovementPattern), strOrEmpty(e.loadBasis),
+  numOrZero(e.implementCount), boolFlag(e.isUnilateral), numOrZero(e.defaultRestSeconds),
+  strOrEmpty(e.notes), boolFlag(e.isShelved), strOrEmpty(e.stationDenomination),
+].join("");
+
+const trackSignature = (t) => [
+  strOrEmpty(t.mode), numOrZero(t.cycleNumber), numOrZero(t.baseWeightLb),
+  numOrZero(t.nextPhase), numOrZero(t.incrementLb), numOrZero(t.roundingLb),
+].join("");
+
+const gymSignature = (g) => [
+  boolFlag(g.isDefault), strOrEmpty(g.defaultBarId), numOrZero(g.collarWeightLb),
+  strOrEmpty(g.loadingPolicy), strOrEmpty(g.barcodeLabel),
+].join("");
+
+// Sessions and programs have no shallow signature covering every field (a
+// session's sets and a program's slot contents are themselves nested
+// structures) — the shared BackupContract explicitly asks for a
+// collection-appropriate shallow comparison here, not a deep recursive diff.
+const sessionSignature = (s) => [
+  strOrEmpty(s.date), strOrEmpty(s.programTag?.programId), numOrZero((s.exercises || []).length),
+].join("");
+
+const programSignature = (p) => [
+  numOrZero((p.days || []).length),
+  numOrZero((p.days || []).reduce((sum, day) => sum + (day.lifts || []).length + (day.accessories || []).length, 0)),
+].join("");
+
+const namedEntity = (id, name, signature) => ({ id, name, signature });
+const trimmedName = (v) => (typeof v === "string" ? v.trim() : "");
+
+// Named-entity restore preview: per-collection new/changed/unchanged/removed
+// entries for a parsed bundle's exercises, tracks, gyms, sessions, and
+// programs against the current store. Pure read — no write, no checkpoint.
+// Mirrors ImportService.namedRestorePreview: entities key on a gym/session/
+// program's own id, or on an exercise/track's own name (neither of which has
+// a separate id).
+//
+// A collection the bundle omits entirely is left out of both sides (`[]`,
+// `[]`) rather than defaulted with `bundle.x || []` on the incoming side
+// alone — importBundle only touches a store when the bundle carries that
+// key at all (even an empty array), so fetching the current records for an
+// OMITTED collection would wrongly preview every current record as
+// `removed` for a restore that will not touch it.
+export async function namedRestorePreview(bundle) {
+  const currentExercises = bundle.exercises
+    ? (await Exercises.all()).map((e) => namedEntity(e.name, e.name, exerciseSignature(e))) : [];
+  const incomingExercises = bundle.exercises
+    ? bundle.exercises
+      .map((e) => ({ ...e, name: trimmedName(e.name) }))
+      // Exercises are keyed by name; an unnamed def can't own a preview
+      // identity either — importBundle's own upsert skips it the same way.
+      .filter((e) => e.name)
+      .map((e) => namedEntity(e.name, e.name, exerciseSignature(e)))
+    : [];
+
+  const currentTracks = bundle.tracks
+    ? (await Tracks.all()).map((t) => namedEntity(t.exerciseName, t.exerciseName, trackSignature(t))) : [];
+  const incomingTracks = bundle.tracks
+    ? bundle.tracks
+      .map((t) => ({ ...t, exerciseName: trimmedName(t.exerciseName) }))
+      .filter((t) => t.exerciseName)
+      .map((t) => namedEntity(t.exerciseName, t.exerciseName, trackSignature(t)))
+    : [];
+
+  const currentGyms = bundle.gyms
+    ? (await Gyms.all()).map((g) => namedEntity(g.id, g.name, gymSignature(g))) : [];
+  // A gym missing an id resolves the SAME way normalizeGym does on import —
+  // a deterministic id derived from its name — so the preview classifies it
+  // exactly as the eventual restore will treat it.
+  const incomingGyms = bundle.gyms
+    ? bundle.gyms.map((g) => namedEntity(
+      isPortableUUID(g.id) ? g.id : stableID(`gym:${g.name}`), trimmedName(g.name), gymSignature(g),
+    ))
+    : [];
+
+  // A session's real IndexedDB key is a local autoincrement integer, never
+  // portable across installs — the same reason exportBundle derives a
+  // stable id from it instead of exporting it raw. Reusing that recipe here
+  // (rather than the full export fingerprint) keeps the id derivation
+  // shallow, matching the signature above, and still round-trips: the same
+  // still-resident session's current raw id hashes to the same value the
+  // bundle carried when this install exported it.
+  const sessionFallbackID = (s) => `${s.date}|${s.programTag?.programId ?? ""}|${(s.exercises || []).length}`;
+  const sessionIdentity = (s) => (isPortableUUID(s.id) ? s.id : stableID(`session:${s.id ?? sessionFallbackID(s)}`));
+  const currentSessions = bundle.sessions
+    ? (await Sessions.all()).map((s) => namedEntity(sessionIdentity(s), s.date || "Untitled session", sessionSignature(s)))
+    : [];
+  const incomingSessions = bundle.sessions
+    ? bundle.sessions.map((s) => namedEntity(sessionIdentity(s), s.date || "Untitled session", sessionSignature(s)))
+    : [];
+
+  const currentPrograms = bundle.programs
+    ? (await Programs.all()).map((p) => namedEntity(p.uuid, p.name, programSignature(p))) : [];
+  // Mirrors importBundle's own id derivation for an imported program exactly
+  // (a string id rides along verbatim; anything else falls back to a name
+  // hash), so the preview classifies a program the same way the restore
+  // will actually key it.
+  const incomingPrograms = bundle.programs
+    ? bundle.programs.map((p) => namedEntity(
+      typeof p.id === "string" ? p.id : stableID(`program:${p.name}`),
+      trimmedName(p.name) || "Untitled program", programSignature(p),
+    ))
+    : [];
+
+  return C.namedRestorePreview({
+    currentExercises, incomingExercises, currentTracks, incomingTracks, currentGyms, incomingGyms,
+    currentSessions, incomingSessions, currentPrograms, incomingPrograms,
+  });
+}
+
 // Restore a backup in ONE transaction: only stores present in the bundle are
 // touched (an old backup without e.g. `gyms` leaves current gyms alone), and a
 // malformed bundle aborts wholesale instead of leaving stores cleared.

@@ -50,4 +50,123 @@ public enum BackupContract {
         let version = schemaVersion ?? 0
         return version >= 0 && version <= currentSchemaVersion
     }
+
+    /// One named entity as seen on either side of a restore preview: its
+    /// store identity (`id`), the label the user reads (`name`), and a
+    /// caller-built fingerprint of the remaining fields worth diffing. Callers
+    /// own how `id` and `signature` are derived per collection — exercises and
+    /// lift tracks key on their own name, gyms/sessions/programs key on a
+    /// separate stable id — so this stays a generic id/name/signature
+    /// comparison, not a parser.
+    public struct NamedEntity: Equatable {
+        public let id: String
+        public let name: String
+        public let signature: String
+
+        public init(id: String, name: String, signature: String) {
+            self.id = id
+            self.name = name
+            self.signature = signature
+        }
+    }
+
+    public enum NamedEntityStatus: String, Equatable {
+        case new, changed, unchanged, removed
+    }
+
+    public struct NamedEntityDiff: Equatable {
+        public let name: String
+        public let id: String
+        public let status: NamedEntityStatus
+
+        public init(name: String, id: String, status: NamedEntityStatus) {
+            self.name = name
+            self.id = id
+            self.status = status
+        }
+    }
+
+    /// Classifies each incoming entity against the current store's matching
+    /// id: an id absent from the current store is new; a matching id whose
+    /// name and signature both match is unchanged; anything else — a rename
+    /// or any other field edit — is changed.
+    ///
+    /// `includeRemoved` decides whether a current id the bundle omits is
+    /// reported as `removed`. Every collection's restore write clears the
+    /// store and re-inserts only the bundle's records — so an omitted id is
+    /// genuinely dropped — with one native exception: the native exercise
+    /// importer upserts by name and never deletes, so a caller previewing
+    /// that one path must pass `false` there rather than claim a removal the
+    /// restore will not actually perform.
+    public static func namedRestoreDiff(
+        current: [NamedEntity], incoming: [NamedEntity], includeRemoved: Bool = true
+    ) -> [NamedEntityDiff] {
+        var byID: [String: NamedEntity] = [:]
+        for entity in current { byID[entity.id] = entity }
+        var matchedIDs: Set<String> = []
+        var result = incoming.map { entity -> NamedEntityDiff in
+            matchedIDs.insert(entity.id)
+            guard let existing = byID[entity.id] else {
+                return NamedEntityDiff(name: entity.name, id: entity.id, status: .new)
+            }
+            let unchanged = existing.name == entity.name && existing.signature == entity.signature
+            return NamedEntityDiff(name: entity.name, id: entity.id, status: unchanged ? .unchanged : .changed)
+        }
+        guard includeRemoved else { return result }
+        for entity in current where !matchedIDs.contains(entity.id) {
+            result.append(NamedEntityDiff(name: entity.name, id: entity.id, status: .removed))
+        }
+        return result
+    }
+
+    /// Per-collection named restore diff for all five collections a restore
+    /// preview names individually: exercises, lift tracks, gyms, sessions,
+    /// and programs.
+    public struct NamedRestorePreview: Equatable {
+        public let exercises: [NamedEntityDiff]
+        public let tracks: [NamedEntityDiff]
+        public let gyms: [NamedEntityDiff]
+        public let sessions: [NamedEntityDiff]
+        public let programs: [NamedEntityDiff]
+
+        public init(
+            exercises: [NamedEntityDiff], tracks: [NamedEntityDiff], gyms: [NamedEntityDiff],
+            sessions: [NamedEntityDiff], programs: [NamedEntityDiff]
+        ) {
+            self.exercises = exercises
+            self.tracks = tracks
+            self.gyms = gyms
+            self.sessions = sessions
+            self.programs = programs
+        }
+
+        /// True only when every classified item across all five collections
+        /// is unchanged — the signal a restore UI uses to skip its
+        /// destructive confirm gate entirely. A `removed` or `new`/`changed`
+        /// entry both count as "not a no-op", same as before.
+        public var isNoOp: Bool {
+            [exercises, tracks, gyms, sessions, programs].allSatisfy { collection in
+                collection.allSatisfy { $0.status == .unchanged }
+            }
+        }
+    }
+
+    public static func namedRestorePreview(
+        currentExercises: [NamedEntity], incomingExercises: [NamedEntity],
+        currentTracks: [NamedEntity], incomingTracks: [NamedEntity],
+        currentGyms: [NamedEntity], incomingGyms: [NamedEntity],
+        currentSessions: [NamedEntity], incomingSessions: [NamedEntity],
+        currentPrograms: [NamedEntity], incomingPrograms: [NamedEntity],
+        // The native exercise importer never deletes (see namedRestoreDiff);
+        // every other caller leaves this at the default.
+        includeRemovedExercises: Bool = true
+    ) -> NamedRestorePreview {
+        NamedRestorePreview(
+            exercises: namedRestoreDiff(current: currentExercises, incoming: incomingExercises, includeRemoved: includeRemovedExercises),
+            tracks: namedRestoreDiff(current: currentTracks, incoming: incomingTracks),
+            gyms: namedRestoreDiff(current: currentGyms, incoming: incomingGyms),
+            sessions: namedRestoreDiff(current: currentSessions, incoming: incomingSessions),
+            programs: namedRestoreDiff(current: currentPrograms, incoming: incomingPrograms)
+        )
+    }
 }
