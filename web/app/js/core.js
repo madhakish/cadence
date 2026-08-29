@@ -2374,6 +2374,54 @@ export function advanceAccessory(state, perf) {
   return next;
 }
 
+// A history-aware first-set target for an off-program (ad-hoc/accessory)
+// exercise, replacing the generic catalog default whenever the lifter has
+// already performed this exact exercise+load-basis pairing.
+//
+// Repeats the prior top-of-session weight/reps by default. Adds one
+// `incrementLb` step ONLY when the prior top-weight sets were both clean AND
+// left reps in reserve (rir2/rir3plus) — the one state that actually shows
+// headroom. Grindy, wobbly, rir1, or unflagged exposures hold flat: history
+// without a legible "there was more in the tank" signal must not be read as
+// one.
+//
+// Bodyweight and assisted work follow the same suppression PRDetection
+// already applies to load PRs (`supportsLoadPR`): there is no honest
+// external-load bump to offer, so weight is always repeated and only the rep
+// count carries the suggestion.
+//
+// Returns null when there is no prior exposure, so the caller's existing
+// generic-catalog fallback still applies. Mirrors CadenceCore
+// `ProgramProgression.suggestedAdHocFirstSetTarget` 1:1.
+export function suggestedAdHocFirstSetTarget(exposure, incrementLb = 5) {
+  if (!exposure) return null;
+  if (!supportsLoadPR(exposure.loadBasis)) {
+    return { weightLb: exposure.weightLb, reps: exposure.reps };
+  }
+  const roomInReserve = exposure.quality === "clean"
+    && (exposure.rir === "rir2" || exposure.rir === "rir3plus");
+  const weightLb = roomInReserve ? exposure.weightLb + incrementLb : exposure.weightLb;
+  return { weightLb, reps: exposure.reps };
+}
+
+// A short "where did this number come from" disclosure for a history-based
+// ad-hoc first-set suggestion — the suggestion itself
+// (`suggestedAdHocFirstSetTarget`) is otherwise silent about its origin.
+// Reuses the app's existing relative-time wording (`agoLabel` in
+// views/session.js) rather than inventing a second "how long ago" vocabulary
+// the lifter would have to learn. Mirrors CadenceCore
+// `ProgramProgression.historyProvenanceLabel` 1:1.
+export function historyProvenanceLabel(exposureDate, asOfDate) {
+  const days = Math.max(0, Math.floor((new Date(asOfDate) - new Date(exposureDate)) / 86400000));
+  let when;
+  if (days === 0) when = "today";
+  else if (days === 1) when = "yesterday";
+  else if (days < 14) when = `${days}d ago`;
+  else if (days < 70) when = `${Math.floor(days / 7)}w ago`;
+  else when = `${Math.floor(days / 30)}mo ago`;
+  return `from your last exposure, ${when}`;
+}
+
 // The next `count` exposures a slot will actually produce.
 //
 // The point of the deterministic engine is that its output can be audited, and

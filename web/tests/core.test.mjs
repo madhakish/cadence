@@ -1106,6 +1106,42 @@ let fractional = C.advanceAccessory(
   { completedSets: 3, minRepsAchieved: 12, anyStoppedEarly: false });
 ok(fractional.weightLb === 12.5 && fractional.currentReps === 8, "a 2.5 lb accessory increment is added unrounded");
 
+// ---- off-program first-set suggestion (suggestedAdHocFirstSetTarget) ----
+// Mirrors CadenceCore ProgramProgressionTests' off-program suggestion block.
+eq(C.suggestedAdHocFirstSetTarget(null), null, "no history returns null");
+
+let repeatTarget = C.suggestedAdHocFirstSetTarget(
+  { weightLb: 135, reps: 8, loadBasis: "totalBar", quality: "grindy", rir: "rir1" });
+ok(repeatTarget.weightLb === 135 && repeatTarget.reps === 8, "repeats weight/reps by default");
+
+for (const rir of ["rir2", "rir3plus"]) {
+  const upgraded = C.suggestedAdHocFirstSetTarget(
+    { weightLb: 135, reps: 8, loadBasis: "totalBar", quality: "clean", rir }, 5);
+  ok(upgraded.weightLb === 140 && upgraded.reps === 8, `clean + ${rir} shows room in reserve`);
+}
+
+for (const [quality, rir] of [["grindy", "rir2"], ["wobble", "rir3plus"], ["clean", "rir1"], [null, null], ["clean", null]]) {
+  const held = C.suggestedAdHocFirstSetTarget(
+    { weightLb: 135, reps: 8, loadBasis: "totalBar", quality, rir }, 5);
+  ok(held.weightLb === 135 && held.reps === 8, `quality=${quality} rir=${rir} must hold flat`);
+}
+
+for (const [loadBasis, weightLb] of [["bodyweight", 0], ["assisted", 40]]) {
+  const bodyweightTarget = C.suggestedAdHocFirstSetTarget(
+    { weightLb, reps: 10, loadBasis, quality: "clean", rir: "rir3plus" }, 5);
+  ok(bodyweightTarget.weightLb === weightLb && bodyweightTarget.reps === 10,
+    `${loadBasis} never receives a fabricated weight change, even with room in reserve`);
+}
+
+// ---- ad-hoc suggestion provenance (historyProvenanceLabel) ----
+// Mirrors CadenceCore ProgramProgressionTests' provenance block.
+eq(C.historyProvenanceLabel("2026-03-10T12:00:00Z", "2026-03-10T12:00:00Z"),
+  "from your last exposure, today", "same day");
+eq(C.historyProvenanceLabel("2026-03-05T12:00:00Z", "2026-03-10T12:00:00Z"),
+  "from your last exposure, 5d ago", "5 days ago");
+eq(C.historyProvenanceLabel("2026-02-17T12:00:00Z", "2026-03-10T12:00:00Z"),
+  "from your last exposure, 3w ago", "3 weeks ago");
+
 // ---- plate colours (gym scheme) ----
 eq(C.plateColorToken({ value: 55, unit: "lb" }), "red", "55 lb red");
 eq(C.plateColorToken({ value: 45, unit: "lb" }), "blue", "45 lb blue");

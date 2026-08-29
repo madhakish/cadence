@@ -326,7 +326,7 @@ struct ActiveSessionView: View {
         }
     }
 
-    /// Extracted from `body` — the seven-argument section call plus the recall
+    /// Extracted from `body` — the multi-argument section call plus the recall
     /// lookup pushed the List builder past the type-checker's budget.
     private var exerciseSections: some View {
         let recall = recallLines()
@@ -337,6 +337,7 @@ struct ActiveSessionView: View {
                 gym: gym,
                 allExercises: allExercises,
                 lastTime: recallLine(for: entry, in: recall),
+                adHocExposure: mostRecentTopExposure(for: entry),
                 onDropLoad: { autoregEntry = entry },
                 onWork: { currentEntry = $0 },
                 onRemove: { removeExercise(entry) },
@@ -476,6 +477,25 @@ struct ActiveSessionView: View {
         return ["Last", role, day].compactMap { $0 }.joined(separator: " ")
     }
 
+    /// The lifter's most recent completed top-weight set for this exact
+    /// entry, scoped exactly like `recallEntry`/`lastTime`: slotless
+    /// exercises match by name and role alone, so a program slot's history
+    /// never leaks into an off-program suggestion or vice versa. Lives here
+    /// (not on `ExerciseSection`) because it needs
+    /// `completedSessions`/`session`/`recallEntry`, which only this view has.
+    private func mostRecentTopExposure(for entry: SessionExercise) -> RecentTopExposure? {
+        guard entry.exercise != nil else { return nil }
+        for past in completedSessions where past.persistentModelID != session.persistentModelID {
+            guard let recalled = recallEntry(for: entry, in: past),
+                  let top = recalled.workingSets.max(by: { $0.weightLb < $1.weightLb }) else { continue }
+            return RecentTopExposure(
+                weightLb: top.weightLb, reps: top.reps, loadBasis: top.loadBasis,
+                quality: top.quality?.rawValue, rir: top.rir?.rawValue, date: past.date
+            )
+        }
+        return nil
+    }
+
     private func addExercise(_ exercise: Exercise) {
         let entry = SessionExercise(order: session.exercises.count, exercise: exercise)
         entry.stampBarID(for: exercise, bar: gym?.defaultBar ?? .bar45lb)
@@ -568,6 +588,13 @@ private struct ExerciseSection: View {
     let allExercises: [Exercise]
     /// Previous-performance context, or nil for a first-ever lift.
     let lastTime: String?
+    /// This entry's most recent completed top-of-session exposure, scoped by
+    /// `recallEntry` exactly like `lastTime` (program-slot matching for a
+    /// programmed entry, name+role matching for an off-program one).
+    /// Precomputed by `ActiveSessionView` (which owns
+    /// `completedSessions`/`recallEntry`); nil with no prior history. Drives
+    /// both the first-set default weight and its provenance disclosure.
+    let adHocExposure: RecentTopExposure?
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
     let onWork: (SessionExercise) -> Void
@@ -811,6 +838,17 @@ private struct ExerciseSection: View {
                                             exerciseName: entry.exercise?.name ?? "")
                         }
                     }, onRemove: { removeSet(set) })
+                    // Discloses where the first working set's ad-hoc history
+                    // suggestion came from — only for that set, and only when
+                    // a suggestion actually shaped it (never the silent
+                    // catalog-default fallback).
+                    if !set.isWarmup,
+                       entry.orderedSets.first(where: { !$0.isWarmup })?.persistentModelID == set.persistentModelID,
+                       let firstSetProvenance {
+                        Text(firstSetProvenance)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     // Loadout visualization — plates for barbell lifts, the
                     // rack number for dumbbell lifts. Mirrors web.
                     if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
@@ -998,7 +1036,7 @@ private struct ExerciseSection: View {
         let carryLb = Self.startingCarryLoadLb(entry: entry, last: last)
         let set = SetEntry(
             order: entry.sets.count,
-            weightLb: isTimed ? carryLb : (last?.weightLb ?? entry.plannedWeightLb ?? firstSetDefaultLb(for: entry.exercise)),
+            weightLb: isTimed ? carryLb : (last?.weightLb ?? entry.plannedWeightLb ?? firstSetDefaultLb()),
             reps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             isPerSide: entry.exercise?.isUnilateral ?? false,
             enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
@@ -1026,20 +1064,36 @@ private struct ExerciseSection: View {
     /// The first set of an exercise added mid-session, with no plan and no
     /// predecessor to inherit from. The old default was a literal 45 — the
     /// empty bar — which prescribed phantom load to everything else: a
-    /// bodyweight GHD sit-up was born asking for 45 lb. The conservative
-    /// bootstrap catalog already knows a starting weight per movement and
-    /// type (0 for bodyweight/band, light for dumbbell/machine). A barbell
-    /// movement is floored at the bar actually in hand: the catalog's light
-    /// recommendations assume a lighter bar, and a total-bar set cannot
-    /// weigh less than its own bar.
-    private func firstSetDefaultLb(for exercise: Exercise?) -> Double {
-        guard let exercise else { return 0 }
-        let catalog = ProgrammingDefaultsData.recommendation(
+    /// bodyweight GHD sit-up was born asking for 45 lb. When the lifter has
+    /// already performed this off-program exercise, their own last top-of-
+    /// session exposure (`adHocExposure`, precomputed by `ActiveSessionView`)
+    /// is a far better starting point than the generic catalog — the
+    /// conservative bootstrap catalog only applies when there is no such
+    /// history. A barbell movement is floored at the bar actually in hand
+    /// either way: the catalog's light recommendations assume a lighter bar,
+    /// and a total-bar set cannot weigh less than its own bar.
+    private func firstSetDefaultLb() -> Double {
+        guard let exercise = entry.exercise else { return 0 }
+        let catalogLb = ProgrammingDefaultsData.recommendation(
             exerciseName: exercise.name,
             slotCategory: exercise.categoryRaw,
             exerciseType: exercise.typeRaw
         ).weightLb
-        return exercise.type == .barbell ? max(catalog, effectiveBar.lb) : catalog
+        let suggestedLb = ProgramProgression.suggestedAdHocFirstSetTarget(
+            fromLastTopExposure: adHocExposure
+        )?.weightLb ?? catalogLb
+        return exercise.type == .barbell ? max(suggestedLb, effectiveBar.lb) : suggestedLb
+    }
+
+    /// Where the history-based suggestion prefilled into this entry's first
+    /// working set came from, so the UI can disclose it instead of leaving a
+    /// history-derived number unexplained. Nil whenever there is no prior
+    /// exposure (the catalog default applied silently, as before).
+    private var firstSetProvenance: String? {
+        guard let exposure = adHocExposure,
+              ProgramProgression.suggestedAdHocFirstSetTarget(fromLastTopExposure: exposure) != nil
+        else { return nil }
+        return ProgramProgression.historyProvenanceLabel(exposureDate: exposure.date, asOf: .now)
     }
 }
 

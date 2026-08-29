@@ -227,6 +227,31 @@ export async function openSession(id) {
     return null;
   }
 
+  // Off-program history for `C.suggestedAdHocFirstSetTarget`: the lifter's
+  // most recent completed top-of-session exposure for this exact slotless
+  // exercise. Scoped like `lastTimeLine`'s program recall — slotless
+  // exercises match by name and role alone, so a program slot's history
+  // never leaks into an ad-hoc suggestion or vice versa. `date` is carried
+  // only so `historyProvenanceLabel` can disclose where the suggestion came
+  // from; it plays no part in the suggestion math itself.
+  function mostRecentTopExposure(se) {
+    const definition = exMap.get(se.exerciseName);
+    for (const p of priorSessions) {
+      const entry = (p.exercises || []).find((candidate) =>
+        candidate.exerciseName === se.exerciseName && !candidate.programRole);
+      if (!entry) continue;
+      const working = (entry.sets || []).filter((set) => !set.isWarmup && set.status === "completed");
+      const top = working.reduce((best, set) => (!best || set.weightLb > best.weightLb ? set : best), null);
+      if (!top) continue;
+      return {
+        weightLb: top.weightLb, reps: top.reps,
+        loadBasis: C.LOAD_BASES.includes(top.loadBasis) ? top.loadBasis : C.resolvedLoadBasis(definition),
+        quality: C.setQuality(top.flags), rir: C.setRIR(top.flags), date: p.date,
+      };
+    }
+    return null;
+  }
+
   // Per-exercise entry/display unit + bar. Session-local. The bar is chosen
   // independently of the plate unit (most bars are 45 lb whatever you load).
   const unitByEx = {};
@@ -444,6 +469,15 @@ export async function openSession(id) {
     se.sets.sort((a, b) => a.order - b.order);
     const showAll = expandedEntries.has(se);
     const currentSet = se.sets.find((set) => !set.isWarmup && set.status === "planned");
+    // Discloses where the first working set's history-based suggestion came
+    // from — only for that set, and only when a suggestion actually shaped
+    // it (never the silent catalog-default fallback). Mirrors native
+    // ActiveSessionView's firstSetProvenance.
+    const firstWorkingSet = se.sets.find((set) => !set.isWarmup);
+    const adHocExposure = mostRecentTopExposure(se);
+    const firstSetProvenance = C.suggestedAdHocFirstSetTarget(adHocExposure)
+      ? C.historyProvenanceLabel(adHocExposure.date, Date.now())
+      : null;
     se.sets.forEach((s, index) => {
       const prior = se.sets[index - 1];
       const loadChange = !!prior && (Math.abs((prior.weightLb || 0) - (s.weightLb || 0)) > 0.001
@@ -451,6 +485,7 @@ export async function openSession(id) {
       card.append(setRow(se, s, body, {
         compact: !showAll && s !== currentSet,
         showLoadout: showAll || s === currentSet || loadChange,
+        provenance: s === firstWorkingSet ? firstSetProvenance : null,
       }));
     });
 
@@ -545,7 +580,7 @@ export async function openSession(id) {
     return sel;
   }
 
-  function setRow(se, s, body, { compact = false, showLoadout = true } = {}) {
+  function setRow(se, s, body, { compact = false, showLoadout = true, provenance = null } = {}) {
     const ex = exMap.get(se.exerciseName);
     const u = setUnit(se, s);
     // Steady-state cardio (type conditioning: Walk/Bike/Ruck…) logs
@@ -634,6 +669,10 @@ export async function openSession(id) {
         // is meaningless there — same exclusion the quality button uses.
         (isCardio || isTimed) ? null : rirButton));
 
+    const provenanceRow = provenance
+      ? ui.h("div", { class: "sub", style: { margin: "2px 0 0" }, text: provenance })
+      : null;
+
     // Loadout visualization — plates for barbell lifts, the rack number for
     // dumbbell lifts. Mirrors native.
     if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
@@ -650,13 +689,13 @@ export async function openSession(id) {
       )) {
         wrap.append(ui.h("span", { class: `sub plate-detail${detail.kind === "target" ? " warn" : ""}`, text: detail.text }));
       }
-      return ui.h("div", {}, row, wrap);
+      return provenanceRow ? ui.h("div", {}, row, provenanceRow, wrap) : ui.h("div", {}, row, wrap);
     }
     if (showLoadout && ex && ex.type === "dumbbell" && s.weightLb > 0) {
-      return ui.h("div", {}, row, ui.h("div", { class: "barbell-wrap" },
-        dumbbellSVG(s.weightLb, u), ui.h("span", { class: "sub", text: u })));
+      const wrap = ui.h("div", { class: "barbell-wrap" }, dumbbellSVG(s.weightLb, u), ui.h("span", { class: "sub", text: u }));
+      return provenanceRow ? ui.h("div", {}, row, provenanceRow, wrap) : ui.h("div", {}, row, wrap);
     }
-    return row;
+    return provenanceRow ? ui.h("div", {}, row, provenanceRow) : row;
   }
 
   function chooseStatus(se, s, body) {
@@ -707,17 +746,21 @@ export async function openSession(id) {
     // First set with no plan and no predecessor: the old default was a
     // literal 45 — the empty bar — which prescribed phantom load to
     // everything else (a bodyweight GHD sit-up was born asking for 45 lb).
-    // The conservative bootstrap catalog already knows a starting weight per
-    // movement and type. A barbell movement is floored at the bar actually
-    // in hand: the catalog's light recommendations assume a lighter bar, and
-    // a total-bar set cannot weigh less than its own bar. Mirrors the native
-    // logger's firstSetDefaultLb.
+    // When the lifter has already performed this exercise, their own last
+    // top-of-session exposure is a far better starting point than the
+    // generic catalog — the conservative bootstrap catalog only applies when
+    // there is no such history. A barbell movement is floored at the bar
+    // actually in hand either way: the catalog's light recommendations
+    // assume a lighter bar, and a total-bar set cannot weigh less than its
+    // own bar. Mirrors the native logger's firstSetDefaultLb.
     const catalogLb = ex
       ? ProgrammingDefaults.recommendation(se.exerciseName, ex.category, ex.type).weightLb
       : 0;
+    const suggested = C.suggestedAdHocFirstSetTarget(mostRecentTopExposure(se));
+    const baseDefaultLb = suggested ? suggested.weightLb : catalogLb;
     const firstSetDefaultLb = ex && ex.type === "barbell"
-      ? Math.max(catalogLb, C.barLb(C.barById(se.barId || gymState.value?.defaultBarId)))
-      : catalogLb;
+      ? Math.max(baseDefaultLb, C.barLb(C.barById(se.barId || gymState.value?.defaultBarId)))
+      : baseDefaultLb;
     const w = durationBased ? carryLb : (last ? last.weightLb : (se.plannedWeightLb ?? firstSetDefaultLb));
     const r = durationBased ? 1 : (last ? last.reps : (se.plannedReps ?? 5));
     const inheritedLoad = last && C.LOAD_BASES.includes(last.loadBasis)
