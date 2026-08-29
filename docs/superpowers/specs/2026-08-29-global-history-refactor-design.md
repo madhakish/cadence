@@ -2,283 +2,243 @@
 
 Date: 2026-08-29
 Status: approved design, pre-implementation
-Baseline: main `7e36047` (v12.0.1, backup schema 10)
+Baseline: main `7e36047` (v12.0.1, backup schema 10, web DB_VERSION 7)
+Epic: #155 — program-independent lift history, training anchors, and
+lossless program switching. Where this document and #155 differ on code
+shapes, #155 wins: it was written against the inspected seams.
 
 ## Problem
 
-Athlete strength data is duplicated and drifts. `baseWeightLb` /
-`estimatedMaxLb` live on program lifts (`ProgramModels.swift`), on tracked
-lifts (`TrackingModels.swift`), and in the web mirror (`web/app/js/db.js`) —
-each program instance carries its own stale copy of what the athlete can
-lift. Consequences observed in a real 12.0.1 export:
+Athlete strength data is duplicated and drifts. `estimatedMaxLb` is copied
+into every program slot (`ProgramModels.swift`) and treated as if each
+program owns the athlete's capability; archived and current copies of the
+same lift disagree in real 12.0.1 exports. `baseWeightLb` is different: it
+is legitimate program-local cursor state (linear working load, Texas slot
+load, wave base, 5/3/1 anchor) and must survive suspension/resume — it is
+NOT deleted by this refactor.
 
-- Archived and current programs hold different copies of the same lift's
-  strength values.
-- Editing a completed session does not consistently update the canonical
-  session or rebuild derived state (a corrected 5×5 deadlift still exported
-  as 235×8).
-- Switching programming styles would today mean re-entering weights and
-  fragmenting history.
+Further confirmed debt (#155):
 
-Separately, prescriptions emit gym-hostile loads: 1.25 lb plates sneaking
-into lower lifts, warmups like 130 lb that nobody loads, and working weights
-(260) that require fiddlier plate setups than their neighbors (255/265).
+- Exercise identity is a display name; joins are stringly typed
+  (`indexedByName()`, `exerciseName` on program slots, name-keyed web
+  store).
+- History projection is computed independently in at least four places
+  (`ProgramTemplates.recordedHistory`, chart e1RM, prior-best grading,
+  recall lines, plus web mirrors).
+- `SessionDetailView.commitCorrections` intentionally does not re-run
+  progression grading or PR detection — a corrected 5×5 deadlift still
+  exported as 235×8.
+
+Separately (user requirement, not in #155): prescriptions emit gym-hostile
+loads — 1.25 lb plates sneaking into lower lifts, 130 lb warmups, working
+weights like 260 that load worse than 255/265.
 
 ## Design principle (load-bearing)
 
-- **Global history answers:** what has this athlete done, and what are they
-  capable of now?
-- **Program template answers:** how does this methodology convert that
-  capability into today's work?
-- **Program instance answers:** where is the athlete inside this block?
+Programs prescribe. Sessions prove. The history projection is rebuildable
+and never becomes another persistent competing truth.
 
-Programs prescribe; they never own history or carry a competing copy of
-athlete strength. Sessions and sets are canonical; all derived state is
-disposable and rebuildable.
+- Global history answers: what has this athlete done; what can they do now?
+- Program template answers: how does this methodology convert capability
+  into today's work?
+- Program (the existing model — already the instance) answers: where is
+  the athlete inside this block?
+
+## Canonical model (#155, verbatim intent)
+
+```text
+Completed sessions + performed sets   — canonical athlete history
+AthleteHistoryIndex                   — disposable in-memory projection
+ProgramTemplateData                   — stateless methodology
+Program                               — one resumable user-specific block
+ProgramLift / ProgramAccessory        — methodology-local cursor state
+```
+
+Explicitly rejected for the first implementation: a persisted LiftProfile.
+Start pure; cache in memory only if profiling proves the scan matters;
+persisting later requires measured justification and a derived-state
+version.
 
 ## Decisions taken during design review
 
 1. **P0 merges more than the calibrated keepers.** From the Chiron probe
    worktrees: undo-import, isPlateaued, release-notes docs page, PLUS the
-   backup named-diff/restore-preview lineage, withCleanup + daysByKind, and
-   ad-hoc targets + provenance captions. The morning-run pair (session time
-   estimate, movement balance) is not merged and sweeps with the run.
-2. **Codex implementation order kept.** Audit → schema → engines →
-   switching → session-edit fix → metadata. Recorded trade-off: the
-   session-edit export bug stays live until P5.
-3. **One batched V11 schema major.** All persisted additions (exercise IDs,
-   LiftProfile, session grouping, SetEquipment, warmup-conditioning fields)
-   ride a single migration and a single backup-schema bump. Features ship
-   incrementally afterward against the already-migrated store.
-4. **Architecture + two proof templates.** Linear progression (behavior
-   port of the current program; acceptance bar: existing users notice
-   nothing) and 5/3/1 (frozen training max; proves snapshot + refresh
-   machinery). Further styles are later content, not part of this plan.
-5. **Plate-math quantization builds once, inside P3**, as the resolver's
-   final stage. No early standalone version.
+   backup named-diff/restore-preview lineage, withCleanup + daysByKind,
+   and ad-hoc targets + provenance captions. The morning-run pair
+   (session time estimate, movement balance) is not merged and sweeps
+   with the run.
+2. **Characterize before architecting.** Stage 0's synthetic regression
+   identifies exactly which persisted projections go stale before any
+   journal/reducer design (supersedes the earlier "edit fix at step 6 /
+   audit-only first" framing — Stage 0 IS the audit, executable).
+3. **Narrow V11 major** (supersedes the earlier "one batched V11"
+   decision, per #155): stable exercise identity + template origin only.
+   Session purpose/grouping, warmup-conditioning role, and belt/strap
+   metadata are later, separate schema work with their own bumps.
+4. **No new program hierarchy.** `Program` is already the instance;
+   `templateID` groups instances by style. No ProgramTemplate/Instance/
+   LiftState rename churn.
+5. **Proof-of-machinery scope for styles.** The switcher and resolver are
+   proven against the existing template set — linear-style progression
+   (current behavior, byte-for-byte gate) plus one frozen-training-max
+   methodology — before any new styles are authored.
+6. **Plate-math quantization builds once, inside the resolver stage**
+   (Stage 3 / P4). No early standalone version.
 
 ## Phase map
 
-Each of P2–P7 gets its own spec → plan → implementation cycle.
+P0–P2 need no persisted-schema change. Each of P1–P8 gets its own
+spec → plan → implementation cycle; PR titles follow #155's sequence.
 
-- **P0 — Chiron harvest** (mechanics, no spec). Six PRs from existing green
-  worktrees, in order: (1) withCleanup + TrainingIntervals.daysByKind,
-  (2) undo-import, (3) TrendProjection.isPlateaued, (4) five-collection
-  named backup diff + restore preview with confirm gate, (5) ad-hoc history
-  targets + provenance captions (from the scope-bug-free t1-r2 worktree),
-  (6) release-notes docs page with break-kind names corrected to
-  Deload/Rest/Away/Active recovery. Then conclude the Chiron run and sweep
-  all probe worktrees. Main is clean before refactor work starts.
-- **P1 — Audit** (output is a document). Every reader/writer of
-  baseWeightLb, estimatedMaxLb, tracked-lift strength, milestones, PRs,
-  banked progression, and every session-edit path, both clients. Validates
-  the V11 shape against reality; answers whether an e1RM formula already
-  exists and where track-level vs program-level strength values disagree.
-- **P2 — V11 schema major.** The only SemVer major in the plan. Details
-  below.
-- **P3 — Engines.** Centralized e1RM, resolveTrainingAnchor,
-  ExerciseEstimateRule table, PlateMath quantizer.
-- **P4 — Program lifecycle.** Template/instance split, activate/suspend/
-  resume, refresh policies, two proof templates. Acceptance tests A–E.
-- **P5 — Session editing + rebuildDerivedState().** Synthetic 5×5
-  regression, idempotent rebuild, integrity-rebuild triggers. Test F.
-- **P6 — Frequency + metadata UX.** Same-day grouping, ruck/stair pre-lift
-  warmup flow, belt/strap filters and guidance. Tests H, I, J.
-- **P7 — History as filter.** Program comparisons, A-vs-B overlays,
-  all-time defaults; full-suite + schema-10 round-trip validation.
-  Tests G, K.
+- **P0 — Chiron harvest** (mechanics, no spec). Six PRs from existing
+  green worktrees, in order: (1) withCleanup +
+  TrainingIntervals.daysByKind, (2) undo-import, (3)
+  TrendProjection.isPlateaued, (4) five-collection named backup diff +
+  restore preview with confirm gate, (5) ad-hoc history targets +
+  provenance captions (scope-bug-free t1-r2 worktree), (6) release-notes
+  docs page with break-kind names corrected. Then conclude the Chiron run
+  and sweep all probe worktrees.
+- **P1 — Stage 0: characterize banked correction.**
+  `test/fix: characterize banked-session correction projections`.
+  Extract `SessionCorrectionService` (native) + web mirror so the view
+  buffers text and delegates; build the synthetic programmed 5×5 deadlift
+  fixture (bank four sets, correct the fifth) and assert independently:
+  stored session, export, volume/work-set summary, chart e1RM points,
+  rotation/banked-day accounting, milestone/PR state, program
+  cursor/pending grade — each correct or demonstrably stale — and
+  idempotence. Gate: no journal design until this inventory exists.
+- **P2 — Stage 1: centralize the history projection.**
+  `refactor: centralize athlete history and e1RM projection`.
+  `AthleteHistory.swift` in CadenceCore + core.js mirror:
+  `CompletedSetSample` → `LiftHistoryProfile` (latest completed load,
+  latest exposure, all-time/recent best e1RM, provenance, exposure
+  count). Preserve current behavior exactly: completed non-warmup sets
+  only, canonical pounds, the existing Epley formula, exact
+  load-semantics handling, no e1RM without external resistance,
+  lifetime-best seeding where templates already use it. Replace duplicate
+  readers incrementally (template creation → custom bootstrap → chart
+  samples → prior-best lookups where semantics match; do not unify
+  readers answering different questions). Gate: program creation is
+  byte-for-byte equivalent on synthetic history.
+- **P3 — Stage 2: stable identity, V11 schema major.**
+  `feat!: add stable exercise identity and backup schema v11`.
+  One compatibility-complete breaking PR: native CadenceSchemaV11 (freeze
+  the shipped V10 snapshot first), backup schema 11 both clients, web
+  DB_VERSION 8. Optional `id`/`exerciseID`/`templateID` fields per #155's
+  model list; idempotent post-open repair assigns every legacy row a
+  portable ID; one deterministic legacy-ID function in CadenceCore
+  mirrored in JS so a v10 backup imports to identical IDs on both
+  clients. Web keeps the name key, adds a unique `byId` index, backfills
+  in the upgrade transaction. Resolution invariant everywhere: ID present
+  → resolve by ID or fail closed; ID absent → legacy name fallback;
+  foreign ID → never bind by coincidental name. Importers accept v0–v10
+  and synthesize IDs; v11 round-trips without identity loss. Gates: real
+  V10 SQLite migration test, fake-indexeddb V7→V8 test, v10 fixture
+  imports both clients, native→web→native v11 round trip, double-run
+  migration produces no changes. The P0-merged restore-preview/named-diff
+  UX is the user-facing safety net for this release.
+- **P4 — Stage 3: training-anchor resolver (+ plate math).**
+  `feat: resolve new program anchors from global history`.
+  `TrainingAnchorResolver.swift` + mirror, consuming AthleteHistoryIndex
+  only (no independent scans). Order: explicit override → exact-exercise
+  completed history → exact latest successful load (styles that need a
+  load, e.g. double progression) → explicit related-lift rule → explicit
+  movement-family/core-lift rule → existing `ProgrammingDefaultsData`.
+  Returns e1RM/latest work + source + sourceExerciseID + confidence +
+  explanation; UI may say "estimated from Deadlift", never presents an
+  estimate as measured. Related-lift rules: small versioned data table
+  (front/box squat ← Back Squat; RDL/snatch-grip/speed ← Deadlift; speed/
+  close-grip/floor press ← horizontal anchors; jerk/overhead ← exact
+  C&J or strict press; Olympic variants exact-first, low-confidence
+  strength fallback), coefficients in data with tests, no substring
+  matching. Methodology conversion per style; resume never auto-refreshes
+  a suspended program. **PlateMath quantizer as the final stage**:
+  inventory-aware (default 45/25/10/5/2.5 per side, no 1.25s, 45 bar;
+  per-gym inventory on the Gym model). Warmups snap to large-plate loads
+  only (130 → 135, never a 2.5). Working sets: within ±5 lb prefer fewest
+  small plates per side (260 → 265 progressing, → 255 backing off).
+  Near-max singles/doubles keep full resolution. Property test: never
+  emit a load the inventory cannot build. Gate: parity tests for exact /
+  related / family / default / bodyweight / per-implement dumbbell /
+  shelved paths.
+- **P5 — Stage 4: explicit program switching.**
+  `feat: add resumable program switcher and new-block flow`.
+  `ProgramActivationService` + web mirror replaces direct `isActive`
+  mutation in Settings. Three actions: resume existing (cursor untouched),
+  start new block of this style, switch to another style (both
+  instantiate from current global history via the resolver — no weight
+  prompts). Rules: exactly one active program; inactive programs retain
+  cycle/rotation/day/slot cursors/stalls/pending; open sessions stay
+  attached to their creating program, never silently retagged; switching
+  fails visibly rather than orphaning; activation only after successful
+  persistence. UI: prominent switcher from Today/Home with anchor preview
+  showing measured/estimated/default source; Settings stays the deep
+  editor. Gate: A→B→A preserves A's exact cursor and all sessions.
+- **P6 — Stage 5: history filters and comparison.**
+  `feat: filter and compare all-time history by program style`.
+  ProgressionChartsView + web: all programs (default) / one instance /
+  one style across blocks / compare two. Uses session `programID` +
+  `programTemplateID` snapshots, legacy name fallback for legacy rows
+  only. Rotations view gets an explicit program selector — changing the
+  active program never rewrites the matrix being read. Gate: one Back
+  Squat history across three methodologies renders as one all-time
+  series and isolates correctly.
+- **P7 — Stage 6: banked-correction reconciliation.**
+  `fix!: reconcile banked corrections with persisted progression state` —
+  only if P1 proves a schema/journal is necessary. Always rebuild
+  immediately: summaries, chart points, recall, exports, PR/milestone
+  projection (regenerated deterministically, never appended), computed
+  reports. Progression state: extract `SessionCompletion.advanceProgram`
+  into a pure reducer first, then the smallest proven persistence
+  boundary — current-cycle regrade, or a typed per-session checkpoint
+  journal from a known baseline. New programs store a replay baseline;
+  legacy programs get an explicit migration checkpoint; the UI never
+  claims a legacy cursor was rebuilt when it was not. Gate: correct +
+  rebuild twice → identical state, no duplicate advancement.
+- **P8 — later, separate schema work** (own bumps, not part of V11):
+  optional session purpose/group metadata (strength / technique /
+  warmup-conditioning / conditioning / recovery — multiple sessions per
+  date already work); an explicit warmup-conditioning role so a routine
+  pre-lift 10-minute ruck or 20 flights is never a fatigue penalty or a
+  failed prescription (track existing duration/distance/load/incline/
+  flights; no second movement identity; no auto-escalation because it is
+  repeatable); set-level `beltUsed`/`strapsUsed` with legacy nil =
+  unknown, never false ("Belted Deadlift" is not a new exercise); belt
+  guidance by relative intensity/effort (optional ~70–80% e1RM,
+  increasingly useful 80%+/RPE 8+, beltless backoffs for bracing), as
+  recommendations with an optional template gear policy — no
+  bodyweight-ratio gates.
 
-## V11 data model
+## File map, invariants, PR sequence
 
-Target shapes; P1's audit finalizes the mapping onto existing models.
-
-- **ExerciseDefinition** — existing `Exercise` model gains stable `id` +
-  `aliases` as canonical identity; names become display/search values.
-  Sessions and program slots migrate from name-references to
-  id-references. The seed catalog maps known names → ids during migration;
-  unrecognized names get new definitions, never guesses. Variations remain
-  distinct exercises related only through explicit estimation rules — no
-  string matching.
-- **SessionRecord / SetRecord** — existing session models gain
-  `sessionGroupId?`, `sequenceWithinDay?`, `sessionPurpose?` (strength /
-  technique / warmupConditioning / conditioning / recovery / mixed),
-  `revision` / `lastEditedAt`, per-set `SetEquipment` (belt / straps /
-  sleeves / wraps: unknown | false | true — legacy migrates to `unknown`,
-  never `false`), and warmup-conditioning fields (modality, load, duration,
-  distance, pace, incline, flights, placement: preLift | betweenLifts |
-  postLift | standalone).
-- **LiftProfile** — new persisted store on both clients (SwiftData model +
-  IndexedDB object store), explicitly a disposable projection: carries
-  `estimatorVersion` + `sourceSetIds`, rebuilt idempotently from sessions,
-  never edited directly. Persisted (not computed-on-demand) for
-  phone/widget performance; canonical truth stays with sessions. Holds
-  current e1RM, all-time best e1RM, latest completed work set, recent top
-  sets, recent exposure date, confidence.
-- **Program split** — current program model becomes ProgramTemplate
-  (stateless: days, phases, load rules, progression rules, training-max
-  policy + refresh policy), ProgramInstance (active/suspended/archived,
-  cursor, cycle, phase, rotation state, activation history, overrides),
-  ProgramLiftState (per-slot progression state; optional
-  trainingMaxSnapshot + snapshot source when template policy requires one —
-  derived from a global LiftProfile, never a replacement for it).
-  `baseWeightLb` / `estimatedMaxLb` survive only as schema-10 decode
-  inputs; nothing reads them post-migration.
-
-## Migration (P2)
-
-- One SwiftData plan extended from every supported checksum, including the
-  PR-72 branched history, per the repository migration protocol.
-- LiftProfiles seeded by priority: completed session history first;
-  existing milestone/history projections as validation only; program
-  `estimatedMaxLb` only when no valid session history exists; conservative
-  default last. Never the largest stale estimate.
-- Gear metadata on old records → `unknown`.
-- Program lift references convert from exerciseName to exerciseId.
-- Backup: `BackupContract.currentSchemaVersion` and `BACKUP_SCHEMA_VERSION`
-  10 → 11 together; schema-10 import kept; newer-than-11 rejected before
-  writes; synthetic fixtures regenerated deliberately;
-  `docs/reference/backup-schema.md` updated.
-- Web: `DB_VERSION` bump with `onupgradeneeded` transforms and
-  prior-version open tests.
-- Proof: real on-disk stores in `CadenceMigrationTests` for all affected
-  checksums; fresh-store tests are insufficient. Marked `feat!:`.
-- The P0-merged restore-preview/named-diff UX is the user-facing safety net
-  for this release's imports.
-
-## Engines (P3)
-
-All engines are pure functions in `CadenceCore` mirrored 1:1 in
-`web/app/js/core.js` with matching test cases in both suites.
-
-- **e1RM** — exactly one versioned implementation; `estimatorVersion`
-  stamped into every LiftProfile. Completed work sets only; warmups,
-  failed, skipped, incomplete sets excluded; very high-rep estimates get
-  reduced confidence; a true single evaluates to its actual weight; current
-  and all-time tracked separately; historical e1RM events preserved for
-  charts; program-style changes never overwrite completed history.
-  Load-basis normalization happens here once (totalBar / perImplement /
-  externalTotal / bodyweight / assisted) — dumbbells cannot double-double;
-  bodyweight/assisted lifts get their own capacity model; conditioning
-  progresses on duration/distance/load with no e1RM.
-- **resolveTrainingAnchor(exerciseId, template, instance, context)** —
-  resolution order: explicit user override → valid exact-exercise
-  LiftProfile → recent exact-exercise work at a compatible rep scheme →
-  explicit related-exercise rule → movement-pattern anchor → core-lift
-  anchor → conservative default. Returns value, source, confidence,
-  sourceExerciseId, sourceSetIds, relation rule id/version, explanation —
-  so the UI can show "Estimated from Back Squat" with one-tap correction.
-  Anchor families: Back Squat (squat), Deadlift (hinge), Barbell Bench
-  (horizontal press, with recorded dumbbell/incline fallback), strict OHP
-  (vertical press); Olympic lifts prefer exact history, related-strength
-  estimates only as low-confidence fallback. Shelved exercises are never
-  silently reactivated; historical strength may inform estimates.
-- **ExerciseEstimateRule** — small, explicit, versioned relation table
-  (source, target, coefficient, confidence, load-basis pair, min/max
-  clamps). Seeded only with rules the proof templates and common
-  substitutions need: Front Squat ← Back Squat, RDL ← Deadlift,
-  Snatch-Grip DL ← Deadlift, Incline ← Bench, Push Press ← OHP,
-  Box Squat ← Back Squat, Weighted Pull-up ← Pull-up. No speculative
-  ontology.
-- **PlateMath quantizer** — the resolver's final stage
-  (anchor → percentage → quantize → prescription). Inventory-aware:
-  default 45/25/10/5/2.5 per side, no 1.25s, 45 lb bar; per-gym inventory
-  rides the existing Gym model. Warmup rule (aggressive): snap to
-  large-plate-friendly loads only (45/25/10 combos — 130 → 135); never
-  prescribe a warmup needing 2.5s. Working-set rule: within ±5 lb prefer
-  the load with the fewest small plates per side (260 → 265 when
-  progressing, → 255 on deload/backoff; direction from progression
-  context). Precision escape hatch: near-max singles/doubles keep full
-  resolution. Property test: the quantizer never emits a load the
-  inventory cannot build.
-- **rebuildDerivedState() (ships P5)** — one entry point plus scoped
-  variant `(affectedExerciseIds, fromDate)`; idempotent; triggered after
-  session edit, backup import, schema migration, and estimator-version
-  change. Rebuilds: exercise history, current/all-time e1RM, PRs,
-  milestones, volume, rep-scheme records, banked/completion counts,
-  rotation completion, cycle advancement, progression state, stall
-  detection, readiness, recommendations, charts, export data. Stale
-  coaching decisions are marked superseded in an audit log, never
-  re-applied.
-
-## Program lifecycle (P4)
-
-- `activateProgram(templateId, mode)` / `suspendProgram(instanceId)` /
-  `resumeProgram(instanceId)`.
-- Modes: `resumeExistingInstance` (cursor, rotation, cycle, phase, and
-  progression state preserved; loads refresh per template policy; no
-  weight prompts; no history reset), `startNewBlock` (new instance from
-  template, every lift seeded from LiftProfiles or fallback estimates,
-  previous instance preserved as filterable history), `createNewInstance`
-  (parallel instance of the same style, same global history).
-- `TrainingMaxRefreshPolicy`: eachSession | eachRotation | eachCycle |
-  onActivation | manual — template-defined, not user-facing configuration.
-- Switching must never: delete/rename sessions, rewrite historical program
-  tags, reset PRs/charts/bodyweight history, duplicate exercises, copy
-  stale e1RMs from archived programs, or prompt for known weights.
-- Completed sessions keep their original program context. All-time history
-  is the default view; program is a filter, not a storage boundary.
-  Required comparisons: all programs, one program, A vs B, same lift
-  across styles (P7).
-
-## Frequency, warmups, gear (P6)
-
-- No Monday–Sunday assumption: training days, rotations, cycles,
-  mesocycles, recovery intervals; calendar weeks are presentation
-  metadata. `preferredSessionSpacingDays` stays guidance and must not
-  block consecutive days, variable rest, multiple sessions per date,
-  AM/PM splits, technique micro-sessions, or separated conditioning.
-- Distinguish distribution frequency vs practice frequency vs dose
-  frequency; readiness/coaching use actual performance trends, not
-  "sessions < 24 h apart" alone.
-- Ruck / stair-climber pre-lift warmups modeled explicitly as warmup
-  conditioning (~0.5 mi / ~10 min / ~3.2 mph / ~20 lb / ~2% grade, or
-  ~20 flights): tracked with modality, load, duration, distance, pace,
-  incline, flights, placement, optional effort rating; never classified as
-  a failed strength prescription; never an automatic readiness penalty; no
-  automatic intensity escalation just because it is repeatable. Progression
-  recommendations distinguish warmup purpose from dedicated conditioning.
-- Belt/straps: set-level metadata, never separate exercises. Unified
-  history with belted/beltless and strapped/unstrapped filters. Guidance by
-  relative intensity and effort (beltless easy warmups; optional ~70–80%
-  e1RM; increasingly useful 80%+ / RPE 8+; beltless backoffs for bracing
-  practice) — recommendations, not enforcement; no bodyweight-ratio
-  gates. Templates may declare a gear policy (beltless / optional /
-  recommended / competitionSpecific).
+Owned by #155 (file map for shared core / native / web / tests / docs;
+the seven INV-* invariants; the eight-PR sequence). This document does
+not duplicate them; treat #155 as the source of truth for those lists.
+The quantizer adds one shared-core file pair to that map
+(`PlateMath.swift` + core.js mirror) and its docs land with
+`docs/reference/progression-rules.md`.
 
 ## Testing strategy
 
-- Acceptance tests A–K from the brief map onto phases: A–E, G → P4;
-  F → P5; H–J → P6; K → P2 + P7.
-- Written as mirrored CadenceCore + core.js unit tests; where they cross
-  persistence, real on-disk CadenceMigrationTests stores and
-  fake-indexeddb smoke tests.
-- Pure engines get property-style coverage (quantizer inventory
-  invariant; resolver order totality; rebuild idempotence).
-- Synthetic fixtures only: a schema-10 fixture for K, the 5×5 edit fixture
-  for F (one incorrect final set corrected to 5×5; verify canonical
-  session, e1RM, volume, milestone, banked-once progression,
-  recommendations, chart, and export all agree; rebuild idempotent). No
-  personal exports committed, ever.
+- Every stage gate above is the acceptance bar; stages ship only with
+  their gate tests green on both suites.
+- Pure engines (projection, resolver, quantizer, progression reducer) get
+  mirrored CadenceCore + core.js cases and property-style coverage
+  (quantizer inventory invariant, resolver order totality, rebuild
+  idempotence).
+- Persistence gates use real on-disk stores in CadenceMigrationTests and
+  fake-indexeddb upgrade tests — fresh-store tests are insufficient.
+- Synthetic fixtures only; no personal export is ever committed.
 
 ## Release train
 
-- P0: individual `feat:` / `fix:` / `docs:` PRs, each CI-green and
+- P0: individual `feat:`/`fix:`/`docs:` PRs, each CI-green,
   squash-merged with release-meaningful titles.
-- P2: the one `feat!:` major, migration notes in the PR body; post-merge
-  main run watched through TestFlight per doctrine.
-- P3–P7: minors against the migrated store.
+- P1–P2: `test:`/`fix:`/`refactor:` — no schema change, no major.
+- P3: the one `feat!:` major of the epic's core; migration notes in the
+  PR body; post-merge main run watched through TestFlight per doctrine.
+- P4–P6: minors. P7: `fix!:` only if P1's inventory demands persisted
+  change. P8: separate bumps when scheduled.
 - Every phase: Linux parse gate → macOS jobs → migration scheme when
   persistence is touched, on the exact head commit; both mirrored suites
   green.
-
-## Non-negotiable rules (carried from the brief)
-
-Sessions and sets are canonical. Derived state must be rebuildable.
-Exercise identity must be stable. Athlete strength is global. Programs
-prescribe; they do not own history. Program-specific progression state is
-allowed; program-specific duplicate strength facts are not. Existing users
-never re-enter known weights. Switching programs never resets progress.
-Completed historical prescriptions remain historical facts. No personal
-training export in the repository. No drive-by refactor. No name-based
-special-case pile. No broad abstraction hierarchy where structs and
-deterministic functions solve it.
