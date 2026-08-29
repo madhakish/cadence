@@ -41,6 +41,8 @@ section that matches what you're trying to do.
   boundaries, readiness lights, capacity budgets, and temporary reductions
 - [Behavioural invariants](reference/invariants.md) — the rules that must
   not silently change, and the tests that hold each one
+- [Release notes — August 2026](reference/release-notes-2026-08.md) — what
+  arrived this cycle and why it matters.
 - [History charts](reference/history-charts.md) — how the progression
   chart splits main from complementary, and what the combined view shows
 - [Milestones](reference/milestones.md) — how heaviest-set, first-scheme,
