@@ -1,3 +1,4 @@
+import CadenceCore
 import Foundation
 import SwiftData
 
