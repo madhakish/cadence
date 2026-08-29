@@ -1432,6 +1432,24 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(checkpoints.every((checkpoint) => checkpoint.bundle.schemaVersion === db.BACKUP_SCHEMA_VERSION), "local checkpoints use the portable backup contract");
 }
 
+// ---- post-import revert affordance: the "before-import" checkpoint the
+// settings-view actionSheet offers restores the pre-import state ----
+{
+  const preImport = await db.Tracks.byName("Deadlift");
+  const preImportWeight = preImport.baseWeightLb;
+  const bundle = JSON.parse(await db.exportJSON());
+  bundle.tracks = bundle.tracks.map((t) => t.exerciseName === "Deadlift" ? { ...t, baseWeightLb: preImportWeight + 500 } : t);
+  // Default createCheckpoint: true — the same "before-import" snapshot
+  // SettingsView.restore(from:)/importData() take before every restore.
+  await db.importBundle(bundle);
+  ok((await db.Tracks.byName("Deadlift")).baseWeightLb === preImportWeight + 500,
+    "the import lands the new data before any revert");
+  // Exercise the exact db.js helper the actionSheet's revert action calls.
+  await db.Checkpoints.restoreLatest();
+  ok((await db.Tracks.byName("Deadlift")).baseWeightLb === preImportWeight,
+    "reverting via Checkpoints.restoreLatest() restores the pre-import state");
+}
+
 // ---- cardio sets: distance/time/incline, not weight×reps ----
 {
   // A fictional conditioning fixture exercises every cardio field.

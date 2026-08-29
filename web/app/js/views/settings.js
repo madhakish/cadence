@@ -1322,10 +1322,27 @@ function importData() {
         // Say so rather than repair silently — the backup carried a slot id on
         // two programs, and the later one has been re-issued.
         const repaired = summary?.repairedSlotIDs || 0;
-        ui.toast(repaired
+        const message = repaired
           ? `Imported. Repaired ${repaired} duplicate slot ${repaired === 1 ? "id" : "ids"} the backup reused across programs.`
-          : "Imported.");
+          : "Imported.";
         ui.nav.refresh();
+        // Offer the pre-import checkpoint right at completion — same
+        // db.js helper the general "Restore latest" control uses — so
+        // undoing a bad import doesn't require finding it there.
+        ui.actionSheet(message, [
+          { label: "Revert to checkpoint from before this import", role: "danger", onClick: async () => {
+            try {
+              await Checkpoints.restoreLatest();
+              await syncLibrary();
+              ui.nav.refresh();
+              ui.toast("Reverted to the checkpoint from before this import.");
+            } catch (error) {
+              console.error("Cadence checkpoint revert failed", error);
+              ui.toast(`Revert failed: ${error?.message || error}`);
+            }
+          } },
+          { label: "Keep it", onClick: () => {} },
+        ]);
       }
       catch (error) {
         console.error("Cadence import failed", error);

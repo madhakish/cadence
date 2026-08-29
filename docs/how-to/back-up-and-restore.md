@@ -52,6 +52,11 @@ One safety rule on restore: gym barcode images are only accepted as
 inline image data, never as remote URLs, so a tampered backup can't make
 the app phone home.
 
+Every import first takes a "before-import" local recovery checkpoint, and the
+completion message offers a one-tap **Revert to checkpoint from before this
+import** alongside **Keep it**/dismiss — no need to go to the separate local
+recovery control to undo a wrong-but-valid import.
+
 ## Reset
 
 **Settings → Reset all data** wipes the device's copy. The generic exercise

@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var exportCSV: Data?
     @State private var showImporter = false
     @State private var importAlert: String?
+    @State private var canRevertImport = false
     @AppStorage(BackupCheckpointService.lastSuccessKey) private var checkpointLastSuccess = ""
     @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
     /// Device-local on purpose — a Health read grant must not ride in a backup.
@@ -286,8 +287,20 @@ struct SettingsView: View {
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 importAlert = restore(from: result)
             }
-            .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } })) {
-                Button("OK") { importAlert = nil }
+            .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil; canRevertImport = false } })) {
+                if canRevertImport {
+                    // The one-tap revert offered right at the import-completion
+                    // moment — same checkpoint-restore path as the general
+                    // "Restore latest checkpoint" control, just surfaced here
+                    // so undoing a bad import doesn't require finding it.
+                    Button("Revert to checkpoint from before this import", role: .destructive) {
+                        importAlert = restoreLatestCheckpoint()
+                        canRevertImport = false
+                    }
+                    Button("Keep it") { importAlert = nil; canRevertImport = false }
+                } else {
+                    Button("OK") { importAlert = nil }
+                }
             } message: {
                 Text(importAlert ?? "")
             }
@@ -297,6 +310,7 @@ struct SettingsView: View {
     private func restore(from result: Result<URL, Error>) -> String {
         switch result {
         case .failure(let err):
+            canRevertImport = false
             return err.localizedDescription
         case .success(let url):
             let scoped = url.startAccessingSecurityScopedResource()
@@ -321,12 +335,14 @@ struct SettingsView: View {
                 // steppers dead in the meantime.
                 try Seeder.syncLibrary(context: context)
                 let restored = "Restored \(s.sessions) sessions, \(s.programs) program(s), \(s.tracks) tracked lift(s)."
+                canRevertImport = true
                 guard s.repairedSlotIDs > 0 else { return restored }
                 // Say so rather than repair silently — the backup carried a
                 // slot id on two programs, and the later one has been re-issued.
                 return restored + "\n\nRepaired \(s.repairedSlotIDs) duplicate slot "
                     + "\(s.repairedSlotIDs == 1 ? "id" : "ids") the backup reused across programs."
             } catch {
+                canRevertImport = false
                 return error.localizedDescription
             }
         }
