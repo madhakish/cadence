@@ -2319,6 +2319,26 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
 
   eq(C.TREND_HORIZONS.map((h) => h.value).join(","), "0,30,90", "the horizons are off, one month, three");
   eq(C.TREND_HORIZONS.map((h) => h.label).join(","), "Off,1 month,3 months", "and say so in words");
+
+  // "Holding flat" should not also read as trustworthy when the fit behind it
+  // is noise — isPlateaued adds the same fitQuality floor fitDescription uses
+  // for "rough trend" on top of trendSummary's rounding rule.
+  eq(C.isPlateaued(0, 0.5), true,
+    "[INV-PROJECTION-DECLARES-ITS-FIT] zero-rounded slope with an adequate fit is plateaued");
+  eq(C.isPlateaued(0.04, 1), true,
+    "[INV-PROJECTION-DECLARES-ITS-FIT] a rate that rounds away with a good fit is plateaued");
+  eq(C.isPlateaued(0, 0.39), false,
+    "[INV-PROJECTION-DECLARES-ITS-FIT] zero-rounded slope but too noisy a fit is not plateaued");
+  eq(C.isPlateaued(-0.04, 0), false,
+    "[INV-PROJECTION-DECLARES-ITS-FIT] zero-rounded slope with no fit at all is not plateaued");
+  eq(C.isPlateaued(5, 1), false,
+    "[INV-PROJECTION-DECLARES-ITS-FIT] a nonzero-rounded positive slope is never plateaued");
+  eq(C.isPlateaued(-5, 1), false,
+    "[INV-PROJECTION-DECLARES-ITS-FIT] a nonzero-rounded negative slope is never plateaued");
+  eq(C.isPlateaued(0.06, 1), false,
+    "[INV-PROJECTION-DECLARES-ITS-FIT] a small but nonzero-rounded slope is never plateaued");
+  eq(C.isPlateaued(0, 0.4), true,
+    "[INV-PROJECTION-DECLARES-ITS-FIT] the fitQuality floor is inclusive, matching fitDescription's");
 }
 
 // The grade fires at the Peak, whose top set is base-multiplied by design — so

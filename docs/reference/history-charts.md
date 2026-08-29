@@ -106,6 +106,12 @@ What it is and is not:
 - The fit quality is always shown — *steady trend*, *rough trend*, or *very
   noisy — treat as a guess*. A line through noise still has a slope, and the
   wording is what stops that slope reading as a finding.
+- When the rate rounds to zero at one decimal **and** the fit quality is at
+  least 0.4 (the same floor that earns *rough trend*), the fit-quality line
+  adds **Plateaued**. A rate that rounds to zero because the fit can't find a
+  direction in the noise (fit quality below 0.4) is not called plateaued —
+  the wording only reads "flat" when the line is also trustworthy enough to
+  believe it.
 
 It **refuses** rather than drawing a confident line through thin history, and
 says why: fewer than 4 exposures, a span under 21 days, or a lift untrained

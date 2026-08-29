@@ -567,7 +567,8 @@ function renderCharts(panel, sessions, exercises, program, chartIntervals = []) 
       points: fitted.points.map((p) => ({ t: p.day * DAY_MS, y: p.value })),
     } : null;
     const projectionNote = fitted
-      ? `${C.trendSummary(fitted.perWeek, horizonLabel, `${chartMetric === "reps" ? Math.round(fitted.horizonValue) : C.trim(fitted.horizonValue)} ${unit}`, unit)} · ${C.fitDescription(fitted.fitQuality)}`
+      ? `${C.trendSummary(fitted.perWeek, horizonLabel, `${chartMetric === "reps" ? Math.round(fitted.horizonValue) : C.trim(fitted.horizonValue)} ${unit}`, unit)}`
+        + ` · ${C.fitDescription(fitted.fitQuality)}${C.isPlateaued(fitted.perWeek, fitted.fitQuality) ? " · Plateaued" : ""}`
       : null;
 
     const chartOptions = {
