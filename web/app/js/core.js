@@ -2245,6 +2245,41 @@ export function recentReturnFromAway(nowMs, lastSessionMs, intervals = [], windo
     .reduce((latest, interval) => (!latest || intervalEndMs(interval) > intervalEndMs(latest) ? interval : latest), null);
 }
 
+// Total calendar days per kind within [sinceMs, untilMs], mirroring the
+// merge-not-sum discipline asleepSeconds uses for overlapping sleep stages:
+// two same-kind intervals covering the same day count that day once, not
+// twice. Different kinds never merge into each other
+// (INV-INTERVAL-KINDS-STAY-DISTINCT). Intervals extending outside the window
+// are clamped to its edges first. Mirrors CadenceCore TrainingIntervals.daysByKind.
+export function intervalDaysByKind(intervals = [], sinceMs, untilMs) {
+  const result = Object.fromEntries(TRAINING_INTERVAL_KINDS.map((kind) => [kind, 0]));
+  if (!(untilMs > sinceMs)) return result;
+
+  for (const kind of TRAINING_INTERVAL_KINDS) {
+    const clamped = intervals
+      .filter((interval) => interval.kind === kind)
+      .map((interval) => [Math.max(interval.startMs, sinceMs), Math.min(intervalEndMs(interval), untilMs)])
+      .filter(([start, end]) => start <= end)
+      .sort((a, b) => a[0] - b[0]);
+    if (!clamped.length) continue;
+
+    let totalMs = 0;
+    let [runStart, runEnd] = clamped[0];
+    for (const [start, end] of clamped.slice(1)) {
+      if (start > runEnd) {
+        totalMs += runEnd - runStart + 1;
+        runStart = start;
+        runEnd = end;
+      } else if (end > runEnd) {
+        runEnd = end;
+      }
+    }
+    totalMs += runEnd - runStart + 1;
+    result[kind] = Math.round(totalMs / 86_400_000);
+  }
+  return result;
+}
+
 // Accessory double progression. state: { sets, minReps, maxReps, currentReps,
 // weightLb, incrementLb, stallCount }; perf: { completedSets, minRepsAchieved, anyStoppedEarly }
 // The rep window a double-progression slot actually runs on, and the target

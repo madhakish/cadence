@@ -86,4 +86,47 @@ final class TrainingIntervalsTests: XCTestCase {
         // A still-open away span is not a return yet.
         XCTAssertNil(TrainingIntervals.recentReturnFromAway(nowMs: 22 * day, lastSessionMs: nil, intervals: [snapshot(.away, 20, 24)]))
     }
+
+    func testDaysByKindReturnsAllFourKindsZeroedWhenAbsent() {
+        let result = TrainingIntervals.daysByKind(intervals: [snapshot(.rest, 10, 12)], sinceMs: 0, untilMs: 30 * day + day - 1)
+        XCTAssertEqual(result[.rest], 3)
+        XCTAssertEqual(result[.deload], 0)
+        XCTAssertEqual(result[.away], 0)
+        XCTAssertEqual(result[.activeRecovery], 0)
+    }
+
+    func testDaysByKindMergesOverlappingSameKindIntervalsWithoutDoubleCounting() {
+        // Two overlapping rest spans covering days 10-12 and 11-15 share days
+        // 11-12 — the merged span is 10-15, six days, not nine.
+        let intervals = [snapshot(.rest, 10, 12), snapshot(.rest, 11, 15)]
+        let result = TrainingIntervals.daysByKind(intervals: intervals, sinceMs: 0, untilMs: 30 * day + day - 1)
+        XCTAssertEqual(result[.rest], 6)
+    }
+
+    func testDaysByKindClampsAnIntervalPartiallyOutsideTheWindow() {
+        // The interval runs days 5-20, but the window only opens on day 10.
+        let intervals = [snapshot(.away, 5, 20)]
+        let result = TrainingIntervals.daysByKind(intervals: intervals, sinceMs: 10 * day, untilMs: 20 * day + day - 1)
+        XCTAssertEqual(result[.away], 11)
+    }
+
+    func testDaysByKindIsAllZeroForEmptyIntervalsOrAZeroWidthWindow() {
+        XCTAssertEqual(TrainingIntervals.daysByKind(intervals: [], sinceMs: 0, untilMs: 30 * day), [
+            .deload: 0, .rest: 0, .away: 0, .activeRecovery: 0,
+        ])
+        let intervals = [snapshot(.deload, 1, 3)]
+        XCTAssertEqual(TrainingIntervals.daysByKind(intervals: intervals, sinceMs: 5 * day, untilMs: 5 * day), [
+            .deload: 0, .rest: 0, .away: 0, .activeRecovery: 0,
+        ])
+    }
+
+    func testDaysByKindKeepsDifferentKindsSeparateOnAnOverlappingDay() {
+        // A deload span and an away span overlap on day 12: each kind counts
+        // its own days, they never merge into a single "break" total
+        // (INV-INTERVAL-KINDS-STAY-DISTINCT).
+        let intervals = [snapshot(.deload, 10, 12), snapshot(.away, 12, 14)]
+        let result = TrainingIntervals.daysByKind(intervals: intervals, sinceMs: 0, untilMs: 30 * day + day - 1)
+        XCTAssertEqual(result[.deload], 3)
+        XCTAssertEqual(result[.away], 3)
+    }
 }
