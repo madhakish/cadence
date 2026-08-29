@@ -104,4 +104,46 @@ public enum TrainingIntervals {
             }
             .max { $0.endMs < $1.endMs }
     }
+
+    /// Total calendar days per kind within `[sinceMs, untilMs]`, mirroring
+    /// the merge-not-sum discipline `HealthComparison.asleepSeconds` uses
+    /// for overlapping sleep stages: two same-kind intervals covering the
+    /// same day count that day once, not twice. Different kinds never merge
+    /// into each other (INV-INTERVAL-KINDS-STAY-DISTINCT) — a day inside
+    /// both a deload span and an away span counts for both. Intervals
+    /// extending outside the window are clamped to its edges first.
+    public static func daysByKind(
+        intervals: [TrainingIntervalSnapshot], sinceMs: Double, untilMs: Double
+    ) -> [TrainingIntervalKind: Int] {
+        var result = Dictionary(uniqueKeysWithValues: TrainingIntervalKind.allCases.map { ($0, 0) })
+        guard untilMs > sinceMs else { return result }
+
+        for kind in TrainingIntervalKind.allCases {
+            let clamped = intervals
+                .filter { $0.kind == kind }
+                .compactMap { interval -> (start: Double, end: Double)? in
+                    let start = Swift.max(interval.startMs, sinceMs)
+                    let end = Swift.min(interval.endMs, untilMs)
+                    return start <= end ? (start, end) : nil
+                }
+                .sorted { $0.start < $1.start }
+            guard let first = clamped.first else { continue }
+
+            var totalMs: Double = 0
+            var runStart = first.start
+            var runEnd = first.end
+            for span in clamped.dropFirst() {
+                if span.start > runEnd {
+                    totalMs += runEnd - runStart + 1
+                    runStart = span.start
+                    runEnd = span.end
+                } else if span.end > runEnd {
+                    runEnd = span.end
+                }
+            }
+            totalMs += runEnd - runStart + 1
+            result[kind] = Int((totalMs / 86_400_000).rounded())
+        }
+        return result
+    }
 }

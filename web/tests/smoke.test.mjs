@@ -3,6 +3,7 @@
 // an export/import round trip. Run: node tests/smoke.test.mjs
 import "fake-indexeddb/auto";
 import { JSDOM } from "jsdom";
+import { withCleanup } from "./fixture-cleanup.mjs";
 
 const dom = new JSDOM(`<!doctype html><html><body>
   <header id="topbar"><h1 id="screen-title"></h1><div id="topbar-actions"></div></header>
@@ -106,20 +107,18 @@ await db.ensureSeeded(); // idempotent
 ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
 
 // Recover an install missing its seed stamp without touching user-owned data.
-{
-  const sentinelId = await db.Sessions.save({
+await withCleanup(async (keep) => {
+  const sentinelId = keep(db.Sessions, await db.Sessions.save({
     date: "2000-01-01T00:00:00.000Z", notes: "Fictional seed-repair sentinel",
     isCompleted: true, gymName: "Main Gym", exercises: [],
-  });
-  const weighInId = await db.Bodyweight.add({ date: "2000-01-01T00:00:00.000Z", weightLb: 199 });
+  }));
+  const weighInId = keep(db.Bodyweight, await db.Bodyweight.add({ date: "2000-01-01T00:00:00.000Z", weightLb: 199 }));
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
   ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
   ok((await db.Exercises.all()).length === 158, "seed repair does not duplicate exercises");
   ok((await db.Bodyweight.all()).some((entry) => entry.id === weighInId), "seed repair preserves other user stores");
-  await db.Sessions.del(sentinelId);
-  await db.Bodyweight.del(weighInId);
-}
+})();
 
 // Explicit fictional state for the remainder of the regression suite. This is
 // test data, never a first-launch seed or exported user backup.
@@ -233,7 +232,7 @@ for (const track of [
 
 // Program changes and their audit records are one transaction. The adapter
 // only mutates a proposed copy, and a bad audit row must roll the program back.
-{
+await withCleanup(async (keep) => {
   const original = await db.Programs.active();
   const recommendation = { id: "atomic-recommendation", ruleID: "spacing", title: "Try two days",
     explanation: "Fixture recommendation", change: { type: "tryShorterSpacing", days: 2 } };
@@ -248,13 +247,13 @@ for (const track of [
   ok((await db.Programs.active()).preferredSessionSpacingDays === original.preferredSessionSpacingDays,
     "failed audit insert rolls the program mutation back");
   const decision = coach.coachingDecision(proposed, recommendation, "accepted", ["fixture"]);
+  keep(db.CoachingDecisions, decision.id);
   await db.Programs.saveWithDecision(proposed, decision);
   ok((await db.Programs.active()).preferredSessionSpacingDays === 2
       && (await db.CoachingDecisions.all()).some((item) => item.id === decision.id),
     "program mutation and accepted-decision audit commit together");
   await db.Programs.save(original);
-  await db.CoachingDecisions.del(decision.id);
-}
+})();
 
 // A rotation suggestion resolves against the real library, keeps the slot's
 // load, and drops the stall counter it was proposed to break.
@@ -509,7 +508,7 @@ ok(serviceWorkerSource.includes('"js/coaching-adapter.js"'),
 
 // Historical and current volume must use the same load multiplier. Two
 // identical two-dumbbell sessions are not a volume PR.
-{
+await withCleanup(async (keep) => {
   const exerciseName = "Flat DB Press";
   const exercise = await db.Exercises.byName(exerciseName);
   const section = () => ({
@@ -521,15 +520,35 @@ ok(serviceWorkerSource.includes('"js/coaching-adapter.js"'),
       durationSeconds: null, distanceMiles: null, autoregReason: null }],
   });
   ok(exercise?.loadBasis === "perImplement", "DB fixture carries per-implement load semantics");
-  const priorID = await db.Sessions.save({ date: "2020-01-01T12:00:00.000Z", notes: "", isCompleted: true,
-    gymName: null, exercises: [section()] });
-  const currentID = await db.Sessions.save({ date: "2020-01-02T12:00:00.000Z", notes: "", isCompleted: false,
-    gymName: null, exercises: [section()] });
+  const priorID = keep(db.Sessions, await db.Sessions.save({ date: "2020-01-01T12:00:00.000Z", notes: "", isCompleted: true,
+    gymName: null, exercises: [section()] }));
+  const currentID = keep(db.Sessions, await db.Sessions.save({ date: "2020-01-02T12:00:00.000Z", notes: "", isCompleted: false,
+    gymName: null, exercises: [section()] }));
   const result = await session.completeSession(await db.Sessions.get(currentID));
   ok(!result.milestones.some((event) => event.kind === "volumePR"),
     "identical two-dumbbell history does not emit a false volume PR");
-  await db.Sessions.del(priorID);
-  await db.Sessions.del(currentID);
+})();
+
+// withCleanup regression: a block whose body throws partway through must
+// still leave every tracked store clean — the guarantee this helper exists
+// to provide, verified by store counts rather than internal helper state.
+{
+  const beforeSessionCount = (await db.Sessions.all()).length;
+  let threw = false;
+  try {
+    await withCleanup(async (keep) => {
+      keep(db.Sessions, await db.Sessions.save({ date: "2000-01-01T00:00:00.000Z",
+        notes: "", isCompleted: false, gymName: null, exercises: [] }));
+      keep(db.Sessions, await db.Sessions.save({ date: "2000-01-02T00:00:00.000Z",
+        notes: "", isCompleted: false, gymName: null, exercises: [] }));
+      throw new Error("simulated assertion failure mid-block");
+    })();
+  } catch {
+    threw = true;
+  }
+  ok(threw, "withCleanup re-throws the wrapped block's error rather than swallowing it");
+  ok((await db.Sessions.all()).length === beforeSessionCount,
+    "withCleanup deletes every tracked record even when the wrapped block throws partway through");
 }
 
 for (let i = 0; i < 10; i++) {

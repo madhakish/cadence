@@ -3,7 +3,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES, COPY } from "../constants.js";
-import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary, localDayKey } from "../db.js";
+import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, wipeAll, ensureSeeded, syncLibrary, localDayKey, intervalSnapshots } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
@@ -142,6 +142,15 @@ export async function render(host) {
   // Training breaks — declared spans over the calendar. A chosen gap must
   // never read as a lapse (INV-INTERVAL-IS-NOT-A-GAP). Mirrors SettingsView.
   root.append(ui.h("div", { class: "section-title", text: "Training breaks" }));
+  if (intervals.length) {
+    // Compact rollup above the list: how many of the last year's calendar
+    // days landed in each declared-break kind. Pure aggregation over
+    // already-stored intervals — see core.js intervalDaysByKind.
+    const untilMs = Date.now();
+    const days = C.intervalDaysByKind(intervalSnapshots(intervals), untilMs - 365 * 86_400_000, untilMs);
+    root.append(ui.h("div", { class: "sub", style: { margin: "4px" },
+      text: `Last 365 days: ${days.rest} rest · ${days.away} away · ${days.deload} deload · ${days.activeRecovery} active recovery` }));
+  }
   const intervalList = ui.h("div", { class: "card list" });
   if (!intervals.length) intervalList.append(ui.h("div", { class: "muted", text: "No declared breaks." }));
   for (const interval of [...intervals].reverse()) {

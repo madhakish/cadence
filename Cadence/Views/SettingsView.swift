@@ -177,6 +177,11 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    if !trainingIntervals.isEmpty {
+                        Text(declaredBreakDaysSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach(trainingIntervals) { interval in
                         NavigationLink {
                             IntervalEditorView(interval: interval)
@@ -357,6 +362,18 @@ struct SettingsView: View {
         let start = interval.startDate.formatted(date: .abbreviated, time: .omitted)
         let end = interval.endDate.formatted(date: .abbreviated, time: .omitted)
         return start == end ? start : "\(start) – \(end)"
+    }
+
+    /// Compact rollup above the list: how many of the last year's calendar
+    /// days landed in each declared-break kind. Pure aggregation over
+    /// already-stored intervals — see `TrainingIntervals.daysByKind`.
+    private var declaredBreakDaysSummary: String {
+        let untilMs = Date.now.timeIntervalSince1970 * 1000
+        let sinceMs = untilMs - 365 * 86_400_000
+        let days = TrainingIntervals.daysByKind(
+            intervals: trainingIntervals.map(\.snapshot), sinceMs: sinceMs, untilMs: untilMs)
+        return "Last 365 days: \(days[.rest] ?? 0) rest · \(days[.away] ?? 0) away · "
+            + "\(days[.deload] ?? 0) deload · \(days[.activeRecovery] ?? 0) active recovery"
     }
 }
 

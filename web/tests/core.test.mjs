@@ -2773,6 +2773,28 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(!C.recentReturnFromAway(22 * day, null, [snapshot("away", 20, 24)]),
     "a still-open away span is not a return yet");
 
+  const zeroed = { deload: 0, rest: 0, away: 0, activeRecovery: 0 };
+  const sameKeys = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  ok(sameKeys(C.intervalDaysByKind([snapshot("rest", 10, 12)], 0, 30 * day + day - 1), { ...zeroed, rest: 3 }),
+    "daysByKind returns all four kinds, zeroed when absent");
+  // Two overlapping rest spans covering days 10-12 and 11-15 share days
+  // 11-12 — the merged span is 10-15, six days, not nine.
+  ok(sameKeys(C.intervalDaysByKind([snapshot("rest", 10, 12), snapshot("rest", 11, 15)], 0, 30 * day + day - 1),
+    { ...zeroed, rest: 6 }),
+    "overlapping same-kind intervals merge instead of double-counting shared days");
+  // The interval runs days 5-20, but the window only opens on day 10.
+  ok(sameKeys(C.intervalDaysByKind([snapshot("away", 5, 20)], 10 * day, 20 * day + day - 1), { ...zeroed, away: 11 }),
+    "an interval partially outside the window is clamped to its edges");
+  ok(sameKeys(C.intervalDaysByKind([], 0, 30 * day), zeroed), "empty intervals produce all zeros");
+  ok(sameKeys(C.intervalDaysByKind([snapshot("deload", 1, 3)], 5 * day, 5 * day), zeroed),
+    "a zero-width window produces all zeros");
+  // A deload span and an away span overlap on day 12: each kind counts its
+  // own days, they never merge into a single "break" total
+  // (INV-INTERVAL-KINDS-STAY-DISTINCT).
+  ok(sameKeys(C.intervalDaysByKind([snapshot("deload", 10, 12), snapshot("away", 12, 14)], 0, 30 * day + day - 1),
+    { ...zeroed, deload: 3, away: 3 }),
+    "different-kind overlaps never merge into each other");
+
   // Shorter-spacing trial mirror (CoachingEngineTests): a five-day cadence
   // supports a four-day trial, but gaps excused by a declared break are not
   // frequency observations and starve the trial of evidence.
