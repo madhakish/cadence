@@ -90,6 +90,7 @@ enum ProgramSession {
         session.programWeek = program.currentWeek
         session.programDayIndex = day.order
         session.programPlanNames = dayNames   // the plan this session is built from
+        session.programTemplateID = program.templateID
         context.insert(session)
 
         var order = 0
@@ -130,6 +131,7 @@ enum ProgramSession {
             let exactLoad = lift.role.rawValue == "main" || lift.prescription.buildsOwnSessionShape
             let weightLb = neat(plan.weightLb, exercise, isMain: exactLoad, phase: phase)
             let entry = SessionExercise(order: order, exercise: exercise)
+            entry.exerciseID = exercise.id
             entry.stampBarID(for: exercise, bar: selectedBar)
             entry.programRole = lift.role.rawValue
             entry.programSlotID = lift.id
@@ -219,6 +221,7 @@ enum ProgramSession {
                 ? (weightLb > 0 ? weightLb : (CardioFormat.defaultLoadLb(exerciseName: exercise.name) ?? 0))
                 : 0
             let entry = SessionExercise(order: order, exercise: exercise)
+            entry.exerciseID = exercise.id
             entry.stampBarID(for: exercise, bar: selectedBar)
             entry.programRole = "accessory"
             entry.programSlotID = acc.id

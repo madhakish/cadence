@@ -8,8 +8,8 @@ import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 7;
-export const BACKUP_SCHEMA_VERSION = 10;
+const DB_VERSION = 8;
+export const BACKUP_SCHEMA_VERSION = 11;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -49,6 +49,7 @@ function open() {
       if (event.oldVersion < 4) migrateToV4(req.transaction);
       else if (event.oldVersion < 6) migrateToV6(req.transaction);
       if (event.oldVersion < 5) migrateToV5(req.result);
+      if (event.oldVersion < 8) migrateToV8(req.transaction);
     };
     req.onsuccess = () => {
       if (settled) { req.result.close(); return; }
@@ -85,6 +86,43 @@ function migrateToV4(transaction) {
   rewrite("exercises", normalizeExercise);
   rewrite("programs", normalizeProgram);
   rewrite("sessions", normalizeSession);
+}
+
+// V8 (schema V11, epic #155 Stage 2): stable portable identity. The name
+// keys stay untouched — this only persists derived ids (and a unique byId
+// index on exercises) so joins and backups can carry identity. Idempotent:
+// records that already hold a portable id are rewritten unchanged.
+function migrateToV8(transaction) {
+  const rewrite = (storeName, transform) => {
+    const store = transaction.objectStore(storeName);
+    store.openCursor().onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (!cursor) return;
+      cursor.update(transform(cursor.value));
+      cursor.continue();
+    };
+  };
+  const derive = (name) => (name ? C.exerciseLegacyID(name) : null);
+  const exercises = transaction.objectStore("exercises");
+  if (!exercises.indexNames.contains("byId")) exercises.createIndex("byId", "id", { unique: true });
+  rewrite("exercises", normalizeExercise);
+  rewrite("programs", normalizeProgram);
+  rewrite("sessions", (session) => ({
+    ...session,
+    programTemplateId: session.programTemplateId || null,
+    exercises: (session.exercises || []).map((entry) => ({
+      ...entry,
+      exerciseId: isPortableUUID(entry.exerciseId) ? entry.exerciseId : derive(entry.exerciseName),
+    })),
+  }));
+  rewrite("tracks", (track) => ({
+    ...track,
+    exerciseId: isPortableUUID(track.exerciseId) ? track.exerciseId : derive(track.exerciseName),
+  }));
+  rewrite("milestones", (milestone) => ({
+    ...milestone,
+    exerciseId: isPortableUUID(milestone.exerciseId) ? milestone.exerciseId : derive(milestone.exerciseName),
+  }));
 }
 
 // V5 retires protein logging. The store is deleted outright rather than left
@@ -156,14 +194,10 @@ const del = (store, key) => run(store, "readwrite", (os) => reqP(os.delete(key))
 const clear = (store) => run(store, "readwrite", (os) => reqP(os.clear()));
 
 // Deterministic UUID-shaped migration IDs keep fixture exports reproducible.
-// Once written they never follow a later rename. Imported v2 IDs win.
-const stableID = (seed) => {
-  let state = 0x811c9dc5;
-  for (const ch of seed) { state ^= ch.charCodeAt(0); state = Math.imul(state, 0x01000193); }
-  let hex = "";
-  for (let i = 0; i < 32; i += 1) { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; hex += ((state >>> 0) & 15).toString(16); }
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
-};
+// Once written they never follow a later rename. Imported v2 IDs win. The
+// algorithm now lives in core.js (mirrored by CadenceCore StableID) so both
+// clients derive identical ids.
+const stableID = C.stableID;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isPortableUUID = (value) => typeof value === "string" && UUID_RE.test(value);
 const EQUIPMENT_POLICIES = ["any", "freeWeightsOnly"];
@@ -191,6 +225,7 @@ const normalizeProgram = (p) => {
       lifts: (day.lifts || []).map((lift, slotIndex) => ({
         ...lift,
         id: isPortableUUID(lift.id) ? lift.id : stableID(`slot:${uuid}:day:${day.order ?? dayIndex}:lift:${slotIndex}`),
+        exerciseId: isPortableUUID(lift.exerciseId) ? lift.exerciseId : C.exerciseLegacyID(lift.exerciseName),
         order: Number.isInteger(lift.order) ? lift.order : slotIndex,
         prescription: lift.prescription || "automatic",
         warmupPolicy: lift.warmupPolicy || "automatic",
@@ -212,6 +247,7 @@ const normalizeProgram = (p) => {
       accessories: (day.accessories || []).map((accessory, slotIndex) => ({
         ...accessory,
         id: isPortableUUID(accessory.id) ? accessory.id : stableID(`slot:${uuid}:day:${day.order ?? dayIndex}:accessory:${slotIndex}`),
+        exerciseId: isPortableUUID(accessory.exerciseId) ? accessory.exerciseId : C.exerciseLegacyID(accessory.exerciseName),
         order: Number.isInteger(accessory.order) ? accessory.order : slotIndex,
         targetSeconds: Number.isInteger(accessory.targetSeconds) ? accessory.targetSeconds : 30,
         durationStepSeconds: Number.isInteger(accessory.durationStepSeconds) ? accessory.durationStepSeconds : 5,
@@ -276,6 +312,10 @@ const normalizeSession = (session) => ({
 
 const normalizeExercise = (exercise) => ({
   ...exercise,
+  // Schema V11 identity: a portable id already present (v11 backup, a
+  // user-created exercise's random UUID) is kept; anything else derives the
+  // deterministic legacy id from the name — identical on both clients.
+  id: isPortableUUID(exercise.id) ? exercise.id : C.exerciseLegacyID(exercise.name),
   movementPattern: C.MOVEMENT_PATTERNS.includes(exercise.movementPattern)
     ? exercise.movementPattern : C.movementPattern(exercise.name, exercise.movementGroup),
   secondaryMovementPattern: C.MOVEMENT_PATTERNS.includes(exercise.secondaryMovementPattern)
@@ -748,12 +788,13 @@ export async function exportBundle() {
     appVersion: "web",
     sessions: sessions.map((s) => ({
       id: portableSessionID(s),
+      programTemplateId: s.programTemplateId || null,
       date: iso(s.date), notes: s.notes || "", gym: s.gymName || null,
       gymId: s.gymId || gymsByName.get(s.gymName)?.id || null, isCompleted: !!s.isCompleted,
       completedAt: s.completedAt || null,
       programTag: exportProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e) => ({
-        name: e.exerciseName, notes: e.notes || "",
+        name: e.exerciseName, exerciseId: e.exerciseId || null, notes: e.notes || "",
         phase: e.phase ? C.portablePhaseLabel(e.phase) : null,
         role: e.programRole || null,
         programSlotId: e.programSlotId || null,
@@ -787,9 +828,9 @@ export async function exportBundle() {
     })),
     bodyweight: bodyweight.map((b) => ({ date: iso(b.date), weightLb: b.weightLb, bodyFatPercent: b.bodyFatPercent ?? null, milestoneLabel: b.milestoneLabel || null })),
     checkIns: checkins.map((c) => ({ date: iso(c.date), site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })),
-    milestones: milestones.map((m) => ({ date: iso(m.date), exercise: m.exerciseName || null, kind: m.kind, label: m.label })),
+    milestones: milestones.map((m) => ({ date: iso(m.date), exercise: m.exerciseName || null, exerciseId: m.exerciseId || null, kind: m.kind, label: m.label })),
     programs: programs.map((p) => ({
-      id: p.uuid, name: p.name, focus: p.focus, equipmentPolicy: p.equipmentPolicy,
+      id: p.uuid, templateId: p.templateId || null, name: p.name, focus: p.focus, equipmentPolicy: p.equipmentPolicy,
       cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
       nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: !!p.isActive,
       coachEnabled: p.coachEnabled !== false, reliableHistoryStart: p.reliableHistoryStart || null,
@@ -802,7 +843,7 @@ export async function exportBundle() {
       days: [...(p.days || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((d) => ({
         name: d.name, order: d.order, trainingIntent: d.trainingIntent,
         lifts: authoredExportSlots(d.lifts).map((l) => ({
-          id: l.id, exerciseName: l.exerciseName, role: l.role, order: l.order ?? 0,
+          id: l.id, exerciseName: l.exerciseName, exerciseId: l.exerciseId || null, role: l.role, order: l.order ?? 0,
           prescription: l.prescription || "automatic", warmupPolicy: l.warmupPolicy || "automatic",
           loadOffsetLb: l.loadOffsetLb ?? 0, peakOffsetLb: l.peakOffsetLb ?? 0,
           deloadMultiplier: l.deloadMultiplier ?? 0.775,
@@ -824,7 +865,7 @@ export async function exportBundle() {
           // marker-free exports (and the synthetic fixture) stay byte-stable.
           ...(l.revertToExerciseName ? { revertToExerciseName: l.revertToExerciseName } : {}),
         })),
-        accessories: authoredExportSlots(d.accessories).map((a) => ({ id: a.id, exerciseName: a.exerciseName, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, capacityManaged: a.capacityManaged !== false, maximumSets: a.maximumSets ?? 6, conditioningEffort: a.conditioningEffort || "easy", targetRPE: a.targetRPE ?? 0, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
+        accessories: authoredExportSlots(d.accessories).map((a) => ({ id: a.id, exerciseName: a.exerciseName, exerciseId: a.exerciseId || null, order: a.order ?? 0, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps, currentReps: a.currentReps, targetSeconds: a.targetSeconds ?? 30, durationStepSeconds: a.durationStepSeconds ?? 5, capacityManaged: a.capacityManaged !== false, maximumSets: a.maximumSets ?? 6, conditioningEffort: a.conditioningEffort || "easy", targetRPE: a.targetRPE ?? 0, weightLb: a.weightLb, incrementLb: a.incrementLb, stallCount: a.stallCount || 0, ...(a.revertToExerciseName ? { revertToExerciseName: a.revertToExerciseName } : {}) })),
       })),
     })),
     // V10: typed calendar spans. Inclusive day-granular dates; ids are
@@ -1400,8 +1441,16 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   if (createCheckpoint) await Checkpoints.create("before-import");
 
   const writes = new Map(); // store name -> records to clear+put
+  // v11 ids ride verbatim when portable; anything else derives the
+  // deterministic legacy id from the recorded name (repair-not-reject,
+  // like slot ids). Mirrors native ImportService.importedExerciseID.
+  const importedID = (dtoId, name) =>
+    (schemaVersion >= 11 && isPortableUUID(dtoId) ? dtoId : (name ? C.exerciseLegacyID(name) : null));
   const importedPrograms = bundle.programs?.map(({ id, ...program }) => normalizeProgram({
     ...program,
+    // Template origin is data, not an enum: carried verbatim from v11
+    // bundles, never guessed for older ones.
+    templateId: schemaVersion >= 11 ? program.templateId || null : null,
     uuid: typeof id === "string" ? id : stableID(`program:${program.name}`),
   }));
 
@@ -1465,10 +1514,11 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       // completed. Version 1 preserves open sessions explicitly.
       date: s.date, notes: s.notes || "", isCompleted: s.isCompleted !== false,
       completedAt: s.completedAt || null,
+      programTemplateId: schemaVersion >= 11 ? s.programTemplateId || null : null,
       gymId: s.gymId || null, gymName: s.gym || null,
       programTag: importProgramTag(s.programTag),
       exercises: (s.exercises || []).map((e, oi) => ({
-        order: oi, exerciseName: e.name, notes: e.notes || "", phase: recoverPhase(e.phase),
+        order: oi, exerciseName: e.name, exerciseId: importedID(e.exerciseId, e.name), notes: e.notes || "", phase: recoverPhase(e.phase),
         programRole: e.role || null, programSlotId: e.programSlotId || null, barId: e.barId || null,
         barIdManual: e.barIdManual === true,
         plannedWeightLb: e.plannedWeightLb ?? null, targetWeightLb: e.targetWeightLb ?? null,
@@ -1498,9 +1548,11 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   // A v<=5 bundle's `protein` array is ignored: schema 6 removed the store,
   // so there is nowhere to put it and nothing that would read it back.
   if (bundle.checkIns) writes.set("checkins", bundle.checkIns.map((c) => ({ date: c.date, site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })));
-  if (bundle.milestones) writes.set("milestones", bundle.milestones.map((m) => ({ date: m.date, exerciseName: m.exercise || null, kind: m.kind, label: m.label })));
+  if (bundle.milestones) writes.set("milestones", bundle.milestones.map((m) => ({ date: m.date, exerciseName: m.exercise || null, exerciseId: importedID(m.exerciseId, m.exercise), kind: m.kind, label: m.label })));
   if (importedPrograms) writes.set("programs", importedPrograms);
-  if (bundle.tracks) writes.set("tracks", bundle.tracks);
+  if (bundle.tracks) writes.set("tracks", bundle.tracks.map((t) => ({
+    ...t, exerciseId: importedID(t.exerciseId, t.exerciseName),
+  })));
   // V10 spans; a v<=9 bundle has none and leaves current intervals alone.
   if (bundle.intervals) writes.set("intervals", bundle.intervals.map((interval) => normalizeInterval(interval)));
   // Gyms are kept as-is except barcodeImage, which must be an inline base64

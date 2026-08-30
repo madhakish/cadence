@@ -137,10 +137,12 @@ enum SessionCompletion {
                     formatWeight: { unitDisplay.format(lb: $0) }
                 )
                 for event in events {
-                    context.insert(Milestone(
+                    let milestone = Milestone(
                         date: session.date, exerciseName: exercise.name,
                         kind: event.kind, label: event.label
-                    ))
+                    )
+                    milestone.exerciseID = exercise.id
+                    context.insert(milestone)
                 }
                 allEvents.append(contentsOf: events)
             }

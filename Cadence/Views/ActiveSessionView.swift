@@ -498,6 +498,7 @@ struct ActiveSessionView: View {
 
     private func addExercise(_ exercise: Exercise) {
         let entry = SessionExercise(order: session.exercises.count, exercise: exercise)
+        entry.exerciseID = exercise.id
         entry.stampBarID(for: exercise, bar: gym?.defaultBar ?? .bar45lb)
         context.insert(entry)
         session.exercises.append(entry)

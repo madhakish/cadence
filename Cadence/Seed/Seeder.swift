@@ -256,6 +256,7 @@ enum Seeder {
         try clearRetiredRestStamps(byName: byName, context: context)
         try promoteVerticalPullMains(byName: byName, context: context)
         try ensureWorkoutSessionIDs(context: context)
+        try ensureExerciseIDs(context: context)
         try normalizeRelationshipAliases(context: context)
         try snapshotLegacyLoadSemantics(context: context)
         try normalizeV4PrescriptionBlocks(context: context)
@@ -356,6 +357,54 @@ enum Seeder {
                 repeat { session.id = UUID().uuidString } while seen.contains(session.id)
             }
             seen.insert(session.id)
+        }
+    }
+
+    /// Schema V11 identity backfill (epic #155 Stage 2). Every exercise row
+    /// lacking a portable id derives the deterministic legacy id from its
+    /// exact name — the same `StableID.exerciseLegacyID` derivation web
+    /// migration and both importers use, so the same store contents yield
+    /// identical ids on every client. Valid ids already present (a restored
+    /// v11 backup, a user-created exercise's random UUID) are preserved.
+    /// Reference columns then follow: program slots, tracks, milestones, and
+    /// session entries copy their exercise's id (or derive from the recorded
+    /// name when the library row is gone). Idempotent — a second run changes
+    /// nothing.
+    static func ensureExerciseIDs(context: ModelContext) throws {
+        var idByName: [String: String] = [:]
+        for exercise in try context.fetch(FetchDescriptor<Exercise>()) {
+            if let id = exercise.id, UUID(uuidString: id) != nil {
+                idByName[exercise.name] = id
+                continue
+            }
+            let derived = StableID.exerciseLegacyID(name: exercise.name)
+            exercise.id = derived
+            idByName[exercise.name] = derived
+        }
+        func resolved(_ name: String?) -> String? {
+            guard let name, !name.isEmpty else { return nil }
+            return idByName[name] ?? StableID.exerciseLegacyID(name: name)
+        }
+        for program in try context.fetch(FetchDescriptor<Program>()) {
+            for day in program.days {
+                for lift in day.lifts where lift.exerciseID == nil {
+                    lift.exerciseID = resolved(lift.exerciseName)
+                }
+                for accessory in day.accessories where accessory.exerciseID == nil {
+                    accessory.exerciseID = resolved(accessory.exerciseName)
+                }
+            }
+        }
+        for track in try context.fetch(FetchDescriptor<LiftTrack>()) where track.exerciseID == nil {
+            track.exerciseID = resolved(track.exerciseName)
+        }
+        for milestone in try context.fetch(FetchDescriptor<Milestone>()) where milestone.exerciseID == nil {
+            milestone.exerciseID = resolved(milestone.exerciseName)
+        }
+        for session in try context.fetch(FetchDescriptor<WorkoutSession>()) {
+            for entry in session.exercises where entry.exerciseID == nil {
+                entry.exerciseID = entry.exercise?.id ?? resolved(entry.exercise?.name)
+            }
         }
     }
 

@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **10**. A missing version means the legacy version-0 shape.
+version **11**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,31 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 11 stable portable identity
+
+Version 11 (epic #155 Stage 2) adds identity fields; no collection changes
+shape and every field is additive:
+
+- **`id`** on each exercise definition: a portable UUID. Exercises that
+  existed before v11 carry a **deterministic legacy id** derived from the
+  exact name (`StableID.exerciseLegacyID` / `C.exerciseLegacyID`, identical
+  byte-for-byte on both clients), so the same store contents produce the
+  same ids everywhere; user-created exercises mint a random UUID at
+  creation. The name remains the store's unique key — the id is the
+  portable reference joins and backups carry.
+- **`exerciseId`** on session exercise entries, program lift/accessory
+  slots, tracks, and milestones: the portable id of the referenced
+  exercise.
+- **`templateId`** on programs and **`programTemplateId`** on sessions: the
+  methodology (ProgramTemplateData slug) the program was instantiated
+  from. Recorded at instantiation only — never inferred for legacy or
+  hand-built programs, where it stays null.
+
+Importers accept v0–v10 and synthesize every id with the same deterministic
+derivation. A malformed v11 id is repaired the same way rather than
+rejected — the established slot-id policy. v11 bundles round-trip ids
+verbatim.
 
 ## Version 10 training-context intervals and manual bar picks
 
@@ -269,6 +294,9 @@ instead — see [program file](program-file.md).
 - Version-8-and-older programs gain `equipmentPolicy: "any"` and days gain
   `trainingIntent: "general"`; no name parsing or equipment filtering is
   applied retroactively.
+- Version-10-and-older bundles carry no exercise/template identity; every
+  id is derived deterministically from the recorded names during import, so
+  both clients agree on identity for identical content.
 - Missing top-level sections leave the corresponding local store untouched.
 - Import runs a full preflight before storage is touched. Missing identifiers,
   invalid dates or numbers, unknown enum values, duplicate keys, and impossible
@@ -286,3 +314,6 @@ The broad synthetic fixture at
 `web/tests/fixtures/synthetic-backup.json` is generated through the real web
 exporter and restored by both clients. Regenerate it with
 `web/tools/generate-synthetic-backup.mjs` after an intentional schema change.
+The pre-identity bundle is kept frozen at
+`web/tests/fixtures/synthetic-backup-v10.json` as the permanent upgrade-path
+input: importing it must always derive the deterministic legacy ids.

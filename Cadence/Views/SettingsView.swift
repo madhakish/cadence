@@ -1211,6 +1211,7 @@ struct ProgramEditorView: View {
                                        prescription: source.prescription, warmupPolicy: source.warmupPolicy,
                                        baseWeightLb: source.baseWeightLb, estimatedMaxLb: source.estimatedMaxLb,
                                        stallCount: source.stallCount, lastIncrementLb: source.lastIncrementLb)
+                lift.exerciseID = source.exerciseID
                 lift.loadOffsetLb = source.loadOffsetLb
                 lift.peakOffsetLb = source.peakOffsetLb
                 lift.deloadMultiplier = source.deloadMultiplier
@@ -1234,6 +1235,7 @@ struct ProgramEditorView: View {
                                                  currentReps: source.currentReps, targetSeconds: source.targetSeconds,
                                                  durationStepSeconds: source.durationStepSeconds, weightLb: source.weightLb,
                                                  incrementLb: source.incrementLb, stallCount: source.stallCount)
+                accessory.exerciseID = source.exerciseID
                 accessory.capacityManaged = source.capacityManaged
                 accessory.maximumSets = source.maximumSets
                 accessory.conditioningEffortRaw = source.conditioningEffortRaw
@@ -1328,6 +1330,8 @@ struct ProgramDayEditorView: View {
                                            order: day.lifts.count,
                                            baseWeightLb: historyBootstrap?.baseWeightLb ?? bootstrap.weightLb,
                                            estimatedMaxLb: historyBootstrap?.estimatedMaxLb ?? bootstrap.estimatedMaxLb)
+                    lift.exerciseID = exercises.first { $0.name == name }?.id
+                        ?? StableID.exerciseLegacyID(name: name)
                     context.insert(lift)
                     day.lifts.append(lift)
                 case .accessory:
@@ -1345,6 +1349,8 @@ struct ProgramDayEditorView: View {
                                                targetSeconds: type == .conditioning ? 1_200 : 30,
                                                weightLb: historyBootstrap?.weightLb ?? bootstrap.weightLb,
                                                incrementLb: historyBootstrap?.incrementLb ?? bootstrap.incrementLb)
+                    acc.exerciseID = exercises.first { $0.name == name }?.id
+                        ?? StableID.exerciseLegacyID(name: name)
                     context.insert(acc)
                     day.accessories.append(acc)
                 }

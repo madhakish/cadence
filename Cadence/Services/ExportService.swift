@@ -34,6 +34,8 @@ enum ExportService {
 
     struct ExportExercise: Codable {
         let name: String
+        /// v11: the logged exercise's portable id.
+        let exerciseId: String?
         let notes: String
         let phase: String?
         let role: String?
@@ -64,6 +66,8 @@ enum ExportService {
 
     struct ExportSession: Codable {
         let id: String
+        /// v11: the methodology the session's program came from, if any.
+        let programTemplateId: String?
         let date: Date
         let notes: String
         let gym: String?
@@ -110,6 +114,8 @@ enum ExportService {
     /// Web `tracks` store record shape (imported verbatim there).
     struct ExportTrack: Codable {
         let exerciseName: String
+        /// v11: the tracked exercise's portable id.
+        let exerciseId: String?
         let mode: String
         let cycleNumber: Int
         let baseWeightLb: Double
@@ -140,6 +146,8 @@ enum ExportService {
 
     /// Web `exercises` store record shape.
     struct ExportExerciseDef: Codable {
+        /// v11: stable portable identity; older importers ignore it.
+        let id: String?
         let name: String
         let category: String
         let type: String
@@ -224,6 +232,8 @@ enum ExportService {
     struct ExportMilestone: Codable {
         let date: Date
         let exercise: String?
+        /// v11: the milestone exercise's portable id, when it has one.
+        let exerciseId: String?
         let kind: String
         let label: String
     }
@@ -246,6 +256,7 @@ enum ExportService {
     struct ExportProgramLift: Codable {
         let id: String
         let exerciseName: String
+        let exerciseId: String?
         let role: String
         let order: Int
         let prescription: String
@@ -275,6 +286,7 @@ enum ExportService {
     struct ExportProgramAccessory: Codable {
         let id: String
         let exerciseName: String
+        let exerciseId: String?
         let order: Int
         let sets: Int
         let minReps: Int
@@ -302,6 +314,8 @@ enum ExportService {
 
     struct ExportProgram: Codable {
         let id: String
+        /// v11: the ProgramTemplateData slug this program came from, if any.
+        let templateId: String?
         let name: String
         let focus: String
         let equipmentPolicy: String
@@ -440,6 +454,7 @@ enum ExportService {
                 }
                 return ExportSession(
                     id: session.id,
+                    programTemplateId: session.programTemplateID,
                     date: session.date,
                     notes: session.notes,
                     gym: session.gymName,
@@ -450,6 +465,7 @@ enum ExportService {
                     exercises: session.orderedExercises.map { entry in
                         ExportExercise(
                             name: entry.exercise?.name ?? "Unknown",
+                            exerciseId: entry.exerciseID,
                             notes: entry.notes,
                             phase: entry.phase?.portableLabel,
                             role: entry.programRole,
@@ -501,7 +517,7 @@ enum ExportService {
                               response: $0.response, note: $0.note)
             },
             milestones: milestones.map {
-                ExportMilestone(date: $0.date, exercise: $0.exerciseName, kind: $0.kindRaw, label: $0.label)
+                ExportMilestone(date: $0.date, exercise: $0.exerciseName, exerciseId: $0.exerciseID, kind: $0.kindRaw, label: $0.label)
             },
             programs: programs.map { p in
                 ExportProgram(
@@ -510,7 +526,7 @@ enum ExportService {
                     // and an unknown raw (newer-binary downgrade, corruption)
                     // must not produce a backup this same app refuses to
                     // restore. Web exports the normalized value the same way.
-                    id: p.id, name: p.name, focus: p.focusRaw, equipmentPolicy: p.equipmentPolicy.rawValue,
+                    id: p.id, templateId: p.templateID, name: p.name, focus: p.focusRaw, equipmentPolicy: p.equipmentPolicy.rawValue,
                     cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
                     nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: p.isActive,
                     coachEnabled: p.coachEnabled, reliableHistoryStart: p.reliableHistoryStart,
@@ -523,7 +539,7 @@ enum ExportService {
                             // role-first display must not change the bytes.
                             lifts: d.authoredLifts.map { l in
                                 ExportProgramLift(
-                                    id: l.id, exerciseName: l.exerciseName, role: l.roleRaw, order: l.order,
+                                    id: l.id, exerciseName: l.exerciseName, exerciseId: l.exerciseID, role: l.roleRaw, order: l.order,
                                     prescription: l.prescriptionRaw, warmupPolicy: l.warmupPolicyRaw,
                                     loadOffsetLb: l.loadOffsetLb, peakOffsetLb: l.peakOffsetLb,
                                     deloadMultiplier: l.deloadMultiplier,
@@ -552,7 +568,7 @@ enum ExportService {
                                 )
                             },
                             accessories: d.orderedAccessories.map { a in
-                                ExportProgramAccessory(id: a.id, exerciseName: a.exerciseName, order: a.order, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
+                                ExportProgramAccessory(id: a.id, exerciseName: a.exerciseName, exerciseId: a.exerciseID, order: a.order, sets: a.sets, minReps: a.minReps, maxReps: a.maxReps,
                                                        currentReps: a.currentReps, targetSeconds: a.targetSeconds,
                                                        durationStepSeconds: a.durationStepSeconds,
                                                        capacityManaged: a.capacityManaged,
@@ -567,7 +583,7 @@ enum ExportService {
                 )
             },
             tracks: tracks.map { t in
-                ExportTrack(exerciseName: t.exerciseName, mode: t.modeRaw, cycleNumber: t.cycleNumber,
+                ExportTrack(exerciseName: t.exerciseName, exerciseId: t.exerciseID, mode: t.modeRaw, cycleNumber: t.cycleNumber,
                             baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhaseRaw, incrementLb: t.incrementLb,
                             roundingLb: t.roundingLb, lastCompletedAt: t.lastCompletedAt)
             },
@@ -585,7 +601,7 @@ enum ExportService {
                 )
             },
             exercises: exerciseDefs.map { e in
-                ExportExerciseDef(name: e.name, category: e.categoryRaw, type: e.typeRaw, movementGroup: e.movementGroup,
+                ExportExerciseDef(id: e.id, name: e.name, category: e.categoryRaw, type: e.typeRaw, movementGroup: e.movementGroup,
                                   movementPattern: e.movementPattern.rawValue,
                                   secondaryMovementPattern: e.secondaryMovementPattern?.rawValue,
                                   aliases: e.aliases, strategyTags: e.strategyTags,

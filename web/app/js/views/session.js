@@ -2193,6 +2193,7 @@ export async function createSessionFromProgramDay(program, day) {
   const id = await Sessions.save({
     date: iso(new Date()), notes: "", isCompleted: false, ...await defaultGymTag(),
     programTag: { programId: stableProgramID, programName: program.name, cycleNumber: program.cycleNumber, week: program.currentWeek, dayIndex: day.order, planNames: dayNames },
+    programTemplateId: program.templateId || null,
     exercises,
   });
   return id;

@@ -37,6 +37,10 @@ enum WarmupPolicy: String, Codable, CaseIterable {
 final class Program {
     @Attribute(.unique) var id: String = UUID().uuidString
     @Attribute(.unique) var name: String
+    /// The ProgramTemplateData slug this program was instantiated from
+    /// (schema V11). Nil for hand-built and legacy programs — the origin is
+    /// recorded at instantiation, never inferred.
+    var templateID: String?
     var focusRaw: String
     var cycleNumber: Int
     var currentWeek: Int            // 1...4 style-neutral rotation pointer
@@ -164,6 +168,9 @@ final class ProgramLift {
     /// completion must advance the slot that created the session entry.
     var id: String = UUID().uuidString
     var exerciseName: String
+    /// Portable id of the slotted exercise (schema V11); the name remains
+    /// the editable display value.
+    var exerciseID: String?
     var roleRaw: String
     var order: Int = 0
     var prescriptionRaw: String = "automatic"
@@ -294,6 +301,8 @@ final class ProgramAccessory {
     /// Stable slot identity; see ProgramLift.id.
     var id: String = UUID().uuidString
     var exerciseName: String
+    /// Portable id of the slotted exercise (schema V11); see ProgramLift.
+    var exerciseID: String?
     var order: Int = 0
     var sets: Int
     var minReps: Int

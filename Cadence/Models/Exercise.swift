@@ -73,6 +73,12 @@ enum BodySite: String, Codable, CaseIterable, Identifiable {
 
 @Model
 final class Exercise {
+    /// Stable portable identity (schema V11, epic #155). Nil on rows written
+    /// before V11 until the idempotent Seeder repair derives the
+    /// deterministic legacy id from the name; user-created exercises mint a
+    /// random UUID at creation. `name` stays the store's unique key — the id
+    /// is the portable reference new joins and backups carry.
+    var id: String?
     @Attribute(.unique) var name: String
     var categoryRaw: String
     var typeRaw: String

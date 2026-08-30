@@ -7,6 +7,9 @@ import CadenceCore
 @Model
 final class LiftTrack {
     @Attribute(.unique) var exerciseName: String
+    /// Portable id of the tracked exercise (schema V11); exerciseName stays
+    /// the unique key, the id rides into backups.
+    var exerciseID: String?
     var modeRaw: String
     var cycleNumber: Int
     /// Cycle mode: week-1 volume weight. Linear mode: current working weight.
@@ -127,6 +130,8 @@ final class CheckIn {
 final class Milestone {
     var date: Date
     var exerciseName: String?
+    /// Portable id of the milestone's exercise (schema V11), when it has one.
+    var exerciseID: String?
     var kindRaw: String
     var label: String
 
