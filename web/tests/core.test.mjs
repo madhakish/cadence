@@ -3093,5 +3093,61 @@ eq(C.exerciseLegacyID("Back Squat"), C.stableID("exercise:Back Squat"), "exercis
   eq(outOfBand, 0, "quantization stays within its band");
 }
 
+
+// ---- resolveTrainingAnchor (epic #155 Stage 3) ----
+// Mirrors CadenceCoreTests/TrainingAnchorResolverTests.swift — same fixtures.
+{
+  const prof = (best = null, latest = null) => ({
+    latestCompletedLoadLb: latest, latestExposureMs: latest == null ? null : 1000,
+    allTimeBestE1RMLb: best,
+  });
+  let a = C.resolveTrainingAnchor("Back Squat", { movementGroup: "squat", history: { "Back Squat": prof(315, 285) } });
+  eq(a.source, "exactExerciseE1RM", "exact history wins");
+  eq(a.e1RMLb, 315, "exact e1RM");
+  eq(a.confidence, "measured", "exact history reads as measured");
+
+  a = C.resolveTrainingAnchor("Back Squat", { history: { "Back Squat": prof(315) }, overrideE1RMLb: 405 });
+  eq(a.source, "explicitOverride", "an explicit override outranks everything");
+
+  a = C.resolveTrainingAnchor("Good Morning", { history: { "Good Morning": prof(null, 135) } });
+  eq(a.source, "exactExerciseRecentWork", "recent work carries a style that needs a load");
+  eq(a.latestWorkLb, 135, "the last exposure's load");
+
+  a = C.resolveTrainingAnchor("Front Squat", { movementGroup: "squat", history: { "Back Squat": prof(300) } });
+  eq(a.source, "relatedExerciseEstimate", "an unseen variation resolves from its related lift");
+  eq(a.e1RMLb, 255, "300 x 0.85");
+  eq(a.ruleId, "front-squat-from-back-squat", "the rule is named");
+  eq(a.explanation, "Estimated from Back Squat", "and the UI can say where it came from");
+
+  a = C.resolveTrainingAnchor("Hack Squat", { movementGroup: "squat", history: { "Back Squat": prof(300) } });
+  eq(a.source, "movementFamilyEstimate", "family anchor is the last estimate before the default");
+  eq(a.e1RMLb, 150, "family estimates are deliberately pessimistic");
+
+  a = C.resolveTrainingAnchor("Front Squat", { movementGroup: "squat", history: {}, defaultE1RMLb: 95 });
+  eq(a.source, "conservativeDefault", "no history at all falls back to the catalog");
+  eq(a.confidence, "guessed", "and says it is a guess");
+
+  a = C.resolveTrainingAnchor("Front Squat", { movementGroup: "squat", history: { "Back Squat": prof(300) },
+    defaultE1RMLb: 95, shelvedExerciseNames: ["Back Squat"] });
+  eq(a.source, "conservativeDefault", "a shelved lift never seeds new work");
+
+  a = C.resolveTrainingAnchor("Clean", { movementGroup: "hinge", history: { Clean: prof(205), "Front Squat": prof(275) } });
+  eq(a.source, "exactExerciseE1RM", "Olympic work prefers its own history");
+  a = C.resolveTrainingAnchor("Clean", { movementGroup: "hinge", history: { "Front Squat": prof(275) } });
+  eq(a.confidence, "guessed", "a lifted-from-squat clean is a guess, and says so");
+
+
+  a = C.resolveTrainingAnchor("Landmine Press", { movementGroup: "press",
+    history: { "Barbell Bench": prof(225) }, defaultE1RMLb: 60, allowFamilyEstimate: false });
+  eq(a.source, "conservativeDefault", "seeding callers opt out of family guesses");
+  a = C.resolveTrainingAnchor("Front Squat", { movementGroup: "squat",
+    history: { "Back Squat": prof(300) }, defaultE1RMLb: 60, allowFamilyEstimate: false });
+  eq(a.source, "relatedExerciseEstimate", "an explicit rule still seeds — that is named evidence");
+
+  eq(new Set(C.ANCHOR_RULES.map((r) => r.id)).size, C.ANCHOR_RULES.length, "rule ids are unique");
+  ok(C.ANCHOR_RULES.every((r) => r.coefficient > 0.3 && r.coefficient < 1.3 && r.source !== r.target),
+    "every shipped rule is plausible and non-circular");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
