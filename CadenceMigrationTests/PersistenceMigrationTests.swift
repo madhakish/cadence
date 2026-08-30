@@ -273,6 +273,44 @@ final class PersistenceMigrationTests: XCTestCase {
         }
     }
 
+    /// The creator is the write-site guard for every recorded number, not
+    /// just RPE: both importers require these non-negative and finite, and a
+    /// non-finite Double makes JSONEncoder refuse the export outright. An
+    /// app must never bank a row whose own backup it cannot restore.
+    func testCreatorRejectsValuesItsOwnBackupWouldRefuse() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        try Seeder.seedIfNeeded(context: context)
+        func input(
+            sessionRPE: Double? = 8, loadLb: Double? = 8,
+            wood: ActivitySession.WoodSplittingFacts = .init()
+        ) -> ActivitySession.Input {
+            .init(kind: .woodSplitting, startDate: .now, durationSeconds: 7_200,
+                  sessionRPE: sessionRPE, loadLb: loadLb, notes: "", woodSplitting: wood)
+        }
+        let rejected: [(String, ActivitySession.Input)] = [
+            ("duration", .init(kind: .woodSplitting, startDate: .now, durationSeconds: 0,
+                               sessionRPE: 8, loadLb: nil, notes: "", woodSplitting: nil)),
+            ("sessionRPE", input(sessionRPE: 11)),
+            ("loadLb", input(loadLb: -8)),
+            ("rounds", input(wood: .init(rounds: -1))),
+            ("splitPieces", input(wood: .init(splitPieces: -1))),
+            ("estimatedStrikes", input(wood: .init(estimatedStrikes: -1))),
+            ("cordVolume", input(wood: .init(cordVolume: -0.25))),
+            ("non-finite cordVolume", input(wood: .init(cordVolume: Double.infinity))),
+        ]
+        for (label, bad) in rejected {
+            XCTAssertThrowsError(try ActivitySession.create(input: bad, context: context),
+                                 "an out-of-contract \(label) must never be banked")
+        }
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ActivityDetail>()).count, 0,
+                       "a rejected quick log leaves no partial rows behind")
+    }
+
     func testV9StoreGainsIntervalsAndManualBarWithoutTouchingAnything() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cadence-v9-interval-migration-\(UUID().uuidString)", isDirectory: true)
