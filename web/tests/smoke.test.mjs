@@ -3618,31 +3618,33 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(kgSets > 0 && perSide > 0 && timed > 0 && bwSets > 0 && drops > 0 && signals > 0,
     `kg entry (${kgSets}), per-side (${perSide}), timed (${timed}), bodyweight (${bwSets}), drop-load (${drops}), body signals (${signals}) all present`);
 
-  // v12 wood splitting: the standalone session restores with its typed
-  // detail intact, derives the workload, and re-exports verbatim
-  // [INV-WOOD-WORK-ROUND-TRIPS]. It is one off-program `WorkoutSession` on
-  // the same timeline as the training log [INV-WOOD-WORK-USES-ONE-TIMELINE].
-  // Duration and maul weight live only on the canonical conditioning set.
+  // v12 ad-hoc activity (wood splitting, the first kind): the standalone
+  // session restores with its typed detail intact, derives the workload,
+  // and re-exports verbatim [INV-WOOD-WORK-ROUND-TRIPS]. It is one
+  // off-program `WorkoutSession` on the same timeline as the training log
+  // [INV-WOOD-WORK-USES-ONE-TIMELINE]. Duration and maul weight live only
+  // on the canonical conditioning set.
   {
-    const wood = sessions.find((s) => s.woodSplitting);
-    ok(!!wood, "the wood-splitting session restores with its typed detail");
-    ok(wood.woodSplitting.sessionRPE === 8.5 && wood.woodSplitting.rounds === 55
-      && wood.woodSplitting.splitPieces === 15 && wood.woodSplitting.estimatedStrikes === 340
-      && wood.woodSplitting.cordVolume === 0.25, "every recorded wood fact survives import");
+    const wood = sessions.find((s) => s.activity);
+    ok(!!wood, "the wood-splitting session restores with its typed activity detail");
+    ok(wood.activity.kind === "woodSplitting", "the activity kind survives import");
+    ok(wood.activity.sessionRPE === 8.5 && wood.activity.rounds === 55
+      && wood.activity.splitPieces === 15 && wood.activity.estimatedStrikes === 340
+      && wood.activity.cordVolume === 0.25, "every recorded wood fact survives import");
     ok(!wood.programTag, "wood splitting is off-program");
-    const woodEntry = wood.exercises.find((e) => e.exerciseName === "Wood Splitting");
+    const woodEntry = wood.exercises.find((e) => e.exerciseName === C.activityExerciseName(wood.activity.kind));
     const woodSet = woodEntry?.sets?.[0];
     ok(woodSet?.durationSeconds === 7200 && woodSet?.weightLb === 8,
       "duration and maul weight stay on the canonical conditioning set");
-    ok(C.woodSplittingWorkload(woodSet.durationSeconds, wood.woodSplitting.sessionRPE)?.arbitraryUnits === 1020,
+    ok(C.activityWorkload(woodSet.durationSeconds, wood.activity.sessionRPE)?.arbitraryUnits === 1020,
       "workload derives as duration minutes × session RPE");
     const reexport = JSON.parse(await db.exportJSON());
-    const woodOut = reexport.sessions.find((s) => s.woodSplitting);
-    ok(JSON.stringify(woodOut.woodSplitting)
-      === JSON.stringify({ sessionRPE: 8.5, rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25 }),
-      "the wood detail re-exports verbatim");
-    ok(reexport.sessions.filter((s) => s.woodSplitting).length === 1
-      && reexport.sessions.every((s) => s.woodSplitting || !("woodSplitting" in s)),
+    const woodOut = reexport.sessions.find((s) => s.activity);
+    ok(JSON.stringify(woodOut.activity)
+      === JSON.stringify({ kind: "woodSplitting", sessionRPE: 8.5, rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25 }),
+      "the activity detail re-exports verbatim");
+    ok(reexport.sessions.filter((s) => s.activity).length === 1
+      && reexport.sessions.every((s) => s.activity || !("activity" in s)),
       "sessions without a detail never gain the key");
   }
 

@@ -10339,7 +10339,8 @@
       "isCompleted": true,
       "completedAt": "2026-06-04T12:00:00.000Z",
       "programTag": null,
-      "woodSplitting": {
+      "activity": {
+        "kind": "woodSplitting",
         "sessionRPE": 8.5,
         "rounds": 55,
         "splitPieces": 15,

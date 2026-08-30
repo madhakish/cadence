@@ -254,17 +254,18 @@ for (const [name, n] of [["Push Press", 1], ["Power Clean", 2], ["Turkish Get-up
   }
 }
 
-// ---- 7. a standalone wood-splitting session with the v12 typed detail ----
-// One completed off-program conditioning session (#166): one Wood Splitting
-// entry, one completed duration set carrying the maul weight, and the
-// session-level `woodSplitting` facts the round-trip has to preserve
-// (INV-WOOD-WORK-ROUND-TRIPS). It shares its date with banked program work
-// to prove wood work coexists on a training day.
+// ---- 7. a standalone activity session with the v12 typed detail ----
+// One completed off-program conditioning session (#166, wood splitting is
+// the first registered kind): one Wood Splitting entry, one completed
+// duration set carrying the maul weight, and the session-level `activity`
+// facts the round-trip has to preserve (INV-WOOD-WORK-ROUND-TRIPS). It
+// shares its date with banked program work to prove activity work coexists
+// on a training day.
 await db.Sessions.save({
   id: "b7a2c9d4-5e31-4f8a-9c06-2d7e84f1a3b5", // fixed portable id, fictional
   date: db.iso(day(-27)), notes: "Wet oak rounds; fictional fixture log.",
   isCompleted: true, completedAt: db.iso(day(-27)),
-  woodSplitting: { sessionRPE: 8.5, rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25 },
+  activity: { kind: "woodSplitting", sessionRPE: 8.5, rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25 },
   exercises: [{
     order: 0, exerciseName: "Wood Splitting", exerciseId: C.exerciseLegacyID("Wood Splitting"),
     notes: "", phase: null, barId: null,

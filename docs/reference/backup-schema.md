@@ -19,17 +19,23 @@ The source-of-truth constants are:
 
 These values must change together.
 
-## Version 12 wood-splitting session detail
+## Version 12 ad-hoc activity detail
 
 Version 12 (#166) adds one optional object on a session; no collection
 changes shape and nothing else moved:
 
-- **`woodSplitting`** on a session marks it as a standalone wood-splitting
-  log and carries its typed facts: `{ sessionRPE, rounds, splitPieces,
-  estimatedStrikes, cordVolume }`, every field optional. `sessionRPE` is
-  1.0–10.0 (half steps valid); the counts are whole and non-negative;
-  `cordVolume` accepts fractional cords. Duration and maul weight are NOT
-  here — their one canonical location stays the session's conditioning set
+- **`activity`** on a session marks it as a standalone ad-hoc activity log
+  and carries its typed facts: `{ kind, sessionRPE, rounds, splitPieces,
+  estimatedStrikes, cordVolume }`. `kind` is required and validated against
+  the registered whitelist — `"woodSplitting"` is the first (and currently
+  only) kind; a future kind (mountain biking, hiking, climbing, portaging,
+  …) is a new value in that whitelist, so adding one bumps this version
+  exactly like every prior enum addition (v4/v5 pattern). `sessionRPE`
+  applies to every kind: 1.0–10.0, half steps valid. The remaining fields
+  are the wood-splitting kind's own typed facts — counts are whole and
+  non-negative, `cordVolume` accepts fractional cords — and stay null for
+  any other kind. Duration and implement load (the maul) are NOT here —
+  their one canonical location stays the session's conditioning set
   (`durationSeconds` / `weightLb`). All values are user-entered: absence is
   preserved, never estimated from other fields.
 

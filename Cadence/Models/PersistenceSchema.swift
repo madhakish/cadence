@@ -4,10 +4,10 @@ import SwiftData
 /// every V12 change is a brand-new model or a nil-valued optional on old
 /// rows, and needs no backfill.
 ///
-/// V12 adds the `WoodSplittingDetail` model (typed metadata for standalone
-/// wood-splitting conditioning sessions) and its optional one-to-one
-/// relationship from `WorkoutSession`; every existing session simply carries
-/// nil.
+/// V12 adds the `ActivityDetail` model (typed, kind-discriminated metadata
+/// for ad-hoc activity sessions — wood splitting first) and its optional
+/// one-to-one relationship from `WorkoutSession`; every existing session
+/// simply carries nil.
 enum CadenceSchemaV12: VersionedSchema {
     static var versionIdentifier = Schema.Version(12, 0, 0)
 
@@ -29,7 +29,7 @@ enum CadenceSchemaV12: VersionedSchema {
             ProgramAccessory.self,
             CoachingDecision.self,
             TrainingInterval.self,
-            WoodSplittingDetail.self,
+            ActivityDetail.self,
         ]
     }
 }
@@ -314,10 +314,10 @@ enum CadenceV10MigrationPlan: SchemaMigrationPlan {
     }
 }
 
-/// V11 -> V12: standalone wood-splitting sessions. V12 adds only the
-/// brand-new `WoodSplittingDetail` model and an optional to-one relationship
-/// on `WorkoutSession` that every existing row leaves nil, so SwiftData can
-/// upgrade without touching a row.
+/// V11 -> V12: ad-hoc activity sessions (wood splitting first). V12 adds
+/// only the brand-new `ActivityDetail` model and an optional to-one
+/// relationship on `WorkoutSession` that every existing row leaves nil, so
+/// SwiftData can upgrade without touching a row.
 enum CadenceV11MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CadenceSchemaV11.self, CadenceSchemaV12.self]

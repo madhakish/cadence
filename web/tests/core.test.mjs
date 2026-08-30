@@ -3060,27 +3060,32 @@ eq(C.stableID(""), "711a1863-0c97-4a6e-a99b-61b9d1644c6e", "stableID empty seed"
 eq(C.stableID("exercise:Caf\u00e9 Curl"), "51492463-ae3e-4033-a696-8af13b918867", "stableID non-ASCII");
 eq(C.exerciseLegacyID("Back Squat"), C.stableID("exercise:Back Squat"), "exerciseLegacyID is the namespaced derivation");
 
-// ---- woodSplittingWorkload: minutes × session RPE (#166) ----
-// Cases pinned identically in CadenceCoreTests/WoodSplittingTests.swift.
+// ---- activityWorkload: minutes × session RPE (#166) ----
+// Cases pinned identically in CadenceCoreTests/ActivityTests.swift.
 // [INV-WOOD-WORK-IS-NOT-LIFTING-VOLUME] workload is arbitrary units, never
 // tonnage; [INV-WOOD-WORK-DOES-NOT-GUESS] missing or out-of-contract inputs
 // yield null, never an estimate.
 {
   const deq = (a, b, msg) => ok(JSON.stringify(a) === JSON.stringify(b), `${msg} (got ${JSON.stringify(a)}, want ${JSON.stringify(b)})`);
-  deq(C.woodSplittingWorkload(7200, 8.5),
+  deq(C.ACTIVITY_KINDS, ["woodSplitting"],
+    "activity kinds are added deliberately — update both clients and the backup contract together");
+  deq(C.activityWorkload(7200, 8.5),
     { durationMinutes: 120, sessionRPE: 8.5, arbitraryUnits: 1020 },
     "workload is duration minutes × session RPE");
 }
-eq(C.woodSplittingWorkload(null, 8), null, "no duration, no workload");
-eq(C.woodSplittingWorkload(3600, null), null, "no RPE, no workload");
-eq(C.woodSplittingWorkload(0, 8), null, "zero duration is invalid");
-eq(C.woodSplittingWorkload(3600, 0), null, "zero RPE is invalid");
-eq(C.woodSplittingWorkload(3600, 0.5), null,
+eq(C.activityExerciseName("woodSplitting"), "Wood Splitting",
+  "each kind resolves its canonical seeded exercise");
+eq(C.activityExerciseName("mountainBiking"), null, "an unregistered kind resolves nothing");
+eq(C.activityWorkload(null, 8), null, "no duration, no workload");
+eq(C.activityWorkload(3600, null), null, "no RPE, no workload");
+eq(C.activityWorkload(0, 8), null, "zero duration is invalid");
+eq(C.activityWorkload(3600, 0), null, "zero RPE is invalid");
+eq(C.activityWorkload(3600, 0.5), null,
   "the recorded contract is 1.0–10.0; sub-1 RPEs are invalid, not tiny workloads");
-eq(C.woodSplittingWorkload(3600, 11), null, "RPE above 10 is invalid");
-eq(C.woodSplittingWorkload(60, 1)?.arbitraryUnits, 1, "RPE 1 is a valid bound");
-eq(C.woodSplittingWorkload(60, 10)?.arbitraryUnits, 10, "RPE 10 is a valid bound");
-eq(C.woodSplittingWorkload(1800, 6.5)?.arbitraryUnits, 195, "half-step RPEs are valid");
+eq(C.activityWorkload(3600, 11), null, "RPE above 10 is invalid");
+eq(C.activityWorkload(60, 1)?.arbitraryUnits, 1, "RPE 1 is a valid bound");
+eq(C.activityWorkload(60, 10)?.arbitraryUnits, 10, "RPE 10 is a valid bound");
+eq(C.activityWorkload(1800, 6.5)?.arbitraryUnits, 195, "half-step RPEs are valid");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

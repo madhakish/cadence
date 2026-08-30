@@ -64,10 +64,12 @@ enum ExportService {
         let planNames: [String]?
     }
 
-    /// v12: typed wood-splitting facts (web `session.woodSplitting`).
-    /// Duration and maul weight are NOT here — their canonical location is
-    /// the session's conditioning set. Emitted only when the detail exists.
-    struct ExportWoodSplitting: Codable {
+    /// v12: typed ad-hoc activity facts (web `session.activity`), wood
+    /// splitting first. Duration and implement load are NOT here — their
+    /// canonical location is the session's conditioning set. Emitted only
+    /// when the detail exists.
+    struct ExportActivity: Codable {
+        let kind: String
         let sessionRPE: Double?
         let rounds: Int?
         let splitPieces: Int?
@@ -86,7 +88,7 @@ enum ExportService {
         let isCompleted: Bool
         let completedAt: Date?
         let programTag: ExportProgramTag?
-        let woodSplitting: ExportWoodSplitting?
+        let activity: ExportActivity?
         let exercises: [ExportExercise]
     }
 
@@ -474,8 +476,9 @@ enum ExportService {
                     isCompleted: session.isCompleted,
                     completedAt: session.completedAt,
                     programTag: programTag,
-                    woodSplitting: session.woodSplittingDetail.map {
-                        ExportWoodSplitting(
+                    activity: session.activityDetail.map {
+                        ExportActivity(
+                            kind: $0.kindRaw,
                             sessionRPE: $0.sessionRPE,
                             rounds: $0.rounds,
                             splitPieces: $0.splitPieces,

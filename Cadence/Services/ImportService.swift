@@ -51,12 +51,13 @@ enum ImportService {
         var id: String?; var programTemplateId: String?; var date: Date?; var notes: String?; var gym: String?; var gymId: String?; var isCompleted: Bool?
         var completedAt: Date?
         var programTag: ProgramTag?; var exercises: [ExerciseEntry]?
-        var woodSplitting: WoodSplittingDTO?
+        var activity: ActivityDTO?
     }
-    /// v12 typed wood-splitting facts. Absent on every older bundle — the
-    /// session simply restores with no detail; nothing is invented.
-    private struct WoodSplittingDTO: Decodable {
-        var sessionRPE: Double?; var rounds: Int?; var splitPieces: Int?
+    /// v12 typed ad-hoc activity facts (wood splitting first). Absent on
+    /// every older bundle — the session simply restores with no detail;
+    /// nothing is invented.
+    private struct ActivityDTO: Decodable {
+        var kind: String?; var sessionRPE: Double?; var rounds: Int?; var splitPieces: Int?
         var estimatedStrikes: Int?; var cordVolume: Double?
     }
     private struct ProgramTag: Decodable {
@@ -1190,17 +1191,21 @@ enum ImportService {
             }
             session.exercises.append(entry)
         }
-        // v12 typed wood-splitting facts. Values restore verbatim — absence
-        // stays absent (INV-WOOD-WORK-DOES-NOT-GUESS), and an all-nil object
-        // still restores as a detail row so the session keeps reading as a
-        // wood-splitting log.
-        if schemaVersion >= 12, let wood = s.woodSplitting {
-            session.woodSplittingDetail = WoodSplittingDetail(
-                sessionRPE: wood.sessionRPE,
-                rounds: wood.rounds,
-                splitPieces: wood.splitPieces,
-                estimatedStrikes: wood.estimatedStrikes,
-                cordVolume: wood.cordVolume
+        // v12 typed ad-hoc activity facts. Values — the kind included —
+        // restore verbatim: absence stays absent
+        // (INV-WOOD-WORK-DOES-NOT-GUESS), and a kind this catalog does not
+        // know yet is preserved rather than destroyed, the same
+        // repair-not-reject posture ids follow. An all-nil object still
+        // restores as a detail row so the session keeps reading as an
+        // activity log.
+        if schemaVersion >= 12, let activity = s.activity, let kind = activity.kind {
+            session.activityDetail = ActivityDetail(
+                kindRaw: kind,
+                sessionRPE: activity.sessionRPE,
+                rounds: activity.rounds,
+                splitPieces: activity.splitPieces,
+                estimatedStrikes: activity.estimatedStrikes,
+                cordVolume: activity.cordVolume
             )
         }
         return session

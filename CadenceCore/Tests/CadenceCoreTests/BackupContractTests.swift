@@ -29,7 +29,7 @@ final class BackupContractTests: XCTestCase {
         XCTAssertTrue(BackupContract.supports(schemaVersion: 9),
                       "a pre-intervals bundle restores; declared breaks stay untouched and bars stay stamped")
         XCTAssertTrue(BackupContract.supports(schemaVersion: 11),
-                      "a pre-wood-splitting bundle restores; no session carries a detail")
+                      "a pre-activity bundle restores; no session carries a detail")
         XCTAssertTrue(BackupContract.supports(schemaVersion: BackupContract.currentSchemaVersion))
     }
 

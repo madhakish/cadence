@@ -182,13 +182,13 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     /// V11 -> V12 (#166): the lightweight stage adds only the brand-new
-    /// `WoodSplittingDetail` model and an optional relationship every
-    /// existing session reads as nil. A real on-disk V11 store upgrades
-    /// without a row being touched, and the production creator then writes
-    /// the canonical wood-splitting shape into the migrated store — one
-    /// off-program `WorkoutSession` on the same timeline as the training
-    /// log [INV-WOOD-WORK-USES-ONE-TIMELINE].
-    func testV11StoreGainsWoodSplittingDetailWithoutTouchingAnything() throws {
+    /// `ActivityDetail` model and an optional relationship every existing
+    /// session reads as nil. A real on-disk V11 store upgrades without a
+    /// row being touched, and the production creator then writes the
+    /// canonical activity shape (wood splitting, the first kind) into the
+    /// migrated store — one off-program `WorkoutSession` on the same
+    /// timeline as the training log [INV-WOOD-WORK-USES-ONE-TIMELINE].
+    func testV11StoreGainsActivityDetailWithoutTouchingAnything() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cadence-v11-wood-migration-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -207,23 +207,25 @@ final class PersistenceMigrationTests: XCTestCase {
             let context = container.mainContext
             let migrated = try XCTUnwrap(
                 try context.fetch(FetchDescriptor<WorkoutSession>()).first { $0.notes == "V11 training day" })
-            XCTAssertNil(migrated.woodSplittingDetail, "existing sessions carry no detail")
+            XCTAssertNil(migrated.activityDetail, "existing sessions carry no detail")
             XCTAssertTrue(migrated.isCompleted)
             let migratedSet = try XCTUnwrap(migrated.orderedExercises.first?.workingSets.first)
             XCTAssertEqual(migratedSet.weightLb, 225, "manual training values survive")
             XCTAssertEqual(migratedSet.reps, 5)
-            XCTAssertEqual(try context.fetch(FetchDescriptor<WoodSplittingDetail>()).count, 0)
+            XCTAssertEqual(try context.fetch(FetchDescriptor<ActivityDetail>()).count, 0)
 
             // The production preparation seeds the canonical exercise, and the
             // production creator writes the quick-log shape into the migrated
             // store: off-program, one entry, one completed duration set.
             try Seeder.syncLibrary(context: context)
-            let wood = try WoodSplittingSession.create(
+            let wood = try ActivitySession.create(
                 input: .init(
+                    kind: .woodSplitting,
                     startDate: migrated.date.addingTimeInterval(6 * 3600),
-                    durationSeconds: 7_200, sessionRPE: 8.5, maulWeightLb: 8,
-                    rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25,
-                    notes: "Wet oak"
+                    durationSeconds: 7_200, sessionRPE: 8.5, loadLb: 8,
+                    notes: "Wet oak",
+                    woodSplitting: .init(rounds: 55, splitPieces: 15,
+                                         estimatedStrikes: 340, cordVolume: 0.25)
                 ),
                 exercises: try context.fetch(FetchDescriptor<Exercise>()),
                 context: context
@@ -233,8 +235,8 @@ final class PersistenceMigrationTests: XCTestCase {
             XCTAssertNil(wood.programID, "wood splitting never joins a program")
             XCTAssertEqual(wood.orderedExercises.count, 1, "no aliased entry rows")
             XCTAssertEqual(wood.orderedExercises.first?.orderedSets.count, 1, "no aliased set rows")
-            XCTAssertEqual(WoodSplittingSession.workload(for: wood)?.arbitraryUnits, 1_020)
-            XCTAssertNil(migrated.woodSplittingDetail, "the training session stays untouched")
+            XCTAssertEqual(ActivitySession.workload(for: wood)?.arbitraryUnits, 1_020)
+            XCTAssertNil(migrated.activityDetail, "the training session stays untouched")
         }
 
         let reopened = try ModelContainer(
@@ -245,7 +247,8 @@ final class PersistenceMigrationTests: XCTestCase {
         let context = reopened.mainContext
         let wood = try XCTUnwrap(
             try context.fetch(FetchDescriptor<WorkoutSession>()).first { $0.id == woodSessionID })
-        let detail = try XCTUnwrap(wood.woodSplittingDetail, "the typed detail persists on disk")
+        let detail = try XCTUnwrap(wood.activityDetail, "the typed detail persists on disk")
+        XCTAssertEqual(detail.kind, .woodSplitting)
         XCTAssertEqual(detail.sessionRPE, 8.5)
         XCTAssertEqual(detail.rounds, 55)
         XCTAssertEqual(detail.splitPieces, 15)
@@ -448,11 +451,11 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
-    /// v12 (#166): every recorded wood-splitting fact survives export and
-    /// restore, duration and maul weight stay on the canonical set, and a
-    /// v11 bundle restores with no detail invented anywhere
-    /// [INV-WOOD-WORK-ROUND-TRIPS].
-    func testNativeBackupRoundTripsWoodSplittingDetail() throws {
+    /// v12 (#166): every recorded activity fact — the kind included —
+    /// survives export and restore, duration and implement load stay on the
+    /// canonical set, and a v11 bundle restores with no detail invented
+    /// anywhere [INV-WOOD-WORK-ROUND-TRIPS].
+    func testNativeBackupRoundTripsActivityDetail() throws {
         let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let source = try ModelContainer(
             for: schema,
@@ -460,12 +463,14 @@ final class PersistenceMigrationTests: XCTestCase {
         )
         let context = source.mainContext
         try Seeder.seedIfNeeded(context: context)
-        _ = try WoodSplittingSession.create(
+        _ = try ActivitySession.create(
             input: .init(
+                kind: .woodSplitting,
                 startDate: IntervalDay.date(from: "2026-06-03")!,
-                durationSeconds: 7_200, sessionRPE: 8.5, maulWeightLb: 8,
-                rounds: 55, splitPieces: nil, estimatedStrikes: nil, cordVolume: 0.25,
-                notes: "Wet oak"
+                durationSeconds: 7_200, sessionRPE: 8.5, loadLb: 8,
+                notes: "Wet oak",
+                woodSplitting: .init(rounds: 55, splitPieces: nil,
+                                     estimatedStrikes: nil, cordVolume: 0.25)
             ),
             exercises: try context.fetch(FetchDescriptor<Exercise>()),
             context: context
@@ -475,8 +480,9 @@ final class PersistenceMigrationTests: XCTestCase {
         let backup = try ExportService.jsonData(context: context)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
         let exportedSession = try XCTUnwrap(
-            (json["sessions"] as? [[String: Any]])?.first { $0["woodSplitting"] != nil })
-        let exportedWood = try XCTUnwrap(exportedSession["woodSplitting"] as? [String: Any])
+            (json["sessions"] as? [[String: Any]])?.first { $0["activity"] != nil })
+        let exportedWood = try XCTUnwrap(exportedSession["activity"] as? [String: Any])
+        XCTAssertEqual(exportedWood["kind"] as? String, "woodSplitting")
         XCTAssertEqual(exportedWood["sessionRPE"] as? Double, 8.5)
         XCTAssertEqual(exportedWood["rounds"] as? Int, 55)
         XCTAssertEqual(exportedWood["cordVolume"] as? Double, 0.25)
@@ -494,21 +500,22 @@ final class PersistenceMigrationTests: XCTestCase {
         try ImportService.load(backup, into: restored.mainContext)
         let roundTripped = try XCTUnwrap(
             try restored.mainContext.fetch(FetchDescriptor<WorkoutSession>())
-                .first { $0.woodSplittingDetail != nil })
-        let detail = try XCTUnwrap(roundTripped.woodSplittingDetail)
+                .first { $0.activityDetail != nil })
+        let detail = try XCTUnwrap(roundTripped.activityDetail)
+        XCTAssertEqual(detail.kind, .woodSplitting)
         XCTAssertEqual(detail.sessionRPE, 8.5)
         XCTAssertEqual(detail.rounds, 55)
         XCTAssertNil(detail.splitPieces)
         XCTAssertNil(detail.estimatedStrikes)
         XCTAssertEqual(detail.cordVolume, 0.25)
-        XCTAssertEqual(WoodSplittingSession.workload(for: roundTripped)?.arbitraryUnits, 1_020)
+        XCTAssertEqual(ActivitySession.workload(for: roundTripped)?.arbitraryUnits, 1_020)
 
-        // A v11 bundle carries no woodSplitting key anywhere: the restore
-        // must not invent a detail for any session.
+        // A v11 bundle carries no activity key anywhere: the restore must
+        // not invent a detail for any session.
         var legacyJSON = json
         legacyJSON["schemaVersion"] = 11
         var legacySessions = try XCTUnwrap(legacyJSON["sessions"] as? [[String: Any]])
-        for index in legacySessions.indices { legacySessions[index].removeValue(forKey: "woodSplitting") }
+        for index in legacySessions.indices { legacySessions[index].removeValue(forKey: "activity") }
         legacyJSON["sessions"] = legacySessions
         let legacy = try ModelContainer(
             for: schema,
@@ -518,8 +525,8 @@ final class PersistenceMigrationTests: XCTestCase {
             JSONSerialization.data(withJSONObject: legacyJSON),
             into: legacy.mainContext
         )
-        XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<WoodSplittingDetail>()).count, 0,
-                       "a v11 restore invents no wood detail")
+        XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<ActivityDetail>()).count, 0,
+                       "a v11 restore invents no activity detail")
     }
 
     func testNativeBackupRoundTripsProgrammingPoliciesAndDefaultsLegacyBundles() throws {
