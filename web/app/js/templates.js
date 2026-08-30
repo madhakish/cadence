@@ -344,6 +344,9 @@ export async function createProgramFromTemplate(template) {
     : { bestE1RM: new Map(), latestWeight: new Map() };
   const programs = await Programs.all();
   return Programs.save({
+    // The methodology origin (schema V11): recorded at instantiation, never
+    // inferred later. Hand-built programs stay null.
+    templateId: template.id,
     name: uniqueName(template.name, new Set(programs.map((p) => p.name))),
     focus: template.focus, cycleNumber: 1, currentWeek: 1,
     nextDayIndex: 0, roundingLb: template.roundingLb, isActive: programs.length === 0,

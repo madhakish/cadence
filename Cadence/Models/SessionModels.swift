@@ -44,6 +44,10 @@ final class WorkoutSession {
     var gymName: String?
     var programID: String?
     var programName: String?
+    /// The methodology this session's program was instantiated from
+    /// (schema V11). Nil for legacy sessions and hand-built programs — a
+    /// template origin is never guessed after the fact.
+    var programTemplateID: String?
     var programCycleNumber: Int?
     var programWeek: Int?
     var programDayIndex: Int?
@@ -98,6 +102,10 @@ final class SessionExercise {
     var phaseRaw: Int?
     var programRole: String?
     var programSlotID: String?
+    /// Portable id of the exercise this entry logged (schema V11). Backfilled
+    /// from the live relationship (or the deterministic legacy derivation)
+    /// by the Seeder repair; nil only when the exercise is gone and unnamed.
+    var exerciseID: String?
 
     init(order: Int, exercise: Exercise?, notes: String = "") {
         self.order = order

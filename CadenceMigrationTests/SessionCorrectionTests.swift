@@ -14,7 +14,7 @@ final class SessionCorrectionTests: XCTestCase {
     // The container must outlive every context handed to a test — a context
     // whose container deallocates is a crash, not an error.
     private func makeContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV11.self)
         return try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

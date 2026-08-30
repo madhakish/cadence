@@ -1083,6 +1083,9 @@ function newExerciseSheet(exercises, onSaved) {
         if (!trimmed) { ui.toast("Enter an exercise name."); return; }
         if (exercises.some((exercise) => exercise.name.toLowerCase() === trimmed.toLowerCase())) { ui.toast("That exercise already exists."); return; }
         const exercise = {
+          // User-created exercises mint a random UUID (epic #155): only
+          // legacy/seed rows derive the deterministic name-based id.
+          id: crypto.randomUUID(),
           name: trimmed, category: category.value, type: type.value,
           movementGroup: movementGroup.value.trim().toLowerCase(), isUnilateral: unilateral,
           movementPattern: movementPattern.value,
