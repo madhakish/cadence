@@ -48,9 +48,17 @@ enum ImportService {
         var enteredAsDays: Bool?; var note: String?; var programId: String?
     }
     private struct Session: Decodable {
-        var id: String?; var date: Date?; var notes: String?; var gym: String?; var gymId: String?; var isCompleted: Bool?
+        var id: String?; var programTemplateId: String?; var date: Date?; var notes: String?; var gym: String?; var gymId: String?; var isCompleted: Bool?
         var completedAt: Date?
         var programTag: ProgramTag?; var exercises: [ExerciseEntry]?
+        var activity: ActivityDTO?
+    }
+    /// v12 typed ad-hoc activity facts (wood splitting first). Absent on
+    /// every older bundle — the session simply restores with no detail;
+    /// nothing is invented.
+    private struct ActivityDTO: Decodable {
+        var kind: String?; var sessionRPE: Double?; var rounds: Int?; var splitPieces: Int?
+        var estimatedStrikes: Int?; var cordVolume: Double?
     }
     private struct ProgramTag: Decodable {
         var programId: String?; var programName: String?; var cycleNumber: Int?; var week: Int?; var dayIndex: Int?
@@ -69,7 +77,7 @@ enum ImportService {
         }
     }
     private struct ExerciseEntry: Decodable {
-        var name: String?; var notes: String?; var phase: String?; var role: String?
+        var name: String?; var exerciseId: String?; var notes: String?; var phase: String?; var role: String?
         var programSlotId: String?; var barId: String?; var barIdManual: Bool?
         var plannedWeightLb: Double?; var targetWeightLb: Double?; var plannedSets: Int?; var plannedReps: Int?
         var plannedDurationSeconds: Int?; var fallbackWeightLb: Double?; var prescriptionStyle: String?
@@ -87,16 +95,16 @@ enum ImportService {
     }
     private struct Bodyweight: Decodable { var date: Date?; var weightLb: Double?; var bodyFatPercent: Double?; var milestoneLabel: String? }
     private struct CheckInDTO: Decodable { var date: Date?; var site: String?; var response: String?; var note: String? }
-    private struct MilestoneDTO: Decodable { var date: Date?; var exercise: String?; var kind: String?; var label: String? }
+    private struct MilestoneDTO: Decodable { var date: Date?; var exercise: String?; var exerciseId: String?; var kind: String?; var label: String? }
     private struct ProgramDTO: Decodable {
-        var id: String?; var name: String?; var focus: String?; var cycleNumber: Int?; var currentWeek: Int?
+        var id: String?; var templateId: String?; var name: String?; var focus: String?; var cycleNumber: Int?; var currentWeek: Int?
         var nextDayIndex: Int?; var roundingLb: Double?; var isActive: Bool?; var days: [DayDTO]?
         var equipmentPolicy: String?
         var coachEnabled: Bool?; var reliableHistoryStart: Date?; var preferredSessionSpacingDays: Int?
         var maximumAddedSetsPerRotation: Int?
 
         private enum CodingKeys: String, CodingKey {
-            case id, name, focus, cycleNumber, currentWeek, nextDayIndex, roundingLb, isActive, days
+            case id, templateId, name, focus, cycleNumber, currentWeek, nextDayIndex, roundingLb, isActive, days
             case equipmentPolicy
             case coachEnabled, reliableHistoryStart, preferredSessionSpacingDays, maximumAddedSetsPerRotation
         }
@@ -104,6 +112,7 @@ enum ImportService {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = (try? c.decode(String.self, forKey: .id))
                 ?? (try? c.decode(Int.self, forKey: .id)).map { String($0) }
+            templateId = try? c.decode(String.self, forKey: .templateId)
             name = try? c.decode(String.self, forKey: .name)
             focus = try? c.decode(String.self, forKey: .focus)
             cycleNumber = try? c.decode(Int.self, forKey: .cycleNumber)
@@ -124,7 +133,7 @@ enum ImportService {
         var lifts: [LiftDTO]?; var accessories: [AccessoryDTO]?
     }
     private struct LiftDTO: Decodable {
-        var id: String?; var exerciseName: String?; var role: String?; var order: Int?
+        var id: String?; var exerciseName: String?; var exerciseId: String?; var role: String?; var order: Int?
         var prescription: String?; var warmupPolicy: String?; var baseWeightLb: Double?; var estimatedMaxLb: Double?
         var loadOffsetLb: Double?; var peakOffsetLb: Double?; var deloadMultiplier: Double?
         var doubleProgressionSets: Int?; var minimumReps: Int?; var maximumReps: Int?; var currentReps: Int?
@@ -136,14 +145,14 @@ enum ImportService {
     private struct PendingDTO: Decodable { var state: PendingState?; var note: String? }
     private struct PendingState: Decodable { var baseWeightLb: Double?; var estimatedMaxLb: Double?; var stallCount: Int?; var lastIncrementLb: Double? }
     private struct AccessoryDTO: Decodable {
-        var id: String?; var exerciseName: String?; var order: Int?; var sets: Int?; var minReps: Int?; var maxReps: Int?
+        var id: String?; var exerciseName: String?; var exerciseId: String?; var order: Int?; var sets: Int?; var minReps: Int?; var maxReps: Int?
         var currentReps: Int?; var targetSeconds: Int?; var durationStepSeconds: Int?
         var capacityManaged: Bool?; var maximumSets: Int?; var conditioningEffort: String?; var targetRPE: Int?
         var weightLb: Double?; var incrementLb: Double?; var stallCount: Int?
         var revertToExerciseName: String?   // cycle-scoped swap, reverts at rollover
     }
     private struct Track: Decodable {
-        var exerciseName: String?; var mode: String?; var cycleNumber: Int?; var baseWeightLb: Double?
+        var exerciseName: String?; var exerciseId: String?; var mode: String?; var cycleNumber: Int?; var baseWeightLb: Double?
         var nextPhase: Int?; var incrementLb: Double?; var roundingLb: Double?; var lastCompletedAt: Date?
     }
     private struct GymDTO: Decodable {
@@ -153,7 +162,7 @@ enum ImportService {
     }
     private struct PlateToggleDTO: Decodable { var value: Double?; var unit: String?; var enabled: Bool? }
     private struct ExerciseDef: Decodable {
-        var name: String?; var category: String?; var type: String?; var movementGroup: String?
+        var id: String?; var name: String?; var category: String?; var type: String?; var movementGroup: String?
         var movementPattern: String?; var secondaryMovementPattern: String?; var aliases: [String]?; var strategyTags: [String]?
         var isUnilateral: Bool?; var loadBasis: String?; var implementCount: Int?
         var defaultRestSeconds: Int?; var notes: String?
@@ -269,6 +278,7 @@ enum ImportService {
         let reasons = Set(AutoregReason.allCases.map(\.rawValue))
         let loadBases = Set(LoadBasis.allCases.map(\.rawValue))
         let blockKinds = Set(PrescriptionBlockKind.allCases.map(\.rawValue))
+        let activityKinds = Set(ActivityKind.allCases.map(\.rawValue))
 
         for (si, session) in (bundle.sessions ?? []).enumerated() {
             let path = "sessions[\(si)]"
@@ -286,6 +296,21 @@ enum ImportService {
                 for (i, name) in (tag.planNames ?? []).enumerated() {
                     _ = try requiredText(name, "\(path).programTag.planNames[\(i)]")
                 }
+            }
+            // v12 typed ad-hoc activity facts — mirrors web validateBackup:
+            // the kind is required and must be a registered value (a later
+            // kind is a new enum value, so adding one bumps the version, the
+            // v4/v5 pattern), RPE follows the recorded 1.0–10.0 contract,
+            // counts are whole and non-negative.
+            if let activity = session.activity {
+                try known(activity.kind, activityKinds, "\(path).activity.kind", required: true)
+                try finite(activity.sessionRPE, "\(path).activity.sessionRPE",
+                           min: ActivityWorkload.sessionRPERange.lowerBound,
+                           max: ActivityWorkload.sessionRPERange.upperBound)
+                try integer(activity.rounds, "\(path).activity.rounds", min: 0)
+                try integer(activity.splitPieces, "\(path).activity.splitPieces", min: 0)
+                try integer(activity.estimatedStrikes, "\(path).activity.estimatedStrikes", min: 0)
+                try finite(activity.cordVolume, "\(path).activity.cordVolume", min: 0)
             }
             for (ei, exercise) in (session.exercises ?? []).enumerated() {
                 let exercisePath = "\(path).exercises[\(ei)]"
@@ -609,8 +634,13 @@ enum ImportService {
                     guard !name.isEmpty else { continue }
                     if let existing = byName[name] {
                         update(existing, from: d, schemaVersion: schemaVersion)
+                        existing.id = importedExerciseID(d.id, name: name, schemaVersion: schemaVersion)
                     }
-                    else { let e = makeExercise(d); context.insert(e); byName[name] = e }
+                    else {
+                        let e = makeExercise(d)
+                        e.id = importedExerciseID(d.id, name: name, schemaVersion: schemaVersion)
+                        context.insert(e); byName[name] = e
+                    }
                 }
             }
             var exByName: [String: Exercise] = [:]
@@ -622,7 +652,7 @@ enum ImportService {
             }
             if let tracks = bundle.tracks {
                 try context.delete(model: LiftTrack.self)
-                for t in tracks { context.insert(makeTrack(t)) }
+                for t in tracks { context.insert(makeTrack(t, schemaVersion: schemaVersion)) }
             }
             let programIDsByName: [String: String]
             if let programs = bundle.programs {
@@ -632,7 +662,7 @@ enum ImportService {
                 // caught. Validation only checks uniqueness within a program.
                 var seenSlotIDs: Set<String> = []
                 for p in programs {
-                    let program = makeProgram(p, preserveID: schemaVersion >= 2,
+                    let program = makeProgram(p, preserveID: schemaVersion >= 2, schemaVersion: schemaVersion,
                                               seenSlotIDs: &seenSlotIDs, repairedSlotIDs: &repairedSlotIDs)
                     context.insert(program)
                     imported[program.name] = program.id
@@ -660,6 +690,7 @@ enum ImportService {
                 for m in ms {
                     let mi = Milestone(date: m.date ?? .now, exerciseName: m.exercise, kind: .heaviestSet, label: m.label ?? "")
                     mi.kindRaw = m.kind ?? mi.kindRaw   // preserve exact raw (incl. "programNote")
+                    mi.exerciseID = importedExerciseID(m.exerciseId, name: m.exercise, schemaVersion: schemaVersion)
                     context.insert(mi)
                 }
             }
@@ -974,7 +1005,17 @@ enum ImportService {
         return gym
     }
 
-    private static func makeTrack(_ t: Track) -> LiftTrack {
+    /// v11 exercise ids ride verbatim when they are portable UUIDs; anything
+    /// else — an older bundle, a missing or malformed id — derives the
+    /// deterministic legacy id from the recorded name, so both clients agree
+    /// on identity for the same content (repair-not-reject, like slot ids).
+    private static func importedExerciseID(_ dtoID: String?, name: String?, schemaVersion: Int) -> String? {
+        if schemaVersion >= 11, let id = dtoID, UUID(uuidString: id) != nil { return id }
+        guard let name, !name.isEmpty else { return nil }
+        return StableID.exerciseLegacyID(name: name)
+    }
+
+    private static func makeTrack(_ t: Track, schemaVersion: Int) -> LiftTrack {
         let track = LiftTrack(
             exerciseName: t.exerciseName ?? "",
             mode: TrackMode(rawValue: t.mode ?? "cycle") ?? .cycle,
@@ -985,6 +1026,7 @@ enum ImportService {
             roundingLb: t.roundingLb ?? 5
         )
         track.lastCompletedAt = t.lastCompletedAt
+        track.exerciseID = importedExerciseID(t.exerciseId, name: t.exerciseName, schemaVersion: schemaVersion)
         return track
     }
 
@@ -1014,12 +1056,16 @@ enum ImportService {
     }
 
     private static func makeProgram(
-        _ p: ProgramDTO, preserveID: Bool, seenSlotIDs: inout Set<String>, repairedSlotIDs: inout Int
+        _ p: ProgramDTO, preserveID: Bool, schemaVersion: Int,
+        seenSlotIDs: inout Set<String>, repairedSlotIDs: inout Int
     ) -> Program {
         let prog = Program(name: p.name ?? "Program", focus: TrainingFocus(rawValue: p.focus ?? "strength") ?? .strength,
                            cycleNumber: p.cycleNumber ?? 1, currentWeek: p.currentWeek ?? 1,
                            nextDayIndex: p.nextDayIndex ?? 0, roundingLb: p.roundingLb ?? 5, isActive: p.isActive ?? false)
         if preserveID, let id = p.id { prog.id = id }
+        // Template origin is data, not an enum: carried verbatim from v11
+        // bundles, never guessed for older ones.
+        prog.templateID = schemaVersion >= 11 ? p.templateId : nil
         prog.equipmentPolicyRaw = p.equipmentPolicy ?? EquipmentPolicy.any.rawValue
         prog.coachEnabled = p.coachEnabled ?? true
         prog.reliableHistoryStart = p.reliableHistoryStart
@@ -1058,6 +1104,7 @@ enum ImportService {
                 lift.dropIncrementLb = l.dropIncrementLb ?? 0
                 lift.capacityManaged = l.capacityManaged ?? true
                 lift.maximumSets = l.maximumSets ?? 6
+                lift.exerciseID = importedExerciseID(l.exerciseId, name: l.exerciseName, schemaVersion: schemaVersion)
                 if let st = l.pending?.state {
                     lift.pendingBaseWeightLb = st.baseWeightLb
                     lift.pendingEstimatedMaxLb = st.estimatedMaxLb
@@ -1081,6 +1128,7 @@ enum ImportService {
                 acc.maximumSets = a.maximumSets ?? 6
                 acc.conditioningEffortRaw = a.conditioningEffort ?? "easy"
                 acc.targetRPE = a.targetRPE ?? 0
+                acc.exerciseID = importedExerciseID(a.exerciseId, name: a.exerciseName, schemaVersion: schemaVersion)
                 day.accessories.append(acc)
             }
         }
@@ -1099,6 +1147,7 @@ enum ImportService {
                                     programIDsByName: [String: String]) -> WorkoutSession {
         let session = WorkoutSession(date: s.date ?? .now, notes: s.notes ?? "", gymID: s.gymId, gymName: s.gym)
         if let id = s.id, UUID(uuidString: id) != nil { session.id = id }
+        session.programTemplateID = schemaVersion >= 11 ? s.programTemplateId : nil
         // Legacy, unversioned backups only contained completed sessions, so a
         // missing flag means completed. Version 1 carries the actual state.
         session.isCompleted = s.isCompleted ?? true
@@ -1115,6 +1164,7 @@ enum ImportService {
         }
         for (oi, e) in (s.exercises ?? []).enumerated() {
             let entry = SessionExercise(order: oi, exercise: e.name.flatMap { exByName[$0] }, notes: e.notes ?? "")
+            entry.exerciseID = importedExerciseID(e.exerciseId, name: e.name, schemaVersion: schemaVersion)
             // Empty means roleless, matching web's `e.role || null`: importing
             // "" as a role would flip an unprogrammed entry's chart role.
             entry.programRole = e.role.flatMap { $0.isEmpty ? nil : $0 }
@@ -1156,6 +1206,21 @@ enum ImportService {
                 entry.sets.append(set)
             }
             session.exercises.append(entry)
+        }
+        // v12 typed ad-hoc activity facts. `validate` has already required
+        // a registered kind and the documented ranges (mirroring web
+        // validateBackup), so values restore verbatim here and absence
+        // stays absent (INV-WOOD-WORK-DOES-NOT-GUESS); the guard is only
+        // the type-level unwrap of what validation guaranteed.
+        if schemaVersion >= 12, let activity = s.activity, let kind = activity.kind {
+            session.activityDetail = ActivityDetail(
+                kindRaw: kind,
+                sessionRPE: activity.sessionRPE,
+                rounds: activity.rounds,
+                splitPieces: activity.splitPieces,
+                estimatedStrikes: activity.estimatedStrikes,
+                cordVolume: activity.cordVolume
+            )
         }
         return session
     }

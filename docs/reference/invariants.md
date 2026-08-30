@@ -802,6 +802,48 @@ restores the ordinary reading.
 
 ---
 
+## Ad-hoc activities (#166)
+
+### INV-WOOD-WORK-USES-ONE-TIMELINE
+*platforms: native, web*
+
+An ad-hoc activity session — wood splitting is the first registered kind —
+is a typed `WorkoutSession`: one completed, off-program session holding the
+kind's canonical conditioning entry, one duration set, and the optional
+`ActivityDetail` / `activity` record carrying the kind and its typed facts.
+No parallel activity-history store exists; it may coexist with any number
+of workouts on the same date and is never merged into or owned by a
+program. A new kind is registered deliberately (`ActivityKind` /
+`C.ACTIVITY_KINDS`, its seeded exercise, and a backup version bump
+together), never inferred from an exercise name.
+
+### INV-WOOD-WORK-IS-NOT-LIFTING-VOLUME
+*platforms: core*
+
+An activity contributes no barbell tonnage, e1RM, lifting PR, milestone,
+or progression result. The seeded exercise's conditioning type is what
+enforces this on both clients; the session-RPE workload
+(`duration minutes × session RPE`, RPE 1.0–10.0) is a separate
+arbitrary-unit value, never tonnage.
+
+### INV-WOOD-WORK-DOES-NOT-GUESS
+*platforms: core*
+
+Every activity fact — cords, rounds, pieces, strikes, RPE, implement
+weight — is user-entered only; absence is preserved, never estimated from
+other fields, and a kind's typed facts attach only to that kind.
+
+### INV-WOOD-WORK-ROUND-TRIPS
+*platforms: native, web*
+
+Every recorded activity field — the kind included — survives native/web
+backup and restore without invention or loss, held by the v12 backup
+contract (`activity` on a session) and the synthetic fixture. Duration and
+implement load live only on the canonical conditioning set; the detail
+record never duplicates them.
+
+---
+
 ## Delivery
 
 ### INV-WEB-APP-SCOPE

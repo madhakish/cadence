@@ -1458,6 +1458,25 @@ export const FOCUS = {
 };
 export const focusParams = (focus) => FOCUS[focus] || FOCUS.strength;
 
+// Deterministic UUID-shaped identifiers (epic #155 Stage 2) — the exact
+// algorithm db.js has minted program-slot ids with since V4, promoted to the
+// shared core so CadenceCore's StableID can mirror it byte-for-byte (shared
+// vectors in core.test.mjs / StableIDTests). FNV-1a 32 over the seed, then
+// 32 xorshift rounds emitting one hex nibble each, assembled v4-shaped.
+export const stableID = (seed) => {
+  let state = 0x811c9dc5;
+  for (const ch of seed) { state ^= ch.charCodeAt(0); state = Math.imul(state, 0x01000193); }
+  let hex = "";
+  for (let i = 0; i < 32; i += 1) { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; hex += ((state >>> 0) & 15).toString(16); }
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
+};
+
+// The legacy-ID namespace for exercises: seed/migration/import derive a
+// pre-v11 exercise's portable id from its exact name, so the same store
+// contents produce the same ids on every client. Mirrors
+// StableID.exerciseLegacyID.
+export const exerciseLegacyID = (name) => stableID(`exercise:${name}`);
+
 export const epleyE1RM = (weightLb, reps) => (reps >= 1 ? weightLb * (1 + reps / 30.0) : weightLb);
 
 // The shared athlete-history fold (epic #155 Stage 1): one projection from
@@ -3758,4 +3777,32 @@ export function namedRestorePreview({
 export function isNamedRestoreNoOp(preview) {
   return [preview.exercises, preview.tracks, preview.gyms, preview.sessions, preview.programs]
     .every((collection) => collection.every((item) => item.status === "unchanged"));
+}
+
+// The registered ad-hoc activity kinds (#166) — real physical work logged as
+// one completed, off-program conditioning session on the same timeline as
+// training. Wood splitting is the first; a future kind (mountain biking,
+// hiking, climbing, portaging, …) is added here deliberately, with its own
+// typed facts, seeded exercise, and a backup-contract version bump — never
+// inferred from an exercise name. Mirrors native `ActivityKind`.
+export const ACTIVITY_EXERCISE_NAMES = { woodSplitting: "Wood Splitting" };
+// Derived, never hand-maintained: one registry, so the validator whitelist
+// and the name resolver cannot drift apart.
+export const ACTIVITY_KINDS = Object.keys(ACTIVITY_EXERCISE_NAMES);
+export const activityExerciseName = (kind) => ACTIVITY_EXERCISE_NAMES[kind] || null;
+// The recorded session-RPE contract, one spelling for the validator and the
+// workload math. Mirrors native `ActivityWorkload.sessionRPERange`.
+export const ACTIVITY_SESSION_RPE = { min: 1, max: 10 };
+
+// Session-RPE workload for ad-hoc activity sessions (#166): duration minutes
+// × session RPE, in arbitrary units. Relative session load, never barbell
+// tonnage (INV-WOOD-WORK-IS-NOT-LIFTING-VOLUME). RPE follows the recorded
+// contract, 1.0–10.0 inclusive; a missing or out-of-contract input yields
+// null, not an estimate. Mirrors native `ActivityWorkload`.
+export function activityWorkload(durationSeconds, sessionRPE) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+  if (!Number.isFinite(sessionRPE)
+    || sessionRPE < ACTIVITY_SESSION_RPE.min || sessionRPE > ACTIVITY_SESSION_RPE.max) return null;
+  const durationMinutes = durationSeconds / 60;
+  return { durationMinutes, sessionRPE, arbitraryUnits: durationMinutes * sessionRPE };
 }

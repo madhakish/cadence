@@ -3027,6 +3027,17 @@
         "quads",
         "triceps"
       ]
+    },
+    "Wood Splitting": {
+      "primary": [
+        "lats",
+        "abs"
+      ],
+      "secondary": [
+        "obliques",
+        "delts",
+        "forearms"
+      ]
     }
   },
   "groupDefaults": {

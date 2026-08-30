@@ -3049,5 +3049,43 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(C.athleteHistoryIndex([s("Deadlift", 1, 100, 1)]).Squat, undefined, "unseen exercise is absent");
 }
 
+
+// ---- stableID: deterministic legacy ids (epic #155 Stage 2) ----
+// Vectors pinned identically in CadenceCoreTests/StableIDTests.swift.
+eq(C.stableID("exercise:Back Squat"), "acb48602-df66-4957-a2d9-c78cae576106", "stableID vector 1");
+eq(C.stableID("exercise:Good Morning"), "f29523a4-cf91-49dd-a5df-accc2223e175", "stableID vector 2");
+eq(C.stableID("exercise:Deadlift"), "19a09757-500a-408f-a70f-18e00beafe8b", "stableID vector 3");
+eq(C.stableID("program:demo"), "4d5cec23-bf96-4e22-ab9f-1d5715078be2", "stableID vector 4");
+eq(C.stableID(""), "711a1863-0c97-4a6e-a99b-61b9d1644c6e", "stableID empty seed");
+eq(C.stableID("exercise:Caf\u00e9 Curl"), "51492463-ae3e-4033-a696-8af13b918867", "stableID non-ASCII");
+eq(C.exerciseLegacyID("Back Squat"), C.stableID("exercise:Back Squat"), "exerciseLegacyID is the namespaced derivation");
+
+// ---- activityWorkload: minutes × session RPE (#166) ----
+// Cases pinned identically in CadenceCoreTests/ActivityTests.swift.
+// [INV-WOOD-WORK-IS-NOT-LIFTING-VOLUME] workload is arbitrary units, never
+// tonnage; [INV-WOOD-WORK-DOES-NOT-GUESS] missing or out-of-contract inputs
+// yield null, never an estimate.
+{
+  const deq = (a, b, msg) => ok(JSON.stringify(a) === JSON.stringify(b), `${msg} (got ${JSON.stringify(a)}, want ${JSON.stringify(b)})`);
+  deq(C.ACTIVITY_KINDS, ["woodSplitting"],
+    "activity kinds are added deliberately — update both clients and the backup contract together");
+  deq(C.activityWorkload(7200, 8.5),
+    { durationMinutes: 120, sessionRPE: 8.5, arbitraryUnits: 1020 },
+    "workload is duration minutes × session RPE");
+}
+eq(C.activityExerciseName("woodSplitting"), "Wood Splitting",
+  "each kind resolves its canonical seeded exercise");
+eq(C.activityExerciseName("mountainBiking"), null, "an unregistered kind resolves nothing");
+eq(C.activityWorkload(null, 8), null, "no duration, no workload");
+eq(C.activityWorkload(3600, null), null, "no RPE, no workload");
+eq(C.activityWorkload(0, 8), null, "zero duration is invalid");
+eq(C.activityWorkload(3600, 0), null, "zero RPE is invalid");
+eq(C.activityWorkload(3600, 0.5), null,
+  "the recorded contract is 1.0–10.0; sub-1 RPEs are invalid, not tiny workloads");
+eq(C.activityWorkload(3600, 11), null, "RPE above 10 is invalid");
+eq(C.activityWorkload(60, 1)?.arbitraryUnits, 1, "RPE 1 is a valid bound");
+eq(C.activityWorkload(60, 10)?.arbitraryUnits, 10, "RPE 10 is a valid bound");
+eq(C.activityWorkload(1800, 6.5)?.arbitraryUnits, 195, "half-step RPEs are valid");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -194,6 +194,11 @@ const exercises = [
   ex("Ruck", "Conditioning", "conditioning", "conditioning"),
   ex("Run", "Conditioning", "conditioning", "conditioning", { aliases: ["Running", "Jog"] }),
   ex("Bear Crawl", "Conditioning", "bodyweight", "conditioning", { defaultRestSeconds: 45 }),
+  // The canonical wood-splitting activity (#166): the seeded name IS the
+  // registry constant the quick-log flow resolves against, so the two can
+  // never drift. Conditioning type keeps it out of lifting volume/e1RM/PR
+  // semantics. Mirrors native Seeder.
+  ex(C.ACTIVITY_EXERCISE_NAMES.woodSplitting, "Conditioning", "conditioning", "conditioning", { notes: "Duration / maul weight" }),
 ];
 
 const gyms = [{

@@ -47,6 +47,9 @@ enum ProgramTemplates {
             isActive: existingPrograms.isEmpty
         )
         context.insert(program)
+        // The methodology origin (schema V11): recorded at instantiation,
+        // never inferred later. Hand-built programs stay nil.
+        program.templateID = template.id
         for (i, d) in template.days.enumerated() {
             let day = ProgramDay(name: d.name, order: i)
             context.insert(day)   // insert before appending children (Seeder pattern)
@@ -80,6 +83,8 @@ enum ProgramTemplates {
                                        order: slotOrder,
                                        baseWeightLb: base, estimatedMaxLb: max)
                 lift.prescription = style
+                lift.exerciseID = existingByName[l.exercise]?.id
+                    ?? StableID.exerciseLegacyID(name: l.exercise)
                 if l.sets > 0 { lift.doubleProgressionSets = l.sets }
                 context.insert(lift)
                 day.lifts.append(lift)
@@ -106,6 +111,8 @@ enum ProgramTemplates {
                                            weightLb: weight, incrementLb: increment)
                 acc.conditioningEffortRaw = a.conditioningEffort
                 acc.targetRPE = a.targetRPE
+                acc.exerciseID = existingByName[a.exercise]?.id
+                    ?? StableID.exerciseLegacyID(name: a.exercise)
                 context.insert(acc)
                 day.accessories.append(acc)
             }

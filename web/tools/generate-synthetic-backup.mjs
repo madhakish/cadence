@@ -254,7 +254,34 @@ for (const [name, n] of [["Push Press", 1], ["Power Clean", 2], ["Turkish Get-up
   }
 }
 
-// ---- 7. GPP sweep: every library exercise not yet in the log gets real sets ----
+// ---- 7. a standalone activity session with the v12 typed detail ----
+// One completed off-program conditioning session (#166, wood splitting is
+// the first registered kind): one Wood Splitting entry, one completed
+// duration set carrying the maul weight, and the session-level `activity`
+// facts the round-trip has to preserve (INV-WOOD-WORK-ROUND-TRIPS). It
+// shares its date with banked program work to prove activity work coexists
+// on a training day.
+await db.Sessions.save({
+  id: "b7a2c9d4-5e31-4f8a-9c06-2d7e84f1a3b5", // fixed portable id, fictional
+  date: db.iso(day(-27)), notes: "Wet oak rounds; fictional fixture log.",
+  isCompleted: true,
+  // The creator contract: completedAt is the END of the work, start +
+  // duration — not the fixture-wide date pin ordinary sessions use.
+  completedAt: db.iso(new Date(day(-27).getTime() + 7200 * 1000)),
+  activity: { kind: "woodSplitting", sessionRPE: 8.5, rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25 },
+  exercises: [{
+    order: 0,
+    exerciseName: C.ACTIVITY_EXERCISE_NAMES.woodSplitting,
+    exerciseId: C.exerciseLegacyID(C.ACTIVITY_EXERCISE_NAMES.woodSplitting),
+    notes: "", phase: null, barId: null,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null, programRole: null,
+    // The canonical set is conditioning work — the block native's creator
+    // stamps; the fixture must pin the same shape.
+    sets: [{ ...mkSet(0, 8, 0, { duration: 7200 }), prescriptionBlock: "conditioning" }],
+  }],
+});
+
+// ---- 8. GPP sweep: every library exercise not yet in the log gets real sets ----
 const used = new Set();
 for (const s of await db.Sessions.completed()) for (const e of s.exercises) used.add(e.exerciseName);
 const leftovers = lib.filter((e) => !used.has(e.name)).sort((a, b) => a.name.localeCompare(b.name));
@@ -295,7 +322,7 @@ for (let i = 0; i < leftovers.length; i += 6) {
   cursor += 3;
 }
 
-// ---- 8. fictional body-log records for storage and chart coverage ----
+// ---- 9. fictional body-log records for storage and chart coverage ----
 for (let w = 0; w < 26; w++) {
   const d = day(-175 + w * 7);
   const weightLb = Math.round((150 + Math.sin(w / 3) * 2 + (rng() - 0.5)) * 10) / 10;
@@ -308,7 +335,7 @@ for (const site of ["Shoulder", "Hip", "Knee"]) {
   }
 }
 
-// ---- 9. settings variations (units both, non-default rest buckets, theme) ----
+// ---- 10. settings variations (units both, non-default rest buckets, theme) ----
 const settings = await db.Settings.get();
 settings.unitDisplay = "both";
 settings.theme = "slate";

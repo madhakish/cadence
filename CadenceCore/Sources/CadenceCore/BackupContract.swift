@@ -36,6 +36,16 @@
 /// `trainingIntent`. Both are additive, and older bundles restore with the
 /// literal legacy values `any` and `general` respectively.
 ///
+/// Version 11 (epic #155 Stage 2) adds stable portable identity: `id` on
+/// exercise definitions, `exerciseId` on session exercise entries, program
+/// lift/accessory slots, tracks, and milestones, plus `templateId` on
+/// programs and `programTemplateId` on sessions (the methodology origin,
+/// recorded at instantiation and never guessed). All additive: importers
+/// accept v0-v10 and derive the deterministic legacy id from each recorded
+/// name (`StableID.exerciseLegacyID`, identical on both clients), and a
+/// malformed v11 id is repaired the same way rather than rejected — the
+/// slot-id policy. v11 round-trips ids verbatim.
+///
 /// Version 10 adds the `intervals` collection (typed calendar spans: deload,
 /// rest, away, active recovery) and the per-session-exercise `barIdManual`
 /// marker (emitted only when true). Both are additive: a v≤9 bundle restores
@@ -43,8 +53,20 @@
 /// behavior. Older importers reject a v10 bundle on the version gate, which
 /// is correct: silently dropping a declared break would turn it back into an
 /// apparent lapse after a restore.
+///
+/// Version 12 (#166) adds the optional per-session `activity` object — the
+/// typed facts of an ad-hoc activity session: a required `kind`
+/// (`woodSplitting` is the first registered kind), `sessionRPE` for every
+/// kind, and the kind's own typed facts (wood: rounds, splitPieces,
+/// estimatedStrikes, cordVolume; duration and implement load stay on the
+/// canonical conditioning set). Additive: a v≤11 bundle restores with no
+/// detail on any session, and a later kind is a new value in the validated
+/// whitelist, so adding one bumps this version exactly like a new enum case
+/// always has. Older importers reject a v12 bundle on the version gate,
+/// which is correct: parsing it would silently drop the recorded facts
+/// (INV-WOOD-WORK-ROUND-TRIPS).
 public enum BackupContract {
-    public static let currentSchemaVersion = 10
+    public static let currentSchemaVersion = 12
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

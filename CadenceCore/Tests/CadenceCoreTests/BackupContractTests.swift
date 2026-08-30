@@ -8,7 +8,7 @@ final class BackupContractTests: XCTestCase {
     ///
     /// Must stay in lockstep with `BACKUP_SCHEMA_VERSION` in web/app/js/db.js.
     func testCurrentVersionIsPinned() {
-        XCTAssertEqual(BackupContract.currentSchemaVersion, 10)
+        XCTAssertEqual(BackupContract.currentSchemaVersion, 12)
     }
 
     func testCurrentAndLegacyVersionsAreSupported() {
@@ -28,6 +28,8 @@ final class BackupContractTests: XCTestCase {
                       "a pre-policy bundle restores with any/general legacy behavior")
         XCTAssertTrue(BackupContract.supports(schemaVersion: 9),
                       "a pre-intervals bundle restores; declared breaks stay untouched and bars stay stamped")
+        XCTAssertTrue(BackupContract.supports(schemaVersion: 11),
+                      "a pre-activity bundle restores; no session carries a detail")
         XCTAssertTrue(BackupContract.supports(schemaVersion: BackupContract.currentSchemaVersion))
     }
 

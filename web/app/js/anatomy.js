@@ -273,6 +273,7 @@ export const MUSCLE_MAP = {
   "Wall Sit": { primary: ["quads"], secondary: ["glutes", "calves"] },
   "Run": { primary: ["quads", "calves"], secondary: ["hamstrings", "glutes"] },
   "Bear Crawl": { primary: ["delts", "abs"], secondary: ["quads", "triceps"] },
+  "Wood Splitting": { primary: ["lats", "abs"], secondary: ["obliques", "delts", "forearms"] },
 };
 
 // Movement-group fallback for exercises the map doesn't know (user-created).

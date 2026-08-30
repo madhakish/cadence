@@ -287,6 +287,7 @@ public enum AnatomyData {
         "Wall Sit": Profile(primary: ["quads"], secondary: ["glutes", "calves"]),
         "Run": Profile(primary: ["quads", "calves"], secondary: ["hamstrings", "glutes"]),
         "Bear Crawl": Profile(primary: ["delts", "abs"], secondary: ["quads", "triceps"]),
+        "Wood Splitting": Profile(primary: ["lats", "abs"], secondary: ["obliques", "delts", "forearms"]),
     ]
 
     public static let groupDefaults: [String: Profile] = [

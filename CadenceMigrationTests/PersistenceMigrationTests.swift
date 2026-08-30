@@ -37,7 +37,7 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
-    func testShippedV3StoreMigratesToV10WithoutDataLoss() throws {
+    func testShippedV3StoreMigratesToV12WithoutDataLoss() throws {
         try assertMigration(
             createStore: createV3Store,
             migrationPlan: CadenceV3MigrationPlan.self,
@@ -47,7 +47,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// An install that skipped the protein retirement and arrives two versions
     /// behind, so its store crosses both stages in one open.
-    func testShippedV4StoreMigratesToV10WithoutDataLoss() throws {
+    func testShippedV4StoreMigratesToV12WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV4Store(at: $0) },
             migrationPlan: CadenceV4MigrationPlan.self,
@@ -57,7 +57,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The common case for this upgrade: every install shipped since protein
     /// logging was retired carries the V5 checksum.
-    func testShippedV5StoreMigratesToV10WithoutDataLoss() throws {
+    func testShippedV5StoreMigratesToV12WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV5Store(at: $0) },
             migrationPlan: CadenceV5MigrationPlan.self,
@@ -67,7 +67,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The common case for THIS upgrade: every install shipped since
     /// conditioning learned to count flights carries the V6 checksum.
-    func testShippedV6StoreMigratesToV10WithoutDataLoss() throws {
+    func testShippedV6StoreMigratesToV12WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV6Store(at: $0) },
             migrationPlan: CadenceV6MigrationPlan.self,
@@ -77,7 +77,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The common case for THIS upgrade: every install shipped since vertical
     /// pulling was promoted carries the V7 checksum.
-    func testShippedV7StoreMigratesToV10WithoutDataLoss() throws {
+    func testShippedV7StoreMigratesToV12WithoutDataLoss() throws {
         try assertMigration(
             createStore: { try self.createV7Store(at: $0) },
             migrationPlan: CadenceV7MigrationPlan.self,
@@ -95,7 +95,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV8PolicyStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         do {
             let container = try ModelContainer(
                 for: schema,
@@ -127,6 +127,152 @@ final class PersistenceMigrationTests: XCTestCase {
 
     /// The common V10 upgrade: a real on-disk V9 store gains the interval
     /// model and the manual-bar column without a row being touched.
+
+    /// V10 -> V11 (epic #155 Stage 2): the lightweight stage invents no
+    /// identity — every new column reads nil — and the production Seeder
+    /// repair then derives the deterministic legacy ids, idempotently.
+    func testV10StoreGainsPortableIdentityWithoutTouchingAnything() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-v10-identity-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+        try createV10IdentityStore(at: storeURL)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let expectedID = StableID.exerciseLegacyID(name: "Legacy Row")
+        do {
+            let container = try ModelContainer(
+                for: schema,
+                migrationPlan: CadenceV10MigrationPlan.self,
+                configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+            )
+            let context = container.mainContext
+            let exercise = try XCTUnwrap(
+                try context.fetch(FetchDescriptor<Exercise>()).first { $0.name == "Legacy Row" })
+            XCTAssertNil(exercise.id, "the lightweight stage must not invent identity")
+            let lift = try XCTUnwrap(try context.fetch(FetchDescriptor<ProgramLift>()).first)
+            XCTAssertNil(lift.exerciseID)
+            XCTAssertEqual(lift.baseWeightLb, 185, "programming values survive")
+
+            try Seeder.syncLibrary(context: context)
+            XCTAssertEqual(exercise.id, expectedID,
+                           "the repair derives the deterministic legacy id")
+            XCTAssertEqual(lift.exerciseID, expectedID)
+            XCTAssertEqual(try context.fetch(FetchDescriptor<LiftTrack>()).first?.exerciseID, expectedID)
+            XCTAssertEqual(try context.fetch(FetchDescriptor<Milestone>()).first?.exerciseID, expectedID)
+            let entry = try XCTUnwrap(try context.fetch(FetchDescriptor<SessionExercise>()).first)
+            XCTAssertEqual(entry.exerciseID, expectedID)
+            XCTAssertNil(try context.fetch(FetchDescriptor<Program>())
+                .first { $0.name == "V10 Identity Program" }?.templateID,
+                "a legacy program's template origin stays unknown — never guessed")
+
+            // Idempotence: the repair run again rewrites nothing.
+            try Seeder.syncLibrary(context: context)
+            XCTAssertFalse(context.hasChanges, "a second repair pass writes nothing")
+        }
+
+        let reopened = try ModelContainer(
+            for: schema,
+            migrationPlan: CadenceV10MigrationPlan.self,
+            configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+        )
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<Exercise>())
+            .first { $0.name == "Legacy Row" }?.id, expectedID, "derived ids persist")
+    }
+
+    /// V11 -> V12 (#166): the lightweight stage adds only the brand-new
+    /// `ActivityDetail` model and an optional relationship every existing
+    /// session reads as nil. A real on-disk V11 store upgrades without a
+    /// row being touched, and the production creator then writes the
+    /// canonical activity shape (wood splitting, the first kind) into the
+    /// migrated store — one off-program `WorkoutSession` on the same
+    /// timeline as the training log [INV-WOOD-WORK-USES-ONE-TIMELINE].
+    func testV11StoreGainsActivityDetailWithoutTouchingAnything() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-v11-wood-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+        try createV11WoodStore(at: storeURL)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        var woodSessionID = ""
+        do {
+            let container = try ModelContainer(
+                for: schema,
+                migrationPlan: CadenceV11MigrationPlan.self,
+                configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+            )
+            let context = container.mainContext
+            let migrated = try XCTUnwrap(
+                try context.fetch(FetchDescriptor<WorkoutSession>()).first { $0.notes == "V11 training day" })
+            XCTAssertNil(migrated.activityDetail, "existing sessions carry no detail")
+            XCTAssertTrue(migrated.isCompleted)
+            let migratedSet = try XCTUnwrap(migrated.orderedExercises.first?.workingSets.first)
+            XCTAssertEqual(migratedSet.weightLb, 225, "manual training values survive")
+            XCTAssertEqual(migratedSet.reps, 5)
+            XCTAssertEqual(try context.fetch(FetchDescriptor<ActivityDetail>()).count, 0)
+
+            // The production preparation seeds the canonical exercise, and the
+            // production creator writes the quick-log shape into the migrated
+            // store: off-program, one entry, one completed duration set.
+            try Seeder.syncLibrary(context: context)
+            let wood = try ActivitySession.create(
+                input: .init(
+                    kind: .woodSplitting,
+                    startDate: migrated.date.addingTimeInterval(6 * 3600),
+                    durationSeconds: 7_200, sessionRPE: 8.5, loadLb: 8,
+                    notes: "Wet oak",
+                    woodSplitting: .init(rounds: 55, splitPieces: 15,
+                                         estimatedStrikes: 340, cordVolume: 0.25)
+                ),
+                context: context
+            )
+            woodSessionID = wood.id
+            try context.save()
+            XCTAssertNil(wood.programID, "wood splitting never joins a program")
+            XCTAssertEqual(wood.orderedExercises.count, 1, "no aliased entry rows")
+            XCTAssertEqual(wood.orderedExercises.first?.orderedSets.count, 1, "no aliased set rows")
+            XCTAssertEqual(ActivitySession.workload(for: wood)?.arbitraryUnits, 1_020)
+            XCTAssertNil(migrated.activityDetail, "the training session stays untouched")
+        }
+
+        let reopened = try ModelContainer(
+            for: schema,
+            migrationPlan: CadenceV11MigrationPlan.self,
+            configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+        )
+        let context = reopened.mainContext
+        let wood = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<WorkoutSession>()).first { $0.id == woodSessionID })
+        let detail = try XCTUnwrap(wood.activityDetail, "the typed detail persists on disk")
+        XCTAssertEqual(detail.kind, .woodSplitting)
+        XCTAssertEqual(detail.sessionRPE, 8.5)
+        XCTAssertEqual(detail.rounds, 55)
+        XCTAssertEqual(detail.splitPieces, 15)
+        XCTAssertEqual(detail.estimatedStrikes, 340)
+        XCTAssertEqual(detail.cordVolume, 0.25)
+        let set = try XCTUnwrap(wood.orderedExercises.first?.workingSets.first)
+        XCTAssertEqual(set.durationSeconds, 7_200, "duration lives only on the canonical set")
+        XCTAssertEqual(set.weightLb, 8, "maul weight lives only on the canonical set")
+        XCTAssertEqual(wood.orderedExercises.first?.workingVolumeLb, 0,
+                       "wood splitting is never lifting volume")
+    }
+
+    /// The seed ships the registered activity kinds' canonical exercises by
+    /// literal name (the web parity check parses the literals from source);
+    /// this pins each literal to the registry constant the creator resolves
+    /// against, so a rename in either place fails here instead of throwing
+    /// `missingExercise` at every quick log.
+    func testSeedCarriesEveryRegisteredActivityExercise() {
+        let seeded = Set(Seeder.libraryDefinitions().map(\.name))
+        for kind in ActivityKind.allCases {
+            XCTAssertTrue(seeded.contains(kind.exerciseName),
+                          "the seed is missing \(kind.rawValue)'s canonical exercise \(kind.exerciseName)")
+        }
+    }
+
     func testV9StoreGainsIntervalsAndManualBarWithoutTouchingAnything() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cadence-v9-interval-migration-\(UUID().uuidString)", isDirectory: true)
@@ -135,7 +281,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV9IntervalStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         do {
             let container = try ModelContainer(
                 for: schema,
@@ -178,8 +324,68 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(IntervalDay.string(from: interval.endDate), "2026-07-20")
     }
 
+
+    /// V11 identity round trip (epic #155 Stage 2): exported ids survive a
+    /// restore verbatim, and a v10 bundle stripped of every id derives the
+    /// same deterministic legacy ids web derives — cross-client identity for
+    /// identical content.
+    func testBackupRoundTripsIdentityAndDerivesLegacyIDs() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let source = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let context = source.mainContext
+        let exercise = Exercise(name: "Round Trip Row", category: .main, type: .barbell, movementGroup: "hinge")
+        exercise.id = "12345678-1234-4123-a123-123456789abc"   // a user-created random UUID
+        context.insert(exercise)
+        let session = WorkoutSession(date: .now)
+        context.insert(session)
+        let entry = SessionExercise(order: 0, exercise: exercise)
+        entry.exerciseID = exercise.id
+        context.insert(entry)
+        session.exercises.append(entry)
+        try context.save()
+
+        let backup = try ExportService.jsonData(context: context)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        let exportedDef = try XCTUnwrap((json["exercises"] as? [[String: Any]])?
+            .first { $0["name"] as? String == "Round Trip Row" })
+        XCTAssertEqual(exportedDef["id"] as? String, exercise.id, "the portable id rides the bundle")
+
+        // v11 ids restore verbatim.
+        let restored = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        try ImportService.load(backup, into: restored.mainContext)
+        XCTAssertEqual(try restored.mainContext.fetch(FetchDescriptor<Exercise>())
+            .first { $0.name == "Round Trip Row" }?.id, exercise.id)
+
+        // A v10 bundle carries no ids: the importer derives the deterministic
+        // legacy id from the name — the exact value web derives.
+        var legacyJSON = json
+        legacyJSON["schemaVersion"] = 10
+        var defs = try XCTUnwrap(legacyJSON["exercises"] as? [[String: Any]])
+        for index in defs.indices { defs[index].removeValue(forKey: "id") }
+        legacyJSON["exercises"] = defs
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyJSON)
+        let legacy = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        try ImportService.load(legacyData, into: legacy.mainContext)
+        XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<Exercise>())
+            .first { $0.name == "Round Trip Row" }?.id,
+            StableID.exerciseLegacyID(name: "Round Trip Row"),
+            "a v10 def derives the deterministic legacy id")
+        XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<SessionExercise>())
+            .first?.exerciseID, StableID.exerciseLegacyID(name: "Round Trip Row"),
+            "a v10 session entry derives the same id from its name")
+    }
+
     func testNativeBackupRoundTripsIntervalsAndManualBarMarker() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -204,7 +410,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         let backup = try ExportService.jsonData(context: context)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
-        XCTAssertEqual(json["schemaVersion"] as? Int, 10)
+        XCTAssertEqual(json["schemaVersion"] as? Int, 12)
         let exportedInterval = try XCTUnwrap((json["intervals"] as? [[String: Any]])?.first)
         XCTAssertEqual(exportedInterval["kind"] as? String, "activeRecovery")
         XCTAssertEqual(exportedInterval["startDate"] as? String, "2026-06-01")
@@ -257,8 +463,108 @@ final class PersistenceMigrationTests: XCTestCase {
         )
     }
 
+    /// v12 (#166): every recorded activity fact — the kind included —
+    /// survives export and restore, duration and implement load stay on the
+    /// canonical set, and a v11 bundle restores with no detail invented
+    /// anywhere [INV-WOOD-WORK-ROUND-TRIPS].
+    func testNativeBackupRoundTripsActivityDetail() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let source = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let context = source.mainContext
+        try Seeder.seedIfNeeded(context: context)
+        _ = try ActivitySession.create(
+            input: .init(
+                kind: .woodSplitting,
+                startDate: IntervalDay.date(from: "2026-06-03")!,
+                durationSeconds: 7_200, sessionRPE: 8.5, loadLb: 8,
+                notes: "Wet oak",
+                woodSplitting: .init(rounds: 55, splitPieces: nil,
+                                     estimatedStrikes: nil, cordVolume: 0.25)
+            ),
+            context: context
+        )
+        try context.save()
+
+        let backup = try ExportService.jsonData(context: context)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        let exportedSession = try XCTUnwrap(
+            (json["sessions"] as? [[String: Any]])?.first { $0["activity"] != nil })
+        let exportedWood = try XCTUnwrap(exportedSession["activity"] as? [String: Any])
+        XCTAssertEqual(exportedWood["kind"] as? String, "woodSplitting")
+        XCTAssertEqual(exportedWood["sessionRPE"] as? Double, 8.5)
+        XCTAssertEqual(exportedWood["rounds"] as? Int, 55)
+        XCTAssertEqual(exportedWood["cordVolume"] as? Double, 0.25)
+        XCTAssertNil(exportedWood["splitPieces"], "absent facts stay absent")
+        let exportedSet = try XCTUnwrap(
+            ((exportedSession["exercises"] as? [[String: Any]])?.first?["sets"] as? [[String: Any]])?.first)
+        XCTAssertEqual(exportedSet["durationSeconds"] as? Int, 7_200,
+                       "duration is only on the canonical set")
+        XCTAssertEqual(exportedSet["weightLb"] as? Double, 8)
+
+        let restored = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        try ImportService.load(backup, into: restored.mainContext)
+        let roundTripped = try XCTUnwrap(
+            try restored.mainContext.fetch(FetchDescriptor<WorkoutSession>())
+                .first { $0.activityDetail != nil })
+        let detail = try XCTUnwrap(roundTripped.activityDetail)
+        XCTAssertEqual(detail.kind, .woodSplitting)
+        XCTAssertEqual(detail.sessionRPE, 8.5)
+        XCTAssertEqual(detail.rounds, 55)
+        XCTAssertNil(detail.splitPieces)
+        XCTAssertNil(detail.estimatedStrikes)
+        XCTAssertEqual(detail.cordVolume, 0.25)
+        XCTAssertEqual(ActivitySession.workload(for: roundTripped)?.arbitraryUnits, 1_020)
+
+        // A v11 bundle carries no activity key anywhere: the restore must
+        // not invent a detail for any session.
+        var legacyJSON = json
+        legacyJSON["schemaVersion"] = 11
+        var legacySessions = try XCTUnwrap(legacyJSON["sessions"] as? [[String: Any]])
+        for index in legacySessions.indices { legacySessions[index].removeValue(forKey: "activity") }
+        legacyJSON["sessions"] = legacySessions
+        let legacy = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        try ImportService.load(
+            JSONSerialization.data(withJSONObject: legacyJSON),
+            into: legacy.mainContext
+        )
+        XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<ActivityDetail>()).count, 0,
+                       "a v11 restore invents no activity detail")
+
+        // Native validation mirrors web validateBackup: an unregistered
+        // kind or an out-of-contract RPE rejects the bundle before any
+        // write, so both clients refuse the same file.
+        let mutations: [(String, Any)] = [("kind", "hiking"), ("sessionRPE", 15)]
+        for (key, value) in mutations {
+            var badJSON = json
+            var badSessions = try XCTUnwrap(badJSON["sessions"] as? [[String: Any]])
+            for index in badSessions.indices where badSessions[index]["activity"] != nil {
+                var activity = try XCTUnwrap(badSessions[index]["activity"] as? [String: Any])
+                activity[key] = value
+                badSessions[index]["activity"] = activity
+            }
+            badJSON["sessions"] = badSessions
+            let rejected = try ModelContainer(
+                for: schema,
+                configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            )
+            XCTAssertThrowsError(try ImportService.load(
+                JSONSerialization.data(withJSONObject: badJSON),
+                into: rejected.mainContext
+            ), "a malformed activity object must reject before writes, as web does")
+        }
+    }
+
     func testNativeBackupRoundTripsProgrammingPoliciesAndDefaultsLegacyBundles() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -274,7 +580,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         let backup = try ExportService.jsonData(context: source.mainContext)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
-        XCTAssertEqual(json["schemaVersion"] as? Int, 10)
+        XCTAssertEqual(json["schemaVersion"] as? Int, 12)
         let exportedProgram = try XCTUnwrap((json["programs"] as? [[String: Any]])?.first)
         XCTAssertEqual(exportedProgram["equipmentPolicy"] as? String, "freeWeightsOnly")
         let exportedDay = try XCTUnwrap((exportedProgram["days"] as? [[String: Any]])?.first)
@@ -312,7 +618,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testNativeStandaloneProgramRoundTripsProgrammingPolicies() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -365,7 +671,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV7Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         do {
             let container = try ModelContainer(for: schema, migrationPlan: CadenceV7MigrationPlan.self,
@@ -408,7 +714,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV6Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(for: schema, migrationPlan: CadenceV6MigrationPlan.self,
                                            configurations: configuration)
@@ -479,7 +785,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// native omits this one, restoring its own post-migration backup promotes
     /// a pull-up the lifter deliberately moved back to Accessory.
     func testNativeBackupRoundTripKeepsVerticalPullPromotionStamp() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -518,7 +824,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// both restore as "gym inventory", matching web's wholesale-record
     /// replacement.
     func testRestoreClearsAStationPreferenceTheBackupDoesNotContain() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -564,7 +870,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV4Store(at: storeURL, proteinEntries: 12)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV4MigrationPlan.self, configurations: configuration
@@ -612,7 +918,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV5Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV5MigrationPlan.self, configurations: configuration
@@ -660,7 +966,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairRestoresIndependentLowerBDayAndIsIdempotent() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -736,7 +1042,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairDoesNotGuessBetweenIdenticalCollidingSlots() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -777,7 +1083,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testMirroredLowerBMatrixRestoresRolesFromItsTaggedProgramDay() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -873,11 +1179,15 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     private func openUsingProductionStrategies(storeURL: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let configuration = {
             ModelConfiguration("migration", schema: schema, url: storeURL)
         }
         let attempts: [() throws -> ModelContainer] = [
+            { try ModelContainer(for: schema, migrationPlan: CadenceV10MigrationPlan.self,
+                                 configurations: configuration()) },
+            { try ModelContainer(for: schema, migrationPlan: CadenceV9MigrationPlan.self,
+                                 configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadenceV8MigrationPlan.self,
                                  configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadenceV7MigrationPlan.self,
@@ -918,7 +1228,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createStore(storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema,
@@ -1440,6 +1750,57 @@ final class PersistenceMigrationTests: XCTestCase {
         context.insert(CadenceSchemaV7.Gym(name: "Migration Gym"))
         context.insert(settings)
         insertV7Program(context)
+        try context.save()
+    }
+
+
+    private func createV10IdentityStore(at url: URL) throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV10.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: url)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+
+        let exercise = CadenceSchemaV10.Exercise(name: "Legacy Row", categoryRaw: "Main", typeRaw: "barbell")
+        let program = CadenceSchemaV10.Program(name: "V10 Identity Program")
+        let day = CadenceSchemaV10.ProgramDay(name: "Pull", order: 0)
+        let lift = CadenceSchemaV10.ProgramLift(exerciseName: "Legacy Row")
+        lift.baseWeightLb = 185
+        let session = CadenceSchemaV10.WorkoutSession(date: .now)
+        session.isCompleted = true
+        let entry = CadenceSchemaV10.SessionExercise(order: 0)
+        let track = CadenceSchemaV10.LiftTrack(exerciseName: "Legacy Row")
+        let milestone = CadenceSchemaV10.Milestone(kindRaw: "heaviestSet", label: "185 lb x 5")
+        milestone.exerciseName = "Legacy Row"
+        // One side only — same rule the other fixtures state.
+        day.program = program; lift.day = day
+        entry.session = session; entry.exercise = exercise
+        context.insert(exercise); context.insert(program); context.insert(day); context.insert(lift)
+        context.insert(session); context.insert(entry); context.insert(track); context.insert(milestone)
+        try context.save()
+    }
+
+    private func createV11WoodStore(at url: URL) throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV11.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: url)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+
+        let exercise = CadenceSchemaV11.Exercise(name: "Back Squat", categoryRaw: "Main", typeRaw: "barbell")
+        exercise.id = StableID.exerciseLegacyID(name: "Back Squat")
+        let session = CadenceSchemaV11.WorkoutSession(date: .now)
+        session.notes = "V11 training day"
+        session.isCompleted = true
+        let entry = CadenceSchemaV11.SessionExercise(order: 0)
+        entry.exerciseID = exercise.id
+        let set = CadenceSchemaV11.SetEntry(order: 0)
+        set.weightLb = 225
+        set.reps = 5
+        set.statusRaw = "completed"
+        // One side only — same rule the other fixtures state.
+        entry.exercise = exercise
+        entry.session = session
+        set.sessionExercise = entry
+        context.insert(exercise); context.insert(session); context.insert(entry); context.insert(set)
         try context.save()
     }
 
