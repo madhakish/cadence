@@ -459,6 +459,7 @@ private struct NewExerciseView: View {
                                                 movementGroup: movementGroup.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
                                                 movementPattern: movementPattern == .unknown ? nil : movementPattern,
                                                 isUnilateral: isUnilateral, notes: notes)
+                        exercise.id = UUID().uuidString
                         context.insert(exercise)
                         if PersistenceErrorCenter.shared.save(context, operation: "Adding the exercise") { dismiss() }
                     }

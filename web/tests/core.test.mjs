@@ -3049,5 +3049,16 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(C.athleteHistoryIndex([s("Deadlift", 1, 100, 1)]).Squat, undefined, "unseen exercise is absent");
 }
 
+
+// ---- stableID: deterministic legacy ids (epic #155 Stage 2) ----
+// Vectors pinned identically in CadenceCoreTests/StableIDTests.swift.
+eq(C.stableID("exercise:Back Squat"), "acb48602-df66-4957-a2d9-c78cae576106", "stableID vector 1");
+eq(C.stableID("exercise:Good Morning"), "f29523a4-cf91-49dd-a5df-accc2223e175", "stableID vector 2");
+eq(C.stableID("exercise:Deadlift"), "19a09757-500a-408f-a70f-18e00beafe8b", "stableID vector 3");
+eq(C.stableID("program:demo"), "4d5cec23-bf96-4e22-ab9f-1d5715078be2", "stableID vector 4");
+eq(C.stableID(""), "711a1863-0c97-4a6e-a99b-61b9d1644c6e", "stableID empty seed");
+eq(C.stableID("exercise:Caf\u00e9 Curl"), "51492463-ae3e-4033-a696-8af13b918867", "stableID non-ASCII");
+eq(C.exerciseLegacyID("Back Squat"), C.stableID("exercise:Back Squat"), "exerciseLegacyID is the namespaced derivation");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

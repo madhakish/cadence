@@ -1075,7 +1075,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // Every other assertion here compares against the constant, so a JS-only bump
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
-ok(db.BACKUP_SCHEMA_VERSION === 10, `backup schema is pinned at 10 (got ${db.BACKUP_SCHEMA_VERSION})`);
+ok(db.BACKUP_SCHEMA_VERSION === 11, `backup schema is pinned at 11 (got ${db.BACKUP_SCHEMA_VERSION})`);
 
 // An app must never write a backup it cannot itself restore. A corrupted or
 // out-of-range birthYear is clamped to the not-set sentinel on the way through
@@ -1617,7 +1617,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 10, "climbed flights ship inside the current backup schema");
+    ok(climbBundle.schemaVersion === 11, "climbed flights ship inside the current backup schema");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -3672,6 +3672,31 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const again = await db.exportBundle();
   ok(canon(again) === canon(fixture), "fixture re-exports byte-for-byte (sans wall-clock stamps)");
 }
+
+// ---- v10 upgrade path: the frozen v10 fixture imports and derives ids ----
+// (epic #155 Stage 2 gate: "v10 fixture imports on both clients and exports
+// v11".) The pre-identity fixture is kept frozen at v10 forever; importing it
+// must synthesize the SAME deterministic ids the native importer derives.
+{
+  const fs = await import("node:fs");
+  const v10 = JSON.parse(fs.readFileSync(new URL("./fixtures/synthetic-backup-v10.json", import.meta.url), "utf8"));
+  ok(v10.schemaVersion === 10, "the frozen upgrade fixture stays at schema 10");
+  await db.importBundle(v10, { createCheckpoint: false });
+  const exercises = await db.Exercises.all();
+  ok(exercises.length > 0 && exercises.every((e) => e.id === C.exerciseLegacyID(e.name)),
+    "every v10 exercise derives its deterministic legacy id");
+  const programs = await db.Programs.all();
+  ok(programs.every((p) => p.templateId == null), "v10 programs get no invented template origin");
+  ok(programs.every((p) => (p.days || []).every((d) =>
+    (d.lifts || []).every((l) => l.exerciseId === C.exerciseLegacyID(l.exerciseName)))),
+    "v10 program slots derive their exercise ids");
+  const sessions = await db.Sessions.completed();
+  ok(sessions.every((s) => (s.exercises || []).every((e) => e.exerciseId === C.exerciseLegacyID(e.exerciseName))),
+    "v10 session entries derive their exercise ids");
+  const reexport = await db.exportBundle();
+  ok(reexport.schemaVersion === 11, "importing v10 re-exports as v11");
+}
+
 
 // A session started by mistake must be removable from inside itself, not only
 // from Today — the original trap was that neither Later, nor stopping the
