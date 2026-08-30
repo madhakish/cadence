@@ -134,6 +134,10 @@ targets:
       # here lets the hostless suite pin correction semantics on real SwiftData
       # rows (epic #155 Stage 0).
       - Cadence/Services/SessionCorrectionService.swift
+      # The wood-splitting creator is a models-only service too; compiling it
+      # here lets the V11->V12 migration test bank the canonical session
+      # shape into a real migrated store (#166).
+      - Cadence/Services/WoodSplittingSession.swift
       - CadenceMigrationTests
     dependencies:
       - package: CadenceCore

@@ -9,7 +9,7 @@ import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 8;
-export const BACKUP_SCHEMA_VERSION = 11;
+export const BACKUP_SCHEMA_VERSION = 12;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -793,6 +793,19 @@ export async function exportBundle() {
       gymId: s.gymId || gymsByName.get(s.gymName)?.id || null, isCompleted: !!s.isCompleted,
       completedAt: s.completedAt || null,
       programTag: exportProgramTag(s.programTag),
+      // v12 typed wood-splitting facts, emitted only when the session has
+      // them (like flights): stamping the key onto every record would break
+      // byte-stable re-export of older backups. Duration and maul weight
+      // stay on the canonical conditioning set.
+      ...(s.woodSplitting ? {
+        woodSplitting: {
+          sessionRPE: s.woodSplitting.sessionRPE ?? null,
+          rounds: s.woodSplitting.rounds ?? null,
+          splitPieces: s.woodSplitting.splitPieces ?? null,
+          estimatedStrikes: s.woodSplitting.estimatedStrikes ?? null,
+          cordVolume: s.woodSplitting.cordVolume ?? null,
+        },
+      } : {}),
       exercises: (s.exercises || []).map((e) => ({
         name: e.exerciseName, exerciseId: e.exerciseId || null, notes: e.notes || "",
         phase: e.phase ? C.portablePhaseLabel(e.phase) : null,
@@ -1094,6 +1107,16 @@ export function validateBackup(bundle) {
       numberValue(tag.dayIndex, `${path}.programTag.dayIndex`, { integer: true, min: 0 });
       const names = array(tag, "planNames", `${path}.programTag.planNames`);
       names?.forEach((name, i) => textValue(name, `${path}.programTag.planNames[${i}]`, true));
+    }
+    // v12 typed wood-splitting facts. Every field is optional; RPE follows
+    // the recorded 1.0–10.0 contract, counts are whole and non-negative.
+    if (session.woodSplitting != null) {
+      const wood = object(session.woodSplitting, `${path}.woodSplitting`);
+      numberValue(wood.sessionRPE, `${path}.woodSplitting.sessionRPE`, { min: 1, max: 10 });
+      numberValue(wood.rounds, `${path}.woodSplitting.rounds`, { integer: true, min: 0 });
+      numberValue(wood.splitPieces, `${path}.woodSplitting.splitPieces`, { integer: true, min: 0 });
+      numberValue(wood.estimatedStrikes, `${path}.woodSplitting.estimatedStrikes`, { integer: true, min: 0 });
+      numberValue(wood.cordVolume, `${path}.woodSplitting.cordVolume`, { min: 0 });
     }
     each(array(session, "exercises", `${path}.exercises`), `${path}.exercises`, (exercise, exercisePath) => {
       textValue(exercise.name, `${exercisePath}.name`, true);
@@ -1517,6 +1540,18 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       programTemplateId: schemaVersion >= 11 ? s.programTemplateId || null : null,
       gymId: s.gymId || null, gymName: s.gym || null,
       programTag: importProgramTag(s.programTag),
+      // v12 typed wood-splitting facts. Values restore verbatim — absence
+      // stays absent (INV-WOOD-WORK-DOES-NOT-GUESS). Mirrors native
+      // ImportService.
+      ...(schemaVersion >= 12 && s.woodSplitting ? {
+        woodSplitting: {
+          sessionRPE: s.woodSplitting.sessionRPE ?? null,
+          rounds: s.woodSplitting.rounds ?? null,
+          splitPieces: s.woodSplitting.splitPieces ?? null,
+          estimatedStrikes: s.woodSplitting.estimatedStrikes ?? null,
+          cordVolume: s.woodSplitting.cordVolume ?? null,
+        },
+      } : {}),
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, exerciseId: importedID(e.exerciseId, e.name), notes: e.notes || "", phase: recoverPhase(e.phase),
         programRole: e.role || null, programSlotId: e.programSlotId || null, barId: e.barId || null,

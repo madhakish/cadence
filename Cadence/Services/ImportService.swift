@@ -51,6 +51,13 @@ enum ImportService {
         var id: String?; var programTemplateId: String?; var date: Date?; var notes: String?; var gym: String?; var gymId: String?; var isCompleted: Bool?
         var completedAt: Date?
         var programTag: ProgramTag?; var exercises: [ExerciseEntry]?
+        var woodSplitting: WoodSplittingDTO?
+    }
+    /// v12 typed wood-splitting facts. Absent on every older bundle — the
+    /// session simply restores with no detail; nothing is invented.
+    private struct WoodSplittingDTO: Decodable {
+        var sessionRPE: Double?; var rounds: Int?; var splitPieces: Int?
+        var estimatedStrikes: Int?; var cordVolume: Double?
     }
     private struct ProgramTag: Decodable {
         var programId: String?; var programName: String?; var cycleNumber: Int?; var week: Int?; var dayIndex: Int?
@@ -1182,6 +1189,19 @@ enum ImportService {
                 entry.sets.append(set)
             }
             session.exercises.append(entry)
+        }
+        // v12 typed wood-splitting facts. Values restore verbatim — absence
+        // stays absent (INV-WOOD-WORK-DOES-NOT-GUESS), and an all-nil object
+        // still restores as a detail row so the session keeps reading as a
+        // wood-splitting log.
+        if schemaVersion >= 12, let wood = s.woodSplitting {
+            session.woodSplittingDetail = WoodSplittingDetail(
+                sessionRPE: wood.sessionRPE,
+                rounds: wood.rounds,
+                splitPieces: wood.splitPieces,
+                estimatedStrikes: wood.estimatedStrikes,
+                cordVolume: wood.cordVolume
+            )
         }
         return session
     }

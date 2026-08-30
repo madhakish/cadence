@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **11**. A missing version means the legacy version-0 shape.
+version **12**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,25 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 12 wood-splitting session detail
+
+Version 12 (#166) adds one optional object on a session; no collection
+changes shape and nothing else moved:
+
+- **`woodSplitting`** on a session marks it as a standalone wood-splitting
+  log and carries its typed facts: `{ sessionRPE, rounds, splitPieces,
+  estimatedStrikes, cordVolume }`, every field optional. `sessionRPE` is
+  1.0–10.0 (half steps valid); the counts are whole and non-negative;
+  `cordVolume` accepts fractional cords. Duration and maul weight are NOT
+  here — their one canonical location stays the session's conditioning set
+  (`durationSeconds` / `weightLb`). All values are user-entered: absence is
+  preserved, never estimated from other fields.
+
+A version-11-or-older bundle restores with no detail on any session. Older
+importers reject a v12 bundle on the version gate, which is correct: parsing
+it would silently drop the recorded facts, and every recorded field must
+survive native/web backup and restore (`INV-WOOD-WORK-ROUND-TRIPS`).
 
 ## Version 11 stable portable identity
 

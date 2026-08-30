@@ -64,6 +64,17 @@ enum ExportService {
         let planNames: [String]?
     }
 
+    /// v12: typed wood-splitting facts (web `session.woodSplitting`).
+    /// Duration and maul weight are NOT here — their canonical location is
+    /// the session's conditioning set. Emitted only when the detail exists.
+    struct ExportWoodSplitting: Codable {
+        let sessionRPE: Double?
+        let rounds: Int?
+        let splitPieces: Int?
+        let estimatedStrikes: Int?
+        let cordVolume: Double?
+    }
+
     struct ExportSession: Codable {
         let id: String
         /// v11: the methodology the session's program came from, if any.
@@ -75,6 +86,7 @@ enum ExportService {
         let isCompleted: Bool
         let completedAt: Date?
         let programTag: ExportProgramTag?
+        let woodSplitting: ExportWoodSplitting?
         let exercises: [ExportExercise]
     }
 
@@ -462,6 +474,15 @@ enum ExportService {
                     isCompleted: session.isCompleted,
                     completedAt: session.completedAt,
                     programTag: programTag,
+                    woodSplitting: session.woodSplittingDetail.map {
+                        ExportWoodSplitting(
+                            sessionRPE: $0.sessionRPE,
+                            rounds: $0.rounds,
+                            splitPieces: $0.splitPieces,
+                            estimatedStrikes: $0.estimatedStrikes,
+                            cordVolume: $0.cordVolume
+                        )
+                    },
                     exercises: session.orderedExercises.map { entry in
                         ExportExercise(
                             name: entry.exercise?.name ?? "Unknown",

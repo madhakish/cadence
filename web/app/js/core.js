@@ -3778,3 +3778,15 @@ export function isNamedRestoreNoOp(preview) {
   return [preview.exercises, preview.tracks, preview.gyms, preview.sessions, preview.programs]
     .every((collection) => collection.every((item) => item.status === "unchanged"));
 }
+
+// Session-RPE workload for standalone wood-splitting sessions (#166):
+// duration minutes × session RPE, in arbitrary units. Relative session load,
+// never barbell tonnage (INV-WOOD-WORK-IS-NOT-LIFTING-VOLUME). RPE follows
+// the recorded contract, 1.0–10.0 inclusive; a missing or out-of-contract
+// input yields null, not an estimate. Mirrors native `WoodSplittingWorkload`.
+export function woodSplittingWorkload(durationSeconds, sessionRPE) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+  if (!Number.isFinite(sessionRPE) || sessionRPE < 1 || sessionRPE > 10) return null;
+  const durationMinutes = durationSeconds / 60;
+  return { durationMinutes, sessionRPE, arbitraryUnits: durationMinutes * sessionRPE };
+}

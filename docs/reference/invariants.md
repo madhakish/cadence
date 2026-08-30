@@ -802,6 +802,43 @@ restores the ordinary reading.
 
 ---
 
+## Wood splitting (#166)
+
+### INV-WOOD-WORK-USES-ONE-TIMELINE
+*platforms: native, web*
+
+A wood-splitting session is a typed `WorkoutSession` — one completed,
+off-program session holding the canonical `Wood Splitting` conditioning
+entry, one duration set, and the optional `WoodSplittingDetail` /
+`woodSplitting` record. No parallel activity-history store exists; it may
+coexist with any number of workouts on the same date and is never merged
+into or owned by a program.
+
+### INV-WOOD-WORK-IS-NOT-LIFTING-VOLUME
+*platforms: core*
+
+Wood splitting contributes no barbell tonnage, e1RM, lifting PR, milestone,
+or progression result. The seeded exercise's conditioning type is what
+enforces this on both clients; the session-RPE workload
+(`duration minutes × session RPE`, RPE 1.0–10.0) is a separate
+arbitrary-unit value, never tonnage.
+
+### INV-WOOD-WORK-DOES-NOT-GUESS
+*platforms: core*
+
+Cords, rounds, pieces, strikes, RPE, and maul weight are user-entered only;
+absence is preserved, never estimated from other fields.
+
+### INV-WOOD-WORK-ROUND-TRIPS
+*platforms: native, web*
+
+Every recorded wood-splitting field survives native/web backup and restore
+without invention or loss — held by the v12 backup contract (`woodSplitting`
+on a session) and the synthetic fixture. Duration and maul weight live only
+on the canonical conditioning set; the detail record never duplicates them.
+
+---
+
 ## Delivery
 
 ### INV-WEB-APP-SCOPE

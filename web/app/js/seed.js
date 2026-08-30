@@ -194,6 +194,10 @@ const exercises = [
   ex("Ruck", "Conditioning", "conditioning", "conditioning"),
   ex("Run", "Conditioning", "conditioning", "conditioning", { aliases: ["Running", "Jog"] }),
   ex("Bear Crawl", "Conditioning", "bodyweight", "conditioning", { defaultRestSeconds: 45 }),
+  // The canonical standalone wood-splitting activity (#166). The quick-log
+  // flow looks this row up BY THIS NAME; conditioning type keeps it out of
+  // lifting volume/e1RM/PR semantics. Mirrors native Seeder.
+  ex("Wood Splitting", "Conditioning", "conditioning", "conditioning", { notes: "Duration / maul weight" }),
 ];
 
 const gyms = [{

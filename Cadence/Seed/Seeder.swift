@@ -216,6 +216,11 @@ enum Seeder {
                      aliases: ["Running", "Jog"]),
             Exercise(name: "Bear Crawl", category: .conditioning, type: .bodyweight, movementGroup: "conditioning",
                      defaultRestSeconds: 45),
+            // The canonical standalone wood-splitting activity (#166). The
+            // quick-log flow looks this row up BY THIS NAME; conditioning
+            // type keeps it out of lifting volume/e1RM/PR semantics.
+            Exercise(name: "Wood Splitting", category: .conditioning, type: .conditioning, movementGroup: "conditioning",
+                     notes: "Duration / maul weight"),
         ]
     }
 
