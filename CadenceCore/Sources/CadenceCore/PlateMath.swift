@@ -234,6 +234,121 @@ public enum PlateMath {
     /// lb stack. Decomposition is GREEDY (biggest plates first): that is the
     /// stack a lifter actually builds, and it pins down which of several
     /// equal-total loadings the twins are taken from.
+    // MARK: - Load quantization (epic #155 Stage 3)
+
+    /// A plate below this is a change plate: real to load, annoying to chase,
+    /// and never worth a warmup or a low-percentage working set.
+    public static let fiddlyPlateLb = 5.0
+
+    public struct QuantizeOptions: Sendable {
+        /// Which side of the target a swap may land on. A hard constraint,
+        /// not a tiebreak: quantizing a progressing lifter DOWN onto the load
+        /// they just left would stall the program.
+        public enum Bias: Sendable { case nearest, up, down }
+
+        /// How far the load may move from the theoretical target.
+        public var bandLb: Double
+        /// Denominations below this are excluded from the quantized load
+        /// entirely (warmups: no change plates, ever).
+        public var minimumPlateLb: Double
+        public var bias: Bias
+
+        public init(bandLb: Double, minimumPlateLb: Double, bias: Bias) {
+            self.bandLb = bandLb
+            self.minimumPlateLb = minimumPlateLb
+            self.bias = bias
+        }
+
+        /// Working sets move at most one plate step and keep every
+        /// denomination available — the goal is trading a change plate for a
+        /// clean stack, not rewriting the prescription.
+        public static func workingSet(bias: Bias) -> QuantizeOptions {
+            QuantizeOptions(bandLb: 5, minimumPlateLb: 0, bias: bias)
+        }
+
+        /// Warmups are approximate by nature, so they get a wider band and
+        /// large plates only: a ramp rung is a number you build in one grab.
+        public static let warmup = QuantizeOptions(bandLb: 10, minimumPlateLb: 10, bias: .nearest)
+    }
+
+    /// Snap a theoretical target onto the nearest load a human would actually
+    /// build on this rack. Ranking, in order: fewest change plates per side,
+    /// then fewest plates, then fewest distinct denominations, then closest to
+    /// the target (the target itself wins any exact tie).
+    ///
+    /// This runs at prescription materialization — after the methodology has
+    /// converted capability into a number — never inside capability
+    /// resolution, and the result is never written back into program cursor
+    /// state: the same history must resolve identically at every gym.
+    /// Mirrors web `quantizeLoad`.
+    public static func quantize(
+        targetLb: Double,
+        bar: Bar,
+        plates: [Plate],
+        collarLb: Double = 0,
+        options: QuantizeOptions,
+        maxPerPlateSide: Int = 10
+    ) -> Double {
+        let collarLb = max(0, collarLb)
+        // One unit system only — the bar's. A quantized load is a NUMBER the
+        // lifter reads and the app stores, so a kg stack must not turn an lb
+        // prescription into 211.14: mixed-unit stacks stay what they always
+        // were, loading guidance produced by `solve` under the neat target.
+        let sameSystem = Array(Set(plates)).filter { $0.unit == bar.unit }
+        let pool = sameSystem.isEmpty ? Array(Set(plates)) : sameSystem
+        let usable = pool.filter { $0.lb >= options.minimumPlateLb - 1e-9 }
+            .sorted { $0.lb > $1.lb }
+        guard targetLb > 0 else { return targetLb }
+
+        let lower: Double
+        let upper: Double
+        switch options.bias {
+        case .nearest: lower = targetLb - options.bandLb; upper = targetLb + options.bandLb
+        case .up: lower = targetLb; upper = targetLb + options.bandLb
+        case .down: lower = targetLb - options.bandLb; upper = targetLb
+        }
+
+        // (fiddly, used, distinct, deviation, total)
+        var best: (fiddly: Int, used: Int, distinct: Int, deviation: Double, total: Double)?
+        func consider(total: Double, fiddly: Int, used: Int, distinct: Int) {
+            guard total >= lower - 1e-9, total <= upper + 1e-9 else { return }
+            let deviation = abs(total - targetLb)
+            guard let current = best else {
+                best = (fiddly, used, distinct, deviation, total); return
+            }
+            if fiddly != current.fiddly { if fiddly < current.fiddly { best = (fiddly, used, distinct, deviation, total) }; return }
+            if used != current.used { if used < current.used { best = (fiddly, used, distinct, deviation, total) }; return }
+            if distinct != current.distinct { if distinct < current.distinct { best = (fiddly, used, distinct, deviation, total) }; return }
+            if deviation < current.deviation - 1e-9 { best = (fiddly, used, distinct, deviation, total) }
+        }
+
+        let barTotal = bar.lb + collarLb
+        consider(total: barTotal, fiddly: 0, used: 0, distinct: 0)
+        // Per-side depth-first fill, pruned by the band's upper edge.
+        let maxPerSide = (upper - barTotal) / 2.0
+        func walk(_ index: Int, perSide: Double, fiddly: Int, used: Int, distinct: Int) {
+            guard index < usable.count else { return }
+            let plate = usable[index]
+            walk(index + 1, perSide: perSide, fiddly: fiddly, used: used, distinct: distinct)
+            guard plate.lb > 1e-9 else { return }
+            var count = 0
+            var side = perSide
+            while count < maxPerPlateSide {
+                side += plate.lb
+                count += 1
+                guard side <= maxPerSide + 1e-9 else { return }
+                let isFiddly = plate.lb < fiddlyPlateLb - 1e-9
+                let nextFiddly = fiddly + (isFiddly ? count : 0)
+                consider(total: barTotal + 2 * side, fiddly: nextFiddly,
+                         used: used + count, distinct: distinct + 1)
+                walk(index + 1, perSide: side, fiddly: nextFiddly,
+                     used: used + count, distinct: distinct + 1)
+            }
+        }
+        walk(0, perSide: 0, fiddly: 0, used: 0, distinct: 0)
+        return best?.total ?? targetLb
+    }
+
     public static func kgTwinSideMassLb(_ sideLb: Double) -> Double? {
         guard sideLb.isFinite, sideLb >= 0 else { return nil }
         var remaining = sideLb
