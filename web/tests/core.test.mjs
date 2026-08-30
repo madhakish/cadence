@@ -3060,5 +3060,38 @@ eq(C.stableID(""), "711a1863-0c97-4a6e-a99b-61b9d1644c6e", "stableID empty seed"
 eq(C.stableID("exercise:Caf\u00e9 Curl"), "51492463-ae3e-4033-a696-8af13b918867", "stableID non-ASCII");
 eq(C.exerciseLegacyID("Back Squat"), C.stableID("exercise:Back Squat"), "exerciseLegacyID is the namespaced derivation");
 
+
+// ---- quantizeLoad: prescription materialization (epic #155 Stage 3) ----
+// Mirrors CadenceCoreTests/PlateQuantizeTests.swift — same fixtures.
+{
+  const bar = C.BARS.bar45lb;
+  const plates = C.STANDARD_LB;
+  const q = (target, options) => C.quantizeLoad(target, bar, plates, 0, options);
+
+  eq(q(260, C.quantizeWorkingSet("up")), 265, "260 progressing trades the change plate for 265");
+  eq(q(260, C.quantizeWorkingSet("down")), 255, "260 backing off resolves to 255");
+  for (const clean of [135, 225, 315, 405]) {
+    eq(q(clean, C.quantizeWorkingSet("up")), clean, `${clean} already loads clean and must not move`);
+  }
+  ok(q(230, C.quantizeWorkingSet("up")) >= 230, "progressing is never quantized backwards");
+  ok(q(230, C.quantizeWorkingSet("down")) <= 230, "backing off is never quantized upwards");
+  eq(q(130, C.QUANTIZE_WARMUP), 135, "nobody builds a 130 lb warmup");
+  eq(q(128, C.QUANTIZE_WARMUP), 135, "a warmup near 130 snaps to the single-plate load");
+  eq(q(45, C.QUANTIZE_WARMUP), 45, "the empty bar stays the lightest rung");
+  eq(C.quantizeLoad(137, bar, [], 0, C.quantizeWorkingSet("up")), 137, "no rack, no quantization");
+
+  // Property: every quantized load is exactly achievable, and stays in band.
+  let unloadable = 0, outOfBand = 0;
+  for (let target = 95; target <= 405; target += 2.5) {
+    for (const options of [C.quantizeWorkingSet("up"), C.quantizeWorkingSet("down"), C.QUANTIZE_WARMUP]) {
+      const quantized = C.quantizeLoad(target, bar, plates, 0, options);
+      if (Math.abs(C.solve(quantized, bar, plates).totalLb - quantized) > 1e-6) unloadable += 1;
+      if (Math.abs(quantized - target) > options.bandLb + 1e-9) outOfBand += 1;
+    }
+  }
+  eq(unloadable, 0, "quantization never invents an unloadable number");
+  eq(outOfBand, 0, "quantization stays within its band");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

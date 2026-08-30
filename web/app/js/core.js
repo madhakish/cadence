@@ -665,6 +665,71 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
 // weigh), and the barbell hint explains the actual plates. Only a genuinely
 // unreachable target stores the achieved load, so the log stays honest on
 // sparse racks. Mirrored 1:1 in CadenceCore PlateMath.storedPrescription.
+// ---- Load quantization (epic #155 Stage 3) ----
+// A plate below this is a change plate: real to load, annoying to chase, and
+// never worth a warmup or a low-percentage working set.
+export const FIDDLY_PLATE_LB = 5;
+
+// Working sets move at most one plate step and keep every denomination
+// available; warmups are approximate by nature, so they get a wider band and
+// large plates only. `bias` is a HARD constraint, not a tiebreak: quantizing
+// a progressing lifter DOWN onto the load they just left would stall them.
+export const quantizeWorkingSet = (bias) => ({ bandLb: 5, minimumPlateLb: 0, bias });
+export const QUANTIZE_WARMUP = { bandLb: 10, minimumPlateLb: 10, bias: "nearest" };
+
+// Snap a theoretical target onto the nearest load a human would actually
+// build on this rack: fewest change plates per side, then fewest plates, then
+// fewest distinct denominations, then closest to the target. Runs at
+// prescription materialization — after the methodology converted capability
+// into a number — never inside capability resolution, and the result is never
+// written back into program cursor state. Mirrors CadenceCore PlateMath.quantize.
+export function quantizeLoad(targetLb, bar, plates, collarLb = 0, options = quantizeWorkingSet("nearest"), maxPerPlateSide = 10) {
+  if (!(targetLb > 0)) return targetLb;
+  const collar = Math.max(0, collarLb || 0);
+  // One unit system only — the bar's. A quantized load is a NUMBER the lifter
+  // reads and the app stores, so a kg stack must not turn an lb prescription
+  // into 211.14: mixed-unit stacks stay what they always were, loading
+  // guidance produced by solve() under the neat target.
+  const sameSystem = plates.filter((p) => p.unit === bar.unit);
+  const pool = sameSystem.length ? sameSystem : plates;
+  const usable = [...new Set(pool.map((p) => plateLb(p)))]
+    .filter((lb) => lb >= options.minimumPlateLb - 1e-9)
+    .sort((a, b) => b - a);
+  const lower = options.bias === "up" ? targetLb : targetLb - options.bandLb;
+  const upper = options.bias === "down" ? targetLb : targetLb + options.bandLb;
+  const barTotal = barLb(bar) + collar;
+  let best = null;
+  const consider = (total, fiddly, used, distinct) => {
+    if (total < lower - 1e-9 || total > upper + 1e-9) return;
+    const deviation = Math.abs(total - targetLb);
+    if (!best) { best = { fiddly, used, distinct, deviation, total }; return; }
+    if (fiddly !== best.fiddly) { if (fiddly < best.fiddly) best = { fiddly, used, distinct, deviation, total }; return; }
+    if (used !== best.used) { if (used < best.used) best = { fiddly, used, distinct, deviation, total }; return; }
+    if (distinct !== best.distinct) { if (distinct < best.distinct) best = { fiddly, used, distinct, deviation, total }; return; }
+    if (deviation < best.deviation - 1e-9) best = { fiddly, used, distinct, deviation, total };
+  };
+  consider(barTotal, 0, 0, 0);
+  const maxPerSide = (upper - barTotal) / 2;
+  const walk = (index, perSide, fiddly, used, distinct) => {
+    if (index >= usable.length) return;
+    const plate = usable[index];
+    walk(index + 1, perSide, fiddly, used, distinct);
+    if (!(plate > 1e-9)) return;
+    let count = 0;
+    let side = perSide;
+    while (count < maxPerPlateSide) {
+      side += plate;
+      count += 1;
+      if (side > maxPerSide + 1e-9) return;
+      const nextFiddly = fiddly + (plate < FIDDLY_PLATE_LB - 1e-9 ? count : 0);
+      consider(barTotal + 2 * side, nextFiddly, used + count, distinct + 1);
+      walk(index + 1, side, nextFiddly, used + count, distinct + 1);
+    }
+  };
+  walk(0, 0, 0, 0, 0);
+  return best ? best.total : targetLb;
+}
+
 export const storedPrescription = (targetLb, achievedLb, barLb = 45) => {
   if (Math.abs(achievedLb - targetLb) <= TOLERANCE_LB + 1e-9) return targetLb;
   // Beyond the absolute band, the denomination twin still stores the canonical

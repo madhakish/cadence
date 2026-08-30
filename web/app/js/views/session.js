@@ -49,10 +49,14 @@ export function achievableWarmups(ramp, workingLb, bar, gym = null, exercise = n
   const seen = new Set();
   const achieved = [];
   for (const warmup of ramp) {
+    // Ramp rungs are approximate by definition, so they snap to large-plate
+    // loads first (epic #155 Stage 3): nobody builds a 130 lb warmup out of
+    // 25s, 10s and a change plate.
+    const target = C.quantizeLoad(warmup.weightLb, bar, plates, collarLb, C.QUANTIZE_WARMUP);
     // A near-miss clean stack (e.g. kg plates on a lb ramp) stays loading
     // guidance — the neat theoretical step is what gets stored.
     const weightLb = C.storedPrescription(
-      warmup.weightLb, C.solve(warmup.weightLb, bar, plates, 10, collarLb, policy).totalLb,
+      target, C.solve(target, bar, plates, 10, collarLb, policy).totalLb,
       C.barLabelLb(bar),
     );
     const key = weightLb.toFixed(6);
@@ -1880,12 +1884,26 @@ async function advanceProgram(session, milestones) {
 // card and the stored prescription never disagree.
 export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym = null, phase = null) {
   if (!exercise || exercise.type !== "barbell" || !(weightLb > 0)) return weightLb;
-  const target = !isMain ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
-  if (!gym) return target;
+  const rounded = !isMain ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
+  if (!gym) return rounded;
   const bar = C.barById(gym.defaultBarId);
+  const plates = availablePlates(gym, exercise);
+  // Quantize BEFORE solving (epic #155 Stage 3): trade a change plate for a
+  // clean neighbour within one step, erring up while the cycle is building
+  // and down on the deload's recovery exposure, so a progressing lifter is
+  // never quantized back onto the load they just left. Gym-specific by
+  // design — prescription materialization, not capability — and never
+  // written back into program cursor state.
+  // ...but only a target that is OFF the program's own load step — that is
+  // exactly where change plates sneak in. A step-aligned number is the
+  // program's deliberate arithmetic (wave multiplier, deload fraction, e1RM
+  // feedback), so quantizing it would silently rewrite progression.
+  const onStep = stepLb > 0 && Math.abs(rounded / stepLb - Math.round(rounded / stepLb)) < 1e-9;
+  const target = onStep ? rounded : C.quantizeLoad(rounded, bar, plates, gym.collarWeightLb || 0,
+    C.quantizeWorkingSet(phase === 4 ? "down" : "up"));
   // A near-miss clean stack (e.g. kg plates on a lb prescription) stays
   // loading guidance — the neat programmed number is what gets stored.
-  return C.storedPrescription(target, C.prescriptionPlateOptions(target, bar, availablePlates(gym, exercise), 10,
+  return C.storedPrescription(target, C.prescriptionPlateOptions(target, bar, plates, 10,
     gym.collarWeightLb || 0, gym.loadingPolicy || "closest", phase === 1).selected.totalLb,
   C.barLabelLb(bar));
 }
