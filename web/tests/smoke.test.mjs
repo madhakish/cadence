@@ -3636,6 +3636,10 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     const woodSet = woodEntry?.sets?.[0];
     ok(woodSet?.durationSeconds === 7200 && woodSet?.weightLb === 8,
       "duration and maul weight stay on the canonical conditioning set");
+    ok(woodSet?.prescriptionBlock === "conditioning",
+      "the canonical set carries the conditioning block native's creator stamps");
+    ok(new Date(wood.completedAt) - new Date(wood.date) === 7200 * 1000,
+      "completedAt is the end of the work: start + duration");
     ok(C.activityWorkload(woodSet.durationSeconds, wood.activity.sessionRPE)?.arbitraryUnits === 1020,
       "workload derives as duration minutes × session RPE");
     const reexport = JSON.parse(await db.exportJSON());

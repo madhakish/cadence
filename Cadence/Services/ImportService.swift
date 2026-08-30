@@ -278,6 +278,7 @@ enum ImportService {
         let reasons = Set(AutoregReason.allCases.map(\.rawValue))
         let loadBases = Set(LoadBasis.allCases.map(\.rawValue))
         let blockKinds = Set(PrescriptionBlockKind.allCases.map(\.rawValue))
+        let activityKinds = Set(ActivityKind.allCases.map(\.rawValue))
 
         for (si, session) in (bundle.sessions ?? []).enumerated() {
             let path = "sessions[\(si)]"
@@ -295,6 +296,21 @@ enum ImportService {
                 for (i, name) in (tag.planNames ?? []).enumerated() {
                     _ = try requiredText(name, "\(path).programTag.planNames[\(i)]")
                 }
+            }
+            // v12 typed ad-hoc activity facts — mirrors web validateBackup:
+            // the kind is required and must be a registered value (a later
+            // kind is a new enum value, so adding one bumps the version, the
+            // v4/v5 pattern), RPE follows the recorded 1.0–10.0 contract,
+            // counts are whole and non-negative.
+            if let activity = session.activity {
+                try known(activity.kind, activityKinds, "\(path).activity.kind", required: true)
+                try finite(activity.sessionRPE, "\(path).activity.sessionRPE",
+                           min: ActivityWorkload.sessionRPERange.lowerBound,
+                           max: ActivityWorkload.sessionRPERange.upperBound)
+                try integer(activity.rounds, "\(path).activity.rounds", min: 0)
+                try integer(activity.splitPieces, "\(path).activity.splitPieces", min: 0)
+                try integer(activity.estimatedStrikes, "\(path).activity.estimatedStrikes", min: 0)
+                try finite(activity.cordVolume, "\(path).activity.cordVolume", min: 0)
             }
             for (ei, exercise) in (session.exercises ?? []).enumerated() {
                 let exercisePath = "\(path).exercises[\(ei)]"
@@ -1191,13 +1207,11 @@ enum ImportService {
             }
             session.exercises.append(entry)
         }
-        // v12 typed ad-hoc activity facts. Values — the kind included —
-        // restore verbatim: absence stays absent
-        // (INV-WOOD-WORK-DOES-NOT-GUESS), and a kind this catalog does not
-        // know yet is preserved rather than destroyed, the same
-        // repair-not-reject posture ids follow. An all-nil object still
-        // restores as a detail row so the session keeps reading as an
-        // activity log.
+        // v12 typed ad-hoc activity facts. `validate` has already required
+        // a registered kind and the documented ranges (mirroring web
+        // validateBackup), so values restore verbatim here and absence
+        // stays absent (INV-WOOD-WORK-DOES-NOT-GUESS); the guard is only
+        // the type-level unwrap of what validation guaranteed.
         if schemaVersion >= 12, let activity = s.activity, let kind = activity.kind {
             session.activityDetail = ActivityDetail(
                 kindRaw: kind,

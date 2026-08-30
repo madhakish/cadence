@@ -26,6 +26,12 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
 /// were recorded — a missing duration or RPE yields nil, not an estimate.
 /// Mirrors web `C.activityWorkload`.
 public struct ActivityWorkload: Equatable, Sendable {
+    /// The recorded session-RPE contract, one spelling for every consumer:
+    /// this initializer, the creator's write guard, and the backup
+    /// validators on both clients (web mirrors it as
+    /// `C.ACTIVITY_SESSION_RPE`).
+    public static let sessionRPERange: ClosedRange<Double> = 1...10
+
     public let durationMinutes: Double
     public let sessionRPE: Double
 
@@ -33,7 +39,7 @@ public struct ActivityWorkload: Equatable, Sendable {
     /// outside is invalid input, not a clampable value.
     public init?(durationSeconds: Int?, sessionRPE: Double?) {
         guard let durationSeconds, durationSeconds > 0,
-              let sessionRPE, sessionRPE >= 1, sessionRPE <= 10 else { return nil }
+              let sessionRPE, Self.sessionRPERange.contains(sessionRPE) else { return nil }
         self.durationMinutes = Double(durationSeconds) / 60.0
         self.sessionRPE = sessionRPE
     }

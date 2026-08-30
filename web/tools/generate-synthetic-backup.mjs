@@ -264,13 +264,20 @@ for (const [name, n] of [["Push Press", 1], ["Power Clean", 2], ["Turkish Get-up
 await db.Sessions.save({
   id: "b7a2c9d4-5e31-4f8a-9c06-2d7e84f1a3b5", // fixed portable id, fictional
   date: db.iso(day(-27)), notes: "Wet oak rounds; fictional fixture log.",
-  isCompleted: true, completedAt: db.iso(day(-27)),
+  isCompleted: true,
+  // The creator contract: completedAt is the END of the work, start +
+  // duration — not the fixture-wide date pin ordinary sessions use.
+  completedAt: db.iso(new Date(day(-27).getTime() + 7200 * 1000)),
   activity: { kind: "woodSplitting", sessionRPE: 8.5, rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25 },
   exercises: [{
-    order: 0, exerciseName: "Wood Splitting", exerciseId: C.exerciseLegacyID("Wood Splitting"),
+    order: 0,
+    exerciseName: C.ACTIVITY_EXERCISE_NAMES.woodSplitting,
+    exerciseId: C.exerciseLegacyID(C.ACTIVITY_EXERCISE_NAMES.woodSplitting),
     notes: "", phase: null, barId: null,
     plannedWeightLb: null, plannedSets: null, plannedReps: null, programRole: null,
-    sets: [mkSet(0, 8, 0, { duration: 7200 })],
+    // The canonical set is conditioning work — the block native's creator
+    // stamps; the fixture must pin the same shape.
+    sets: [{ ...mkSet(0, 8, 0, { duration: 7200 }), prescriptionBlock: "conditioning" }],
   }],
 });
 

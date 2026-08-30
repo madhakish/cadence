@@ -227,7 +227,6 @@ final class PersistenceMigrationTests: XCTestCase {
                     woodSplitting: .init(rounds: 55, splitPieces: 15,
                                          estimatedStrikes: 340, cordVolume: 0.25)
                 ),
-                exercises: try context.fetch(FetchDescriptor<Exercise>()),
                 context: context
             )
             woodSessionID = wood.id
@@ -259,6 +258,19 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(set.weightLb, 8, "maul weight lives only on the canonical set")
         XCTAssertEqual(wood.orderedExercises.first?.workingVolumeLb, 0,
                        "wood splitting is never lifting volume")
+    }
+
+    /// The seed ships the registered activity kinds' canonical exercises by
+    /// literal name (the web parity check parses the literals from source);
+    /// this pins each literal to the registry constant the creator resolves
+    /// against, so a rename in either place fails here instead of throwing
+    /// `missingExercise` at every quick log.
+    func testSeedCarriesEveryRegisteredActivityExercise() {
+        let seeded = Set(Seeder.libraryDefinitions().map(\.name))
+        for kind in ActivityKind.allCases {
+            XCTAssertTrue(seeded.contains(kind.exerciseName),
+                          "the seed is missing \(kind.rawValue)'s canonical exercise \(kind.exerciseName)")
+        }
     }
 
     func testV9StoreGainsIntervalsAndManualBarWithoutTouchingAnything() throws {
@@ -472,7 +484,6 @@ final class PersistenceMigrationTests: XCTestCase {
                 woodSplitting: .init(rounds: 55, splitPieces: nil,
                                      estimatedStrikes: nil, cordVolume: 0.25)
             ),
-            exercises: try context.fetch(FetchDescriptor<Exercise>()),
             context: context
         )
         try context.save()
@@ -527,6 +538,29 @@ final class PersistenceMigrationTests: XCTestCase {
         )
         XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<ActivityDetail>()).count, 0,
                        "a v11 restore invents no activity detail")
+
+        // Native validation mirrors web validateBackup: an unregistered
+        // kind or an out-of-contract RPE rejects the bundle before any
+        // write, so both clients refuse the same file.
+        let mutations: [(String, Any)] = [("kind", "hiking"), ("sessionRPE", 15)]
+        for (key, value) in mutations {
+            var badJSON = json
+            var badSessions = try XCTUnwrap(badJSON["sessions"] as? [[String: Any]])
+            for index in badSessions.indices where badSessions[index]["activity"] != nil {
+                var activity = try XCTUnwrap(badSessions[index]["activity"] as? [String: Any])
+                activity[key] = value
+                badSessions[index]["activity"] = activity
+            }
+            badJSON["sessions"] = badSessions
+            let rejected = try ModelContainer(
+                for: schema,
+                configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            )
+            XCTAssertThrowsError(try ImportService.load(
+                JSONSerialization.data(withJSONObject: badJSON),
+                into: rejected.mainContext
+            ), "a malformed activity object must reject before writes, as web does")
+        }
     }
 
     func testNativeBackupRoundTripsProgrammingPoliciesAndDefaultsLegacyBundles() throws {

@@ -3785,9 +3785,14 @@ export function isNamedRestoreNoOp(preview) {
 // hiking, climbing, portaging, …) is added here deliberately, with its own
 // typed facts, seeded exercise, and a backup-contract version bump — never
 // inferred from an exercise name. Mirrors native `ActivityKind`.
-export const ACTIVITY_KINDS = ["woodSplitting"];
 export const ACTIVITY_EXERCISE_NAMES = { woodSplitting: "Wood Splitting" };
+// Derived, never hand-maintained: one registry, so the validator whitelist
+// and the name resolver cannot drift apart.
+export const ACTIVITY_KINDS = Object.keys(ACTIVITY_EXERCISE_NAMES);
 export const activityExerciseName = (kind) => ACTIVITY_EXERCISE_NAMES[kind] || null;
+// The recorded session-RPE contract, one spelling for the validator and the
+// workload math. Mirrors native `ActivityWorkload.sessionRPERange`.
+export const ACTIVITY_SESSION_RPE = { min: 1, max: 10 };
 
 // Session-RPE workload for ad-hoc activity sessions (#166): duration minutes
 // × session RPE, in arbitrary units. Relative session load, never barbell
@@ -3796,7 +3801,8 @@ export const activityExerciseName = (kind) => ACTIVITY_EXERCISE_NAMES[kind] || n
 // null, not an estimate. Mirrors native `ActivityWorkload`.
 export function activityWorkload(durationSeconds, sessionRPE) {
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
-  if (!Number.isFinite(sessionRPE) || sessionRPE < 1 || sessionRPE > 10) return null;
+  if (!Number.isFinite(sessionRPE)
+    || sessionRPE < ACTIVITY_SESSION_RPE.min || sessionRPE > ACTIVITY_SESSION_RPE.max) return null;
   const durationMinutes = durationSeconds / 60;
   return { durationMinutes, sessionRPE, arbitraryUnits: durationMinutes * sessionRPE };
 }

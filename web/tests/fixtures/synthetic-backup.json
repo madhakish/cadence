@@ -10337,7 +10337,7 @@
       "gym": null,
       "gymId": null,
       "isCompleted": true,
-      "completedAt": "2026-06-04T12:00:00.000Z",
+      "completedAt": "2026-06-04T14:00:00.000Z",
       "programTag": null,
       "activity": {
         "kind": "woodSplitting",
@@ -10371,7 +10371,7 @@
               "plannedWeightLb": null,
               "plannedReps": null,
               "plannedDurationSeconds": null,
-              "prescriptionBlock": "work",
+              "prescriptionBlock": "conditioning",
               "isWarmup": false,
               "isPerSide": false,
               "status": "completed",

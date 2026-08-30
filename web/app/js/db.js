@@ -740,6 +740,18 @@ const authoredExportSlots = (slots) => [...(slots || [])]
     || (String(a.exerciseName) < String(b.exerciseName) ? -1
       : String(a.exerciseName) > String(b.exerciseName) ? 1 : 0));
 
+// v12 activity DTO — ONE spelling shared by export and import (like the
+// programTag mappers), so a kind's facts can never drift between the two
+// directions (INV-WOOD-WORK-ROUND-TRIPS).
+const portableActivity = (a) => ({
+  kind: a.kind,
+  sessionRPE: a.sessionRPE ?? null,
+  rounds: a.rounds ?? null,
+  splitPieces: a.splitPieces ?? null,
+  estimatedStrikes: a.estimatedStrikes ?? null,
+  cordVolume: a.cordVolume ?? null,
+});
+
 export async function exportBundle() {
   const sessionFingerprint = (session) => JSON.stringify({
     date: iso(session.date), notes: session.notes || "", gym: session.gymName || "",
@@ -797,16 +809,7 @@ export async function exportBundle() {
       // them (like flights): stamping the key onto every record would break
       // byte-stable re-export of older backups. Duration and implement load
       // stay on the canonical conditioning set.
-      ...(s.activity ? {
-        activity: {
-          kind: s.activity.kind,
-          sessionRPE: s.activity.sessionRPE ?? null,
-          rounds: s.activity.rounds ?? null,
-          splitPieces: s.activity.splitPieces ?? null,
-          estimatedStrikes: s.activity.estimatedStrikes ?? null,
-          cordVolume: s.activity.cordVolume ?? null,
-        },
-      } : {}),
+      ...(s.activity ? { activity: portableActivity(s.activity) } : {}),
       exercises: (s.exercises || []).map((e) => ({
         name: e.exerciseName, exerciseId: e.exerciseId || null, notes: e.notes || "",
         phase: e.phase ? C.portablePhaseLabel(e.phase) : null,
@@ -1117,7 +1120,8 @@ export function validateBackup(bundle) {
     if (session.activity != null) {
       const activity = object(session.activity, `${path}.activity`);
       enumValue(activity.kind, C.ACTIVITY_KINDS, `${path}.activity.kind`, true);
-      numberValue(activity.sessionRPE, `${path}.activity.sessionRPE`, { min: 1, max: 10 });
+      numberValue(activity.sessionRPE, `${path}.activity.sessionRPE`,
+        { min: C.ACTIVITY_SESSION_RPE.min, max: C.ACTIVITY_SESSION_RPE.max });
       numberValue(activity.rounds, `${path}.activity.rounds`, { integer: true, min: 0 });
       numberValue(activity.splitPieces, `${path}.activity.splitPieces`, { integer: true, min: 0 });
       numberValue(activity.estimatedStrikes, `${path}.activity.estimatedStrikes`, { integer: true, min: 0 });
@@ -1548,16 +1552,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       // v12 typed ad-hoc activity facts. Values — the kind included —
       // restore verbatim; absence stays absent
       // (INV-WOOD-WORK-DOES-NOT-GUESS). Mirrors native ImportService.
-      ...(schemaVersion >= 12 && s.activity ? {
-        activity: {
-          kind: s.activity.kind,
-          sessionRPE: s.activity.sessionRPE ?? null,
-          rounds: s.activity.rounds ?? null,
-          splitPieces: s.activity.splitPieces ?? null,
-          estimatedStrikes: s.activity.estimatedStrikes ?? null,
-          cordVolume: s.activity.cordVolume ?? null,
-        },
-      } : {}),
+      ...(schemaVersion >= 12 && s.activity ? { activity: portableActivity(s.activity) } : {}),
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, exerciseId: importedID(e.exerciseId, e.name), notes: e.notes || "", phase: recoverPhase(e.phase),
         programRole: e.role || null, programSlotId: e.programSlotId || null, barId: e.barId || null,
