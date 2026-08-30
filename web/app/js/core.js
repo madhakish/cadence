@@ -3789,7 +3789,12 @@ export const ACTIVITY_EXERCISE_NAMES = { woodSplitting: "Wood Splitting" };
 // Derived, never hand-maintained: one registry, so the validator whitelist
 // and the name resolver cannot drift apart.
 export const ACTIVITY_KINDS = Object.keys(ACTIVITY_EXERCISE_NAMES);
-export const activityExerciseName = (kind) => ACTIVITY_EXERCISE_NAMES[kind] || null;
+// Only a REGISTERED kind resolves a name — the same whitelist the backup
+// validator uses. A bare `ACTIVITY_EXERCISE_NAMES[kind]` would also answer for
+// inherited Object keys ("constructor", "toString"), handing a caller a
+// function where native's enum can only ever return a real name.
+export const activityExerciseName = (kind) =>
+  (ACTIVITY_KINDS.includes(kind) ? ACTIVITY_EXERCISE_NAMES[kind] : null);
 // The recorded session-RPE contract, one spelling for the validator and the
 // workload math. Mirrors native `ActivityWorkload.sessionRPERange`.
 export const ACTIVITY_SESSION_RPE = { min: 1, max: 10 };

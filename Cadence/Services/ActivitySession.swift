@@ -34,16 +34,31 @@ enum ActivitySession {
     enum Error: LocalizedError {
         case invalidDuration
         case invalidSessionRPE
+        case invalidValue(String)
         case missingExercise(String)
 
         var errorDescription: String? {
             switch self {
             case .invalidDuration: return "Duration must be greater than zero."
             case .invalidSessionRPE: return "Session RPE must be between 1 and 10."
+            case .invalidValue(let label): return "\(label) must be zero or more."
             case .missingExercise(let name):
                 return "The exercise library is missing \(name). Sync or restore the library, then try again."
             }
         }
+    }
+
+    /// Every recorded number the importers require non-negative and finite.
+    /// Nil stays nil — absence is preserved, never repaired to a zero
+    /// (INV-WOOD-WORK-DOES-NOT-GUESS).
+    private static func requireNonNegative(_ value: Double?, _ label: String) throws {
+        guard let value else { return }
+        guard value.isFinite, value >= 0 else { throw Error.invalidValue(label) }
+    }
+
+    private static func requireNonNegative(_ value: Int?, _ label: String) throws {
+        guard let value else { return }
+        guard value >= 0 else { throw Error.invalidValue(label) }
     }
 
     static func create(input: Input, context: ModelContext) throws -> WorkoutSession {
@@ -54,6 +69,19 @@ enum ActivitySession {
         if let rpe = input.sessionRPE, !ActivityWorkload.sessionRPERange.contains(rpe) {
             throw Error.invalidSessionRPE
         }
+        // Kind-specific facts attach only for their own kind, so a stray
+        // field can never masquerade as another activity's data.
+        let wood = input.kind == .woodSplitting ? input.woodSplitting : nil
+        // The same reasoning as the RPE guard, for every remaining recorded
+        // number: both importers require these non-negative and finite, so an
+        // unguarded write banks a row whose own backup neither client will
+        // restore — and a non-finite Double makes JSONEncoder refuse the
+        // export outright, leaving the user with no backup at all.
+        try requireNonNegative(input.loadLb, "Implement weight")
+        try requireNonNegative(wood?.rounds, "Rounds")
+        try requireNonNegative(wood?.splitPieces, "Split pieces")
+        try requireNonNegative(wood?.estimatedStrikes, "Estimated strikes")
+        try requireNonNegative(wood?.cordVolume, "Cords split")
         let exerciseName = input.kind.exerciseName
         var lookup = FetchDescriptor<Exercise>(predicate: #Predicate { $0.name == exerciseName })
         lookup.fetchLimit = 1
@@ -90,9 +118,6 @@ enum ActivitySession {
         context.insert(set)
         entry.sets.append(set)
 
-        // Kind-specific facts attach only for their own kind, so a stray
-        // field can never masquerade as another activity's data.
-        let wood = input.kind == .woodSplitting ? input.woodSplitting : nil
         let detail = ActivityDetail(
             kindRaw: input.kind.rawValue,
             sessionRPE: input.sessionRPE,

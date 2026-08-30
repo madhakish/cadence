@@ -3076,6 +3076,8 @@ eq(C.exerciseLegacyID("Back Squat"), C.stableID("exercise:Back Squat"), "exercis
 eq(C.activityExerciseName("woodSplitting"), "Wood Splitting",
   "each kind resolves its canonical seeded exercise");
 eq(C.activityExerciseName("mountainBiking"), null, "an unregistered kind resolves nothing");
+eq(C.activityExerciseName("constructor"), null,
+  "an inherited Object key is not a registered kind, so it resolves nothing");
 eq(C.activityWorkload(null, 8), null, "no duration, no workload");
 eq(C.activityWorkload(3600, null), null, "no RPE, no workload");
 eq(C.activityWorkload(0, 8), null, "zero duration is invalid");
