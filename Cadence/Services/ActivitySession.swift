@@ -41,7 +41,7 @@ enum ActivitySession {
             switch self {
             case .invalidDuration: return "Duration must be greater than zero."
             case .invalidSessionRPE: return "Session RPE must be between 1 and 10."
-            case .invalidValue(let label): return "\(label) must be zero or more."
+            case .invalidValue(let label): return "\(label) must be a real number, zero or more."
             case .missingExercise(let name):
                 return "The exercise library is missing \(name). Sync or restore the library, then try again."
             }
@@ -105,6 +105,12 @@ enum ActivitySession {
         context.insert(entry)
         session.exercises.append(entry)
 
+        // An unrecorded implement weight banks 0, the same "unloaded"
+        // encoding every other conditioning set in the app uses (a run, a
+        // row, a walk): `SetEntry.weightLb` is non-optional, so absence is
+        // not representable there and 0 is the canonical reading, not an
+        // invented fact. The kind's OPTIONAL typed facts live on
+        // ActivityDetail, where nil round-trips as nil.
         let set = SetEntry(
             order: 0,
             weightLb: input.loadLb ?? 0,

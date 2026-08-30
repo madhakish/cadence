@@ -829,9 +829,15 @@ arbitrary-unit value, never tonnage.
 ### INV-WOOD-WORK-DOES-NOT-GUESS
 *platforms: core*
 
-Every activity fact — cords, rounds, pieces, strikes, RPE, implement
-weight — is user-entered only; absence is preserved, never estimated from
-other fields, and a kind's typed facts attach only to that kind.
+Every activity fact is user-entered only, never estimated from another
+field, and a kind's typed facts attach only to that kind. The optional
+typed facts — cords, rounds, pieces, strikes, RPE — live on the detail
+record, where absence is preserved as nil through storage and backup.
+Implement weight is the exception by storage, not by policy: its canonical
+location is the session's conditioning `SetEntry.weightLb`, which is
+non-optional, so an unrecorded weight banks 0 — the same "unloaded"
+reading every other conditioning set carries — and is never inferred from
+duration, cords, or anything else.
 
 ### INV-WOOD-WORK-ROUND-TRIPS
 *platforms: native, web*
