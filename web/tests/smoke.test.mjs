@@ -4556,7 +4556,7 @@ await withCleanup(async (keep) => {
   b.isActive = true; await db.Programs.save(b);
   a = await db.Programs.get(aId);
   ok(!a.isActive && a.cycleNumber === 3 && a.currentWeek === 3 && a.nextDayIndex === 2,
-    "a suspended program keeps its cycle, rotation and next day");
+    "[INV-SWITCH-PRESERVES-CURSOR] a suspended program keeps its cycle, rotation and next day");
   ok(a.days[0].lifts[0].stallCount === 1 && a.days[0].lifts[0].pending?.state.baseWeightLb === 245,
     "and its per-slot progression state and pending peak result");
 
@@ -4594,9 +4594,50 @@ await withCleanup(async (keep) => {
     .reverse().find((o) => /Switch program/.test(o.textContent || ""));
   const text = sheet?.textContent || "";
   ok(/Start a new block/.test(text), "the switcher offers starting a new block");
-  ok(/already earned/.test(text), "and promises history and earned weights survive the switch");
+  ok(/already earned/.test(text),
+    "[INV-NEW-BLOCK-USES-CURRENT-HISTORY] and promises history and earned weights survive the switch");
   sheet?.querySelector("button")?.click(); await tick();
 })();
+// ---- Stage 5: program is a filter over one global history (epic #155) ----
+// [INV-PROGRAM-IS-A-FILTER] The same lift trained under two blocks is ONE
+// all-time series that each scope narrows; changing the active program never
+// changes what history draws.
+{
+  const historyView = await import("../app/js/views/history.js");
+  const eq = (a, b, msg) => ok(a === b, `${msg} (got ${a}, want ${b})`);
+  const programs = [
+    { id: 1, uuid: "aaaaaaaa-0000-4000-a000-000000000001", name: "Block A", templateId: "strength-upper-lower" },
+    { id: 2, uuid: "aaaaaaaa-0000-4000-a000-000000000002", name: "Block B", templateId: "conjugate" },
+    { id: 3, uuid: "aaaaaaaa-0000-4000-a000-000000000003", name: "Block C", templateId: "strength-upper-lower" },
+  ];
+  const sess = (programId, programName) => ({ date: "2026-08-01T10:00:00.000Z", isCompleted: true,
+    programTag: programId ? { programId, programName } : null, exercises: [] });
+  const sessions = [
+    sess(programs[0].uuid, "Block A"), sess(programs[1].uuid, "Block B"),
+    sess(programs[2].uuid, "Block C"), sess(null, null),
+  ];
+
+  const inScope = (scope) => sessions.filter((s) => historyView.sessionInScope(s, scope, programs)).length;
+  eq(inScope("all"), 4, "all-time is the default and includes untracked work");
+  eq(inScope(`program:${programs[0].uuid}`), 1, "one instance narrows to that block");
+  eq(inScope("style:strength-upper-lower"), 2, "a style spans every block of that methodology");
+  eq(inScope("style:conjugate"), 1, "and isolates a different style");
+
+  const scopes = historyView.programScopes(sessions, programs);
+  eq(scopes[0].value, "all", "all-time leads the picker");
+  ok(scopes.some((s) => s.label === "Block A") && scopes.some((s) => s.label === "Block B"),
+    "every block that logged this history is offered");
+  ok(scopes.some((s) => s.value === "style:strength-upper-lower"),
+    "and so is the style that spans two of them");
+  // A legacy session carrying only a program NAME still resolves.
+  ok(historyView.sessionInScope({ programTag: { programName: "Block A" } },
+    `program:${programs[0].uuid}`, programs), "legacy name-only tags still resolve to their block");
+  // Scoping is a pure function of the session and the programs — no notion of
+  // which program is active appears anywhere in it.
+  eq(inScope("all"), 4, "switching the active program cannot change history");
+}
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

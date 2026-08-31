@@ -802,6 +802,45 @@ restores the ordinary reading.
 
 ---
 
+## Program lifecycle
+
+### INV-HISTORY-OUTLIVES-PROGRAM
+*platforms: native*
+
+Activating, suspending, creating, or deleting a program never deletes or
+rewrites a completed session. Banked work keeps the program context it was
+performed under, so history stays whole and comparable across every block.
+
+### INV-PROGRAM-IS-A-FILTER
+*platforms: web*
+
+There is ONE global training history. A program scopes a view of it and never
+owns a separate store: filtering history by block or by methodology narrows
+the same series, an untracked session still belongs to all-time, and which
+program happens to drive Today can never change what history draws. The
+rotations matrix follows an explicit program choice for the same reason.
+
+Native mirrors this rule in `ProgressionChartsView`/`HistoryView`; it is
+registered for web because the hostless macOS suite cannot compile view code,
+so only the web suite can verify it.
+
+### INV-SWITCH-PRESERVES-CURSOR
+*platforms: native, web*
+
+Suspending a program is a pause, not a reset, and resuming it mutates
+activation and nothing else. Its cycle, rotation, next day, per-slot stall
+counts, and pending peak results are exactly where the lifter left them, and
+no weight is re-derived or re-prompted. Switching never deletes a session,
+rewrites a historical program tag, or resets a PR.
+
+### INV-NEW-BLOCK-USES-CURRENT-HISTORY
+*platforms: native, web*
+
+A new block seeds every slot from current global history through the training
+anchor resolver — exact history first, then an explicit related-lift rule,
+then the conservative catalog default — before it is ever activated. A lifter
+who has already earned a weight is never asked to type it again.
+
 ## Delivery
 
 ### INV-WEB-APP-SCOPE
