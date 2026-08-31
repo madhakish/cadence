@@ -4639,5 +4639,45 @@ await withCleanup(async (keep) => {
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
 
+
+// ---- Stage 6: corrections rebuild what is replayable (epic #155) ----
+// PR milestones are regenerated deterministically from the corrected
+// canonical sessions — never appended to — and the rebuild is idempotent.
+await withCleanup(async (keep) => {
+  const sessionView = await import("../app/js/views/session.js");
+  const before = new Set((await db.Milestones.all()).map((m) => m.id));
+  const mk = async (date, reps) => keep(db.Sessions, await db.Sessions.save({
+    date: db.iso(date), completedAt: db.iso(date), isCompleted: true, notes: "",
+    exercises: [{ exerciseName: "Good Morning", order: 0, sets: [
+      { order: 0, weightLb: 185, reps, isWarmup: false, status: "completed", enteredUnit: "lb" },
+    ] }],
+  }));
+  await mk(new Date("2031-01-01T10:00:00Z"), 5);
+  await mk(new Date("2031-02-01T10:00:00Z"), 3);
+
+  await sessionView.rebuildMilestones(["Good Morning"]);
+  const first = (await db.Milestones.all()).filter((m) => !before.has(m.id) && m.exerciseName === "Good Morning");
+  for (const m of first) keep(db.Milestones, m.id);
+  ok(first.length > 0, "replaying corrected history regenerates the lift's PR milestones");
+  ok(first.some((m) => m.kind === "heaviestSet" && /185/.test(m.label)),
+    "including the heaviest-set record the history actually earns");
+
+  // Idempotent: replaying unchanged history reproduces the same set, not a
+  // second copy appended beside it.
+  await sessionView.rebuildMilestones(["Good Morning"]);
+  const second = (await db.Milestones.all()).filter((m) => m.exerciseName === "Good Morning" && !before.has(m.id));
+  for (const m of second) keep(db.Milestones, m.id);
+  const signature = (list) => list.map((m) => `${m.date}|${m.kind}|${m.label}`).sort().join("\n");
+  ok(signature(second) === signature(first),
+    "[INV-CORRECTION-REBUILDS-DERIVED-STATE] a second rebuild reproduces the same "
+    + "milestones rather than appending duplicates");
+
+  // Another lift's milestones are untouched by a scoped rebuild.
+  const otherBefore = (await db.Milestones.all()).filter((m) => m.exerciseName !== "Good Morning").length;
+  await sessionView.rebuildMilestones(["Good Morning"]);
+  const otherAfter = (await db.Milestones.all()).filter((m) => m.exerciseName !== "Good Morning").length;
+  ok(otherAfter === otherBefore, "a scoped rebuild never touches records it does not own");
+})();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

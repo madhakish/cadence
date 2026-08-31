@@ -124,9 +124,10 @@ enum SessionCompletion {
 
             if !offProgram {
                 let history: (sets: [SetSample], volumes: [Double], schemes: Set<String>)
-                do { history = try priorHistory(for: exercise.name, basis: working[0].loadBasis,
-                                                before: session.date, context: context,
-                                                excludingOffProgram: intervalSnapshots) }
+                do { history = try MilestoneProjection.priorHistory(
+                        for: exercise.name, basis: working[0].loadBasis,
+                        before: session.date, context: context,
+                        excludingOffProgram: intervalSnapshots) }
                 catch { context.rollback(); throw SaveFailure(underlying: error) }
                 let events = PRDetection.evaluate(
                     exercise: exercise.name,
@@ -1203,47 +1204,6 @@ enum SessionCompletion {
         program.cycleNumber += 1
         program.currentWeek = 1
         program.nextDayIndex = allDayOrders.first ?? 0
-    }
-
-    /// All working sets / volumes / top schemes for an exercise across prior
-    /// completed sessions.
-    private static func priorHistory(
-        for exerciseName: String,
-        basis: LoadBasis,
-        before date: Date,
-        context: ModelContext,
-        excludingOffProgram intervals: [TrainingIntervalSnapshot] = []
-    ) throws -> (sets: [SetSample], volumes: [Double], schemes: Set<String>) {
-        let descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { $0.isCompleted && $0.date < date }
-        )
-        // An active-recovery session never joins the PR baseline either —
-        // suppressing its OWN milestones at bank time is not enough, because a
-        // heavy recovery set left in history would suppress every later
-        // legitimate PR forever (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Mirrors
-        // web completeSessionInner's prior filter.
-        let sessions = try context.fetch(descriptor).filter {
-            !TrainingIntervals.isOffProgramTime(
-                $0.date.timeIntervalSince1970 * 1000, intervals: intervals
-            )
-        }
-
-        var sets: [SetSample] = []
-        var volumes: [Double] = []
-        var schemes: Set<String> = []
-
-        for s in sessions {
-            for entry in s.exercises where entry.exercise?.name == exerciseName {
-                let working = entry.workingSets.map(sample).filter { $0.loadBasis == basis }
-                guard !working.isEmpty else { continue }
-                sets.append(contentsOf: working)
-                volumes.append(PRDetection.volume(working))
-                if let top = PRDetection.topScheme(working) {
-                    schemes.insert("\(top.sets)×\(top.reps)")
-                }
-            }
-        }
-        return (sets, volumes, schemes)
     }
 
     private static func advanceStandaloneTracks(in session: WorkoutSession, context: ModelContext) throws -> [String] {
