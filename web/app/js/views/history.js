@@ -10,8 +10,13 @@ import { COPY } from "../constants.js";
 let mode = "rotations";
 
 export async function render(host) {
-  const [sessions, milestones, exercises, program, checkins, intervals] = await Promise.all([
-    Sessions.completed(), Milestones.all(), Exercises.all(), Programs.active(), Checkins.all(), Intervals.all(),
+  // Every program, not just the active one (epic #155 Stage 5): the chart's
+  // program filter must resolve a session's block whichever program happens to
+  // be driving Today, and switching the active program must never change what
+  // history shows.
+  const [sessions, milestones, exercises, program, programs, checkins, intervals] = await Promise.all([
+    Sessions.completed(), Milestones.all(), Exercises.all(), Programs.active(), Programs.all(),
+    Checkins.all(), Intervals.all(),
   ]);
   const root = ui.h("div");
   root.append(ui.seg([{ value: "rotations", label: "Rotations" }, { value: "log", label: "Log" },
@@ -19,9 +24,23 @@ export async function render(host) {
   const panel = ui.h("div");
   root.append(panel);
 
-  if (mode === "rotations") renderRotations(panel, sessions, exercises, program, checkins, intervals);
+  // An explicit choice, not "whatever drives Today" (epic #155 Stage 5):
+  // switching the active program must not rewrite the matrix being read.
+  const rotationProgram = programs.find((p) => (p.uuid || p.id) === rotationProgramId)
+    || program || programs[0] || null;
+  if (mode === "rotations") {
+    if (programs.length > 1) {
+      const picker = ui.h("select", {}, ...programs.map((p) => ui.h("option", {
+        value: p.uuid || p.id, text: p.name,
+        selected: (p.uuid || p.id) === (rotationProgram?.uuid || rotationProgram?.id),
+      })));
+      picker.addEventListener("change", () => { rotationProgramId = picker.value; render(host); });
+      panel.append(ui.field("Program", picker));
+    }
+    renderRotations(panel, sessions, exercises, rotationProgram, checkins, intervals);
+  }
   else if (mode === "log") renderLog(panel, sessions, exercises, intervals);
-  else if (mode === "charts") renderCharts(panel, sessions, exercises, program, intervals);
+  else if (mode === "charts") renderCharts(panel, sessions, exercises, program, intervals, programs);
   else renderMilestones(panel, milestones);
 
   host.replaceChildren(root);
@@ -425,7 +444,7 @@ const PROJECTION_COLOR = "#7aa7d9";
 
 let chartEx = null, chartMetric = "weight", chartIntent = "main";
 let chartHorizon = 0;
-function renderCharts(panel, sessions, exercises, program, chartIntervals = []) {
+function renderCharts(panel, sessions, exercises, program, chartIntervals = [], programs = []) {
   const mains = exercises.filter((e) => e.category === "Main").map((e) => e.name).sort();
   if (!mains.length) { panel.append(ui.empty("📈", COPY.emptyHistory)); return; }
   if (!chartEx || !mains.includes(chartEx)) {
@@ -447,6 +466,17 @@ function renderCharts(panel, sessions, exercises, program, chartIntervals = []) 
     ui.h("option", { value: "rotations", text: "Compare like rotations", selected: chartIntent === "rotations" }));
   intentSelect.addEventListener("change", () => { chartIntent = intentSelect.value; renderInner(); });
   panel.append(ui.field("Chart intent", intentSelect));
+  // Program is a FILTER over one global history, never a separate store
+  // (epic #155 Stage 5, INV-PROGRAM-IS-A-FILTER). All-time is the default;
+  // scoping to one block or one methodology narrows the same series, and
+  // switching the active program never changes what is drawn.
+  const scopes = programScopes(sessions, programs);
+  const scopeSelect = ui.h("select", {}, ...scopes.map((scope) => ui.h("option", {
+    value: scope.value, text: scope.label, selected: scope.value === chartProgramScope,
+  })));
+  if (!scopes.some((scope) => scope.value === chartProgramScope)) chartProgramScope = "all";
+  scopeSelect.addEventListener("change", () => { chartProgramScope = scopeSelect.value; renderInner(); });
+  panel.append(ui.field("Program", scopeSelect));
   // How far past today to extend the fitted trend. Off by default: the chart's
   // job is what happened, and a forecast is something the lifter asks for.
   panel.append(ui.h("div", { class: "sub", style: { padding: "8px 4px 0" }, text: "Project forward" }));
@@ -484,7 +514,8 @@ function renderCharts(panel, sessions, exercises, program, chartIntervals = []) 
     // the tonnage. One pass keeps every metric describing the same set of
     // performed sets, so switching metric can never re-slice the data.
     const rows = [];
-    for (const s of [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date))) {
+    const scoped = [...sessions].filter((s) => sessionInScope(s, chartProgramScope, programs));
+    for (const s of scoped.sort((a, b) => new Date(a.date) - new Date(b.date))) {
       const matching = (s.exercises || []).filter((x) => x.exerciseName === chartEx);
       if (!matching.length) continue;
       for (const role of ["main", "complementary"]) {
@@ -741,4 +772,52 @@ function renderMilestones(panel, milestones) {
       ui.h("span", { class: "sub", text: ui.fmtLong(m.date) }))));
   }
   panel.append(card);
+}
+
+// ---- Program scoping (epic #155 Stage 5) ----
+// One global history; program membership is a lens over it. A session's own
+// program tag is the truth — legacy rows with only a name fall back to the
+// name, the same rule ProgramResolution states natively.
+let chartProgramScope = "all";
+let rotationProgramId = "";
+
+function programOfSession(session, programs) {
+  const id = session.programTag?.programId;
+  if (id) return programs.find((p) => p.uuid === id || p.id === id) || null;
+  const name = session.programTag?.programName;
+  return name ? programs.find((p) => p.name === name) || null : null;
+}
+
+export function sessionInScope(session, scope, programs) {
+  if (!scope || scope === "all") return true;
+  const program = programOfSession(session, programs);
+  if (scope.startsWith("program:")) {
+    const id = scope.slice("program:".length);
+    return !!program && (program.uuid === id || program.id === id);
+  }
+  if (scope.startsWith("style:")) {
+    return !!program && program.templateId === scope.slice("style:".length);
+  }
+  return true;
+}
+
+// Offer only scopes this lift's history can actually populate, so the picker
+// never advertises an empty chart.
+export function programScopes(sessions, programs) {
+  const instances = new Map();
+  const styles = new Map();
+  for (const session of sessions) {
+    const program = programOfSession(session, programs);
+    if (!program) continue;
+    instances.set(program.uuid || program.id, program.name);
+    if (program.templateId) styles.set(program.templateId, program.templateId);
+  }
+  const scopes = [{ value: "all", label: "All programs (all-time)" }];
+  for (const [id, name] of instances) scopes.push({ value: `program:${id}`, label: name });
+  // A style groups every block of one methodology — "same lift under 5/3/1",
+  // across however many blocks it took.
+  if (styles.size > 1 || (styles.size === 1 && instances.size > 1)) {
+    for (const [id] of styles) scopes.push({ value: `style:${id}`, label: `Style: ${id}` });
+  }
+  return scopes;
 }

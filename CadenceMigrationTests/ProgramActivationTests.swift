@@ -30,6 +30,7 @@ final class ProgramActivationTests: XCTestCase {
     }
 
     /// B — resume preserves the cursor exactly (the Stage 4 gate).
+    /// [INV-SWITCH-PRESERVES-CURSOR]
     func testSwitchingAwayAndBackPreservesEveryCursor() throws {
         let container = try makeContainer()
         let context = container.mainContext
@@ -66,6 +67,7 @@ final class ProgramActivationTests: XCTestCase {
 
     /// A + C — a new block seeds from global history and preserves the old
     /// instance, its sessions, and its cursor.
+    /// [INV-NEW-BLOCK-USES-CURRENT-HISTORY] [INV-HISTORY-OUTLIVES-PROGRAM]
     func testStartingANewBlockKeepsEveryPriorSessionAndInstance() throws {
         let container = try makeContainer()
         let context = container.mainContext

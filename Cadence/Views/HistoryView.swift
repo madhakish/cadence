@@ -5,6 +5,9 @@ import CadenceCore
 
 /// Sessions, milestones, and per-lift progression charts.
 struct HistoryView: View {
+    /// The block the rotations matrix is scoped to; empty falls back to the
+    /// active program.
+    @State private var rotationProgramID = ""
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted },
            sort: \WorkoutSession.date, order: .reverse) private var sessions: [WorkoutSession]
     @Query(sort: \Milestone.date, order: .reverse) private var milestones: [Milestone]
@@ -54,7 +57,17 @@ struct HistoryView: View {
 
     private var rotationList: some View {
         List {
-            if let program = programs.first(where: { $0.isActive }) ?? programs.first {
+            // An explicit choice, not "whatever drives Today" (epic #155
+            // Stage 5): switching the active program must not rewrite the
+            // matrix the lifter is reading. Defaults to the active block.
+            if programs.count > 1 {
+                Picker("Program", selection: $rotationProgramID) {
+                    ForEach(programs, id: \.id) { Text($0.name).tag($0.id) }
+                }
+                .pickerStyle(.menu)
+            }
+            if let program = programs.first(where: { $0.id == rotationProgramID })
+                ?? programs.first(where: { $0.isActive }) ?? programs.first {
                 let report = CoachingService.report(
                     program: program, sessions: sessions,
                     exercises: exercises, checkIns: checkIns,
@@ -891,6 +904,11 @@ struct ProgressionChartsView: View {
     // Defaults to the first main lift in the library on appear — no
     // hardcoded exercise name (the library is user data).
     @State private var selectedLift = ""
+    /// Program is a FILTER over one global history, never a separate store
+    /// (epic #155 Stage 5, INV-PROGRAM-IS-A-FILTER). All-time is the default;
+    /// scoping narrows the same series, and which program drives Today can
+    /// never change what history draws. Mirrors web `sessionInScope`.
+    @State private var programScope = "all"
     @State private var plot: Plot = .progression
     @State private var metric: Metric = .topSet
     @State private var intent: ChartIntent = .mainProgression
@@ -974,11 +992,54 @@ struct ProgressionChartsView: View {
     /// Load points (working weight and/or est. 1RM) for the visible roles.
     /// Volume is deliberately NOT a metric here — tonnage lives on its own
     /// plot (`volumeBars`), on its own zero-based scale.
+
+    /// The block a session was logged under: its own id, with the recorded
+    /// name as the legacy-only fallback (the ProgramResolution rule).
+    private func programOf(_ session: WorkoutSession) -> Program? {
+        if let id = session.programID { return programs.first { $0.id == id } }
+        if let name = session.programName { return programs.first { $0.name == name } }
+        return nil
+    }
+
+    private var scopedSessions: [WorkoutSession] {
+        guard programScope != "all" else { return sessions }
+        return sessions.filter { session in
+            guard let program = programOf(session) else { return false }
+            if programScope.hasPrefix("program:") {
+                return program.id == String(programScope.dropFirst("program:".count))
+            }
+            if programScope.hasPrefix("style:") {
+                return program.templateID == String(programScope.dropFirst("style:".count))
+            }
+            return true
+        }
+    }
+
+    /// Only scopes this history can actually populate, so the picker never
+    /// advertises an empty chart.
+    private var programScopeOptions: [(value: String, label: String)] {
+        var instances: [(String, String)] = []
+        var styles: [String] = []
+        for session in sessions {
+            guard let program = programOf(session) else { continue }
+            if !instances.contains(where: { $0.0 == program.id }) {
+                instances.append((program.id, program.name))
+            }
+            if let template = program.templateID, !styles.contains(template) { styles.append(template) }
+        }
+        var options: [(value: String, label: String)] = [("all", "All programs (all-time)")]
+        options += instances.map { ("program:\($0.0)", $0.1) }
+        if styles.count > 1 || (styles.count == 1 && instances.count > 1) {
+            options += styles.map { ("style:\($0)", "Style: \($0)") }
+        }
+        return options
+    }
+
     private var points: [Point] {
         let display = settingsList.unitDisplay
         let shown = { (lb: Double) in display.primaryUnit == .kg ? Weight.kg(fromLb: lb) : lb }
         var result: [Point] = []
-        for session in sessions {
+        for session in scopedSessions {
             let matching = session.exercises.filter { $0.exercise?.name == selectedLift }
             guard !matching.isEmpty else { continue }
             for role in visibleRoles {
@@ -1429,6 +1490,15 @@ struct ProgressionChartsView: View {
                         ForEach(ChartIntent.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.menu)
+                    if programScopeOptions.count > 1 {
+                        Picker("Program", selection: $programScope) {
+                            ForEach(programScopeOptions, id: \.value) { option in
+                                Text(option.label).tag(option.value)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: programScope) { selectedDate = nil }
+                    }
                     Picker("Project forward", selection: $horizon) {
                         ForEach(TrendProjection.Horizon.allCases, id: \.self) { Text($0.label).tag($0) }
                     }
