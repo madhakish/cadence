@@ -4569,5 +4569,34 @@ await withCleanup(async (keep) => {
     "resuming re-derives nothing — it is a pause, not a restart");
 })();
 
+
+// ---- Stage 4 UI: the switcher is reachable from Today (epic #155) ----
+await withCleanup(async (keep) => {
+  const home = await import("../app/js/views/home.js");
+  const id = keep(db.Programs, await db.Programs.save({
+    name: "Switcher UI Fixture", focus: "strength", cycleNumber: 2, currentWeek: 1,
+    nextDayIndex: 0, roundingLb: 5, isActive: true,
+    days: [{ name: "Pull", order: 0, lifts: [cyc("Deadlift", "main", 235, 320)], accessories: [] }],
+  }));
+  // Only one program may be active; park any other the suite left behind.
+  for (const other of await db.Programs.all()) {
+    if (other.id !== id && other.isActive) { other.isActive = false; await db.Programs.save(other); }
+  }
+  await home.render(host()); await tick();
+  const button = [...host().querySelectorAll("button")]
+    .find((b) => b.getAttribute("aria-label") === "Switch training program");
+  ok(button, "Today offers a program switcher next to the active block");
+  button.click();
+  // programSwitcher resolves two dynamic imports before it builds the sheet.
+  for (let i = 0; i < 5; i += 1) await tick();
+  // Other suite blocks leave sheets parked in the DOM; find OURS by title.
+  const sheet = [...document.querySelectorAll("#overlays .sheet")]
+    .reverse().find((o) => /Switch program/.test(o.textContent || ""));
+  const text = sheet?.textContent || "";
+  ok(/Start a new block/.test(text), "the switcher offers starting a new block");
+  ok(/already earned/.test(text), "and promises history and earned weights survive the switch");
+  sheet?.querySelector("button")?.click(); await tick();
+})();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

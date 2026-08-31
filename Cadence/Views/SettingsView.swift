@@ -18,7 +18,6 @@ struct SettingsView: View {
     @State private var exportCSV: Data?
     @State private var showImporter = false
     @State private var importAlert: String?
-    @State private var activationError: String?
     @State private var canRevertImport = false
     /// A decoded, checkpointed restore waiting on the user's second, explicit
     /// confirmation before ImportService.load actually commits it.
@@ -305,13 +304,6 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) { pendingRestore = nil }
             } message: {
                 Text(pendingRestore.map(Self.previewSummary) ?? "")
-            }
-            .alert("Can't switch programs", isPresented: Binding(
-                get: { activationError != nil }, set: { if !$0 { activationError = nil } }
-            )) {
-                Button("OK") { activationError = nil }
-            } message: {
-                Text(activationError ?? "")
             }
             .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil; canRevertImport = false } })) {
                 if canRevertImport {
@@ -839,6 +831,9 @@ struct TrackEditorView: View {
 struct ProgramEditorView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    /// Surfaces a refused switch (an open session from another program)
+    /// instead of letting the toggle silently snap back.
+    @State private var activationError: String?
     @Query private var allPrograms: [Program]
     @Query private var settingsList: [AppSettings]
     @Query private var exercises: [Exercise]
@@ -1135,6 +1130,13 @@ struct ProgramEditorView: View {
                     Text("Delete program")
                 }
             }
+        }
+        .alert("Can't switch programs", isPresented: Binding(
+            get: { activationError != nil }, set: { if !$0 { activationError = nil } }
+        )) {
+            Button("OK") { activationError = nil }
+        } message: {
+            Text(activationError ?? "")
         }
         .navigationTitle(program.name)
         .saveChangesOnDisappear(context, operation: "Saving the program")
