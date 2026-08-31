@@ -792,7 +792,7 @@ private struct ProgramSwitcherView: View {
                     }
                 }
             }
-            Section("Start a new block") {
+            Section {
                 ForEach(ProgramTemplateData.all, id: \.id) { template in
                     Button {
                         act { _ = try ProgramActivationService.startBlock(template, context: context) }
@@ -803,6 +803,8 @@ private struct ProgramSwitcherView: View {
                         }
                     }
                 }
+            } header: {
+                Text("Start a new block")
             } footer: {
                 Text("Your history, PRs and charts stay whole either way — a new "
                      + "block starts from the weights you have already earned.")
