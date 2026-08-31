@@ -20,6 +20,8 @@ struct HomeView: View {
     @Environment(WorkoutClock.self) private var workoutClock
     @Query private var tracks: [LiftTrack]
     @Query private var programs: [Program]
+    @State private var showProgramSwitcher = false
+    @State private var switcherError: String?
     @Query private var exercises: [Exercise]
     @Query(sort: \CoachingDecision.date, order: .reverse) private var coachingDecisions: [CoachingDecision]
     @Query private var gyms: [Gym]
@@ -313,7 +315,17 @@ struct HomeView: View {
                 }
 
                 if let program = activeProgram, let day = nextDay(program) {
-                    Section("\(program.name) · Cycle \(program.cycleNumber)") {
+                    Section {
+                        // The switcher lives where training starts (epic #155
+                        // Stage 4): resuming another block or trying a
+                        // different methodology is one tap from Today instead
+                        // of buried in Settings.
+                        Button("Switch program") { showProgramSwitcher = true }
+                            .accessibilityLabel("Switch training program")
+                    } header: {
+                        Text("\(program.name) · Cycle \(program.cycleNumber)")
+                    }
+                    Section {
                         // Tapping the day opens the full preview — browse the
                         // whole workout without starting it.
                         Button {
@@ -439,6 +451,18 @@ struct HomeView: View {
 
             }
             .navigationTitle("Cadence")
+            .sheet(isPresented: $showProgramSwitcher) {
+                NavigationStack {
+                    ProgramSwitcherView(onError: { switcherError = $0 })
+                }
+            }
+            .alert("Can't switch programs", isPresented: Binding(
+                get: { switcherError != nil }, set: { if !$0 { switcherError = nil } }
+            )) {
+                Button("OK") { switcherError = nil }
+            } message: {
+                Text(switcherError ?? "")
+            }
             .fullScreenCover(item: $activeSession) { session in
                 NavigationStack {
                     ActiveSessionView(session: session)
@@ -733,6 +757,71 @@ struct HomeView: View {
             if PersistenceErrorCenter.shared.save(context, operation: "Starting the program session") { activeSession = session }
         } catch {
             PersistenceErrorCenter.shared.report(error, operation: "Starting the program session", context: context)
+        }
+    }
+}
+
+/// Resume another block, or start a fresh one in any methodology — every slot
+/// seeded from current global history through the anchor resolver, never a
+/// weight prompt (epic #155 Stage 4). Activation itself belongs to
+/// ProgramActivationService so exclusivity, cursor preservation, and the
+/// open-session refusal have exactly one implementation.
+private struct ProgramSwitcherView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Query private var programs: [Program]
+    let onError: (String) -> Void
+
+    var body: some View {
+        List {
+            let resumable = programs.filter { !$0.isActive }
+            if !resumable.isEmpty {
+                Section("Resume") {
+                    ForEach(resumable) { program in
+                        Button {
+                            act { try ProgramActivationService.activate(program, context: context) }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(program.name)
+                                // Resuming picks up exactly where this block
+                                // left off — nothing is re-derived.
+                                Text("Cycle \(program.cycleNumber) · rotation \(program.currentWeek)")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            Section {
+                ForEach(ProgramTemplateData.all, id: \.id) { template in
+                    Button {
+                        act { _ = try ProgramActivationService.startBlock(template, context: context) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(template.name)
+                            Text(template.tagline).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text("Start a new block")
+            } footer: {
+                Text("Your history, PRs and charts stay whole either way — a new "
+                     + "block starts from the weights you have already earned.")
+            }
+        }
+        .navigationTitle("Switch program")
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+    }
+
+    private func act(_ work: () throws -> Void) {
+        do {
+            try work()
+            guard PersistenceErrorCenter.shared.save(context, operation: "Switching programs") else { return }
+            dismiss()
+        } catch {
+            dismiss()
+            onError(error.localizedDescription)
         }
     }
 }

@@ -446,10 +446,33 @@ function moveSlot(slots, slot, delta) {
   return true;
 }
 
-async function activateProgram(p) {
+// The one owner of program activation (epic #155 Stage 4). Mirrors native
+// ProgramActivationService: activation is exclusive, resuming preserves every
+// cursor (this function mutates NOTHING but isActive), and a switch that would
+// strand an open session from another program fails loudly rather than
+// orphaning it or silently retagging its work.
+export async function assertNoForeignOpenSession(targetId) {
+  for (const session of await Sessions.openAll()) {
+    const programId = session.programTag?.programId;
+    // An untagged ad-hoc session belongs to no program and blocks nothing.
+    if (!programId || programId === targetId) continue;
+    throw new Error(`You have an unfinished ${session.programTag?.programName || "workout"} `
+      + "session. Finish or discard it before switching programs.");
+  }
+}
+
+export async function activateProgram(p) {
+  await assertNoForeignOpenSession(p.uuid || p.id);
   const all = await Programs.all();
   for (const x of all) { const want = x.id === p.id; if (x.isActive !== want) { x.isActive = want; await Programs.save(x); } }
   p.isActive = true;
+}
+
+// Suspend is a pause, never a reset: cursors, pending grades, and history are
+// untouched.
+export async function suspendProgram(p) {
+  p.isActive = false;
+  await Programs.save(p);
 }
 
 export async function programEditor(p) {
@@ -596,7 +619,14 @@ export async function programEditor(p) {
           ui.h("div", { class: "row" }, ui.h("span", { text: "Rounding" }),
             ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: ui.fmtWeight, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
           ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Active (drives Today)" }),
-            ui.toggle(p.isActive, async (v) => { if (v) await activateProgram(p); else p.isActive = false; await Programs.save(p); }))));
+            ui.toggle(p.isActive, async (v) => {
+              try {
+                if (v) { await activateProgram(p); await Programs.save(p); } else { await suspendProgram(p); }
+              } catch (error) {
+                ui.toast(error?.message || "Couldn't switch programs.");
+                ui.nav.refresh();
+              }
+            }))));
         body.append(ui.h("div", { class: "section-title", text: "Deterministic coach" }));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Coaching proposals" }),

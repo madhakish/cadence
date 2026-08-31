@@ -134,6 +134,10 @@ targets:
       # here lets the hostless suite pin correction semantics on real SwiftData
       # rows (epic #155 Stage 0).
       - Cadence/Services/SessionCorrectionService.swift
+      # Activation is models-only too: compiling it here lets the hostless
+      # suite prove A -> B -> A preserves cursors and history (epic #155
+      # Stage 4).
+      - Cadence/Services/ProgramActivationService.swift
       - CadenceMigrationTests
     dependencies:
       - package: CadenceCore

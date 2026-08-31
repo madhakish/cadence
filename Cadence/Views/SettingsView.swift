@@ -831,6 +831,9 @@ struct TrackEditorView: View {
 struct ProgramEditorView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    /// Surfaces a refused switch (an open session from another program)
+    /// instead of letting the toggle silently snap back.
+    @State private var activationError: String?
     @Query private var allPrograms: [Program]
     @Query private var settingsList: [AppSettings]
     @Query private var exercises: [Exercise]
@@ -1012,9 +1015,14 @@ struct ProgramEditorView: View {
                     }
                 }
                 Stepper("Rounding: \(settingsList.unitDisplay.format(lb: program.roundingLb))", value: $program.roundingLb, in: 2.5...10, step: 2.5)
-                // Activation is exclusive — only one program drives Today.
+                // Activation is exclusive and owned by one service (epic
+                // #155 Stage 4): resuming preserves every cursor, and a
+                // switch that would strand an open session fails loudly
+                // instead of silently retagging its work.
                 Toggle("Active", isOn: Binding(get: { program.isActive }, set: { on in
-                    if on { for p in allPrograms { p.isActive = (p === program) } } else { program.isActive = false }
+                    guard on else { ProgramActivationService.suspend(program); return }
+                    do { try ProgramActivationService.activate(program, context: context) }
+                    catch { activationError = error.localizedDescription }
                 }))
             }
             Section {
@@ -1122,6 +1130,13 @@ struct ProgramEditorView: View {
                     Text("Delete program")
                 }
             }
+        }
+        .alert("Can't switch programs", isPresented: Binding(
+            get: { activationError != nil }, set: { if !$0 { activationError = nil } }
+        )) {
+            Button("OK") { activationError = nil }
+        } message: {
+            Text(activationError ?? "")
         }
         .navigationTitle(program.name)
         .saveChangesOnDisappear(context, operation: "Saving the program")

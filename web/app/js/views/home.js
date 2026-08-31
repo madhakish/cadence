@@ -160,7 +160,15 @@ export async function render(host) {
   if (program && program.days.length) {
     const day = program.days.find((d) => d.order === program.nextDayIndex) || program.days[0];
     for (const d of program.days) for (const l of d.lifts) ownedNames.add(l.exerciseName);
-    root.append(ui.h("div", { class: "section-title", text: `${program.name} · Cycle ${program.cycleNumber}` }));
+    // The program switcher lives where training starts (epic #155 Stage 4):
+    // resuming another block, starting a fresh one, or trying a different
+    // methodology is one tap from Today instead of buried in Settings.
+    const heading = ui.h("div", { class: "row", style: { alignItems: "baseline" } },
+      ui.h("div", { class: "section-title", style: { flex: "1", margin: "0" },
+        text: `${program.name} · Cycle ${program.cycleNumber}` }),
+      ui.h("button", { class: "btn ghost sm", text: "Switch",
+        "aria-label": "Switch training program", onClick: () => programSwitcher(program) }));
+    root.append(heading);
     // Advisory only. The preference used to be write-only — a stepper set it
     // and nothing read it back.
     const lastBanked = completed[0]?.date ? new Date(completed[0].date) : null;
@@ -387,4 +395,58 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
       }
     },
   });
+}
+
+// Resume another block, start a fresh block of any methodology, or switch
+// styles — all seeded from current global history, never a weight prompt
+// (epic #155 Stage 4). Activation itself is owned by views/settings.js so
+// every rule (exclusivity, cursor preservation, the open-session refusal)
+// has exactly one implementation.
+async function programSwitcher(active) {
+  const [{ activateProgram, assertNoForeignOpenSession }, { PROGRAM_TEMPLATES, createProgramFromTemplate }]
+    = await Promise.all([import("./settings.js"), import("../templates.js")]);
+  const programs = await Programs.all();
+  ui.sheet({ title: "Switch program", build: (c, api) => {
+    const fail = (error) => ui.toast(error?.message || "Couldn't switch programs.");
+    const resumable = programs.filter((p) => p.id !== active?.id);
+    if (resumable.length) {
+      c.append(ui.h("div", { class: "section-title", text: "Resume" }));
+      for (const p of resumable) {
+        c.append(ui.h("div", { class: "card" },
+          ui.h("div", { class: "row", style: { cursor: "pointer" }, onClick: async () => {
+            try {
+              await activateProgram(p);
+              await Programs.save(p);
+              api.close();
+              ui.nav.refresh();
+            } catch (error) { fail(error); }
+          } },
+            ui.h("span", { class: "title", text: p.name }),
+            // Resuming picks up exactly where this block left off.
+            ui.h("span", { class: "sub", text: `Cycle ${p.cycleNumber} · rotation ${p.currentWeek}` }))));
+      }
+    }
+    c.append(ui.h("div", { class: "section-title", text: "Start a new block" }));
+    for (const template of PROGRAM_TEMPLATES) {
+      c.append(ui.h("div", { class: "card" },
+        ui.h("div", { class: "row", style: { cursor: "pointer" }, onClick: async () => {
+          try {
+            await assertNoForeignOpenSession(null);
+            const id = await createProgramFromTemplate(template);
+            const created = await Programs.get(id);
+            await activateProgram(created);
+            await Programs.save(created);
+            api.close();
+            ui.nav.refresh();
+          } catch (error) { fail(error); }
+        } },
+          ui.h("span", { class: "title", text: template.name }),
+          ui.h("span", { class: "sub", text: template.tagline || "" }))));
+    }
+    c.append(ui.h("div", { class: "muted", style: { marginTop: "8px" },
+      text: "Your history, PRs and charts stay whole either way — a new block "
+        + "starts from the weights you have already earned." }));
+    c.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" },
+      text: "Close", onClick: () => api.close() }));
+  } });
 }
