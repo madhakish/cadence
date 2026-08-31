@@ -4517,5 +4517,57 @@ await withCleanup(async (keep) => {
     `lift base seeds from fraction x best e1RM floored to the step (>= ${expectedBase}, got ${lift.baseWeightLb})`);
 })();
 
+
+// ---- Stage 4: program switching is suspend + activate (epic #155) ----
+// A -> B -> A must preserve every cursor and every session, and a switch that
+// would strand an open session from another program must fail loudly.
+await withCleanup(async (keep) => {
+  const settingsView = await import("../app/js/views/settings.js");
+  const mk = async (name, isActive) => {
+    const id = await db.Programs.save({
+      name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+      roundingLb: 5, isActive,
+      days: [{ name: "Pull", order: 0, lifts: [cyc("Deadlift", "main", 235, 320)], accessories: [] }],
+    });
+    return keep(db.Programs, id);
+  };
+  const aId = await mk("Switch Fixture A", true);
+  const bId = await mk("Switch Fixture B", false);
+  let a = await db.Programs.get(aId);
+  a.cycleNumber = 3; a.currentWeek = 3; a.nextDayIndex = 2;
+  a.days[0].lifts[0].stallCount = 1;
+  a.days[0].lifts[0].pending = { state: { baseWeightLb: 245 }, grade: "fail", note: "held at the peak" };
+  await db.Programs.save(a);
+
+  // An open session tagged to A blocks switching away from it.
+  const openId = keep(db.Sessions, await db.Sessions.save({
+    date: db.iso(new Date()), isCompleted: false, notes: "", exercises: [],
+    programTag: { programId: a.uuid, programName: a.name },
+  }));
+  let blocked = false;
+  try { await settingsView.assertNoForeignOpenSession((await db.Programs.get(bId)).uuid); }
+  catch { blocked = true; }
+  ok(blocked, "an open session from another program blocks the switch instead of orphaning it");
+  await db.Sessions.del(openId);
+
+  // A -> B -> A preserves everything.
+  const b = await db.Programs.get(bId);
+  await settingsView.suspendProgram(await db.Programs.get(aId));
+  b.isActive = true; await db.Programs.save(b);
+  a = await db.Programs.get(aId);
+  ok(!a.isActive && a.cycleNumber === 3 && a.currentWeek === 3 && a.nextDayIndex === 2,
+    "a suspended program keeps its cycle, rotation and next day");
+  ok(a.days[0].lifts[0].stallCount === 1 && a.days[0].lifts[0].pending?.state.baseWeightLb === 245,
+    "and its per-slot progression state and pending peak result");
+
+  await settingsView.suspendProgram(await db.Programs.get(bId));
+  a = await db.Programs.get(aId);
+  a.isActive = true; await db.Programs.save(a);
+  a = await db.Programs.get(aId);
+  ok(a.isActive && a.cycleNumber === 3 && a.nextDayIndex === 2
+    && a.days[0].lifts[0].pending?.note === "held at the peak",
+    "resuming re-derives nothing — it is a pause, not a restart");
+})();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

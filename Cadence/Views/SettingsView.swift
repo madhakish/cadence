@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var exportCSV: Data?
     @State private var showImporter = false
     @State private var importAlert: String?
+    @State private var activationError: String?
     @State private var canRevertImport = false
     /// A decoded, checkpointed restore waiting on the user's second, explicit
     /// confirmation before ImportService.load actually commits it.
@@ -304,6 +305,13 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) { pendingRestore = nil }
             } message: {
                 Text(pendingRestore.map(Self.previewSummary) ?? "")
+            }
+            .alert("Can't switch programs", isPresented: Binding(
+                get: { activationError != nil }, set: { if !$0 { activationError = nil } }
+            )) {
+                Button("OK") { activationError = nil }
+            } message: {
+                Text(activationError ?? "")
             }
             .alert("Cadence data", isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil; canRevertImport = false } })) {
                 if canRevertImport {
@@ -1012,9 +1020,14 @@ struct ProgramEditorView: View {
                     }
                 }
                 Stepper("Rounding: \(settingsList.unitDisplay.format(lb: program.roundingLb))", value: $program.roundingLb, in: 2.5...10, step: 2.5)
-                // Activation is exclusive — only one program drives Today.
+                // Activation is exclusive and owned by one service (epic
+                // #155 Stage 4): resuming preserves every cursor, and a
+                // switch that would strand an open session fails loudly
+                // instead of silently retagging its work.
                 Toggle("Active", isOn: Binding(get: { program.isActive }, set: { on in
-                    if on { for p in allPrograms { p.isActive = (p === program) } } else { program.isActive = false }
+                    guard on else { ProgramActivationService.suspend(program); return }
+                    do { try ProgramActivationService.activate(program, context: context) }
+                    catch { activationError = error.localizedDescription }
                 }))
             }
             Section {
