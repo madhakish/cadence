@@ -335,6 +335,9 @@ struct SessionDetailView: View {
     let session: WorkoutSession
     @Environment(\.modelContext) private var context
     @Query private var settingsList: [AppSettings]
+    /// The post-correction milestone rebuild must exclude off-program spans
+    /// exactly as bank time does, so it needs the same interval snapshots.
+    @Query(sort: \TrainingInterval.startDate) private var correctionIntervals: [TrainingInterval]
     @AppStorage(HealthKitService.readEnabledKey) private var healthReadEnabled = false
     @State private var healthMiles: Double?
     @State private var healthEnergyKcal: Double?
@@ -478,8 +481,8 @@ struct SessionDetailView: View {
         do {
             try SessionCorrectionService.applyAndRebuild(
                 corrections, in: session, context: context,
-                intervals: trainingIntervals.map(\.snapshot),
-                formatWeight: { unitDisplay.format(lb: $0) }
+                intervals: correctionIntervals.map(\.snapshot),
+                formatWeight: { [unitDisplay] in unitDisplay.format(lb: $0) }
             )
         } catch {
             SessionCorrectionService.apply(corrections)

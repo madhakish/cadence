@@ -63,7 +63,7 @@ enum MilestoneProjection {
         exerciseNames: Set<String>,
         context: ModelContext,
         intervals: [TrainingIntervalSnapshot] = [],
-        formatWeight: (Double) -> String
+        formatWeight: @escaping (Double) -> String
     ) throws -> Int {
         guard !exerciseNames.isEmpty else { return 0 }
         let ordered = try context.fetch(

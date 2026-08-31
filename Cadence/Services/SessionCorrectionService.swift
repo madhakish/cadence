@@ -47,7 +47,7 @@ enum SessionCorrectionService {
         in session: WorkoutSession,
         context: ModelContext,
         intervals: [TrainingIntervalSnapshot] = [],
-        formatWeight: (Double) -> String = { String(format: "%g lb", $0) }
+        formatWeight: @escaping (Double) -> String = { String(format: "%g lb", $0) }
     ) throws -> Outcome {
         let corrected = Set(corrections.map { ObjectIdentifier($0.set) })
         var affected: Set<String> = []
