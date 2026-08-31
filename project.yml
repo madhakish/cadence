@@ -138,6 +138,9 @@ targets:
       # suite prove A -> B -> A preserves cursors and history (epic #155
       # Stage 4).
       - Cadence/Services/ProgramActivationService.swift
+      # The milestone projection is the shared owner behind both bank-time
+      # PRs and the post-correction rebuild (epic #155 Stage 6).
+      - Cadence/Services/MilestoneProjection.swift
       - CadenceMigrationTests
     dependencies:
       - package: CadenceCore

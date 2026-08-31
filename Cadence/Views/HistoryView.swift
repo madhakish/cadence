@@ -335,6 +335,9 @@ struct SessionDetailView: View {
     let session: WorkoutSession
     @Environment(\.modelContext) private var context
     @Query private var settingsList: [AppSettings]
+    /// The post-correction milestone rebuild must exclude off-program spans
+    /// exactly as bank time does, so it needs the same interval snapshots.
+    @Query(sort: \TrainingInterval.startDate) private var correctionIntervals: [TrainingInterval]
     @AppStorage(HealthKitService.readEnabledKey) private var healthReadEnabled = false
     @State private var healthMiles: Double?
     @State private var healthEnergyKcal: Double?
@@ -471,7 +474,19 @@ struct SessionDetailView: View {
                 corrections.append((set: set, correction: correction))
             }
         }
-        SessionCorrectionService.apply(corrections)
+        // Rebuild what the correction can deterministically rebuild — the PR
+        // milestones of the touched lifts — and leave the banked grade alone
+        // (epic #155 Stage 6). A failed rebuild must not swallow the
+        // correction itself; the corrected sets are already applied.
+        do {
+            try SessionCorrectionService.applyAndRebuild(
+                corrections, in: session, context: context,
+                intervals: correctionIntervals.map(\.snapshot),
+                formatWeight: { [unitDisplay] in unitDisplay.format(lb: $0) }
+            )
+        } catch {
+            SessionCorrectionService.apply(corrections)
+        }
     }
 
     var body: some View {

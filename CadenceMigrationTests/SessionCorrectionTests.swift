@@ -84,6 +84,62 @@ final class SessionCorrectionTests: XCTestCase {
                        "reapplying an identical correction writes nothing (write-only-changed)")
     }
 
+
+    /// Stage 6: the correction rebuilds what is deterministically
+    /// rebuildable — the touched lifts' PR milestones — replayed from the
+    /// corrected canonical sessions rather than appended to, and idempotent.
+    /// [INV-CORRECTION-REBUILDS-DERIVED-STATE]
+    func testCorrectionRegeneratesMilestonesDeterministically() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let exercise = Exercise(name: "Good Morning", category: .accessory, type: .barbell,
+                                movementGroup: "hinge")
+        context.insert(exercise)
+
+        func bank(_ date: Date, reps: Int) -> [SetEntry] {
+            let session = WorkoutSession(date: date)
+            context.insert(session)
+            session.isCompleted = true
+            session.completedAt = date
+            let entry = SessionExercise(order: 0, exercise: exercise)
+            context.insert(entry)
+            session.exercises.append(entry)
+            let set = SetEntry(order: 0, weightLb: 185, reps: reps, status: .completed)
+            context.insert(set)
+            entry.sets.append(set)
+            return [set]
+        }
+        _ = bank(Date(timeIntervalSince1970: 1_900_000_000), reps: 5)
+        let later = bank(Date(timeIntervalSince1970: 1_902_000_000), reps: 3)
+        try context.save()
+
+        let outcome = try SessionCorrectionService.applyAndRebuild(
+            [(set: later[0], correction: SetLifecycle.SetCorrection(reps: 8))],
+            in: try XCTUnwrap(later[0].sessionExercise?.session),
+            context: context, formatWeight: { String(format: "%g lb", $0) }
+        )
+        try context.save()
+
+        XCTAssertGreaterThan(outcome.rebuiltMilestones, 0,
+                             "the corrected history earns milestones on replay")
+        XCTAssertFalse(outcome.programStateReplayed,
+                       "and the banked program grade is deliberately NOT replayed")
+        let first = try context.fetch(FetchDescriptor<Milestone>())
+            .filter { $0.exerciseName == "Good Morning" }
+            .map { "\($0.date.timeIntervalSince1970)|\($0.kindRaw)|\($0.label)" }.sorted()
+        XCTAssertFalse(first.isEmpty)
+
+        // Replaying unchanged history reproduces the same set — no duplicates.
+        _ = try MilestoneProjection.rebuild(
+            exerciseNames: ["Good Morning"], context: context,
+            formatWeight: { String(format: "%g lb", $0) })
+        try context.save()
+        let second = try context.fetch(FetchDescriptor<Milestone>())
+            .filter { $0.exerciseName == "Good Morning" }
+            .map { "\($0.date.timeIntervalSince1970)|\($0.kindRaw)|\($0.label)" }.sorted()
+        XCTAssertEqual(second, first, "a second rebuild regenerates, never appends")
+    }
+
     func testEmptyCorrectionWritesNothing() throws {
         let container = try makeContainer()
         let context = container.mainContext

@@ -1228,7 +1228,7 @@ async function completeSessionInner(session) {
       }
     }
     if (!offProgram) {
-      const events = C.prEvaluate({ exercise: se.exerciseName, sessionSets: working, historySets, historyVolumes, historySchemes, formatWeight: ui.fmtWeight });
+      const events = prEventsFor(se.exerciseName, working, historySets, historyVolumes, historySchemes);
       for (const e of events) { milestoneRecords.push({ date: iso(new Date(session.date)), exerciseName: e.exercise, kind: e.kind, label: e.label }); milestones.push(e); }
     }
 
@@ -2239,4 +2239,86 @@ function showSummary(summary, onDone) {
       c.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "12px" }, text: "Done", onClick: () => { api.close(); onDone(); } }));
     },
   });
+}
+
+// ---- Milestone derivation (epic #155 Stage 0/6) ----
+// One owner for "what PRs did this exposure earn", used at bank time AND by
+// the post-correction rebuild, so a rebuilt milestone can never disagree with
+// the one banking would have written.
+const PR_MILESTONE_KINDS = new Set(["heaviestSet", "firstScheme", "volumePR", "repPR"]);
+
+function prEventsFor(exerciseName, working, historySets, historyVolumes, historySchemes) {
+  return C.prEvaluate({
+    exercise: exerciseName, sessionSets: working, historySets, historyVolumes,
+    historySchemes, formatWeight: ui.fmtWeight,
+  });
+}
+
+// Every completed non-warmup set of one lift in one session, normalized the
+// way PR detection compares them (load basis resolved, per-side preserved).
+function prSamplesFor(session, exerciseName, exerciseByName) {
+  const out = [];
+  for (const se of session.exercises || []) {
+    if (se.exerciseName !== exerciseName) continue;
+    const definition = exerciseByName.get(exerciseName);
+    for (const set of se.sets || []) {
+      if (set.isWarmup || set.status !== "completed") continue;
+      out.push({
+        weightLb: set.weightLb, reps: set.reps, isPerSide: !!set.isPerSide,
+        loadBasis: C.LOAD_BASES.includes(set.loadBasis) ? set.loadBasis : C.resolvedLoadBasis(definition),
+        implementCount: set.implementCount || C.resolvedImplementCount(definition),
+      });
+    }
+  }
+  return out;
+}
+
+// Regenerate PR milestones for the affected lifts deterministically from the
+// canonical sessions — replayed in order, never appended to (epic #155
+// Stage 6). Milestones this rebuild does not own (programNote, and every
+// other lift's records) are left exactly as they are. Idempotent: replaying
+// unchanged history reproduces the same set.
+export async function rebuildMilestones(exerciseNames) {
+  const names = new Set([...exerciseNames].filter(Boolean));
+  if (!names.size) return { rebuilt: 0 };
+  const [all, completed, exercises, intervals] = await Promise.all([
+    Milestones.all(), Sessions.completed(), Exercises.all(), Intervals.all(),
+  ]);
+  const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
+  const intervalSnaps = intervalSnapshots(intervals);
+  const ordered = [...completed].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const regenerated = [];
+  for (const [index, session] of ordered.entries()) {
+    // Work logged inside an active-recovery span never earns a PR and never
+    // joins the baseline — the same rule bank time applies.
+    if (C.isOffProgramTime(new Date(session.date).getTime(), intervalSnaps)) continue;
+    const prior = ordered.slice(0, index)
+      .filter((s) => !C.isOffProgramTime(new Date(s.date).getTime(), intervalSnaps));
+    for (const name of names) {
+      const working = prSamplesFor(session, name, exerciseByName);
+      if (!working.length) continue;
+      const historySets = [], historyVolumes = [], historySchemes = new Set();
+      for (const past of prior) {
+        const w = prSamplesFor(past, name, exerciseByName)
+          .filter((set) => set.loadBasis === working[0].loadBasis);
+        if (!w.length) continue;
+        historySets.push(...w);
+        historyVolumes.push(C.prVolume(w));
+        const top = C.prTopScheme(w); if (top) historySchemes.add(`${top.sets}×${top.reps}`);
+      }
+      for (const event of prEventsFor(name, working, historySets, historyVolumes, historySchemes)) {
+        regenerated.push({ date: iso(new Date(session.date)), exerciseName: event.exercise,
+          kind: event.kind, label: event.label });
+      }
+    }
+  }
+  // Replace only what this rebuild owns.
+  for (const milestone of all) {
+    if (names.has(milestone.exerciseName) && PR_MILESTONE_KINDS.has(milestone.kind)) {
+      await Milestones.del(milestone.id);
+    }
+  }
+  for (const record of regenerated) await Milestones.add(record);
+  return { rebuilt: regenerated.length };
 }

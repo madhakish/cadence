@@ -257,10 +257,14 @@ function editableHistorySetRow(set, exerciseType, draft) {
 function openDetail(s, exerciseByName) {
   // Correction mode for a banked log: a set that never got its ✓ mid-workout
   // or a weight banked at the stale plan can be fixed here. The corrected
-  // history is what charts, recalls, exports, and prior-best evidence read.
-  // It does NOT re-run the grading that fired at bank time — that result is
-  // already stashed in the lift's pending state — so a prescription built
-  // from the wrong base is fixed in the program editor, not here.
+  // history is what charts, recalls, exports, and prior-best evidence read,
+  // and PR milestones for the touched lifts are regenerated deterministically
+  // from the corrected sessions (epic #155 Stage 6).
+  // It still does NOT re-run the grading that fired at bank time — that
+  // result is already stashed in the lift's pending state, and replaying it
+  // needs a recorded baseline this store does not have — so a prescription
+  // built from the wrong base is fixed in the program editor, not here. The
+  // UI says so rather than implying the cursor followed the correction.
   let editing = false;
   let screen = null;
   // Field text buffered per set while editing; the stored record is untouched
@@ -294,7 +298,21 @@ function openDetail(s, exerciseByName) {
     return entries;
   };
   const saveCorrections = async () => {
-    await Sessions.applyCorrections(s, draftCorrections());
+    const entries = draftCorrections();
+    // Which lifts the correction actually touches — only their derived
+    // records are rebuilt (epic #155 Stage 6).
+    const affected = new Set();
+    for (const exercise of s.exercises || []) {
+      if ((exercise.sets || []).some((set) => entries.some((entry) => entry.set === set))) {
+        affected.add(exercise.exerciseName);
+      }
+    }
+    await Sessions.applyCorrections(s, entries);
+    // PR milestones are regenerated deterministically from the corrected
+    // canonical sessions, never appended to. The program's banked grade is
+    // NOT replayed — see the note in the editor.
+    const { rebuildMilestones } = await import("./session.js");
+    await rebuildMilestones(affected);
     drafts.clear();
     // The log list and rolling load behind this overlay were rendered from
     // the pre-edit record; refresh them so the correction is visible the
