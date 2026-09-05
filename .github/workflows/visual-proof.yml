@@ -1,18 +1,9 @@
 name: iPhone visual proof
 
-# Temporary PR trigger captures the corrected final evidence. The exact-base
-# baseline is already green and committed separately; the final workflow is
-# manual-only so ordinary PRs retain one gated iOS build.
+# Manual-only render target for deliberate visual QA. Ordinary pull requests
+# retain the repository's single gated iOS build in CI.
 
 on:
-  pull_request:
-    paths:
-      - "Cadence/**"
-      - "CadenceCore/**"
-      - "CadenceVisualProofUITests/**"
-      - ".github/visual-proof/**"
-      - "project.yml"
-      - ".github/workflows/visual-proof.yml"
   workflow_dispatch:
 
 permissions:

@@ -9,6 +9,7 @@
 - Touch — 56 pt is the native between-set target; web primary controls retain at least 44 CSS pixels.
 - Motion — state transitions use 160 ms, are interruptible, and collapse under Reduce Motion / `prefers-reduced-motion`.
 - Plate input — every renderer receives the chosen `PlateSolution`; it has no target or rack input from which it could infer a second stack.
+- Plate entry — the decimal pad has an explicit Done action and scroll dismissal, so calculator results never remain hidden behind an input state.
 - Full bar — hero diagrams draw shaft, sleeves, collars, and mirrored stacks. Each exact stack derives its own minimum legible width from metadata thickness. A normal two-plate-per-side load fits a 390-point phone; constrained stacks scale only their plate geometry, keep denomination text at 9 points, and expose a focused horizontally scrollable view at natural width.
 - Plate geometry — bumper and calibrated-steel presentations use metadata-driven relative diameter and thickness rather than interchangeable rectangles.
 - Plate labels — exact metadata labels such as `1.25 kg` are drawn on every disc and repeated as face-on badges in stack lists.

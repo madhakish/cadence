@@ -1,34 +1,44 @@
-# Design-pass visual proof
+# iPhone design-pass proof
 
-The baseline repository had no deterministic native screenshot target. The
-four true pre-pass captures therefore use the existing web client, whose
-surface structure matched native. The pass adds an isolated iPhone fixture and
-UI-test scheme; every final capture below is from an iPhone 17 Pro simulator at
-1206 × 2622 pixels and uses the production views, metadata, and plate solver.
+These are simulator captures, not mockups. The baseline checks out the exact
+PR base (`11895fb95cde9e4b938831098d00dd0350b45bc2`); the final capture runs the
+production views at candidate head
+`f576b62bb67392c8a80948eeccd87a3091e0e89c`. Both use the same deterministic,
+in-memory fixture and the same iPhone 17 Pro viewport (1206 × 2622 pixels).
+
+The proof-only baseline patch adds a launch fixture and screenshot target to
+the checked-out base. It does not replace or restyle the base production views.
+That patch and its temporary CI job were removed after the baseline capture.
 
 ## Major surfaces
 
-| Surface | Before | Final iPhone |
-| --- | --- | --- |
-| Today hierarchy | ![Baseline Today](before/home-desktop.jpg) | ![Final Today](after/after-01-home-iphone.png) |
-| Plate calculator | ![Baseline plate calculator](before/plate-calculator-desktop.jpg) | ![Final plate calculator](after/after-07-plate-calculator-iphone.png) |
-| Exercise and anatomy | ![Baseline exercise anatomy](before/exercise-anatomy-desktop.jpg) | ![Final exercise pane](after/after-04-exercise-pane-iphone.png) |
-| Settings | ![Baseline settings](before/settings-desktop.jpg) | ![Final settings](after/after-09-settings-iphone.png) |
+| Surface | Exact-base iPhone | Final iPhone | Material result |
+| --- | --- | --- | --- |
+| Today | ![Today before](before/before-01-home-iphone.png) | ![Today after](after/after-01-home-iphone.png) | Four equally loud utility containers no longer precede the workout. Training state and the resume/start action lead; utility actions remain direct. |
+| Ad-hoc work | ![Ad-hoc work before](before/before-02-ad-hoc-work-iphone.png) | ![Ad-hoc work after](after/after-02-ad-hoc-work-iphone.png) | The #167 Wood Splitting form is deliberately preserved as the off-program foundation, with duration, effort, optional facts, and explicit banking behavior. |
+| Current session | ![Session before](before/before-03-current-session-iphone.png) | ![Session after](after/after-03-current-session-iphone.png) | The current exercise, set, achieved load, exact plates, and next action form one dominant boundary. Earlier completed work stays collapsed above it in authored order. |
+| Exercise information | ![Exercise information before](before/before-04-exercise-anatomy-iphone.png) | ![Exercise information after](after/after-04-exercise-pane-iphone.png) | Live prescription and truthful training-focus provenance lead; history, programming, and anatomy remain available through progressive disclosure. |
+| Anatomy | ![Anatomy before](before/before-04-exercise-anatomy-iphone.png) | ![Anatomy after](after/after-05-anatomy-unselected-iphone.png) | The exact Vitruvian gorilla is retained and edge-feathered. Primary and supporting muscle regions are restrained, labelled controls instead of replacement artwork. |
+| Plate calculator | ![Calculator before](before/before-05-plate-calculator-iphone.png) | ![Calculator after](after/after-07-plate-calculator-iphone.png) | The complete mirrored bar is the hero. Every plate keeps its exact denomination; achieved weight includes bar and collars and reads lb first, kg second. |
+| Settings | ![Settings before](before/before-06-settings-iphone.png) | ![Settings after](after/after-09-settings-iphone.png) | Implementation-order rows become six task-oriented groups. Existing controls remain one tap away; no unsupported setting was invented. |
+| History | ![History before](before/before-07-history-ad-hoc-iphone.png) | ![History after](after/after-10-history-ad-hoc-iphone.png) | All-time/program filtering remains intact. Ad-hoc work is visibly separate and never masquerades as lifting tonnage or cycle progress. |
 
-Wood Splitting had a typed #167 persistence shape but no dedicated interface in
-the baseline. Its new entry and history surfaces are shown in the final capture
-index below.
+The apparent similarity in the Ad-hoc Work and History pair is intentional:
+#167 advanced while this pass was in progress, so the exact base already
+contains the hardened activity UI. This branch consumes and preserves that
+foundation instead of claiming it as a visual-pass invention.
 
 ## Render-driven corrections
 
-The first iPhone render was treated as an engineering input, not the result.
-These pairs record the problems found in pixels and the corrected output.
+The first render was treated as engineering input. These are real intermediate
+simulator captures retained to show the pixel-level defects that were corrected.
 
-| Finding | First render | Corrected render |
+| Finding | Observed render | Corrected render |
 | --- | --- | --- |
 | Completed rows displaced the current set below the fold | ![Session before render correction](iteration/session-before-render-correction-iphone.png) | ![Current set corrected](after/after-03-current-session-iphone.png) |
 | Adjacent mixed-unit denominations collided | ![Calculator before label correction](iteration/calculator-before-label-correction-iphone.png) | ![Calculator labels corrected](after/after-07-plate-calculator-iphone.png) |
-| Expanded bar was fixed-width and opened on only the left stack | ![Expanded bar before fit correction](iteration/expanded-bar-before-fit-correction-iphone.png) | ![Expanded complete bar](after/after-08-expanded-bar-iphone.png) |
+| Expanded bar opened at a fixed width on only the left stack | ![Expanded bar before fit correction](iteration/expanded-bar-before-fit-correction-iphone.png) | ![Expanded complete bar](after/after-08-expanded-bar-iphone.png) |
+| Decimal entry keyboard obscured the load summary | ![Calculator before explicit dismissal](iteration/calculator-before-keyboard-dismissal-iphone.png) | ![Calculator with keyboard dismissed](after/after-07-plate-calculator-iphone.png) |
 
 ## Final iPhone capture index
 
@@ -47,26 +57,34 @@ These pairs record the problems found in pixels and the corrected output.
 
 | Contract | Native | Web |
 | --- | --- | --- |
-| Solver-selected loadout is rendered without view-side re-solving | `Loadout` passed to `BarbellView` | `loadout` passed to `barbellSVG` |
+| Renderer consumes the selected solution without view-side solving | `PlateSolution` passed to `BarbellView` | `PlateSolution` passed to `barbellSVG` |
 | Complete bar, collars, mirrored sides, metadata geometry | Yes | Yes |
-| Exact denomination on every plate | Yes | Yes |
-| Achieved total includes bar and leads lb, then kg | Yes | Yes |
-| Target / reverse entered-stack modes | Yes | Yes |
-| Current, completed, upcoming, and warmup emphasis | Yes | Yes |
-| Exercise prescription / focus provenance | Yes | Yes |
+| Exact denomination on every visible plate | Yes | Yes |
+| Achieved total includes bar/collars and leads lb, then kg | Yes | Yes |
+| Target mode and exact entered-stack reverse mode | Yes | Yes |
+| Warmup, completed, current, and upcoming set states | Yes | Yes |
+| Resolved prescription and complementary-focus provenance | Yes | Yes |
 | Exact gorilla raster plus interactive muscle regions | Yes | Yes |
-| Six capability-backed Settings groups | Yes | Yes |
-| Off-program activity creation, edit, delete, history, and backup | Yes | Yes |
-| Visible focus, keyboard/touch targets, and reduced motion | VoiceOver / Dynamic Type / Reduce Motion | Keyboard / ARIA / `prefers-reduced-motion` |
+| Six capability-backed Settings groups with direct controls | Yes | Yes |
+| Ad-hoc create, edit, confirmed delete, History, and backup | Yes | Yes |
+| Focus, touch targets, reduced motion, and accessible labels | VoiceOver / Dynamic Type / Reduce Motion | Keyboard / ARIA / `prefers-reduced-motion` |
 
-## Evidence
+## Verification evidence
 
-- [Final visual workflow](https://github.com/madhakish/cadence/actions/runs/33980722038)
-- [Screenshot artifact](https://github.com/madhakish/cadence/actions/runs/33980722038/artifacts/9973824422)
-- [Full verification workflow](https://github.com/madhakish/cadence/actions/runs/33980722040)
-- Visual tests: ten attachments, zero failures. Web verification: 3,267
-  direct assertions plus 100 invariant-platform assertions (3,367 total).
-- Protected-code audit: plate solving, plate metadata, programming engine,
-  session completion, frozen schemas, and migration stages are unchanged.
-  `ActivitySession` changes are additive edit/validation support for #167; the
-  only other persistence-suite changes are focused regression tests.
+- [Exact-base and initial-current visual proof](https://github.com/madhakish/cadence/actions/runs/33987258925)
+- [Exact-base screenshot artifact](https://github.com/madhakish/cadence/actions/runs/33987258925/artifacts/9975727723)
+- [Initial-current screenshot artifact](https://github.com/madhakish/cadence/actions/runs/33987258925/artifacts/9975777749)
+- [Corrected final visual proof](https://github.com/madhakish/cadence/actions/runs/33989092206)
+- [Corrected final screenshot artifact](https://github.com/madhakish/cadence/actions/runs/33989092206/artifacts/9976209508)
+- [Full native/web verification](https://github.com/madhakish/cadence/actions/runs/33989092207)
+- Visual suite: seven UI tests, ten final screenshot attachments, zero
+  failures. Web suite: 3,367 direct assertions plus 100 cross-platform
+  invariant assertions (3,467 total), zero failures.
+- Protected-code audit: plate solving, authoritative plate metadata,
+  programming, session completion, frozen schemas, and migration semantics are
+  unchanged. `ActivitySession` changes are additive edit/validation support for
+  #167; the other persistence-suite changes are focused regression coverage.
+
+This remains a draft harvest source for #177–#187, not a claim that one large PR
+should close the epic and every sub-issue. The screenshots and shared renderer
+work can be split into the surgical issue PRs described in Claude's review.
