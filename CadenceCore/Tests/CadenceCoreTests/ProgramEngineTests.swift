@@ -218,6 +218,9 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertNil(ProgramEngine.complementaryEffortCue(
             role: .complementary, prescriptionStyle: .doubleProgression, movementGroup: "pull"
         ))
+        XCTAssertNil(ProgramEngine.complementaryEffortCue(
+            role: .complementary, prescriptionStyle: .automatic, movementGroup: "hinge", focus: .hypertrophy
+        ))
     }
 
     func testComplementaryVolumeDoesNotInheritMainFiveByFive() {

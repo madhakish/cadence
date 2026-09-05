@@ -24,7 +24,7 @@ export function plateBadgeSVG(plate, style = "steel") {
   );
   const value = el("text", { x: 26, y: 24, "text-anchor": "middle",
     "font-size": 15, "font-weight": 800, fill: foreground });
-  value.textContent = C.trim(plate.value);
+  value.textContent = C.trim(plate.value, 2);
   const unit = el("text", { x: 26, y: 36, "text-anchor": "middle",
     "font-size": 9, "font-weight": 700, fill: foreground });
   unit.textContent = plate.unit;

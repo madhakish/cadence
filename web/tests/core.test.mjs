@@ -206,6 +206,8 @@ eq(C.complementaryEffortCue("main", "automatic", "hinge"), null,
   "main work keeps its own methodology target");
 eq(C.complementaryEffortCue("complementary", "doubleProgression", "pull"), null,
   "explicit complementary methodologies keep their own contract");
+eq(C.complementaryEffortCue("complementary", "automatic", "hinge", "hypertrophy"), null,
+  "automatic hypertrophy work does not borrow the strength secondary-volume cue");
 let rolePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 0 }, 5,
   "barbell", "hinge", "complementary", "strength", "automatic");
 eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x8@180", "complementary volume avoids a second 5x5");
