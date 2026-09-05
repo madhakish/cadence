@@ -72,6 +72,17 @@ export function includesEmptyBarWarmup(exerciseName) {
   return !["backsquat", "deadlift"].includes(key);
 }
 
+// A session freezes the requested methodology, but `automatic` still needs
+// the originating program's focus to resolve truthfully. If that program has
+// gone missing, silence is more honest than defaulting a legacy session to a
+// strength cue it may never have prescribed. Mirrors ActiveSessionView.
+export function complementaryEffortCueForEntry(entry, exercise, program) {
+  const style = entry?.prescriptionStyle;
+  if (!style || (style === "automatic" && !program?.focus)) return null;
+  return C.complementaryEffortCue(entry.programRole, style, exercise?.movementGroup,
+    program?.focus || "strength");
+}
+
 async function defaultGymTag() { const g = await Gyms.default(); return { gymId: g?.id || null, gymName: g?.name || null }; }
 
 // Barbell entries record the bar that builds them so later gym edits cannot
@@ -469,6 +480,9 @@ export async function openSession(id) {
     const card = ui.h("div", { class: "card" }, head);
     const last = lastTimeLine(se);
     if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
+    const effortCue = complementaryEffortCueForEntry(se, ex, sessionProgram);
+    if (effortCue) card.append(ui.h("div", { class: "effort-cue", text: effortCue,
+      "aria-label": `Effort target: ${effortCue}` }));
 
     se.sets.sort((a, b) => a.order - b.order);
     const showAll = expandedEntries.has(se);

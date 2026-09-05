@@ -124,6 +124,12 @@ button.btn:active, a.btn:active { filter: brightness(1.2); }
 .pill.warn { background: rgba(255,204,0,0.16); color: var(--warn); }
 .pill.hard { background: rgba(255,59,48,0.16); color: var(--hard); }
 .pill.accent { background: rgba(255,149,0,0.16); color: var(--accent); }
+.effort-cue {
+  margin: 8px 0 10px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent); font-size: 13px; font-weight: 700;
+}
 
 /* forms */
 label.field { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; font-size: 13px; color: var(--muted); }
@@ -304,8 +310,19 @@ svg.dumbbell { height: 36px; max-width: 100%; }
 .barbell-plate-hub, .barbell-lock-collar { vector-effect: non-scaling-stroke; }
 .barbell-plate-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .barbell-hero { padding: 12px 0 4px; }
-.barbell-hero svg.barbell { height: 68px; }
+.barbell-hero svg.barbell { height: 84px; }
 .barbell-hero.full svg.barbell { width: 100%; height: auto; }
+.dual-weight {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center; margin: 4px 0 3px;
+}
+.weight-measure { display: flex; align-items: baseline; justify-content: center; gap: 5px; min-width: 0; padding: 6px; }
+.weight-measure + .weight-measure { border-left: 1px solid var(--line); }
+.weight-value { font-size: clamp(26px, 9vw, 34px); font-weight: 850; letter-spacing: -.025em; line-height: 1; }
+.weight-unit { color: var(--muted); font-size: 13px; font-weight: 700; }
+.plate-row { min-height: 60px; }
+.plate-key { display: inline-flex; align-items: center; gap: 12px; min-width: 0; }
+svg.plate-badge { width: 52px; height: 52px; flex: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .centered { text-align: center; }
 select.bar-select { width: auto; min-width: 96px; padding: 6px 8px; font-size: 13px; }
 

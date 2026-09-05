@@ -196,6 +196,15 @@ for (const track of [
   "plate bodies have disc faces, steel hubs, rims, and denomination marks rather than flat blocks");
   ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
     "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
+  ok(fullBar.getAttribute("viewBox") === "0 0 340 96",
+    "the complete bar has enough vertical canvas for plates to be legible on a phone");
+  const plateBadge = barbell.plateBadgeSVG({ value: 20, unit: "kg" }, "steel");
+  ok(plateBadge.getAttribute("aria-label") === "20 kg plate"
+    && plateBadge.textContent.includes("20") && plateBadge.textContent.includes("kg")
+    && plateBadge.querySelectorAll("circle").length >= 2,
+  "calculator rows use a large face-on plate key with visible denomination and unit");
+  ok(barbell.plateBadgeSVG({ value: 1.25, unit: "kg" }, "steel").textContent.includes("1.25"),
+    "fractional plate badges preserve the exact denomination instead of rounding to one decimal");
   const collarsOnly = barbell.barbellSVG(50, "lb", C.BARS.bar45lb, legacyRack,
     null, null, "full").svg;
   ok(collarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 2,
@@ -997,9 +1006,48 @@ ok(["Main progression", "Compare program roles", "Compare like rotations"].every
 
 // plate calculator overlay
 await plates.openPlateCalculator(); await tick();
-ok(document.querySelector("#overlays .overlay"), "plate calculator opened");
-document.querySelector("#overlays .overlay .overlay-head button").click(); // close
+const plateOverlay = document.querySelector("#overlays .overlay");
+ok(plateOverlay, "plate calculator opened");
+const targetTotal = plateOverlay.querySelector(".dual-weight");
+const targetHero = plateOverlay.querySelector(".barbell-hero");
+ok(targetTotal?.textContent.includes("lb") && targetTotal?.textContent.includes("kg"),
+  "target mode always shows the achieved bar in both pounds and kilograms");
+ok((targetTotal?.compareDocumentPosition(targetHero) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+  "target mode puts the dual-unit answer before the loadout graphic");
+ok(plateOverlay.querySelectorAll("svg.plate-badge").length > 0,
+  "target per-side rows expose readable denomination badges");
+const reverseButton = [...plateOverlay.querySelectorAll(".seg button")].find((button) => button.textContent === "On the bar");
+ok(reverseButton, "plate calculator exposes the reverse-mode control");
+reverseButton?.click(); await tick();
+const reverseTotal = plateOverlay.querySelector(".dual-weight");
+const reversePlateList = [...plateOverlay.querySelectorAll(".section-title")]
+  .find((heading) => heading.textContent === "Plates on one side");
+ok(reverseTotal?.textContent.includes("lb") && reverseTotal?.textContent.includes("kg"),
+  "reverse mode always shows mixed bar-and-plate totals in both units");
+ok((reverseTotal?.compareDocumentPosition(reversePlateList) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+  "reverse mode keeps the dual-unit total above the plate controls");
+ok(plateOverlay.querySelectorAll("svg.plate-badge[aria-label$='plate']").length > 0,
+  "reverse controls keep plate numbers visible instead of relying on colour");
+const kg20Row = plateOverlay.querySelector('svg.plate-badge[aria-label="20 kg plate"]')?.closest(".row");
+ok(kg20Row, "reverse mode exposes the 20 kg plate control");
+kg20Row?.querySelector(".stepper button:last-child")?.click();
+const mixedTotalLb = 45 + (2 * C.lbFromKg(20));
+const updatedMixedTotal = plateOverlay.querySelector(".dual-weight");
+ok(updatedMixedTotal.textContent.includes(C.trim(mixedTotalLb))
+  && updatedMixedTotal.textContent.includes(C.trim(C.kgFromLb(mixedTotalLb))),
+"a 45 lb bar plus mirrored kg plates is converted exactly in both displayed totals");
+plateOverlay.querySelector(".overlay-head button").click(); // close
 await tick();
+
+ok(session.complementaryEffortCueForEntry(
+  { programRole: "complementary", prescriptionStyle: "automatic" }, { movementGroup: "hinge" }, { focus: "strength" },
+)?.includes("2–3 reps left"), "automatic strength sessions show the secondary-volume effort contract");
+ok(session.complementaryEffortCueForEntry(
+  { programRole: "complementary", prescriptionStyle: "automatic" }, { movementGroup: "hinge" }, { focus: "hypertrophy" },
+) === null, "automatic hypertrophy sessions do not show a strength-only effort contract");
+ok(session.complementaryEffortCueForEntry(
+  { programRole: "complementary", prescriptionStyle: "automatic" }, { movementGroup: "hinge" }, null,
+) === null, "an orphaned automatic session stays silent when its focus cannot be recovered");
 
 // ---- full session flow: start Deadlift (245 target snapped to achieved load), complete, expect PR + advance ----
 // First prove untouched prescriptions are not performed work.
