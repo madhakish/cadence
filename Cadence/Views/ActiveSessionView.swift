@@ -581,7 +581,7 @@ struct ActiveSessionView: View {
 
 /// Smart per-exercise rest via the shared CadenceCore precedence (per-exercise
 /// rest → program role → movementGroup bucket); no exercise → accessory bucket.
-private func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: AppSettings?) -> Int {
+func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: AppSettings?) -> Int {
     let config = settings?.restConfig ?? .standard
     guard let ex = exercise else { return config.accessorySeconds }
     return RestDefaults.seconds(category: ex.categoryRaw, movementGroup: ex.movementGroup, role: role,

@@ -65,7 +65,10 @@ final class VisualProofUITests: XCTestCase {
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(element("history-screen").waitForExistence(timeout: 5))
         app.segmentedControls.buttons["Log"].tap()
-        XCTAssertTrue(app.staticTexts["Ad-hoc work this year"].waitForExistence(timeout: 5))
+        let activitySummary = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH 'Ad-hoc work ·'")
+        ).firstMatch
+        XCTAssertTrue(activitySummary.waitForExistence(timeout: 5))
         capture("after-09-history-ad-hoc-iphone")
     }
 
