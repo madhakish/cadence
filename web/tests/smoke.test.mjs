@@ -196,6 +196,15 @@ for (const track of [
   "plate bodies have disc faces, steel hubs, rims, and denomination marks rather than flat blocks");
   ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
     "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
+  ok(fullBar.getAttribute("viewBox") === "0 0 340 96",
+    "the complete bar has enough vertical canvas for plates to be legible on a phone");
+  const plateBadge = barbell.plateBadgeSVG({ value: 20, unit: "kg" }, "steel");
+  ok(plateBadge.getAttribute("aria-label") === "20 kg plate"
+    && plateBadge.textContent.includes("20") && plateBadge.textContent.includes("kg")
+    && plateBadge.querySelectorAll("circle").length >= 2,
+  "calculator rows use a large face-on plate key with visible denomination and unit");
+  ok(barbell.plateBadgeSVG({ value: 1.25, unit: "kg" }, "steel").textContent.includes("1.25"),
+    "fractional plate badges preserve the exact denomination instead of rounding to one decimal");
   const collarsOnly = barbell.barbellSVG(50, "lb", C.BARS.bar45lb, legacyRack,
     null, null, "full").svg;
   ok(collarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 2,
@@ -997,9 +1006,48 @@ ok(["Main progression", "Compare program roles", "Compare like rotations"].every
 
 // plate calculator overlay
 await plates.openPlateCalculator(); await tick();
-ok(document.querySelector("#overlays .overlay"), "plate calculator opened");
-document.querySelector("#overlays .overlay .overlay-head button").click(); // close
+const plateOverlay = document.querySelector("#overlays .overlay");
+ok(plateOverlay, "plate calculator opened");
+const targetTotal = plateOverlay.querySelector(".dual-weight");
+const targetHero = plateOverlay.querySelector(".barbell-hero");
+ok(targetTotal?.textContent.includes("lb") && targetTotal?.textContent.includes("kg"),
+  "target mode always shows the achieved bar in both pounds and kilograms");
+ok((targetTotal?.compareDocumentPosition(targetHero) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+  "target mode puts the dual-unit answer before the loadout graphic");
+ok(plateOverlay.querySelectorAll("svg.plate-badge").length > 0,
+  "target per-side rows expose readable denomination badges");
+const reverseButton = [...plateOverlay.querySelectorAll(".seg button")].find((button) => button.textContent === "On the bar");
+ok(reverseButton, "plate calculator exposes the reverse-mode control");
+reverseButton?.click(); await tick();
+const reverseTotal = plateOverlay.querySelector(".dual-weight");
+const reversePlateList = [...plateOverlay.querySelectorAll(".section-title")]
+  .find((heading) => heading.textContent === "Plates on one side");
+ok(reverseTotal?.textContent.includes("lb") && reverseTotal?.textContent.includes("kg"),
+  "reverse mode always shows mixed bar-and-plate totals in both units");
+ok((reverseTotal?.compareDocumentPosition(reversePlateList) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+  "reverse mode keeps the dual-unit total above the plate controls");
+ok(plateOverlay.querySelectorAll("svg.plate-badge[aria-label$='plate']").length > 0,
+  "reverse controls keep plate numbers visible instead of relying on colour");
+const kg20Row = plateOverlay.querySelector('svg.plate-badge[aria-label="20 kg plate"]')?.closest(".row");
+ok(kg20Row, "reverse mode exposes the 20 kg plate control");
+kg20Row?.querySelector(".stepper button:last-child")?.click();
+const mixedTotalLb = 45 + (2 * C.lbFromKg(20));
+const updatedMixedTotal = plateOverlay.querySelector(".dual-weight");
+ok(updatedMixedTotal.textContent.includes(C.trim(mixedTotalLb))
+  && updatedMixedTotal.textContent.includes(C.trim(C.kgFromLb(mixedTotalLb))),
+"a 45 lb bar plus mirrored kg plates is converted exactly in both displayed totals");
+plateOverlay.querySelector(".overlay-head button").click(); // close
 await tick();
+
+ok(session.complementaryEffortCueForEntry(
+  { programRole: "complementary", prescriptionStyle: "automatic" }, { movementGroup: "hinge" }, { focus: "strength" },
+)?.includes("2–3 reps left"), "automatic strength sessions show the secondary-volume effort contract");
+ok(session.complementaryEffortCueForEntry(
+  { programRole: "complementary", prescriptionStyle: "automatic" }, { movementGroup: "hinge" }, { focus: "hypertrophy" },
+) === null, "automatic hypertrophy sessions do not show a strength-only effort contract");
+ok(session.complementaryEffortCueForEntry(
+  { programRole: "complementary", prescriptionStyle: "automatic" }, { movementGroup: "hinge" }, null,
+) === null, "an orphaned automatic session stays silent when its focus cannot be recovered");
 
 // ---- full session flow: start Deadlift (245 target snapped to achieved load), complete, expect PR + advance ----
 // First prove untouched prescriptions are not performed work.
@@ -4549,6 +4597,168 @@ await withCleanup(async (keep) => {
   const expectedBase = Math.floor((C.templateStartFraction(style) * (200 * (1 + 5 / 30))) / 5 + 1e-9) * 5;
   ok(lift.baseWeightLb >= expectedBase && lift.baseWeightLb % 5 === 0,
     `lift base seeds from fraction x best e1RM floored to the step (>= ${expectedBase}, got ${lift.baseWeightLb})`);
+})();
+
+
+// ---- Stage 4: program switching is suspend + activate (epic #155) ----
+// A -> B -> A must preserve every cursor and every session, and a switch that
+// would strand an open session from another program must fail loudly.
+await withCleanup(async (keep) => {
+  const settingsView = await import("../app/js/views/settings.js");
+  const mk = async (name, isActive) => {
+    const id = await db.Programs.save({
+      name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+      roundingLb: 5, isActive,
+      days: [{ name: "Pull", order: 0, lifts: [cyc("Deadlift", "main", 235, 320)], accessories: [] }],
+    });
+    return keep(db.Programs, id);
+  };
+  const aId = await mk("Switch Fixture A", true);
+  const bId = await mk("Switch Fixture B", false);
+  let a = await db.Programs.get(aId);
+  a.cycleNumber = 3; a.currentWeek = 3; a.nextDayIndex = 2;
+  a.days[0].lifts[0].stallCount = 1;
+  a.days[0].lifts[0].pending = { state: { baseWeightLb: 245 }, grade: "fail", note: "held at the peak" };
+  await db.Programs.save(a);
+
+  // An open session tagged to A blocks switching away from it.
+  const openId = keep(db.Sessions, await db.Sessions.save({
+    date: db.iso(new Date()), isCompleted: false, notes: "", exercises: [],
+    programTag: { programId: a.uuid, programName: a.name },
+  }));
+  let blocked = false;
+  try { await settingsView.assertNoForeignOpenSession((await db.Programs.get(bId)).uuid); }
+  catch { blocked = true; }
+  ok(blocked, "an open session from another program blocks the switch instead of orphaning it");
+  await db.Sessions.del(openId);
+
+  // A -> B -> A preserves everything.
+  const b = await db.Programs.get(bId);
+  await settingsView.suspendProgram(await db.Programs.get(aId));
+  b.isActive = true; await db.Programs.save(b);
+  a = await db.Programs.get(aId);
+  ok(!a.isActive && a.cycleNumber === 3 && a.currentWeek === 3 && a.nextDayIndex === 2,
+    "[INV-SWITCH-PRESERVES-CURSOR] a suspended program keeps its cycle, rotation and next day");
+  ok(a.days[0].lifts[0].stallCount === 1 && a.days[0].lifts[0].pending?.state.baseWeightLb === 245,
+    "and its per-slot progression state and pending peak result");
+
+  await settingsView.suspendProgram(await db.Programs.get(bId));
+  a = await db.Programs.get(aId);
+  a.isActive = true; await db.Programs.save(a);
+  a = await db.Programs.get(aId);
+  ok(a.isActive && a.cycleNumber === 3 && a.nextDayIndex === 2
+    && a.days[0].lifts[0].pending?.note === "held at the peak",
+    "resuming re-derives nothing — it is a pause, not a restart");
+})();
+
+
+// ---- Stage 4 UI: the switcher is reachable from Today (epic #155) ----
+await withCleanup(async (keep) => {
+  const home = await import("../app/js/views/home.js");
+  const id = keep(db.Programs, await db.Programs.save({
+    name: "Switcher UI Fixture", focus: "strength", cycleNumber: 2, currentWeek: 1,
+    nextDayIndex: 0, roundingLb: 5, isActive: true,
+    days: [{ name: "Pull", order: 0, lifts: [cyc("Deadlift", "main", 235, 320)], accessories: [] }],
+  }));
+  // Only one program may be active; park any other the suite left behind.
+  for (const other of await db.Programs.all()) {
+    if (other.id !== id && other.isActive) { other.isActive = false; await db.Programs.save(other); }
+  }
+  await home.render(host()); await tick();
+  const button = [...host().querySelectorAll("button")]
+    .find((b) => b.getAttribute("aria-label") === "Switch training program");
+  ok(button, "Today offers a program switcher next to the active block");
+  button.click();
+  // programSwitcher resolves two dynamic imports before it builds the sheet.
+  for (let i = 0; i < 5; i += 1) await tick();
+  // Other suite blocks leave sheets parked in the DOM; find OURS by title.
+  const sheet = [...document.querySelectorAll("#overlays .sheet")]
+    .reverse().find((o) => /Switch program/.test(o.textContent || ""));
+  const text = sheet?.textContent || "";
+  ok(/Start a new block/.test(text), "the switcher offers starting a new block");
+  ok(/already earned/.test(text),
+    "[INV-NEW-BLOCK-USES-CURRENT-HISTORY] and promises history and earned weights survive the switch");
+  sheet?.querySelector("button")?.click(); await tick();
+})();
+// ---- Stage 5: program is a filter over one global history (epic #155) ----
+// [INV-PROGRAM-IS-A-FILTER] The same lift trained under two blocks is ONE
+// all-time series that each scope narrows; changing the active program never
+// changes what history draws.
+{
+  const historyView = await import("../app/js/views/history.js");
+  const eq = (a, b, msg) => ok(a === b, `${msg} (got ${a}, want ${b})`);
+  const programs = [
+    { id: 1, uuid: "aaaaaaaa-0000-4000-a000-000000000001", name: "Block A", templateId: "strength-upper-lower" },
+    { id: 2, uuid: "aaaaaaaa-0000-4000-a000-000000000002", name: "Block B", templateId: "conjugate" },
+    { id: 3, uuid: "aaaaaaaa-0000-4000-a000-000000000003", name: "Block C", templateId: "strength-upper-lower" },
+  ];
+  const sess = (programId, programName) => ({ date: "2026-08-01T10:00:00.000Z", isCompleted: true,
+    programTag: programId ? { programId, programName } : null, exercises: [] });
+  const sessions = [
+    sess(programs[0].uuid, "Block A"), sess(programs[1].uuid, "Block B"),
+    sess(programs[2].uuid, "Block C"), sess(null, null),
+  ];
+
+  const inScope = (scope) => sessions.filter((s) => historyView.sessionInScope(s, scope, programs)).length;
+  eq(inScope("all"), 4, "all-time is the default and includes untracked work");
+  eq(inScope(`program:${programs[0].uuid}`), 1, "one instance narrows to that block");
+  eq(inScope("style:strength-upper-lower"), 2, "a style spans every block of that methodology");
+  eq(inScope("style:conjugate"), 1, "and isolates a different style");
+
+  const scopes = historyView.programScopes(sessions, programs);
+  eq(scopes[0].value, "all", "all-time leads the picker");
+  ok(scopes.some((s) => s.label === "Block A") && scopes.some((s) => s.label === "Block B"),
+    "every block that logged this history is offered");
+  ok(scopes.some((s) => s.value === "style:strength-upper-lower"),
+    "and so is the style that spans two of them");
+  // A legacy session carrying only a program NAME still resolves.
+  ok(historyView.sessionInScope({ programTag: { programName: "Block A" } },
+    `program:${programs[0].uuid}`, programs), "legacy name-only tags still resolve to their block");
+  // Scoping is a pure function of the session and the programs — no notion of
+  // which program is active appears anywhere in it.
+  eq(inScope("all"), 4, "switching the active program cannot change history");
+}
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
+
+
+// ---- Stage 6: corrections rebuild what is replayable (epic #155) ----
+// PR milestones are regenerated deterministically from the corrected
+// canonical sessions — never appended to — and the rebuild is idempotent.
+await withCleanup(async (keep) => {
+  const sessionView = await import("../app/js/views/session.js");
+  const before = new Set((await db.Milestones.all()).map((m) => m.id));
+  const mk = async (date, reps) => keep(db.Sessions, await db.Sessions.save({
+    date: db.iso(date), completedAt: db.iso(date), isCompleted: true, notes: "",
+    exercises: [{ exerciseName: "Good Morning", order: 0, sets: [
+      { order: 0, weightLb: 185, reps, isWarmup: false, status: "completed", enteredUnit: "lb" },
+    ] }],
+  }));
+  await mk(new Date("2031-01-01T10:00:00Z"), 5);
+  await mk(new Date("2031-02-01T10:00:00Z"), 3);
+
+  await sessionView.rebuildMilestones(["Good Morning"]);
+  const first = (await db.Milestones.all()).filter((m) => !before.has(m.id) && m.exerciseName === "Good Morning");
+  for (const m of first) keep(db.Milestones, m.id);
+  ok(first.length > 0, "replaying corrected history regenerates the lift's PR milestones");
+  ok(first.some((m) => m.kind === "heaviestSet" && /185/.test(m.label)),
+    "including the heaviest-set record the history actually earns");
+
+  // Idempotent: replaying unchanged history reproduces the same set, not a
+  // second copy appended beside it.
+  await sessionView.rebuildMilestones(["Good Morning"]);
+  const second = (await db.Milestones.all()).filter((m) => m.exerciseName === "Good Morning" && !before.has(m.id));
+  for (const m of second) keep(db.Milestones, m.id);
+  const signature = (list) => list.map((m) => `${m.date}|${m.kind}|${m.label}`).sort().join("\n");
+  ok(signature(second) === signature(first),
+    "[INV-CORRECTION-REBUILDS-DERIVED-STATE] a second rebuild reproduces the same "
+    + "milestones rather than appending duplicates");
+
+  // Another lift's milestones are untouched by a scoped rebuild.
+  const otherBefore = (await db.Milestones.all()).filter((m) => m.exerciseName !== "Good Morning").length;
+  await sessionView.rebuildMilestones(["Good Morning"]);
+  const otherAfter = (await db.Milestones.all()).filter((m) => m.exerciseName !== "Good Morning").length;
+  ok(otherAfter === otherBefore, "a scoped rebuild never touches records it does not own");
 })();
 
 console.log(`\n${pass} passed, ${fail} failed`);

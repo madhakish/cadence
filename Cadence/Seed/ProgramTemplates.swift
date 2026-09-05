@@ -39,6 +39,8 @@ enum ProgramTemplates {
                 + day.accessories.map(\.exercise)
         })
         let history = try recordedHistory(for: historyNames, context: context)
+        let anchorHistory = try anchorIndex(for: historyNames, context: context)
+        let shelved = try shelvedNames(context: context)
         let focus = TrainingFocus(rawValue: template.focus) ?? .strength
         let program = Program(
             name: uniqueProgramName(template.name, existing: existingPrograms.map(\.name)),
@@ -74,7 +76,23 @@ enum ProgramTemplates {
                     style, movementGroup: movementGroup, role: role, focus: focus
                 )
                 let fraction = l.startFraction > 0 ? l.startFraction : resolvedStyle.templateStartFraction
-                if fraction > 0, let e1RM = history.bestE1RM[l.historyExercise ?? l.exercise], e1RM > 0 {
+                // Capability first (epic #155 Stage 3): the lifter's own
+                // history for this exact lift, else an explicit related-lift
+                // rule, else the movement family, else the catalog. The
+                // methodology's own fraction converts capability into the
+                // starting load — the resolver never sees a gym or a plate.
+                    // No defaultE1RMLb on purpose: a conservative-default
+                    // anchor must stay empty here so the caller keeps its own
+                    // fallback pair, rather than running the catalog number
+                    // back through the methodology's start fraction.
+                let anchor = TrainingAnchorResolver.resolve(
+                    exerciseName: l.historyExercise ?? l.exercise,
+                    movementGroup: movementGroup,
+                    history: anchorHistory,
+                    shelvedExerciseNames: shelved,
+                    allowFamilyEstimate: false
+                )
+                if fraction > 0, let e1RM = anchor.e1RMLb, e1RM > 0 {
                     base = Swift.max(fallback.weightLb, floorTo(fraction * e1RM, step: template.roundingLb))
                     max = (e1RM).rounded()
                 }
@@ -131,6 +149,29 @@ enum ProgramTemplates {
     /// into samples and delegates the fold (recency ties, lifetime Epley max)
     /// to the shared `AthleteHistory.index`, which web recordedHistory
     /// mirrors through `athleteHistoryIndex`.
+    static func athleteHistory(
+        for names: Set<String>, context: ModelContext
+    ) throws -> [String: AthleteHistory.LiftHistoryProfile] {
+        guard !names.isEmpty else { return [:] }
+        let sessions = try context.fetch(
+            FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.isCompleted })
+        )
+        var samples: [AthleteHistory.CompletedSetSample] = []
+        for session in sessions {
+            let timestampMs = session.effectiveCompletionDate.timeIntervalSince1970 * 1000
+            for entry in session.exercises {
+                guard let name = entry.exercise?.name, names.contains(name) else { continue }
+                for set in entry.workingSets where set.weightLb > 0 && set.reps >= 1 {
+                    samples.append(AthleteHistory.CompletedSetSample(
+                        exerciseName: name, timestampMs: timestampMs,
+                        weightLb: set.weightLb, reps: set.reps
+                    ))
+                }
+            }
+        }
+        return AthleteHistory.index(samples)
+    }
+
     private static func recordedHistory(for names: Set<String>, context: ModelContext) throws -> HistorySnapshot {
         guard !names.isEmpty else { return HistorySnapshot() }
         let sessions = try context.fetch(
@@ -157,6 +198,27 @@ enum ProgramTemplates {
         return result
     }
 
+    /// The history projection the anchor resolver needs: the requested lifts
+    /// PLUS every lift a shipped rule or family anchor could estimate from,
+    /// so an unseen variation can resolve from the competition lift that
+    /// trains it instead of dropping straight to the catalog default.
+    static func anchorIndex(
+        for names: Set<String>, context: ModelContext
+    ) throws -> [String: AthleteHistory.LiftHistoryProfile] {
+        var wanted = names
+        for rule in TrainingAnchorResolver.defaultRules where names.contains(rule.targetExerciseName) {
+            wanted.insert(rule.sourceExerciseName)
+        }
+        for anchor in TrainingAnchorResolver.defaultFamilyAnchors.values { wanted.insert(anchor) }
+        return try athleteHistory(for: wanted, context: context)
+    }
+
+    /// Shelved lifts, by name. A shelved lift's own history still counts, but
+    /// it must never seed a NEW slot for something else.
+    static func shelvedNames(context: ModelContext) throws -> Set<String> {
+        Set(try context.fetch(FetchDescriptor<Exercise>()).filter(\.isShelved).map(\.name))
+    }
+
     /// History-aware defaults for a slot added in the custom program editor.
     /// Template creation uses the same rules above, including its optional
     /// history alias and explicit methodology fraction.
@@ -171,8 +233,17 @@ enum ProgramTemplates {
             exerciseName: exercise.name, slotCategory: ExerciseCategory.main.rawValue,
             exerciseType: exercise.typeRaw
         )
-        let history = try recordedHistory(for: [exercise.name], context: context)
-        guard let e1RM = history.bestE1RM[exercise.name], e1RM > 0 else {
+        // Same capability ladder as template instantiation (epic #155
+        // Stage 3): exact history, else an explicit related-lift rule, else
+        // the movement family, else the catalog default.
+        let anchor = TrainingAnchorResolver.resolve(
+            exerciseName: exercise.name,
+            movementGroup: exercise.movementGroup,
+            history: try anchorIndex(for: [exercise.name], context: context),
+            shelvedExerciseNames: try shelvedNames(context: context),
+            allowFamilyEstimate: false
+        )
+        guard let e1RM = anchor.e1RMLb, e1RM > 0 else {
             return (fallback.weightLb, fallback.estimatedMaxLb)
         }
         let style = ProgramEngine.resolvedStyle(

@@ -46,6 +46,19 @@ struct PlateCalculatorView: View {
         settingsList.first?.unitDisplay.primaryUnit ?? .lb
     }
 
+    private var reversePerSide: [PlateCount] {
+        availablePlates.compactMap { plate in
+            let count = reverseCounts[plate.id] ?? 0
+            return count > 0 ? PlateCount(plate: plate, count: count) : nil
+        }
+    }
+
+    private var reverseCollarLb: Double { gym?.collarWeightLb ?? 0 }
+
+    private var reverseTotalLb: Double {
+        PlateMath.total(bar: bar, perSide: reversePerSide, collarLb: reverseCollarLb)
+    }
+
     var body: some View {
         Form {
             Picker("Mode", selection: $mode) {
@@ -109,12 +122,36 @@ struct PlateCalculatorView: View {
         }
 
         if let solution {
+            Section("Total on bar") {
+                DualWeightReadout(lb: solution.loadout.totalLb)
+                Text("Achieved on \(bar.label) · \((gym?.loadingPolicy ?? .closest).label.lowercased())")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !solution.satisfiesPolicy {
+                    Label("No available stack satisfies this loading policy; showing the closest load.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout.bold())
+                        .foregroundStyle(Theme.warn)
+                }
+                if solution.isOffTarget {
+                    let deviation = targetUnit == .kg
+                        ? Weight.kg(fromLb: solution.deviationLb)
+                        : solution.deviationLb
+                    Label(
+                        "\(Copy.offTarget) \(deviation > 0 ? "+" : "")\(Weight.trim(deviation)) \(targetUnit.rawValue) vs target.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.callout.bold())
+                    .foregroundStyle(Theme.warn)
+                }
+            }
+
             // The answer, drawn: the loaded bar itself — the SAME solution as
             // the list below (which may pick the other unit system).
             Section {
                 BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym,
                             loadout: solution.loadout, plateStyle: plateStyle, presentation: .fullBar)
-                    .frame(height: 82)
+                    .frame(minHeight: 102)
                 Text("Same stack on both sides")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -127,6 +164,7 @@ struct PlateCalculatorView: View {
                 } else {
                     ForEach(solution.loadout.perSide) { pc in
                         HStack {
+                            PlateFaceBadge(plate: pc.plate, style: plateStyle)
                             Text(pc.plate.label)
                                 .font(.title3.bold())
                                 .foregroundStyle(pc.plate.unit == .kg ? Theme.accent : .primary)
@@ -137,33 +175,6 @@ struct PlateCalculatorView: View {
                     }
                 }
             }
-
-            Section {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(Weight.both(lb: solution.loadout.totalLb))
-                        .font(.system(size: 30, weight: .heavy, design: .rounded))
-                    Text("achieved total on \(bar.label) · \((gym?.loadingPolicy ?? .closest).label.lowercased())")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if !solution.satisfiesPolicy {
-                        Label("No available stack satisfies this loading policy; showing the closest load.",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.callout.bold())
-                            .foregroundStyle(Theme.warn)
-                    }
-                    if solution.isOffTarget {
-                        let deviation = targetUnit == .kg
-                            ? Weight.kg(fromLb: solution.deviationLb)
-                            : solution.deviationLb
-                        Label(
-                            "\(Copy.offTarget) \(deviation > 0 ? "+" : "")\(Weight.trim(deviation)) \(targetUnit.rawValue) vs target.",
-                            systemImage: "exclamationmark.triangle.fill"
-                        )
-                        .font(.callout.bold())
-                        .foregroundStyle(Theme.warn)
-                    }
-                }
-            }
         }
     }
 
@@ -171,6 +182,22 @@ struct PlateCalculatorView: View {
 
     @ViewBuilder
     private var reverseSections: some View {
+        Section("Total on bar") {
+            DualWeightReadout(lb: reverseTotalLb)
+            Text("On \(bar.label)\(reverseCollarLb > 0 ? " + collars" : "")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            // Draw exactly what the user says is on the bar — never re-solve it.
+            BarbellView(weightLb: reverseTotalLb, unit: .lb, bar: bar, gym: gym,
+                        loadout: Loadout(bar: bar, perSide: reversePerSide, collarLb: reverseCollarLb),
+                        plateStyle: plateStyle, presentation: .fullBar)
+                .frame(minHeight: 102)
+            Text("Counts are per side and mirrored")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+
         Section("Plates on one side") {
             ForEach(availablePlates.sorted(by: >).reversed(), id: \.id) { plate in
                 Stepper(value: Binding(
@@ -178,6 +205,7 @@ struct PlateCalculatorView: View {
                     set: { reverseCounts[plate.id] = $0 }
                 ), in: 0...12) {
                     HStack {
+                        PlateFaceBadge(plate: plate, style: plateStyle)
                         Text(plate.label)
                             .foregroundStyle(plate.unit == .kg ? Theme.accent : .primary)
                         Spacer()
@@ -190,30 +218,36 @@ struct PlateCalculatorView: View {
             }
             Button("Clear", role: .destructive) { reverseCounts = [:] }
         }
+    }
+}
 
-        Section {
-            let perSide = availablePlates.compactMap { plate -> PlateCount? in
-                let count = reverseCounts[plate.id] ?? 0
-                return count > 0 ? PlateCount(plate: plate, count: count) : nil
-            }
-            let collarLb = gym?.collarWeightLb ?? 0
-            let total = PlateMath.total(bar: bar, perSide: perSide, collarLb: collarLb)
-            VStack(alignment: .leading, spacing: 6) {
-                // Draw exactly what the user says is on the bar — never re-solve it.
-                BarbellView(weightLb: total, unit: .lb, bar: bar, gym: gym,
-                            loadout: Loadout(bar: bar, perSide: perSide, collarLb: collarLb),
-                            plateStyle: plateStyle, presentation: .fullBar)
-                    .frame(height: 82)
-                Text("Counts are per side and mirrored")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                Text(Weight.both(lb: total))
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
-                Text("total on \(bar.label)\(collarLb > 0 ? " + collars" : "")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+/// Both totals are always visible and always ordered lb → kg. The selectors
+/// describe what the user typed and what equipment they grabbed; neither is a
+/// reason to hide the other interpretation of the final mixed-unit bar.
+private struct DualWeightReadout: View {
+    let lb: Double
+
+    var body: some View {
+        HStack(spacing: 0) {
+            metric(Weight.trim(lb), unit: "lb")
+            Divider().frame(height: 48)
+            metric(Weight.trim(Weight.kg(fromLb: lb)), unit: "kg")
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Total \(Weight.both(lb: lb))")
+    }
+
+    private func metric(_ value: String, unit: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(value)
+                .font(.system(size: 32, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+            Text(unit)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }

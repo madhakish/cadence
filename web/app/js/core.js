@@ -124,6 +124,17 @@ export function resolvedPrescriptionStyle(requested = "automatic", movementGroup
   return "wave";
 }
 
+// The effort contract for Cadence's secondary-volume prescription. A fixed
+// weight cannot distinguish an easy exposure from useful work, and there is
+// no honest universal conversion between different lifts. Explicit
+// methodologies keep their own contract. Mirrors ProgramEngine.
+export function complementaryEffortCue(role, prescriptionStyle = "automatic",
+  movementGroup = null, focus = "strength") {
+  if (role !== "complementary"
+      || resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus) !== "secondary") return null;
+  return "Target 2–3 reps left. Adjust the next set if the load misses that range.";
+}
+
 // Round a target TOTAL to the nearest weight cleanly loadable on `barLb`: the
 // per-side load snaps to `stepLb`, so no lonely 2.5 lb change plate (e.g. 150 on
 // a 45 bar → 155 = 45+10/side). Never below the bar. For secondary/accessory
@@ -665,6 +676,164 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
 // weigh), and the barbell hint explains the actual plates. Only a genuinely
 // unreachable target stores the achieved load, so the log stays honest on
 // sparse racks. Mirrored 1:1 in CadenceCore PlateMath.storedPrescription.
+// ---- Training-anchor resolution (epic #155 Stage 3) ----
+// Gym-independent athlete capability. Mirrors CadenceCore
+// TrainingAnchorResolver — same rule table, same order, same fixtures.
+// The methodology converts an anchor into a prescription; quantizeLoad then
+// snaps that to the rack. Strictly downstream of here.
+export const ANCHOR_RULES = [
+  // Squat family
+  { id: "front-squat-from-back-squat", version: 1, source: "Back Squat", target: "Front Squat", coefficient: 0.85, confidence: "estimated" },
+  { id: "overhead-squat-from-back-squat", version: 1, source: "Back Squat", target: "Overhead Squat", coefficient: 0.65, confidence: "guessed" },
+  { id: "low-box-squat-from-back-squat", version: 1, source: "Back Squat", target: "Low Box Squat", coefficient: 0.90, confidence: "estimated" },
+  { id: "paused-box-squat-from-back-squat", version: 1, source: "Back Squat", target: "Paused Box Squat", coefficient: 0.90, confidence: "estimated" },
+  { id: "front-box-squat-from-back-squat", version: 1, source: "Back Squat", target: "Front Box Squat", coefficient: 0.80, confidence: "estimated" },
+  { id: "speed-box-squat-from-back-squat", version: 1, source: "Back Squat", target: "Speed Box Squat", coefficient: 0.60, confidence: "estimated" },
+  // Hinge family
+  { id: "rdl-from-deadlift", version: 1, source: "Deadlift", target: "Romanian Deadlift", coefficient: 0.85, confidence: "estimated" },
+  { id: "snatch-grip-deadlift-from-deadlift", version: 1, source: "Deadlift", target: "Snatch-grip Deadlift", coefficient: 0.85, confidence: "estimated" },
+  { id: "speed-deadlift-from-deadlift", version: 1, source: "Deadlift", target: "Speed Deadlift", coefficient: 0.60, confidence: "estimated" },
+  { id: "sumo-deadlift-from-deadlift", version: 1, source: "Deadlift", target: "Sumo Deadlift", coefficient: 0.95, confidence: "estimated" },
+  { id: "good-morning-from-deadlift", version: 1, source: "Deadlift", target: "Good Morning", coefficient: 0.50, confidence: "guessed" },
+  // Horizontal press family
+  { id: "incline-bench-from-bench", version: 1, source: "Barbell Bench", target: "Incline Barbell Bench Press", coefficient: 0.80, confidence: "estimated" },
+  { id: "close-grip-bench-from-bench", version: 1, source: "Barbell Bench", target: "Close-Grip Bench Press", coefficient: 0.90, confidence: "estimated" },
+  { id: "floor-press-from-bench", version: 1, source: "Barbell Bench", target: "Close-Grip Floor Press", coefficient: 0.85, confidence: "estimated" },
+  { id: "speed-bench-from-bench", version: 1, source: "Barbell Bench", target: "Speed Bench Press", coefficient: 0.60, confidence: "estimated" },
+  // Vertical press family
+  { id: "press-from-bench", version: 1, source: "Barbell Bench", target: "Overhead Press", coefficient: 0.63, confidence: "guessed" },
+  { id: "push-press-from-press", version: 1, source: "Overhead Press", target: "Push Press", coefficient: 1.15, confidence: "estimated" },
+  // Olympic: exact history first; these are the low-confidence floor.
+  { id: "clean-from-front-squat", version: 1, source: "Front Squat", target: "Clean", coefficient: 0.80, confidence: "guessed" },
+  { id: "power-clean-from-clean", version: 1, source: "Clean", target: "Power Clean", coefficient: 0.85, confidence: "estimated" },
+  { id: "clean-and-jerk-from-clean", version: 1, source: "Clean", target: "Clean & Jerk", coefficient: 0.95, confidence: "estimated" },
+  { id: "power-snatch-from-snatch", version: 1, source: "Snatch", target: "Power Snatch", coefficient: 0.85, confidence: "estimated" },
+];
+
+export const FAMILY_ANCHORS = { squat: "Back Squat", hinge: "Deadlift", press: "Barbell Bench", pull: "Deadlift" };
+// Deliberately pessimistic: a family estimate knows only that two lifts train
+// the same pattern, so it starts light and lets the program earn it back.
+export const FAMILY_ANCHOR_COEFFICIENT = 0.5;
+
+export function resolveTrainingAnchor(exerciseName, {
+  movementGroup = null, history = {}, overrideE1RMLb = null, defaultE1RMLb = null,
+  rules = ANCHOR_RULES, familyAnchors = FAMILY_ANCHORS, shelvedExerciseNames = [],
+  allowFamilyEstimate = true,
+} = {}) {
+  const shelved = new Set(shelvedExerciseNames);
+  const exact = history[exerciseName];
+  if (overrideE1RMLb > 0) {
+    return { e1RMLb: overrideE1RMLb, latestWorkLb: exact?.latestCompletedLoadLb ?? null,
+      source: "explicitOverride", sourceExerciseName: exerciseName, confidence: "measured",
+      ruleId: null, explanation: "Your own setting" };
+  }
+  if (exact) {
+    if (exact.allTimeBestE1RMLb > 0) {
+      return { e1RMLb: exact.allTimeBestE1RMLb, latestWorkLb: exact.latestCompletedLoadLb ?? null,
+        source: "exactExerciseE1RM", sourceExerciseName: exerciseName, confidence: "measured",
+        ruleId: null, explanation: `From your ${exerciseName} history` };
+    }
+    if (exact.latestCompletedLoadLb > 0) {
+      return { e1RMLb: null, latestWorkLb: exact.latestCompletedLoadLb,
+        source: "exactExerciseRecentWork", sourceExerciseName: exerciseName, confidence: "measured",
+        ruleId: null, explanation: `From your last ${exerciseName}` };
+    }
+  }
+  // A shelved lift's history still informs estimates, but a shelved SOURCE
+  // never seeds new work: a program must not quietly reactivate something the
+  // lifter benched for a reason.
+  const estimateFrom = (name, coefficient, confidence, ruleId, source) => {
+    if (shelved.has(name)) return null;
+    const profile = history[name];
+    if (!(profile?.allTimeBestE1RMLb > 0)) return null;
+    return { e1RMLb: profile.allTimeBestE1RMLb * coefficient, latestWorkLb: null, source,
+      sourceExerciseName: name, confidence, ruleId, explanation: `Estimated from ${name}` };
+  };
+  for (const rule of rules) {
+    if (rule.target !== exerciseName) continue;
+    const estimate = estimateFrom(rule.source, rule.coefficient, rule.confidence, rule.id, "relatedExerciseEstimate");
+    if (estimate) return estimate;
+  }
+  // A family estimate says only "these train the same pattern", which is thin
+  // evidence for a lift the athlete has never performed. Callers that SEED a
+  // slot pass false and take the conservative catalog default instead: a
+  // too-light opening set costs one easy session, a too-heavy one costs a
+  // failed rep under a loaded bar.
+  const anchorName = allowFamilyEstimate && movementGroup ? familyAnchors[movementGroup] : null;
+  if (anchorName && anchorName !== exerciseName) {
+    const estimate = estimateFrom(anchorName, FAMILY_ANCHOR_COEFFICIENT, "guessed", null, "movementFamilyEstimate");
+    if (estimate) return estimate;
+  }
+  return { e1RMLb: defaultE1RMLb > 0 ? defaultE1RMLb : null, latestWorkLb: null,
+    source: "conservativeDefault", sourceExerciseName: null, confidence: "guessed",
+    ruleId: null, explanation: "Conservative starting load" };
+}
+
+// ---- Load quantization (epic #155 Stage 3) ----
+// A plate below this is a change plate: real to load, annoying to chase, and
+// never worth a warmup or a low-percentage working set.
+export const FIDDLY_PLATE_LB = 5;
+
+// Working sets move at most one plate step and keep every denomination
+// available; warmups are approximate by nature, so they get a wider band and
+// large plates only. `bias` is a HARD constraint, not a tiebreak: quantizing
+// a progressing lifter DOWN onto the load they just left would stall them.
+export const quantizeWorkingSet = (bias) => ({ bandLb: 5, minimumPlateLb: 0, bias });
+export const QUANTIZE_WARMUP = { bandLb: 10, minimumPlateLb: 10, bias: "nearest" };
+
+// Snap a theoretical target onto the nearest load a human would actually
+// build on this rack: fewest change plates per side, then fewest plates, then
+// fewest distinct denominations, then closest to the target. Runs at
+// prescription materialization — after the methodology converted capability
+// into a number — never inside capability resolution, and the result is never
+// written back into program cursor state. Mirrors CadenceCore PlateMath.quantize.
+export function quantizeLoad(targetLb, bar, plates, collarLb = 0, options = quantizeWorkingSet("nearest"), maxPerPlateSide = 10) {
+  if (!(targetLb > 0)) return targetLb;
+  const collar = Math.max(0, collarLb || 0);
+  // One unit system only — the bar's. A quantized load is a NUMBER the lifter
+  // reads and the app stores, so a kg stack must not turn an lb prescription
+  // into 211.14: mixed-unit stacks stay what they always were, loading
+  // guidance produced by solve() under the neat target.
+  const sameSystem = plates.filter((p) => p.unit === bar.unit);
+  const pool = sameSystem.length ? sameSystem : plates;
+  const usable = [...new Set(pool.map((p) => plateLb(p)))]
+    .filter((lb) => lb >= options.minimumPlateLb - 1e-9)
+    .sort((a, b) => b - a);
+  const lower = options.bias === "up" ? targetLb : targetLb - options.bandLb;
+  const upper = options.bias === "down" ? targetLb : targetLb + options.bandLb;
+  const barTotal = barLb(bar) + collar;
+  let best = null;
+  const consider = (total, fiddly, used, distinct) => {
+    if (total < lower - 1e-9 || total > upper + 1e-9) return;
+    const deviation = Math.abs(total - targetLb);
+    if (!best) { best = { fiddly, used, distinct, deviation, total }; return; }
+    if (fiddly !== best.fiddly) { if (fiddly < best.fiddly) best = { fiddly, used, distinct, deviation, total }; return; }
+    if (used !== best.used) { if (used < best.used) best = { fiddly, used, distinct, deviation, total }; return; }
+    if (distinct !== best.distinct) { if (distinct < best.distinct) best = { fiddly, used, distinct, deviation, total }; return; }
+    if (deviation < best.deviation - 1e-9) best = { fiddly, used, distinct, deviation, total };
+  };
+  consider(barTotal, 0, 0, 0);
+  const maxPerSide = (upper - barTotal) / 2;
+  const walk = (index, perSide, fiddly, used, distinct) => {
+    if (index >= usable.length) return;
+    const plate = usable[index];
+    walk(index + 1, perSide, fiddly, used, distinct);
+    if (!(plate > 1e-9)) return;
+    let count = 0;
+    let side = perSide;
+    while (count < maxPerPlateSide) {
+      side += plate;
+      count += 1;
+      if (side > maxPerSide + 1e-9) return;
+      const nextFiddly = fiddly + (plate < FIDDLY_PLATE_LB - 1e-9 ? count : 0);
+      consider(barTotal + 2 * side, nextFiddly, used + count, distinct + 1);
+      walk(index + 1, side, nextFiddly, used + count, distinct + 1);
+    }
+  };
+  walk(0, 0, 0, 0, 0);
+  return best ? best.total : targetLb;
+}
+
 export const storedPrescription = (targetLb, achievedLb, barLb = 45) => {
   if (Math.abs(achievedLb - targetLb) <= TOLERANCE_LB + 1e-9) return targetLb;
   // Beyond the absolute band, the denomination twin still stores the canonical

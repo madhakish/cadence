@@ -41,6 +41,9 @@ struct ActiveSessionView: View {
             ?? gyms.first { $0.isDefault }
             ?? gyms.first
     }
+    private var sessionProgram: Program? {
+        programs.matching(sessionProgramID: session.programID, name: session.programName)
+    }
     private var unfinishedSetCount: Int {
         session.orderedExercises.flatMap(\.plannedWorkingSets).filter { $0.status == .planned }.count
     }
@@ -61,9 +64,8 @@ struct ActiveSessionView: View {
         return index + 1
     }
     private var workoutName: String {
-        let program = programs.matching(sessionProgramID: session.programID, name: session.programName)
         return session.programDayIndex.flatMap { index in
-            program?.day(order: index)?.name
+            sessionProgram?.day(order: index)?.name
         } ?? session.programName ?? "Workout"
     }
     /// The stopwatch origin lives in WorkoutClock (root-scoped), so it survives
@@ -335,6 +337,7 @@ struct ActiveSessionView: View {
                 entry: entry,
                 settings: settingsList.first,
                 gym: gym,
+                programFocus: sessionProgram?.focus,
                 allExercises: allExercises,
                 lastTime: recallLine(for: entry, in: recall),
                 adHocExposure: mostRecentTopExposure(for: entry),
@@ -586,6 +589,9 @@ private struct ExerciseSection: View {
     // per-section @Query would register one redundant fetch per exercise.
     let settings: AppSettings?
     let gym: Gym?
+    /// Automatic prescriptions are focus-dependent. A missing originating
+    /// program is unknown evidence, so its automatic cue stays silent.
+    let programFocus: TrainingFocus?
     let allExercises: [Exercise]
     /// Previous-performance context, or nil for a first-ever lift.
     let lastTime: String?
@@ -745,6 +751,17 @@ private struct ExerciseSection: View {
     @State private var liftInfo: Exercise?
 
     private var restSeconds: Int { smartRestSeconds(for: entry.exercise, role: entry.programRole, settings: settings) }
+    private var complementaryEffortCue: String? {
+        guard let role = entry.programRole.flatMap(LiftRole.init(rawValue:)),
+              let style = PrescriptionStyle(rawValue: entry.prescriptionStyleRaw) else { return nil }
+        guard style != .automatic || programFocus != nil else { return nil }
+        return ProgramEngine.complementaryEffortCue(
+            role: role,
+            prescriptionStyle: style,
+            movementGroup: entry.exercise?.movementGroup,
+            focus: programFocus ?? .strength
+        )
+    }
     private var restBinding: Binding<Int> {
         Binding(get: { restSeconds },
                 set: {
@@ -821,6 +838,15 @@ private struct ExerciseSection: View {
 
     var body: some View {
         Section {
+            if let complementaryEffortCue {
+                Text(complementaryEffortCue)
+                    .font(.caption.bold())
+                    .foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityLabel("Effort target: \(complementaryEffortCue)")
+            }
             ForEach(entry.orderedSets) { set in
                 // The set you're ON — the first WORKING set with no verdict
                 // yet. Warmups sit quiet (and often go unflagged, so they must

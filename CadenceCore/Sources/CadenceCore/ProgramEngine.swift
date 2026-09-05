@@ -526,6 +526,30 @@ public enum ProgramEngine {
         return .wave
     }
 
+    /// The effort contract for Cadence's secondary-volume prescription.
+    ///
+    /// A weight by itself cannot say whether complementary work is doing its
+    /// job: an easy set and a near-limit set at the same load are different
+    /// evidence. Name the target where the lifter can act on it, without
+    /// pretending there is a universal ratio between two different lifts.
+    /// Explicit methodologies keep their own contract. Mirrors web
+    /// `complementaryEffortCue`.
+    public static func complementaryEffortCue(
+        role: LiftRole,
+        prescriptionStyle: PrescriptionStyle,
+        movementGroup: String?,
+        focus: TrainingFocus = .strength
+    ) -> String? {
+        guard role == .complementary,
+              resolvedStyle(
+                prescriptionStyle,
+                movementGroup: movementGroup,
+                role: role,
+                focus: focus
+              ) == .secondary else { return nil }
+        return "Target 2–3 reps left. Adjust the next set if the load misses that range."
+    }
+
     /// Where the program is in its rotation, said without claiming the
     /// rotation is a weight wave. The program-level indicator is shared by
     /// slots that have nothing to do with each other's prescriptions, so it can

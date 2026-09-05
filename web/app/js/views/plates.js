@@ -2,8 +2,22 @@
 // from the floating action button.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { barbellSVG } from "../barbell.js";
+import { barbellSVG, plateBadgeSVG } from "../barbell.js";
 import { Gyms, Settings } from "../db.js";
+
+const weightMeasure = (value, unit) => ui.h("span", { class: "weight-measure" },
+  ui.h("span", { class: "weight-value", text: C.trim(value) }),
+  ui.h("span", { class: "weight-unit", text: unit }));
+
+// The selectors describe input and equipment denominations. The final bar is
+// physical truth, so it is always translated both ways and always lb → kg.
+const dualWeight = (lb) => ui.h("div", { class: "dual-weight mono", role: "group",
+  "aria-label": `Total ${C.both(lb)}` },
+weightMeasure(lb, "lb"), weightMeasure(C.kgFromLb(lb), "kg"));
+
+const plateKey = (plate, style) => ui.h("span", { class: "plate-key" },
+  plateBadgeSVG(plate, style),
+  ui.h("span", { class: `title${plate.unit === "kg" ? " accent" : ""}`, text: C.plateLabel(plate) }));
 
 export async function openPlateCalculator() {
   const [gyms, settings] = await Promise.all([Gyms.all(), Settings.get()]);
@@ -60,6 +74,18 @@ export async function openPlateCalculator() {
           const sol = C.solve(targetLb, bar, availablePlates(), 10,
             gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
           ui.clear(out);
+          out.append(ui.h("div", { class: "section-title", text: "Total on bar" }));
+          out.append(dualWeight(sol.totalLb));
+          out.append(ui.h("div", { class: "sub", text: `Achieved on ${C.barLabel(bar)}${sol.collarLb ? ` + ${C.trim(sol.collarLb)} lb collars` : ""} · ${C.loadingPolicyLabel(sol.policy)}` }));
+          if (!sol.satisfiesPolicy) {
+            out.append(ui.h("div", { class: "card", style: { background: "rgba(255,204,0,0.16)", marginTop: "10px" } },
+              ui.h("span", { class: "warn", text: `⚠︎ No available plate stack satisfies ${C.loadingPolicyLabel(sol.policy).toLowerCase()}; showing the closest load.` })));
+          }
+          if (sol.isOffTarget) {
+            const deviation = unit === "kg" ? C.kgFromLb(Math.abs(sol.deviationLb)) : Math.abs(sol.deviationLb);
+            out.append(ui.h("div", { class: "card", style: { background: "rgba(255,204,0,0.16)", marginTop: "10px" } },
+              ui.h("span", { class: "warn", text: `⚠︎ Closest load is off target by ${C.trim(deviation)} ${unit}.` })));
+          }
           // The answer, drawn: the loaded bar itself, big — the SAME solution
           // as the list below (which may pick the other unit system).
           if (targetLb > 0) {
@@ -70,21 +96,9 @@ export async function openPlateCalculator() {
           out.append(ui.h("div", { class: "section-title", text: "Per side" }));
           if (!sol.perSide.length) out.append(ui.h("div", { class: "big", text: sol.collarLb > 0 ? "Bar + collars" : "Bar only" }));
           for (const pc of sol.perSide) {
-            out.append(ui.h("div", { class: "row" },
-              ui.h("span", { class: "title" + (pc.plate.unit === "kg" ? " accent" : ""), text: C.plateLabel(pc.plate) }),
+            out.append(ui.h("div", { class: "row plate-row" },
+              plateKey(pc.plate, plateStyle),
               ui.h("span", { class: "mono", text: `× ${pc.count}` })));
-          }
-          out.append(ui.h("div", { class: "section-title", text: "Total achieved" }));
-          out.append(ui.h("div", { class: "big mono", text: C.both(sol.totalLb) }));
-          out.append(ui.h("div", { class: "sub", text: `on ${C.barLabel(bar)}${sol.collarLb ? ` + ${C.trim(sol.collarLb)} lb collars` : ""} · ${C.loadingPolicyLabel(sol.policy)}` }));
-          if (!sol.satisfiesPolicy) {
-            out.append(ui.h("div", { class: "card", style: { background: "rgba(255,204,0,0.16)", marginTop: "10px" } },
-              ui.h("span", { class: "warn", text: `⚠︎ No available plate stack satisfies ${C.loadingPolicyLabel(sol.policy).toLowerCase()}; showing the closest load.` })));
-          }
-          if (sol.isOffTarget) {
-            const deviation = unit === "kg" ? C.kgFromLb(Math.abs(sol.deviationLb)) : Math.abs(sol.deviationLb);
-            out.append(ui.h("div", { class: "card", style: { background: "rgba(255,204,0,0.16)", marginTop: "10px" } },
-              ui.h("span", { class: "warn", text: `⚠︎ Closest load is off target by ${C.trim(deviation)} ${unit}.` })));
           }
         }
       }
@@ -92,8 +106,8 @@ export async function openPlateCalculator() {
       function drawReverse(p) {
         const plates = availablePlates();
         const out = ui.h("div", { class: "card" });
-        const hero = ui.h("div", { class: "barbell-hero" });
-        const total = ui.h("div", { class: "big mono" });
+        const hero = ui.h("div", { class: "barbell-hero full" });
+        const total = ui.h("div");
         const sub = ui.h("div", { class: "sub" });
         const recompute = () => {
           const perSide = plates.map((pl) => ({ plate: pl, count: counts[C.plateId(pl)] || 0 })).filter((pc) => pc.count > 0);
@@ -103,19 +117,20 @@ export async function openPlateCalculator() {
           ui.clear(hero);
           hero.append(barbellSVG(totalLb, "lb", bar, gym, { perSide, totalLb, collarLb }, null, "full", plateStyle).svg,
             ui.h("div", { class: "sub centered", text: "Counts are per side and mirrored" }));
-          total.textContent = C.both(totalLb);
-          sub.textContent = `total on ${C.barLabel(bar)}${collarLb ? ` + ${C.trim(collarLb)} lb collars` : ""}`;
+          ui.mount(total, dualWeight(totalLb));
+          sub.textContent = `On ${C.barLabel(bar)}${collarLb ? ` + ${C.trim(collarLb)} lb collars` : ""}`;
         };
         for (const pl of plates) {
           const id = C.plateId(pl);
-          out.append(ui.h("div", { class: "row" },
-            ui.h("span", { class: "title" + (pl.unit === "kg" ? " accent" : ""), text: C.plateLabel(pl) }),
+          out.append(ui.h("div", { class: "row plate-row" },
+            plateKey(pl, plateStyle),
             ui.stepper(counts[id] || 0, { min: 0, max: 12, onChange: (v) => { counts[id] = v; recompute(); } })));
         }
+        const totalCard = ui.h("div", { class: "card" }, ui.h("div", { class: "section-title", text: "Total on bar" }), total, sub, hero);
+        p.append(totalCard);
+        p.append(ui.h("div", { class: "section-title", text: "Plates on one side" }));
         p.append(out);
         p.append(ui.h("button", { class: "btn ghost wide danger", text: "Clear", onClick: () => { for (const k of Object.keys(counts)) counts[k] = 0; draw(); } }));
-        const totalCard = ui.h("div", { class: "card" }, ui.h("div", { class: "section-title", text: "On the bar" }), hero, total, sub);
-        p.append(totalCard);
         recompute();
       }
 

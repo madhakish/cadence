@@ -196,6 +196,18 @@ eq(C.resolvedPrescriptionStyle("automatic", "press", "main", "strength"), "wave"
 eq(C.resolvedPrescriptionStyle("automatic", "hinge", "complementary", "strength"), "secondary", "automatic complementary uses lower-fatigue strategy");
 eq(C.resolvedPrescriptionStyle("automatic", "press", "main", "hypertrophy"), "hypertrophy", "focus drives hypertrophy prescription");
 eq(C.resolvedPrescriptionStyle("automatic", "olympic", "main", "strength"), "technique", "Olympic lift prioritizes technique");
+eq(C.complementaryEffortCue("complementary", "automatic", "hinge"),
+  "Target 2–3 reps left. Adjust the next set if the load misses that range.",
+  "automatic complementary volume names its effort contract");
+eq(C.complementaryEffortCue("complementary", "secondary", "squat"),
+  "Target 2–3 reps left. Adjust the next set if the load misses that range.",
+  "explicit secondary volume keeps the same effort contract");
+eq(C.complementaryEffortCue("main", "automatic", "hinge"), null,
+  "main work keeps its own methodology target");
+eq(C.complementaryEffortCue("complementary", "doubleProgression", "pull"), null,
+  "explicit complementary methodologies keep their own contract");
+eq(C.complementaryEffortCue("complementary", "automatic", "hinge", "hypertrophy"), null,
+  "automatic hypertrophy work does not borrow the strength secondary-volume cue");
 let rolePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 0 }, 5,
   "barbell", "hinge", "complementary", "strength", "automatic");
 eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x8@180", "complementary volume avoids a second 5x5");
@@ -3088,6 +3100,94 @@ eq(C.activityWorkload(3600, 11), null, "RPE above 10 is invalid");
 eq(C.activityWorkload(60, 1)?.arbitraryUnits, 1, "RPE 1 is a valid bound");
 eq(C.activityWorkload(60, 10)?.arbitraryUnits, 10, "RPE 10 is a valid bound");
 eq(C.activityWorkload(1800, 6.5)?.arbitraryUnits, 195, "half-step RPEs are valid");
+
+// ---- quantizeLoad: prescription materialization (epic #155 Stage 3) ----
+// Mirrors CadenceCoreTests/PlateQuantizeTests.swift — same fixtures.
+{
+  const bar = C.BARS.bar45lb;
+  const plates = C.STANDARD_LB;
+  const q = (target, options) => C.quantizeLoad(target, bar, plates, 0, options);
+
+  eq(q(260, C.quantizeWorkingSet("up")), 265, "260 progressing trades the change plate for 265");
+  eq(q(260, C.quantizeWorkingSet("down")), 255, "260 backing off resolves to 255");
+  for (const clean of [135, 225, 315, 405]) {
+    eq(q(clean, C.quantizeWorkingSet("up")), clean, `${clean} already loads clean and must not move`);
+  }
+  ok(q(230, C.quantizeWorkingSet("up")) >= 230, "progressing is never quantized backwards");
+  ok(q(230, C.quantizeWorkingSet("down")) <= 230, "backing off is never quantized upwards");
+  eq(q(130, C.QUANTIZE_WARMUP), 135, "nobody builds a 130 lb warmup");
+  eq(q(128, C.QUANTIZE_WARMUP), 135, "a warmup near 130 snaps to the single-plate load");
+  eq(q(45, C.QUANTIZE_WARMUP), 45, "the empty bar stays the lightest rung");
+  eq(C.quantizeLoad(137, bar, [], 0, C.quantizeWorkingSet("up")), 137, "no rack, no quantization");
+
+  // Property: every quantized load is exactly achievable, and stays in band.
+  let unloadable = 0, outOfBand = 0;
+  for (let target = 95; target <= 405; target += 2.5) {
+    for (const options of [C.quantizeWorkingSet("up"), C.quantizeWorkingSet("down"), C.QUANTIZE_WARMUP]) {
+      const quantized = C.quantizeLoad(target, bar, plates, 0, options);
+      if (Math.abs(C.solve(quantized, bar, plates).totalLb - quantized) > 1e-6) unloadable += 1;
+      if (Math.abs(quantized - target) > options.bandLb + 1e-9) outOfBand += 1;
+    }
+  }
+  eq(unloadable, 0, "quantization never invents an unloadable number");
+  eq(outOfBand, 0, "quantization stays within its band");
+}
+
+
+// ---- resolveTrainingAnchor (epic #155 Stage 3) ----
+// Mirrors CadenceCoreTests/TrainingAnchorResolverTests.swift — same fixtures.
+{
+  const prof = (best = null, latest = null) => ({
+    latestCompletedLoadLb: latest, latestExposureMs: latest == null ? null : 1000,
+    allTimeBestE1RMLb: best,
+  });
+  let a = C.resolveTrainingAnchor("Back Squat", { movementGroup: "squat", history: { "Back Squat": prof(315, 285) } });
+  eq(a.source, "exactExerciseE1RM", "exact history wins");
+  eq(a.e1RMLb, 315, "exact e1RM");
+  eq(a.confidence, "measured", "exact history reads as measured");
+
+  a = C.resolveTrainingAnchor("Back Squat", { history: { "Back Squat": prof(315) }, overrideE1RMLb: 405 });
+  eq(a.source, "explicitOverride", "an explicit override outranks everything");
+
+  a = C.resolveTrainingAnchor("Good Morning", { history: { "Good Morning": prof(null, 135) } });
+  eq(a.source, "exactExerciseRecentWork", "recent work carries a style that needs a load");
+  eq(a.latestWorkLb, 135, "the last exposure's load");
+
+  a = C.resolveTrainingAnchor("Front Squat", { movementGroup: "squat", history: { "Back Squat": prof(300) } });
+  eq(a.source, "relatedExerciseEstimate", "an unseen variation resolves from its related lift");
+  eq(a.e1RMLb, 255, "300 x 0.85");
+  eq(a.ruleId, "front-squat-from-back-squat", "the rule is named");
+  eq(a.explanation, "Estimated from Back Squat", "and the UI can say where it came from");
+
+  a = C.resolveTrainingAnchor("Hack Squat", { movementGroup: "squat", history: { "Back Squat": prof(300) } });
+  eq(a.source, "movementFamilyEstimate", "family anchor is the last estimate before the default");
+  eq(a.e1RMLb, 150, "family estimates are deliberately pessimistic");
+
+  a = C.resolveTrainingAnchor("Front Squat", { movementGroup: "squat", history: {}, defaultE1RMLb: 95 });
+  eq(a.source, "conservativeDefault", "no history at all falls back to the catalog");
+  eq(a.confidence, "guessed", "and says it is a guess");
+
+  a = C.resolveTrainingAnchor("Front Squat", { movementGroup: "squat", history: { "Back Squat": prof(300) },
+    defaultE1RMLb: 95, shelvedExerciseNames: ["Back Squat"] });
+  eq(a.source, "conservativeDefault", "a shelved lift never seeds new work");
+
+  a = C.resolveTrainingAnchor("Clean", { movementGroup: "hinge", history: { Clean: prof(205), "Front Squat": prof(275) } });
+  eq(a.source, "exactExerciseE1RM", "Olympic work prefers its own history");
+  a = C.resolveTrainingAnchor("Clean", { movementGroup: "hinge", history: { "Front Squat": prof(275) } });
+  eq(a.confidence, "guessed", "a lifted-from-squat clean is a guess, and says so");
+
+
+  a = C.resolveTrainingAnchor("Landmine Press", { movementGroup: "press",
+    history: { "Barbell Bench": prof(225) }, defaultE1RMLb: 60, allowFamilyEstimate: false });
+  eq(a.source, "conservativeDefault", "seeding callers opt out of family guesses");
+  a = C.resolveTrainingAnchor("Front Squat", { movementGroup: "squat",
+    history: { "Back Squat": prof(300) }, defaultE1RMLb: 60, allowFamilyEstimate: false });
+  eq(a.source, "relatedExerciseEstimate", "an explicit rule still seeds — that is named evidence");
+
+  eq(new Set(C.ANCHOR_RULES.map((r) => r.id)).size, C.ANCHOR_RULES.length, "rule ids are unique");
+  ok(C.ANCHOR_RULES.every((r) => r.coefficient > 0.3 && r.coefficient < 1.3 && r.source !== r.target),
+    "every shipped rule is plausible and non-circular");
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

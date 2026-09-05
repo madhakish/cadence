@@ -525,8 +525,29 @@ enum ProgramSession {
         guard exercise?.type == .barbell, weightLb > 0 else { return weightLb }
         let rounded = neatWeight(weightLb, isBarbell: true, isMain: isMain,
                                  barLb: bar.lb, stepLb: stepLb)
-        let options = PlateMath.prescriptionOptions(
+        // Quantize BEFORE solving (epic #155 Stage 3), but only a target that
+        // is OFF the program's own load step — that is exactly where change
+        // plates sneak in (a percentage, a multiplier, an imported base).
+        // A step-aligned number is the program's deliberate arithmetic: the
+        // wave multiplier, the deload fraction, and the e1RM feedback loop all
+        // read it back, so quantizing it would silently rewrite progression.
+        // Erring up while the cycle builds and down on the deload's recovery
+        // exposure keeps a progressing lifter off the load they just left.
+        // Gym-specific by design — prescription materialization, not
+        // capability — and never written back into cursor state.
+        let onStep = stepLb > 0
+            && abs(rounded / stepLb - (rounded / stepLb).rounded()) < 1e-9
+        let quantized = onStep ? rounded : PlateMath.quantize(
             targetLb: rounded, bar: bar,
+            plates: PlateMath.stationPlates(
+                preference: exercise?.stationDenomination,
+                gymPlates: gym?.availablePlates ?? Plate.allStandard
+            ),
+            collarLb: gym?.collarWeightLb ?? 0,
+            options: .workingSet(bias: phase == .deload ? .down : .up)
+        )
+        let options = PlateMath.prescriptionOptions(
+            targetLb: quantized, bar: bar,
             plates: PlateMath.stationPlates(
                 preference: exercise?.stationDenomination,
                 gymPlates: gym?.availablePlates ?? Plate.allStandard
@@ -538,7 +559,7 @@ enum ProgramSession {
         // A near-miss clean stack (e.g. kg plates on a lb prescription) stays
         // loading guidance — the neat programmed number is what gets stored.
         return PlateMath.storedPrescription(
-            targetLb: rounded, achievedLb: options.selected.loadout.totalLb,
+            targetLb: quantized, achievedLb: options.selected.loadout.totalLb,
             barLb: bar.labelLb
         )
     }
@@ -551,17 +572,24 @@ enum ProgramSession {
                                   gym: Gym?, bar: Bar, exercise: Exercise? = nil) -> [WarmupSet] {
         var seen: Set<Double> = []
         return ramp.compactMap { warmup in
+            // Ramp rungs are approximate by definition, so they snap to
+            // large-plate loads first (epic #155 Stage 3): nobody builds a
+            // 130 lb warmup out of 25s, 10s and a change plate.
+            let rackPlates = PlateMath.stationPlates(
+                preference: exercise?.stationDenomination,
+                gymPlates: gym?.availablePlates ?? Plate.allStandard
+            )
+            let target = PlateMath.quantize(
+                targetLb: warmup.weightLb, bar: bar, plates: rackPlates,
+                collarLb: gym?.collarWeightLb ?? 0, options: .warmup
+            )
             let solution = PlateMath.solve(
-                targetLb: warmup.weightLb, bar: bar,
-                plates: PlateMath.stationPlates(
-                    preference: exercise?.stationDenomination,
-                    gymPlates: gym?.availablePlates ?? Plate.allStandard
-                ),
+                targetLb: target, bar: bar, plates: rackPlates,
                 collarLb: gym?.collarWeightLb ?? 0,
                 policy: gym?.loadingPolicy ?? .closest
             )
             let stored = PlateMath.storedPrescription(
-                targetLb: warmup.weightLb, achievedLb: solution.loadout.totalLb,
+                targetLb: target, achievedLb: solution.loadout.totalLb,
                 barLb: bar.labelLb
             )
             guard stored < workingLb - 1e-9, seen.insert(stored).inserted else { return nil }

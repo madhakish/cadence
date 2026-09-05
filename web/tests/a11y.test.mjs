@@ -52,7 +52,12 @@ ok(/\.flagbtn\.labeled \.microlabel/.test(css),
 const barbell = read("app/js/barbell.js");
 ok(/role: "img"/.test(barbell) && /aria-label[^\n]*barbell/i.test(barbell),
   "the barbell graphic is an image with a spoken load");
+ok(/plateBadgeSVG/.test(barbell) && /aria-label[^\n]*plate/i.test(barbell),
+  "readable plate denomination badges also carry spoken labels");
 ok(/aria-label[^\n]*Dumbbell/.test(barbell), "the dumbbell graphic carries a spoken load");
+const plates = read("app/js/views/plates.js");
+ok(/aria-label[^\n]*Total/.test(plates) && /weightMeasure\(lb, "lb"\)[^\n]*weightMeasure\(C\.kgFromLb\(lb\), "kg"\)/.test(plates),
+  "the calculator's final load is announced and displayed in both units");
 
 // ---- Session lifecycle: destructive discard is confirmed ----
 const home = read("app/js/views/home.js");

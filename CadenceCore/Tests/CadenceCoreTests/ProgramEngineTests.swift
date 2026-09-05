@@ -199,6 +199,30 @@ final class ProgramEngineTests: XCTestCase {
         XCTAssertEqual(ProgramEngine.resolvedStyle(.automatic, movementGroup: "olympic", role: .main, focus: .strength), .technique)
     }
 
+    func testComplementaryEffortCueBelongsOnlyToSecondaryVolume() {
+        XCTAssertEqual(
+            ProgramEngine.complementaryEffortCue(
+                role: .complementary, prescriptionStyle: .automatic, movementGroup: "hinge"
+            ),
+            "Target 2–3 reps left. Adjust the next set if the load misses that range."
+        )
+        XCTAssertEqual(
+            ProgramEngine.complementaryEffortCue(
+                role: .complementary, prescriptionStyle: .secondary, movementGroup: "squat"
+            ),
+            "Target 2–3 reps left. Adjust the next set if the load misses that range."
+        )
+        XCTAssertNil(ProgramEngine.complementaryEffortCue(
+            role: .main, prescriptionStyle: .automatic, movementGroup: "hinge"
+        ))
+        XCTAssertNil(ProgramEngine.complementaryEffortCue(
+            role: .complementary, prescriptionStyle: .doubleProgression, movementGroup: "pull"
+        ))
+        XCTAssertNil(ProgramEngine.complementaryEffortCue(
+            role: .complementary, prescriptionStyle: .automatic, movementGroup: "hinge", focus: .hypertrophy
+        ))
+    }
+
     func testComplementaryVolumeDoesNotInheritMainFiveByFive() {
         let state = CycleState(baseWeightLb: 200, nextPhase: .volume)
         let plan = ProgramEngine.programPlan(for: state, programRoundingLb: 5, exerciseType: "barbell",

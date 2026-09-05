@@ -300,12 +300,51 @@ async function recordedHistory(names) {
 // deriving starting weights from an estimated max.
 const floorTo = (x, step) => (step > 0 ? Math.floor(x / step + 1e-9) * step : x);
 
+// The history projection the anchor resolver needs: the requested lifts PLUS
+// every lift a shipped rule or family anchor could estimate from, so an unseen
+// variation resolves from the competition lift that trains it instead of
+// dropping straight to the catalog default. Mirrors native anchorIndex.
+async function anchorHistoryFor(names) {
+  const wanted = new Set(names);
+  for (const rule of C.ANCHOR_RULES) if (wanted.has(rule.target)) wanted.add(rule.source);
+  for (const anchor of Object.values(C.FAMILY_ANCHORS)) wanted.add(anchor);
+  const samples = [];
+  for (const session of await Sessions.all()) {
+    if (!session.isCompleted) continue;
+    const timestampMs = new Date(session.completedAt || session.date).getTime();
+    for (const entry of session.exercises || []) {
+      if (!wanted.has(entry.exerciseName)) continue;
+      for (const set of entry.sets || []) {
+        if (set.isWarmup || set.status !== "completed" || !(set.weightLb > 0) || !(set.reps >= 1)) continue;
+        samples.push({ exerciseName: entry.exerciseName, timestampMs, weightLb: set.weightLb, reps: set.reps });
+      }
+    }
+  }
+  return C.athleteHistoryIndex(samples);
+}
+
+// A shelved lift's own history still counts, but it must never seed a NEW
+// slot for something else.
+async function shelvedExerciseNames() {
+  return (await Exercises.all()).filter((exercise) => exercise.isShelved).map((exercise) => exercise.name);
+}
+
 /// History-aware values for slots added in the custom program editor.
 export async function bootstrapLiftFromHistory(exercise, { role = "complementary",
   focus = "strength", roundingLb = 5 } = {}) {
   const fallback = ProgrammingDefaults.recommendation(exercise.name, "Main", exercise.type);
-  const history = await recordedHistory([exercise.name]);
-  const e1RM = history.bestE1RM.get(exercise.name) || 0;
+  // Same capability ladder as template instantiation (epic #155 Stage 3):
+  // exact history, else an explicit related-lift rule, else the movement
+  // family, else the catalog default.
+  const anchor = C.resolveTrainingAnchor(exercise.name, {
+    movementGroup: exercise.movementGroup || null,
+    history: await anchorHistoryFor([exercise.name]),
+    // No defaultE1RMLb on purpose: a conservative-default anchor stays empty
+    // so this caller keeps its own fallback pair.
+    shelvedExerciseNames: await shelvedExerciseNames(),
+    allowFamilyEstimate: false,
+  });
+  const e1RM = anchor.e1RMLb || 0;
   if (!(e1RM > 0)) return { baseWeightLb: fallback.weightLb, estimatedMaxLb: fallback.estimatedMaxLb };
   const style = C.resolvedPrescriptionStyle("automatic", exercise.movementGroup || null, role, focus);
   return {
@@ -342,6 +381,8 @@ export async function createProgramFromTemplate(template) {
   ]);
   const known = historyNames.length ? await recordedHistory(historyNames)
     : { bestE1RM: new Map(), latestWeight: new Map() };
+  const anchorHistory = historyNames.length ? await anchorHistoryFor(historyNames) : {};
+  const shelved = historyNames.length ? await shelvedExerciseNames() : [];
   const programs = await Programs.all();
   return Programs.save({
     // The methodology origin (schema V11): recorded at instantiation, never
@@ -370,7 +411,18 @@ export async function createProgramFromTemplate(template) {
         const resolvedStyle = C.resolvedPrescriptionStyle(record.prescription,
           exercise.movementGroup || null, l.role, template.focus);
         const fraction = startFraction || C.templateStartFraction(resolvedStyle);
-        const e1RM = known.bestE1RM.get(historyExercise || l.exerciseName) || 0;
+        // Capability first (epic #155 Stage 3): the lifter's own history for
+        // this exact lift, else an explicit related-lift rule, else the
+        // movement family, else the catalog. The methodology's own fraction
+        // converts capability into the starting load — the resolver never
+        // sees a gym or a plate.
+        const e1RM = C.resolveTrainingAnchor(historyExercise || l.exerciseName, {
+          movementGroup: exercise.movementGroup || null,
+          history: anchorHistory,
+          // No defaultE1RMLb on purpose: see bootstrapLiftFromHistory.
+          shelvedExerciseNames: shelved,
+          allowFamilyEstimate: false,
+        }).e1RMLb || 0;
         if (fraction > 0 && e1RM > 0) {
           record.baseWeightLb = Math.max(fallback.weightLb,
             floorTo(fraction * e1RM, template.roundingLb));
