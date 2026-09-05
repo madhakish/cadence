@@ -14,8 +14,10 @@ import CadenceCore
 @Model
 final class ActivityDetail {
     @Attribute(.unique) var id: String = UUID().uuidString
-    /// `ActivityKind` raw value. Stored verbatim on import so a record from
-    /// a newer catalog is never destroyed; the app reads it through `kind`.
+    /// `ActivityKind` raw value: the persisted discriminator, read through
+    /// `kind`. Both importers reject an unregistered value before any write
+    /// (a newer kind arrives with a newer backup version, which the version
+    /// gate refuses first), so this column only ever holds a registered kind.
     var kindRaw: String = ""
     /// Session RPE, 1.0–10.0, half steps supported. Applies to every kind.
     var sessionRPE: Double?
