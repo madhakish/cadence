@@ -4,8 +4,10 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { Exercises, Sessions, Settings, iso } from "../db.js";
 
+// Whole minutes, floored — the same reading native gives, so a 59m 31s log
+// never reports as an hour on one client and 59 minutes on the other.
 const durationLabel = (seconds) => {
-  const minutes = Math.max(0, Math.round((seconds || 0) / 60));
+  const minutes = Math.max(0, Math.floor((seconds || 0) / 60));
   if (minutes < 60) return `${minutes} min`;
   return minutes % 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : `${minutes / 60} hr`;
 };
@@ -58,6 +60,14 @@ export function buildActivitySession(input, exercise, existing = null) {
   };
   const start = new Date(input.startDate);
   if (Number.isNaN(start.getTime())) throw new Error("Choose a valid start date.");
+  // Editing rewrites the record wholesale, so it must only ever rewrite the
+  // canonical shape: one activity, one entry, one set, no program. Anything
+  // else is refused rather than silently truncated. Mirrors native
+  // ActivitySession.update's invalidSessionShape guard.
+  if (existing && !(existing.activity && !existing.programTag
+    && existing.exercises?.length === 1 && existing.exercises[0].sets?.length === 1)) {
+    throw new Error("This activity record is incomplete and can't be edited safely.");
+  }
   const oldEntry = (existing?.exercises || [])[0] || {};
   const oldSet = oldEntry.sets?.[0] || {};
   const set = {

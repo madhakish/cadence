@@ -5,7 +5,6 @@ import CadenceCore
 
 /// Sessions, milestones, and per-lift progression charts.
 struct HistoryView: View {
-    @Environment(\.modelContext) private var context
     /// The block the rotations matrix is scoped to; empty falls back to the
     /// active program.
     @State private var rotationProgramID = ""
@@ -277,16 +276,6 @@ struct HistoryView: View {
                                     }
                                     .frame(height: 3)
                                     .padding(.top, 3)
-                                }
-                            }
-                        }
-                        .swipeActions {
-                            if session.activityDetail != nil {
-                                Button(role: .destructive) {
-                                    context.delete(session)
-                                    PersistenceErrorCenter.shared.save(context, operation: "Deleting ad-hoc work")
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
                                 }
                             }
                         }

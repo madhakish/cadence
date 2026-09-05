@@ -146,6 +146,14 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
     "ad-hoc work refuses a negative count, matching the backup validators");
   ok(rejects({ kind: "hiking", startDate: new Date(), durationSeconds: 60 }),
     "ad-hoc work refuses an unregistered kind");
+  let driftedRejected = false;
+  try {
+    activity.buildActivitySession({ kind: "woodSplitting", startDate: new Date(), durationSeconds: 60 }, wood,
+      { ...built, exercises: [...built.exercises, { exerciseName: "Back Squat", sets: [] }] });
+  } catch { driftedRejected = true; }
+  ok(driftedRejected, "editing refuses a record that drifted from the one-entry, one-set shape instead of truncating it");
+  ok(activity.activityDurationLabel(59 * 60 + 31) === "59 min",
+    "duration labels floor to whole minutes like native, never rounding 59m31s up to an hour");
   await activity.openActivityLog(); await tick();
   const activityOverlay = document.querySelector("#overlays .overlay");
   ok(activityOverlay?.textContent.includes("Physical work, not a training session")

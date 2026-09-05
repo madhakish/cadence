@@ -157,8 +157,14 @@ enum ActivitySession {
     static func update(session: WorkoutSession, input: Input, context: ModelContext) throws {
         let exercise = try validatedExercise(input: input, context: context)
         let wood = input.kind == .woodSplitting ? input.woodSplitting : nil
-        guard let detail = session.activityDetail,
+        // The whole canonical shape, not just its first row: one entry, one
+        // set, no program. A record that has drifted from that is refused
+        // rather than half-edited into an inconsistent one.
+        guard session.programID == nil,
+              let detail = session.activityDetail,
+              session.orderedExercises.count == 1,
               let entry = session.orderedExercises.first,
+              entry.orderedSets.count == 1,
               let set = entry.orderedSets.first
         else { throw Error.invalidSessionShape }
 

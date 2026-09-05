@@ -366,6 +366,27 @@ final class PersistenceMigrationTests: XCTestCase {
                      "an optional fact cleared by the user stays absent")
         XCTAssertEqual(original.activityDetail?.cordVolume, 0.4)
         XCTAssertEqual(ActivitySession.workload(for: original)?.arbitraryUnits, 1_125)
+
+        // A record that has drifted from the canonical shape (here, a second
+        // entry) is refused outright, never half-edited.
+        let drifted = try ActivitySession.create(
+            input: .init(kind: .woodSplitting, startDate: .now,
+                         durationSeconds: 1_800, sessionRPE: nil, loadLb: nil,
+                         notes: "", woodSplitting: nil),
+            context: context
+        )
+        let squat = try XCTUnwrap(try context.fetch(FetchDescriptor<Exercise>()).first { $0.name == "Back Squat" })
+        let extra = SessionExercise(order: 1, exercise: squat)
+        context.insert(extra)
+        drifted.exercises.append(extra)
+        try context.save()
+        XCTAssertThrowsError(try ActivitySession.update(
+            session: drifted,
+            input: .init(kind: .woodSplitting, startDate: .now, durationSeconds: 1_800,
+                         sessionRPE: 5, loadLb: nil, notes: "", woodSplitting: nil),
+            context: context
+        ), "an off-shape activity record must be refused, not partially edited")
+        XCTAssertNil(drifted.activityDetail?.sessionRPE, "the refused edit wrote nothing")
     }
 
     func testV9StoreGainsIntervalsAndManualBarWithoutTouchingAnything() throws {
