@@ -32,6 +32,7 @@ const signals = await import("../app/js/views/signals.js");
 const settings = await import("../app/js/views/settings.js");
 const session = await import("../app/js/views/session.js");
 const plates = await import("../app/js/views/plates.js");
+const activity = await import("../app/js/views/activity.js");
 const barbell = await import("../app/js/barbell.js");
 const ui = await import("../app/js/ui.js");
 const C = await import("../app/js/core.js");
@@ -105,6 +106,44 @@ ok((await db.Bodyweight.all()).length === 0 && (await db.Checkins.all()).length 
   "fresh install has no body metrics or health signals");
 await db.ensureSeeded(); // idempotent
 ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
+
+// Ad-hoc work uses the ordinary history timeline but owns a deliberately
+// off-program shape: one completed duration set, no bar, role, or program tag.
+{
+  const wood = await db.Exercises.byName("Wood Splitting");
+  const built = activity.buildActivitySession({
+    kind: "woodSplitting", startDate: new Date("2026-01-17T14:00:00Z"),
+    durationSeconds: 7_200, sessionRPE: 8.5, loadLb: 8,
+    enteredUnit: "lb", notes: "Oak rounds",
+    woodSplitting: { rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25 },
+  }, wood);
+  const set = activity.activitySet(built);
+  ok(built.isCompleted && built.programTag === null && built.activity.kind === "woodSplitting"
+    && built.exercises.length === 1 && set.status === "completed" && set.durationSeconds === 7_200,
+  "the quick logger builds one completed off-program duration exposure");
+  ok(set.weightLb === 8 && set.enteredUnit === "lb" && set.reps === 0 && set.loadBasis === "externalTotal",
+    "maul weight remains an exact implement fact instead of lifting volume");
+  ok(C.activityWorkload(activity.activityDurationSeconds(built), built.activity.sessionRPE)?.arbitraryUnits === 1_020,
+    "wood workload is duration × session effort, independent of maul weight");
+  const edited = activity.buildActivitySession({
+    kind: "woodSplitting", startDate: new Date("2026-01-17T14:00:00Z"),
+    durationSeconds: 7_500, sessionRPE: 9, loadLb: C.lbFromKg(4), enteredUnit: "kg",
+    notes: "More oak", woodSplitting: { rounds: 60 },
+  }, wood, built);
+  ok(edited.id === built.id && activity.activitySet(edited).enteredUnit === "kg"
+    && edited.activity.rounds === 60 && edited.activity.splitPieces === null,
+  "editing preserves identity and exact entered unit without inventing uncounted wood facts");
+  let rejected = false;
+  try { activity.buildActivitySession({ kind: "woodSplitting", startDate: new Date(), durationSeconds: 0 }, wood); }
+  catch { rejected = true; }
+  ok(rejected, "ad-hoc work refuses a zero-duration record");
+  await activity.openActivityLog(); await tick();
+  const activityOverlay = document.querySelector("#overlays .overlay");
+  ok(activityOverlay?.textContent.includes("Physical work, not a training session")
+    && activityOverlay?.textContent.includes("never advances a cycle"),
+  "the logger states its off-program boundary before anything is banked");
+  activityOverlay?.querySelector(".overlay-head button")?.click();
+}
 
 // Recover an install missing its seed stamp without touching user-owned data.
 await withCleanup(async (keep) => {
@@ -194,10 +233,17 @@ for (const track of [
     && bumperBar.querySelectorAll("ellipse.barbell-plate-hub").length === bumperRight.length * 2
     && bumperBar.querySelectorAll("text.barbell-plate-label").length >= bumperRight.length * 2,
   "plate bodies have disc faces, steel hubs, rims, and denomination marks rather than flat blocks");
+  const mixedLabelYs = [...mixedBar.querySelectorAll("text.barbell-plate-label")]
+    .slice(0, 6).map((label) => Number(label.getAttribute("y")));
+  ok(new Set(mixedLabelYs).size > 1,
+    "adjacent denominations use staggered label rails instead of printing on top of one another");
   ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
     "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
-  ok(fullBar.getAttribute("viewBox") === "0 0 340 96",
+  ok(fullBar.getAttribute("viewBox") === "0 0 420 124",
     "the complete bar has enough vertical canvas for plates to be legible on a phone");
+  ok([...fullBar.querySelectorAll(".barbell-plate-body")].every((plate) =>
+    plate.tabIndex === 0 && plate.dataset.plateDenomination && plate.getAttribute("aria-label")?.includes("plate")),
+  "every visible plate exposes its exact denomination to keyboard and assistive technology");
   const plateBadge = barbell.plateBadgeSVG({ value: 20, unit: "kg" }, "steel");
   ok(plateBadge.getAttribute("aria-label") === "20 kg plate"
     && plateBadge.textContent.includes("20") && plateBadge.textContent.includes("kg")
@@ -1009,11 +1055,11 @@ await plates.openPlateCalculator(); await tick();
 const plateOverlay = document.querySelector("#overlays .overlay");
 ok(plateOverlay, "plate calculator opened");
 const targetTotal = plateOverlay.querySelector(".dual-weight");
-const targetHero = plateOverlay.querySelector(".barbell-hero");
+const targetHero = plateOverlay.querySelector(".barbell-stage.hero");
 ok(targetTotal?.textContent.includes("lb") && targetTotal?.textContent.includes("kg"),
   "target mode always shows the achieved bar in both pounds and kilograms");
-ok((targetTotal?.compareDocumentPosition(targetHero) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
-  "target mode puts the dual-unit answer before the loadout graphic");
+ok((targetHero?.compareDocumentPosition(targetTotal) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+  "target mode puts the physical loadout first, followed immediately by its dual-unit answer");
 ok(plateOverlay.querySelectorAll("svg.plate-badge").length > 0,
   "target per-side rows expose readable denomination badges");
 const reverseButton = [...plateOverlay.querySelectorAll(".seg button")].find((button) => button.textContent === "On the bar");
@@ -3486,16 +3532,25 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
     "face pulls highlight rear delts instead of the generic shoulder cap");
   ok(svg.querySelectorAll('path[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
-  ok(svg.querySelectorAll('path[fill="#3a7bd5"]').length >= 1, "supporting muscles highlighted blue");
+  ok(svg.querySelectorAll('path[fill="#a6abb2"]').length >= 1,
+    "supporting muscles use the restrained forged-steel treatment");
   ok(svg.querySelectorAll("image.anatomy-region-mask.primary").length >= 2
     && svg.querySelectorAll("image.anatomy-region-mask.supporting").length >= 1,
   "back-view highlights use muscle-shaped masks rather than balloon contours");
   ok([...svg.querySelectorAll("text.anatomy-view-label")].map((node) => node.textContent).join("/") === "Ape front/Ape back",
     "the two anatomical views identify their orientation");
-  const legend = A.muscleLegend(A.muscleProfile("Overhead Press", "press"));
-  ok(legend.querySelector('[data-role="primary"]')?.textContent.includes("Shoulders, Triceps")
-    && legend.querySelector('[data-role="supporting"]')?.textContent.includes("Traps, Abs"),
+  const legend = A.muscleLegend(A.muscleProfile("Overhead Press", "press"), svg);
+  const legendNames = (role) => [...legend.querySelectorAll(`[data-role="${role}"] button`)]
+    .map((button) => button.textContent).join(", ");
+  ok(legendNames("primary") === "Shoulders, Triceps"
+    && legendNames("supporting") === "Traps, Abs",
     "the visual key names the exact primary and supporting muscle groups");
+  const shoulderButton = legend.querySelector('button[data-muscle="delts"]');
+  shoulderButton.click();
+  ok(shoulderButton.getAttribute("aria-pressed") === "true"
+    && svg.querySelector('[data-muscle="delts"]')?.classList.contains("is-selected")
+    && svg.querySelector('[data-muscle="triceps"]')?.classList.contains("is-muted"),
+  "legend selection focuses the corresponding overlay without replacing the supplied art");
 
   const frontAsset = await readFile(new URL("../app/assets/vitruvian-front.jpeg", import.meta.url));
   const backAsset = await readFile(new URL("../app/assets/vitruvian-back.jpeg", import.meta.url));

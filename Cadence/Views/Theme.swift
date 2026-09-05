@@ -27,17 +27,17 @@ enum ThemeName: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .memento:
             return Palette(accent: Color(hex: 0xC9A24B), warn: Color(hex: 0xD29A3A),
-                           hardStop: Color(hex: 0xD5352B), good: Color(hex: 0x5BA06A))
+                           hardStop: Color(hex: 0xFF7A73), good: Color(hex: 0x5BA06A))
         case .carbon:
-            return Palette(accent: Color(hex: 0xEF4444), warn: Color(hex: 0xEAB308),
-                           hardStop: Color(hex: 0xDC2626), good: Color(hex: 0x4ADE80))
+            return Palette(accent: Color(hex: 0xFF5A5F), warn: Color(hex: 0xEAB308),
+                           hardStop: Color(hex: 0xFF7A73), good: Color(hex: 0x4ADE80))
         case .slate:
-            return Palette(accent: Color(hex: 0xE5484D), warn: Color(hex: 0xD29922),
-                           hardStop: Color(hex: 0xDA3633), good: Color(hex: 0x3FB950))
+            return Palette(accent: Color(hex: 0xFF5A5F), warn: Color(hex: 0xD29922),
+                           hardStop: Color(hex: 0xFF7A73), good: Color(hex: 0x3FB950))
         case .system:
-            return Palette(accent: Color(lightHex: 0xC81E1E, darkHex: 0xEF4444),
+            return Palette(accent: Color(lightHex: 0xC81E1E, darkHex: 0xFF5A5F),
                            warn: Color(lightHex: 0xB8860B, darkHex: 0xEAB308),
-                           hardStop: Color(lightHex: 0xA51111, darkHex: 0xF0554F),
+                           hardStop: Color(lightHex: 0xA51111, darkHex: 0xFF7A73),
                            good: Color(lightHex: 0x1A8F43, darkHex: 0x4ADE80))
         }
     }
@@ -63,6 +63,14 @@ enum Theme {
     static var hardStop: Color { name.palette.hardStop }    // hard stop (semantic critical)
     static var good: Color { name.palette.good }            // clean rep (semantic)
     static let card = Color(.secondarySystemGroupedBackground)
+    static let raised = Color(.tertiarySystemGroupedBackground)
+    static let hairline = Color.primary.opacity(0.14)
+
+    /// Industrial geometry: almost square, but not sharp enough to snag a
+    /// thumb-sized control. Shared by the few surfaces that genuinely need a
+    /// boundary; spacing and dividers do the rest of the grouping.
+    static let cornerRadius: CGFloat = 4
+    static let shortMotion: Double = 0.16
 
     /// Minimum touch target for between-sets thumbs.
     static let bigTap: CGFloat = 56
@@ -108,7 +116,11 @@ extension View {
     func cardStyle() -> some View {
         padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 12))
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                    .stroke(Theme.hairline, lineWidth: 0.5)
+            }
     }
 }
 

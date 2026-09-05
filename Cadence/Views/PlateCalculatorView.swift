@@ -5,15 +5,21 @@ import CadenceCore
 /// The killer feature. Target → per-side loading in mixed units, or
 /// reverse: what's on the bar → total. Big digits, zero ceremony.
 struct PlateCalculatorView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
 
     @State private var mode: Mode = .target
+#if DEBUG
+    @State private var targetText = ProcessInfo.processInfo.arguments.contains("--visual-proof") ? "139" : ""
+#else
     @State private var targetText = ""
+#endif
     @State private var targetUnit: WeightUnit = .lb
     @State private var bar: Bar = .bar45lb
     @State private var plateStyle: PlateVisualStyle = .steel
     @State private var selectedGymName: String?
+    @State private var showExpandedBar = false
     // Reverse mode: counts per plate denomination on ONE side.
     @State private var reverseCounts: [String: Int] = [:]
 
@@ -59,6 +65,10 @@ struct PlateCalculatorView: View {
         PlateMath.total(bar: bar, perSide: reversePerSide, collarLb: reverseCollarLb)
     }
 
+    private var reverseLoadout: Loadout {
+        Loadout(bar: bar, perSide: reversePerSide, collarLb: reverseCollarLb)
+    }
+
     var body: some View {
         Form {
             Picker("Mode", selection: $mode) {
@@ -67,39 +77,24 @@ struct PlateCalculatorView: View {
             .pickerStyle(.segmented)
             .listRowBackground(Color.clear)
 
-            Section {
-                Picker("Bar", selection: $bar) {
-                    ForEach(Bar.all) { Text($0.label).tag($0) }
-                }
-                Picker("Plate type", selection: $plateStyle) {
-                    ForEach(PlateVisualStyle.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                if gyms.count > 1 {
-                    Picker("Gym", selection: Binding(
-                        get: { gym?.name ?? "" },
-                        set: { name in
-                            selectedGymName = name
-                            if let selected = gyms.first(where: { $0.name == name }) {
-                                bar = selected.defaultBar
-                            }
-                        }
-                    )) {
-                        ForEach(gyms) { Text($0.name).tag($0.name) }
-                    }
-                }
-            }
-
             switch mode {
             case .target: targetSections
             case .reverse: reverseSections
             }
+
+            equipmentSection
         }
+        .listStyle(.plain)
+        .accessibilityIdentifier("plate-calculator-screen")
         .navigationTitle("Plates")
         .navigationBarTitleDisplayMode(.inline)
+        .listSectionSpacing(.compact)
         .onAppear {
             if targetText.isEmpty { targetUnit = preferredUnit }
             if selectedGymName == nil { bar = gym?.defaultBar ?? .bar45lb }
+        }
+        .sheet(isPresented: $showExpandedBar) {
+            expandedBarView
         }
     }
 
@@ -107,11 +102,12 @@ struct PlateCalculatorView: View {
 
     @ViewBuilder
     private var targetSections: some View {
-        Section("Target total") {
+        Section("Requested target") {
             HStack {
                 TextField("0", text: $targetText)
                     .keyboardType(.decimalPad)
                     .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .accessibilityIdentifier("plate-target")
                 Picker("", selection: $targetUnit) {
                     Text("lb").tag(WeightUnit.lb)
                     Text("kg").tag(WeightUnit.kg)
@@ -122,11 +118,39 @@ struct PlateCalculatorView: View {
         }
 
         if let solution {
-            Section("Total on bar") {
-                DualWeightReadout(lb: solution.loadout.totalLb)
-                Text("Achieved on \(bar.label) · \((gym?.loadingPolicy ?? .closest).label.lowercased())")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Section {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym,
+                                loadout: solution.loadout, plateStyle: plateStyle, presentation: .fullBar)
+                        .frame(width: 420, height: 132)
+                        .id(solution.loadout)
+                        .animation(reduceMotion ? nil : .easeOut(duration: Theme.shortMotion),
+                                   value: solution.loadout)
+                }
+                .accessibilityLabel("Loaded bar diagram; scroll horizontally if needed")
+                HStack {
+                    Text("Mirrored stack · counts are per side")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") {
+                        showExpandedBar = true
+                    }
+                    .font(.caption.bold())
+                    .labelStyle(.titleAndIcon)
+                }
+                .frame(minHeight: 44)
+            } header: {
+                Text("Load on the bar")
+            }
+
+            Section {
+                LoadoutSummaryView(requestedLb: targetLb, loadout: solution.loadout)
+                if let mixed = mixedUnitExplanation(solution.loadout) {
+                    Label(mixed, systemImage: "scalemass")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
                 if !solution.satisfiesPolicy {
                     Label("No available stack satisfies this loading policy; showing the closest load.",
                           systemImage: "exclamationmark.triangle.fill")
@@ -144,19 +168,10 @@ struct PlateCalculatorView: View {
                     .font(.callout.bold())
                     .foregroundStyle(Theme.warn)
                 }
+            } header: {
+                Text("Load summary")
             }
 
-            // The answer, drawn: the loaded bar itself — the SAME solution as
-            // the list below (which may pick the other unit system).
-            Section {
-                BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym,
-                            loadout: solution.loadout, plateStyle: plateStyle, presentation: .fullBar)
-                    .frame(minHeight: 102)
-                Text("Same stack on both sides")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
             Section("Per side") {
                 if solution.loadout.perSide.isEmpty {
                     Text(solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
@@ -182,20 +197,41 @@ struct PlateCalculatorView: View {
 
     @ViewBuilder
     private var reverseSections: some View {
-        Section("Total on bar") {
-            DualWeightReadout(lb: reverseTotalLb)
-            Text("On \(bar.label)\(reverseCollarLb > 0 ? " + collars" : "")")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Section {
             // Draw exactly what the user says is on the bar — never re-solve it.
-            BarbellView(weightLb: reverseTotalLb, unit: .lb, bar: bar, gym: gym,
-                        loadout: Loadout(bar: bar, perSide: reversePerSide, collarLb: reverseCollarLb),
-                        plateStyle: plateStyle, presentation: .fullBar)
-                .frame(minHeight: 102)
-            Text("Counts are per side and mirrored")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
+            ScrollView(.horizontal, showsIndicators: true) {
+                BarbellView(weightLb: reverseTotalLb, unit: .lb, bar: bar, gym: gym,
+                            loadout: reverseLoadout,
+                            plateStyle: plateStyle, presentation: .fullBar)
+                    .frame(width: 420, height: 132)
+                    .id(reverseLoadout)
+                    .animation(reduceMotion ? nil : .easeOut(duration: Theme.shortMotion), value: reverseLoadout)
+            }
+            .accessibilityLabel("Loaded bar diagram; scroll horizontally if needed")
+            HStack {
+                Text("Mirrored stack · counts are per side")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") {
+                    showExpandedBar = true
+                }
+                .font(.caption.bold())
+            }
+            .frame(minHeight: 44)
+        } header: {
+            Text("On the bar")
+        }
+
+        Section {
+            LoadoutSummaryView(requestedLb: nil, loadout: reverseLoadout)
+            if let mixed = mixedUnitExplanation(reverseLoadout) {
+                Label(mixed, systemImage: "scalemass")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Load summary")
         }
 
         Section("Plates on one side") {
@@ -217,37 +253,95 @@ struct PlateCalculatorView: View {
                 }
             }
             Button("Clear", role: .destructive) { reverseCounts = [:] }
+                .frame(minHeight: 44)
         }
     }
-}
 
-/// Both totals are always visible and always ordered lb → kg. The selectors
-/// describe what the user typed and what equipment they grabbed; neither is a
-/// reason to hide the other interpretation of the final mixed-unit bar.
-private struct DualWeightReadout: View {
-    let lb: Double
-
-    var body: some View {
-        HStack(spacing: 0) {
-            metric(Weight.trim(lb), unit: "lb")
-            Divider().frame(height: 48)
-            metric(Weight.trim(Weight.kg(fromLb: lb)), unit: "kg")
+    private var equipmentSection: some View {
+        Section {
+            DisclosureGroup("Equipment & loading") {
+                Picker("Bar", selection: $bar) {
+                    ForEach(Bar.all) { Text($0.label).tag($0) }
+                }
+                Picker("Plate type", selection: $plateStyle) {
+                    ForEach(PlateVisualStyle.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                if gyms.count > 1 {
+                    Picker("Gym", selection: Binding(
+                        get: { gym?.name ?? "" },
+                        set: { name in
+                            selectedGymName = name
+                            if let selected = gyms.first(where: { $0.name == name }) {
+                                bar = selected.defaultBar
+                            }
+                        }
+                    )) {
+                        ForEach(gyms) { Text($0.name).tag($0.name) }
+                    }
+                }
+                Text("Bar units and plate denominations stay independent. Mixed racks are converted only in the total; the pictured stack always uses the plates actually selected.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Total \(Weight.both(lb: lb))")
     }
 
-    private func metric(_ value: String, unit: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(value)
-                .font(.system(size: 32, weight: .heavy, design: .rounded))
-                .monospacedDigit()
-                .minimumScaleFactor(0.7)
-                .lineLimit(1)
-            Text(unit)
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
+    private func mixedUnitExplanation(_ loadout: Loadout) -> String? {
+        let plateUnits = Set(loadout.perSide.map { $0.plate.unit })
+        guard plateUnits.count > 1 || plateUnits.contains(where: { $0 != loadout.bar.unit }) else { return nil }
+        return "Mixed equipment: \(loadout.bar.label) with \(loadout.perSideLabel) per side. The achieved total above already includes every conversion."
+    }
+
+    private var expandedBarView: some View {
+        let loadout = mode == .target ? solution?.loadout : reverseLoadout
+        let requested = mode == .target ? targetLb : nil
+        return NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if let loadout {
+                        BarbellView(
+                            weightLb: loadout.totalLb,
+                            unit: mode == .target ? targetUnit : .lb,
+                            bar: bar,
+                            gym: gym,
+                            loadout: loadout,
+                            plateStyle: plateStyle,
+                            presentation: .fullBar
+                        )
+                        .frame(maxWidth: 620)
+                        .frame(height: 180)
+                        .padding(.horizontal)
+                        LoadoutSummaryView(requestedLb: requested, loadout: loadout)
+                            .padding(.horizontal)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Plates per side")
+                                .font(.headline)
+                            if loadout.perSide.isEmpty {
+                                Text(loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+                            } else {
+                                ForEach(loadout.perSide) { plateCount in
+                                    HStack {
+                                        PlateFaceBadge(plate: plateCount.plate, style: plateStyle)
+                                        Text(plateCount.plate.label).font(.title3.bold())
+                                        Spacer()
+                                        Text("× \(plateCount.count)").font(.title3.bold().monospacedDigit())
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+                .padding(.vertical)
+            }
+            .navigationTitle("Loaded bar")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showExpandedBar = false }
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
     }
 }

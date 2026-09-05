@@ -45,7 +45,7 @@ struct RootView: View {
                 Image(systemName: "circle.circle.fill")
                     .font(.title)
                     .frame(width: Theme.bigTap, height: Theme.bigTap)
-                    .background(Theme.accent.gradient, in: Circle())
+                    .background(Theme.accent, in: Circle())
                     .foregroundStyle(.black)
             }
             .padding(.trailing, 16)

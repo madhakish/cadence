@@ -13,7 +13,7 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 // imply physically impossible plate thickness. Mirrors PlateFaceBadge.
 export function plateBadgeSVG(plate, style = "steel") {
   const token = C.plateColorToken(plate, style);
-  const foreground = token === "white" || token === "yellow" ? "#24262a" : "#fff";
+  const foreground = ["white", "yellow", "green"].includes(token) ? "#24262a" : "#fff";
   const svg = el("svg", { class: `plate-badge ${style}`, viewBox: "0 0 52 52",
     role: "img", "aria-label": `${C.plateLabel(plate)} plate` });
   svg.append(
@@ -78,7 +78,8 @@ const addPlateGradients = (defs, style) => {
   }
 };
 
-const appendPlate = (svg, plate, { x, y, width, height, side, style, stackIndex = null }) => {
+const appendPlate = (svg, plate, { x, y, width, height, side, style, stackIndex = null,
+  stackCount = null, prominent = false }) => {
   const token = C.plateColorToken(plate, style);
   const data = stackIndex == null ? {} : {
     "data-side": side, "data-stack-index": stackIndex,
@@ -90,6 +91,9 @@ const appendPlate = (svg, plate, { x, y, width, height, side, style, stackIndex 
     class: `barbell-plate barbell-plate-body ${style}`, x, y, width, height,
     rx: style === "bumper" ? 2.4 : 1.2, fill: `url(#cadence-${style}-${token})`,
     stroke: STROKE[token], "stroke-width": 0.65, ...data,
+    tabindex: "0", role: "img",
+    "aria-label": `${side} plate${stackIndex == null ? "" : ` ${stackIndex + 1} of ${stackCount || "?"}`}, ${C.plateLabel(plate)}`,
+    "data-plate-denomination": C.plateLabel(plate),
   });
   svg.append(body);
 
@@ -113,12 +117,20 @@ const appendPlate = (svg, plate, { x, y, width, height, side, style, stackIndex 
   svg.append(el("ellipse", { class: "barbell-plate-hub", cx: faceX, cy: y + height / 2,
     rx: Math.max(.75, faceRX * .62), ry: Math.max(2.2, Math.min(4.8, height * .1)),
     fill: "url(#cadence-bar-steel)", stroke: "#555b63", "stroke-width": .45 }));
-  if (height >= 24 && width >= 3.8) {
-    const label = el("text", { class: "barbell-plate-label", x: x + width / 2, y: y + height / 2,
-      "text-anchor": "middle", "dominant-baseline": "central", "font-size": "5.2", "font-weight": "700",
-      fill: token === "white" || token === "yellow" ? "#24262a" : "#fff", opacity: ".88",
-      transform: `rotate(-90 ${x + width / 2} ${y + height / 2})` });
-    label.textContent = C.trim(plate.value);
+  // Every drawn plate carries its exact denomination. Full-bar stages are
+  // deliberately scroll-safe (rather than shrinking to dust on a phone), so
+  // these marks remain readable even on fractional change plates.
+  if (height >= 14) {
+    const requestedOffset = stackCount > 1
+      ? (prominent ? [-18, 18, 0] : [-7, 7, 0])[stackIndex % 3] : 0;
+    const labelOffset = Math.max(-height * .22, Math.min(height * .22, requestedOffset));
+    const labelY = y + height / 2 + labelOffset;
+    const label = el("text", { class: "barbell-plate-label", x: x + width / 2, y: labelY,
+      "text-anchor": "middle", "dominant-baseline": "central", "font-size": prominent ? "9" : "5.2",
+      "font-weight": "800", fill: ["white", "yellow", "green"].includes(token) ? "#24262a" : "#fff",
+      opacity: ".98", "aria-hidden": "true", "data-plate-denomination": C.plateLabel(plate),
+      transform: `rotate(-90 ${x + width / 2} ${labelY})` });
+    label.textContent = C.plateLabel(plate);
     svg.append(label);
   }
 };
@@ -133,6 +145,10 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
   presentation = "compact", plateStyle = "steel") {
   const solution = preSolved || C.solve(weightLb, bar, stationPlates(unit, gym, stationDenomination), 10,
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
+  // Views consume this same solution for totals and labels. Stamp the bar on
+  // the authoritative object once instead of asking every caller to remember
+  // which independently selected bar produced the stack.
+  if (!solution.bar) solution.bar = bar;
   const plates = [];
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);
   const barLabel = C.barLabel(bar);
@@ -141,9 +157,10 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     : solution.collarLb > 0 ? `${barLabel} with collars, no plates` : `${barLabel}, bar only`;
 
   if (presentation === "full") {
-    const W = 340, H = 96, midY = H / 2, shoulder = 78, rightShoulder = W - shoulder;
+    const W = 420, H = 124, midY = H / 2, shoulder = 100, rightShoulder = W - shoulder;
     const svg = el("svg", { class: `barbell full ${plateStyle}`, viewBox: `0 0 ${W} ${H}`,
-      role: "img", "aria-label": `${plateStyle === "bumper" ? "Bumper" : "Steel"} barbell: ${accessibilityLoad}` });
+      preserveAspectRatio: "xMidYMid meet", role: "img",
+      "aria-label": `${plateStyle === "bumper" ? "Bumper" : "Steel"} barbell: ${accessibilityLoad}` });
     const defs = el("defs");
     const steel = el("linearGradient", { id: "cadence-bar-steel", x1: "0", y1: "0", x2: "0", y2: "1" });
     steel.append(el("stop", { offset: "0", "stop-color": "#5d626a" }),
@@ -175,7 +192,7 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     let leftCursor = shoulder - 6, rightCursor = rightShoulder + 6;
     for (const [stackIndex, p] of plates.entries()) {
       const width = widths[stackIndex];
-      const h = (H - 12) * C.plateDiameterFactor(p, plateStyle);
+      const h = (H - 18) * C.plateDiameterFactor(p, plateStyle);
       const leftX = leftCursor - width;
       const rightX = rightCursor;
       // `plates` is collar → sleeve (heaviest first). Screen coordinates move
@@ -183,7 +200,8 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
       // right list: both sides start at their collar and grow outboard.
       for (const { side, x } of [{ side: "left", x: leftX }, { side: "right", x: rightX }]) {
         const y = (H - h) / 2;
-        appendPlate(svg, p, { x, y, width, height: h, side, style: plateStyle, stackIndex });
+        appendPlate(svg, p, { x, y, width, height: h, side, style: plateStyle,
+          stackIndex, stackCount: plates.length, prominent: true });
       }
       leftCursor = leftX - gap;
       rightCursor = rightX + width + gap;
@@ -202,7 +220,7 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     return { svg, solution, bar };
   }
 
-  const H = 34, gap = plateStyle === "bumper" ? 1 : .7, sleeve = 18;
+  const H = 46, gap = plateStyle === "bumper" ? 1 : .7, sleeve = 18;
   const widths = plates.map((plate) => plateWidth(plate, plateStyle, .72));
   const stackWidth = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, widths.length - 1) * gap;
   const W = Math.max(plates.length ? 50 : solution.collarLb > 0 ? 96 : 74,
@@ -224,7 +242,8 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
   for (const [index, p] of plates.entries()) {
     const width = widths[index];
     const h = (H - 4) * C.plateDiameterFactor(p, plateStyle);
-    appendPlate(svg, p, { x, y: (H - h) / 2, width, height: h, side: "right", style: plateStyle });
+    appendPlate(svg, p, { x, y: (H - h) / 2, width, height: h, side: "right",
+      style: plateStyle, stackIndex: index, stackCount: plates.length });
     x += width + gap;
   }
   if (solution.collarLb > 0) {
@@ -238,6 +257,84 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     svg.append(t);
   }
   return { svg, solution, bar };
+}
+
+// One responsive shell for every complete-bar presentation. It preserves a
+// minimum physical drawing size and exposes horizontal keyboard/touch scroll
+// when the viewport is too narrow; callers may add an expanded-screen action
+// without duplicating or re-solving the loadout.
+export function barbellStage(rendered, { caption = "", emphasis = "standard" } = {}) {
+  const stage = document.createElement("div");
+  stage.className = `barbell-stage ${emphasis}`;
+  stage.tabIndex = 0;
+  stage.setAttribute("role", "group");
+  stage.setAttribute("aria-label", "Barbell loading diagram; scroll horizontally if needed");
+  const track = document.createElement("div");
+  track.className = "barbell-stage-track";
+  track.append(rendered.svg);
+  stage.append(track);
+  if (caption) {
+    const note = document.createElement("div");
+    note.className = "sub centered barbell-caption";
+    note.textContent = caption;
+    stage.append(note);
+  }
+  return stage;
+}
+
+const dom = (tag, className = "", text = "") => {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text) node.textContent = text;
+  return node;
+};
+
+const summaryRow = (label, value, warning = false) => {
+  const row = dom("div", "load-summary-row");
+  row.append(dom("span", "", label), dom("strong", `mono${warning ? " warn" : ""}`, value));
+  return row;
+};
+
+// One totals block for the calculator and every in-session plate preview.
+// Pounds are intentionally first regardless of the entry unit; `solution`
+// is the exact object handed to the renderer, so the numbers and steel can
+// never drift through a second calculation in the view.
+export function loadoutSummary(requestedLb, solution, { compact = false } = {}) {
+  const difference = requestedLb == null ? null : solution.totalLb - requestedLb;
+  const sign = difference > .005 ? "+" : "";
+  const summary = dom("div", `card load-summary${compact ? " compact" : ""}`);
+  summary.append(dom("span", "eyebrow", "ACHIEVED · BAR INCLUDED"));
+  const weights = dom("div", "dual-weight mono");
+  weights.setAttribute("role", "group");
+  weights.setAttribute("aria-label", `Achieved total, bar included, ${C.both(solution.totalLb)}`);
+  for (const [value, unit, primary] of [
+    [solution.totalLb, "lb", true],
+    [C.kgFromLb(solution.totalLb), "kg", false],
+  ]) {
+    const measure = dom("span", `weight-measure${primary ? " primary" : ""}`);
+    measure.append(dom("span", "weight-value", C.trim(value)), dom("span", "weight-unit", unit));
+    weights.append(measure);
+  }
+  summary.append(weights);
+  const grid = dom("div", "load-summary-grid");
+  if (requestedLb != null) grid.append(summaryRow("Requested", C.both(requestedLb)));
+  grid.append(summaryRow("Bar", C.both(C.barLb(solution.bar))),
+    summaryRow("Plates / side", C.perSideLabel(solution.perSide)));
+  if (solution.collarLb > 0) grid.append(summaryRow("Collars", C.both(solution.collarLb)));
+  if (difference != null) grid.append(summaryRow("Difference",
+    `${sign}${C.trim(difference, 2)} lb / ${sign}${C.trim(C.kgFromLb(difference), 2)} kg`,
+    Math.abs(difference) > .01));
+  summary.append(grid);
+  return summary;
+}
+
+export function mixedEquipmentNote(solution) {
+  const units = new Set((solution.perSide || []).map((count) => count.plate.unit));
+  if (units.size < 2 && ![...units].some((plateUnit) => plateUnit !== solution.bar.unit)) return null;
+  const note = dom("div", "mixed-unit-note");
+  note.append(dom("strong", "", "Mixed equipment"),
+    dom("span", "sub", `${C.barLabel(solution.bar)} + ${C.perSideLabel(solution.perSide)} per side. The achieved total already includes every conversion.`));
+  return note;
 }
 
 // Compact dumbbell graphic for dumbbell lifts — the counterpart of the

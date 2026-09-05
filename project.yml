@@ -154,6 +154,23 @@ targets:
         GENERATE_INFOPLIST_FILE: true
         CODE_SIGNING_ALLOWED: false
 
+  # Screenshot-only UI target. It launches the app with a DEBUG-gated,
+  # in-memory fixture and never enters the normal release scheme.
+  CadenceVisualProofUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - CadenceVisualProofUITests
+    dependencies:
+      - target: Cadence
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.CadenceVisualProofUITests
+        TEST_TARGET_NAME: Cadence
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: true
+
 schemes:
   Cadence:
     build:
@@ -169,3 +186,10 @@ schemes:
     test:
       targets:
         - CadenceMigrationTests
+  CadenceVisualProof:
+    build:
+      targets:
+        Cadence: all
+    test:
+      targets:
+        - CadenceVisualProofUITests

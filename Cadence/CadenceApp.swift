@@ -29,7 +29,36 @@ final class AppBootstrap: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var isTemporary = false
 
-    init() { loadPersistentStore() }
+    init() {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--visual-proof") {
+            loadVisualProofStore()
+            return
+        }
+#endif
+        loadPersistentStore()
+    }
+
+#if DEBUG
+    /// A disposable, deterministic store used only by the screenshot suite.
+    /// It gives visual review a realistic open session without ever reading or
+    /// mutating the developer's simulator data.
+    private func loadVisualProofStore() {
+        do {
+            let loaded = try makeContainer(
+                migrationPlan: CadencePre72MigrationPlan.self,
+                isStoredInMemoryOnly: true
+            )
+            try prepare(loaded)
+            try VisualProofSeed.install(in: loaded.mainContext)
+            isTemporary = true
+            container = loaded
+            errorMessage = nil
+        } catch {
+            errorMessage = "Couldn't prepare the visual-proof fixture: \(error.localizedDescription)"
+        }
+    }
+#endif
 
     func loadPersistentStore() {
         container = nil
