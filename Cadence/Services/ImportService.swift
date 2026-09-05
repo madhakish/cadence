@@ -51,6 +51,14 @@ enum ImportService {
         var id: String?; var programTemplateId: String?; var date: Date?; var notes: String?; var gym: String?; var gymId: String?; var isCompleted: Bool?
         var completedAt: Date?
         var programTag: ProgramTag?; var exercises: [ExerciseEntry]?
+        var activity: ActivityDTO?
+    }
+    /// v12 typed ad-hoc activity facts (wood splitting first). Absent on
+    /// every older bundle — the session simply restores with no detail;
+    /// nothing is invented.
+    private struct ActivityDTO: Decodable {
+        var kind: String?; var sessionRPE: Double?; var rounds: Int?; var splitPieces: Int?
+        var estimatedStrikes: Int?; var cordVolume: Double?
     }
     private struct ProgramTag: Decodable {
         var programId: String?; var programName: String?; var cycleNumber: Int?; var week: Int?; var dayIndex: Int?
@@ -270,6 +278,7 @@ enum ImportService {
         let reasons = Set(AutoregReason.allCases.map(\.rawValue))
         let loadBases = Set(LoadBasis.allCases.map(\.rawValue))
         let blockKinds = Set(PrescriptionBlockKind.allCases.map(\.rawValue))
+        let activityKinds = Set(ActivityKind.allCases.map(\.rawValue))
 
         for (si, session) in (bundle.sessions ?? []).enumerated() {
             let path = "sessions[\(si)]"
@@ -286,6 +295,56 @@ enum ImportService {
                 try integer(tag.dayIndex, "\(path).programTag.dayIndex", min: 0)
                 for (i, name) in (tag.planNames ?? []).enumerated() {
                     _ = try requiredText(name, "\(path).programTag.planNames[\(i)]")
+                }
+            }
+            // v12 typed ad-hoc activity facts — mirrors web validateBackup:
+            // the kind is required and must be a registered value (a later
+            // kind is a new enum value, so adding one bumps the version, the
+            // v4/v5 pattern), RPE follows the recorded 1.0–10.0 contract,
+            // counts are whole and non-negative.
+            if let activity = session.activity {
+                try known(activity.kind, activityKinds, "\(path).activity.kind", required: true)
+                try finite(activity.sessionRPE, "\(path).activity.sessionRPE",
+                           min: ActivityWorkload.sessionRPERange.lowerBound,
+                           max: ActivityWorkload.sessionRPERange.upperBound)
+                try integer(activity.rounds, "\(path).activity.rounds", min: 0)
+                try integer(activity.splitPieces, "\(path).activity.splitPieces", min: 0)
+                try integer(activity.estimatedStrikes, "\(path).activity.estimatedStrikes", min: 0)
+                try finite(activity.cordVolume, "\(path).activity.cordVolume", min: 0)
+                // The importer is a second write path: it refuses what the
+                // creator refuses. An activity session is one completed,
+                // off-program session holding exactly the kind's canonical
+                // conditioning entry with one timed set
+                // (INV-WOOD-WORK-USES-ONE-TIMELINE). Mirrors web validateBackup.
+                guard session.isCompleted == true else {
+                    throw ImportError.invalidData("\(path).activity: an activity session must be completed")
+                }
+                guard session.programTag == nil else {
+                    throw ImportError.invalidData("\(path).activity: an activity session carries no program tag")
+                }
+                let entries = session.exercises ?? []
+                let canonicalName = activity.kind.flatMap(ActivityKind.init(rawValue:))?.exerciseName ?? ""
+                guard entries.count == 1,
+                      try requiredText(entries[0].name, "\(path).exercises[0].name") == canonicalName
+                else {
+                    throw ImportError.invalidData("\(path).exercises: an activity session holds exactly one \(canonicalName) entry")
+                }
+                let sets = entries[0].sets ?? []
+                guard sets.count == 1 else {
+                    throw ImportError.invalidData("\(path).exercises[0].sets: an activity session holds exactly one set")
+                }
+                try integer(sets[0].durationSeconds, "\(path).exercises[0].sets[0].durationSeconds", required: true, min: 1)
+                guard session.programTemplateId == nil,
+                      entries[0].role == nil,
+                      entries[0].programSlotId == nil,
+                      sets[0].isWarmup == false,
+                      sets[0].status == SetStatus.completed.rawValue,
+                      sets[0].prescriptionBlock == PrescriptionBlockKind.conditioning.rawValue,
+                      sets[0].reps == 0
+                else {
+                    throw ImportError.invalidData(
+                        "\(path).activity: expected one completed, non-warmup, off-program conditioning set"
+                    )
                 }
             }
             for (ei, exercise) in (session.exercises ?? []).enumerated() {
@@ -801,13 +860,29 @@ enum ImportService {
         let incomingSessions = (bundle.sessions ?? []).map { s -> BackupContract.NamedEntity in
             let id = s.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? ""
             let name = s.date.map { isoSessionName($0) } ?? "Untitled session"
-            return BackupContract.NamedEntity(id: id, name: name, signature: sessionSignature(
-                date: s.date, programId: s.programTag?.programId, exerciseCount: (s.exercises ?? []).count))
+            // Bound step by step: nesting these calls inside the initializer
+            // is more than the type-checker will resolve in reasonable time.
+            let activity = s.activity
+            let activitySig = activitySignature(
+                kind: activity?.kind, sessionRPE: activity?.sessionRPE, rounds: activity?.rounds,
+                splitPieces: activity?.splitPieces, estimatedStrikes: activity?.estimatedStrikes,
+                cordVolume: activity?.cordVolume)
+            let signature = sessionSignature(
+                date: s.date, programId: s.programTag?.programId,
+                exerciseCount: (s.exercises ?? []).count, activity: activitySig)
+            return BackupContract.NamedEntity(id: id, name: name, signature: signature)
         }
         let currentSessions: [BackupContract.NamedEntity] = bundle.sessions == nil ? [] :
             try context.fetch(FetchDescriptor<WorkoutSession>()).map { session in
-                BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: sessionSignature(
-                    date: session.date, programId: session.programID, exerciseCount: session.exercises.count))
+                let detail = session.activityDetail
+                let activitySig = activitySignature(
+                    kind: detail?.kindRaw, sessionRPE: detail?.sessionRPE, rounds: detail?.rounds,
+                    splitPieces: detail?.splitPieces, estimatedStrikes: detail?.estimatedStrikes,
+                    cordVolume: detail?.cordVolume)
+                let signature = sessionSignature(
+                    date: session.date, programId: session.programID,
+                    exerciseCount: session.exercises.count, activity: activitySig)
+                return BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: signature)
             }
 
         // Mirrors `load`'s own program id derivation exactly (a v2+ bundle's
@@ -843,9 +918,24 @@ enum ImportService {
         ISO8601DateFormatter().string(from: date)
     }
 
-    private static func sessionSignature(date: Date?, programId: String?, exerciseCount: Int) -> String {
-        [date.map { ISO8601DateFormatter().string(from: $0) } ?? "", programId ?? "", String(exerciseCount)]
+    private static func sessionSignature(date: Date?, programId: String?, exerciseCount: Int, activity: String) -> String {
+        [date.map { ISO8601DateFormatter().string(from: $0) } ?? "", programId ?? "", String(exerciseCount), activity]
             .joined(separator: "\u{1F}")
+    }
+
+    /// The v12 activity object is the first user-entered session-level fact
+    /// outside `exercises`, so it joins the shallow signature: an edit to RPE
+    /// or cords on one device must not preview as "unchanged" on the other
+    /// (INV-WOOD-WORK-ROUND-TRIPS). Mirrors web db.js sessionSignature.
+    private static func activitySignature(kind: String?, sessionRPE: Double?, rounds: Int?,
+                                          splitPieces: Int?, estimatedStrikes: Int?, cordVolume: Double?) -> String {
+        guard let kind else { return "" }
+        let rpeText = sessionRPE.map { String($0) } ?? ""
+        let roundsText = rounds.map { String($0) } ?? ""
+        let piecesText = splitPieces.map { String($0) } ?? ""
+        let strikesText = estimatedStrikes.map { String($0) } ?? ""
+        let cordsText = cordVolume.map { String($0) } ?? ""
+        return [kind, rpeText, roundsText, piecesText, strikesText, cordsText].joined(separator: ",")
     }
 
     private static func programSignature(dayCount: Int, slotCount: Int) -> String {
@@ -1182,6 +1272,23 @@ enum ImportService {
                 entry.sets.append(set)
             }
             session.exercises.append(entry)
+        }
+        // v12 typed ad-hoc activity facts. `validate` has already required
+        // a registered kind, the documented ranges, and the canonical session
+        // shape (mirroring web validateBackup), so values restore verbatim
+        // here and absence stays absent (INV-WOOD-WORK-DOES-NOT-GUESS). Not
+        // gated on the declared version: a bundle that carries the facts
+        // never drops them (INV-WOOD-WORK-ROUND-TRIPS); the guard is only
+        // the type-level unwrap of what validation guaranteed.
+        if let activity = s.activity, let kind = activity.kind {
+            session.activityDetail = ActivityDetail(
+                kindRaw: kind,
+                sessionRPE: activity.sessionRPE,
+                rounds: activity.rounds,
+                splitPieces: activity.splitPieces,
+                estimatedStrikes: activity.estimatedStrikes,
+                cordVolume: activity.cordVolume
+            )
         }
         return session
     }

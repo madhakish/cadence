@@ -281,6 +281,17 @@ export function nextSetStatus(status) {
   return SET_STATUSES[((index < 0 ? 0 : index) + 1) % SET_STATUSES.length];
 }
 
+// Focus one working set without hiding unresolved warmups. Resolved ramp rows
+// collapse; planned warmups retain their authored positions. With no current
+// working set, preserve the complete plan for correction. Mirrors
+// SetLifecycle.focusedPresentationIndices.
+export function focusedSetIndices(sets = []) {
+  const currentWorkIndex = sets.findIndex((set) => !set.isWarmup && (set.status || "planned") === "planned");
+  if (currentWorkIndex < 0) return sets.map((_, index) => index);
+  return sets.flatMap((set, index) => (index === currentWorkIndex
+    || (set.isWarmup && (set.status || "planned") === "planned") ? [index] : []));
+}
+
 // Whether a set of this kind counts as the slot's prescribed work — the sets
 // that are graded and that supply the cycle's strength sample.
 //
@@ -311,6 +322,21 @@ export const resolvedPrescriptionBlock = (set) => set.prescriptionBlock || (set.
 export const plateLb = (p) => toLb(p.value, p.unit);
 export const plateId = (p) => `${p.value}-${p.unit}`;
 export const plateLabel = (p) => `${trim(p.value, 2)} ${p.unit}`;
+
+// Move one visible reverse-mode denomination relative to its visible
+// neighbours while preserving IDs hidden by the active gym. Mirrors
+// PlateMath.movedVisiblePlateIDs.
+export function movedVisiblePlateIDs(id, offset, storedOrder = [], visibleOrder = []) {
+  const visibleIndex = visibleOrder.indexOf(id);
+  const destination = visibleIndex + offset;
+  if (visibleIndex < 0 || destination < 0 || destination >= visibleOrder.length) return [...storedOrder];
+  const storedIndex = storedOrder.indexOf(id);
+  const storedDestination = storedOrder.indexOf(visibleOrder[destination]);
+  if (storedIndex < 0 || storedDestination < 0) return [...storedOrder];
+  const result = [...storedOrder];
+  [result[storedIndex], result[storedDestination]] = [result[storedDestination], result[storedIndex]];
+  return result;
+}
 
 // Plate colour token (the user's gym scheme). The UI maps the token → a hex.
 // kg is IWF: 25 red · 20 blue · 15 yellow · 10 green · 5 white · 2.5 red change plate.
@@ -886,6 +912,26 @@ function makeSolution(bar, perSide, targetLb, collarLb = 0, policy = "closest", 
 
 // Reverse mode: what's on the bar → total.
 export const totalOnBar = (bar, perSide, collarLb = 0) => loadoutTotalLb(bar, perSide, collarLb);
+
+// Reverse-mode domain result. Unlike a target solve, the entered collar→sleeve
+// order is evidence and must not be sorted away before the renderer sees it.
+export function enteredPlateSolution(bar, perSide, collarLb = 0) {
+  const orderedPerSide = perSide.map((count) => ({
+    plate: { ...count.plate }, count: count.count,
+  }));
+  const totalLb = loadoutTotalLb(bar, orderedPerSide, collarLb);
+  return {
+    bar,
+    collarLb,
+    perSide: orderedPerSide,
+    targetLb: totalLb,
+    policy: "entered",
+    satisfiesPolicy: true,
+    totalLb,
+    deviationLb: 0,
+    isOffTarget: false,
+  };
+}
 
 // ---- Warmup ramp -----------------------------------------------------------
 
@@ -2622,6 +2668,16 @@ export function suggestedAdHocFirstSetTarget(exposure, incrementLb = 5) {
   return { weightLb, reps: exposure.reps };
 }
 
+// Whether an entry's first working set is eligible for the history-aware
+// off-program fallback above. Program identity and an explicit entry-level
+// plan are both authoritative provenance, even when their numeric load happens
+// to equal the historical suggestion. Mirrors ProgramProgression 1:1.
+export function usesAdHocFirstSetFallback(entry) {
+  return entry?.programRole == null
+    && entry?.programSlotId == null
+    && entry?.plannedWeightLb == null;
+}
+
 // A short "where did this number come from" disclosure for a history-based
 // ad-hoc first-set suggestion — the suggestion itself
 // (`suggestedAdHocFirstSetTarget`) is otherwise silent about its origin.
@@ -3946,4 +4002,37 @@ export function namedRestorePreview({
 export function isNamedRestoreNoOp(preview) {
   return [preview.exercises, preview.tracks, preview.gyms, preview.sessions, preview.programs]
     .every((collection) => collection.every((item) => item.status === "unchanged"));
+}
+
+// The registered ad-hoc activity kinds (#166) — real physical work logged as
+// one completed, off-program conditioning session on the same timeline as
+// training. Wood splitting is the first; a future kind (mountain biking,
+// hiking, climbing, portaging, …) is added here deliberately, with its own
+// typed facts, seeded exercise, and a backup-contract version bump — never
+// inferred from an exercise name. Mirrors native `ActivityKind`.
+export const ACTIVITY_EXERCISE_NAMES = { woodSplitting: "Wood Splitting" };
+// Derived, never hand-maintained: one registry, so the validator whitelist
+// and the name resolver cannot drift apart.
+export const ACTIVITY_KINDS = Object.keys(ACTIVITY_EXERCISE_NAMES);
+// Only a REGISTERED kind resolves a name — the same whitelist the backup
+// validator uses. A bare `ACTIVITY_EXERCISE_NAMES[kind]` would also answer for
+// inherited Object keys ("constructor", "toString"), handing a caller a
+// function where native's enum can only ever return a real name.
+export const activityExerciseName = (kind) =>
+  (ACTIVITY_KINDS.includes(kind) ? ACTIVITY_EXERCISE_NAMES[kind] : null);
+// The recorded session-RPE contract, one spelling for the validator and the
+// workload math. Mirrors native `ActivityWorkload.sessionRPERange`.
+export const ACTIVITY_SESSION_RPE = { min: 1, max: 10 };
+
+// Session-RPE workload for ad-hoc activity sessions (#166): duration minutes
+// × session RPE, in arbitrary units. Relative session load, never barbell
+// tonnage (INV-WOOD-WORK-IS-NOT-LIFTING-VOLUME). RPE follows the recorded
+// contract, 1.0–10.0 inclusive; a missing or out-of-contract input yields
+// null, not an estimate. Mirrors native `ActivityWorkload`.
+export function activityWorkload(durationSeconds, sessionRPE) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+  if (!Number.isFinite(sessionRPE)
+    || sessionRPE < ACTIVITY_SESSION_RPE.min || sessionRPE > ACTIVITY_SESSION_RPE.max) return null;
+  const durationMinutes = durationSeconds / 60;
+  return { durationMinutes, sessionRPE, arbitraryUnits: durationMinutes * sessionRPE };
 }

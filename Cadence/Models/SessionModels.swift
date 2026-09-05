@@ -70,6 +70,12 @@ final class WorkoutSession {
     var programPlanNames: [String]?
     @Relationship(deleteRule: .cascade, inverse: \SessionExercise.session)
     var exercises: [SessionExercise]
+    /// Typed metadata for an ad-hoc activity session (schema V12) — wood
+    /// splitting first. Nil for every ordinary session — the timeline stays
+    /// one `WorkoutSession` list; only the activity's typed facts live here
+    /// instead of in notes.
+    @Relationship(deleteRule: .cascade, inverse: \ActivityDetail.session)
+    var activityDetail: ActivityDetail?
 
     init(date: Date = .now, notes: String = "", gymID: String? = nil, gymName: String? = nil) {
         self.id = UUID().uuidString

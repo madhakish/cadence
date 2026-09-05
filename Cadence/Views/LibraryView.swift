@@ -79,6 +79,12 @@ struct ExerciseDetailByNameView: View {
 struct ExerciseDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var exercise: Exercise
+    /// Present only when this pane is opened from the live logger. The pane
+    /// then shows the resolved prescription and exact bar context instead of
+    /// pretending the catalog knows today's work.
+    var sessionEntry: SessionExercise? = nil
+    var sessionGym: Gym? = nil
+    var sessionProgramFocus: TrainingFocus? = nil
     @Query private var programs: [Program]
     @Query private var settingsList: [AppSettings]
     @Query private var gyms: [Gym]
@@ -86,8 +92,57 @@ struct ExerciseDetailView: View {
            sort: \WorkoutSession.date, order: .reverse)
     private var completed: [WorkoutSession]
 
+    @State private var showAnatomy = true
+    @State private var showProgramming = false
+    @State private var showSetup = false
+    @State private var showStatus = false
+    @State private var showExpandedContextBar = false
+
     private var profile: AnatomyData.Profile? {
         AnatomyData.muscleProfile(name: exercise.name, movementGroup: exercise.movementGroup)
+    }
+
+    private var contextualSet: SetEntry? {
+        guard let sessionEntry else { return nil }
+        return sessionEntry.orderedSets.first { !$0.isWarmup && $0.status == .planned }
+            ?? sessionEntry.orderedSets.last { !$0.isWarmup && $0.status == .completed }
+            ?? sessionEntry.orderedSets.first
+    }
+
+    private var contextualBar: Bar {
+        sessionEntry?.barID.map { Bar.by(id: $0) } ?? sessionGym?.defaultBar ?? .bar45lb
+    }
+
+    private var contextualSolution: PlateSolution? {
+        guard exercise.type == .barbell, let set = contextualSet, set.weightLb > 0 else { return nil }
+        return authoritativePlateSolution(
+            targetLb: set.weightLb,
+            fallbackUnit: set.enteredUnit,
+            bar: contextualBar,
+            gym: sessionGym,
+            stationDenomination: exercise.stationDenomination
+        )
+    }
+
+    private var contextualEffortCue: String? {
+        guard let entry = sessionEntry,
+              let role = entry.programRole.flatMap(LiftRole.init(rawValue:)),
+              let style = PrescriptionStyle(rawValue: entry.prescriptionStyleRaw)
+        else { return nil }
+        guard style != .automatic || sessionProgramFocus != nil else { return nil }
+        return ProgramEngine.complementaryEffortCue(
+            role: role,
+            prescriptionStyle: style,
+            movementGroup: exercise.movementGroup,
+            focus: sessionProgramFocus ?? .strength
+        )
+    }
+
+    private var contextualTrainingRelationship: String? {
+        guard let role = sessionEntry?.programRole.flatMap(LiftRole.init(rawValue:)) else { return nil }
+        let relationship = role == .complementary ? "Complementary lift" : "Main lift"
+        guard let sessionProgramFocus else { return relationship }
+        return "\(relationship) · \(sessionProgramFocus.rawValue.capitalized) focus"
     }
 
     private struct CycleMembership: Identifiable {
@@ -117,8 +172,6 @@ struct ExerciseDetailView: View {
         return (labels, cycle)
     }
 
-    private var cycleMemberships: [CycleMembership] { membershipData.cycle }
-
     private var defaultGym: Gym? { gyms.first(where: \.isDefault) ?? gyms.first }
 
     /// The shared preview pipeline; base, fallback sets, and the gym are
@@ -134,9 +187,6 @@ struct ExerciseDetailView: View {
             addedVolumeSets: addedVolumeSets, gym: gym
         ).snapped
     }
-
-    /// "Program · Day (role)" for every slot this exercise fills.
-    private var memberships: [String] { membershipData.labels }
 
     /// Compact previous-performance context from the newest completed session
     /// containing this exercise.
@@ -169,12 +219,87 @@ struct ExerciseDetailView: View {
 
     var body: some View {
         Form {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 7) {
+                        Text(exercise.category.rawValue.uppercased())
+                        Text(exercise.type.rawValue.uppercased())
+                        if !exercise.movementGroup.isEmpty {
+                            Text(exercise.movementGroup.replacingOccurrences(of: "_", with: " ").uppercased())
+                        }
+                    }
+                    .font(.caption2.bold())
+                    .tracking(0.7)
+                    .foregroundStyle(.secondary)
+
+                    if let set = contextualSet {
+                        Text("CURRENT PRESCRIPTION")
+                            .font(.caption.bold())
+                            .tracking(0.8)
+                            .foregroundStyle(Theme.accent)
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(set.weightLb > 0 ? settingsList.unitDisplay.format(lb: set.weightLb) : "Bodyweight")
+                                .font(.system(size: 30, weight: .black, design: .rounded))
+                                .monospacedDigit()
+                            if exercise.type != .timed && exercise.type != .conditioning {
+                                Text("× \(set.reps)")
+                                    .font(.title3.bold().monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        HStack {
+                            Text(set.status == .planned ? "Next set" : "Most recent set")
+                            if let entry = sessionEntry {
+                                Text("· \(entry.plannedWorkingSets.filter { $0.status == .completed }.count)/\(entry.plannedWorkingSets.count) complete")
+                            }
+                            Text("· rest \(mmss(smartRestSeconds(for: exercise, role: sessionEntry?.programRole, settings: settingsList.first)))")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        if let contextualTrainingRelationship {
+                            Text(contextualTrainingRelationship)
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("training-focus-context")
+                        }
+                        if let contextualEffortCue {
+                            Text(contextualEffortCue)
+                                .font(.callout.bold())
+                                .foregroundStyle(Theme.accent)
+                        }
+                        if let contextualSolution {
+                            let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
+                            BarbellStageView(
+                                solution: contextualSolution,
+                                unit: set.enteredUnit,
+                                plateStyle: style,
+                                onExpand: { showExpandedContextBar = true }
+                            )
+                            LoadoutSummaryView(
+                                requestedLb: set.targetWeightLb ?? sessionEntry?.targetWeightLb,
+                                loadout: contextualSolution.loadout
+                            )
+                        }
+                    }
+                }
+            }
+
             if let profile {
-                Section("Muscles") {
-                    AnatomyFigureView(profile: profile)
-                        .frame(maxWidth: 420)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
+                Section {
+                    DisclosureGroup(isExpanded: $showAnatomy) {
+                        AnatomyFigureView(profile: profile)
+                            .frame(maxWidth: 620)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Muscles worked").font(.headline)
+                            Text(profile.primary.map { AnatomyData.muscleNames[$0] ?? $0 }.joined(separator: ", "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
                 }
             }
 
@@ -196,16 +321,18 @@ struct ExerciseDetailView: View {
             let data = membershipData
             let gym = defaultGym
 
-            Section("In programs") {
-                if data.labels.isEmpty {
-                    Text("None").foregroundStyle(.secondary)
-                } else {
-                    ForEach(data.labels, id: \.self) { Text($0) }
-                }
-            }
+            Section {
+                DisclosureGroup(isExpanded: $showProgramming) {
+                    if data.labels.isEmpty {
+                        Text("Not currently used in a program.").foregroundStyle(.secondary)
+                    } else {
+                        Text("PROGRAM MEMBERSHIP")
+                            .font(.caption.bold())
+                            .tracking(0.7)
+                            .foregroundStyle(.secondary)
+                        ForEach(data.labels, id: \.self) { Text($0) }
+                    }
 
-            if !data.cycle.isEmpty {
-                Section("Program cycle") {
                     ForEach(data.cycle) { item in
                         // Base and fallback sets are phase-invariant: once
                         // per membership row, not once per rotation line.
@@ -253,150 +380,209 @@ struct ExerciseDetailView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Programming context").font(.headline)
+                        Text(data.labels.isEmpty ? "No program assignment" : "\(data.labels.count) assignment\(data.labels.count == 1 ? "" : "s") · rotation details")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
             Section {
-                Picker("Category", selection: Binding(
+                DisclosureGroup(isExpanded: $showSetup) {
+                    Picker("Category", selection: Binding(
                     get: { exercise.category },
                     set: { exercise.category = $0 }
-                )) {
-                    ForEach(ExerciseCategory.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                Picker("Type", selection: Binding(
+                    )) {
+                        ForEach(ExerciseCategory.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    Picker("Type", selection: Binding(
                     get: { exercise.type },
                     set: { exercise.type = $0 }
-                )) {
-                    ForEach(ExerciseType.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                TextField("Movement group", text: $exercise.movementGroup)
-                    .textInputAutocapitalization(.never)
-                Picker("Movement pattern", selection: Binding(
+                    )) {
+                        ForEach(ExerciseType.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    TextField("Movement group", text: $exercise.movementGroup)
+                        .textInputAutocapitalization(.never)
+                    Picker("Movement pattern", selection: Binding(
                     get: { exercise.movementPattern },
                     set: { exercise.movementPattern = $0 }
-                )) {
-                    ForEach(MovementPattern.allCases, id: \.self) { pattern in
-                        Text(pattern.name).tag(pattern)
+                    )) {
+                        ForEach(MovementPattern.allCases, id: \.self) { pattern in
+                            Text(pattern.name).tag(pattern)
+                        }
                     }
-                }
-                TextField("Aliases, comma-separated", text: Binding(
+                    TextField("Aliases, comma-separated", text: Binding(
                     get: { exercise.aliases.joined(separator: ", ") },
                     set: { exercise.aliases = Self.splitList($0) }
-                ))
-                TextField("Strategy tags, comma-separated", text: Binding(
+                    ))
+                    TextField("Strategy tags, comma-separated", text: Binding(
                     get: { exercise.strategyTags.joined(separator: ", ") },
                     set: { exercise.strategyTags = Self.splitList($0) }
-                ))
-                Toggle("Unilateral (log per side)", isOn: $exercise.isUnilateral)
-                Picker("Load means", selection: Binding(
+                    ))
+                    Toggle("Unilateral (log per side)", isOn: $exercise.isUnilateral)
+                    Picker("Load means", selection: Binding(
                     get: { exercise.loadBasis },
                     set: { exercise.loadBasis = $0 }
-                )) {
-                    ForEach(LoadBasis.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                if exercise.loadBasis == .perImplement {
-                    Stepper("Implements used: \(exercise.resolvedImplementCount)", value: Binding(
-                        get: { exercise.resolvedImplementCount },
-                        set: { exercise.implementCount = $0 }
-                    ), in: 1...4)
-                }
-                // 0 = no rest of its own → the timer falls to the configurable
-                // rest buckets in Settings; any value set here wins everywhere.
-                Stepper(
-                    exercise.defaultRestSeconds == 0
-                        ? "Rest: default (Settings)"
-                        : "Rest: \(exercise.defaultRestSeconds / 60):\(String(format: "%02d", exercise.defaultRestSeconds % 60))",
-                    value: $exercise.defaultRestSeconds, in: 0...600, step: 15
-                )
-                if exercise.type == .barbell {
+                    )) {
+                        ForEach(LoadBasis.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    if exercise.loadBasis == .perImplement {
+                        Stepper("Implements used: \(exercise.resolvedImplementCount)", value: Binding(
+                            get: { exercise.resolvedImplementCount },
+                            set: { exercise.implementCount = $0 }
+                        ), in: 1...4)
+                    }
+                    // 0 = no rest of its own → the timer falls to the configurable
+                    // rest buckets in Settings; any value set here wins everywhere.
+                    Stepper(
+                        exercise.defaultRestSeconds == 0
+                            ? "Rest: default (Settings)"
+                            : "Rest: \(exercise.defaultRestSeconds / 60):\(String(format: "%02d", exercise.defaultRestSeconds % 60))",
+                        value: $exercise.defaultRestSeconds, in: 0...600, step: 15
+                    )
+                    if exercise.type == .barbell {
                     // The station this lift lives at can stock a single plate
                     // denomination — a kg-only deadlift platform beside lb
                     // squat racks. The preference rides the exercise the same
                     // way its rest default does; prescriptions, warmups, and
                     // the plate hint all solve against the station's plates.
-                    Picker("Station plates", selection: Binding(
-                        get: { exercise.stationDenomination },
-                        set: { exercise.stationDenomination = $0 }
-                    )) {
-                        Text("Gym inventory").tag(WeightUnit?.none)
-                        Text("lb only").tag(WeightUnit?.some(.lb))
-                        Text("kg only").tag(WeightUnit?.some(.kg))
+                        Picker("Station plates", selection: Binding(
+                            get: { exercise.stationDenomination },
+                            set: { exercise.stationDenomination = $0 }
+                        )) {
+                            Text("Gym inventory").tag(WeightUnit?.none)
+                            Text("lb only").tag(WeightUnit?.some(.lb))
+                            Text("kg only").tag(WeightUnit?.some(.kg))
+                        }
                     }
-                }
-            }
-
-            Section("Watch site") {
-                Picker("Body site", selection: Binding(
-                    get: { exercise.watchSite },
-                    set: { exercise.watchSite = $0 }
-                )) {
-                    Text("None").tag(BodySite?.none)
-                    ForEach(BodySite.allCases) { site in
-                        Text(site.rawValue).tag(BodySite?.some(site))
+                    Picker("Watch site", selection: Binding(
+                        get: { exercise.watchSite },
+                        set: { exercise.watchSite = $0 }
+                    )) {
+                        Text("None").tag(BodySite?.none)
+                        ForEach(BodySite.allCases) { site in
+                            Text(site.rawValue).tag(BodySite?.some(site))
+                        }
+                    }
+                    TextField("Notes", text: $exercise.notes, axis: .vertical)
+                        .lineLimit(2...6)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Exercise setup").font(.headline)
+                        Text("Classification, loading, rest and watch site")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
 
             Section {
-                Picker("Gate", selection: Binding(
+                DisclosureGroup(isExpanded: $showStatus) {
+                    Picker("Gate", selection: Binding(
                     get: { exercise.gateStatus },
                     set: { exercise.gateStatus = $0 }
-                )) {
-                    ForEach(ExerciseGateStatus.allCases, id: \.self) { status in
-                        Text(status.name).tag(status)
+                    )) {
+                        ForEach(ExerciseGateStatus.allCases, id: \.self) { status in
+                            Text(status.name).tag(status)
+                        }
                     }
-                }
-                if exercise.gateStatus != .open {
-                    Picker("Site", selection: Binding(
+                    if exercise.gateStatus != .open {
+                        Picker("Site", selection: Binding(
                         get: { exercise.gateSite },
                         set: { exercise.gateSite = $0 }
-                    )) {
-                        Text("None").tag(BodySite?.none)
-                        ForEach(BodySite.allCases) { site in Text(site.rawValue).tag(BodySite?.some(site)) }
-                    }
-                    TextField("Coach note", text: $exercise.shelvedNote, axis: .vertical)
-                        .lineLimit(2...5)
-                    TextField("Re-entry criteria — one per line", text: Binding(
-                        get: { exercise.reEntryCriteria.joined(separator: "\n") },
-                        set: { exercise.reEntryCriteria = Self.splitLines($0) }
-                    ), axis: .vertical)
-                    ForEach(exercise.reEntryCriteria, id: \.self) { criterion in
-                        Toggle(criterion, isOn: Binding(
-                            get: { exercise.completedReEntryCriteria.contains(criterion) },
-                            set: { complete in
-                                if complete, !exercise.completedReEntryCriteria.contains(criterion) {
-                                    exercise.completedReEntryCriteria.append(criterion)
-                                } else if !complete {
-                                    exercise.completedReEntryCriteria.removeAll { $0 == criterion }
+                        )) {
+                            Text("None").tag(BodySite?.none)
+                            ForEach(BodySite.allCases) { site in Text(site.rawValue).tag(BodySite?.some(site)) }
+                        }
+                        TextField("Coach note", text: $exercise.shelvedNote, axis: .vertical)
+                            .lineLimit(2...5)
+                        TextField("Re-entry criteria — one per line", text: Binding(
+                            get: { exercise.reEntryCriteria.joined(separator: "\n") },
+                            set: { exercise.reEntryCriteria = Self.splitLines($0) }
+                        ), axis: .vertical)
+                        ForEach(exercise.reEntryCriteria, id: \.self) { criterion in
+                            Toggle(criterion, isOn: Binding(
+                                get: { exercise.completedReEntryCriteria.contains(criterion) },
+                                set: { complete in
+                                    if complete, !exercise.completedReEntryCriteria.contains(criterion) {
+                                        exercise.completedReEntryCriteria.append(criterion)
+                                    } else if !complete {
+                                        exercise.completedReEntryCriteria.removeAll { $0 == criterion }
+                                    }
+                                    if exercise.reEntryCriteriaComplete { exercise.gateStatus = .reEntry }
                                 }
-                                if exercise.reEntryCriteriaComplete { exercise.gateStatus = .reEntry }
-                            }
-                        ))
+                            ))
+                        }
+                        if exercise.reEntryCriteriaComplete || exercise.gateStatus == .reEntry {
+                            Stepper("Test: \(exercise.reEntryTestSets) × \(exercise.reEntryTestReps)",
+                                    value: $exercise.reEntryTestSets, in: 1...8)
+                            Stepper("Test reps: \(exercise.reEntryTestReps)",
+                                    value: $exercise.reEntryTestReps, in: 1...12)
+                            Stepper("Test load: \(settingsList.unitDisplay.format(lb: exercise.reEntryTestWeightLb))",
+                                    value: $exercise.reEntryTestWeightLb, in: 0...1000, step: 5)
+                        }
                     }
-                    if exercise.reEntryCriteriaComplete || exercise.gateStatus == .reEntry {
-                        Stepper("Test: \(exercise.reEntryTestSets) × \(exercise.reEntryTestReps)",
-                                value: $exercise.reEntryTestSets, in: 1...8)
-                        Stepper("Test reps: \(exercise.reEntryTestReps)",
-                                value: $exercise.reEntryTestReps, in: 1...12)
-                        Stepper("Test load: \(settingsList.unitDisplay.format(lb: exercise.reEntryTestWeightLb))",
-                                value: $exercise.reEntryTestWeightLb, in: 0...1000, step: 5)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Availability & re-entry").font(.headline)
+                        Text(exercise.gateStatus.name)
+                            .font(.caption)
+                            .foregroundStyle(exercise.gateStatus == .shelved ? Theme.hardStop : .secondary)
                     }
                 }
-            } header: {
-                Text("Status")
             } footer: {
                 if exercise.gateStatus == .shelved {
                     Text("Stays in the library and out of new programs until its user-defined re-entry criteria pass.")
                 }
             }
 
-            Section("Notes") {
-                TextField("Notes", text: $exercise.notes, axis: .vertical)
-                    .lineLimit(2...6)
-            }
         }
+        .listStyle(.plain)
+        .accessibilityIdentifier("exercise-detail-screen")
         .navigationTitle(exercise.name)
         .saveChangesOnDisappear(context, operation: "Saving the exercise")
+        .sheet(isPresented: $showExpandedContextBar) {
+            if let solution = contextualSolution {
+                NavigationStack {
+                    ScrollView {
+                        let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
+                        VStack(alignment: .leading, spacing: 18) {
+                            ScrollView(.horizontal, showsIndicators: true) {
+                                BarbellView(
+                                    solution: solution,
+                                    plateStyle: style,
+                                    presentation: .fullBar
+                                )
+                                .frame(
+                                    width: max(
+                                        360,
+                                        BarbellView.minimumLegibleWidth(for: solution.loadout, style: style)
+                                    ),
+                                    height: 180
+                                )
+                                .padding(.horizontal)
+                            }
+                            LoadoutSummaryView(
+                                requestedLb: contextualSet?.targetWeightLb ?? sessionEntry?.targetWeightLb,
+                                loadout: solution.loadout
+                            )
+                            .padding(.horizontal)
+                        }
+                        .padding(.vertical)
+                    }
+                    .navigationTitle(exercise.name)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showExpandedContextBar = false }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private static func splitList(_ text: String) -> [String] {

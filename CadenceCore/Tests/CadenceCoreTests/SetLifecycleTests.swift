@@ -8,6 +8,29 @@ final class SetLifecycleTests: XCTestCase {
         XCTAssertEqual(SetLifecycle.resolve("skipped", sessionCompleted: true), .skipped)
     }
 
+    func testFocusedPresentationKeepsPlannedWarmupsAheadOfCurrentWork() {
+        typealias State = SetLifecycle.PresentationState
+        let states = [
+            State(isWarmup: true, status: .completed),
+            State(isWarmup: true, status: .planned),
+            State(isWarmup: false, status: .planned),
+            State(isWarmup: false, status: .planned),
+        ]
+
+        XCTAssertEqual(SetLifecycle.focusedPresentationIndices(states), [1, 2],
+                       "resolved ramp rows collapse, but an unresolved warmup cannot hide behind NOW")
+    }
+
+    func testFocusedPresentationFallsBackToCompletePlanWithoutCurrentWork() {
+        typealias State = SetLifecycle.PresentationState
+        let states = [
+            State(isWarmup: true, status: .skipped),
+            State(isWarmup: false, status: .completed),
+        ]
+
+        XCTAssertEqual(SetLifecycle.focusedPresentationIndices(states), [0, 1])
+    }
+
     func testQualityIsExclusiveAndStoppedEarlyIndependent() {
         XCTAssertEqual(SetLifecycle.normalizedFlags(quality: "grindy", stoppedEarly: true),
                        ["grindy", "stopped early"])

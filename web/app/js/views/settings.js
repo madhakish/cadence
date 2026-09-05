@@ -7,6 +7,7 @@ import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BA
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
+import { barbellSVG, barbellStage, loadoutSummary, mixedEquipmentNote, stationPlates } from "../barbell.js";
 import { Sessions } from "../db.js";
 // Module cycle with session.js is safe: these are hoisted function exports
 // used only at runtime (session.js likewise imports exerciseDetail from here).
@@ -48,17 +49,31 @@ async function positionAtRotation(program, rotation) {
 
 export async function render(host) {
   const [settings, gyms, tracks, exercises, programs, checkpoints, intervals] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all(), Programs.all(), Checkpoints.all(), Intervals.all()]);
-  const root = ui.h("div");
+  const root = ui.h("div", { class: "settings-index" });
   const saveS = async () => { await Settings.save(settings); ui.prefs.unitDisplay = settings.unitDisplay; };
+  const group = (title, description) => {
+    const content = ui.h("div", { class: "settings-group-content" });
+    root.append(ui.h("section", { class: "settings-group", "aria-label": title },
+      ui.h("header", { class: "settings-group-heading" },
+        ui.h("h2", { class: "title", text: title }),
+        ui.h("p", { class: "sub", text: description })), content));
+    return content;
+  };
+  const gymAndEquipment = group("Gym & equipment", "Profiles, bars, plates, collars, and membership tags");
+  const unitsAndLoading = group("Units & loading", "Display preference and mixed-unit behavior");
+  const trainingBehavior = group("Training behavior", "Rest, feedback, arrival, and profile inputs");
+  const appearance = group("Appearance & accessibility", "Theme and interface presentation");
+  const programming = group("Programming & library", "Standalone progression, planned breaks, and exercises");
+  const data = group("Data, import, export & backup", "Portable backups and local recovery points");
 
   // Theme
-  root.append(ui.h("div", { class: "section-title", text: "Theme" }));
-  root.append(ui.h("div", { class: "card" },
+  appearance.append(ui.h("div", { class: "section-title", text: "Theme" }));
+  appearance.append(ui.h("div", { class: "card" },
     ui.seg(ui.THEMES, settings.theme || "carbon", async (v) => { settings.theme = v; ui.applyTheme(v); await saveS(); })));
 
   // Units
-  root.append(ui.h("div", { class: "section-title", text: "Units" }));
-  root.append(ui.h("div", { class: "card" },
+  unitsAndLoading.append(ui.h("div", { class: "section-title", text: "Display & entry" }));
+  unitsAndLoading.append(ui.h("div", { class: "card" },
     ui.seg([{ value: "lbPrimary", label: "lb" }, { value: "kgPrimary", label: "kg" }, { value: "both", label: "Both" }],
       settings.unitDisplay, async (v) => { settings.unitDisplay = v; await saveS(); ui.nav.refresh(); })));
 
@@ -66,7 +81,7 @@ export async function render(host) {
   // of its own, listed in the order they're checked: today's program role
   // first, then movement type. Settings.get() normalized `rest`, so every
   // bucket key is present (no view-side re-merge). Mirrors SettingsView.
-  root.append(ui.h("div", { class: "section-title", text: "Rest timer" }));
+  trainingBehavior.append(ui.h("div", { class: "section-title", text: "Rest timer" }));
   const rest = settings.rest;
   const restCard = ui.h("div", { class: "card" });
   const restRow = (label, key) => restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: label }),
@@ -79,25 +94,25 @@ export async function render(host) {
   restRow("Olympic lifts", "olympicSeconds");
   restRow("Other main lifts (presses…)", "mainUpperSeconds");
   restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Auto-start rest after a set" }),
-    ui.toggle(settings.autoStartRest, async (v) => { settings.autoStartRest = v; await saveS(); })));
+    ui.toggle(settings.autoStartRest, async (v) => { settings.autoStartRest = v; await saveS(); }, "Auto-start rest after a set")));
   restCard.append(ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Haptics" }),
-    ui.toggle(settings.haptics !== false, async (v) => { settings.haptics = v; await saveS(); })));
-  root.append(restCard);
-  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "These are the fallback timers. An exercise with a rest of its own (set with ⏱ in the logger, or in the library) always uses that instead. 0:00 = no timer. Auto-start off = tap Rest yourself." }));
+    ui.toggle(settings.haptics !== false, async (v) => { settings.haptics = v; await saveS(); }, "Haptics")));
+  trainingBehavior.append(restCard);
+  trainingBehavior.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "These are the fallback timers. An exercise with a rest of its own (set with ⏱ in the logger, or in the library) always uses that instead. 0:00 = no timer. Auto-start off = tap Rest yourself." }));
 
-  root.append(ui.h("div", { class: "section-title", text: "Arrival" }));
-  root.append(ui.h("div", { class: "card" },
+  trainingBehavior.append(ui.h("div", { class: "section-title", text: "Arrival" }));
+  trainingBehavior.append(ui.h("div", { class: "card" },
     ui.h("div", { class: "row", style: { borderBottom: "0" } },
       ui.h("div", { class: "lead" },
         ui.h("span", { text: "Show gym tag on first launch of the day" }),
         ui.h("span", { class: "sub", text: "Presents the default membership tag once, then leaves Today ready for training." })),
-      ui.toggle(settings.gymTagFirstLaunchOfDay === true, async (v) => { settings.gymTagFirstLaunchOfDay = v; await saveS(); }))));
+      ui.toggle(settings.gymTagFirstLaunchOfDay === true, async (v) => { settings.gymTagFirstLaunchOfDay = v; await saveS(); }, "Show gym tag on first launch of the day"))));
 
   // About you. The only thing age is used for, said plainly — a health app
   // asking for a birthday without saying why is how people learn to distrust
   // one. Bounded by the same plausible-lifespan window the importer enforces,
   // so the picker cannot produce a value a backup would reject.
-  root.append(ui.h("div", { class: "section-title", text: "About you" }));
+  trainingBehavior.append(ui.h("div", { class: "section-title", text: "About you" }));
   const thisYear = new Date().getFullYear();
   const yearSelect = ui.h("select", { class: "input" },
     ui.h("option", { value: "0", text: "Not set" }),
@@ -107,12 +122,12 @@ export async function render(host) {
     }));
   yearSelect.value = String(settings.birthYear || 0);
   yearSelect.onchange = async () => { settings.birthYear = parseInt(yearSelect.value, 10) || 0; await saveS(); };
-  root.append(ui.h("div", { class: "card" },
+  trainingBehavior.append(ui.h("div", { class: "card" },
     ui.h("div", { class: "row" }, ui.h("span", { text: "Year of birth" }), yearSelect),
     ui.h("div", { class: "muted", text: "Used only to adjust the per-meal protein figure on the Body screen — muscle responds less to a given dose with age. Nothing else reads it, and it never affects your program." })));
 
   // Gyms
-  root.append(ui.h("div", { class: "section-title", text: "Gyms" }));
+  gymAndEquipment.append(ui.h("div", { class: "section-title", text: "Gym profiles" }));
   const gymList = ui.h("div", { class: "card list" });
   for (const g of gyms) {
     gymList.append(ui.h("div", { class: "row", onClick: () => gymEditor(g) },
@@ -120,14 +135,14 @@ export async function render(host) {
         ui.h("span", { class: "sub", text: (g.isDefault ? "default · " : "") + (g.barcodeImage ? "tag stored" : "no tag") })),
       ui.h("span", { class: "chev" })));
   }
-  root.append(gymList);
-  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add gym", onClick: async () => {
+  gymAndEquipment.append(gymList);
+  gymAndEquipment.append(ui.h("button", { class: "btn ghost wide", text: "+ Add gym", onClick: async () => {
     const g = { name: `Gym ${gyms.length + 1}`, isDefault: gyms.length === 0, defaultBarId: C.barId(C.BARS.bar45lb), collarWeightLb: 0, loadingPolicy: "closest", plateToggles: C.ALL_STANDARD.map((p) => ({ value: p.value, unit: p.unit, enabled: true })), barcodeImage: null, barcodeLabel: "Membership tag" };
     await Gyms.save(g); ui.nav.refresh();
   } }));
 
   // Progression
-  root.append(ui.h("div", { class: "section-title", text: "Progression (standalone lifts)" }));
+  programming.append(ui.h("div", { class: "section-title", text: "Progression (standalone lifts)" }));
   const trackList = ui.h("div", { class: "card list" });
   if (!tracks.length) trackList.append(ui.h("div", { class: "muted", text: "No tracked lifts." }));
   for (const t of tracks) {
@@ -137,18 +152,18 @@ export async function render(host) {
         ui.h("span", { class: "sub", text: `+${ui.fmtWeight(t.incrementLb)} per ${t.mode === "cycle" ? "cycle" : "session"} · next: ${ui.fmtWeight(sug.weightLb)} · ${sug.sets}×${sug.reps}` })),
       ui.h("span", { class: "chev" })));
   }
-  root.append(trackList);
+  programming.append(trackList);
 
   // Training breaks — declared spans over the calendar. A chosen gap must
   // never read as a lapse (INV-INTERVAL-IS-NOT-A-GAP). Mirrors SettingsView.
-  root.append(ui.h("div", { class: "section-title", text: "Training breaks" }));
+  programming.append(ui.h("div", { class: "section-title", text: "Training breaks" }));
   if (intervals.length) {
     // Compact rollup above the list: how many of the last year's calendar
     // days landed in each declared-break kind. Pure aggregation over
     // already-stored intervals — see core.js intervalDaysByKind.
     const untilMs = Date.now();
     const days = C.intervalDaysByKind(intervalSnapshots(intervals), untilMs - 365 * 86_400_000, untilMs);
-    root.append(ui.h("div", { class: "sub", style: { margin: "4px" },
+    programming.append(ui.h("div", { class: "sub", style: { margin: "4px" },
       text: `Last 365 days: ${days.rest} rest · ${days.away} away · ${days.deload} deload · ${days.activeRecovery} active recovery` }));
   }
   const intervalList = ui.h("div", { class: "card list" });
@@ -162,17 +177,17 @@ export async function render(host) {
         ui.h("span", { class: "sub", text: range + (interval.note ? ` · ${interval.note}` : "") })),
       ui.h("span", { class: "chev" })));
   }
-  root.append(intervalList);
-  root.append(ui.h("button", { class: "btn ghost wide", text: "+ Add break", onClick: async () => {
+  programming.append(intervalList);
+  programming.append(ui.h("button", { class: "btn ghost wide", text: "+ Add break", onClick: async () => {
     const today = localDayKey(new Date());
     await Intervals.save({ kind: "rest", startDate: today, endDate: today, enteredAsDays: true, note: "" });
     ui.nav.refresh();
   } }));
-  root.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Declared breaks — deload, rest, away, active recovery — keep a chosen gap from reading as a lapse. Work banked during an active-recovery break stays in history but never advances progression or PR baselines." }));
+  programming.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Declared breaks — deload, rest, away, active recovery — keep a chosen gap from reading as a lapse. Work banked during an active-recovery break stays in history but never advances progression or PR baselines." }));
 
   // Library
-  root.append(ui.h("div", { class: "section-title", text: "Library" }));
-  root.append(ui.h("div", { class: "card list" },
+  programming.append(ui.h("div", { class: "section-title", text: "Library" }));
+  programming.append(ui.h("div", { class: "card list" },
     ui.h("div", { class: "row", onClick: () => exerciseLibrary(exercises), style: { borderBottom: "0" } },
       ui.h("span", { class: "title", text: "Exercise library" }), ui.h("span", { class: "chev" }))));
 
@@ -186,8 +201,8 @@ export async function render(host) {
       ui.toast(`Export failed: ${error?.message || error}`);
     }
   };
-  root.append(ui.h("div", { class: "section-title", text: "Data" }));
-  root.append(ui.h("div", { class: "card" },
+  data.append(ui.h("div", { class: "section-title", text: "Portable export" }));
+  data.append(ui.h("div", { class: "card" },
     ui.h("div", { class: "btn-row" },
       ui.h("button", { class: "btn", text: "Export JSON", onClick: () => downloadExport("json") }),
       ui.h("button", { class: "btn", text: "Export CSV", onClick: () => downloadExport("csv") }),
@@ -210,7 +225,8 @@ export async function render(host) {
       ui.toast(`Recovery failed: ${error?.message || error}`);
     }
   };
-  root.append(ui.h("div", { class: "card", style: { marginTop: "10px" } },
+  data.append(ui.h("div", { class: "section-title", text: "Local recovery" }));
+  data.append(ui.h("div", { class: "card" },
     ui.h("div", { class: "btn-row" },
       ui.h("button", { class: "btn ghost", text: "Checkpoint now", onClick: () => checkpointAction("create") }),
       latestCheckpoint ? ui.h("button", { class: "btn ghost", text: "Restore latest", onClick: () => ui.actionSheet("Restore local checkpoint?", [
@@ -220,7 +236,7 @@ export async function render(host) {
       ? `Keeping ${checkpoints.length} of 3 local recovery points. Latest: ${new Date(latestCheckpoint.createdAt).toLocaleString()}.`
       : "Cadence keeps the last 3 local recovery points when the app backgrounds and before imports/resets." }),
     ui.h("div", { class: "sub", style: { marginTop: "4px" }, text: "Local checkpoints can undo a bad import, but Safari eviction removes them too. Downloaded JSON is the real backup." })));
-  root.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "10px" }, text: "Reset all data", onClick: () => resetData() }));
+  data.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "10px" }, text: "Reset all data", onClick: () => resetData() }));
 
   host.replaceChildren(root);
 }
@@ -300,7 +316,7 @@ function gymEditor(g) {
         const name = ui.h("input", { type: "text", value: g.name });
         name.addEventListener("change", async () => { const old = g.name; g.name = name.value || old; if (g.name !== old) { await Gyms.del(old); } await Gyms.save(g); api.setTitle(g.name); });
         body.append(ui.field("Name", name));
-        body.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Default gym" }), ui.toggle(g.isDefault, async (v) => { g.isDefault = v; await Gyms.save(g); })));
+        body.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Default gym" }), ui.toggle(g.isDefault, async (v) => { g.isDefault = v; await Gyms.save(g); }, "Default gym")));
         const barSel = ui.h("select", {}, ...C.ALL_BARS.map((b) => ui.h("option", { value: C.barId(b), text: C.barLabel(b), selected: C.barId(b) === g.defaultBarId })));
         barSel.addEventListener("change", async () => { g.defaultBarId = barSel.value; await Gyms.save(g); });
         body.append(ui.field("Default bar", barSel));
@@ -319,7 +335,7 @@ function gymEditor(g) {
         const inv = ui.h("div", { class: "card" });
         for (const t of g.plateToggles) {
           inv.append(ui.h("div", { class: "row" }, ui.h("span", { class: t.unit === "kg" ? "accent" : "", text: `${C.trim(t.value, 2)} ${t.unit}` }),
-            ui.toggle(t.enabled, async (v) => { t.enabled = v; await Gyms.save(g); })));
+            ui.toggle(t.enabled, async (v) => { t.enabled = v; await Gyms.save(g); }, `${C.trim(t.value, 2)} ${t.unit} plates available`)));
         }
         body.append(inv);
 
@@ -626,11 +642,11 @@ export async function programEditor(p) {
                 ui.toast(error?.message || "Couldn't switch programs.");
                 ui.nav.refresh();
               }
-            }))));
+            }, `${p.name} active program`))));
         body.append(ui.h("div", { class: "section-title", text: "Deterministic coach" }));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Coaching proposals" }),
-            ui.toggle(p.coachEnabled !== false, async (v) => { p.coachEnabled = v; await Programs.save(p); })),
+            ui.toggle(p.coachEnabled !== false, async (v) => { p.coachEnabled = v; await Programs.save(p); }, "Coaching proposals")),
           ui.h("div", { class: "row" }, ui.h("span", { text: "Preferred spacing" }),
             ui.stepper(p.preferredSessionSpacingDays ?? 3, { min: 2, max: 7, step: 1, format: (v) => `${v} days`, onChange: async (v) => { p.preferredSessionSpacingDays = v; await Programs.save(p); } })),
           ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Max work added / rotation" }),
@@ -866,14 +882,14 @@ async function programDayEditor(p, day) {
             l.prescription === "dynamicEffort" ? ui.h("div", { class: "sub", text: "The base is wave week 1: 50% for squat/pull or 40% for bench. Speed work waves for three weeks, then resets." }) : null,
             !C.buildsOwnSessionShape(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Peak top single" }),
-                ui.toggle(!!l.peakSingleEnabled, async (v) => { l.peakSingleEnabled = v; await Programs.save(p); draw(); })) : null,
+                ui.toggle(!!l.peakSingleEnabled, async (v) => { l.peakSingleEnabled = v; await Programs.save(p); draw(); }, "Peak top single")) : null,
             l.peakSingleEnabled && !C.buildsOwnSessionShape(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus)) ? ui.h("div", { class: "row" }, ui.h("span", { text: "Last clean / step" }),
               ui.h("div", { class: "btn-row" },
                 ui.stepper(l.lastPeakSingleLb ?? 0, { min: 0, max: 1200, step: 5, format: ui.fmtWeight, onChange: async (v) => { l.lastPeakSingleLb = v; await Programs.save(p); refresh(); } }),
                 ui.stepper(l.peakSingleIncrementLb ?? 5, { min: 2.5, max: 25, step: 2.5, format: (v) => `+${ui.fmtWeight(v)}`, onChange: async (v) => { l.peakSingleIncrementLb = v; await Programs.save(p); refresh(); } }))) : null,
             !C.buildsOwnSessionShape(C.resolvedPrescriptionStyle(l.prescription || "automatic", exerciseByName.get(l.exerciseName)?.movementGroup ?? null, l.role, p.focus))
               ? ui.h("div", { class: "row" }, ui.h("span", { text: "Phase primer single" }),
-                ui.toggle(l.phasePrimerEnabled !== false, async (v) => { l.phasePrimerEnabled = v; await Programs.save(p); refresh(); })) : null,
+                ui.toggle(l.phasePrimerEnabled !== false, async (v) => { l.phasePrimerEnabled = v; await Programs.save(p); refresh(); }, "Phase primer single")) : null,
             ui.h("div", { class: "row" }, ui.h("span", { text: "One-tap drop (0 = auto)" }),
               ui.stepper(l.dropIncrementLb ?? 0, { min: 0, max: 50, step: C.programLoadStep(p.roundingLb, exerciseByName.get(l.exerciseName)?.type), format: ui.fmtWeight, onChange: async (v) => { l.dropIncrementLb = v; await Programs.save(p); } })),
             ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Est. 1RM" }),
@@ -1106,7 +1122,7 @@ function newExerciseSheet(exercises, onSaved) {
       c.append(ui.field("Name", name), ui.field("Category", category), ui.field("Type", type),
         ui.field("Movement group", movementGroup), ui.field("Movement pattern", movementPattern),
         ui.field("Aliases", aliases),
-        ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(false, (value) => { unilateral = value; })),
+        ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(false, (value) => { unilateral = value; }, "Unilateral per side")),
         ui.field("Notes", notes));
       c.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "10px" }, text: "Add", onClick: async () => {
         const trimmed = name.value.trim();
@@ -1212,61 +1228,121 @@ async function exerciseInsight(wrap, e) {
 // caller may pass onClose to repaint itself: this screen live-edits the
 // exercise (rest, load basis, type, shelving), and a logger underneath must
 // not keep showing the pre-edit state.
-export function exerciseDetail(e, { onClose } = {}) {
+export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = null,
+  sessionProgramFocus = null, restSeconds = null } = {}) {
   ui.pushScreen({
     title: e.name,
     onClose,
     build: (body) => {
       const draw = () => {
         ui.clear(body);
-        // Muscles first: primary movers red, supporting blue.
+        body.append(ui.h("header", { class: "exercise-info-hero" },
+          ui.h("span", { class: "eyebrow", text: [e.category, e.movementGroup, e.type].filter(Boolean).join(" · ") }),
+          ui.h("h2", { text: e.name }),
+          e.notes ? ui.h("p", { class: "sub", text: e.notes }) : null));
+
+        // When opened between sets, the work in hand wins the hierarchy.
+        // This is the same stored entry and solver path the logger records;
+        // the pane does not invent a presentation-only prescription.
+        if (sessionEntry) {
+          const working = (sessionEntry.sets || []).filter((set) => !set.isWarmup);
+          const current = working.find((set) => set.status === "planned") || working.at(-1) || null;
+          const currentNumber = current ? Math.max(1, working.indexOf(current) + 1) : 0;
+          const effortCue = sessionEntry.prescriptionStyle
+            && !(sessionEntry.prescriptionStyle === "automatic" && !sessionProgramFocus)
+            ? C.complementaryEffortCue(sessionEntry.programRole, sessionEntry.prescriptionStyle,
+              e.movementGroup, sessionProgramFocus || "strength") : null;
+          const relationship = sessionEntry.programRole ? [
+            sessionEntry.programRole === "complementary" ? "Complementary lift" : "Main lift",
+            sessionProgramFocus ? `${sessionProgramFocus[0].toUpperCase()}${sessionProgramFocus.slice(1)} focus` : null,
+          ].filter(Boolean).join(" · ") : null;
+          const live = ui.h("section", { class: "current-prescription", "aria-label": "Current prescription" },
+            ui.h("span", { class: "eyebrow", text: "CURRENT PRESCRIPTION" }),
+            ui.h("div", { class: "prescription-line mono", text: current
+              ? `${current.weightLb === 0 ? "BW" : C.both(current.weightLb)} × ${current.reps}` : "No working sets" }),
+            relationship ? ui.h("div", { class: "sub training-focus-context", text: relationship,
+              "aria-label": `Training context: ${relationship}` }) : null,
+            ui.h("div", { class: "sub", text: current
+              ? [`Set ${currentNumber} of ${working.length}`, effortCue,
+                Number.isFinite(restSeconds) ? `${ui.mmss(restSeconds)} rest` : null].filter(Boolean).join(" · ")
+              : "All work resolved" }));
+          if (current && e.type === "barbell" && current.weightLb > 0) {
+            const selectedBar = sessionEntry.barId ? C.barById(sessionEntry.barId)
+              : C.barById(sessionGym?.defaultBarId || C.barId(C.BARS.bar45lb));
+            const style = e.movementGroup === "olympic" ? "bumper" : "steel";
+            const enteredUnit = current.enteredUnit || "lb";
+            const solution = C.solve(current.weightLb, selectedBar,
+              stationPlates(enteredUnit, sessionGym, e.stationDenomination ?? null), 10,
+              sessionGym?.collarWeightLb || 0, sessionGym?.loadingPolicy || "closest");
+            const rendered = barbellSVG(solution, "full", style);
+            const requestedLb = current.targetWeightLb ?? sessionEntry.targetWeightLb ?? current.weightLb;
+            live.append(barbellStage(rendered, {
+              caption: "Exact mirrored stack · counts are per side", emphasis: "session",
+              onExpand: () => ui.pushScreen({ title: `${e.name} · loaded bar`, build: (screen) => {
+                screen.append(barbellStage(barbellSVG(solution, "full", style), {
+                  caption: "Exact mirrored stack · counts are per side", emphasis: "expanded",
+                }), loadoutSummary(requestedLb, solution));
+                const expandedMixed = mixedEquipmentNote(solution); if (expandedMixed) screen.append(expandedMixed);
+              } }),
+            }), loadoutSummary(requestedLb, solution, { compact: true }));
+            const mixed = mixedEquipmentNote(solution); if (mixed) live.append(mixed);
+          }
+          body.append(live);
+        }
+
         const profile = muscleProfile(e.name, e.movementGroup);
         if (profile) {
           const svg = figureSVG(profile);
-          svg.style.maxWidth = "280px"; svg.style.width = "100%";
-          body.append(ui.h("div", { class: "card anatomy-card" },
-            ui.h("div", { class: "section-title", text: "Muscles" }), svg, muscleLegend(profile)));
+          svg.style.maxWidth = "620px"; svg.style.width = "100%";
+          body.append(ui.h("details", { class: "card info-disclosure", open: !sessionEntry },
+            ui.h("summary", {}, ui.h("span", { text: "Muscles & anatomy" }),
+              ui.h("span", { class: "sub", text: profile.primary.map((id) => id).join(" · ") })),
+            ui.h("div", { class: "anatomy-card" }, svg, muscleLegend(profile, svg))));
         }
         const insightWrap = ui.h("div", {});
-        body.append(insightWrap);
+        body.append(ui.h("details", { class: "card info-disclosure", open: !sessionEntry },
+          ui.h("summary", { text: "Previous performance & programming" }), insightWrap));
         exerciseInsight(insightWrap, e);
+        const setup = ui.h("div", { class: "disclosure-content" });
+        body.append(ui.h("details", { class: "card info-disclosure" },
+          ui.h("summary", { text: "Exercise setup" }), setup));
         const categorySel = ui.h("select", {}, ...CATEGORIES.map((value) => ui.h("option", { value, text: value, selected: value === e.category })));
         categorySel.addEventListener("change", async () => { e.category = categorySel.value; await Exercises.save(e); });
-        body.append(ui.field("Category", categorySel));
+        setup.append(ui.field("Category", categorySel));
         const typeSel = ui.h("select", {}, ...EX_TYPES.map((t) => ui.h("option", { value: t, text: t, selected: t === e.type })));
         typeSel.addEventListener("change", async () => { e.type = typeSel.value; await Exercises.save(e); });
-        body.append(ui.field("Type", typeSel));
+        setup.append(ui.field("Type", typeSel));
         const basisSel = ui.h("select", {}, ...C.LOAD_BASES.map((basis) => ui.h("option", {
           value: basis, text: C.loadBasisLabel(basis), selected: basis === C.resolvedLoadBasis(e),
         })));
         basisSel.addEventListener("change", async () => { e.loadBasis = basisSel.value; await Exercises.save(e); draw(); });
-        body.append(ui.field("Entered load means", basisSel));
+        setup.append(ui.field("Entered load means", basisSel));
         if (C.resolvedLoadBasis(e) === "perImplement") {
-          body.append(ui.field("Implements used", ui.stepper(C.resolvedImplementCount(e), {
+          setup.append(ui.field("Implements used", ui.stepper(C.resolvedImplementCount(e), {
             min: 1, max: 4, step: 1, onChange: async (v) => { e.implementCount = v; await Exercises.save(e); },
           })));
         }
         const groupInput = ui.h("input", { type: "text", value: e.movementGroup || "", placeholder: "press, pull, squat, hinge…" });
         groupInput.addEventListener("change", async () => { e.movementGroup = groupInput.value.trim().toLowerCase(); await Exercises.save(e); });
-        body.append(ui.field("Movement group", groupInput));
+        setup.append(ui.field("Movement group", groupInput));
         const patternSel = ui.h("select", {}, ...C.MOVEMENT_PATTERNS.map((pattern) => ui.h("option", {
           value: pattern, text: C.movementPatternName(pattern), selected: pattern === e.movementPattern,
         })));
         patternSel.addEventListener("change", async () => { e.movementPattern = patternSel.value; await Exercises.save(e); });
-        body.append(ui.field("Primary movement pattern", patternSel));
+        setup.append(ui.field("Primary movement pattern", patternSel));
         const secondarySel = ui.h("select", {}, ui.h("option", { value: "", text: "None", selected: !e.secondaryMovementPattern }),
           ...C.MOVEMENT_PATTERNS.filter((pattern) => pattern !== "unknown").map((pattern) => ui.h("option", {
             value: pattern, text: C.movementPatternName(pattern), selected: pattern === e.secondaryMovementPattern,
           })));
         secondarySel.addEventListener("change", async () => { e.secondaryMovementPattern = secondarySel.value || null; await Exercises.save(e); });
-        body.append(ui.field("Secondary pattern", secondarySel));
+        setup.append(ui.field("Secondary pattern", secondarySel));
         const aliases = ui.h("input", { type: "text", value: (e.aliases || []).join(", "), placeholder: "alternate names" });
         aliases.addEventListener("change", async () => { e.aliases = aliases.value.split(",").map((value) => value.trim()).filter(Boolean); await Exercises.save(e); });
         const tags = ui.h("input", { type: "text", value: (e.strategyTags || []).join(", "), placeholder: "low-fatigue, shoulder-friendly…" });
         tags.addEventListener("change", async () => { e.strategyTags = tags.value.split(",").map((value) => value.trim()).filter(Boolean); await Exercises.save(e); });
-        body.append(ui.field("Aliases", aliases), ui.field("Programming tags", tags));
-        body.append(ui.h("div", { class: "card" },
-          ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(e.isUnilateral, async (v) => { e.isUnilateral = v; await Exercises.save(e); })),
+        setup.append(ui.field("Aliases", aliases), ui.field("Programming tags", tags));
+        setup.append(ui.h("div", { class: "settings-rows" },
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Unilateral (per side)" }), ui.toggle(e.isUnilateral, async (v) => { e.isUnilateral = v; await Exercises.save(e); }, "Unilateral per side")),
           // 0 = no rest of its own → the timer falls to the configurable rest
           // buckets in Settings; any value set here wins everywhere.
           // `|| 0`: a raw-imported record can lack the field — an undefined
@@ -1282,13 +1358,19 @@ export function exerciseDetail(e, { onClose } = {}) {
             ...[["", "Gym inventory"], ["lb", "lb only"], ["kg", "kg only"]]
               .map(([value, text]) => ui.h("option", { value, text, selected: value === (e.stationDenomination || "") })));
           stationSel.addEventListener("change", async () => { e.stationDenomination = stationSel.value || null; await Exercises.save(e); });
-          body.append(ui.field("Station plates", stationSel));
+          setup.append(ui.field("Station plates", stationSel));
         }
         const siteSel = ui.h("select", {}, ui.h("option", { value: "", text: "None", selected: !e.watchSite }), ...BODY_SITES.map((s) => ui.h("option", { value: s, text: s, selected: s === e.watchSite })));
         siteSel.addEventListener("change", async () => { e.watchSite = siteSel.value || null; await Exercises.save(e); });
-        body.append(ui.field("Watch site", siteSel));
+        setup.append(ui.field("Watch site", siteSel));
 
-        body.append(ui.h("div", { class: "section-title", text: "Availability & re-entry" }));
+        const notes = ui.h("textarea", { rows: 3, placeholder: "Notes", value: e.notes || "" });
+        notes.addEventListener("change", async () => { e.notes = notes.value; await Exercises.save(e); });
+        setup.append(ui.field("Notes", notes));
+
+        const availability = ui.h("div", { class: "disclosure-content" });
+        body.append(ui.h("details", { class: "card info-disclosure" },
+          ui.h("summary", { text: "Availability & re-entry" }), availability));
         const gateStatus = ui.h("select", {}, ...[["open", "Open"], ["watch", "Watch"], ["shelved", "Shelved"], ["re-entry", "Re-entry test"]]
           .map(([value, text]) => ui.h("option", { value, text, selected: value === C.exerciseGateStatus(e) })));
         gateStatus.addEventListener("change", async () => {
@@ -1298,7 +1380,7 @@ export function exerciseDetail(e, { onClose } = {}) {
         const gateSite = ui.h("select", {}, ui.h("option", { value: "", text: "No site", selected: !e.gateSite }),
           ...BODY_SITES.map((site) => ui.h("option", { value: site, text: site, selected: site === e.gateSite })));
         gateSite.addEventListener("change", async () => { e.gateSite = gateSite.value || null; await Exercises.save(e); });
-        body.append(ui.field("Status", gateStatus), ui.field("Site", gateSite));
+        availability.append(ui.field("Status", gateStatus), ui.field("Site", gateSite));
         if ((e.gateStatus || "open") !== "open") {
           const criteria = ui.h("textarea", { rows: 3, value: (e.reEntryCriteria || []).join("\n"),
             placeholder: "One objective criterion per line" });
@@ -1307,9 +1389,9 @@ export function exerciseDetail(e, { onClose } = {}) {
             e.completedReEntryCriteria = (e.completedReEntryCriteria || []).filter((item) => e.reEntryCriteria.includes(item));
             await Exercises.save(e); draw();
           });
-          body.append(ui.field("Re-entry criteria", criteria));
+          availability.append(ui.field("Re-entry criteria", criteria));
           for (const criterion of e.reEntryCriteria || []) {
-            body.append(ui.h("div", { class: "row" }, ui.h("span", { class: "sub", text: criterion }),
+            availability.append(ui.h("div", { class: "row" }, ui.h("span", { class: "sub", text: criterion }),
               ui.toggle((e.completedReEntryCriteria || []).includes(criterion), async (checked) => {
                 const completed = new Set(e.completedReEntryCriteria || []);
                 if (checked) completed.add(criterion); else completed.delete(criterion);
@@ -1318,9 +1400,9 @@ export function exerciseDetail(e, { onClose } = {}) {
                   e.gateStatus = "re-entry"; e.isShelved = false;
                 }
                 await Exercises.save(e);
-              })));
+              }, `Re-entry criterion: ${criterion}`)));
           }
-          body.append(ui.h("div", { class: "card" },
+          availability.append(ui.h("div", { class: "settings-rows" },
             ui.h("div", { class: "sub", text: "Light re-entry test" }),
             ui.h("div", { class: "row" }, ui.h("span", { text: "Load" }), ui.stepper(e.reEntryTestWeightLb || 0, {
               min: 0, max: 1000, step: 5, format: ui.fmtWeight, onChange: async (value) => { e.reEntryTestWeightLb = value; await Exercises.save(e); },
@@ -1331,9 +1413,6 @@ export function exerciseDetail(e, { onClose } = {}) {
                 ui.stepper(e.reEntryTestReps || 5, { min: 1, max: 20, onChange: async (value) => { e.reEntryTestReps = value; await Exercises.save(e); } })))));
         }
 
-        const notes = ui.h("textarea", { rows: 3, placeholder: "Notes", value: e.notes || "" });
-        notes.addEventListener("change", async () => { e.notes = notes.value; await Exercises.save(e); });
-        body.append(ui.field("Notes", notes));
       };
       draw();
     },

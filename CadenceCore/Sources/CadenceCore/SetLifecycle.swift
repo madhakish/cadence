@@ -12,6 +12,34 @@ public enum SetStatus: String, Codable, CaseIterable, Sendable {
 public enum SetLifecycle {
     public static let qualityValues = ["clean", "grindy", "wobble"]
 
+    /// The lifecycle state needed to choose the focused set rows. This is a
+    /// deterministic cross-client rule: planned warmups cannot disappear
+    /// behind the first working set merely because resolved rows collapse.
+    public struct PresentationState: Equatable, Sendable {
+        public let isWarmup: Bool
+        public let status: SetStatus
+
+        public init(isWarmup: Bool, status: SetStatus) {
+            self.isWarmup = isWarmup
+            self.status = status
+        }
+    }
+
+    /// Returns authored indices for every unresolved warmup plus the first
+    /// unresolved working set. With no current working set, return the whole
+    /// plan so completed/skipped rows remain correctable. Mirrors web
+    /// `focusedSetIndices`.
+    public static func focusedPresentationIndices(_ sets: [PresentationState]) -> [Int] {
+        guard let currentWorkIndex = sets.firstIndex(where: {
+            !$0.isWarmup && $0.status == .planned
+        }) else {
+            return Array(sets.indices)
+        }
+        return sets.indices.filter { index in
+            index == currentWorkIndex || (sets[index].isWarmup && sets[index].status == .planned)
+        }
+    }
+
     /// Reps left in reserve, coarse on purpose.
     ///
     /// A number entry invites false precision — RIR accuracy is a trainable

@@ -134,6 +134,10 @@ targets:
       # here lets the hostless suite pin correction semantics on real SwiftData
       # rows (epic #155 Stage 0).
       - Cadence/Services/SessionCorrectionService.swift
+      # The activity creator is a models-only service too; compiling it
+      # here lets the V11->V12 migration test bank the canonical session
+      # shape into a real migrated store (#166).
+      - Cadence/Services/ActivitySession.swift
       # Activation is models-only too: compiling it here lets the hostless
       # suite prove A -> B -> A preserves cursors and history (epic #155
       # Stage 4).
@@ -150,6 +154,23 @@ targets:
         GENERATE_INFOPLIST_FILE: true
         CODE_SIGNING_ALLOWED: false
 
+  # Screenshot-only UI target. It launches the app with a DEBUG-gated,
+  # in-memory fixture and never enters the normal release scheme.
+  CadenceVisualProofUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - CadenceVisualProofUITests
+    dependencies:
+      - target: Cadence
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.CadenceVisualProofUITests
+        TEST_TARGET_NAME: Cadence
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: true
+
 schemes:
   Cadence:
     build:
@@ -165,3 +186,10 @@ schemes:
     test:
       targets:
         - CadenceMigrationTests
+  CadenceVisualProof:
+    build:
+      targets:
+        Cadence: all
+    test:
+      targets:
+        - CadenceVisualProofUITests

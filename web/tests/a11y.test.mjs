@@ -32,6 +32,24 @@ ok(/ui\.h\("span", \{ text: t\.label \}\)/.test(app),
 
 // ---- Keyboard focus visibility ----
 const css = read("app/styles.css");
+ok(css.indexOf(':root, :root[data-theme="carbon"]') >= 0
+  && css.indexOf(':root, :root[data-theme="carbon"]') < css.indexOf(':root[data-theme="memento"]'),
+  "Carbon tokens paint before JavaScript applies the persisted theme (no light/brass flash)");
+const carbonTokens = /:root, :root\[data-theme="carbon"\]\s*\{([^}]*)\}/.exec(css)?.[1] || "";
+const colorToken = (name) => new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, "i").exec(carbonTokens)?.[1];
+const relativeLuminance = (hex) => {
+  const channels = [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255)
+    .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+};
+const contrast = (a, b) => {
+  const values = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+};
+const carbonSurfaces = ["bg", "card", "card2"].map(colorToken);
+ok(["text", "muted", "accent", "warn", "hard", "good"].every((name) =>
+  carbonSurfaces.every((surface) => contrast(colorToken(name), surface) >= 4.5)),
+"Carbon text and semantic tokens meet WCAG AA on every app elevation");
 ok(/button:focus-visible[^{]*\{/.test(css), "buttons have a visible keyboard-focus style");
 ok(/input:focus|input:focus-visible/.test(css), "text inputs have a visible focus style");
 
@@ -54,10 +72,17 @@ ok(/role: "img"/.test(barbell) && /aria-label[^\n]*barbell/i.test(barbell),
   "the barbell graphic is an image with a spoken load");
 ok(/plateBadgeSVG/.test(barbell) && /aria-label[^\n]*plate/i.test(barbell),
   "readable plate denomination badges also carry spoken labels");
+ok(/\["white", "yellow", "green"\]\.includes\(token\) \? "#24262a" : "#fff"/.test(barbell),
+  "yellow, white, and green plates use the high-contrast dark denomination ink");
 ok(/aria-label[^\n]*Dumbbell/.test(barbell), "the dumbbell graphic carries a spoken load");
 const plates = read("app/js/views/plates.js");
-ok(/aria-label[^\n]*Total/.test(plates) && /weightMeasure\(lb, "lb"\)[^\n]*weightMeasure\(C\.kgFromLb\(lb\), "kg"\)/.test(plates),
-  "the calculator's final load is announced and displayed in both units");
+ok(/Achieved total, bar included/.test(barbell)
+  && /\[solution\.totalLb, "lb", true\][\s\S]*\[C\.kgFromLb\(solution\.totalLb\), "kg", false\]/.test(barbell)
+  && /loadoutSummary\(targetLb, solution\)/.test(plates),
+  "the shared calculator/session total is announced and displayed pounds first, then kilograms");
+ok(/prefers-reduced-motion: reduce/.test(css), "motion can be reduced at the operating-system level");
+ok(/tabindex: "0"[\s\S]*data-plate-denomination/.test(barbell),
+  "every rendered plate denomination is keyboard inspectable");
 
 // ---- Session lifecycle: destructive discard is confirmed ----
 const home = read("app/js/views/home.js");

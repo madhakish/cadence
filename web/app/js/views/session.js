@@ -4,7 +4,7 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram , Intervals, intervalSnapshots } from "../db.js";
-import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
+import { barbellSVG, barbellStage, dumbbellSVG, loadoutSummary, mixedEquipmentNote, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
 import * as ProgrammingDefaults from "../programming-defaults.js";
 import { exerciseDetail, exercisePickerList } from "./settings.js";
@@ -38,6 +38,13 @@ const availablePlates = (gym, exercise = null) => {
   // denomination — the kg-only deadlift platform beside the lb squat racks.
   return C.stationPlates(exercise?.stationDenomination ?? null, rack);
 };
+
+/// The single plate solution for a stored session set. Both the inline diagram
+/// and tests consume this result; the renderer is never allowed to solve again.
+export function plateSolutionForSet(set, bar, gym = null, exercise = null) {
+  return C.solve(set.weightLb, bar, availablePlates(gym, exercise), 10,
+    gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
+}
 
 // The theoretical ramp describes useful jumps; the stored ramp must describe
 // plates that actually exist. Collapse duplicate/equal-to-working results when
@@ -349,6 +356,22 @@ export async function openSession(id) {
   const currentExercise = () => exMap.get((currentEntry() || {}).exerciseName);
   const expandedEntries = new Set();
 
+  const hasPlannedWork = (entry) => (entry?.sets || [])
+    .some((set) => !set.isWarmup && set.status === "planned");
+  function focusAfterVerdict(entry, status) {
+    // Undoing a verdict is an explicit return to this lift. A resolving
+    // verdict stays here until its final work set, then advances through the
+    // authored sequence (skipping already-finished entries).
+    if (status === "planned" || hasPlannedWork(entry)) {
+      currentSE = entry;
+      return;
+    }
+    const index = session.exercises.indexOf(entry);
+    const later = index < 0 ? null
+      : session.exercises.slice(index + 1).find(hasPlannedWork);
+    currentSE = later || session.exercises.find(hasPlannedWork) || entry;
+  }
+
   const rest = makeRestTimer(() => paintBar(), () => onRestDone());
   let restLabel = "";
   let barEls = null;                          // bottom-bar refs, filled after pushScreen
@@ -410,7 +433,28 @@ export async function openSession(id) {
     // workout forward, so the ordinal must count it or skipping every set
     // would read "1 of N" forever. Mirrors the native progress card.
     const resolvedWork = workSets.filter((set) => set.status === "completed" || set.status === "skipped").length;
-    body.append(ui.h("div", { class: "card session-progress" },
+    const currentIndex = current ? session.exercises.indexOf(current) : -1;
+    const earlier = currentIndex > 0 ? session.exercises.slice(0, currentIndex) : [];
+    // Do not rewrite 1,2,3,4 as 3,1,2,4. Earlier authored entries stay above
+    // the current lift inside one compact disclosure; move controls still act
+    // on exactly the sequence represented on screen.
+    if (earlier.length) {
+      const names = earlier.map((entry) => {
+        const sets = (entry.sets || []).filter((set) => !set.isWarmup);
+        const resolved = sets.filter((set) => set.status !== "planned").length;
+        return `${entry.exerciseName} ${resolved}/${sets.length}`;
+      }).join(" · ");
+      const prior = ui.h("details", { class: "prior-exercises" },
+        ui.h("summary", {}, ui.h("span", { class: "title", text: "Earlier in session" }),
+          ui.h("span", { class: "sub", text: names })));
+      earlier.forEach((entry) => prior.append(exerciseCard(entry, body, false)));
+      body.append(prior);
+    }
+    if (current) {
+      body.append(exerciseCard(current, body, true));
+    }
+    body.append(ui.h("div", { class: "session-progress" },
+      ui.h("div", { class: "eyebrow", text: workoutName }),
       ui.h("div", { class: "title mono", text: `Exercise ${exerciseNumber} of ${session.exercises.length} · ${workSets.length === 0 ? 0 : Math.min(resolvedWork + 1, workSets.length)} of ${workSets.length} work sets` }),
       ui.h("div", { class: "sub", text: ui.fmtDate(session.date) })));
     if (gymOptions.length) {
@@ -439,7 +483,8 @@ export async function openSession(id) {
       });
       body.append(ui.field("Training at", gymSelect));
     }
-    session.exercises.forEach((se) => body.append(exerciseCard(se, body)));
+    session.exercises.slice(currentIndex + 1)
+      .forEach((se) => body.append(exerciseCard(se, body, false)));
 
     body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "12px" }, text: "+ Add exercise", onClick: () => pickExercise(body) }));
 
@@ -453,7 +498,7 @@ export async function openSession(id) {
       onClick: () => discard() }));
   }
 
-  function exerciseCard(se, body) {
+  function exerciseCard(se, body, emphasized = false) {
     const ex = exMap.get(se.exerciseName);
     const phaseLabel = ui.sessionPhaseLabel(se, ex);
     const head = ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px" } },
@@ -468,7 +513,11 @@ export async function openSession(id) {
         ex
           ? ui.h("button", { class: "title title-button", text: se.exerciseName,
             "aria-label": `${se.exerciseName} — muscles, history, and settings`,
-            onClick: () => exerciseDetail(ex, { onClose: () => renderBody(body) }) })
+            onClick: () => exerciseDetail(ex, {
+              onClose: () => renderBody(body), sessionEntry: se, sessionGym: gymState.value,
+              sessionProgramFocus: sessionProgram?.focus || null,
+              restSeconds: restFor(ex, se.programRole),
+            }) })
           : ui.h("span", { class: "title", text: se.exerciseName }),
         phaseLabel ? ui.h("span", { class: "sub accent", text: phaseLabel }) : null),
       ui.h("div", { class: "btn-row", style: { alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" } },
@@ -477,7 +526,8 @@ export async function openSession(id) {
         ex && ex.type === "barbell" ? barSelect(se, body) : null,
         ui.h("button", { class: "btn sm ghost", text: `⏱ ${ui.mmss(restFor(ex, se.programRole))}`, onClick: () => editRest(se, ex, body) }),
         ex && ex.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null));
-    const card = ui.h("div", { class: "card" }, head);
+    const card = ui.h("section", { class: `card exercise-card${emphasized ? " emphasized" : ""}`,
+      "aria-label": `${se.exerciseName}${emphasized ? ", current exercise" : ""}` }, head);
     const last = lastTimeLine(se);
     if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
     const effortCue = complementaryEffortCueForEntry(se, ex, sessionProgram);
@@ -487,16 +537,21 @@ export async function openSession(id) {
     se.sets.sort((a, b) => a.order - b.order);
     const showAll = expandedEntries.has(se);
     const currentSet = se.sets.find((set) => !set.isWarmup && set.status === "planned");
+    const focusedIndices = new Set(emphasized && !showAll
+      ? C.focusedSetIndices(se.sets)
+      : se.sets.map((_, index) => index));
     // Discloses where the first working set's history-based suggestion came
     // from — only for that set, and only when a suggestion actually shaped
     // it (never the silent catalog-default fallback). Mirrors native
     // ActiveSessionView's firstSetProvenance.
     const firstWorkingSet = se.sets.find((set) => !set.isWarmup);
-    const adHocExposure = mostRecentTopExposure(se);
+    const usesAdHocFallback = C.usesAdHocFirstSetFallback(se);
+    const adHocExposure = usesAdHocFallback ? mostRecentTopExposure(se) : null;
     const firstSetProvenance = C.suggestedAdHocFirstSetTarget(adHocExposure)
       ? C.historyProvenanceLabel(adHocExposure.date, Date.now())
       : null;
     se.sets.forEach((s, index) => {
+      if (!focusedIndices.has(index)) return;
       const prior = se.sets[index - 1];
       const loadChange = !!prior && (Math.abs((prior.weightLb || 0) - (s.weightLb || 0)) > 0.001
         || prior.loadBasis !== s.loadBasis || (prior.implementCount || 1) !== (s.implementCount || 1));
@@ -601,6 +656,7 @@ export async function openSession(id) {
   function setRow(se, s, body, { compact = false, showLoadout = true, provenance = null } = {}) {
     const ex = exMap.get(se.exerciseName);
     const u = setUnit(se, s);
+    const isCurrent = se.sets.find((x) => !x.isWarmup && x.status === "planned") === s;
     // Steady-state cardio (type conditioning: Walk/Bike/Ruck…) logs
     // distance/time/incline, not weight×reps — keyed on the exercise TYPE so
     // rep-based conditioning (burpees, type bodyweight) keeps the lifting row.
@@ -617,7 +673,11 @@ export async function openSession(id) {
         : ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editSet(se, s, body) },
           ui.h("span", { class: "wt mono" + (s.isWarmup ? " muted" : ""), text: s.weightLb === 0 ? "BW" : `${C.trim(u === "kg" ? C.kgFromLb(s.weightLb) : s.weightLb)} ${u}${C.loadBasisSuffix(s.loadBasis)}` }),
           ui.h("span", { class: "sub mono", text: ` × ${s.reps}${s.isPerSide ? "/side" : ""}` }));
-    const tags = ui.h("span", { class: "sub" });
+    const state = s.status === "completed" ? "COMPLETED"
+      : s.status === "skipped" ? "SKIPPED"
+        : isCurrent ? "NOW" : s.isWarmup ? "WARMUP" : "UPCOMING";
+    const tags = ui.h("span", { class: "sub set-state-line" },
+      ui.h("span", { class: `set-state ${state.toLowerCase()}`, text: state }));
     if (s.isWarmup) tags.append(ui.h("span", { class: "pill", text: "warmup" }));
     // The prescribed reps are a FLOOR on an AMRAP set. Without saying so,
     // 5/3/1's week 3 reads as a plain single and the "+" — the whole
@@ -642,9 +702,9 @@ export async function openSession(id) {
       "aria-label": `Set status: ${s.status}`,
       title: "Tap to complete or undo; hold for more set options",
       onClick: () => {
-        currentSE = se;
         const newlyCompleted = s.status !== "completed";
         s.status = newlyCompleted ? "completed" : "planned";
+        focusAfterVerdict(se, s.status);
         if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole), se.exerciseName);
         save(); renderBody(body);
       },
@@ -678,7 +738,6 @@ export async function openSession(id) {
     // The set you're ON — the first WORKING set with no verdict yet — gets
     // the accent rail; warmups sit quiet (and often go unflagged, so they
     // must not hold the rail hostage).
-    const isCurrent = se.sets.find((x) => !x.isWarmup && x.status === "planned") === s;
     const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "")
       + (isCurrent ? " current current-set-card" : "") + (compact ? " compact" : "") }, wt, tags,
       ui.h("div", { class: "flagbtns" }, statusButton,
@@ -694,9 +753,31 @@ export async function openSession(id) {
     // Loadout visualization — plates for barbell lifts, the rack number for
     // dumbbell lifts. Mirrors native.
     if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
-      const { svg, solution } = barbellSVG(s.weightLb, u, barFor(se), gymState.value, null,
-        ex?.stationDenomination ?? null, "compact", ex?.movementGroup === "olympic" ? "bumper" : "steel");
-      const wrap = ui.h("div", { class: "barbell-wrap" }, svg);
+      const selectedBar = barFor(se);
+      const plateStyle = ex?.movementGroup === "olympic" ? "bumper" : "steel";
+      const solution = plateSolutionForSet(s, selectedBar, gymState.value, ex);
+      const rendered = barbellSVG(solution, isCurrent ? "full" : "compact", plateStyle);
+      const requestedLb = s.targetWeightLb ?? se.targetWeightLb ?? s.weightLb;
+      const wrap = ui.h("div", { class: `barbell-wrap${isCurrent ? " current-loadout" : ""}` });
+      if (isCurrent) {
+        wrap.append(ui.h("div", { class: "section-heading" },
+          ui.h("div", {}, ui.h("span", { class: "eyebrow", text: "PUT THIS ON THE BAR" }),
+            ui.h("div", { class: "title", text: C.barLabel(selectedBar) }))));
+        wrap.append(barbellStage(rendered, {
+          caption: "Exact mirrored stack · counts are per side", emphasis: "session",
+          onExpand: () => {
+            ui.pushScreen({ title: `${se.exerciseName} · loaded bar`, build: (screen) => {
+              const expanded = barbellSVG(solution, "full", plateStyle);
+              screen.append(barbellStage(expanded, { caption: "Exact mirrored stack · counts are per side", emphasis: "expanded" }),
+                loadoutSummary(requestedLb, solution));
+              const mixed = mixedEquipmentNote(solution); if (mixed) screen.append(mixed);
+            } });
+          },
+        }), loadoutSummary(requestedLb, solution, { compact: true }));
+        const mixed = mixedEquipmentNote(solution); if (mixed) wrap.append(mixed);
+      } else {
+        wrap.append(rendered.svg);
+      }
       if (solution.isOffTarget) {
         const t = u === "kg" ? C.kgFromLb(solution.totalLb) : solution.totalLb;
         wrap.append(ui.h("span", { class: "sub warn", text: `≈ closest ${C.trim(t)} ${u}` }));
@@ -717,12 +798,12 @@ export async function openSession(id) {
   }
 
   function chooseStatus(se, s, body) {
-    currentSE = se;
     ui.actionSheet("Set status", ["planned", "completed", "skipped"].map((status) => ({
       label: status[0].toUpperCase() + status.slice(1),
       onClick: () => {
         const newlyCompleted = status === "completed" && s.status !== "completed";
         s.status = status;
+        focusAfterVerdict(se, status);
         if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole), se.exerciseName);
         save(); renderBody(body);
       },
@@ -774,7 +855,9 @@ export async function openSession(id) {
     const catalogLb = ex
       ? ProgrammingDefaults.recommendation(se.exerciseName, ex.category, ex.type).weightLb
       : 0;
-    const suggested = C.suggestedAdHocFirstSetTarget(mostRecentTopExposure(se));
+    const suggested = C.usesAdHocFirstSetFallback(se)
+      ? C.suggestedAdHocFirstSetTarget(mostRecentTopExposure(se))
+      : null;
     const baseDefaultLb = suggested ? suggested.weightLb : catalogLb;
     const firstSetDefaultLb = ex && ex.type === "barbell"
       ? Math.max(baseDefaultLb, C.barLb(C.barById(se.barId || gymState.value?.defaultBarId)))
@@ -863,14 +946,14 @@ export async function openSession(id) {
         let stopped = (s.flags || []).includes("stopped early");
         let applyWeightToRemaining = false;
         let applyRepsToRemaining = !s.isWarmup && s.status === "planned";
-        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Warmup" }), ui.toggle(warm, (v) => { warm = v; })));
-        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Per side" }), ui.toggle(per, (v) => { per = v; })));
-        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Stopped early" }), ui.toggle(stopped, (v) => { stopped = v; })));
+        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Warmup" }), ui.toggle(warm, (v) => { warm = v; }, "Warmup set")));
+        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Per side" }), ui.toggle(per, (v) => { per = v; }, "Load entered per side")));
+        c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Stopped early" }), ui.toggle(stopped, (v) => { stopped = v; }, "Stopped early")));
         if (!s.isWarmup && se.sets.some((candidate) => candidate !== s && !candidate.isWarmup && candidate.status === "planned")) {
           c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Apply reps to remaining planned sets" }),
-            ui.toggle(applyRepsToRemaining, (v) => { applyRepsToRemaining = v; })));
+            ui.toggle(applyRepsToRemaining, (v) => { applyRepsToRemaining = v; }, "Apply reps to remaining planned sets")));
           c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Apply weight to remaining planned sets" }),
-            ui.toggle(applyWeightToRemaining, (v) => { applyWeightToRemaining = v; })));
+            ui.toggle(applyWeightToRemaining, (v) => { applyWeightToRemaining = v; }, "Apply weight to remaining planned sets")));
         }
         const noteInput = ui.h("input", { type: "text", placeholder: "What did it feel like?", value: s.bodyFlagNote || "" });
         const siteSel = ui.h("select", {}, ui.h("option", { value: "", text: "None" }), ...BODY_SITES.map((b) => ui.h("option", { value: b, text: b, selected: b === site })));

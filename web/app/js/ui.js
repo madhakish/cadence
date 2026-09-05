@@ -67,28 +67,113 @@ export function icon(name) {
 
 // ---- overlays (full-screen pushed screens) ----
 const overlays = () => document.getElementById("overlays");
+let dialogSequence = 0;
+const focusable = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Capture enough identity to find the same control after a screen underneath
+// a dialog repaints. Keeping only the original node works until onClose clears
+// and rebuilds that screen; then the detached node cannot receive focus and
+// keyboard/VoiceOver users fall back to the document body. Prefer authored
+// identity, with visible control text plus its ordinal as the final fallback.
+function returnFocusLocator(control) {
+  if (!control || control === document.body || typeof control.closest !== "function") return null;
+  const scope = control.closest('[role="dialog"]') || document;
+  const tagName = control.tagName;
+  const id = control.id || null;
+  const focusKey = control.getAttribute("data-focus-key");
+  const ariaLabel = control.getAttribute("aria-label");
+  const name = control.getAttribute("name");
+  const text = (control.textContent || "").trim();
+  const matches = (candidate) => {
+    if (candidate.tagName !== tagName) return false;
+    if (id) return candidate.id === id;
+    if (focusKey) return candidate.getAttribute("data-focus-key") === focusKey;
+    if (ariaLabel) return candidate.getAttribute("aria-label") === ariaLabel;
+    if (name) return candidate.getAttribute("name") === name;
+    return text.length > 0 && (candidate.textContent || "").trim() === text;
+  };
+  const peers = [...scope.querySelectorAll(focusable)].filter(matches);
+  const ordinal = Math.max(0, peers.indexOf(control));
+  return () => {
+    if (control.isConnected) return control;
+    const liveScope = scope === document || scope.isConnected ? scope : document;
+    const replacements = [...liveScope.querySelectorAll(focusable)].filter(matches);
+    return replacements[ordinal] || replacements.at(-1) || null;
+  };
+}
+
+function dialogKeyboard(dialog, close, returnFocus) {
+  const locateReturnFocus = returnFocusLocator(returnFocus);
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") { event.preventDefault(); close(); return; }
+    if (event.key !== "Tab") return;
+    const controls = [...dialog.querySelectorAll(focusable)].filter((control) => control.getClientRects().length || control === document.activeElement);
+    if (!controls.length) { event.preventDefault(); dialog.focus(); return; }
+    const first = controls[0], last = controls.at(-1);
+    const activeIndex = controls.indexOf(document.activeElement);
+    // A dialog container, heading, or newly introduced custom focus target can
+    // hold focus without belonging to the current control list. Letting the
+    // browser guess from there can leave the modal. Re-enter at the correct
+    // edge before handling the ordinary first/last wrap.
+    if (activeIndex < 0) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && activeIndex === 0) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && activeIndex === controls.length - 1) {
+      event.preventDefault(); first.focus();
+    }
+  };
+  dialog.addEventListener("keydown", onKeyDown);
+  return () => {
+    dialog.removeEventListener("keydown", onKeyDown);
+    locateReturnFocus?.()?.focus();
+  };
+}
+
 export function pushScreen({ title, build, actions = [], onClose }) {
+  const returnFocus = document.activeElement;
+  const headingId = `cadence-dialog-title-${++dialogSequence}`;
   const body = h("div", { class: "overlay-body" });
   const back = h("button", { class: "btn ghost sm", text: "‹ Back", onClick: () => close() });
-  const head = h("div", { class: "overlay-head" }, back, h("h2", { text: title || "" }), h("div", { class: "btn-row" }, ...actions));
-  const el = h("div", { class: "overlay" }, head, body);
+  const head = h("div", { class: "overlay-head" }, back, h("h2", { id: headingId, text: title || "" }), h("div", { class: "btn-row" }, ...actions));
+  const el = h("div", { class: "overlay", role: "dialog", "aria-modal": "true",
+    "aria-labelledby": headingId, tabIndex: -1 }, head, body);
   overlays().append(el);
   const api = { el, body, close, setTitle: (t) => { head.querySelector("h2").textContent = t; } };
+  let closed = false;
+  const restoreFocus = dialogKeyboard(el, close, returnFocus);
   // onClose mirrors sheet(): the screen underneath may need to repaint state
   // this screen edited (the logger under the lift-info editor).
-  function close() { el.remove(); onClose?.(); }
+  function close() {
+    if (closed) return;
+    closed = true; el.remove();
+    try { onClose?.(); } finally { restoreFocus(); }
+  }
   if (build) build(body, api);
+  back.focus();
   return api;
 }
 
 // ---- bottom sheets ----
 export function sheet({ title, build, onClose }) {
-  const content = h("div", { class: "sheet" }, h("div", { class: "grip" }), title ? h("h2", { text: title }) : null);
+  const returnFocus = document.activeElement;
+  const headingId = `cadence-dialog-title-${++dialogSequence}`;
+  const content = h("div", { class: "sheet", role: "dialog", "aria-modal": "true",
+    ...(title ? { "aria-labelledby": headingId } : { "aria-label": "Dialog" }), tabIndex: -1 },
+  h("div", { class: "grip", "aria-hidden": "true" }), title ? h("h2", { id: headingId, text: title }) : null);
   const scrim = h("div", { class: "scrim", onClick: (e) => { if (e.target === scrim) close(); } }, content);
   overlays().append(scrim);
   const api = { el: content, close };
-  function close() { scrim.remove(); onClose?.(); }
+  let closed = false;
+  const restoreFocus = dialogKeyboard(content, close, returnFocus);
+  function close() {
+    if (closed) return;
+    closed = true; scrim.remove();
+    try { onClose?.(); } finally { restoreFocus(); }
+  }
   if (build) build(content, api);
+  (content.querySelector(focusable) || content).focus();
   return api;
 }
 
@@ -119,12 +204,13 @@ export function toast(msg) {
 export function seg(options, value, onChange) {
   // options: [{ value, label }] or [value...]
   const opts = options.map((o) => (typeof o === "object" ? o : { value: o, label: o }));
-  const wrap = h("div", { class: "seg" });
+  const wrap = h("div", { class: "seg", role: "group" });
   const render = (val) => {
     clear(wrap);
     for (const o of opts) {
       wrap.append(h("button", {
         class: o.value === val ? "on" : "", text: o.label,
+        type: "button", "aria-pressed": String(o.value === val),
         onClick: () => { render(o.value); onChange(o.value); },
       }));
     }
@@ -144,9 +230,13 @@ export function stepper(value, { min = -Infinity, max = Infinity, step = 1, form
   );
 }
 
-export function toggle(value, onChange) {
-  const b = h("button", { class: "toggle" + (value ? " on" : "") , type: "button" });
-  b.addEventListener("click", () => { const nv = !b.classList.contains("on"); b.classList.toggle("on", nv); onChange(nv); });
+export function toggle(value, onChange, label = "Toggle") {
+  const b = h("button", { class: "toggle" + (value ? " on" : ""), type: "button",
+    role: "switch", "aria-checked": String(!!value), "aria-label": label });
+  b.addEventListener("click", () => {
+    const nv = !b.classList.contains("on");
+    b.classList.toggle("on", nv); b.setAttribute("aria-checked", String(nv)); onChange(nv);
+  });
   return b;
 }
 

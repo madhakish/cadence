@@ -47,6 +47,11 @@ assert_classification \
   $'Cadence/Services/ExportService.swift\nCadence/Services/ProgramImportService.swift'
 
 assert_classification \
+  "models-only services compiled into the migration target run the migration suite" \
+  $'native=true\nmigrations=true\nweb=false' \
+  $'Cadence/Services/ActivitySession.swift\nCadence/Services/ProgramActivationService.swift'
+
+assert_classification \
   "seed template catalog changes run the migration suite" \
   $'native=true\nmigrations=true\nweb=false' \
   'Cadence/Seed/ProgramTemplates.swift'
