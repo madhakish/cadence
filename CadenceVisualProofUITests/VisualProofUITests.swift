@@ -62,7 +62,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(target.waitForExistence(timeout: 3))
         target.tap()
         target.typeText("139")
-        app.swipeDown()
+        element("plate-calculator-screen").swipeUp()
         XCTAssertTrue(app.staticTexts["ACHIEVED — BAR INCLUDED"].waitForExistence(timeout: 3))
         capture("after-07-plate-calculator-iphone")
 
@@ -99,7 +99,14 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(delete.waitForExistence(timeout: 3))
         delete.tap()
         XCTAssertTrue(app.buttons["Delete activity"].waitForExistence(timeout: 3))
-        app.buttons["Cancel"].tap()
+        let cancel = app.buttons["Cancel"]
+        if cancel.waitForExistence(timeout: 1) {
+            cancel.tap()
+        } else {
+            let dismissRegion = element("PopoverDismissRegion")
+            XCTAssertTrue(dismissRegion.waitForExistence(timeout: 3))
+            dismissRegion.tap()
+        }
         XCTAssertTrue(activitySummary.waitForExistence(timeout: 3), "cancelling keeps the banked activity")
     }
 
