@@ -1,16 +1,15 @@
 import SwiftData
 
-/// Current persistence schema. V3 through V9 are frozen in their own files;
-/// every V10 change has a literal migration-safe default or is a brand-new
-/// model, and needs no backfill.
+/// Current persistence schema. V3 through V11 are frozen in their own files;
+/// every V12 change is a brand-new model or a nil-valued optional on old
+/// rows, and needs no backfill.
 ///
-/// V10 adds the `TrainingInterval` model (typed, dated calendar spans —
-/// deload, rest, away, active recovery) and
-/// `SessionExercise.barIDIsManual` (whether the entry's bar was picked by
-/// hand rather than stamped from the gym default; `false` reproduces every
-/// V9 row exactly).
-enum CadenceSchemaV11: VersionedSchema {
-    static var versionIdentifier = Schema.Version(11, 0, 0)
+/// V12 adds the `ActivityDetail` model (typed, kind-discriminated metadata
+/// for ad-hoc activity sessions — wood splitting first) and its optional
+/// one-to-one relationship from `WorkoutSession`; every existing session
+/// simply carries nil.
+enum CadenceSchemaV12: VersionedSchema {
+    static var versionIdentifier = Schema.Version(12, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [
@@ -30,6 +29,7 @@ enum CadenceSchemaV11: VersionedSchema {
             ProgramAccessory.self,
             CoachingDecision.self,
             TrainingInterval.self,
+            ActivityDetail.self,
         ]
     }
 }
@@ -41,7 +41,7 @@ enum CadencePre72MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CadenceSchemaV1.self, CadenceSchemaV3.self, CadenceSchemaV4.self, CadenceSchemaV5.self,
          CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self, CadenceSchemaV9.self,
-         CadenceSchemaV10.self, CadenceSchemaV11.self]
+         CadenceSchemaV10.self, CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
@@ -64,6 +64,8 @@ enum CadencePre72MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV10.self),
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }
@@ -74,7 +76,7 @@ enum Cadence72MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CadenceSchemaV2.self, CadenceSchemaV3.self, CadenceSchemaV4.self, CadenceSchemaV5.self,
          CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self, CadenceSchemaV9.self,
-         CadenceSchemaV10.self, CadenceSchemaV11.self]
+         CadenceSchemaV10.self, CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
@@ -97,6 +99,8 @@ enum Cadence72MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV10.self),
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }
@@ -106,7 +110,7 @@ enum CadenceV3MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CadenceSchemaV3.self, CadenceSchemaV4.self, CadenceSchemaV5.self,
          CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self, CadenceSchemaV9.self,
-         CadenceSchemaV10.self, CadenceSchemaV11.self]
+         CadenceSchemaV10.self, CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
@@ -127,6 +131,8 @@ enum CadenceV3MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV10.self),
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }
@@ -137,7 +143,7 @@ enum CadenceV4MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CadenceSchemaV4.self, CadenceSchemaV5.self, CadenceSchemaV6.self,
          CadenceSchemaV7.self, CadenceSchemaV8.self, CadenceSchemaV9.self,
-         CadenceSchemaV10.self, CadenceSchemaV11.self]
+         CadenceSchemaV10.self, CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
@@ -156,6 +162,8 @@ enum CadenceV4MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV10.self),
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }
@@ -166,7 +174,7 @@ enum CadenceV4MigrationPlan: SchemaMigrationPlan {
 enum CadenceV5MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CadenceSchemaV5.self, CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self,
-         CadenceSchemaV9.self, CadenceSchemaV10.self, CadenceSchemaV11.self]
+         CadenceSchemaV9.self, CadenceSchemaV10.self, CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
@@ -183,6 +191,8 @@ enum CadenceV5MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV10.self),
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }
@@ -193,7 +203,7 @@ enum CadenceV5MigrationPlan: SchemaMigrationPlan {
 enum CadenceV6MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CadenceSchemaV6.self, CadenceSchemaV7.self, CadenceSchemaV8.self, CadenceSchemaV9.self,
-         CadenceSchemaV10.self, CadenceSchemaV11.self]
+         CadenceSchemaV10.self, CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
@@ -208,6 +218,8 @@ enum CadenceV6MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV10.self),
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }
@@ -218,7 +230,8 @@ enum CadenceV6MigrationPlan: SchemaMigrationPlan {
 /// SwiftData can add the column without touching a row.
 enum CadenceV7MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV7.self, CadenceSchemaV8.self, CadenceSchemaV9.self, CadenceSchemaV10.self, CadenceSchemaV11.self]
+        [CadenceSchemaV7.self, CadenceSchemaV8.self, CadenceSchemaV9.self, CadenceSchemaV10.self,
+         CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
@@ -231,6 +244,8 @@ enum CadenceV7MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV10.self),
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }
@@ -240,7 +255,8 @@ enum CadenceV7MigrationPlan: SchemaMigrationPlan {
 /// program or day.
 enum CadenceV8MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV8.self, CadenceSchemaV9.self, CadenceSchemaV10.self, CadenceSchemaV11.self]
+        [CadenceSchemaV8.self, CadenceSchemaV9.self, CadenceSchemaV10.self,
+         CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
@@ -251,6 +267,8 @@ enum CadenceV8MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV10.self),
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }
@@ -262,7 +280,7 @@ enum CadenceV8MigrationPlan: SchemaMigrationPlan {
 /// without touching a row.
 enum CadenceV9MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV9.self, CadenceSchemaV10.self, CadenceSchemaV11.self]
+        [CadenceSchemaV9.self, CadenceSchemaV10.self, CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
@@ -271,6 +289,8 @@ enum CadenceV9MigrationPlan: SchemaMigrationPlan {
                          toVersion: CadenceSchemaV10.self),
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }
@@ -281,13 +301,32 @@ enum CadenceV9MigrationPlan: SchemaMigrationPlan {
 /// deterministic legacy ids after open.
 enum CadenceV10MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CadenceSchemaV10.self, CadenceSchemaV11.self]
+        [CadenceSchemaV10.self, CadenceSchemaV11.self, CadenceSchemaV12.self]
     }
 
     static var stages: [MigrationStage] {
         [
             .lightweight(fromVersion: CadenceSchemaV10.self,
                          toVersion: CadenceSchemaV11.self),
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
+        ]
+    }
+}
+
+/// V11 -> V12: ad-hoc activity sessions (wood splitting first). V12 adds
+/// only the brand-new `ActivityDetail` model and an optional to-one
+/// relationship on `WorkoutSession` that every existing row leaves nil, so
+/// SwiftData can upgrade without touching a row.
+enum CadenceV11MigrationPlan: SchemaMigrationPlan {
+    static var schemas: [any VersionedSchema.Type] {
+        [CadenceSchemaV11.self, CadenceSchemaV12.self]
+    }
+
+    static var stages: [MigrationStage] {
+        [
+            .lightweight(fromVersion: CadenceSchemaV11.self,
+                         toVersion: CadenceSchemaV12.self),
         ]
     }
 }

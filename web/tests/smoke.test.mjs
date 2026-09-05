@@ -88,7 +88,7 @@ const completeAll = async (workout) => {
 // ---- privacy-safe first launch ----
 await db.ensureSeeded();
 const seededExercises = await db.Exercises.all();
-ok(seededExercises.length === 158, "seeded 158 exercises");
+ok(seededExercises.length === 159, "seeded 159 exercises");
 ok(["Push-ups", "Pull-ups", "Barbell Row", "Bulgarian Split Squat", "Ab Wheel Rollout", "Row Erg"]
   .every((name) => seededExercises.some((exercise) => exercise.name === name)),
   "comprehensive seed covers common push, pull, lower, core, and conditioning movements");
@@ -116,7 +116,7 @@ await withCleanup(async (keep) => {
   const s = await db.Settings.get(); s.seededAt = null; await db.Settings.save(s);
   await db.ensureSeeded();
   ok((await db.Sessions.all()).some((workout) => workout.id === sentinelId), "seed repair preserves workout history");
-  ok((await db.Exercises.all()).length === 158, "seed repair does not duplicate exercises");
+  ok((await db.Exercises.all()).length === 159, "seed repair does not duplicate exercises");
   ok((await db.Bodyweight.all()).some((entry) => entry.id === weighInId), "seed repair preserves other user stores");
 })();
 
@@ -588,7 +588,7 @@ for (let i = 0; i < 10; i++) {
   await db.syncLibrary();
   ok((await db.Exercises.byName("Deadlift")).movementGroup === "hinge", "sync backfills a missing movement group");
   ok((await db.Exercises.byName("Deadlift")).defaultRestSeconds === 222, "sync does NOT clobber user edits");
-  ok((await db.Exercises.all()).length === 158, "sync leaves the count whole (no dupes)");
+  ok((await db.Exercises.all()).length === 159, "sync leaves the count whole (no dupes)");
 }
 
 // ---- vertical pulls: migrate old installs once, then respect user edits ----
@@ -1123,7 +1123,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // Every other assertion here compares against the constant, so a JS-only bump
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
-ok(db.BACKUP_SCHEMA_VERSION === 11, `backup schema is pinned at 11 (got ${db.BACKUP_SCHEMA_VERSION})`);
+ok(db.BACKUP_SCHEMA_VERSION === 12, `backup schema is pinned at 12 (got ${db.BACKUP_SCHEMA_VERSION})`);
 
 // An app must never write a backup it cannot itself restore. A corrupted or
 // out-of-range birthYear is clamped to the not-set sentinel on the way through
@@ -1149,7 +1149,7 @@ ok(db.BACKUP_SCHEMA_VERSION === 11, `backup schema is pinned at 11 (got ${db.BAC
 ok(parsed.sessions.length === 11 && Array.isArray(parsed.milestones), "export bundle shape");
 ok(Array.isArray(parsed.tracks) && parsed.tracks.length === 3, "export carries lift tracks");
 ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
-ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 158, "export carries the exercise library");
+ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 159, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
 ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
@@ -1665,7 +1665,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 11, "climbed flights ship inside the current backup schema");
+    ok(climbBundle.schemaVersion === 12, "climbed flights ship inside the current backup schema");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -3666,6 +3666,40 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(kgSets > 0 && perSide > 0 && timed > 0 && bwSets > 0 && drops > 0 && signals > 0,
     `kg entry (${kgSets}), per-side (${perSide}), timed (${timed}), bodyweight (${bwSets}), drop-load (${drops}), body signals (${signals}) all present`);
 
+  // v12 ad-hoc activity (wood splitting, the first kind): the standalone
+  // session restores with its typed detail intact, derives the workload,
+  // and re-exports verbatim [INV-WOOD-WORK-ROUND-TRIPS]. It is one
+  // off-program `WorkoutSession` on the same timeline as the training log
+  // [INV-WOOD-WORK-USES-ONE-TIMELINE]. Duration and maul weight live only
+  // on the canonical conditioning set.
+  {
+    const wood = sessions.find((s) => s.activity);
+    ok(!!wood, "the wood-splitting session restores with its typed activity detail");
+    ok(wood.activity.kind === "woodSplitting", "the activity kind survives import");
+    ok(wood.activity.sessionRPE === 8.5 && wood.activity.rounds === 55
+      && wood.activity.splitPieces === 15 && wood.activity.estimatedStrikes === 340
+      && wood.activity.cordVolume === 0.25, "every recorded wood fact survives import");
+    ok(!wood.programTag, "wood splitting is off-program");
+    const woodEntry = wood.exercises.find((e) => e.exerciseName === C.activityExerciseName(wood.activity.kind));
+    const woodSet = woodEntry?.sets?.[0];
+    ok(woodSet?.durationSeconds === 7200 && woodSet?.weightLb === 8,
+      "duration and maul weight stay on the canonical conditioning set");
+    ok(woodSet?.prescriptionBlock === "conditioning",
+      "the canonical set carries the conditioning block native's creator stamps");
+    ok(new Date(wood.completedAt) - new Date(wood.date) === 7200 * 1000,
+      "completedAt is the end of the work: start + duration");
+    ok(C.activityWorkload(woodSet.durationSeconds, wood.activity.sessionRPE)?.arbitraryUnits === 1020,
+      "workload derives as duration minutes × session RPE");
+    const reexport = JSON.parse(await db.exportJSON());
+    const woodOut = reexport.sessions.find((s) => s.activity);
+    ok(JSON.stringify(woodOut.activity)
+      === JSON.stringify({ kind: "woodSplitting", sessionRPE: 8.5, rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25 }),
+      "the activity detail re-exports verbatim");
+    ok(reexport.sessions.filter((s) => s.activity).length === 1
+      && reexport.sessions.every((s) => s.activity || !("activity" in s)),
+      "sessions without a detail never gain the key");
+  }
+
   const progs = await db.Programs.all();
   ok(progs.length >= 3 && new Set(progs.map((p) => p.focus)).size === 3, "programs cover all three training focuses");
   ok(fixture.appVersion === "synthetic" && progs.every((program) => program.name.startsWith("Fixture ")),
@@ -3742,7 +3776,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(sessions.every((s) => (s.exercises || []).every((e) => e.exerciseId === C.exerciseLegacyID(e.exerciseName))),
     "v10 session entries derive their exercise ids");
   const reexport = await db.exportBundle();
-  ok(reexport.schemaVersion === 11, "importing v10 re-exports as v11");
+  ok(reexport.schemaVersion === 12, "importing v10 re-exports as the current version");
 }
 
 

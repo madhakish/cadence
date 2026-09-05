@@ -53,8 +53,20 @@
 /// behavior. Older importers reject a v10 bundle on the version gate, which
 /// is correct: silently dropping a declared break would turn it back into an
 /// apparent lapse after a restore.
+///
+/// Version 12 (#166) adds the optional per-session `activity` object — the
+/// typed facts of an ad-hoc activity session: a required `kind`
+/// (`woodSplitting` is the first registered kind), `sessionRPE` for every
+/// kind, and the kind's own typed facts (wood: rounds, splitPieces,
+/// estimatedStrikes, cordVolume; duration and implement load stay on the
+/// canonical conditioning set). Additive: a v≤11 bundle restores with no
+/// detail on any session, and a later kind is a new value in the validated
+/// whitelist, so adding one bumps this version exactly like a new enum case
+/// always has. Older importers reject a v12 bundle on the version gate,
+/// which is correct: parsing it would silently drop the recorded facts
+/// (INV-WOOD-WORK-ROUND-TRIPS).
 public enum BackupContract {
-    public static let currentSchemaVersion = 11
+    public static let currentSchemaVersion = 12
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

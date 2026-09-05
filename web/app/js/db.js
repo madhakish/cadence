@@ -9,7 +9,7 @@ import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 8;
-export const BACKUP_SCHEMA_VERSION = 11;
+export const BACKUP_SCHEMA_VERSION = 12;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -740,6 +740,18 @@ const authoredExportSlots = (slots) => [...(slots || [])]
     || (String(a.exerciseName) < String(b.exerciseName) ? -1
       : String(a.exerciseName) > String(b.exerciseName) ? 1 : 0));
 
+// v12 activity DTO — ONE spelling shared by export and import (like the
+// programTag mappers), so a kind's facts can never drift between the two
+// directions (INV-WOOD-WORK-ROUND-TRIPS).
+const portableActivity = (a) => ({
+  kind: a.kind,
+  sessionRPE: a.sessionRPE ?? null,
+  rounds: a.rounds ?? null,
+  splitPieces: a.splitPieces ?? null,
+  estimatedStrikes: a.estimatedStrikes ?? null,
+  cordVolume: a.cordVolume ?? null,
+});
+
 export async function exportBundle() {
   const sessionFingerprint = (session) => JSON.stringify({
     date: iso(session.date), notes: session.notes || "", gym: session.gymName || "",
@@ -793,6 +805,11 @@ export async function exportBundle() {
       gymId: s.gymId || gymsByName.get(s.gymName)?.id || null, isCompleted: !!s.isCompleted,
       completedAt: s.completedAt || null,
       programTag: exportProgramTag(s.programTag),
+      // v12 typed ad-hoc activity facts, emitted only when the session has
+      // them (like flights): stamping the key onto every record would break
+      // byte-stable re-export of older backups. Duration and implement load
+      // stay on the canonical conditioning set.
+      ...(s.activity ? { activity: portableActivity(s.activity) } : {}),
       exercises: (s.exercises || []).map((e) => ({
         name: e.exerciseName, exerciseId: e.exerciseId || null, notes: e.notes || "",
         phase: e.phase ? C.portablePhaseLabel(e.phase) : null,
@@ -1094,6 +1111,21 @@ export function validateBackup(bundle) {
       numberValue(tag.dayIndex, `${path}.programTag.dayIndex`, { integer: true, min: 0 });
       const names = array(tag, "planNames", `${path}.programTag.planNames`);
       names?.forEach((name, i) => textValue(name, `${path}.programTag.planNames[${i}]`, true));
+    }
+    // v12 typed ad-hoc activity facts. The kind is required and validated
+    // against the registered whitelist (a later kind is a new enum value,
+    // so adding one bumps the version — the v4/v5 pattern); every fact is
+    // optional; RPE follows the recorded 1.0–10.0 contract, counts are
+    // whole and non-negative.
+    if (session.activity != null) {
+      const activity = object(session.activity, `${path}.activity`);
+      enumValue(activity.kind, C.ACTIVITY_KINDS, `${path}.activity.kind`, true);
+      numberValue(activity.sessionRPE, `${path}.activity.sessionRPE`,
+        { min: C.ACTIVITY_SESSION_RPE.min, max: C.ACTIVITY_SESSION_RPE.max });
+      numberValue(activity.rounds, `${path}.activity.rounds`, { integer: true, min: 0 });
+      numberValue(activity.splitPieces, `${path}.activity.splitPieces`, { integer: true, min: 0 });
+      numberValue(activity.estimatedStrikes, `${path}.activity.estimatedStrikes`, { integer: true, min: 0 });
+      numberValue(activity.cordVolume, `${path}.activity.cordVolume`, { min: 0 });
     }
     each(array(session, "exercises", `${path}.exercises`), `${path}.exercises`, (exercise, exercisePath) => {
       textValue(exercise.name, `${exercisePath}.name`, true);
@@ -1517,6 +1549,10 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       programTemplateId: schemaVersion >= 11 ? s.programTemplateId || null : null,
       gymId: s.gymId || null, gymName: s.gym || null,
       programTag: importProgramTag(s.programTag),
+      // v12 typed ad-hoc activity facts. Values — the kind included —
+      // restore verbatim; absence stays absent
+      // (INV-WOOD-WORK-DOES-NOT-GUESS). Mirrors native ImportService.
+      ...(schemaVersion >= 12 && s.activity ? { activity: portableActivity(s.activity) } : {}),
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, exerciseId: importedID(e.exerciseId, e.name), notes: e.notes || "", phase: recoverPhase(e.phase),
         programRole: e.role || null, programSlotId: e.programSlotId || null, barId: e.barId || null,

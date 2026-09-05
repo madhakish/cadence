@@ -3947,3 +3947,36 @@ export function isNamedRestoreNoOp(preview) {
   return [preview.exercises, preview.tracks, preview.gyms, preview.sessions, preview.programs]
     .every((collection) => collection.every((item) => item.status === "unchanged"));
 }
+
+// The registered ad-hoc activity kinds (#166) — real physical work logged as
+// one completed, off-program conditioning session on the same timeline as
+// training. Wood splitting is the first; a future kind (mountain biking,
+// hiking, climbing, portaging, …) is added here deliberately, with its own
+// typed facts, seeded exercise, and a backup-contract version bump — never
+// inferred from an exercise name. Mirrors native `ActivityKind`.
+export const ACTIVITY_EXERCISE_NAMES = { woodSplitting: "Wood Splitting" };
+// Derived, never hand-maintained: one registry, so the validator whitelist
+// and the name resolver cannot drift apart.
+export const ACTIVITY_KINDS = Object.keys(ACTIVITY_EXERCISE_NAMES);
+// Only a REGISTERED kind resolves a name — the same whitelist the backup
+// validator uses. A bare `ACTIVITY_EXERCISE_NAMES[kind]` would also answer for
+// inherited Object keys ("constructor", "toString"), handing a caller a
+// function where native's enum can only ever return a real name.
+export const activityExerciseName = (kind) =>
+  (ACTIVITY_KINDS.includes(kind) ? ACTIVITY_EXERCISE_NAMES[kind] : null);
+// The recorded session-RPE contract, one spelling for the validator and the
+// workload math. Mirrors native `ActivityWorkload.sessionRPERange`.
+export const ACTIVITY_SESSION_RPE = { min: 1, max: 10 };
+
+// Session-RPE workload for ad-hoc activity sessions (#166): duration minutes
+// × session RPE, in arbitrary units. Relative session load, never barbell
+// tonnage (INV-WOOD-WORK-IS-NOT-LIFTING-VOLUME). RPE follows the recorded
+// contract, 1.0–10.0 inclusive; a missing or out-of-contract input yields
+// null, not an estimate. Mirrors native `ActivityWorkload`.
+export function activityWorkload(durationSeconds, sessionRPE) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+  if (!Number.isFinite(sessionRPE)
+    || sessionRPE < ACTIVITY_SESSION_RPE.min || sessionRPE > ACTIVITY_SESSION_RPE.max) return null;
+  const durationMinutes = durationSeconds / 60;
+  return { durationMinutes, sessionRPE, arbitraryUnits: durationMinutes * sessionRPE };
+}

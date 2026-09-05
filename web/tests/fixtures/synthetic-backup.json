@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "exportedAt": "2026-07-01T12:00:00.000Z",
   "appVersion": "synthetic",
   "sessions": [
@@ -10322,6 +10322,68 @@
               "bodyFlagSite": null,
               "bodyFlagNote": null,
               "durationSeconds": null,
+              "distanceMiles": null,
+              "autoregReason": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b7a2c9d4-5e31-4f8a-9c06-2d7e84f1a3b5",
+      "programTemplateId": null,
+      "date": "2026-06-04T12:00:00.000Z",
+      "notes": "Wet oak rounds; fictional fixture log.",
+      "gym": null,
+      "gymId": null,
+      "isCompleted": true,
+      "completedAt": "2026-06-04T14:00:00.000Z",
+      "programTag": null,
+      "activity": {
+        "kind": "woodSplitting",
+        "sessionRPE": 8.5,
+        "rounds": 55,
+        "splitPieces": 15,
+        "estimatedStrikes": 340,
+        "cordVolume": 0.25
+      },
+      "exercises": [
+        {
+          "name": "Wood Splitting",
+          "exerciseId": "05c70564-c15c-4a9c-a107-acd7d11f0e02",
+          "notes": "",
+          "phase": null,
+          "role": null,
+          "programSlotId": null,
+          "barId": null,
+          "plannedWeightLb": null,
+          "targetWeightLb": null,
+          "plannedSets": null,
+          "plannedReps": null,
+          "plannedDurationSeconds": null,
+          "fallbackWeightLb": null,
+          "prescriptionStyle": null,
+          "sets": [
+            {
+              "weightLb": 8,
+              "reps": 0,
+              "targetWeightLb": null,
+              "plannedWeightLb": null,
+              "plannedReps": null,
+              "plannedDurationSeconds": null,
+              "prescriptionBlock": "conditioning",
+              "isWarmup": false,
+              "isPerSide": false,
+              "status": "completed",
+              "loadBasis": "externalTotal",
+              "implementCount": 1,
+              "enteredUnit": "lb",
+              "flags": [
+                "clean"
+              ],
+              "bodyFlagSite": null,
+              "bodyFlagNote": null,
+              "durationSeconds": 7200,
               "distanceMiles": null,
               "autoregReason": null
             }
@@ -52345,6 +52407,34 @@
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
       "id": "47d0bb81-62f6-49a3-ae73-0dab655dc415"
+    },
+    {
+      "name": "Wood Splitting",
+      "category": "Conditioning",
+      "type": "conditioning",
+      "movementGroup": "conditioning",
+      "movementPattern": "mixedConditioning",
+      "secondaryMovementPattern": null,
+      "aliases": [],
+      "strategyTags": [],
+      "loadBasis": "externalTotal",
+      "implementCount": 1,
+      "isUnilateral": false,
+      "defaultRestSeconds": 0,
+      "notes": "Duration / maul weight",
+      "isShelved": false,
+      "shelvedNote": "",
+      "watchSite": null,
+      "gateStatus": "open",
+      "gateSite": null,
+      "reEntryCriteria": [],
+      "completedReEntryCriteria": [],
+      "reEntryTestWeightLb": 0,
+      "reEntryTestSets": 3,
+      "reEntryTestReps": 5,
+      "createdAt": "2000-01-01T00:00:00.000Z",
+      "id": "05c70564-c15c-4a9c-a107-acd7d11f0e02",
+      "stationDenomination": null
     },
     {
       "name": "Y-T-W Raises",
