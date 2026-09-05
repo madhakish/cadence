@@ -154,6 +154,9 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
   ok(driftedRejected, "editing refuses a record that drifted from the one-entry, one-set shape instead of truncating it");
   ok(activity.activityDurationLabel(59 * 60 + 31) === "59 min",
     "duration labels floor to whole minutes like native, never rounding 59m31s up to an hour");
+  ok(activity.wholeMinuteSeconds("1.1", "0") === 3600 && activity.wholeMinuteSeconds("0", "0.5") === 0
+    && activity.wholeMinuteSeconds("", "45") === 2700 && activity.wholeMinuteSeconds("-2", "10") === 600,
+  "the form floors decimal hours and minutes to whole minutes, matching native's steppers");
   await activity.openActivityLog(); await tick();
   const activityOverlay = document.querySelector("#overlays .overlay");
   ok(activityOverlay?.textContent.includes("Physical work, not a training session")
@@ -3754,6 +3757,55 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     ok(reexport.sessions.filter((s) => s.activity).length === 1
       && reexport.sessions.every((s) => s.activity || !("activity" in s)),
       "sessions without a detail never gain the key");
+  }
+
+  // The importer is a second write path: it refuses the shapes the creator
+  // refuses, before any write, and the canonical shape still validates.
+  // Mirrors native ImportService.validate.
+  {
+    const woodID = "b7a2c9d4-5e31-4f8a-9c06-2d7e84f1a3b5";
+    const withWood = (mutate) => {
+      const copy = structuredClone(fixture);
+      mutate(copy.sessions.find((s) => s.id === woodID));
+      return copy;
+    };
+    const rejects = (why, mutate) => {
+      let rejected = false;
+      try { db.validateBackup(withWood(mutate)); } catch { rejected = true; }
+      ok(rejected, why);
+    };
+    rejects("an activity session with a second entry is rejected before writes",
+      (s) => { s.exercises.push(structuredClone(s.exercises[0])); });
+    rejects("an activity session with two sets is rejected before writes",
+      (s) => { s.exercises[0].sets.push(structuredClone(s.exercises[0].sets[0])); });
+    rejects("an activity session that is not completed is rejected before writes",
+      (s) => { s.isCompleted = false; });
+    rejects("an activity session carrying a program tag is rejected before writes",
+      (s) => { s.programTag = { programId: "0f3c2a9e-6b7d-4c1e-9a2b-5d4e3f2a1b0c" }; });
+    rejects("an activity session whose entry is not the kind's exercise is rejected before writes",
+      (s) => { s.exercises[0].name = "Back Squat"; });
+    rejects("an activity session without a timed set is rejected before writes",
+      (s) => { s.exercises[0].sets[0].durationSeconds = null; });
+    db.validateBackup(withWood(() => {}));
+    ok(true, "the canonical activity shape still validates");
+
+    // An edit to the facts alone is visible to the named-restore preview,
+    // so it can never be refused as "nothing to restore"
+    // [INV-WOOD-WORK-ROUND-TRIPS].
+    const edited = withWood((s) => { s.activity.sessionRPE = 9; s.activity.cordVolume = 0.4; });
+    const preview = await db.namedRestorePreview(edited);
+    ok(preview.sessions.some((d) => d.id === woodID && d.status !== "unchanged"),
+      "editing only the activity facts previews the session as changed");
+    ok(!preview.sessions.some((d) => d.id !== woodID && d.status !== "unchanged"),
+      "the activity signature leaves every other session unchanged");
+
+    // The version label never drops facts the bundle carries.
+    const relabelled = withWood(() => {});
+    relabelled.schemaVersion = 11;
+    await db.importBundle(relabelled, { createCheckpoint: false });
+    const restored = (await db.Sessions.completed()).find((s) => s.id === woodID);
+    ok(restored?.activity?.sessionRPE === 8.5 && restored?.activity?.cordVolume === 0.25,
+      "a bundle labelled below v12 that still carries the facts restores them rather than dropping them");
   }
 
   const progs = await db.Programs.all();

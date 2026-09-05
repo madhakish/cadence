@@ -655,6 +655,45 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<ActivityDetail>()).count, 0,
                        "a v11 restore invents no activity detail")
 
+        // A bundle whose declared version predates activities but still
+        // carries a valid object (a hand-relabelled v12 file) restores the
+        // facts rather than silently dropping them
+        // (INV-WOOD-WORK-ROUND-TRIPS).
+        var relabelledJSON = json
+        relabelledJSON["schemaVersion"] = 11
+        let relabelled = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        try ImportService.load(
+            JSONSerialization.data(withJSONObject: relabelledJSON),
+            into: relabelled.mainContext
+        )
+        XCTAssertEqual(try relabelled.mainContext.fetch(FetchDescriptor<ActivityDetail>()).count, 1,
+                       "a bundle that carries the facts never loses them to its version label")
+
+        // The importer is a second write path and refuses what the creator
+        // refuses: an activity session holding anything but the kind's one
+        // canonical entry with one timed set rejects before any write.
+        var offShapeJSON = json
+        var offShapeSessions = try XCTUnwrap(offShapeJSON["sessions"] as? [[String: Any]])
+        for index in offShapeSessions.indices where offShapeSessions[index]["activity"] != nil {
+            var exercises = try XCTUnwrap(offShapeSessions[index]["exercises"] as? [[String: Any]])
+            exercises.append(exercises[0])
+            offShapeSessions[index]["exercises"] = exercises
+        }
+        offShapeJSON["sessions"] = offShapeSessions
+        let offShape = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        XCTAssertThrowsError(try ImportService.load(
+            JSONSerialization.data(withJSONObject: offShapeJSON),
+            into: offShape.mainContext
+        ), "an activity session with a second entry must reject before writes, as web does")
+        XCTAssertEqual(try offShape.mainContext.fetch(FetchDescriptor<WorkoutSession>()).count, 0,
+                       "a rejected bundle writes nothing")
+
         // Native validation mirrors web validateBackup: an unregistered
         // kind or an out-of-contract RPE rejects the bundle before any
         // write, so both clients refuse the same file.

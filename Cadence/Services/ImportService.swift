@@ -311,6 +311,29 @@ enum ImportService {
                 try integer(activity.splitPieces, "\(path).activity.splitPieces", min: 0)
                 try integer(activity.estimatedStrikes, "\(path).activity.estimatedStrikes", min: 0)
                 try finite(activity.cordVolume, "\(path).activity.cordVolume", min: 0)
+                // The importer is a second write path: it refuses what the
+                // creator refuses. An activity session is one completed,
+                // off-program session holding exactly the kind's canonical
+                // conditioning entry with one timed set
+                // (INV-WOOD-WORK-USES-ONE-TIMELINE). Mirrors web validateBackup.
+                guard session.isCompleted == true else {
+                    throw ImportError.invalidData("\(path).activity: an activity session must be completed")
+                }
+                guard session.programTag == nil else {
+                    throw ImportError.invalidData("\(path).activity: an activity session carries no program tag")
+                }
+                let entries = session.exercises ?? []
+                let canonicalName = activity.kind.flatMap(ActivityKind.init(rawValue:))?.exerciseName ?? ""
+                guard entries.count == 1,
+                      try requiredText(entries[0].name, "\(path).exercises[0].name") == canonicalName
+                else {
+                    throw ImportError.invalidData("\(path).exercises: an activity session holds exactly one \(canonicalName) entry")
+                }
+                let sets = entries[0].sets ?? []
+                guard sets.count == 1 else {
+                    throw ImportError.invalidData("\(path).exercises[0].sets: an activity session holds exactly one set")
+                }
+                try integer(sets[0].durationSeconds, "\(path).exercises[0].sets[0].durationSeconds", required: true, min: 1)
             }
             for (ei, exercise) in (session.exercises ?? []).enumerated() {
                 let exercisePath = "\(path).exercises[\(ei)]"
@@ -826,12 +849,21 @@ enum ImportService {
             let id = s.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? ""
             let name = s.date.map { isoSessionName($0) } ?? "Untitled session"
             return BackupContract.NamedEntity(id: id, name: name, signature: sessionSignature(
-                date: s.date, programId: s.programTag?.programId, exerciseCount: (s.exercises ?? []).count))
+                date: s.date, programId: s.programTag?.programId, exerciseCount: (s.exercises ?? []).count,
+                activity: activitySignature(
+                    kind: s.activity?.kind, sessionRPE: s.activity?.sessionRPE, rounds: s.activity?.rounds,
+                    splitPieces: s.activity?.splitPieces, estimatedStrikes: s.activity?.estimatedStrikes,
+                    cordVolume: s.activity?.cordVolume)))
         }
         let currentSessions: [BackupContract.NamedEntity] = bundle.sessions == nil ? [] :
             try context.fetch(FetchDescriptor<WorkoutSession>()).map { session in
-                BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: sessionSignature(
-                    date: session.date, programId: session.programID, exerciseCount: session.exercises.count))
+                let detail = session.activityDetail
+                return BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: sessionSignature(
+                    date: session.date, programId: session.programID, exerciseCount: session.exercises.count,
+                    activity: activitySignature(
+                        kind: detail?.kindRaw, sessionRPE: detail?.sessionRPE, rounds: detail?.rounds,
+                        splitPieces: detail?.splitPieces, estimatedStrikes: detail?.estimatedStrikes,
+                        cordVolume: detail?.cordVolume)))
             }
 
         // Mirrors `load`'s own program id derivation exactly (a v2+ bundle's
@@ -867,9 +899,21 @@ enum ImportService {
         ISO8601DateFormatter().string(from: date)
     }
 
-    private static func sessionSignature(date: Date?, programId: String?, exerciseCount: Int) -> String {
-        [date.map { ISO8601DateFormatter().string(from: $0) } ?? "", programId ?? "", String(exerciseCount)]
+    private static func sessionSignature(date: Date?, programId: String?, exerciseCount: Int, activity: String) -> String {
+        [date.map { ISO8601DateFormatter().string(from: $0) } ?? "", programId ?? "", String(exerciseCount), activity]
             .joined(separator: "\u{1F}")
+    }
+
+    /// The v12 activity object is the first user-entered session-level fact
+    /// outside `exercises`, so it joins the shallow signature: an edit to RPE
+    /// or cords on one device must not preview as "unchanged" on the other
+    /// (INV-WOOD-WORK-ROUND-TRIPS). Mirrors web db.js sessionSignature.
+    private static func activitySignature(kind: String?, sessionRPE: Double?, rounds: Int?,
+                                          splitPieces: Int?, estimatedStrikes: Int?, cordVolume: Double?) -> String {
+        guard let kind else { return "" }
+        return [kind, sessionRPE.map { String($0) } ?? "", rounds.map(String.init) ?? "",
+                splitPieces.map(String.init) ?? "", estimatedStrikes.map(String.init) ?? "",
+                cordVolume.map { String($0) } ?? ""].joined(separator: ",")
     }
 
     private static func programSignature(dayCount: Int, slotCount: Int) -> String {
@@ -1208,11 +1252,13 @@ enum ImportService {
             session.exercises.append(entry)
         }
         // v12 typed ad-hoc activity facts. `validate` has already required
-        // a registered kind and the documented ranges (mirroring web
-        // validateBackup), so values restore verbatim here and absence
-        // stays absent (INV-WOOD-WORK-DOES-NOT-GUESS); the guard is only
+        // a registered kind, the documented ranges, and the canonical session
+        // shape (mirroring web validateBackup), so values restore verbatim
+        // here and absence stays absent (INV-WOOD-WORK-DOES-NOT-GUESS). Not
+        // gated on the declared version: a bundle that carries the facts
+        // never drops them (INV-WOOD-WORK-ROUND-TRIPS); the guard is only
         // the type-level unwrap of what validation guaranteed.
-        if schemaVersion >= 12, let activity = s.activity, let kind = activity.kind {
+        if let activity = s.activity, let kind = activity.kind {
             session.activityDetail = ActivityDetail(
                 kindRaw: kind,
                 sessionRPE: activity.sessionRPE,
