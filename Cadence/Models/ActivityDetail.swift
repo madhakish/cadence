@@ -15,9 +15,11 @@ import CadenceCore
 final class ActivityDetail {
     @Attribute(.unique) var id: String = UUID().uuidString
     /// `ActivityKind` raw value: the persisted discriminator, read through
-    /// `kind`. Both importers reject an unregistered value before any write
-    /// (a newer kind arrives with a newer backup version, which the version
-    /// gate refuses first), so this column only ever holds a registered kind.
+    /// `kind`, which is nil for anything unregistered. The importers reject
+    /// an unregistered value before any write (a newer kind arrives with a
+    /// newer backup version, which the version gate refuses first); the model
+    /// itself does not validate, so readers must still treat `kind` as
+    /// optional rather than assume this column holds a registered value.
     var kindRaw: String = ""
     /// Session RPE, 1.0–10.0, half steps supported. Applies to every kind.
     var sessionRPE: Double?
