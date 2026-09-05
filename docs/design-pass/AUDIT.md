@@ -1,10 +1,10 @@
 # Design-pass audit
 
-Scope: issues #177–#187, implemented here as a cohesive draft and harvest
-source so the shared plate renderer, live exercise hierarchy, and proof fixture
-can be verified in one tree. Per Claude's review, this draft does not close the
-epic or replace the surgical issue PRs. iPhone is the primary surface; web
-follows the same information and data contracts.
+Scope: issues #177–#187, implemented as one cohesive pass because the shared
+plate renderer, live exercise hierarchy, and proof fixture have to agree in one
+tree. iPhone is the primary surface; web follows the same information and data
+contracts. The PR is Part of #177 and intentionally does not auto-close the
+epic or its sub-issues.
 
 ## Surface and ownership matrix
 
@@ -114,12 +114,13 @@ It cannot read or mutate a user's store.
 
 The comparison baseline is not a reconstruction. The one-time proof workflow
 checked out the exact PR base,
-`11895fb95cde9e4b938831098d00dd0350b45bc2`, injected only an in-memory
-fixture and UI-test target, and captured the unmodified production views on the
-same iPhone simulator. The seven baseline PNGs are committed under
-`docs/design-pass/before/`; the proof-only patch and baseline job have been
-removed. The remaining visual workflow is manual-only so routine pull requests
-retain the repository's single gated iOS build.
+`11895fb95cde9e4b938831098d00dd0350b45bc2`, injected an in-memory fixture,
+bootstrap, and UI-test target, and captured on the same iPhone simulator. Its
+sole production-view source delta seeded the calculator field to `139`; no
+layout, style, metadata, or renderer code changed. The seven baseline PNGs are
+committed under `docs/design-pass/before/`; the proof-only patch and baseline
+job have been removed. The remaining visual workflow is manual-only so routine
+pull requests retain the repository's single gated iOS build.
 
 Web verification runs from `web` with `npm test`. Native core, migration, device
 build, and visual proof run in GitHub Actions because the repository's local

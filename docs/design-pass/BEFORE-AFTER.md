@@ -6,9 +6,10 @@ production views at candidate head
 `f576b62bb67392c8a80948eeccd87a3091e0e89c`. Both use the same deterministic,
 in-memory fixture and the same iPhone 17 Pro viewport (1206 × 2622 pixels).
 
-The proof-only baseline patch adds a launch fixture and screenshot target to
-the checked-out base. It does not replace or restyle the base production views.
-That patch and its temporary CI job were removed after the baseline capture.
+The proof-only baseline patch adds an in-memory fixture/bootstrap and screenshot
+target to the checked-out base. Its sole production-view source delta seeds the
+calculator field to `139`; it does not change layout, styles, metadata, or the
+renderer. That patch and its temporary CI job were removed after capture.
 
 ## Major surfaces
 
@@ -77,14 +78,14 @@ simulator captures retained to show the pixel-level defects that were corrected.
 - [Corrected final visual proof](https://github.com/madhakish/cadence/actions/runs/33989092206)
 - [Corrected final screenshot artifact](https://github.com/madhakish/cadence/actions/runs/33989092206/artifacts/9976209508)
 - [Full native/web verification](https://github.com/madhakish/cadence/actions/runs/33989092207)
-- Visual suite: seven UI tests, ten final screenshot attachments, zero
-  failures. Web suite: 3,367 direct assertions plus 100 cross-platform
+- Visual proof: four exact-base UI tests produced seven baseline screenshots;
+  seven final UI tests produced ten screenshots. Both suites completed with
+  zero failures. Web suite: 3,367 direct assertions plus 100 cross-platform
   invariant assertions (3,467 total), zero failures.
 - Protected-code audit: plate solving, authoritative plate metadata,
   programming, session completion, frozen schemas, and migration semantics are
   unchanged. `ActivitySession` changes are additive edit/validation support for
   #167; the other persistence-suite changes are focused regression coverage.
 
-This remains a draft harvest source for #177–#187, not a claim that one large PR
-should close the epic and every sub-issue. The screenshots and shared renderer
-work can be split into the surgical issue PRs described in Claude's review.
+This evidence documents #188's cohesive pass. The PR remains Part of #177 and
+intentionally does not auto-close the epic or its sub-issues.
