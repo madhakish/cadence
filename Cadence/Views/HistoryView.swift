@@ -154,7 +154,10 @@ struct HistoryView: View {
 
     private func rollingSummary(days: Int) -> String {
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: .now) ?? .distantPast
-        let recent = sessions.filter { $0.date >= cutoff }
+        // Ad-hoc activities are not training load: their timed set would
+        // otherwise read as program conditioning minutes
+        // (INV-WOOD-WORK-USES-ONE-TIMELINE). Web excludes them the same way.
+        let recent = sessions.filter { $0.date >= cutoff && $0.activityDetail == nil }
         let work = recent.flatMap(\.exercises).flatMap(\.workingSets).filter {
             guard let exercise = $0.sessionExercise?.exercise else { return true }
             return !exercise.movementPattern.isConditioning
@@ -240,7 +243,10 @@ struct HistoryView: View {
         let maxVolume = max(1, sessions.map(volumeOf).max() ?? 1)
         return List {
             if !currentYearActivities.isEmpty {
-                Section("Ad-hoc work · \(Calendar.current.component(.year, from: .now))") {
+                // A String title, not a LocalizedStringKey: interpolating the
+                // year into the key formats it with grouping ("2,026").
+                let yearTitle = "Ad-hoc work · \(Calendar.current.component(.year, from: .now))"
+                Section(yearTitle) {
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 20) { activityYearStats }
                         VStack(alignment: .leading, spacing: 10) { activityYearStats }
@@ -364,6 +370,7 @@ struct HistoryView: View {
     }
 
     private func durationLabel(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes)m" }
         return minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h \(minutes % 60)m"
@@ -466,9 +473,12 @@ struct SessionDetailView: View {
     /// untouched field is not an edit.
     @State private var setDrafts: [PersistentIdentifier: SetCorrectionDraft] = [:]
     @State private var showActivityEditor = false
-    /// Set by the activity editor before it deletes this session. Once the
-    /// backing row is gone, reading any property of `session` faults, so the
-    /// view renders nothing until the pop completes.
+    /// The editor sheet asks for the delete; this view performs it in the
+    /// sheet's `onDismiss`, after the sheet is gone.
+    @State private var activityDeleteRequested = false
+    /// Set immediately before the delete commits. Once the backing row is
+    /// gone, reading any property of `session` faults, so the view renders
+    /// nothing until the pop completes. Cleared again if the save fails.
     @State private var activityDeleted = false
 
     /// The conditioning sets this session actually performed. `workingSets` is
@@ -693,11 +703,21 @@ struct SessionDetailView: View {
             }
         }
         .sheet(isPresented: $showActivityEditor, onDismiss: {
-            // The editor flags the deletion before it commits; this view
-            // stops reading the model at once and pops after the sheet closes.
-            if activityDeleted { dismiss() }
+            // The delete runs here, after the sheet is gone, so nothing is
+            // mid-transition when the row disappears. The flag stops this
+            // view reading the model before the pop; a failed save rolls the
+            // context back and clears the flag, so the record stays visible.
+            guard activityDeleteRequested else { return }
+            activityDeleteRequested = false
+            activityDeleted = true
+            context.delete(session)
+            if PersistenceErrorCenter.shared.save(context, operation: "Deleting ad-hoc work") {
+                dismiss()
+            } else {
+                activityDeleted = false
+            }
         }) {
-            ActivityQuickLogView(session: session, onDelete: { activityDeleted = true })
+            ActivityQuickLogView(session: session, onDelete: { activityDeleteRequested = true })
         }
         .task {
             // One lookup per open, and only when there is something to compare
@@ -790,6 +810,7 @@ struct SessionDetailView: View {
     }
 
     private func activityDurationLabel(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds) sec" }
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes) min" }
         return minutes % 60 == 0 ? "\(minutes / 60) hr" : "\(minutes / 60) hr \(minutes % 60) min"

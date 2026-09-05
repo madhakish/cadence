@@ -74,15 +74,3 @@ diff --git a/project.yml b/project.yml
 +    test:
 +      targets:
 +        - CadenceBaselineVisualProofUITests
-diff --git a/Cadence/Views/PlateCalculatorView.swift b/Cadence/Views/PlateCalculatorView.swift
---- a/Cadence/Views/PlateCalculatorView.swift
-+++ b/Cadence/Views/PlateCalculatorView.swift
-@@ -8,7 +8,7 @@ struct PlateCalculatorView: View {
-     @Query private var gyms: [Gym]
-     @Query private var settingsList: [AppSettings]
-
-     @State private var mode: Mode = .target
--    @State private var targetText = ""
-+    @State private var targetText = "139"
-     @State private var targetUnit: WeightUnit = .lb
-     @State private var bar: Bar = .bar45lb

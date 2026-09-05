@@ -37,7 +37,7 @@ final class BaselineVisualProofUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(resume.waitForExistence(timeout: 5))
         resume.tap()
-        XCTAssertTrue(app.staticTexts["Back Squat"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.navigationBars["Lower Forge"].waitForExistence(timeout: 8))
         capture("before-03-current-session-iphone")
 
         let squat = app.buttons.matching(
@@ -52,6 +52,11 @@ final class BaselineVisualProofUITests: XCTestCase {
     func test03PlateCalculator() {
         app.buttons["Plate calculator"].tap()
         XCTAssertTrue(app.navigationBars["Plates"].waitForExistence(timeout: 6))
+        let target = app.textFields.firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 3))
+        target.tap()
+        target.typeText("139")
+        app.swipeDown()
         XCTAssertTrue(app.staticTexts["Total on bar"].waitForExistence(timeout: 3))
         capture("before-05-plate-calculator-iphone")
     }

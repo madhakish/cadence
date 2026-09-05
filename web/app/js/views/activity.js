@@ -7,6 +7,7 @@ import { Exercises, Sessions, Settings, iso } from "../db.js";
 // Whole minutes, floored — the same reading native gives, so a 59m 31s log
 // never reports as an hour on one client and 59 minutes on the other.
 const durationLabel = (seconds) => {
+  if ((seconds || 0) < 60) return `${Math.max(0, seconds || 0)} sec`;
   const minutes = Math.max(0, Math.floor((seconds || 0) / 60));
   if (minutes < 60) return `${minutes} min`;
   return minutes % 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : `${minutes / 60} hr`;
@@ -17,6 +18,25 @@ const durationLabel = (seconds) => {
 // seconds that the builder would reject with the wrong message.
 export const wholeMinuteSeconds = (hours, minutes) =>
   Math.max(0, Math.floor(Number(hours) || 0)) * 3600 + Math.max(0, Math.floor(Number(minutes) || 0)) * 60;
+
+// The fields show the stored duration as whole minutes. An untouched duration
+// saves back exactly as stored, seconds included, so an imported 5430 s record
+// is not silently truncated to 5400 by an unrelated edit. Mirrors native.
+export const editedDurationSeconds = (original, hours, minutes) => {
+  const typed = wholeMinuteSeconds(hours, minutes);
+  const stored = Number.isInteger(original) && original > 0 ? original : 0;
+  return stored > 0 && typed === stored - (stored % 60) ? stored : typed;
+};
+
+// The RPE picker offers the half-step grid every consumer of the contract
+// expects, plus the record's own value when it sits off the grid (a valid
+// 7.25 from a bundle), so an unrelated edit can never clear it.
+export const sessionRPEOptions = (existing = null) => {
+  const grid = [];
+  for (let value = C.ACTIVITY_SESSION_RPE.min; value <= C.ACTIVITY_SESSION_RPE.max; value += 0.5) grid.push(value);
+  if (Number.isFinite(existing) && !grid.includes(existing)) grid.push(existing);
+  return grid.sort((a, b) => a - b);
+};
 
 export function activitySet(session, kind = session?.activity?.kind) {
   const name = C.activityExerciseName(kind);
@@ -173,11 +193,12 @@ export async function openActivityLog(existing = null, { onDone = () => ui.nav.r
   hours.max = "48";
   const minutes = numberInput(String(Math.floor((duration % 3600) / 60)), { inputMode: "numeric" });
   minutes.max = "59";
+  const existingRPE = existing?.activity?.sessionRPE ?? null;
   const rpe = ui.h("select", {},
-    ui.h("option", { value: "", text: "Not recorded", selected: existing?.activity?.sessionRPE == null }),
-    ...Array.from({ length: 19 }, (_, index) => 1 + index * 0.5).map((value) =>
-      ui.h("option", { value: String(value), text: `RPE ${C.trim(value)}`,
-        selected: existing?.activity?.sessionRPE === value })));
+    ui.h("option", { value: "", text: "Not recorded", selected: existingRPE == null }),
+    ...sessionRPEOptions(existingRPE).map((value) =>
+      ui.h("option", { value: String(value), text: `RPE ${C.trim(value, 2)}`,
+        selected: existingRPE === value })));
   const load = numberInput(initialLoad, { step: "0.25", inputMode: "decimal" });
   const enteredUnit = ui.h("select", {},
     ui.h("option", { value: "lb", text: "lb", selected: initialUnit === "lb" }),
@@ -213,10 +234,14 @@ export async function openActivityLog(existing = null, { onDone = () => ui.nav.r
       ui.h("div", { class: "card" }, notes),
     );
 
-    const actions = ui.h("div", { class: "sticky-actions" },
-      ui.h("button", { class: "btn primary wide", text: existing ? "Save" : "Bank work", onClick: async () => {
+    // One in-flight save at a time: a double tap on a slow device must bank
+    // one session, not two with different ids. Mirrors native isSaving.
+    let saving = false;
+    const bank = ui.h("button", { class: "btn primary wide", text: existing ? "Save" : "Bank work", onClick: async () => {
+        if (saving) return;
+        saving = true; bank.disabled = true;
         try {
-          const durationSeconds = wholeMinuteSeconds(hours.value, minutes.value);
+          const durationSeconds = editedDurationSeconds(duration, hours.value, minutes.value);
           const exercise = await Exercises.byName(C.activityExerciseName(activityKind));
           const displayLoad = nonNegative(load.value, "Maul weight");
           const session = buildActivitySession({
@@ -238,8 +263,12 @@ export async function openActivityLog(existing = null, { onDone = () => ui.nav.r
           onDone();
         } catch (error) {
           ui.toast(error?.message || "Couldn't bank this work.");
+        } finally {
+          saving = false; bank.disabled = false;
         }
-      } }),
+      } });
+    const actions = ui.h("div", { class: "sticky-actions" },
+      bank,
       existing ? ui.h("button", { class: "btn ghost danger wide", text: "Delete activity", onClick: () => {
         ui.actionSheet("Delete this activity? Training cycles and workouts are unchanged.", [
           { label: "Delete activity", role: "danger", onClick: async () => {

@@ -62,15 +62,20 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(target.waitForExistence(timeout: 3))
         target.tap()
         target.typeText("139")
+        // Scroll into the result instead of dragging the calculator sheet
+        // toward dismissal. The Form dismisses its decimal keyboard as the
+        // content moves, matching the normal one-handed interaction.
         element("plate-calculator-screen").swipeUp()
         XCTAssertTrue(app.staticTexts["ACHIEVED — BAR INCLUDED"].waitForExistence(timeout: 3))
         capture("after-07-plate-calculator-iphone")
 
         // A typical stack fits the phone with no redundant expand control.
         XCTAssertFalse(element("expand-loaded-bar").exists)
+        for _ in 0..<3 where !target.isHittable { app.swipeDown() }
+        XCTAssertTrue(target.isHittable)
         target.tap()
         target.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 3) + "1500")
-        app.swipeDown()
+        element("plate-calculator-screen").swipeUp()
         let expand = element("expand-loaded-bar")
         XCTAssertTrue(expand.waitForExistence(timeout: 5))
         expand.tap()
@@ -98,7 +103,8 @@ final class VisualProofUITests: XCTestCase {
         let delete = app.buttons["Delete"]
         XCTAssertTrue(delete.waitForExistence(timeout: 3))
         delete.tap()
-        XCTAssertTrue(app.buttons["Delete activity"].waitForExistence(timeout: 3))
+        let deleteConfirmation = app.buttons["Delete activity"]
+        XCTAssertTrue(deleteConfirmation.waitForExistence(timeout: 3))
         let cancel = app.buttons["Cancel"]
         if cancel.waitForExistence(timeout: 1) {
             cancel.tap()
@@ -107,6 +113,7 @@ final class VisualProofUITests: XCTestCase {
             XCTAssertTrue(dismissRegion.waitForExistence(timeout: 3))
             dismissRegion.tap()
         }
+        XCTAssertTrue(deleteConfirmation.waitForNonExistence(timeout: 3))
         XCTAssertTrue(activitySummary.waitForExistence(timeout: 3), "cancelling keeps the banked activity")
     }
 
