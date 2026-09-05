@@ -1321,7 +1321,22 @@ final class ProgramProgressionTests: XCTestCase {
     }
 
     // MARK: - Ad-hoc suggestion provenance
-    // Mirrors the `historyProvenanceLabel` block in web/tests/core.test.mjs.
+    // Mirrors the fallback/provenance block in web/tests/core.test.mjs.
+
+    func testOnlyUnplannedOffProgramEntriesUseAdHocFirstSetFallback() {
+        XCTAssertTrue(P.usesAdHocFirstSetFallback(
+            programRole: nil, programSlotID: nil, plannedWeightLb: nil
+        ))
+        XCTAssertFalse(P.usesAdHocFirstSetFallback(
+            programRole: "main", programSlotID: nil, plannedWeightLb: nil
+        ), "a role alone is enough evidence that ProgramSession prescribed the entry")
+        XCTAssertFalse(P.usesAdHocFirstSetFallback(
+            programRole: nil, programSlotID: "slot-1", plannedWeightLb: nil
+        ), "legacy or partially repaired program identity must suppress ad-hoc provenance")
+        XCTAssertFalse(P.usesAdHocFirstSetFallback(
+            programRole: nil, programSlotID: nil, plannedWeightLb: 135
+        ), "an explicit entry-level plan did not come from the fallback")
+    }
 
     func testProvenanceLabelSameDay() {
         let day = makeDate(year: 2026, month: 3, day: 10)

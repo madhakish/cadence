@@ -33,7 +33,7 @@ struct SettingsView: View {
                 if let settings = settingsList.first {
                     let bindable = Bindable(settings)
 
-                    Section("Theme") {
+                    Section {
                         Picker("Theme", selection: Binding(
                             get: { ThemeName(rawValue: settings.themeNameRaw) ?? .carbon },
                             set: { settings.themeNameRaw = $0.rawValue }
@@ -49,14 +49,22 @@ struct SettingsView: View {
                         }
                         .pickerStyle(.inline)
                         .labelsHidden()
+                    } header: {
+                        Text("Appearance & accessibility")
+                    } footer: {
+                        Text("Carbon is the default high-contrast training surface. System follows the device appearance.")
                     }
 
-                    Section("Units") {
-                        Picker("Display", selection: bindable.unitDisplayRaw) {
+                    Section {
+                        Picker("Weight display", selection: bindable.unitDisplayRaw) {
                             Text("lb primary").tag(UnitDisplay.lbPrimary.rawValue)
                             Text("kg primary").tag(UnitDisplay.kgPrimary.rawValue)
                             Text("Both").tag(UnitDisplay.both.rawValue)
                         }
+                    } header: {
+                        Text("Units & loading")
+                    } footer: {
+                        Text("This changes display and entry defaults, not stored loads. Bars and plate denominations remain independent in mixed-unit gyms.")
                     }
 
                     // The smart defaults an exercise falls to when it has no
@@ -64,82 +72,72 @@ struct SettingsView: View {
                     // today's program role first, then movement type
                     // (RestDefaults in CadenceCore). Mirrors web settings.
                     Section {
+                        Text("Rest guidance").font(.headline)
+                        Text("PROGRAM ROLE")
+                            .font(.caption.bold())
+                            .tracking(0.7)
+                            .foregroundStyle(.secondary)
                         Stepper("Complementary lifts: \(mmss(settings.secondaryRestSeconds))",
                                 value: bindable.secondaryRestSeconds, in: 0...600, step: 15)
                         Stepper("Accessories: \(mmss(settings.accessoryRestSeconds))",
                                 value: bindable.accessoryRestSeconds, in: 0...600, step: 15)
-                    } header: {
-                        Text("Rest timer — in a program day, by role")
-                    }
-                    Section {
+                        Text("MOVEMENT FALLBACK")
+                            .font(.caption.bold())
+                            .tracking(0.7)
+                            .foregroundStyle(.secondary)
                         Stepper("Squat & deadlift mains: \(mmss(settings.mainCompoundRestSeconds))",
                                 value: bindable.mainCompoundRestSeconds, in: 0...600, step: 15)
                         Stepper("Olympic lifts: \(mmss(settings.olympicRestSeconds))",
                                 value: bindable.olympicRestSeconds, in: 0...600, step: 15)
-                        Stepper("Other main lifts (presses…): \(mmss(settings.mainUpperRestSeconds))",
+                        Stepper("Other main lifts: \(mmss(settings.mainUpperRestSeconds))",
                                 value: bindable.mainUpperRestSeconds, in: 0...600, step: 15)
+                        Text("An exercise-specific rest value wins. 0:00 disables that fallback.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
                         Toggle("Haptics", isOn: bindable.haptics)
-                    } header: {
-                        Text("Rest timer — everything else, by movement")
-                    } footer: {
-                        Text("These are the fallback timers. An exercise with a rest of its own (set in the logger or the library) always uses that instead. 0:00 = no timer. Auto-start off = tap Rest yourself.")
-                    }
-
-                    Section {
+                        Toggle("Show gym tag on first launch of the day",
+                               isOn: bindable.gymTagFirstLaunchOfDay)
+                        Text("Profile & Health").font(.headline)
                         Picker("Year of birth", selection: bindable.birthYear) {
                             Text("Not set").tag(0)
                             ForEach(Self.selectableBirthYears, id: \.self) { year in
                                 Text(String(year)).tag(year)
                             }
                         }
-                    } header: {
-                        Text("About you")
-                    } footer: {
-                        // The only thing age is used for, said plainly. A health
-                        // app asking for a birthday without saying why is how
-                        // people learn to distrust one.
-                        Text("Used only to adjust the per-meal protein figure on the Body screen — muscle responds less to a given dose with age. Nothing else reads it, and it never affects your program.")
-                    }
-
-                    Section {
-                        Toggle("Show gym tag on first launch of the day",
-                               isOn: bindable.gymTagFirstLaunchOfDay)
-                    } header: {
-                        Text("Arrival")
-                    } footer: {
-                        Text("Shows the default membership tag once per day, then returns to Today for training.")
-                    }
-
-                    Section {
-                        Toggle("Write workouts & bodyweight to Health", isOn: Binding(
-                            get: { settings.healthKitEnabled },
-                            set: { on in
-                                settings.healthKitEnabled = on
-                                if on {
-                                    Task { _ = await HealthKitService.shared.requestWriteAuthorization() }
+                            Text("Birth year only adjusts the per-meal protein figure on Body; it never changes training.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Toggle("Write workouts & bodyweight to Health", isOn: Binding(
+                                get: { settings.healthKitEnabled },
+                                set: { on in
+                                    settings.healthKitEnabled = on
+                                    if on {
+                                        Task { _ = await HealthKitService.shared.requestWriteAuthorization() }
+                                    }
                                 }
-                            }
-                        ))
-                        Toggle("Compare conditioning with Health", isOn: Binding(
-                            get: { healthReadEnabled },
-                            set: { on in
-                                healthReadEnabled = on
-                                HealthKitService.shared.isReadEnabled = on
-                                if on {
-                                    Task { _ = await HealthKitService.shared.requestReadAuthorization() }
+                            ))
+                            Toggle("Compare conditioning with Health", isOn: Binding(
+                                get: { healthReadEnabled },
+                                set: { on in
+                                    healthReadEnabled = on
+                                    HealthKitService.shared.isReadEnabled = on
+                                    if on {
+                                        Task { _ = await HealthKitService.shared.requestReadAuthorization() }
+                                    }
                                 }
-                            }
-                        ))
+                            ))
+                            Text("Write and compare are separate permissions. Health never edits a logged workout.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                     } header: {
-                        Text("HealthKit")
+                        Text("Training behavior")
                     } footer: {
-                        // [INV-HEALTH-IS-A-SECOND-OPINION]
-                        Text("Two separate permissions. Comparing reads walking, running, and cycling distance for sessions you have already logged, and shows it beside your own numbers — it never changes a logged workout on its own.")
+                        Text("Auto-start off keeps rest manual. The arrival tag appears once per day, then returns to Today.")
                     }
                 }
 
-                Section("Gyms") {
+                Section {
                     ForEach(gyms) { gym in
                         NavigationLink {
                             GymEditorView(gym: gym)
@@ -163,9 +161,17 @@ struct SettingsView: View {
                     } label: {
                         Label("Add gym", systemImage: "plus")
                     }
+                } header: {
+                    Text("Gym & equipment")
+                } footer: {
+                    Text("Each gym owns its available bars, plate denominations, collars and loading policy. Exercise station overrides remain in the exercise library.")
                 }
 
-                Section("Progression (standalone lifts)") {
+                Section {
+                    Text("Standalone progression").font(.headline)
+                    if tracks.isEmpty {
+                        Text("No standalone lifts configured.").foregroundStyle(.secondary)
+                    }
                     ForEach(tracks) { track in
                         NavigationLink {
                             TrackEditorView(track: track)
@@ -178,9 +184,7 @@ struct SettingsView: View {
                             }
                         }
                     }
-                }
-
-                Section {
+                    Text("Training breaks").font(.headline)
                     if !trainingIntervals.isEmpty {
                         Text(declaredBreakDaysSummary)
                             .font(.caption)
@@ -206,18 +210,18 @@ struct SettingsView: View {
                     } label: {
                         Label("Add break", systemImage: "plus")
                     }
-                } header: {
-                    Text("Training breaks")
-                } footer: {
-                    // [INV-INTERVAL-IS-NOT-A-GAP] [INV-RECOVERY-WORK-IS-OFF-PROGRAM]
-                    Text("Declared breaks — deload, rest, away, active recovery — keep a chosen gap from reading as a lapse. Work banked during an active-recovery break stays in history but never advances progression or PR baselines.")
-                }
-
-                Section("Library") {
+                    Text("Breaks keep a chosen gap from reading as a lapse. Work during active recovery stays in history but never advances progression or PR baselines.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     NavigationLink("Exercise library") { LibraryView() }
+                } header: {
+                    Text("Programming & library")
+                } footer: {
+                    Text("Standalone lift settings do not change the active program. Program structure remains cycle- and rotation-based.")
                 }
 
-                Section("Export") {
+                Section {
+                    Text("Export").font(.headline)
                     Button("Prepare JSON export") {
                         do { exportJSON = try ExportService.jsonData(context: context) }
                         catch {
@@ -248,9 +252,7 @@ struct SettingsView: View {
                             Label("Share CSV", systemImage: "square.and.arrow.up")
                         }
                     }
-                }
-
-                Section {
+                    Text("Local recovery").font(.headline)
                     Button("Checkpoint now") {
                         do {
                             try BackupCheckpointService.create(context: context, reason: "manual")
@@ -267,24 +269,22 @@ struct SettingsView: View {
                     if !checkpointLastFailure.isEmpty {
                         Text("Last checkpoint failed: \(checkpointLastFailure)").font(.caption).foregroundStyle(.red)
                     }
-                } header: {
-                    Text("Local recovery")
-                } footer: {
-                    Text("Cadence keeps the last three checkpoints when it backgrounds and before imports. They can undo a bad import, but deleting the app removes them; exported JSON is the durable backup.")
-                }
-
-                Section {
+                    Text("Cadence keeps the last three local checkpoints. Deleting the app removes them; exported JSON is the durable backup.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Button {
                         showImporter = true
                     } label: {
                         Label("Import JSON backup", systemImage: "square.and.arrow.down")
                     }
                 } header: {
-                    Text("Import")
+                    Text("Data, import, export & backup")
                 } footer: {
-                    Text("Restores a backup, replacing the data it contains and leaving anything it doesn't alone. Export first if you're unsure.")
+                    Text("Import previews every material change before restore and offers a checkpoint rollback immediately afterward.")
                 }
         }
+        .listStyle(.plain)
+        .accessibilityIdentifier("settings-screen")
         .saveChangesOnDisappear(context, operation: "Saving settings")
         .navigationTitle("Settings")
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in

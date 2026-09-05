@@ -90,11 +90,17 @@ struct WorkoutPreviewView: View {
                             let previewExercise = exercises.first(where: { $0.name == lift.exerciseName })
                             let type = previewExercise?.type
                             if type == .barbell {
-                                BarbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit,
-                                            bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym,
-                                            targetWeightLb: target.weightLb,
-                                            stationDenomination: previewExercise?.stationDenomination,
-                                            plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel)
+                                let bar = defaultGym?.defaultBar ?? .bar45lb
+                                BarbellView(
+                                    solution: authoritativePlateSolution(
+                                        targetLb: p.weightLb,
+                                        fallbackUnit: unitDisplay.primaryUnit,
+                                        bar: bar,
+                                        gym: defaultGym,
+                                        stationDenomination: previewExercise?.stationDenomination
+                                    ),
+                                    plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel
+                                )
                             } else if type == .dumbbell {
                                 DumbbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit)
                             }

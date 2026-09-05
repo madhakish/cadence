@@ -1145,8 +1145,16 @@ for (const [loadBasis, weightLb] of [["bodyweight", 0], ["assisted", 40]]) {
     `${loadBasis} never receives a fabricated weight change, even with room in reserve`);
 }
 
-// ---- ad-hoc suggestion provenance (historyProvenanceLabel) ----
-// Mirrors CadenceCore ProgramProgressionTests' provenance block.
+// ---- ad-hoc suggestion provenance ----
+// Mirrors CadenceCore ProgramProgressionTests' fallback/provenance block.
+ok(C.usesAdHocFirstSetFallback({ programRole: null, programSlotId: null, plannedWeightLb: null }),
+  "an unplanned off-program entry uses the history fallback");
+ok(!C.usesAdHocFirstSetFallback({ programRole: "main", programSlotId: null, plannedWeightLb: null }),
+  "a program role suppresses ad-hoc provenance");
+ok(!C.usesAdHocFirstSetFallback({ programRole: null, programSlotId: "slot-1", plannedWeightLb: null }),
+  "a program slot suppresses ad-hoc provenance");
+ok(!C.usesAdHocFirstSetFallback({ programRole: null, programSlotId: null, plannedWeightLb: 135 }),
+  "an explicit entry-level plan suppresses ad-hoc provenance");
 eq(C.historyProvenanceLabel("2026-03-10T12:00:00Z", "2026-03-10T12:00:00Z"),
   "from your last exposure, today", "same day");
 eq(C.historyProvenanceLabel("2026-03-05T12:00:00Z", "2026-03-10T12:00:00Z"),
@@ -3100,6 +3108,28 @@ eq(C.activityWorkload(3600, 11), null, "RPE above 10 is invalid");
 eq(C.activityWorkload(60, 1)?.arbitraryUnits, 1, "RPE 1 is a valid bound");
 eq(C.activityWorkload(60, 10)?.arbitraryUnits, 10, "RPE 10 is a valid bound");
 eq(C.activityWorkload(1800, 6.5)?.arbitraryUnits, 195, "half-step RPEs are valid");
+
+// Focused logger presentation: resolved ramp rows collapse, but planned
+// warmups stay ahead of the current work set. Mirrors SetLifecycleTests.
+eq(C.focusedSetIndices([
+  { isWarmup: true, status: "completed" },
+  { isWarmup: true, status: "planned" },
+  { isWarmup: false, status: "planned" },
+  { isWarmup: false, status: "planned" },
+]).join(","), "1,2", "focused plan keeps unresolved warmups plus current work");
+eq(C.focusedSetIndices([
+  { isWarmup: true, status: "skipped" },
+  { isWarmup: false, status: "completed" },
+]).join(","), "0,1", "no current work preserves the complete plan");
+
+// Reverse sleeve order after a gym switch: visible indices cannot address the
+// stored list while an old-gym denomination is hidden between them.
+eq(C.movedVisiblePlateIDs("20-kg", 1,
+  ["20-kg", "15-kg", "10-kg"], ["20-kg", "10-kg"]).join(","),
+"10-kg,15-kg,20-kg", "visible plate reorder maps around hidden gym IDs");
+eq(C.movedVisiblePlateIDs("20-kg", -1,
+  ["20-kg", "15-kg", "10-kg"], ["20-kg", "10-kg"]).join(","),
+"20-kg,15-kg,10-kg", "visible plate reorder respects boundaries");
 
 // ---- quantizeLoad: prescription materialization (epic #155 Stage 3) ----
 // Mirrors CadenceCoreTests/PlateQuantizeTests.swift — same fixtures.

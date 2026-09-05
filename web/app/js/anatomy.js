@@ -1,6 +1,6 @@
 // Muscle anatomy for the exercise detail view: a weightlifting gorilla in Da
 // Vinci's Vitruvian construction, plus the exercise → muscles map that drives
-// the highlighting (primary movers red, supporting blue).
+// the highlighting (primary movers red, supporting work a quiet steel wash).
 //
 // DATA is ported 1:1 from CadenceCore/Sources/CadenceCore/AnatomyData.swift;
 // parity is ENFORCED against web/tests/fixtures/anatomy.json by both test
@@ -308,7 +308,7 @@ export function muscleBlurb(profile) {
 // ---- web-only SVG rendering ------------------------------------------------
 const NS = "http://www.w3.org/2000/svg";
 const PRIMARY_COLOR = "#e0453a";   // red — primary movers
-const SECONDARY_COLOR = "#3a7bd5"; // blue — supporting
+const SECONDARY_COLOR = "var(--forged-steel)"; // shared forged-steel token
 const smoothPath = (points) => {
   if (points.length < 3) return "";
   const midpoint = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
@@ -383,8 +383,13 @@ export function figureSVG(profile) {
       for (const r of VITRUVIAN_FRONT_REGIONS) {
         const isP = profile && profile.primary.includes(r.id);
         const isS = profile && !isP && profile.secondary.includes(r.id);
-        if (isP) regions.append(shape(r.points, PRIMARY_COLOR, "none", 0.46, "anatomy-region primary"));
-        else if (isS) regions.append(shape(r.points, SECONDARY_COLOR, "none", 0.30, "anatomy-region supporting"));
+        const region = isP
+          ? shape(r.points, PRIMARY_COLOR, "none", 0.46, "anatomy-region primary")
+          : isS ? shape(r.points, SECONDARY_COLOR, "none", 0.30, "anatomy-region supporting") : null;
+        if (region) {
+          region.setAttribute("data-muscle", r.id);
+          regions.append(region);
+        }
       }
       g.append(regions);
     } else if (profile) {
@@ -407,21 +412,52 @@ export function figureSVG(profile) {
 
 /// Visible muscle grouping for the exercise detail. The body colours are much
 /// faster to scan when their exact names sit beside the same colour key.
-export function muscleLegend(profile) {
+export function muscleLegend(profile, figure = null) {
   const wrap = document.createElement("div");
   wrap.className = "anatomy-legend";
   if (!profile) return wrap;
+  let locked = null;
+  const buttons = [];
+  const paint = (id) => {
+    if (figure) {
+      for (const region of figure.querySelectorAll("[data-muscle]")) {
+        const selected = !!id && region.dataset.muscle === id;
+        region.classList.toggle("is-selected", selected);
+        region.classList.toggle("is-muted", !!id && !selected);
+      }
+    }
+    for (const button of buttons) {
+      const selected = button.dataset.muscle === id;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(locked === button.dataset.muscle));
+    }
+  };
   const row = (role, ids) => {
-    const line = document.createElement("div");
-    line.className = `muscle-key ${role}`;
+    const line = document.createElement("section");
+    line.className = `muscle-key-group ${role}`;
     line.dataset.role = role;
-    const dot = document.createElement("i");
-    dot.setAttribute("aria-hidden", "true");
     const label = document.createElement("strong");
-    label.textContent = role === "primary" ? "Primary" : "Supporting";
-    const names = document.createElement("span");
-    names.textContent = ids.map((id) => MUSCLE_NAMES[id] || id).join(", ");
-    line.append(dot, label, names);
+    label.textContent = role === "primary" ? "Primary movers" : "Supporting";
+    const choices = document.createElement("div");
+    choices.className = "muscle-key-choices";
+    for (const id of ids) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `muscle-key ${role}`;
+      button.dataset.muscle = id;
+      button.setAttribute("aria-pressed", "false");
+      button.setAttribute("aria-label", `${MUSCLE_NAMES[id] || id}, ${role === "primary" ? "primary mover" : "supporting muscle"}`);
+      const dot = document.createElement("i"); dot.setAttribute("aria-hidden", "true");
+      const name = document.createElement("span"); name.textContent = MUSCLE_NAMES[id] || id;
+      button.append(dot, name);
+      button.addEventListener("pointerenter", () => paint(id));
+      button.addEventListener("pointerleave", () => paint(locked));
+      button.addEventListener("focus", () => paint(id));
+      button.addEventListener("blur", () => paint(locked));
+      button.addEventListener("click", () => { locked = locked === id ? null : id; paint(locked); });
+      buttons.push(button); choices.append(button);
+    }
+    line.append(label, choices);
     return line;
   };
   wrap.append(row("primary", profile.primary));

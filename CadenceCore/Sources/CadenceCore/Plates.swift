@@ -180,9 +180,14 @@ public struct Loadout: Hashable, Codable, Sendable {
     /// Combined weight of the pair of collars/clips, canonical pounds.
     public let collarLb: Double
 
-    public init(bar: Bar, perSide: [PlateCount], collarLb: Double = 0) {
+    public init(
+        bar: Bar,
+        perSide: [PlateCount],
+        collarLb: Double = 0,
+        preservesOrder: Bool = false
+    ) {
         self.bar = bar
-        self.perSide = perSide.sorted { $0.plate.lb > $1.plate.lb }
+        self.perSide = preservesOrder ? perSide : perSide.sorted { $0.plate.lb > $1.plate.lb }
         self.collarLb = max(0, collarLb)
     }
 

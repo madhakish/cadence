@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Cadence product site (web/) plus the PWA it fronts (web/app/) — static, no build step. package.json marks ESM for Node-run tests and pins the test-only deps (jsdom, fake-indexeddb).",
   "scripts": {
-    "test": "node ../.github/scripts/check-invariants.mjs && node tests/core.test.mjs && node tests/db-migration.test.mjs && node tests/db-v6-migration.test.mjs && node tests/db-v7-migration.test.mjs && node tests/db-v8-migration.test.mjs && node tests/program-file.test.mjs && node tests/smoke.test.mjs && node tests/site.test.mjs && node tests/a11y.test.mjs"
+    "test": "node ../.github/scripts/check-invariants.mjs && node tests/core.test.mjs && node tests/plate-renderer.test.mjs && node tests/db-migration.test.mjs && node tests/db-v6-migration.test.mjs && node tests/db-v7-migration.test.mjs && node tests/db-v8-migration.test.mjs && node tests/program-file.test.mjs && node tests/smoke.test.mjs && node tests/site.test.mjs && node tests/a11y.test.mjs"
   },
   "devDependencies": {
     "fake-indexeddb": "6.2.5",

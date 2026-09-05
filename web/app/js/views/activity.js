@@ -90,9 +90,14 @@ export function buildActivitySession(input, exercise, existing = null) {
   // canonical shape: one activity, one entry, one set, no program. Anything
   // else is refused rather than silently truncated. Mirrors native
   // ActivitySession.update's invalidSessionShape guard.
-  if (existing && !(existing.activity && !existing.programTag
-    && existing.exercises?.length === 1 && existing.exercises[0].sets?.length === 1)) {
-    throw new Error("This activity record is incomplete and can't be edited safely.");
+  if (existing) {
+    const entries = Array.isArray(existing.exercises) ? existing.exercises : [];
+    const sets = Array.isArray(entries[0]?.sets) ? entries[0].sets : [];
+    if (!existing.activity || entries.length !== 1 || sets.length !== 1 || sets[0].isWarmup
+        || existing.programTemplateId != null || existing.programTag != null
+        || entries[0].programRole != null || entries[0].programSlotId != null) {
+      throw new Error("This activity record is incomplete and can't be edited safely.");
+    }
   }
   const oldEntry = (existing?.exercises || [])[0] || {};
   const oldSet = oldEntry.sets?.[0] || {};

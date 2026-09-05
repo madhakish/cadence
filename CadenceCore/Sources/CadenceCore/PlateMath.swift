@@ -529,4 +529,27 @@ public enum PlateMath {
     public static func total(bar: Bar, perSide: [PlateCount], collarLb: Double = 0) -> Double {
         Loadout(bar: bar, perSide: perSide, collarLb: collarLb).totalLb
     }
+
+    /// Moves one visible reverse-mode denomination relative to the other
+    /// visible rows while preserving IDs hidden by the current gym. A visible
+    /// row index cannot address `storedOrder` directly after an inventory
+    /// switch because the two index spaces may differ. Mirrors web
+    /// `movedVisiblePlateIDs`.
+    public static func movedVisiblePlateIDs(
+        id: String,
+        by offset: Int,
+        storedOrder: [String],
+        visibleOrder: [String]
+    ) -> [String] {
+        guard let visibleIndex = visibleOrder.firstIndex(of: id) else { return storedOrder }
+        let destination = visibleIndex + offset
+        guard visibleOrder.indices.contains(destination),
+              let storedIndex = storedOrder.firstIndex(of: id),
+              let storedDestination = storedOrder.firstIndex(of: visibleOrder[destination])
+        else { return storedOrder }
+
+        var result = storedOrder
+        result.swapAt(storedIndex, storedDestination)
+        return result
+    }
 }

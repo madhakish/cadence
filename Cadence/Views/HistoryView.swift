@@ -5,6 +5,7 @@ import CadenceCore
 
 /// Sessions, milestones, and per-lift progression charts.
 struct HistoryView: View {
+    @Environment(\.modelContext) private var context
     /// The block the rotations matrix is scoped to; empty falls back to the
     /// active program.
     @State private var rotationProgramID = ""
@@ -20,6 +21,7 @@ struct HistoryView: View {
 
     @State private var view: ViewMode = .rotations
     @State private var rotationDetail: String?
+    @State private var activityPendingDeletion: WorkoutSession?
 
     enum ViewMode: String, CaseIterable {
         case list = "Log"
@@ -44,6 +46,7 @@ struct HistoryView: View {
                 case .milestones: milestoneList
                 }
             }
+            .accessibilityIdentifier("history-screen")
             .navigationTitle("History")
             .alert("Rotation details", isPresented: Binding(
                 get: { rotationDetail != nil }, set: { if !$0 { rotationDetail = nil } }
@@ -51,6 +54,24 @@ struct HistoryView: View {
                 Button("OK") { rotationDetail = nil }
             } message: {
                 Text(rotationDetail ?? "")
+            }
+            .confirmationDialog(
+                "Delete this activity?",
+                isPresented: Binding(
+                    get: { activityPendingDeletion != nil },
+                    set: { if !$0 { activityPendingDeletion = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete activity", role: .destructive) {
+                    guard let session = activityPendingDeletion else { return }
+                    activityPendingDeletion = nil
+                    context.delete(session)
+                    PersistenceErrorCenter.shared.save(context, operation: "Deleting ad-hoc work")
+                }
+                Button("Cancel", role: .cancel) { activityPendingDeletion = nil }
+            } message: {
+                Text("This removes the banked activity from history. Training cycles and workout records are unchanged.")
             }
         }
     }
@@ -282,6 +303,15 @@ struct HistoryView: View {
                                     }
                                     .frame(height: 3)
                                     .padding(.top, 3)
+                                }
+                            }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if session.activityDetail != nil {
+                                Button(role: .destructive) {
+                                    activityPendingDeletion = session
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
                                 }
                             }
                         }

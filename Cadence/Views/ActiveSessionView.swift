@@ -29,6 +29,7 @@ struct ActiveSessionView: View {
     @State private var showBankError = false            // failed save: everything rolled back, Bank stays retryable
     @State private var bankErrorMessage = ""
     @State private var showIncompleteBankConfirmation = false
+    @State private var showEarlierExercises = false
 
     private var currentOrFirst: SessionExercise? {
         currentEntry
@@ -99,8 +100,18 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
+            // Preserve the authored exercise order. Work already passed stays
+            // represented above the current lift as one compact disclosure,
+            // rather than moving the current lift ahead of exercises 1...N.
+            earlierExerciseSections
+            focusedExerciseSection
+
             Section {
                 VStack(alignment: .leading, spacing: 4) {
+                    Text("SESSION PROGRESS")
+                        .font(.caption.bold())
+                        .tracking(0.8)
+                        .foregroundStyle(.secondary)
                     Text("Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(totalWorkSetCount == 0 ? 0 : min(resolvedWorkSetCount + 1, totalWorkSetCount)) of \(totalWorkSetCount) work sets")
                         .font(.headline.monospacedDigit())
                     Text(session.date.formatted(date: .abbreviated, time: .omitted))
@@ -108,7 +119,7 @@ struct ActiveSessionView: View {
                 }
             }
             trainingAtSection
-            exerciseSections
+            remainingExerciseSections
 
             Section {
                 Button {
@@ -134,9 +145,12 @@ struct ActiveSessionView: View {
                 }
                 .disabled(banking)
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                 .listRowBackground(Color.clear)
             }
         }
+        .listStyle(.plain)
+        .accessibilityIdentifier("active-session-screen")
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SessionBottomBar(
                 sessionStart: isTimingThisSession ? workoutClock.startDate : nil,
@@ -330,23 +344,141 @@ struct ActiveSessionView: View {
 
     /// Extracted from `body` — the multi-argument section call plus the recall
     /// lookup pushed the List builder past the type-checker's budget.
-    private var exerciseSections: some View {
+    @ViewBuilder
+    private var earlierExerciseSections: some View {
         let recall = recallLines()
-        return ForEach(session.orderedExercises) { entry in
-            ExerciseSection(
-                entry: entry,
-                settings: settingsList.first,
-                gym: gym,
-                programFocus: sessionProgram?.focus,
-                allExercises: allExercises,
-                lastTime: recallLine(for: entry, in: recall),
-                adHocExposure: mostRecentTopExposure(for: entry),
-                onDropLoad: { autoregEntry = entry },
-                onWork: { currentEntry = $0 },
-                onRemove: { removeExercise(entry) },
-                onMove: { moveExercise(entry, direction: $0) }
-            )
+        let focusedID = currentOrFirst?.persistentModelID
+        let earlier = exercises(before: focusedID)
+
+        if !earlier.isEmpty {
+            if showEarlierExercises {
+                ForEach(earlier) { entry in
+                    exerciseSection(for: entry, emphasized: false, recall: recall)
+                }
+                Section {
+                    Button("Collapse earlier exercises") {
+                        showEarlierExercises = false
+                    }
+                    .accessibilityIdentifier("collapse-earlier-exercises")
+                }
+            } else {
+                Section {
+                    Button {
+                        showEarlierExercises = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Theme.good)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Earlier in session")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(earlierExerciseSummary(earlier))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(minHeight: Theme.bigTap - 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("expand-earlier-exercises")
+                    .accessibilityHint("Shows exercises that remain in their authored positions before the current exercise")
+                }
+            }
         }
+    }
+
+    private var focusedExerciseSection: some View {
+        let recall = recallLines()
+        let focusedID = currentOrFirst?.persistentModelID
+        return ForEach(session.orderedExercises.filter { $0.persistentModelID == focusedID }) { entry in
+            exerciseSection(for: entry, emphasized: true, recall: recall)
+        }
+    }
+
+    private var remainingExerciseSections: some View {
+        let recall = recallLines()
+        let focusedID = currentOrFirst?.persistentModelID
+        return ForEach(exercises(after: focusedID)) { entry in
+            exerciseSection(for: entry, emphasized: false, recall: recall)
+        }
+    }
+
+    private func exercises(before focusedID: PersistentIdentifier?) -> [SessionExercise] {
+        guard let focusedID,
+              let index = session.orderedExercises.firstIndex(where: { $0.persistentModelID == focusedID })
+        else { return [] }
+        return Array(session.orderedExercises.prefix(index))
+    }
+
+    private func exercises(after focusedID: PersistentIdentifier?) -> [SessionExercise] {
+        guard let focusedID,
+              let index = session.orderedExercises.firstIndex(where: { $0.persistentModelID == focusedID })
+        else { return session.orderedExercises }
+        return Array(session.orderedExercises.dropFirst(index + 1))
+    }
+
+    private func earlierExerciseSummary(_ entries: [SessionExercise]) -> String {
+        entries.map { entry in
+            let resolved = entry.plannedWorkingSets.filter { $0.status != .planned }.count
+            let total = entry.plannedWorkingSets.count
+            return "\(entry.exercise?.name ?? "Exercise") \(resolved)/\(total)"
+        }
+        .joined(separator: " · ")
+    }
+
+    private func exerciseSection(
+        for entry: SessionExercise,
+        emphasized: Bool,
+        recall: [PersistentIdentifier: String]
+    ) -> some View {
+        ExerciseSection(
+            entry: entry,
+            emphasized: emphasized,
+            settings: settingsList.first,
+            gym: gym,
+            programFocus: sessionProgram?.focus,
+            allExercises: allExercises,
+            lastTime: recallLine(for: entry, in: recall),
+            adHocExposure: mostRecentTopExposure(for: entry),
+            onDropLoad: { autoregEntry = entry },
+            onWork: { currentEntry = $0 },
+            onResolve: { focusAfterResolving($0) },
+            onRemove: { removeExercise(entry) },
+            onMove: { moveExercise(entry, direction: $0) }
+        )
+    }
+
+    /// A verdict resolves the current position, not merely the tapped row.
+    /// Stay on this exercise while it still has planned work; after its final
+    /// set, advance through authored order to the next exercise that can be
+    /// performed. Undoing a verdict deliberately returns focus to that entry.
+    private func focusAfterResolving(_ entry: SessionExercise) {
+        if entry.plannedWorkingSets.contains(where: { $0.status == .planned }) {
+            currentEntry = entry
+            return
+        }
+
+        let ordered = session.orderedExercises
+        guard let index = ordered.firstIndex(where: {
+            $0.persistentModelID == entry.persistentModelID
+        }) else {
+            currentEntry = entry
+            return
+        }
+        let later = ordered.dropFirst(index + 1).first {
+            $0.plannedWorkingSets.contains(where: { $0.status == .planned })
+        }
+        let remaining = later ?? ordered.first {
+            $0.plannedWorkingSets.contains(where: { $0.status == .planned })
+        }
+        currentEntry = remaining ?? entry
+        if remaining != nil { showEarlierExercises = false }
     }
 
     private func recallLine(
@@ -553,7 +685,7 @@ struct ActiveSessionView: View {
 
 /// Smart per-exercise rest via the shared CadenceCore precedence (per-exercise
 /// rest → program role → movementGroup bucket); no exercise → accessory bucket.
-private func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: AppSettings?) -> Int {
+func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: AppSettings?) -> Int {
     let config = settings?.restConfig ?? .standard
     guard let ex = exercise else { return config.accessorySeconds }
     return RestDefaults.seconds(category: ex.categoryRaw, movementGroup: ex.movementGroup, role: role,
@@ -577,6 +709,15 @@ private struct SummaryBox: Identifiable {
     let summary: SessionSummary
 }
 
+/// Immutable snapshot for the expanded bar sheet. Keeping the exact loadout
+/// here prevents the sheet from re-solving against a gym edited underneath it.
+private struct ExpandedLoadout: Identifiable {
+    let id = UUID()
+    let solution: PlateSolution
+    let requestedLb: Double?
+    let style: PlateVisualStyle
+}
+
 // MARK: - Exercise section
 
 private struct ExerciseSection: View {
@@ -585,6 +726,10 @@ private struct ExerciseSection: View {
 
     @Bindable var entry: SessionExercise
     @State private var showAllSets = false
+    @State private var expandedLoadout: ExpandedLoadout?
+    /// Only the actively worked exercise gets the full between-sets cockpit.
+    /// Remaining exercises stay in authored order underneath it.
+    let emphasized: Bool
     // Passed down from ActiveSessionView (which already queries them) — a
     // per-section @Query would register one redundant fetch per exercise.
     let settings: AppSettings?
@@ -596,15 +741,17 @@ private struct ExerciseSection: View {
     /// Previous-performance context, or nil for a first-ever lift.
     let lastTime: String?
     /// This entry's most recent completed top-of-session exposure, scoped by
-    /// `recallEntry` exactly like `lastTime` (program-slot matching for a
-    /// programmed entry, name+role matching for an off-program one).
-    /// Precomputed by `ActiveSessionView` (which owns
-    /// `completedSessions`/`recallEntry`); nil with no prior history. Drives
-    /// both the first-set default weight and its provenance disclosure.
+    /// `recallEntry` exactly like `lastTime`. Precomputed by
+    /// `ActiveSessionView` (which owns `completedSessions`/`recallEntry`); nil
+    /// with no prior history. It may drive a default and its disclosure only
+    /// when `usesAdHocFirstSetFallback` confirms the entry is truly unplanned
+    /// and off-program.
     let adHocExposure: RecentTopExposure?
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
     let onWork: (SessionExercise) -> Void
+    /// Recomputes the active position after a completed or skipped verdict.
+    let onResolve: (SessionExercise) -> Void
     /// Remove this exercise from the session. Unlike a swap, removal leaves no
     /// performed entry carrying the program slot identity.
     let onRemove: () -> Void
@@ -751,6 +898,16 @@ private struct ExerciseSection: View {
     @State private var liftInfo: Exercise?
 
     private var restSeconds: Int { smartRestSeconds(for: entry.exercise, role: entry.programRole, settings: settings) }
+
+    private func solvedPlateSolution(for set: SetEntry) -> PlateSolution {
+        authoritativePlateSolution(
+            targetLb: set.weightLb,
+            fallbackUnit: set.enteredUnit,
+            bar: effectiveBar,
+            gym: gym,
+            stationDenomination: entry.exercise?.stationDenomination
+        )
+    }
     private var complementaryEffortCue: String? {
         guard let role = entry.programRole.flatMap(LiftRole.init(rawValue:)),
               let style = PrescriptionStyle(rawValue: entry.prescriptionStyleRaw) else { return nil }
@@ -761,6 +918,35 @@ private struct ExerciseSection: View {
             movementGroup: entry.exercise?.movementGroup,
             focus: programFocus ?? .strength
         )
+    }
+
+    /// Default between-set presentation: show the next working set first and
+    /// collapse the already-resolved ramp into one readable progress line.
+    /// "Show full set plan" restores every authored row without changing it.
+    private var currentWorkingSet: SetEntry? {
+        entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }
+    }
+
+    private var displayedSets: [SetEntry] {
+        let ordered = entry.orderedSets
+        guard emphasized, !showAllSets, currentWorkingSet != nil else { return ordered }
+        let states = ordered.map {
+            SetLifecycle.PresentationState(isWarmup: $0.isWarmup, status: $0.status)
+        }
+        return SetLifecycle.focusedPresentationIndices(states).map { ordered[$0] }
+    }
+
+    private var setStateSummary: String {
+        let warmups = entry.orderedSets.filter(\.isWarmup)
+        let work = entry.orderedSets.filter { !$0.isWarmup }
+        let warmupsDone = warmups.filter { $0.status != .planned }.count
+        let workDone = work.filter { $0.status != .planned }.count
+        let currentOrdinal = currentWorkingSet.flatMap { current in
+            work.firstIndex { $0.persistentModelID == current.persistentModelID }
+        }.map { $0 + 1 }
+        let position = currentOrdinal.map { "Work set \($0) of \(work.count)" }
+            ?? "Work \(workDone) of \(work.count)"
+        return "Warmups \(warmupsDone)/\(warmups.count) · \(position) · \(max(0, work.count - workDone - (currentWorkingSet == nil ? 0 : 1))) after"
     }
     private var restBinding: Binding<Int> {
         Binding(get: { restSeconds },
@@ -838,29 +1024,60 @@ private struct ExerciseSection: View {
 
     var body: some View {
         Section {
+            if emphasized, let exercise = entry.exercise {
+                HStack(spacing: 8) {
+                    Text(exercise.movementGroup.replacingOccurrences(of: "_", with: " ").uppercased())
+                    if let role = entry.programRole {
+                        Text(role.uppercased())
+                    }
+                    if let phase = entry.truthfulPhaseLabel {
+                        Text(phase.uppercased()).foregroundStyle(Theme.accent)
+                    }
+                }
+                .font(.caption2.bold())
+                .tracking(0.7)
+                .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+            }
             if let complementaryEffortCue {
                 Text(complementaryEffortCue)
                     .font(.caption.bold())
                     .foregroundStyle(Theme.accent)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
-                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
                     .accessibilityLabel("Effort target: \(complementaryEffortCue)")
             }
-            ForEach(entry.orderedSets) { set in
+            if emphasized && !showAllSets {
+                Text(setStateSummary)
+                    .font(.callout.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Set progress, \(setStateSummary)")
+            }
+            ForEach(displayedSets) { set in
                 // The set you're ON — the first WORKING set with no verdict
-                // yet. Warmups sit quiet (and often go unflagged, so they must
-                // not hold the rail hostage).
-                let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }?.persistentModelID == set.persistentModelID
+                // yet. Unresolved warmups remain visible above it; only the
+                // already-resolved ramp collapses into the progress line.
+                let isCurrent = currentWorkingSet?.persistentModelID == set.persistentModelID
                 let showLoadout = showAllSets || isCurrent || loadChanges(at: set)
                 VStack(alignment: .leading, spacing: 4) {
+                    if emphasized && isCurrent {
+                        Text("CURRENT SET · NEXT ACTION")
+                            .font(.caption.bold())
+                            .tracking(0.8)
+                            .foregroundStyle(Theme.accent)
+                            .accessibilityIdentifier("current-exercise-\(entry.exercise?.name ?? "Exercise")")
+                    }
                     SetRow(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
                            compact: !showAllSets && !isCurrent,
-                           targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onLogged: {
-                        onWork(entry)
-                        // Auto-start only if the user opted in (manual is the
-                        // default), and never restart a countdown already running.
-                        if settings?.autoStartRest == true && !restTimer.isRunning {
+                           targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onStatusChange: { previous, status in
+                        if status == .planned { onWork(entry) }
+                        else { onResolve(entry) }
+                        // Auto-start only for a new completed verdict when the
+                        // user opted in (manual is the default), and never
+                        // restart a countdown already running.
+                        if status == .completed, previous != .completed,
+                           settings?.autoStartRest == true, !restTimer.isRunning {
                             restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
                                             exerciseName: entry.exercise?.name ?? "")
                         }
@@ -879,24 +1096,54 @@ private struct ExerciseSection: View {
                     // Loadout visualization — plates for barbell lifts, the
                     // rack number for dumbbell lifts. Mirrors web.
                     if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
-                        BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
-                                    bar: effectiveBar, gym: gym,
-                                    targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                    stationDenomination: entry.exercise?.stationDenomination,
-                                    plateStyle: entry.exercise?.movementGroup == "olympic" ? .bumper : .steel)
+                        let exactSolution = solvedPlateSolution(for: set)
+                        let style: PlateVisualStyle = entry.exercise?.movementGroup == "olympic" ? .bumper : .steel
+                        if emphasized && isCurrent {
+                            BarbellStageView(
+                                solution: exactSolution,
+                                unit: set.enteredUnit,
+                                plateStyle: style,
+                                onExpand: {
+                                    expandedLoadout = ExpandedLoadout(
+                                        solution: exactSolution,
+                                        requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
+                                        style: style
+                                    )
+                                }
+                            )
+                        } else {
+                            BarbellView(
+                                solution: exactSolution,
+                                plateStyle: style,
+                                presentation: .compactSide
+                            )
+                        }
+                        if emphasized && isCurrent {
+                            LoadoutSummaryView(
+                                requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
+                                loadout: exactSolution.loadout
+                            )
+                        }
                     } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
                 }
+                .opacity(set.isWarmup ? 0.68 : (set.status == .completed ? 0.72 : 1))
             }
             .onDelete { offsets in
-                let ordered = entry.orderedSets
+                let ordered = displayedSets
                 for index in offsets.sorted(by: >) { removeSet(ordered[index], save: false) }
                 PersistenceErrorCenter.shared.save(context, operation: "Deleting the set")
             }
 
+            if let lastTime {
+                Text("Previous · \(lastTime)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if entry.orderedSets.count > 1 {
-                Button(showAllSets ? "Focus current set" : "Show all sets") {
+                Button(showAllSets ? "Focus current set" : "Show full set plan") {
                     showAllSets.toggle()
                 }
                 .font(.caption.bold())
@@ -958,22 +1205,27 @@ private struct ExerciseSection: View {
                         liftInfo = exercise
                     } label: {
                         Text(exercise.name)
+                            .font(emphasized ? .title2.bold() : .headline)
+                            .foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("exercise-info-\(exercise.name)")
                     .accessibilityHint("Shows muscles worked, history, and exercise settings")
                     .sheet(item: $liftInfo) { exercise in
                         NavigationStack {
-                            ExerciseDetailView(exercise: exercise)
+                            ExerciseDetailView(
+                                exercise: exercise,
+                                sessionEntry: entry,
+                                sessionGym: gym,
+                                sessionProgramFocus: programFocus
+                            )
                         }
                     }
                 } else {
                     Text("Exercise")
                 }
-                if let phaseLabel = entry.truthfulPhaseLabel {
+                if !emphasized, let phaseLabel = entry.truthfulPhaseLabel {
                     Text(phaseLabel).foregroundStyle(Theme.accent)
-                }
-                if let lastTime {
-                    Text(lastTime).textCase(nil)
                 }
                 if entry.exercise?.isShelved == true {
                     Text(Copy.shelved).foregroundStyle(Theme.hardStop)
@@ -1024,6 +1276,45 @@ private struct ExerciseSection: View {
         } footer: {
             if let site = entry.exercise?.watchSite {
                 Text("Watch: \(site.rawValue.lowercased()) — \(site.watchNote)")
+            }
+        }
+        .sheet(item: $expandedLoadout) { detail in
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            BarbellView(
+                                solution: detail.solution,
+                                plateStyle: detail.style,
+                                presentation: .fullBar
+                            )
+                            .frame(
+                                width: max(
+                                    360,
+                                    BarbellView.minimumLegibleWidth(
+                                        for: detail.solution.loadout,
+                                        style: detail.style
+                                    )
+                                ),
+                                height: 180
+                            )
+                            .padding(.horizontal)
+                        }
+                        LoadoutSummaryView(
+                            requestedLb: detail.requestedLb,
+                            loadout: detail.solution.loadout
+                        )
+                            .padding(.horizontal)
+                    }
+                    .padding(.vertical)
+                }
+                .navigationTitle(entry.exercise?.name ?? "Loaded bar")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { expandedLoadout = nil }
+                    }
+                }
             }
         }
     }
@@ -1106,18 +1397,31 @@ private struct ExerciseSection: View {
             slotCategory: exercise.categoryRaw,
             exerciseType: exercise.typeRaw
         ).weightLb
-        let suggestedLb = ProgramProgression.suggestedAdHocFirstSetTarget(
-            fromLastTopExposure: adHocExposure
-        )?.weightLb ?? catalogLb
+        let usesHistory = ProgramProgression.usesAdHocFirstSetFallback(
+            programRole: entry.programRole,
+            programSlotID: entry.programSlotID,
+            plannedWeightLb: entry.plannedWeightLb
+        )
+        let suggestedLb = usesHistory
+            ? (ProgramProgression.suggestedAdHocFirstSetTarget(
+                fromLastTopExposure: adHocExposure
+            )?.weightLb ?? catalogLb)
+            : catalogLb
         return exercise.type == .barbell ? max(suggestedLb, effectiveBar.lb) : suggestedLb
     }
 
     /// Where the history-based suggestion prefilled into this entry's first
     /// working set came from, so the UI can disclose it instead of leaving a
-    /// history-derived number unexplained. Nil whenever there is no prior
-    /// exposure (the catalog default applied silently, as before).
+    /// history-derived number unexplained. Nil for program/explicit plans and
+    /// whenever there is no prior exposure (the catalog default applied
+    /// silently, as before).
     private var firstSetProvenance: String? {
-        guard let exposure = adHocExposure,
+        guard ProgramProgression.usesAdHocFirstSetFallback(
+                programRole: entry.programRole,
+                programSlotID: entry.programSlotID,
+                plannedWeightLb: entry.plannedWeightLb
+              ),
+              let exposure = adHocExposure,
               ProgramProgression.suggestedAdHocFirstSetTarget(fromLastTopExposure: exposure) != nil
         else { return nil }
         return ProgramProgression.historyProvenanceLabel(exposureDate: exposure.date, asOf: .now)
@@ -1216,7 +1520,7 @@ private struct SetRow: View {
     let compact: Bool
     /// The program/track weight this session recommends — the picker anchors here.
     let targetLb: Double?
-    var onLogged: () -> Void
+    var onStatusChange: (_ previous: SetStatus, _ current: SetStatus) -> Void
     var onRemove: () -> Void
 
     @State private var showDetail = false
@@ -1250,6 +1554,10 @@ private struct SetRow: View {
                 showDetail = true
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
+                    Text(isCurrent ? "NOW" : (set.status == .completed ? "COMPLETED" : (set.status == .skipped ? "SKIPPED" : "UPCOMING")))
+                        .font(.caption2.bold())
+                        .tracking(0.7)
+                        .foregroundStyle(isCurrent ? Theme.accent : .secondary)
                     // Cardio uses the shared CadenceCore formatter; lifts show
                     // weight in the unit used for entry.
                     Text(isCardio
@@ -1316,14 +1624,14 @@ private struct SetRow: View {
 
             Spacer()
 
-            SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onCompleted: onLogged)
+            SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onStatusChange: onStatusChange)
         }
         .padding(isCurrent ? 12 : 0)
         .background {
             if isCurrent {
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: Theme.cornerRadius)
                     .fill(Theme.accent.opacity(0.10))
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.45)))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.accent.opacity(0.55)))
             }
         }
         .sheet(isPresented: $showDetail) {
@@ -1689,7 +1997,7 @@ private struct SetVerdictControl: View {
     @Environment(\.modelContext) private var context
     @Bindable var set: SetEntry
     let allowsQuality: Bool
-    var onCompleted: () -> Void
+    var onStatusChange: (_ previous: SetStatus, _ current: SetStatus) -> Void
 
     var body: some View {
         Menu {
@@ -1763,9 +2071,10 @@ private struct SetVerdictControl: View {
     }
 
     private func apply(_ status: SetStatus) {
-        let wasCompleted = set.status == .completed
+        let previous = set.status
+        guard previous != status else { return }
         set.status = status
-        if status == .completed && !wasCompleted { onCompleted() }
+        onStatusChange(previous, status)
         save()
     }
 
@@ -1847,9 +2156,16 @@ private struct SetDetailSheet: View {
                     }
 
                     if isBarbell && lb > 0 {
-                        BarbellView(weightLb: lb, unit: unit, bar: bar, gym: gym,
-                                    stationDenomination: exercise?.stationDenomination,
-                                    plateStyle: exercise?.movementGroup == "olympic" ? .bumper : .steel)
+                        BarbellView(
+                            solution: authoritativePlateSolution(
+                                targetLb: lb,
+                                fallbackUnit: unit,
+                                bar: bar,
+                                gym: gym,
+                                stationDenomination: exercise?.stationDenomination
+                            ),
+                            plateStyle: exercise?.movementGroup == "olympic" ? .bumper : .steel
+                        )
                             .frame(maxWidth: .infinity, alignment: .center)
                     } else if exercise?.type == .dumbbell && lb > 0 {
                         DumbbellView(weightLb: lb, unit: unit)
@@ -2061,6 +2377,7 @@ private struct SessionBottomBar: View {
                             .minimumScaleFactor(0.7)
                     }
                     .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                     .accessibilityHint("Begins the workout clock for this session")
                 }
 
@@ -2105,6 +2422,7 @@ private struct SessionBottomBar: View {
                             .padding(.horizontal, 4)
                     }
                     .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                 }
             }
             .padding(.horizontal)

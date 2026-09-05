@@ -181,6 +181,8 @@ struct HomeView: View {
                             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                         }
                         .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                        .accessibilityIdentifier("resume-session")
                         Button(role: .destructive) { discardSession = open } label: {
                             Label("Discard session", systemImage: "trash").font(.caption)
                         }
@@ -237,6 +239,7 @@ struct HomeView: View {
                         }
                         Button("Start \(day.name)") { startProgramDay(program, day) }
                             .buttonStyle(.borderedProminent)
+                            .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                     }
                 }
 
@@ -275,6 +278,7 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
                     }
                     .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                     .tint(prominentGymTag ? Theme.accent : Color(.tertiarySystemFill))
                     .accessibilityHint("Shows the default membership barcode at full brightness")
                 }
@@ -300,6 +304,7 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("activity-quick-log")
                     .accessibilityHint("Banks off-program physical work without starting a training session")
                 } header: {
                     Text("Ad-hoc work")
@@ -426,11 +431,17 @@ struct HomeView: View {
                                     let previewExercise = exercises.first(where: { $0.name == lift.exerciseName })
                                     let type = previewExercise?.type
                                     if type == .barbell {
-                                        BarbellView(weightLb: plan.weightLb, unit: entryUnit,
-                                                    bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym,
-                                                    targetWeightLb: target.weightLb,
-                                                    stationDenomination: previewExercise?.stationDenomination,
-                                                    plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel)
+                                        let bar = defaultGym?.defaultBar ?? .bar45lb
+                                        BarbellView(
+                                            solution: authoritativePlateSolution(
+                                                targetLb: plan.weightLb,
+                                                fallbackUnit: entryUnit,
+                                                bar: bar,
+                                                gym: defaultGym,
+                                                stationDenomination: previewExercise?.stationDenomination
+                                            ),
+                                            plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel
+                                        )
                                     } else if type == .dumbbell {
                                         DumbbellView(weightLb: plan.weightLb, unit: entryUnit)
                                     }
@@ -447,6 +458,7 @@ struct HomeView: View {
                             Text("Start \(day.name)").frame(maxWidth: .infinity).font(.headline)
                         }
                         .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                     }
                 }
 
@@ -487,6 +499,8 @@ struct HomeView: View {
                 }
 
             }
+            .listStyle(.plain)
+            .accessibilityIdentifier("home-screen")
             .navigationTitle("Cadence")
             .sheet(isPresented: $showProgramSwitcher) {
                 NavigationStack {
@@ -540,6 +554,7 @@ struct HomeView: View {
                                         HStack {
                                             Button("Apply") { apply(recommendation, report: report, program: program) }
                                                 .buttonStyle(.borderedProminent)
+                                                .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                                             Button("Not now") { deferRecommendation(recommendation, report: report, program: program) }
                                                 .buttonStyle(.bordered)
                                         }

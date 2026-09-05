@@ -158,14 +158,23 @@ enum ActivitySession {
         let exercise = try validatedExercise(input: input, context: context)
         let wood = input.kind == .woodSplitting ? input.woodSplitting : nil
         // The whole canonical shape, not just its first row: one entry, one
-        // set, no program. A record that has drifted from that is refused
-        // rather than half-edited into an inconsistent one.
-        guard session.programID == nil,
-              let detail = session.activityDetail,
-              session.orderedExercises.count == 1,
+        // set, no program relationship. A record that has drifted from that
+        // is refused rather than half-edited into an inconsistent one.
+        guard let detail = session.activityDetail,
+              session.exercises.count == 1,
               let entry = session.orderedExercises.first,
-              entry.orderedSets.count == 1,
-              let set = entry.orderedSets.first
+              entry.sets.count == 1,
+              let set = entry.orderedSets.first,
+              !set.isWarmup,
+              session.programID == nil,
+              session.programName == nil,
+              session.programTemplateID == nil,
+              session.programCycleNumber == nil,
+              session.programWeek == nil,
+              session.programDayIndex == nil,
+              session.programPlanNames == nil,
+              entry.programRole == nil,
+              entry.programSlotID == nil
         else { throw Error.invalidSessionShape }
 
         session.date = input.startDate

@@ -1222,6 +1222,20 @@ public enum ProgramProgression {
         return AdHocFirstSetTarget(weightLb: weightLb, reps: exposure.reps)
     }
 
+    /// Whether an entry's first working set is eligible for the history-aware
+    /// off-program fallback above. A program identity means ProgramSession
+    /// authored the prescription; an entry-level planned weight means some
+    /// other explicit prescription did. Neither may be described as coming
+    /// from the ad-hoc history fallback, even when the numeric loads happen to
+    /// match. Mirrored 1:1 in web/app/js/core.js.
+    public static func usesAdHocFirstSetFallback(
+        programRole: String?,
+        programSlotID: String?,
+        plannedWeightLb: Double?
+    ) -> Bool {
+        programRole == nil && programSlotID == nil && plannedWeightLb == nil
+    }
+
     /// A short "where did this number come from" disclosure for a
     /// history-based ad-hoc first-set suggestion — the suggestion itself
     /// (`suggestedAdHocFirstSetTarget`) is otherwise silent about its origin.
