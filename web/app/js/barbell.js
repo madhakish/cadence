@@ -8,6 +8,30 @@ const FILL = { red: "#d23b3b", blue: "#2f6fed", green: "#1faa52", yellow: "#e8b0
 const STROKE = { red: "#7a1f1f", blue: "#1b3f8f", green: "#10632f", yellow: "#8a6a04", white: "#9a9a9a", black: "#3a3b42" };
 const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
 
+// A readable, face-on denomination key for calculator rows. The hero remains
+// an honest edge-on load-order diagram, where a large horizontal number would
+// imply physically impossible plate thickness. Mirrors PlateFaceBadge.
+export function plateBadgeSVG(plate, style = "steel") {
+  const token = C.plateColorToken(plate, style);
+  const foreground = token === "white" || token === "yellow" ? "#24262a" : "#fff";
+  const svg = el("svg", { class: `plate-badge ${style}`, viewBox: "0 0 52 52",
+    role: "img", "aria-label": `${C.plateLabel(plate)} plate` });
+  svg.append(
+    el("circle", { cx: 26, cy: 26, r: 24, fill: FILL[token] || "#888",
+      stroke: STROKE[token] || "#333", "stroke-width": 2 }),
+    el("circle", { cx: 26, cy: 26, r: 17, fill: "none", stroke: foreground,
+      "stroke-width": 1, opacity: .34 }),
+  );
+  const value = el("text", { x: 26, y: 24, "text-anchor": "middle",
+    "font-size": 15, "font-weight": 800, fill: foreground });
+  value.textContent = C.trim(plate.value);
+  const unit = el("text", { x: 26, y: 36, "text-anchor": "middle",
+    "font-size": 9, "font-weight": 700, fill: foreground });
+  unit.textContent = plate.unit;
+  svg.append(value, unit);
+  return svg;
+}
+
 // The plate denominations of the chosen unit that exist at this gym. The bar is
 // chosen separately (most bars are 45 lb regardless of which plates you load).
 export function stationPlates(unit, gym, stationDenomination = null) {
@@ -117,7 +141,7 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     : solution.collarLb > 0 ? `${barLabel} with collars, no plates` : `${barLabel}, bar only`;
 
   if (presentation === "full") {
-    const W = 340, H = 78, midY = H / 2, shoulder = 78, rightShoulder = W - shoulder;
+    const W = 340, H = 96, midY = H / 2, shoulder = 78, rightShoulder = W - shoulder;
     const svg = el("svg", { class: `barbell full ${plateStyle}`, viewBox: `0 0 ${W} ${H}`,
       role: "img", "aria-label": `${plateStyle === "bumper" ? "Bumper" : "Steel"} barbell: ${accessibilityLoad}` });
     const defs = el("defs");

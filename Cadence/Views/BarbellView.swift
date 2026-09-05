@@ -1,6 +1,54 @@
 import SwiftUI
 import CadenceCore
 
+private enum PlatePalette {
+    static let fill: [String: Color] = [
+        "red": Color(hex: 0xD23B3B), "blue": Color(hex: 0x2F6FED), "green": Color(hex: 0x1FAA52),
+        "yellow": Color(hex: 0xE8B008), "white": Color(hex: 0xEDEDED), "black": Color(hex: 0x1C1D22),
+    ]
+    static let stroke: [String: Color] = [
+        "red": Color(hex: 0x7A1F1F), "blue": Color(hex: 0x1B3F8F), "green": Color(hex: 0x10632F),
+        "yellow": Color(hex: 0x8A6A04), "white": Color(hex: 0x9A9A9A), "black": Color(hex: 0x3A3B42),
+    ]
+
+    static func labelColor(for token: String) -> Color {
+        token == "white" || token == "yellow" ? Color(hex: 0x24262A) : .white
+    }
+}
+
+/// A readable, face-on denomination key for a plate in the calculator. The
+/// bar graphic stays an honest edge-on load-order diagram; this companion
+/// view owns the large number that an edge-on plate cannot physically carry.
+struct PlateFaceBadge: View {
+    let plate: Plate
+    let style: PlateVisualStyle
+
+    private var token: String { plate.colorToken(for: style) }
+
+    var body: some View {
+        let foreground = PlatePalette.labelColor(for: token)
+        ZStack {
+            Circle()
+                .fill(PlatePalette.fill[token] ?? Color(hex: 0x888888))
+            Circle()
+                .stroke(PlatePalette.stroke[token] ?? .black.opacity(0.3), lineWidth: 2)
+            Circle()
+                .stroke(foreground.opacity(0.34), lineWidth: 1)
+                .padding(7)
+            VStack(spacing: -2) {
+                Text(Weight.trim(plate.value, decimals: 2))
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                Text(plate.unit.rawValue)
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(foreground)
+        }
+        .frame(width: 52, height: 52)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(plate.label) plate")
+    }
+}
+
 /// The actual loaded bar: collar-first mirrored stacks, competition colours,
 /// reflective steel, and distinct bumper/calibrated-steel geometry. Mirrors
 /// web/app/js/barbell.js. `unit` picks denominations; `plateStyle` picks the
@@ -33,17 +81,9 @@ struct BarbellView: View {
     /// a count across both sides.
     var presentation: Presentation = .compactSide
 
-    private static let fill: [String: Color] = [
-        "red": Color(hex: 0xD23B3B), "blue": Color(hex: 0x2F6FED), "green": Color(hex: 0x1FAA52),
-        "yellow": Color(hex: 0xE8B008), "white": Color(hex: 0xEDEDED), "black": Color(hex: 0x1C1D22),
-    ]
-    private static let stroke: [String: Color] = [
-        "red": Color(hex: 0x7A1F1F), "blue": Color(hex: 0x1B3F8F), "green": Color(hex: 0x10632F),
-        "yellow": Color(hex: 0x8A6A04), "white": Color(hex: 0x9A9A9A), "black": Color(hex: 0x3A3B42),
-    ]
-
     // Geometry shared with the web SVG.
     private static let height: CGFloat = 34
+    private static let fullHeight: CGFloat = 96
     private static let sleeve: CGFloat = 18
 
     private func drawnPlateWidth(_ plate: Plate, scale: CGFloat = 1) -> CGFloat {
@@ -97,8 +137,8 @@ struct BarbellView: View {
                 let h = presentation == .fullBar ? size.height : Self.height
                 func drawPlate(_ plate: Plate, rect: CGRect, side: String) {
                     let token = plate.colorToken(for: plateStyle)
-                    let fill = Self.fill[token] ?? Color(hex: 0x888888)
-                    let stroke = Self.stroke[token] ?? .black.opacity(0.3)
+                    let fill = PlatePalette.fill[token] ?? Color(hex: 0x888888)
+                    let stroke = PlatePalette.stroke[token] ?? .black.opacity(0.3)
                     let radius: CGFloat = plateStyle == .bumper ? 2.4 : 1.2
                     let shadow = Path(roundedRect: rect.offsetBy(dx: 1, dy: 2), cornerRadius: radius)
                     ctx.fill(shadow, with: .color(.black.opacity(0.16)))
@@ -242,7 +282,7 @@ struct BarbellView: View {
                 }
             }
             .frame(width: presentation == .compactSide ? width : nil,
-                   height: presentation == .compactSide ? Self.height : 78)
+                   height: presentation == .compactSide ? Self.height : Self.fullHeight)
             .frame(maxWidth: presentation == .fullBar ? .infinity : nil)
 
             if solution.isOffTarget {

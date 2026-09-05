@@ -745,6 +745,15 @@ private struct ExerciseSection: View {
     @State private var liftInfo: Exercise?
 
     private var restSeconds: Int { smartRestSeconds(for: entry.exercise, role: entry.programRole, settings: settings) }
+    private var complementaryEffortCue: String? {
+        guard let role = entry.programRole.flatMap(LiftRole.init(rawValue:)),
+              let style = PrescriptionStyle(rawValue: entry.prescriptionStyleRaw) else { return nil }
+        return ProgramEngine.complementaryEffortCue(
+            role: role,
+            prescriptionStyle: style,
+            movementGroup: entry.exercise?.movementGroup
+        )
+    }
     private var restBinding: Binding<Int> {
         Binding(get: { restSeconds },
                 set: {
@@ -821,6 +830,15 @@ private struct ExerciseSection: View {
 
     var body: some View {
         Section {
+            if let complementaryEffortCue {
+                Text(complementaryEffortCue)
+                    .font(.caption.bold())
+                    .foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityLabel("Effort target: \(complementaryEffortCue)")
+            }
             ForEach(entry.orderedSets) { set in
                 // The set you're ON — the first WORKING set with no verdict
                 // yet. Warmups sit quiet (and often go unflagged, so they must

@@ -124,6 +124,17 @@ export function resolvedPrescriptionStyle(requested = "automatic", movementGroup
   return "wave";
 }
 
+// The effort contract for Cadence's secondary-volume prescription. A fixed
+// weight cannot distinguish an easy exposure from useful work, and there is
+// no honest universal conversion between different lifts. Explicit
+// methodologies keep their own contract. Mirrors ProgramEngine.
+export function complementaryEffortCue(role, prescriptionStyle = "automatic",
+  movementGroup = null, focus = "strength") {
+  if (role !== "complementary"
+      || resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus) !== "secondary") return null;
+  return "Target 2–3 reps left. Adjust the next set if the load misses that range.";
+}
+
 // Round a target TOTAL to the nearest weight cleanly loadable on `barLb`: the
 // per-side load snaps to `stepLb`, so no lonely 2.5 lb change plate (e.g. 150 on
 // a 45 bar → 155 = 45+10/side). Never below the bar. For secondary/accessory

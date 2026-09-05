@@ -469,6 +469,11 @@ export async function openSession(id) {
     const card = ui.h("div", { class: "card" }, head);
     const last = lastTimeLine(se);
     if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
+    const effortCue = se.prescriptionStyle
+      ? C.complementaryEffortCue(se.programRole, se.prescriptionStyle, ex?.movementGroup)
+      : null;
+    if (effortCue) card.append(ui.h("div", { class: "effort-cue", text: effortCue,
+      "aria-label": `Effort target: ${effortCue}` }));
 
     se.sets.sort((a, b) => a.order - b.order);
     const showAll = expandedEntries.has(se);
