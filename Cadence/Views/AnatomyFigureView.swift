@@ -197,9 +197,12 @@ struct AnatomyFigureView: View {
     }
 
     private func backOpacity(asset: String, primary: Bool) -> Double {
-        guard let selectedMuscle,
-              let selectedAsset = Self.backAssetByMuscle[selectedMuscle]
-        else { return primary ? 0.50 : 0.32 }
+        guard let selectedMuscle else { return primary ? 0.50 : 0.32 }
+        // A front-only selection (quads, chest, abs…) has no back mask.
+        // In that case every unrelated back region should recede instead of
+        // remaining fully highlighted and contradicting the selected state.
+        guard let selectedAsset = Self.backAssetByMuscle[selectedMuscle]
+        else { return primary ? 0.10 : 0.07 }
         return selectedAsset == asset ? (primary ? 0.58 : 0.44) : (primary ? 0.10 : 0.07)
     }
 

@@ -113,16 +113,21 @@ struct ActivityQuickLogView: View {
                             Text("RPE \(Weight.trim(value))").tag(Double?.some(value))
                         }
                     }
-                    HStack {
-                        TextField("Maul weight", text: $loadText)
-                            .keyboardType(.decimalPad)
-                            .font(.body.monospacedDigit())
-                        Picker("Unit", selection: $loadUnit) {
-                            Text("lb").tag(WeightUnit.lb)
-                            Text("kg").tag(WeightUnit.kg)
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("Maul weight")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            TextField("Optional", text: $loadText)
+                                .keyboardType(.decimalPad)
+                                .font(.body.monospacedDigit())
+                            Picker("Unit", selection: $loadUnit) {
+                                Text("lb").tag(WeightUnit.lb)
+                                Text("kg").tag(WeightUnit.kg)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 116)
                         }
-                        .pickerStyle(.segmented)
-                        .frame(width: 116)
                     }
                     Text("Both are optional. RPE creates a duration × effort workload; maul weight remains an implement fact, never volume.")
                         .font(.caption)
