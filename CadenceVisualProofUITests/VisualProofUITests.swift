@@ -5,15 +5,24 @@ final class VisualProofUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        launchApp()
+    }
+
+    private func launchApp(extraArguments: [String] = []) {
         app = XCUIApplication()
         app.launchArguments = [
             "--visual-proof",
             "-AppleLanguages", "(en)",
             "-AppleLocale", "en_US",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"
-        ]
+        ] + extraArguments
         app.launch()
         XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+    }
+
+    private func relaunch(extraArguments: [String]) {
+        app.terminate()
+        launchApp(extraArguments: extraArguments)
     }
 
     func test01HomeAndAdHocWork() {
@@ -152,8 +161,64 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertFalse(element("current-exercise-Back Squat").exists)
     }
 
+    func test08UnresolvedWarmupStaysAheadOfCurrentWork() {
+        relaunch(extraArguments: ["--visual-proof-unresolved-warmup"])
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+
+        let warmup = element("warmup-set-1")
+        let currentWork = element("current-exercise-Back Squat")
+        XCTAssertTrue(warmup.waitForExistence(timeout: 3),
+                      "a planned warmup must stay visible without expanding the full set plan")
+        XCTAssertTrue(currentWork.waitForExistence(timeout: 3))
+        XCTAssertLessThan(warmup.frame.minY, currentWork.frame.minY,
+                          "the authored warmup remains ahead of the current working set")
+        XCTAssertFalse(element("warmup-set-0").exists,
+                       "resolved ramp rows still collapse into the progress summary")
+    }
+
+    func test09ReverseOrderSurvivesSparseGymSwitch() {
+        relaunch(extraArguments: ["--visual-proof-sparse-rack"])
+        app.buttons["Plate calculator"].tap()
+        XCTAssertTrue(element("plate-calculator-screen").waitForExistence(timeout: 6))
+        app.segmentedControls.buttons["On the bar"].tap()
+
+        for plateID in ["20-kg", "15-kg", "10-kg"] {
+            let stepper = app.steppers["reverse-count-\(plateID)"]
+            reveal(stepper)
+            XCTAssertTrue(stepper.isHittable)
+            stepper.buttons["Increment"].tap()
+        }
+
+        let equipment = element("equipment-loading-disclosure")
+        reveal(equipment)
+        XCTAssertTrue(equipment.isHittable)
+        equipment.tap()
+
+        let gymPicker = element("plate-gym-picker")
+        reveal(gymPicker)
+        XCTAssertTrue(gymPicker.isHittable)
+        gymPicker.tap()
+        let sparseRack = app.staticTexts["Sparse Rack"]
+        XCTAssertTrue(sparseRack.waitForExistence(timeout: 3))
+        sparseRack.tap()
+
+        let moveTwentyOutward = element("reverse-move-outward-20-kg")
+        reveal(moveTwentyOutward)
+        XCTAssertTrue(moveTwentyOutward.isHittable)
+        moveTwentyOutward.tap()
+        XCTAssertFalse(moveTwentyOutward.isEnabled,
+                       "20 kg moved behind the visible 10 kg row, not the hidden 15 kg ID")
+        XCTAssertFalse(element("reverse-move-inward-10-kg").isEnabled)
+    }
+
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    private func reveal(_ target: XCUIElement, swipes: Int = 10) {
+        for _ in 0..<swipes where !target.isHittable { app.swipeUp() }
+        XCTAssertTrue(target.waitForExistence(timeout: 3))
     }
 
     private func capture(_ name: String) {

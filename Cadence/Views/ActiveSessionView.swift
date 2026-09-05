@@ -928,8 +928,12 @@ private struct ExerciseSection: View {
     }
 
     private var displayedSets: [SetEntry] {
-        guard emphasized, !showAllSets, let currentWorkingSet else { return entry.orderedSets }
-        return [currentWorkingSet]
+        let ordered = entry.orderedSets
+        guard emphasized, !showAllSets, let currentWorkingSet else { return ordered }
+        return ordered.filter {
+            ($0.isWarmup && $0.status == .planned)
+                || $0.persistentModelID == currentWorkingSet.persistentModelID
+        }
     }
 
     private var setStateSummary: String {
@@ -1052,8 +1056,8 @@ private struct ExerciseSection: View {
             }
             ForEach(displayedSets) { set in
                 // The set you're ON — the first WORKING set with no verdict
-                // yet. Warmups sit quiet (and often go unflagged, so they must
-                // not hold the rail hostage).
+                // yet. Unresolved warmups remain visible above it; only the
+                // already-resolved ramp collapses into the progress line.
                 let isCurrent = currentWorkingSet?.persistentModelID == set.persistentModelID
                 let showLoadout = showAllSets || isCurrent || loadChanges(at: set)
                 VStack(alignment: .leading, spacing: 4) {
@@ -1617,6 +1621,7 @@ private struct SetRow: View {
                     .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.accent.opacity(0.55)))
             }
         }
+        .accessibilityIdentifier(set.isWarmup ? "warmup-set-\(set.order)" : "work-set-\(set.order)")
         .sheet(isPresented: $showDetail) {
             if isCardio {
                 CardioSetSheet(set: set, exerciseName: exercise?.name ?? "", onDelete: onRemove)

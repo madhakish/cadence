@@ -10,6 +10,7 @@ enum VisualProofSeed {
     private static let calendar = Calendar(identifier: .gregorian)
 
     static func install(in context: ModelContext) throws {
+        let arguments = ProcessInfo.processInfo.arguments
         let exercises = try context.fetch(FetchDescriptor<Exercise>())
         guard let squat = exercises.first(where: { $0.name == "Back Squat" }),
               let rdl = exercises.first(where: { $0.name == "Romanian Deadlift" })
@@ -38,6 +39,14 @@ enum VisualProofSeed {
         }
         gym.collarWeightLb = 0
         gym.loadingPolicy = .closest
+        if arguments.contains("--visual-proof-sparse-rack") {
+            let sparseRack = Gym(name: "Sparse Rack", defaultBar: .bar45lb)
+            let visiblePlateIDs: Set<String> = ["20-kg", "10-kg"]
+            sparseRack.plateToggles = Plate.allStandard.map {
+                PlateToggle(plate: $0, enabled: visiblePlateIDs.contains($0.id))
+            }
+            context.insert(sparseRack)
+        }
         squat.stationDenomination = .kg
         rdl.stationDenomination = .kg
         squat.notes = "High-bar stance. Brace before the walkout; drive evenly through the whole foot."
@@ -103,6 +112,7 @@ enum VisualProofSeed {
             program: program,
             squatSlot: squatSlot,
             rdlSlot: rdlSlot,
+            leavesSecondWarmupPlanned: arguments.contains("--visual-proof-unresolved-warmup"),
             context: context
         )
         try addWoodSplittingActivity(context: context)
@@ -116,6 +126,7 @@ enum VisualProofSeed {
         program: Program,
         squatSlot: ProgramLift,
         rdlSlot: ProgramLift,
+        leavesSecondWarmupPlanned: Bool,
         context: ModelContext
     ) throws {
         let session = WorkoutSession(
@@ -158,7 +169,7 @@ enum VisualProofSeed {
         let secondWarmup = solution(targetLb: 89, gym: gym).loadout.totalLb
         appendSet(
             SetEntry(order: 1, weightLb: secondWarmup, reps: 5, isWarmup: true,
-                     status: .completed, enteredUnit: .lb,
+                     status: leavesSecondWarmupPlanned ? .planned : .completed, enteredUnit: .lb,
                      targetWeightLb: 89, plannedWeightLb: secondWarmup,
                      plannedReps: 5, prescriptionBlock: .warmup),
             to: squatEntry,
