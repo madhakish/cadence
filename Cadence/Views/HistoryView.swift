@@ -436,6 +436,10 @@ struct SessionDetailView: View {
     /// untouched field is not an edit.
     @State private var setDrafts: [PersistentIdentifier: SetCorrectionDraft] = [:]
     @State private var showActivityEditor = false
+    /// Set by the activity editor before it deletes this session. Once the
+    /// backing row is gone, reading any property of `session` faults, so the
+    /// view renders nothing until the pop completes.
+    @State private var activityDeleted = false
 
     /// The conditioning sets this session actually performed. `workingSets` is
     /// already completed-and-non-warmup: a set left planned, or skipped after
@@ -572,6 +576,10 @@ struct SessionDetailView: View {
     }
 
     var body: some View {
+        if activityDeleted { Color.clear } else { content }
+    }
+
+    private var content: some View {
         List {
             if let activity = session.activityDetail {
                 activitySections(activity)
@@ -625,14 +633,14 @@ struct SessionDetailView: View {
         .onDisappear {
             // Leaving the screen commits like Done: what the fields show is
             // what banks. A read-only visit (no drafts) saves nothing.
-            guard session.activityDetail == nil, isEditing, !setDrafts.isEmpty else { return }
+            guard !activityDeleted, session.activityDetail == nil, isEditing, !setDrafts.isEmpty else { return }
             commitCorrections()
             if PersistenceErrorCenter.shared.save(context, operation: "Saving the workout corrections") {
                 setDrafts = [:]
             }
         }
         .toolbar {
-            if session.activityDetail != nil {
+            if !activityDeleted, session.activityDetail != nil {
                 Button("Edit") { showActivityEditor = true }
                     .accessibilityLabel("Edit this ad-hoc activity")
             } else if session.isCompleted {
@@ -654,13 +662,17 @@ struct SessionDetailView: View {
                 .accessibilityLabel(isEditing ? "Finish editing this workout" : "Edit this workout's sets")
             }
         }
-        .sheet(isPresented: $showActivityEditor) {
-            ActivityQuickLogView(session: session, onDelete: { dismiss() })
+        .sheet(isPresented: $showActivityEditor, onDismiss: {
+            // The editor flags the deletion before it commits; this view
+            // stops reading the model at once and pops after the sheet closes.
+            if activityDeleted { dismiss() }
+        }) {
+            ActivityQuickLogView(session: session, onDelete: { activityDeleted = true })
         }
         .task {
             // One lookup per open, and only when there is something to compare
             // and a window to compare it over.
-            guard session.activityDetail == nil,
+            guard !activityDeleted, session.activityDetail == nil,
                   !didCheckHealth, healthReadEnabled, let window = healthWindow else { return }
             didCheckHealth = true
             async let miles = HealthKitService.shared

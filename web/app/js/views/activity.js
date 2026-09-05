@@ -12,6 +12,12 @@ const durationLabel = (seconds) => {
   return minutes % 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : `${minutes / 60} hr`;
 };
 
+// The form's hour and minute fields are whole units, the same contract as
+// native's steppers: a decimal entry is floored, never turned into fractional
+// seconds that the builder would reject with the wrong message.
+export const wholeMinuteSeconds = (hours, minutes) =>
+  Math.max(0, Math.floor(Number(hours) || 0)) * 3600 + Math.max(0, Math.floor(Number(minutes) || 0)) * 60;
+
 export function activitySet(session, kind = session?.activity?.kind) {
   const name = C.activityExerciseName(kind);
   if (!name) return null;
@@ -205,7 +211,7 @@ export async function openActivityLog(existing = null, { onDone = () => ui.nav.r
     const actions = ui.h("div", { class: "sticky-actions" },
       ui.h("button", { class: "btn primary wide", text: existing ? "Save" : "Bank work", onClick: async () => {
         try {
-          const durationSeconds = Number(hours.value) * 3600 + Number(minutes.value) * 60;
+          const durationSeconds = wholeMinuteSeconds(hours.value, minutes.value);
           const exercise = await Exercises.byName(C.activityExerciseName(activityKind));
           const displayLoad = nonNegative(load.value, "Maul weight");
           const session = buildActivitySession({

@@ -272,10 +272,13 @@ struct ActivityQuickLogView: View {
 
     private func deleteSession() {
         guard let session else { return }
+        // Tell the presenting detail view first: it must stop reading the
+        // model before the row it backs is gone, or the dismiss transition
+        // faults on an invalidated instance.
+        onDelete?()
         context.delete(session)
         if PersistenceErrorCenter.shared.save(context, operation: "Deleting ad-hoc work") {
             dismiss()
-            onDelete?()
         }
     }
 
