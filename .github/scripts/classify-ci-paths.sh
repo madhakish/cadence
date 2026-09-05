@@ -23,7 +23,7 @@ while IFS= read -r path; do
     # (see project.yml) is compatibility-bearing: the backup and program-file
     # codecs plus the template/seed catalogs are proven only by that suite,
     # so a change to any of them must run it.
-    Cadence/Models/*|Cadence/Seed/Seeder.swift|Cadence/Seed/ProgramTemplates.swift|Cadence/Services/ExportService.swift|Cadence/Services/ImportService.swift|Cadence/Services/ProgramExportService.swift|Cadence/Services/ProgramImportService.swift|CadenceMigrationTests/*|project.yml|.github/scripts/generate-shipped-stores.sh)
+    Cadence/Models/*|Cadence/Seed/Seeder.swift|Cadence/Seed/ProgramTemplates.swift|Cadence/Services/ExportService.swift|Cadence/Services/ImportService.swift|Cadence/Services/ProgramExportService.swift|Cadence/Services/ProgramImportService.swift|Cadence/Services/SessionCorrectionService.swift|Cadence/Services/ActivitySession.swift|Cadence/Services/ProgramActivationService.swift|Cadence/Services/MilestoneProjection.swift|CadenceMigrationTests/*|project.yml|.github/scripts/generate-shipped-stores.sh)
       migrations=true
       ;;
   esac
