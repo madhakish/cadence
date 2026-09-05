@@ -15,6 +15,7 @@ struct PlateCalculatorView: View {
     @State private var plateStyle: PlateVisualStyle = .steel
     @State private var selectedGymName: String?
     @State private var showExpandedBar = false
+    @FocusState private var targetFieldFocused: Bool
     // Reverse mode: counts per plate denomination on ONE side.
     @State private var reverseCounts: [String: Int] = [:]
     @State private var reverseOrder: [String] = []
@@ -93,6 +94,13 @@ struct PlateCalculatorView: View {
         .navigationTitle("Plates")
         .navigationBarTitleDisplayMode(.inline)
         .listSectionSpacing(.compact)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { targetFieldFocused = false }
+                    .accessibilityIdentifier("plate-target-done")
+            }
+        }
         .onAppear {
             if targetText.isEmpty { targetUnit = preferredUnit }
             if selectedGymName == nil { bar = gym?.defaultBar ?? .bar45lb }
@@ -111,6 +119,7 @@ struct PlateCalculatorView: View {
                 TextField("0", text: $targetText)
                     .keyboardType(.decimalPad)
                     .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .focused($targetFieldFocused)
                     .accessibilityIdentifier("plate-target")
                 Picker("", selection: $targetUnit) {
                     Text("lb").tag(WeightUnit.lb)

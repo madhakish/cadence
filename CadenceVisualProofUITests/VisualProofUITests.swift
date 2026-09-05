@@ -62,11 +62,13 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(target.waitForExistence(timeout: 3))
         target.tap()
         target.typeText("139")
-        // Scroll into the result instead of dragging the calculator sheet
-        // toward dismissal. The Form dismisses its decimal keyboard as the
-        // content moves, matching the normal one-handed interaction.
-        element("plate-calculator-screen").swipeUp()
-        XCTAssertTrue(app.staticTexts["ACHIEVED — BAR INCLUDED"].waitForExistence(timeout: 3))
+        let keyboardDone = element("plate-target-done")
+        XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
+        keyboardDone.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        let achieved = app.staticTexts["ACHIEVED — BAR INCLUDED"]
+        for _ in 0..<3 where !achieved.isHittable { app.swipeUp() }
+        XCTAssertTrue(achieved.isHittable)
         capture("after-07-plate-calculator-iphone")
 
         // A typical stack fits the phone with no redundant expand control.
@@ -75,9 +77,12 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(target.isHittable)
         target.tap()
         target.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 3) + "1500")
-        element("plate-calculator-screen").swipeUp()
+        XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
+        keyboardDone.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
         let expand = element("expand-loaded-bar")
-        XCTAssertTrue(expand.waitForExistence(timeout: 5))
+        for _ in 0..<3 where !expand.isHittable { app.swipeUp() }
+        XCTAssertTrue(expand.isHittable)
         expand.tap()
         XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
         capture("after-08-expanded-bar-iphone")
