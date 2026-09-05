@@ -62,7 +62,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(target.waitForExistence(timeout: 3))
         target.tap()
         target.typeText("139")
-        let keyboardDone = element("plate-target-done")
+        let keyboardDone = app.buttons["plate-target-done"]
         XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
         keyboardDone.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
