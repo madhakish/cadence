@@ -9,7 +9,7 @@
 - Touch — 56 pt is the native between-set target; web primary controls retain at least 44 CSS pixels.
 - Motion — state transitions use 160 ms, are interruptible, and collapse under Reduce Motion / `prefers-reduced-motion`.
 - Plate input — every resolved view receives the chosen `Loadout`; it does not infer a second stack from the target.
-- Full bar — hero diagrams draw shaft, sleeves, collars, and mirrored stacks, with a horizontal legibility floor and expanded view on narrow screens.
+- Full bar — hero diagrams draw shaft, sleeves, collars, and mirrored stacks. Inline native and web stages hold a 420-point/CSS-pixel legibility floor and scroll instead of compressing labels; web expansion holds 620 CSS pixels, while the native sheet fits the complete bar to the available iPhone width (capped at 620 points) and retains 9-point plate labels.
 - Plate geometry — bumper and calibrated-steel presentations use metadata-driven relative diameter and thickness rather than interchangeable rectangles.
 - Plate labels — exact metadata labels such as `1.25 kg` are drawn on every disc and repeated as face-on badges in stack lists.
 - Totals — achieved weight always leads in pounds then kilograms and always includes the selected bar and collars.
