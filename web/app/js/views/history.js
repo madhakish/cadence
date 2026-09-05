@@ -51,7 +51,11 @@ function renderRotations(panel, sessions, exercises, program, checkins, interval
   const exMap = new Map(exercises.map((exercise) => [exercise.name, exercise]));
   const rolling = (days) => {
     const cutoff = Date.now() - days * 86_400_000;
-    const recent = sessions.filter((session) => Date.parse(session.completedAt || session.date) >= cutoff);
+    // Ad-hoc activities are not training load: their timed set would otherwise
+    // read as program conditioning minutes (INV-WOOD-WORK-USES-ONE-TIMELINE).
+    // Mirrors HistoryView.rollingSummary.
+    const recent = sessions.filter((session) => !session.activity
+      && Date.parse(session.completedAt || session.date) >= cutoff);
     let sets = 0, conditioningSeconds = 0;
     for (const session of recent) for (const entry of session.exercises || []) {
       const exercise = exMap.get(entry.exerciseName);

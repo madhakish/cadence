@@ -157,6 +157,26 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
   ok(activity.wholeMinuteSeconds("1.1", "0") === 3600 && activity.wholeMinuteSeconds("0", "0.5") === 0
     && activity.wholeMinuteSeconds("", "45") === 2700 && activity.wholeMinuteSeconds("-2", "10") === 600,
   "the form floors decimal hours and minutes to whole minutes, matching native's steppers");
+  ok(activity.editedDurationSeconds(5430, "1", "30") === 5430
+    && activity.editedDurationSeconds(5430, "1", "31") === 5460
+    && activity.editedDurationSeconds(45, "0", "0") === 45
+    && activity.editedDurationSeconds(0, "0", "0") === 0,
+  "an untouched duration saves back with its stored seconds; a changed one saves the typed minutes");
+  ok(activity.activityDurationLabel(45) === "45 sec",
+    "a sub-minute record labels its seconds instead of reading as nothing");
+  const grid = activity.sessionRPEOptions(null);
+  ok(grid.length === 19 && grid[0] === 1 && grid[18] === 10 && grid.includes(6.5)
+    && !activity.sessionRPEOptions(7.25).includes(7.3) && activity.sessionRPEOptions(7.25).includes(7.25)
+    && activity.sessionRPEOptions(8).length === 19,
+  "the RPE picker offers the half-step contract grid plus the record's own off-grid value");
+  const offGrid = { ...built, activity: { ...built.activity, sessionRPE: 7.25 } };
+  await activity.openActivityLog(offGrid); await tick();
+  const editOverlay = document.querySelector("#overlays .overlay");
+  const rpeSelect = [...editOverlay.querySelectorAll("select")].find((select) =>
+    [...select.options].some((option) => option.value === "7.25"));
+  ok(rpeSelect && rpeSelect.value === "7.25",
+    "editing a record with an off-grid RPE keeps that value selected rather than silently clearing it");
+  editOverlay?.querySelector(".overlay-head button")?.click();
   await activity.openActivityLog(); await tick();
   const activityOverlay = document.querySelector("#overlays .overlay");
   ok(activityOverlay?.textContent.includes("Physical work, not a training session")
