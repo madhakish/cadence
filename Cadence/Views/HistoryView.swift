@@ -21,6 +21,7 @@ struct HistoryView: View {
 
     @State private var view: ViewMode = .rotations
     @State private var rotationDetail: String?
+    @State private var activityPendingDeletion: WorkoutSession?
 
     enum ViewMode: String, CaseIterable {
         case list = "Log"
@@ -53,6 +54,24 @@ struct HistoryView: View {
                 Button("OK") { rotationDetail = nil }
             } message: {
                 Text(rotationDetail ?? "")
+            }
+            .confirmationDialog(
+                "Delete this activity?",
+                isPresented: Binding(
+                    get: { activityPendingDeletion != nil },
+                    set: { if !$0 { activityPendingDeletion = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete activity", role: .destructive) {
+                    guard let session = activityPendingDeletion else { return }
+                    activityPendingDeletion = nil
+                    context.delete(session)
+                    PersistenceErrorCenter.shared.save(context, operation: "Deleting ad-hoc work")
+                }
+                Button("Cancel", role: .cancel) { activityPendingDeletion = nil }
+            } message: {
+                Text("This removes the banked activity from history. Training cycles and workout records are unchanged.")
             }
         }
     }
@@ -281,11 +300,10 @@ struct HistoryView: View {
                                 }
                             }
                         }
-                        .swipeActions {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if session.activityDetail != nil {
                                 Button(role: .destructive) {
-                                    context.delete(session)
-                                    PersistenceErrorCenter.shared.save(context, operation: "Deleting ad-hoc work")
+                                    activityPendingDeletion = session
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }

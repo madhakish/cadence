@@ -356,6 +356,22 @@ export async function openSession(id) {
   const currentExercise = () => exMap.get((currentEntry() || {}).exerciseName);
   const expandedEntries = new Set();
 
+  const hasPlannedWork = (entry) => (entry?.sets || [])
+    .some((set) => !set.isWarmup && set.status === "planned");
+  function focusAfterVerdict(entry, status) {
+    // Undoing a verdict is an explicit return to this lift. A resolving
+    // verdict stays here until its final work set, then advances through the
+    // authored sequence (skipping already-finished entries).
+    if (status === "planned" || hasPlannedWork(entry)) {
+      currentSE = entry;
+      return;
+    }
+    const index = session.exercises.indexOf(entry);
+    const later = index < 0 ? null
+      : session.exercises.slice(index + 1).find(hasPlannedWork);
+    currentSE = later || session.exercises.find(hasPlannedWork) || entry;
+  }
+
   const rest = makeRestTimer(() => paintBar(), () => onRestDone());
   let restLabel = "";
   let barEls = null;                          // bottom-bar refs, filled after pushScreen
@@ -681,9 +697,9 @@ export async function openSession(id) {
       "aria-label": `Set status: ${s.status}`,
       title: "Tap to complete or undo; hold for more set options",
       onClick: () => {
-        currentSE = se;
         const newlyCompleted = s.status !== "completed";
         s.status = newlyCompleted ? "completed" : "planned";
+        focusAfterVerdict(se, s.status);
         if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole), se.exerciseName);
         save(); renderBody(body);
       },
@@ -777,12 +793,12 @@ export async function openSession(id) {
   }
 
   function chooseStatus(se, s, body) {
-    currentSE = se;
     ui.actionSheet("Set status", ["planned", "completed", "skipped"].map((status) => ({
       label: status[0].toUpperCase() + status.slice(1),
       onClick: () => {
         const newlyCompleted = status === "completed" && s.status !== "completed";
         s.status = status;
+        focusAfterVerdict(se, status);
         if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole), se.exerciseName);
         save(); renderBody(body);
       },

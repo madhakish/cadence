@@ -10,7 +10,7 @@ contracts.
 | Surface | Native | Web | Shared source of truth |
 | --- | --- | --- | --- |
 | Main session | `Cadence/Views/ActiveSessionView.swift` | `web/app/js/views/session.js` | persisted `WorkoutSession` / set load |
-| Plate calculator | `Cadence/Views/PlateCalculatorView.swift` | `web/app/js/views/plates.js` | solver `PlateSolution` / explicit reverse `Loadout` |
+| Plate calculator | `Cadence/Views/PlateCalculatorView.swift` | `web/app/js/views/plates.js` | solver `PlateSolution` / entered-stack `PlateSolution` |
 | Plate renderer and totals | `Cadence/Views/BarbellView.swift` | `web/app/js/barbell.js` | plate/bar metadata + solver result |
 | Exercise information | `Cadence/Views/LibraryView.swift` | `web/app/js/views/settings.js` and session sheet | resolved prescription and program slot |
 | Muscle figure | `Cadence/Views/AnatomyFigureView.swift` | `web/app/js/anatomy.js` | exercise primary/secondary muscle IDs |
@@ -47,10 +47,11 @@ remain byte-identical within each pose.
 - Compact per-set and calculator presentations lived in those same modules but
   used different geometry and totals treatment.
 
-The pass keeps one renderer module per surface and makes an explicit
-solver-selected `Loadout` the input wherever a load has already been resolved.
-Reverse mode constructs one `Loadout` from the entered stack and never invokes
-the target solver.
+The pass keeps one renderer module per surface and makes a complete
+domain-owned `PlateSolution` its only input. The renderer cannot accept a
+target or inventory, so it cannot sort, sum, substitute, or solve. Reverse mode
+constructs one `PlateSolution` from the entered stack in the user's exact
+collar-to-sleeve order and never invokes the target solver.
 
 ## Ranked baseline problems
 
@@ -109,6 +110,12 @@ a complementary hypertrophy slot, and a long wood-splitting activity. The
 `iPhone visual proof` workflow captures the home, ad-hoc form, active session,
 exercise pane, anatomy, calculator, expanded bar, Settings, and History surfaces.
 It cannot read or mutate a user's store.
+
+The comparison baseline is not a reconstruction. A proof-only workflow checks
+out pre-pass commit `1bdcc3d68ac5eb51b352ddddb0f98cf25e4dfa5c`, injects only
+an in-memory fixture and UI-test target, and captures its unmodified production
+views on the same iPhone simulator. That instrumentation is removed after the
+baseline artifact is committed.
 
 Web verification runs from `web` with `npm test`. Native core, migration, device
 build, and visual proof run in GitHub Actions because the repository's local

@@ -91,6 +91,16 @@ final class VisualProofUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(activitySummary.waitForExistence(timeout: 5))
         capture("after-10-history-ad-hoc-iphone")
+
+        let activityRow = app.staticTexts["Wood Splitting"].firstMatch
+        XCTAssertTrue(activityRow.waitForExistence(timeout: 3))
+        activityRow.swipeLeft()
+        let delete = app.buttons["Delete"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 3))
+        delete.tap()
+        XCTAssertTrue(app.buttons["Delete activity"].waitForExistence(timeout: 3))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(activitySummary.waitForExistence(timeout: 3), "cancelling keeps the banked activity")
     }
 
     func test06ComplementaryTrainingFocusIsTruthful() {
@@ -105,6 +115,22 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(focus.waitForExistence(timeout: 3))
         XCTAssertEqual(focus.label, "Complementary lift · Hypertrophy focus")
         XCTAssertFalse(app.staticTexts["Target 2–3 reps left. Adjust the next set if the load misses that range."].exists)
+    }
+
+    func test07FinalSetAdvancesToNextAuthoredExercise() {
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        XCTAssertTrue(element("current-exercise-Back Squat").waitForExistence(timeout: 3))
+
+        // The proof fixture starts on squat work set 2 of 3. Resolve both;
+        // focus must move to the next authored lift without another tap.
+        for _ in 0..<2 {
+            let status = app.buttons["Set status"].firstMatch
+            XCTAssertTrue(status.waitForExistence(timeout: 3))
+            status.tap()
+        }
+        XCTAssertTrue(element("current-exercise-Romanian Deadlift").waitForExistence(timeout: 5))
+        XCTAssertFalse(element("current-exercise-Back Squat").exists)
     }
 
     private func element(_ identifier: String) -> XCUIElement {

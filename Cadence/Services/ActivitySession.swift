@@ -158,8 +158,20 @@ enum ActivitySession {
         let exercise = try validatedExercise(input: input, context: context)
         let wood = input.kind == .woodSplitting ? input.woodSplitting : nil
         guard let detail = session.activityDetail,
+              session.exercises.count == 1,
               let entry = session.orderedExercises.first,
-              let set = entry.orderedSets.first
+              entry.sets.count == 1,
+              let set = entry.orderedSets.first,
+              !set.isWarmup,
+              session.programID == nil,
+              session.programName == nil,
+              session.programTemplateID == nil,
+              session.programCycleNumber == nil,
+              session.programWeek == nil,
+              session.programDayIndex == nil,
+              session.programPlanNames == nil,
+              entry.programRole == nil,
+              entry.programSlotID == nil
         else { throw Error.invalidSessionShape }
 
         session.date = input.startDate

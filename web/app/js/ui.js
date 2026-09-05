@@ -77,8 +77,19 @@ function dialogKeyboard(dialog, close, returnFocus) {
     const controls = [...dialog.querySelectorAll(focusable)].filter((control) => control.getClientRects().length || control === document.activeElement);
     if (!controls.length) { event.preventDefault(); dialog.focus(); return; }
     const first = controls[0], last = controls.at(-1);
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    const activeIndex = controls.indexOf(document.activeElement);
+    // A dialog container, heading, or newly introduced custom focus target can
+    // hold focus without belonging to the current control list. Letting the
+    // browser guess from there can leave the modal. Re-enter at the correct
+    // edge before handling the ordinary first/last wrap.
+    if (activeIndex < 0) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && activeIndex === 0) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && activeIndex === controls.length - 1) {
+      event.preventDefault(); first.focus();
+    }
   };
   dialog.addEventListener("keydown", onKeyDown);
   return () => {

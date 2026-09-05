@@ -5,7 +5,7 @@ import * as C from "../core.js";
 import { Exercises, Sessions, Settings, iso } from "../db.js";
 
 const durationLabel = (seconds) => {
-  const minutes = Math.max(0, Math.round((seconds || 0) / 60));
+  const minutes = Math.max(0, Math.floor((seconds || 0) / 60));
   if (minutes < 60) return `${minutes} min`;
   return minutes % 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : `${minutes / 60} hr`;
 };
@@ -45,6 +45,15 @@ export function buildActivitySession(input, exercise, existing = null) {
   }
   if (!exercise || exercise.name !== C.activityExerciseName(input.kind)) {
     throw new Error(`The exercise library is missing ${C.activityExerciseName(input.kind)}.`);
+  }
+  if (existing) {
+    const entries = Array.isArray(existing.exercises) ? existing.exercises : [];
+    const sets = Array.isArray(entries[0]?.sets) ? entries[0].sets : [];
+    if (!existing.activity || entries.length !== 1 || sets.length !== 1 || sets[0].isWarmup
+        || existing.programTemplateId != null || existing.programTag != null
+        || entries[0].programRole != null || entries[0].programSlotId != null) {
+      throw new Error("This activity record is incomplete and can't be edited safely.");
+    }
   }
   const loadLb = nonNegative(input.loadLb, "Implement weight") ?? 0;
   const wood = input.kind === "woodSplitting" ? (input.woodSplitting || {}) : {};

@@ -380,6 +380,73 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(ActivitySession.workload(for: original)?.arbitraryUnits, 1_125)
     }
 
+    /// Editing is deliberately not a repair path. If a damaged import or old
+    /// bug left extra rows, a warmup row, or a program relationship on an
+    /// activity, mutating only the first set would preserve a contradictory
+    /// record. Refuse it and leave every row available for explicit recovery.
+    func testActivityQuickEditRejectsNoncanonicalSessionShape() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        let exercise = Exercise(
+            name: ActivityKind.woodSplitting.exerciseName,
+            category: .conditioning,
+            type: .conditioning,
+            movementGroup: "conditioning"
+        )
+        context.insert(exercise)
+
+        let input = ActivitySession.Input(
+            kind: .woodSplitting,
+            startDate: .now,
+            durationSeconds: 3_600,
+            sessionRPE: 8,
+            loadLb: 8,
+            notes: "Synthetic oak",
+            woodSplitting: .init(rounds: 20)
+        )
+
+        let extraEntrySession = try ActivitySession.create(input: input, context: context)
+        let extraEntry = SessionExercise(order: 1, exercise: exercise)
+        context.insert(extraEntry)
+        extraEntrySession.exercises.append(extraEntry)
+        XCTAssertThrowsError(
+            try ActivitySession.update(session: extraEntrySession, input: input, context: context)
+        )
+
+        let extraSetSession = try ActivitySession.create(input: input, context: context)
+        let extraSet = SetEntry(
+            order: 1,
+            weightLb: 8,
+            reps: 0,
+            status: .completed,
+            durationSeconds: 60,
+            prescriptionBlock: .conditioning
+        )
+        context.insert(extraSet)
+        let extraSetEntry = try XCTUnwrap(extraSetSession.orderedExercises.first)
+        extraSetEntry.sets.append(extraSet)
+        XCTAssertThrowsError(
+            try ActivitySession.update(session: extraSetSession, input: input, context: context)
+        )
+
+        let warmupSession = try ActivitySession.create(input: input, context: context)
+        let corruptedWarmup = try XCTUnwrap(warmupSession.orderedExercises.first?.orderedSets.first)
+        corruptedWarmup.isWarmup = true
+        XCTAssertThrowsError(
+            try ActivitySession.update(session: warmupSession, input: input, context: context)
+        )
+
+        let programmedSession = try ActivitySession.create(input: input, context: context)
+        programmedSession.programName = "Not off-program"
+        XCTAssertThrowsError(
+            try ActivitySession.update(session: programmedSession, input: input, context: context)
+        )
+    }
+
     func testV9StoreGainsIntervalsAndManualBarWithoutTouchingAnything() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cadence-v9-interval-migration-\(UUID().uuidString)", isDirectory: true)

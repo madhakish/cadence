@@ -43,6 +43,33 @@ const completeAll = async (workout) => {
 };
 
 {
+  const trigger = ui.h("button", { text: "Open focus proof" });
+  document.body.append(trigger);
+  trigger.focus();
+  const modal = ui.pushScreen({ title: "Focus proof", build: (body) => {
+    body.append(ui.h("button", { text: "Last proof control" }));
+  } });
+  // jsdom has no layout, so mark the controls visible for the same filter the
+  // browser uses before trapping focus.
+  for (const control of modal.el.querySelectorAll("button")) {
+    control.getClientRects = () => [{ width: 44, height: 44 }];
+  }
+  const unlisted = ui.h("h3", { text: "Programmatic focus target", tabIndex: -1 });
+  modal.body.prepend(unlisted);
+  unlisted.focus();
+  unlisted.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+  ok(document.activeElement.textContent === "‹ Back",
+    "Tab from an unlisted programmatic target re-enters the modal at its first control");
+  unlisted.focus();
+  unlisted.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+  ok(document.activeElement.textContent === "Last proof control",
+    "Shift-Tab from an unlisted programmatic target re-enters the modal at its last control");
+  modal.close();
+  ok(document.activeElement === trigger, "closing a modal restores its invoking control");
+  trigger.remove();
+}
+
+{
   const adjusted = history.historySetPresentationForTest({
     weightLb: 215, reps: 3, plannedWeightLb: 225, plannedReps: 5,
     status: "completed", isWarmup: false, isPerSide: false, prescriptionBlock: "work",
@@ -133,6 +160,23 @@ ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
   ok(edited.id === built.id && activity.activitySet(edited).enteredUnit === "kg"
     && edited.activity.rounds === 60 && edited.activity.splitPieces === null,
   "editing preserves identity and exact entered unit without inventing uncounted wood facts");
+  ok(activity.activityDurationLabel(89) === "1 min" && activity.activityDurationLabel(91) === "1 min",
+    "ad-hoc duration summaries floor partial minutes exactly like native history");
+  const corruptions = [
+    (value) => value.exercises.push(structuredClone(value.exercises[0])),
+    (value) => value.exercises[0].sets.push(structuredClone(value.exercises[0].sets[0])),
+    (value) => { value.exercises[0].sets[0].isWarmup = true; },
+    (value) => { value.programTag = { name: "Not off-program" }; },
+  ];
+  ok(corruptions.every((corrupt) => {
+    const invalid = structuredClone(built);
+    corrupt(invalid);
+    try { activity.buildActivitySession({
+      kind: "woodSplitting", startDate: new Date("2026-01-17T14:00:00Z"),
+      durationSeconds: 7_500, sessionRPE: 9, loadLb: 8, enteredUnit: "lb",
+      notes: "Invalid fixture", woodSplitting: {},
+    }, wood, invalid); return false; } catch { return true; }
+  }), "editing refuses extra rows, warmups, or program relationships instead of mutating one fragment");
   let rejected = false;
   try { activity.buildActivitySession({ kind: "woodSplitting", startDate: new Date(), durationSeconds: 0 }, wood); }
   catch { rejected = true; }
@@ -740,6 +784,9 @@ for (let i = 0; i < 10; i++) {
   const workout = await db.Sessions.get(sid);
   workout.exercises.sort((a, b) => a.order - b.order);
   for (const set of workout.exercises[0].sets || []) if (!set.isWarmup) set.status = "completed";
+  const secondWork = (workout.exercises[1].sets || []).filter((set) => !set.isWarmup);
+  secondWork.forEach((set, index) => { set.status = index === secondWork.length - 1 ? "planned" : "completed"; });
+  const nextExerciseName = workout.exercises[2].exerciseName;
   await db.Sessions.save(workout);
   await session.openSession(sid); await tick();
   const logger = [...document.querySelectorAll("#overlays .overlay")].at(-1);
@@ -759,7 +806,16 @@ for (let i = 0; i < 10; i++) {
       && repainted.querySelector(".exercise-card.emphasized")?.getAttribute("aria-label")
         ?.startsWith(workout.exercises[1].exerciseName),
   "moving the current lift upward updates the represented authored order immediately");
-  repainted.querySelector(".overlay-head button")?.click(); await tick();
+  const finalSetStatus = repainted.querySelector(
+    '.exercise-card.emphasized .setrow.current button[aria-label="Set status: planned"]',
+  );
+  ok(finalSetStatus, "the final planned set remains the current one-tap action");
+  finalSetStatus?.click(); await tick();
+  const advanced = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  ok(advanced.querySelector(".exercise-card.emphasized")?.getAttribute("aria-label")
+      ?.startsWith(nextExerciseName),
+  "resolving the final set advances focus to the next authored exercise with planned work");
+  advanced.querySelector(".overlay-head button")?.click(); await tick();
   await db.Sessions.del(sid);
 }
 

@@ -448,9 +448,37 @@ struct ActiveSessionView: View {
             adHocExposure: mostRecentTopExposure(for: entry),
             onDropLoad: { autoregEntry = entry },
             onWork: { currentEntry = $0 },
+            onResolve: { focusAfterResolving($0) },
             onRemove: { removeExercise(entry) },
             onMove: { moveExercise(entry, direction: $0) }
         )
+    }
+
+    /// A verdict resolves the current position, not merely the tapped row.
+    /// Stay on this exercise while it still has planned work; after its final
+    /// set, advance through authored order to the next exercise that can be
+    /// performed. Undoing a verdict deliberately returns focus to that entry.
+    private func focusAfterResolving(_ entry: SessionExercise) {
+        if entry.plannedWorkingSets.contains(where: { $0.status == .planned }) {
+            currentEntry = entry
+            return
+        }
+
+        let ordered = session.orderedExercises
+        guard let index = ordered.firstIndex(where: {
+            $0.persistentModelID == entry.persistentModelID
+        }) else {
+            currentEntry = entry
+            return
+        }
+        let later = ordered.dropFirst(index + 1).first {
+            $0.plannedWorkingSets.contains(where: { $0.status == .planned })
+        }
+        let remaining = later ?? ordered.first {
+            $0.plannedWorkingSets.contains(where: { $0.status == .planned })
+        }
+        currentEntry = remaining ?? entry
+        if remaining != nil { showEarlierExercises = false }
     }
 
     private func recallLine(
@@ -722,6 +750,8 @@ private struct ExerciseSection: View {
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
     let onWork: (SessionExercise) -> Void
+    /// Recomputes the active position after a completed or skipped verdict.
+    let onResolve: (SessionExercise) -> Void
     /// Remove this exercise from the session. Unlike a swap, removal leaves no
     /// performed entry carrying the program slot identity.
     let onRemove: () -> Void
@@ -1032,14 +1062,18 @@ private struct ExerciseSection: View {
                             .font(.caption.bold())
                             .tracking(0.8)
                             .foregroundStyle(Theme.accent)
+                            .accessibilityIdentifier("current-exercise-\(entry.exercise?.name ?? "Exercise")")
                     }
                     SetRow(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
                            compact: !showAllSets && !isCurrent,
-                           targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onLogged: {
-                        onWork(entry)
-                        // Auto-start only if the user opted in (manual is the
-                        // default), and never restart a countdown already running.
-                        if settings?.autoStartRest == true && !restTimer.isRunning {
+                           targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onStatusChange: { previous, status in
+                        if status == .planned { onWork(entry) }
+                        else { onResolve(entry) }
+                        // Auto-start only for a new completed verdict when the
+                        // user opted in (manual is the default), and never
+                        // restart a countdown already running.
+                        if status == .completed, previous != .completed,
+                           settings?.autoStartRest == true, !restTimer.isRunning {
                             restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
                                             exerciseName: entry.exercise?.name ?? "")
                         }
@@ -1469,7 +1503,7 @@ private struct SetRow: View {
     let compact: Bool
     /// The program/track weight this session recommends — the picker anchors here.
     let targetLb: Double?
-    var onLogged: () -> Void
+    var onStatusChange: (_ previous: SetStatus, _ current: SetStatus) -> Void
     var onRemove: () -> Void
 
     @State private var showDetail = false
@@ -1573,7 +1607,7 @@ private struct SetRow: View {
 
             Spacer()
 
-            SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onCompleted: onLogged)
+            SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onStatusChange: onStatusChange)
         }
         .padding(isCurrent ? 12 : 0)
         .background {
@@ -1946,7 +1980,7 @@ private struct SetVerdictControl: View {
     @Environment(\.modelContext) private var context
     @Bindable var set: SetEntry
     let allowsQuality: Bool
-    var onCompleted: () -> Void
+    var onStatusChange: (_ previous: SetStatus, _ current: SetStatus) -> Void
 
     var body: some View {
         Menu {
@@ -2020,9 +2054,10 @@ private struct SetVerdictControl: View {
     }
 
     private func apply(_ status: SetStatus) {
-        let wasCompleted = set.status == .completed
+        let previous = set.status
+        guard previous != status else { return }
         set.status = status
-        if status == .completed && !wasCompleted { onCompleted() }
+        onStatusChange(previous, status)
         save()
     }
 

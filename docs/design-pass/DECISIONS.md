@@ -8,13 +8,13 @@
 - Type — heavy rounded numerals are limited to live load and totals; headings use the platform sans hierarchy and supporting copy never drops below readable caption size.
 - Touch — 56 pt is the native between-set target; web primary controls retain at least 44 CSS pixels.
 - Motion — state transitions use 160 ms, are interruptible, and collapse under Reduce Motion / `prefers-reduced-motion`.
-- Plate input — every resolved view receives the chosen `Loadout`; it does not infer a second stack from the target.
-- Full bar — hero diagrams draw shaft, sleeves, collars, and mirrored stacks. Inline native and web stages hold a 420-point/CSS-pixel legibility floor and scroll instead of compressing labels; web expansion holds 620 CSS pixels, while the native sheet fits the complete bar to the available iPhone width (capped at 620 points) and retains 9-point plate labels.
+- Plate input — every renderer receives the chosen `PlateSolution`; it has no target or rack input from which it could infer a second stack.
+- Full bar — hero diagrams draw shaft, sleeves, collars, and mirrored stacks. Each exact stack derives its own minimum legible width from metadata thickness. A normal two-plate-per-side load fits a 390-point phone; constrained stacks scale only their plate geometry, keep denomination text at 9 points, and expose a focused horizontally scrollable view at natural width.
 - Plate geometry — bumper and calibrated-steel presentations use metadata-driven relative diameter and thickness rather than interchangeable rectangles.
 - Plate labels — exact metadata labels such as `1.25 kg` are drawn on every disc and repeated as face-on badges in stack lists.
 - Totals — achieved weight always leads in pounds then kilograms and always includes the selected bar and collars.
 - Mixed units — bar unit and plate denomination are named independently; conversion is confined to the achieved-total explanation.
-- Session hierarchy — current exercise, load, current set, plate stack, and next action own the first block; progress and analysis follow.
+- Session hierarchy — current exercise, load, current set, plate stack, and next action own the first block; earlier completed exercises remain above it as one disclosure so the authored order is never falsified, and later work follows in order.
 - Set states — completed dims, current carries the red boundary, upcoming stays neutral, and warmups reduce emphasis without changing geometry.
 - Exercise pane — live prescription and load stay visible; history/programming and anatomy/setup are separate disclosures.
 - Gorilla — the exact raster is retained, edge-feathered at the container, and paired with restrained primary/secondary vector overlays.
