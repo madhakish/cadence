@@ -35,6 +35,11 @@ struct ActivityQuickLogView: View {
 
     private static let rpeOptions = Array(stride(from: 1.0, through: 10.0, by: 0.5))
 
+    /// The stored duration as banked, seconds included. The steppers show
+    /// whole minutes; an untouched duration saves back exactly as stored so
+    /// an imported 5430 s record is not silently truncated to 5400.
+    private let originalDurationSeconds: Int
+
     init(session: WorkoutSession? = nil, onDelete: (() -> Void)? = nil) {
         self.session = session
         self.onDelete = onDelete
@@ -42,6 +47,7 @@ struct ActivityQuickLogView: View {
         let resolvedKind = detail?.kind ?? .woodSplitting
         let set = session.flatMap { Self.activitySet(in: $0, kind: resolvedKind) }
         let duration = set?.durationSeconds ?? 0
+        originalDurationSeconds = duration
         let unit = set?.enteredUnit ?? .lb
         let load = set?.weightLb ?? 0
 
@@ -62,7 +68,10 @@ struct ActivityQuickLogView: View {
     }
 
     private var durationSeconds: Int {
-        durationHours * 3_600 + durationMinutes * 60
+        let typed = durationHours * 3_600 + durationMinutes * 60
+        // The steppers still show the stored minutes: keep the stored seconds.
+        let flooredOriginal = originalDurationSeconds - originalDurationSeconds % 60
+        return originalDurationSeconds > 0 && typed == flooredOriginal ? originalDurationSeconds : typed
     }
 
     private var isEditing: Bool { session != nil }
@@ -152,7 +161,9 @@ struct ActivityQuickLogView: View {
                         .lineLimit(3...8)
                 }
 
-                if isEditing {
+                // The presenter performs the delete, so the action exists
+                // only when a presenter has wired it; never a silent no-op.
+                if isEditing, onDelete != nil {
                     Section {
                         Button("Delete activity", role: .destructive) { confirmDelete = true }
                             .frame(minHeight: 44)
@@ -271,15 +282,13 @@ struct ActivityQuickLogView: View {
     }
 
     private func deleteSession() {
-        guard let session else { return }
-        // Tell the presenting detail view first: it must stop reading the
-        // model before the row it backs is gone, or the dismiss transition
-        // faults on an invalidated instance.
+        guard session != nil else { return }
+        // The sheet only asks. The presenting detail view performs the
+        // delete once this sheet is gone, so no view is mid-transition on a
+        // row that no longer exists, and a failed save leaves the record on
+        // screen instead of behind a blank page.
         onDelete?()
-        context.delete(session)
-        if PersistenceErrorCenter.shared.save(context, operation: "Deleting ad-hoc work") {
-            dismiss()
-        }
+        dismiss()
     }
 
     private static func activitySet(in session: WorkoutSession, kind: ActivityKind) -> SetEntry? {
@@ -290,6 +299,7 @@ struct ActivityQuickLogView: View {
     }
 
     private func durationLabel(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds) sec" }
         let hours = seconds / 3_600
         let minutes = (seconds % 3_600) / 60
         if hours == 0 { return "\(minutes) min" }

@@ -1339,6 +1339,10 @@ final class PersistenceMigrationTests: XCTestCase {
             ModelConfiguration("migration", schema: schema, url: storeURL)
         }
         let attempts: [() throws -> ModelContainer] = [
+            // Same order as AppBootstrap.loadPersistentStore: newest shipped
+            // checksum first.
+            { try ModelContainer(for: schema, migrationPlan: CadenceV11MigrationPlan.self,
+                                 configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadenceV10MigrationPlan.self,
                                  configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadenceV9MigrationPlan.self,
