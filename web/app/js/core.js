@@ -281,6 +281,17 @@ export function nextSetStatus(status) {
   return SET_STATUSES[((index < 0 ? 0 : index) + 1) % SET_STATUSES.length];
 }
 
+// Focus one working set without hiding unresolved warmups. Resolved ramp rows
+// collapse; planned warmups retain their authored positions. With no current
+// working set, preserve the complete plan for correction. Mirrors
+// SetLifecycle.focusedPresentationIndices.
+export function focusedSetIndices(sets = []) {
+  const currentWorkIndex = sets.findIndex((set) => !set.isWarmup && (set.status || "planned") === "planned");
+  if (currentWorkIndex < 0) return sets.map((_, index) => index);
+  return sets.flatMap((set, index) => (index === currentWorkIndex
+    || (set.isWarmup && (set.status || "planned") === "planned") ? [index] : []));
+}
+
 // Whether a set of this kind counts as the slot's prescribed work — the sets
 // that are graded and that supply the cycle's strength sample.
 //
@@ -311,6 +322,21 @@ export const resolvedPrescriptionBlock = (set) => set.prescriptionBlock || (set.
 export const plateLb = (p) => toLb(p.value, p.unit);
 export const plateId = (p) => `${p.value}-${p.unit}`;
 export const plateLabel = (p) => `${trim(p.value, 2)} ${p.unit}`;
+
+// Move one visible reverse-mode denomination relative to its visible
+// neighbours while preserving IDs hidden by the active gym. Mirrors
+// PlateMath.movedVisiblePlateIDs.
+export function movedVisiblePlateIDs(id, offset, storedOrder = [], visibleOrder = []) {
+  const visibleIndex = visibleOrder.indexOf(id);
+  const destination = visibleIndex + offset;
+  if (visibleIndex < 0 || destination < 0 || destination >= visibleOrder.length) return [...storedOrder];
+  const storedIndex = storedOrder.indexOf(id);
+  const storedDestination = storedOrder.indexOf(visibleOrder[destination]);
+  if (storedIndex < 0 || storedDestination < 0) return [...storedOrder];
+  const result = [...storedOrder];
+  [result[storedIndex], result[storedDestination]] = [result[storedDestination], result[storedIndex]];
+  return result;
+}
 
 // Plate colour token (the user's gym scheme). The UI maps the token → a hex.
 // kg is IWF: 25 red · 20 blue · 15 yellow · 10 green · 5 white · 2.5 red change plate.

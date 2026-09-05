@@ -537,6 +537,9 @@ export async function openSession(id) {
     se.sets.sort((a, b) => a.order - b.order);
     const showAll = expandedEntries.has(se);
     const currentSet = se.sets.find((set) => !set.isWarmup && set.status === "planned");
+    const focusedIndices = new Set(emphasized && !showAll
+      ? C.focusedSetIndices(se.sets)
+      : se.sets.map((_, index) => index));
     // Discloses where the first working set's history-based suggestion came
     // from — only for that set, and only when a suggestion actually shaped
     // it (never the silent catalog-default fallback). Mirrors native
@@ -547,6 +550,7 @@ export async function openSession(id) {
       ? C.historyProvenanceLabel(adHocExposure.date, Date.now())
       : null;
     se.sets.forEach((s, index) => {
+      if (!focusedIndices.has(index)) return;
       const prior = se.sets[index - 1];
       const loadChange = !!prior && (Math.abs((prior.weightLb || 0) - (s.weightLb || 0)) > 0.001
         || prior.loadBasis !== s.loadBasis || (prior.implementCount || 1) !== (s.implementCount || 1));

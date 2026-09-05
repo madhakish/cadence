@@ -391,6 +391,36 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(loadout.totalLb, 210, accuracy: 1e-9)
     }
 
+    func testVisiblePlateReorderMapsAcrossHiddenGymInventoryIDs() {
+        let stored = ["20-kg", "15-kg", "10-kg"]
+        let visible = ["20-kg", "10-kg"]
+
+        let moved = PlateMath.movedVisiblePlateIDs(
+            id: "20-kg",
+            by: 1,
+            storedOrder: stored,
+            visibleOrder: visible
+        )
+
+        XCTAssertEqual(moved, ["10-kg", "15-kg", "20-kg"],
+                       "the selected visible plates swap even when a hidden old-gym ID sits between them")
+        XCTAssertEqual(moved.filter(Set(visible).contains), ["10-kg", "20-kg"])
+    }
+
+    func testVisiblePlateReorderLeavesBoundariesAndMissingRowsAlone() {
+        let stored = ["20-kg", "15-kg", "10-kg"]
+        let visible = ["20-kg", "10-kg"]
+
+        XCTAssertEqual(
+            PlateMath.movedVisiblePlateIDs(id: "20-kg", by: -1, storedOrder: stored, visibleOrder: visible),
+            stored
+        )
+        XCTAssertEqual(
+            PlateMath.movedVisiblePlateIDs(id: "15-kg", by: 1, storedOrder: stored, visibleOrder: visible),
+            stored
+        )
+    }
+
     func testSolvedLoadoutStillUsesPhysicalHeaviestFirstOrder() {
         let unsorted = [10.0, 45, 2.5, 25].map {
             PlateCount(plate: Plate(value: $0, unit: .lb), count: 1)

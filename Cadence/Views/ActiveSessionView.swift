@@ -929,11 +929,11 @@ private struct ExerciseSection: View {
 
     private var displayedSets: [SetEntry] {
         let ordered = entry.orderedSets
-        guard emphasized, !showAllSets, let currentWorkingSet else { return ordered }
-        return ordered.filter {
-            ($0.isWarmup && $0.status == .planned)
-                || $0.persistentModelID == currentWorkingSet.persistentModelID
+        guard emphasized, !showAllSets, currentWorkingSet != nil else { return ordered }
+        let states = ordered.map {
+            SetLifecycle.PresentationState(isWarmup: $0.isWarmup, status: $0.status)
         }
+        return SetLifecycle.focusedPresentationIndices(states).map { ordered[$0] }
     }
 
     private var setStateSummary: String {
@@ -1621,7 +1621,6 @@ private struct SetRow: View {
                     .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.accent.opacity(0.55)))
             }
         }
-        .accessibilityIdentifier(set.isWarmup ? "warmup-set-\(set.order)" : "work-set-\(set.order)")
         .sheet(isPresented: $showDetail) {
             if isCardio {
                 CardioSetSheet(set: set, exerciseName: exercise?.name ?? "", onDelete: onRemove)

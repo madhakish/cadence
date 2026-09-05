@@ -235,7 +235,6 @@ struct PlateCalculatorView: View {
                         }
                     }
                 }
-                .accessibilityIdentifier("reverse-count-\(plate.id)")
             }
             Button("Clear", role: .destructive) {
                 reverseCounts = [:]
@@ -255,19 +254,16 @@ struct PlateCalculatorView: View {
                             moveReversePlate(id: plateCount.id, by: -1)
                         }
                         .labelStyle(.iconOnly)
-                        .accessibilityIdentifier("reverse-move-inward-\(plateCount.id)")
                         .disabled(index == 0)
                         .frame(minWidth: 44, minHeight: 44)
                         Button("Move outward", systemImage: "arrow.down") {
                             moveReversePlate(id: plateCount.id, by: 1)
                         }
                         .labelStyle(.iconOnly)
-                        .accessibilityIdentifier("reverse-move-outward-\(plateCount.id)")
                         .disabled(index == reversePerSide.count - 1)
                         .frame(minWidth: 44, minHeight: 44)
                     }
                     .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("reverse-order-\(plateCount.id)")
                 }
             }
         }
@@ -295,13 +291,11 @@ struct PlateCalculatorView: View {
                     )) {
                         ForEach(gyms) { Text($0.name).tag($0.name) }
                     }
-                    .accessibilityIdentifier("plate-gym-picker")
                 }
                 Text("Bar units and plate denominations stay independent. Mixed racks are converted only in the total; the pictured stack always uses the plates actually selected.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .accessibilityIdentifier("equipment-loading-disclosure")
         }
     }
 
@@ -322,14 +316,12 @@ struct PlateCalculatorView: View {
     }
 
     private func moveReversePlate(id: String, by offset: Int) {
-        let visibleOrder = reversePerSide.map(\.id)
-        guard let visibleIndex = visibleOrder.firstIndex(of: id) else { return }
-        let destination = visibleIndex + offset
-        guard visibleOrder.indices.contains(destination),
-              let storedIndex = reverseOrder.firstIndex(of: id),
-              let storedDestination = reverseOrder.firstIndex(of: visibleOrder[destination])
-        else { return }
-        reverseOrder.swapAt(storedIndex, storedDestination)
+        reverseOrder = PlateMath.movedVisiblePlateIDs(
+            id: id,
+            by: offset,
+            storedOrder: reverseOrder,
+            visibleOrder: reversePerSide.map(\.id)
+        )
     }
 
     private var expandedBarView: some View {
