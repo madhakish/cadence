@@ -340,6 +340,7 @@ struct HistoryView: View {
     }
 
     private func durationLabel(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes)m" }
         return minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h \(minutes % 60)m"
@@ -779,6 +780,7 @@ struct SessionDetailView: View {
     }
 
     private func activityDurationLabel(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds) sec" }
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes) min" }
         return minutes % 60 == 0 ? "\(minutes / 60) hr" : "\(minutes / 60) hr \(minutes % 60) min"
