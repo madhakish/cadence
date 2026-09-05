@@ -5,6 +5,7 @@ import CadenceCore
 
 /// Sessions, milestones, and per-lift progression charts.
 struct HistoryView: View {
+    @Environment(\.modelContext) private var context
     /// The block the rotations matrix is scoped to; empty falls back to the
     /// active program.
     @State private var rotationProgramID = ""
@@ -218,6 +219,17 @@ struct HistoryView: View {
         // each row makes trends scannable while scrolling.
         let maxVolume = max(1, sessions.map(volumeOf).max() ?? 1)
         return List {
+            if !currentYearActivities.isEmpty {
+                Section("Ad-hoc work · \(Calendar.current.component(.year, from: .now))") {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 20) { activityYearStats }
+                        VStack(alignment: .leading, spacing: 10) { activityYearStats }
+                    }
+                    Text("Off-program physical work. Reported separately from lifting volume and training cycles.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             ForEach(monthGroups, id: \.0) { month, items in
                 Section(month) {
                     ForEach(items) { row in
@@ -232,7 +244,14 @@ struct HistoryView: View {
                                 Text(session.date.formatted(date: .abbreviated, time: .omitted))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                if let lead = leadLift(session) {
+                                if let detail = session.activityDetail {
+                                    Text(detail.kind?.exerciseName ?? "Ad-hoc work")
+                                        .font(.callout.bold())
+                                    Text(activityRowLine(session))
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.accent)
+                                        .lineLimit(2)
+                                } else if let lead = leadLift(session) {
                                     HStack(spacing: 6) {
                                         Text(lead.name).font(.callout.bold())
                                         Text(lead.set)
@@ -240,14 +259,14 @@ struct HistoryView: View {
                                             .foregroundStyle(Theme.accent)
                                     }
                                 }
-                                let rest = restLine(session)
+                                let rest = session.activityDetail == nil ? restLine(session) : ""
                                 if !rest.isEmpty {
                                     Text(rest)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
-                                let vol = volumeOf(session)
+                                let vol = session.activityDetail == nil ? volumeOf(session) : 0
                                 if vol > 0 {
                                     GeometryReader { geo in
                                         ZStack(alignment: .leading) {
@@ -261,6 +280,16 @@ struct HistoryView: View {
                                 }
                             }
                         }
+                        .swipeActions {
+                            if session.activityDetail != nil {
+                                Button(role: .destructive) {
+                                    context.delete(session)
+                                    PersistenceErrorCenter.shared.save(context, operation: "Deleting ad-hoc work")
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
                         }
                     }
                 }
@@ -269,6 +298,68 @@ struct HistoryView: View {
                 Text(Copy.emptyHistory).foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var currentYearActivities: [WorkoutSession] {
+        let year = Calendar.current.component(.year, from: .now)
+        return sessions.filter {
+            $0.activityDetail != nil && Calendar.current.component(.year, from: $0.date) == year
+        }
+    }
+
+    @ViewBuilder
+    private var activityYearStats: some View {
+        activityStat("\(currentYearActivities.count)", label: "sessions")
+        let seconds = currentYearActivities.reduce(0) { $0 + activityDurationSeconds($1) }
+        activityStat(durationLabel(seconds), label: "logged time")
+        let cords = currentYearActivities.compactMap { $0.activityDetail?.cordVolume }.reduce(0, +)
+        if cords > 0 {
+            activityStat(Weight.trim(cords, decimals: 3), label: "cords")
+        }
+        let workload = currentYearActivities.compactMap { ActivitySession.workload(for: $0) }.reduce(0) {
+            $0 + $1.arbitraryUnits
+        }
+        if workload > 0 {
+            activityStat(Weight.trim(workload), label: "effort AU")
+        }
+    }
+
+    private func activityStat(_ value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value).font(.headline.monospacedDigit())
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func activitySet(_ session: WorkoutSession) -> SetEntry? {
+        guard let kind = session.activityDetail?.kind else { return nil }
+        let stableID = StableID.exerciseLegacyID(name: kind.exerciseName)
+        return session.orderedExercises.first {
+            $0.exerciseID == stableID || $0.exercise?.name == kind.exerciseName
+        }?.orderedSets.first
+    }
+
+    private func activityDurationSeconds(_ session: WorkoutSession) -> Int {
+        session.orderedExercises.flatMap(\.workingSets).compactMap(\.durationSeconds).reduce(0, +)
+    }
+
+    private func durationLabel(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        return minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    private func activityRowLine(_ session: WorkoutSession) -> String {
+        guard let detail = session.activityDetail else { return "" }
+        var parts = [durationLabel(activityDurationSeconds(session))]
+        if let rpe = detail.sessionRPE { parts.append("RPE \(Weight.trim(rpe))") }
+        if let set = activitySet(session), set.weightLb > 0 {
+            let value = set.enteredUnit == .kg ? Weight.kg(fromLb: set.weightLb) : set.weightLb
+            parts.append("\(Weight.trim(value, decimals: 2)) \(set.enteredUnit.rawValue) maul")
+        }
+        if let cords = detail.cordVolume { parts.append("\(Weight.trim(cords, decimals: 3)) cords") }
+        return parts.joined(separator: " · ")
     }
 
     private func volumeOf(_ session: WorkoutSession) -> Double {
@@ -334,6 +425,7 @@ struct HistoryView: View {
 struct SessionDetailView: View {
     let session: WorkoutSession
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
     @Query private var settingsList: [AppSettings]
     /// The post-correction milestone rebuild must exclude off-program spans
     /// exactly as bank time does, so it needs the same interval snapshots.
@@ -354,6 +446,7 @@ struct SessionDetailView: View {
     /// a half-typed number can never be banked by an autosave, and an
     /// untouched field is not an edit.
     @State private var setDrafts: [PersistentIdentifier: SetCorrectionDraft] = [:]
+    @State private var showActivityEditor = false
 
     /// The conditioning sets this session actually performed. `workingSets` is
     /// already completed-and-non-warmup: a set left planned, or skipped after
@@ -491,14 +584,17 @@ struct SessionDetailView: View {
 
     var body: some View {
         List {
-            sessionSummary
-            if !session.notes.isEmpty {
-                Section("Notes") { Text(session.notes) }
-            }
-            healthSection
-            ForEach(session.orderedExercises) { entry in
-                Section {
-                    ForEach(entry.orderedSets) { set in
+            if let activity = session.activityDetail {
+                activitySections(activity)
+            } else {
+                sessionSummary
+                if !session.notes.isEmpty {
+                    Section("Notes") { Text(session.notes) }
+                }
+                healthSection
+                ForEach(session.orderedExercises) { entry in
+                    Section {
+                        ForEach(entry.orderedSets) { set in
                         // Only strength and timed rows are correctable, keyed on
                         // the DATA when the library entry is gone (like the
                         // read-only rendering): a restored cardio record whose
@@ -506,31 +602,32 @@ struct SessionDetailView: View {
                         // editor over its distance. Conditioning corrections
                         // belong to the Health comparison flow above, which
                         // reconciles against a measurement instead of a memory.
-                        if isEditing, isCorrectable(entry) {
-                            HistorySetEditRow(set: set,
-                                              isTimed: entry.exercise?.type == .timed,
-                                              unitDisplay: unitDisplay,
-                                              draft: draftBinding(for: set))
-                        } else {
-                            HistorySetRow(set: set, type: entry.exercise?.type,
-                                          unitDisplay: unitDisplay)
-                        }
-                    }
-                    if !entry.notes.isEmpty {
-                        Text(entry.notes).font(.caption).foregroundStyle(.secondary)
-                    }
-                } header: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text(entry.exercise?.name ?? "Exercise")
-                            if let phaseLabel = entry.truthfulPhaseLabel {
-                                Text(phaseLabel).foregroundStyle(Theme.accent)
+                            if isEditing, isCorrectable(entry) {
+                                HistorySetEditRow(set: set,
+                                                  isTimed: entry.exercise?.type == .timed,
+                                                  unitDisplay: unitDisplay,
+                                                  draft: draftBinding(for: set))
+                            } else {
+                                HistorySetRow(set: set, type: entry.exercise?.type,
+                                              unitDisplay: unitDisplay)
                             }
                         }
-                        Text(exerciseSummary(entry))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .textCase(nil)
+                        if !entry.notes.isEmpty {
+                            Text(entry.notes).font(.caption).foregroundStyle(.secondary)
+                        }
+                    } header: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(entry.exercise?.name ?? "Exercise")
+                                if let phaseLabel = entry.truthfulPhaseLabel {
+                                    Text(phaseLabel).foregroundStyle(Theme.accent)
+                                }
+                            }
+                            Text(exerciseSummary(entry))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .textCase(nil)
+                        }
                     }
                 }
             }
@@ -539,14 +636,17 @@ struct SessionDetailView: View {
         .onDisappear {
             // Leaving the screen commits like Done: what the fields show is
             // what banks. A read-only visit (no drafts) saves nothing.
-            guard isEditing, !setDrafts.isEmpty else { return }
+            guard session.activityDetail == nil, isEditing, !setDrafts.isEmpty else { return }
             commitCorrections()
             if PersistenceErrorCenter.shared.save(context, operation: "Saving the workout corrections") {
                 setDrafts = [:]
             }
         }
         .toolbar {
-            if session.isCompleted {
+            if session.activityDetail != nil {
+                Button("Edit") { showActivityEditor = true }
+                    .accessibilityLabel("Edit this ad-hoc activity")
+            } else if session.isCompleted {
                 Button(isEditing ? "Done" : "Edit") {
                     if isEditing {
                         commitCorrections()
@@ -565,10 +665,14 @@ struct SessionDetailView: View {
                 .accessibilityLabel(isEditing ? "Finish editing this workout" : "Edit this workout's sets")
             }
         }
+        .sheet(isPresented: $showActivityEditor) {
+            ActivityQuickLogView(session: session, onDelete: { dismiss() })
+        }
         .task {
             // One lookup per open, and only when there is something to compare
             // and a window to compare it over.
-            guard !didCheckHealth, healthReadEnabled, let window = healthWindow else { return }
+            guard session.activityDetail == nil,
+                  !didCheckHealth, healthReadEnabled, let window = healthWindow else { return }
             didCheckHealth = true
             async let miles = HealthKitService.shared
                 .conditioningDistanceMiles(start: window.start, end: window.end)
@@ -577,6 +681,87 @@ struct SessionDetailView: View {
             healthMiles = await miles
             healthEnergyKcal = await energy
         }
+    }
+
+    @ViewBuilder
+    private func activitySections(_ detail: ActivityDetail) -> some View {
+        let kind = detail.kind
+        let durationSeconds = activityDurationSeconds
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("AD-HOC WORK · OFF PROGRAM")
+                    .font(.caption.bold())
+                    .tracking(0.9)
+                    .foregroundStyle(Theme.accent)
+                Text(kind?.exerciseName ?? "Ad-hoc work")
+                    .font(.title2.bold())
+                Text(session.date.formatted(date: .long, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(activityDurationLabel(durationSeconds))
+                        .font(.system(size: 32, weight: .black, design: .rounded))
+                        .monospacedDigit()
+                    if let rpe = detail.sessionRPE {
+                        Text("RPE \(Weight.trim(rpe))")
+                            .font(.title3.bold())
+                            .foregroundStyle(Theme.accent)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+
+        Section("Recorded facts") {
+            if let set = activitySet, set.weightLb > 0 {
+                let entered = set.enteredUnit == .kg ? Weight.kg(fromLb: set.weightLb) : set.weightLb
+                LabeledContent("Maul", value: "\(Weight.trim(entered, decimals: 2)) \(set.enteredUnit.rawValue)")
+            }
+            if let rounds = detail.rounds { LabeledContent("Rounds", value: String(rounds)) }
+            if let pieces = detail.splitPieces { LabeledContent("Split pieces", value: String(pieces)) }
+            if let strikes = detail.estimatedStrikes { LabeledContent("Estimated strikes", value: String(strikes)) }
+            if let cords = detail.cordVolume {
+                LabeledContent("Cords split", value: Weight.trim(cords, decimals: 3))
+            }
+            if let workload = ActivitySession.workload(for: session) {
+                LabeledContent("Session workload", value: "\(Weight.trim(workload.arbitraryUnits)) AU")
+                Text("\(activityDurationLabel(durationSeconds)) × RPE \(Weight.trim(workload.sessionRPE)). This is relative effort, not lifting volume.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if detail.sessionRPE == nil {
+                Text("No effort workload calculated because session RPE was not recorded.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+
+        if !session.notes.isEmpty {
+            Section("Notes") { Text(session.notes) }
+        }
+
+        Section {
+            Text("This work shares the History timeline, but it never advances a program rotation, changes progression, sets a PR, or contributes barbell tonnage.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var activitySet: SetEntry? {
+        guard let kind = session.activityDetail?.kind else { return nil }
+        let stableID = StableID.exerciseLegacyID(name: kind.exerciseName)
+        return session.orderedExercises.first {
+            $0.exerciseID == stableID || $0.exercise?.name == kind.exerciseName
+        }?.orderedSets.first
+    }
+
+    private var activityDurationSeconds: Int {
+        session.orderedExercises.flatMap(\.workingSets).compactMap(\.durationSeconds).reduce(0, +)
+    }
+
+    private func activityDurationLabel(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes) min" }
+        return minutes % 60 == 0 ? "\(minutes / 60) hr" : "\(minutes / 60) hr \(minutes % 60) min"
     }
 
     private var sessionSummary: some View {

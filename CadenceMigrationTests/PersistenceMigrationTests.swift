@@ -311,6 +311,63 @@ final class PersistenceMigrationTests: XCTestCase {
                        "a rejected quick log leaves no partial rows behind")
     }
 
+    /// The iPhone quick editor mutates the one canonical activity row rather
+    /// than delete/recreate. Identity matters to history ordering and backup
+    /// diffs; the entry denomination matters when a kilogram maul is edited.
+    func testActivityQuickEditPreservesIdentityAndOffProgramShape() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        try Seeder.seedIfNeeded(context: context)
+        let original = try ActivitySession.create(
+            input: .init(kind: .woodSplitting, startDate: .now,
+                         durationSeconds: 3_600, sessionRPE: 7, loadLb: 8,
+                         notes: "First pile",
+                         woodSplitting: .init(rounds: 20, splitPieces: 30)),
+            context: context
+        )
+        // SwiftData relationship models use temporary persistent identifiers
+        // until their first save. Establish permanent IDs before proving that
+        // the editor mutates these rows instead of replacing them.
+        try context.save()
+        let originalID = original.id
+        let originalEntryID = try XCTUnwrap(original.orderedExercises.first?.id)
+        let originalSetID = try XCTUnwrap(original.orderedExercises.first?.orderedSets.first?.id)
+
+        try ActivitySession.update(
+            session: original,
+            input: .init(kind: .woodSplitting,
+                         startDate: original.date.addingTimeInterval(600),
+                         durationSeconds: 7_500, sessionRPE: 9,
+                         loadLb: Weight.toLb(4, from: .kg), notes: "Oak rounds",
+                         woodSplitting: .init(rounds: 60, cordVolume: 0.4),
+                         enteredUnit: .kg),
+            context: context
+        )
+        try context.save()
+
+        XCTAssertEqual(original.id, originalID)
+        XCTAssertEqual(original.orderedExercises.first?.id, originalEntryID)
+        XCTAssertEqual(original.orderedExercises.first?.orderedSets.first?.id, originalSetID)
+        XCTAssertNil(original.programID)
+        XCTAssertNil(original.programName)
+        XCTAssertNil(original.orderedExercises.first?.programRole)
+        XCTAssertEqual(original.orderedExercises.count, 1)
+        XCTAssertEqual(original.orderedExercises.first?.orderedSets.count, 1)
+        let editedSet = try XCTUnwrap(original.orderedExercises.first?.orderedSets.first)
+        XCTAssertEqual(editedSet.enteredUnit, .kg)
+        XCTAssertEqual(editedSet.durationSeconds, 7_500)
+        XCTAssertEqual(editedSet.weightLb, Weight.toLb(4, from: .kg), accuracy: 0.000_001)
+        XCTAssertEqual(original.activityDetail?.rounds, 60)
+        XCTAssertNil(original.activityDetail?.splitPieces,
+                     "an optional fact cleared by the user stays absent")
+        XCTAssertEqual(original.activityDetail?.cordVolume, 0.4)
+        XCTAssertEqual(ActivitySession.workload(for: original)?.arbitraryUnits, 1_125)
+    }
+
     func testV9StoreGainsIntervalsAndManualBarWithoutTouchingAnything() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cadence-v9-interval-migration-\(UUID().uuidString)", isDirectory: true)
