@@ -1,0 +1,76 @@
+diff --git a/Cadence/CadenceApp.swift b/Cadence/CadenceApp.swift
+--- a/Cadence/CadenceApp.swift
++++ b/Cadence/CadenceApp.swift
+@@ -29,7 +29,34 @@ final class AppBootstrap: ObservableObject {
+     @Published private(set) var errorMessage: String?
+     @Published private(set) var isTemporary = false
+ 
+-    init() { loadPersistentStore() }
++    init() {
++#if DEBUG
++        if ProcessInfo.processInfo.arguments.contains("--visual-proof") {
++            loadVisualProofStore()
++            return
++        }
++#endif
++        loadPersistentStore()
++    }
++
++#if DEBUG
++    /// Disposable fixture used only by the unmerged baseline-proof target.
++    private func loadVisualProofStore() {
++        do {
++            let loaded = try makeContainer(
++                migrationPlan: CadencePre72MigrationPlan.self,
++                isStoredInMemoryOnly: true
++            )
++            try prepare(loaded)
++            try VisualProofSeed.install(in: loaded.mainContext)
++            isTemporary = true
++            container = loaded
++            errorMessage = nil
++        } catch {
++            errorMessage = "Couldn't prepare the baseline fixture: \(error.localizedDescription)"
++        }
++    }
++#endif
+ 
+     func loadPersistentStore() {
+         container = nil
+diff --git a/project.yml b/project.yml
+--- a/project.yml
++++ b/project.yml
+@@ -158,6 +158,22 @@ targets:
+         GENERATE_INFOPLIST_FILE: true
+         CODE_SIGNING_ALLOWED: false
+ 
++  # Unmerged screenshot target installed into the exact pre-pass checkout.
++  CadenceBaselineVisualProofUITests:
++    type: bundle.ui-testing
++    platform: iOS
++    deploymentTarget: "17.0"
++    sources:
++      - CadenceBaselineVisualProofUITests
++    dependencies:
++      - target: Cadence
++    settings:
++      base:
++        PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.CadenceBaselineVisualProofUITests
++        TEST_TARGET_NAME: Cadence
++        SWIFT_VERSION: "5.9"
++        GENERATE_INFOPLIST_FILE: true
++
+ schemes:
+   Cadence:
+     build:
+@@ -171,3 +187,10 @@ schemes:
+     test:
+       targets:
+         - CadenceMigrationTests
++  CadenceBaselineVisualProof:
++    build:
++      targets:
++        Cadence: all
++    test:
++      targets:
++        - CadenceBaselineVisualProofUITests
