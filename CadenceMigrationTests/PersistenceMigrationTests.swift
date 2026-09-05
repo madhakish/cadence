@@ -321,7 +321,19 @@ final class PersistenceMigrationTests: XCTestCase {
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         )
         let context = container.mainContext
-        try Seeder.seedIfNeeded(context: context)
+        // Keep this regression fixture deliberately narrow. Seeding the full
+        // program graph here leaves V12 ProgramDay/ProgramLift metadata alive
+        // long enough to collide with the V11 ProgramActivation fixtures in
+        // the same Xcode 26 test process; the editor only needs its canonical
+        // activity exercise.
+        context.insert(Exercise(
+            name: ActivityKind.woodSplitting.exerciseName,
+            category: .conditioning,
+            type: .conditioning,
+            movementGroup: "conditioning",
+            notes: "Duration / maul weight"
+        ))
+        try context.save()
         let original = try ActivitySession.create(
             input: .init(kind: .woodSplitting, startDate: .now,
                          durationSeconds: 3_600, sessionRPE: 7, loadLb: 8,
