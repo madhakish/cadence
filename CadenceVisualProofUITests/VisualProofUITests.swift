@@ -19,7 +19,10 @@ final class VisualProofUITests: XCTestCase {
     func test01HomeAndAdHocWork() {
         capture("after-01-home-iphone")
 
-        app.buttons["activity-quick-log"].tap()
+        let activity = app.buttons["activity-quick-log"]
+        for _ in 0..<4 where !activity.isHittable { app.swipeUp() }
+        XCTAssertTrue(activity.waitForExistence(timeout: 3))
+        activity.tap()
         XCTAssertTrue(element("activity-log-screen").waitForExistence(timeout: 5))
         capture("after-02-ad-hoc-work-iphone")
     }
@@ -38,29 +41,35 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
         capture("after-04-exercise-pane-iphone")
 
-        let anatomy = element("anatomy-figure")
-        for _ in 0..<5 where !anatomy.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(anatomy.exists)
-        capture("after-05-anatomy-iphone")
+        let frontLabel = app.staticTexts["Front"]
+        for _ in 0..<4 where !frontLabel.isHittable { app.swipeUp() }
+        XCTAssertTrue(frontLabel.waitForExistence(timeout: 3))
+        capture("after-05-anatomy-unselected-iphone")
+
+        let quads = app.buttons["Quads, primary muscle"]
+        for _ in 0..<4 where !quads.isHittable { app.swipeUp() }
+        XCTAssertTrue(quads.waitForExistence(timeout: 3))
+        quads.tap()
+        for _ in 0..<4 where !frontLabel.isHittable { app.swipeDown() }
+        XCTAssertTrue(frontLabel.isHittable)
+        capture("after-06-anatomy-selected-iphone")
     }
 
     func test04PlateCalculatorHero() {
         app.buttons["Plate calculator"].tap()
         XCTAssertTrue(element("plate-calculator-screen").waitForExistence(timeout: 6))
         XCTAssertTrue(app.staticTexts["ACHIEVED — BAR INCLUDED"].waitForExistence(timeout: 3))
-        capture("after-06-plate-calculator-iphone")
+        capture("after-07-plate-calculator-iphone")
 
         app.buttons["Expand"].tap()
         XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
-        capture("after-07-expanded-bar-iphone")
+        capture("after-08-expanded-bar-iphone")
     }
 
     func test05SettingsAndHistory() {
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
-        capture("after-08-settings-iphone")
+        capture("after-09-settings-iphone")
 
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(element("history-screen").waitForExistence(timeout: 5))
@@ -69,7 +78,7 @@ final class VisualProofUITests: XCTestCase {
             NSPredicate(format: "label BEGINSWITH 'Ad-hoc work ·'")
         ).firstMatch
         XCTAssertTrue(activitySummary.waitForExistence(timeout: 5))
-        capture("after-09-history-ad-hoc-iphone")
+        capture("after-10-history-ad-hoc-iphone")
     }
 
     private func element(_ identifier: String) -> XCUIElement {

@@ -143,9 +143,11 @@ struct ActiveSessionView: View {
                 }
                 .disabled(banking)
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                 .listRowBackground(Color.clear)
             }
         }
+        .listStyle(.plain)
         .accessibilityIdentifier("active-session-screen")
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SessionBottomBar(
@@ -814,6 +816,31 @@ private struct ExerciseSection: View {
             focus: programFocus ?? .strength
         )
     }
+
+    /// Default between-set presentation: show the next working set first and
+    /// collapse the already-resolved ramp into one readable progress line.
+    /// "Show full set plan" restores every authored row without changing it.
+    private var currentWorkingSet: SetEntry? {
+        entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }
+    }
+
+    private var displayedSets: [SetEntry] {
+        guard emphasized, !showAllSets, let currentWorkingSet else { return entry.orderedSets }
+        return [currentWorkingSet]
+    }
+
+    private var setStateSummary: String {
+        let warmups = entry.orderedSets.filter(\.isWarmup)
+        let work = entry.orderedSets.filter { !$0.isWarmup }
+        let warmupsDone = warmups.filter { $0.status != .planned }.count
+        let workDone = work.filter { $0.status != .planned }.count
+        let currentOrdinal = currentWorkingSet.flatMap { current in
+            work.firstIndex { $0.persistentModelID == current.persistentModelID }
+        }.map { $0 + 1 }
+        let position = currentOrdinal.map { "Work set \($0) of \(work.count)" }
+            ?? "Work \(workDone) of \(work.count)"
+        return "Warmups \(warmupsDone)/\(warmups.count) · \(position) · \(max(0, work.count - workDone - (currentWorkingSet == nil ? 0 : 1))) after"
+    }
     private var restBinding: Binding<Int> {
         Binding(get: { restSeconds },
                 set: {
@@ -914,11 +941,17 @@ private struct ExerciseSection: View {
                     .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
                     .accessibilityLabel("Effort target: \(complementaryEffortCue)")
             }
-            ForEach(entry.orderedSets) { set in
+            if emphasized && !showAllSets {
+                Text(setStateSummary)
+                    .font(.callout.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Set progress, \(setStateSummary)")
+            }
+            ForEach(displayedSets) { set in
                 // The set you're ON — the first WORKING set with no verdict
                 // yet. Warmups sit quiet (and often go unflagged, so they must
                 // not hold the rail hostage).
-                let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }?.persistentModelID == set.persistentModelID
+                let isCurrent = currentWorkingSet?.persistentModelID == set.persistentModelID
                 let showLoadout = showAllSets || isCurrent || loadChanges(at: set)
                 VStack(alignment: .leading, spacing: 4) {
                     if emphasized && isCurrent {
@@ -997,13 +1030,19 @@ private struct ExerciseSection: View {
                 .opacity(set.isWarmup ? 0.68 : (set.status == .completed ? 0.72 : 1))
             }
             .onDelete { offsets in
-                let ordered = entry.orderedSets
+                let ordered = displayedSets
                 for index in offsets.sorted(by: >) { removeSet(ordered[index], save: false) }
                 PersistenceErrorCenter.shared.save(context, operation: "Deleting the set")
             }
 
+            if let lastTime {
+                Text("Previous · \(lastTime)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if entry.orderedSets.count > 1 {
-                Button(showAllSets ? "Focus current set" : "Show all sets") {
+                Button(showAllSets ? "Focus current set" : "Show full set plan") {
                     showAllSets.toggle()
                 }
                 .font(.caption.bold())
@@ -1084,11 +1123,8 @@ private struct ExerciseSection: View {
                 } else {
                     Text("Exercise")
                 }
-                if let phaseLabel = entry.truthfulPhaseLabel {
+                if !emphasized, let phaseLabel = entry.truthfulPhaseLabel {
                     Text(phaseLabel).foregroundStyle(Theme.accent)
-                }
-                if let lastTime {
-                    Text(lastTime).textCase(nil)
                 }
                 if entry.exercise?.isShelved == true {
                     Text(Copy.shelved).foregroundStyle(Theme.hardStop)
@@ -1145,19 +1181,18 @@ private struct ExerciseSection: View {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            BarbellView(
-                                weightLb: detail.loadout.totalLb,
-                                unit: detail.unit,
-                                bar: detail.loadout.bar,
-                                gym: gym,
-                                loadout: detail.loadout,
-                                plateStyle: detail.style,
-                                presentation: .fullBar
-                            )
-                            .frame(width: 620, height: 180)
-                            .padding(.horizontal)
-                        }
+                        BarbellView(
+                            weightLb: detail.loadout.totalLb,
+                            unit: detail.unit,
+                            bar: detail.loadout.bar,
+                            gym: gym,
+                            loadout: detail.loadout,
+                            plateStyle: detail.style,
+                            presentation: .fullBar
+                        )
+                        .frame(maxWidth: 620)
+                        .frame(height: 180)
+                        .padding(.horizontal)
                         LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.loadout)
                             .padding(.horizontal)
                     }
@@ -2211,6 +2246,7 @@ private struct SessionBottomBar: View {
                             .minimumScaleFactor(0.7)
                     }
                     .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                     .accessibilityHint("Begins the workout clock for this session")
                 }
 
@@ -2255,6 +2291,7 @@ private struct SessionBottomBar: View {
                             .padding(.horizontal, 4)
                     }
                     .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                 }
             }
             .padding(.horizontal)

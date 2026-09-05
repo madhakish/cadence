@@ -1,6 +1,6 @@
 // Muscle anatomy for the exercise detail view: a weightlifting gorilla in Da
 // Vinci's Vitruvian construction, plus the exercise → muscles map that drives
-// the highlighting (primary movers red, supporting blue).
+// the highlighting (primary movers red, supporting work a quiet steel wash).
 //
 // DATA is ported 1:1 from CadenceCore/Sources/CadenceCore/AnatomyData.swift;
 // parity is ENFORCED against web/tests/fixtures/anatomy.json by both test
@@ -308,7 +308,7 @@ export function muscleBlurb(profile) {
 // ---- web-only SVG rendering ------------------------------------------------
 const NS = "http://www.w3.org/2000/svg";
 const PRIMARY_COLOR = "#e0453a";   // red — primary movers
-const SECONDARY_COLOR = "#3a7bd5"; // blue — supporting
+const SECONDARY_COLOR = "#a6abb2"; // forged steel — supporting
 const smoothPath = (points) => {
   if (points.length < 3) return "";
   const midpoint = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];

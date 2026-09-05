@@ -233,6 +233,10 @@ for (const track of [
     && bumperBar.querySelectorAll("ellipse.barbell-plate-hub").length === bumperRight.length * 2
     && bumperBar.querySelectorAll("text.barbell-plate-label").length >= bumperRight.length * 2,
   "plate bodies have disc faces, steel hubs, rims, and denomination marks rather than flat blocks");
+  const mixedLabelYs = [...mixedBar.querySelectorAll("text.barbell-plate-label")]
+    .slice(0, 6).map((label) => Number(label.getAttribute("y")));
+  ok(new Set(mixedLabelYs).size > 1,
+    "adjacent denominations use staggered label rails instead of printing on top of one another");
   ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
     "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
   ok(fullBar.getAttribute("viewBox") === "0 0 420 124",
@@ -3528,7 +3532,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
     "face pulls highlight rear delts instead of the generic shoulder cap");
   ok(svg.querySelectorAll('path[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
-  ok(svg.querySelectorAll('path[fill="#3a7bd5"]').length >= 1, "supporting muscles highlighted blue");
+  ok(svg.querySelectorAll('path[fill="#a6abb2"]').length >= 1,
+    "supporting muscles use the restrained forged-steel treatment");
   ok(svg.querySelectorAll("image.anatomy-region-mask.primary").length >= 2
     && svg.querySelectorAll("image.anatomy-region-mask.supporting").length >= 1,
   "back-view highlights use muscle-shaped masks rather than balloon contours");

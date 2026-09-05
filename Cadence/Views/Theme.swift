@@ -27,17 +27,17 @@ enum ThemeName: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .memento:
             return Palette(accent: Color(hex: 0xC9A24B), warn: Color(hex: 0xD29A3A),
-                           hardStop: Color(hex: 0xD5352B), good: Color(hex: 0x5BA06A))
+                           hardStop: Color(hex: 0xFF7A73), good: Color(hex: 0x5BA06A))
         case .carbon:
-            return Palette(accent: Color(hex: 0xEF4444), warn: Color(hex: 0xEAB308),
-                           hardStop: Color(hex: 0xDC2626), good: Color(hex: 0x4ADE80))
+            return Palette(accent: Color(hex: 0xFF5A5F), warn: Color(hex: 0xEAB308),
+                           hardStop: Color(hex: 0xFF7A73), good: Color(hex: 0x4ADE80))
         case .slate:
-            return Palette(accent: Color(hex: 0xE5484D), warn: Color(hex: 0xD29922),
-                           hardStop: Color(hex: 0xDA3633), good: Color(hex: 0x3FB950))
+            return Palette(accent: Color(hex: 0xFF5A5F), warn: Color(hex: 0xD29922),
+                           hardStop: Color(hex: 0xFF7A73), good: Color(hex: 0x3FB950))
         case .system:
-            return Palette(accent: Color(lightHex: 0xC81E1E, darkHex: 0xEF4444),
+            return Palette(accent: Color(lightHex: 0xC81E1E, darkHex: 0xFF5A5F),
                            warn: Color(lightHex: 0xB8860B, darkHex: 0xEAB308),
-                           hardStop: Color(lightHex: 0xA51111, darkHex: 0xF0554F),
+                           hardStop: Color(lightHex: 0xA51111, darkHex: 0xFF7A73),
                            good: Color(lightHex: 0x1A8F43, darkHex: 0x4ADE80))
         }
     }

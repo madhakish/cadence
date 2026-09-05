@@ -159,6 +159,7 @@ struct ActivityQuickLogView: View {
                     }
                 }
             }
+            .listStyle(.plain)
             .accessibilityIdentifier("activity-log-screen")
             .navigationTitle(isEditing ? "Edit ad-hoc work" : "Log ad-hoc work")
             .navigationBarTitleDisplayMode(.inline)

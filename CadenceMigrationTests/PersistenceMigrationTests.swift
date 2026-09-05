@@ -329,6 +329,10 @@ final class PersistenceMigrationTests: XCTestCase {
                          woodSplitting: .init(rounds: 20, splitPieces: 30)),
             context: context
         )
+        // SwiftData relationship models use temporary persistent identifiers
+        // until their first save. Establish permanent IDs before proving that
+        // the editor mutates these rows instead of replacing them.
+        try context.save()
         let originalID = original.id
         let originalEntryID = try XCTUnwrap(original.orderedExercises.first?.id)
         let originalSetID = try XCTUnwrap(original.orderedExercises.first?.orderedSets.first?.id)

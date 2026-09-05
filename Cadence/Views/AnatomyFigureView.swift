@@ -2,15 +2,16 @@ import SwiftUI
 import CadenceCore
 
 /// A weightlifting gorilla drawn in Da Vinci's Vitruvian construction. Primary
-/// movers are red and supporting muscles blue; engraved linework stays above
-/// the colour so the figure keeps its hands, feet, face, and muscle boundaries.
+/// movers use the interaction red while supporting muscles use a quiet forged-
+/// steel wash; engraved linework stays above both so the figure keeps its
+/// hands, feet, face, and muscle boundaries.
 struct AnatomyFigureView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let profile: AnatomyData.Profile
     @State private var selectedMuscle: String?
 
     private static let primaryColor = Color(red: 0.878, green: 0.271, blue: 0.227)   // #e0453a
-    private static let secondaryColor = Color(red: 0.227, green: 0.482, blue: 0.835) // #3a7bd5
+    private static let secondaryColor = Color(hex: 0xA6ABB2) // forged-steel supporting wash
     private static let backAssetByMuscle = [
         "traps": "VitruvianBackTraps",
         "delts": "VitruvianBackDelts",

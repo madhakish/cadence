@@ -1,12 +1,16 @@
-/* Cadence themes. Selectable via [data-theme] on <html>; default is Memento
-   (the gym-mural direction). Memento matches the native Theme.swift tokens;
-   Carbon / Slate / System are web-only until the native picker lands.
+/* Cadence themes. Selectable via [data-theme] on <html>; default is Carbon,
+   matching the persisted default and native Theme.swift before JavaScript
+   hydrates. All four themes remain available on both surfaces.
    Accent = the single interactive/active signal. warn/good/hard stay
    semantic (grindy·wobble / clean / hard stop) and separate from accent. */
-:root, :root[data-theme="memento"] {   /* Memento — brass on warm near-black (default) */
+:root, :root[data-theme="carbon"] {    /* Carbon — greyscale + red signal (default) */
+  --accent: #ff5a5f; --warn: #eab308; --hard: #ff7a73; --good: #4ade80;
+  --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
+}
+:root[data-theme="memento"] {           /* Memento — brass on warm near-black */
   --accent: #c9a24b;
   --warn: #d29a3a;
-  --hard: #d5352b;
+  --hard: #ff7a73;
   --good: #5ba06a;
   --bg: #0a0908;
   --card: #16130d;
@@ -15,12 +19,8 @@
   --muted: #9a8f77;
   --line: #2f2718;
 }
-:root[data-theme="carbon"] {           /* Carbon — greyscale + red signal */
-  --accent: #ef4444; --warn: #eab308; --hard: #dc2626; --good: #4ade80;
-  --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
-}
 :root[data-theme="slate"] {            /* Slate — cool gunmetal + crimson */
-  --accent: #e5484d; --warn: #d29922; --hard: #da3633; --good: #3fb950;
+  --accent: #ff5a5f; --warn: #d29922; --hard: #ff7a73; --good: #3fb950;
   --bg: #0d1117; --card: #161b22; --card2: #1e252e; --text: #eaeef4; --muted: #8a97a6; --line: #2a323c;
 }
 :root[data-theme="system"] {           /* System — follows OS; light by default, dark below */
@@ -29,7 +29,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
-    --accent: #ef4444; --warn: #eab308; --hard: #f0554f; --good: #4ade80;
+    --accent: #ff5a5f; --warn: #eab308; --hard: #ff7a73; --good: #4ade80;
     --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
   }
 }
@@ -357,7 +357,7 @@ svg.anatomy { width: 100%; max-width: 430px; color: var(--text); overflow: visib
 }
 .anatomy-region-mask.supporting {
   opacity: .32;
-  filter: invert(47%) sepia(74%) saturate(1135%) hue-rotate(180deg) brightness(88%) contrast(91%) blur(1.8px);
+  filter: invert(72%) sepia(7%) saturate(360%) hue-rotate(175deg) brightness(92%) contrast(86%) blur(1.8px);
 }
 .anatomy-view-label { fill: var(--muted); font-size: 10px; letter-spacing: .04em; }
 .anatomy-legend { display: grid; gap: 12px; margin-top: 10px; text-align: left; }
@@ -367,7 +367,7 @@ svg.anatomy { width: 100%; max-width: 430px; color: var(--text); overflow: visib
 button.muscle-key { min-height: 44px; display: inline-grid; grid-template-columns: 10px auto; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card2); color: var(--text); font: inherit; cursor: pointer; }
 .muscle-key i { width: 8px; height: 8px; border-radius: 50%; }
 .muscle-key.primary i { background: #e0453a; }
-.muscle-key.supporting i { background: #3a7bd5; }
+.muscle-key.supporting i { background: #a6abb2; }
 .muscle-key span { font-size: 14px; font-weight: 650; }
 .muscle-key.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
 .anatomy-region, .anatomy-region-mask { transition: opacity var(--short-motion), filter var(--short-motion); }

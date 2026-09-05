@@ -13,7 +13,7 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 // imply physically impossible plate thickness. Mirrors PlateFaceBadge.
 export function plateBadgeSVG(plate, style = "steel") {
   const token = C.plateColorToken(plate, style);
-  const foreground = token === "white" || token === "yellow" ? "#24262a" : "#fff";
+  const foreground = ["white", "yellow", "green"].includes(token) ? "#24262a" : "#fff";
   const svg = el("svg", { class: `plate-badge ${style}`, viewBox: "0 0 52 52",
     role: "img", "aria-label": `${C.plateLabel(plate)} plate` });
   svg.append(
@@ -121,11 +121,15 @@ const appendPlate = (svg, plate, { x, y, width, height, side, style, stackIndex 
   // deliberately scroll-safe (rather than shrinking to dust on a phone), so
   // these marks remain readable even on fractional change plates.
   if (height >= 14) {
-    const label = el("text", { class: "barbell-plate-label", x: x + width / 2, y: y + height / 2,
+    const requestedOffset = stackCount > 1
+      ? (prominent ? [-18, 18, 0] : [-7, 7, 0])[stackIndex % 3] : 0;
+    const labelOffset = Math.max(-height * .22, Math.min(height * .22, requestedOffset));
+    const labelY = y + height / 2 + labelOffset;
+    const label = el("text", { class: "barbell-plate-label", x: x + width / 2, y: labelY,
       "text-anchor": "middle", "dominant-baseline": "central", "font-size": prominent ? "9" : "5.2",
-      "font-weight": "800", fill: token === "white" || token === "yellow" ? "#24262a" : "#fff",
+      "font-weight": "800", fill: ["white", "yellow", "green"].includes(token) ? "#24262a" : "#fff",
       opacity: ".98", "aria-hidden": "true", "data-plate-denomination": C.plateLabel(plate),
-      transform: `rotate(-90 ${x + width / 2} ${y + height / 2})` });
+      transform: `rotate(-90 ${x + width / 2} ${labelY})` });
     label.textContent = C.plateLabel(plate);
     svg.append(label);
   }

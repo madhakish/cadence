@@ -84,6 +84,7 @@ struct PlateCalculatorView: View {
 
             equipmentSection
         }
+        .listStyle(.plain)
         .accessibilityIdentifier("plate-calculator-screen")
         .navigationTitle("Plates")
         .navigationBarTitleDisplayMode(.inline)
@@ -299,19 +300,18 @@ struct PlateCalculatorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if let loadout {
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            BarbellView(
-                                weightLb: loadout.totalLb,
-                                unit: mode == .target ? targetUnit : .lb,
-                                bar: bar,
-                                gym: gym,
-                                loadout: loadout,
-                                plateStyle: plateStyle,
-                                presentation: .fullBar
-                            )
-                            .frame(width: 620, height: 180)
-                            .padding(.horizontal)
-                        }
+                        BarbellView(
+                            weightLb: loadout.totalLb,
+                            unit: mode == .target ? targetUnit : .lb,
+                            bar: bar,
+                            gym: gym,
+                            loadout: loadout,
+                            plateStyle: plateStyle,
+                            presentation: .fullBar
+                        )
+                        .frame(maxWidth: 620)
+                        .frame(height: 180)
+                        .padding(.horizontal)
                         LoadoutSummaryView(requestedLb: requested, loadout: loadout)
                             .padding(.horizontal)
                         VStack(alignment: .leading, spacing: 10) {

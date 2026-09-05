@@ -1,0 +1,23 @@
+# Material design decisions
+
+- Default surface — Carbon loads before hydration so native and web open on charcoal without a palette flash.
+- Elevation — base, card, and raised are the only surface levels; dividers and spacing group content before containers.
+- Accent — red is reserved for current, selected, focus, and primary action; warnings and completion keep separate semantic colours.
+- Contrast — default Carbon text and semantic tokens clear 4.5:1 on all three web elevations; green, yellow, and white plate labels use dark ink.
+- Geometry — 4–5 pt corners keep controls touch-safe without turning the interface into stacked pills.
+- Type — heavy rounded numerals are limited to live load and totals; headings use the platform sans hierarchy and supporting copy never drops below readable caption size.
+- Touch — 56 pt is the native between-set target; web primary controls retain at least 44 CSS pixels.
+- Motion — state transitions use 160 ms, are interruptible, and collapse under Reduce Motion / `prefers-reduced-motion`.
+- Plate input — every resolved view receives the chosen `Loadout`; it does not infer a second stack from the target.
+- Full bar — hero diagrams draw shaft, sleeves, collars, and mirrored stacks, with a horizontal legibility floor and expanded view on narrow screens.
+- Plate geometry — bumper and calibrated-steel presentations use metadata-driven relative diameter and thickness rather than interchangeable rectangles.
+- Plate labels — exact metadata labels such as `1.25 kg` are drawn on every disc and repeated as face-on badges in stack lists.
+- Totals — achieved weight always leads in pounds then kilograms and always includes the selected bar and collars.
+- Mixed units — bar unit and plate denomination are named independently; conversion is confined to the achieved-total explanation.
+- Session hierarchy — current exercise, load, current set, plate stack, and next action own the first block; progress and analysis follow.
+- Set states — completed dims, current carries the red boundary, upcoming stays neutral, and warmups reduce emphasis without changing geometry.
+- Exercise pane — live prescription and load stay visible; history/programming and anatomy/setup are separate disclosures.
+- Gorilla — the exact raster is retained, edge-feathered at the container, and paired with restrained primary/secondary vector overlays.
+- Settings — controls are grouped by equipment, loading, training behaviour, appearance/accessibility, programming/library, and data safety; no new setting keys were invented.
+- Ad-hoc work — Wood Splitting banks on the all-time timeline through #167's typed record but never advances cycles, sets PRs, or contributes lifting tonnage.
+- Ad-hoc facts — duration and optional session RPE are universal; maul weight and wood counts stay user-entered, typed, and never inferred from one another.

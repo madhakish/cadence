@@ -37,7 +37,8 @@ private enum PlatePalette {
     ]
 
     static func labelColor(for token: String) -> Color {
-        token == "white" || token == "yellow" ? Color(hex: 0x24262A) : .white
+        token == "white" || token == "yellow" || token == "green"
+            ? Color(hex: 0x24262A) : .white
     }
 }
 
@@ -164,7 +165,7 @@ struct BarbellView: View {
         VStack(alignment: .leading, spacing: 2) {
             Canvas { ctx, size in
                 let h = presentation == .fullBar ? size.height : Self.height
-                func drawPlate(_ plate: Plate, rect: CGRect, side: String) {
+                func drawPlate(_ plate: Plate, rect: CGRect, side: String, labelYOffset: CGFloat = 0) {
                     let token = plate.colorToken(for: plateStyle)
                     let fill = PlatePalette.fill[token] ?? Color(hex: 0x888888)
                     let stroke = PlatePalette.stroke[token] ?? .black.opacity(0.3)
@@ -207,8 +208,9 @@ struct BarbellView: View {
                     // exact metadata label so even a thin calibrated change
                     // plate can carry "1.25 kg" without view-side rounding.
                     // The web renderer uses the same metadata and orientation.
+                    let boundedLabelOffset = min(max(labelYOffset, -rect.height * 0.22), rect.height * 0.22)
                     var labelContext = ctx
-                    labelContext.translateBy(x: rect.midX, y: rect.midY)
+                    labelContext.translateBy(x: rect.midX, y: rect.midY + boundedLabelOffset)
                     labelContext.rotate(by: .degrees(-90))
                     labelContext.draw(
                         Text(plate.label)
@@ -272,6 +274,7 @@ struct BarbellView: View {
                     let gap = max(0.45, nominalGap * scale)
                     var leftCursor = shoulder - 6
                     var rightCursor = rightShoulder + 6
+                    let labelOffsets: [CGFloat] = [-18, 18, 0]
                     for (index, plate) in plates.enumerated() {
                         let plateWidth = widths[index]
                         let plateHeight = (h - 12) * CGFloat(plate.diameterFactor(for: plateStyle))
@@ -279,8 +282,9 @@ struct BarbellView: View {
                                               width: plateWidth, height: plateHeight)
                         let rightRect = CGRect(x: rightCursor, y: (h - plateHeight) / 2,
                                                width: plateWidth, height: plateHeight)
-                        drawPlate(plate, rect: leftRect, side: "left")
-                        drawPlate(plate, rect: rightRect, side: "right")
+                        let labelOffset: CGFloat = plates.count == 1 ? 0 : labelOffsets[index % 3]
+                        drawPlate(plate, rect: leftRect, side: "left", labelYOffset: labelOffset)
+                        drawPlate(plate, rect: rightRect, side: "right", labelYOffset: labelOffset)
                         leftCursor = leftRect.minX - gap
                         rightCursor = rightRect.maxX + gap
                     }
@@ -306,11 +310,13 @@ struct BarbellView: View {
                              with: .color(Color(hex: 0x7C828C)))
 
                     var x = Self.sleeve + 5
+                    let labelOffsets: [CGFloat] = [-7, 7, 0]
                     for (index, plate) in plates.enumerated() {
                         let plateWidth = compactWidths[index]
                         let ph = (h - 4) * CGFloat(plate.diameterFactor(for: plateStyle))
                         let rect = CGRect(x: x, y: (h - ph) / 2, width: plateWidth, height: ph)
-                        drawPlate(plate, rect: rect, side: "right")
+                        let labelOffset: CGFloat = plates.count == 1 ? 0 : labelOffsets[index % 3]
+                        drawPlate(plate, rect: rect, side: "right", labelYOffset: labelOffset)
                         x += plateWidth + compactGap
                     }
                     if solution.loadout.collarLb > 0 {

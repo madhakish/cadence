@@ -534,6 +534,7 @@ struct ExerciseDetailView: View {
             }
 
         }
+        .listStyle(.plain)
         .accessibilityIdentifier("exercise-detail-screen")
         .navigationTitle(exercise.name)
         .saveChangesOnDisappear(context, operation: "Saving the exercise")

@@ -289,6 +289,7 @@ struct SettingsView: View {
                     Text("Import previews every material change before restore and offers a checkpoint rollback immediately afterward.")
                 }
         }
+        .listStyle(.plain)
         .accessibilityIdentifier("settings-screen")
         .saveChangesOnDisappear(context, operation: "Saving settings")
         .navigationTitle("Settings")

@@ -173,6 +173,7 @@ struct HomeView: View {
                             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                         }
                         .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                         .accessibilityIdentifier("resume-session")
                         Button(role: .destructive) { discardSession = open } label: {
                             Label("Discard session", systemImage: "trash").font(.caption)
@@ -230,6 +231,7 @@ struct HomeView: View {
                         }
                         Button("Start \(day.name)") { startProgramDay(program, day) }
                             .buttonStyle(.borderedProminent)
+                            .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                     }
                 }
 
@@ -268,8 +270,36 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
                     }
                     .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                     .tint(prominentGymTag ? Theme.accent : Color(.tertiarySystemFill))
                     .accessibilityHint("Shows the default membership barcode at full brightness")
+                }
+
+                Section {
+                    Button { showActivityLog = true } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text("Wood Splitting")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "plus")
+                                    .font(.headline)
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            Text("Log duration, effort, maul and wood counts")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("activity-quick-log")
+                    .accessibilityHint("Banks off-program physical work without starting a training session")
+                } header: {
+                    Text("Ad-hoc work")
+                } footer: {
+                    Text("Hard work outside the program. It appears in History but never advances your training cycle or lifting volume.")
                 }
 
                 if let recoveryMessage {
@@ -412,6 +442,7 @@ struct HomeView: View {
                             Text("Start \(day.name)").frame(maxWidth: .infinity).font(.headline)
                         }
                         .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                     }
                 }
 
@@ -451,34 +482,8 @@ struct HomeView: View {
                     }
                 }
 
-                Section {
-                    Button { showActivityLog = true } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack {
-                                Text("Wood Splitting")
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Image(systemName: "plus")
-                                    .font(.headline)
-                                    .foregroundStyle(Theme.accent)
-                            }
-                            Text("Log duration, effort, maul and wood counts")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("activity-quick-log")
-                    .accessibilityHint("Banks off-program physical work without starting a training session")
-                } header: {
-                    Text("Ad-hoc work")
-                } footer: {
-                    Text("Hard work outside the program. It appears in History but never advances your training cycle or lifting volume.")
-                }
-
             }
+            .listStyle(.plain)
             .accessibilityIdentifier("home-screen")
             .navigationTitle("Cadence")
             .sheet(isPresented: $showProgramSwitcher) {
@@ -533,6 +538,7 @@ struct HomeView: View {
                                         HStack {
                                             Button("Apply") { apply(recommendation, report: report, program: program) }
                                                 .buttonStyle(.borderedProminent)
+                                                .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
                                             Button("Not now") { deferRecommendation(recommendation, report: report, program: program) }
                                                 .buttonStyle(.bordered)
                                         }
