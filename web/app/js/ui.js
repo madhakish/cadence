@@ -70,7 +70,40 @@ const overlays = () => document.getElementById("overlays");
 let dialogSequence = 0;
 const focusable = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// Capture enough identity to find the same control after a screen underneath
+// a dialog repaints. Keeping only the original node works until onClose clears
+// and rebuilds that screen; then the detached node cannot receive focus and
+// keyboard/VoiceOver users fall back to the document body. Prefer authored
+// identity, with visible control text plus its ordinal as the final fallback.
+function returnFocusLocator(control) {
+  if (!control || control === document.body || typeof control.closest !== "function") return null;
+  const scope = control.closest('[role="dialog"]') || document;
+  const tagName = control.tagName;
+  const id = control.id || null;
+  const focusKey = control.getAttribute("data-focus-key");
+  const ariaLabel = control.getAttribute("aria-label");
+  const name = control.getAttribute("name");
+  const text = (control.textContent || "").trim();
+  const matches = (candidate) => {
+    if (candidate.tagName !== tagName) return false;
+    if (id) return candidate.id === id;
+    if (focusKey) return candidate.getAttribute("data-focus-key") === focusKey;
+    if (ariaLabel) return candidate.getAttribute("aria-label") === ariaLabel;
+    if (name) return candidate.getAttribute("name") === name;
+    return text.length > 0 && (candidate.textContent || "").trim() === text;
+  };
+  const peers = [...scope.querySelectorAll(focusable)].filter(matches);
+  const ordinal = Math.max(0, peers.indexOf(control));
+  return () => {
+    if (control.isConnected) return control;
+    const liveScope = scope === document || scope.isConnected ? scope : document;
+    const replacements = [...liveScope.querySelectorAll(focusable)].filter(matches);
+    return replacements[ordinal] || replacements.at(-1) || null;
+  };
+}
+
 function dialogKeyboard(dialog, close, returnFocus) {
+  const locateReturnFocus = returnFocusLocator(returnFocus);
   const onKeyDown = (event) => {
     if (event.key === "Escape") { event.preventDefault(); close(); return; }
     if (event.key !== "Tab") return;
@@ -94,7 +127,7 @@ function dialogKeyboard(dialog, close, returnFocus) {
   dialog.addEventListener("keydown", onKeyDown);
   return () => {
     dialog.removeEventListener("keydown", onKeyDown);
-    if (returnFocus?.isConnected) returnFocus.focus();
+    locateReturnFocus?.()?.focus();
   };
 }
 
@@ -114,7 +147,8 @@ export function pushScreen({ title, build, actions = [], onClose }) {
   // this screen edited (the logger under the lift-info editor).
   function close() {
     if (closed) return;
-    closed = true; el.remove(); restoreFocus(); onClose?.();
+    closed = true; el.remove();
+    try { onClose?.(); } finally { restoreFocus(); }
   }
   if (build) build(body, api);
   back.focus();
@@ -135,7 +169,8 @@ export function sheet({ title, build, onClose }) {
   const restoreFocus = dialogKeyboard(content, close, returnFocus);
   function close() {
     if (closed) return;
-    closed = true; scrim.remove(); restoreFocus(); onClose?.();
+    closed = true; scrim.remove();
+    try { onClose?.(); } finally { restoreFocus(); }
   }
   if (build) build(content, api);
   (content.querySelector(focusable) || content).focus();

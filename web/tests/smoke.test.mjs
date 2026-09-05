@@ -4244,6 +4244,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const logger = [...document.querySelectorAll("#overlays .overlay")].pop();
   const title = [...logger.querySelectorAll(".title")].find((t) => t.textContent === "Deadlift");
   ok(title, "logger shows the lift name");
+  title.focus();
   title.click(); await tick();
   const detail = [...document.querySelectorAll("#overlays .overlay")].pop();
   ok(detail !== logger && detail.querySelector(".anatomy-card svg"),
@@ -4256,6 +4257,10 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const plus = [...restRow.querySelectorAll(".stepper button")].pop();
   plus.click(); await tick(); // Default → 0:15 of the lift's own rest
   detail.querySelector(".overlay-head button").click(); await tick();
+  const replacementTitle = [...logger.querySelectorAll(".title")]
+    .find((candidate) => candidate.textContent === "Deadlift");
+  ok(!title.isConnected && replacementTitle !== title && document.activeElement === replacementTitle,
+    "closing lift info restores focus to the replacement title after the logger repaints");
   const chip = [...logger.querySelectorAll("button")].find((b) => b.textContent.startsWith("⏱"));
   ok(chip && chip.textContent.includes("0:15"),
     `closing lift info repaints the logger (rest chip reads ${chip?.textContent})`);
