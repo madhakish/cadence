@@ -56,8 +56,13 @@ ok(/plateBadgeSVG/.test(barbell) && /aria-label[^\n]*plate/i.test(barbell),
   "readable plate denomination badges also carry spoken labels");
 ok(/aria-label[^\n]*Dumbbell/.test(barbell), "the dumbbell graphic carries a spoken load");
 const plates = read("app/js/views/plates.js");
-ok(/aria-label[^\n]*Total/.test(plates) && /weightMeasure\(lb, "lb"\)[^\n]*weightMeasure\(C\.kgFromLb\(lb\), "kg"\)/.test(plates),
-  "the calculator's final load is announced and displayed in both units");
+ok(/Achieved total, bar included/.test(barbell)
+  && /\[solution\.totalLb, "lb", true\][\s\S]*\[C\.kgFromLb\(solution\.totalLb\), "kg", false\]/.test(barbell)
+  && /loadoutSummary\(targetLb, solution\)/.test(plates),
+  "the shared calculator/session total is announced and displayed pounds first, then kilograms");
+ok(/prefers-reduced-motion: reduce/.test(css), "motion can be reduced at the operating-system level");
+ok(/tabindex: "0"[\s\S]*data-plate-denomination/.test(barbell),
+  "every rendered plate denomination is keyboard inspectable");
 
 // ---- Session lifecycle: destructive discard is confirmed ----
 const home = read("app/js/views/home.js");

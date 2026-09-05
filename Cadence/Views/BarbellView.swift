@@ -1,6 +1,31 @@
 import SwiftUI
 import CadenceCore
 
+/// One rack-resolution path for every native plate surface. Views may pass a
+/// previously chosen `Loadout`, but whenever a target still needs solving it
+/// comes through this function so station units, mixed inventory, collars and
+/// loading policy cannot drift between the calculator, logger and lift pane.
+func authoritativePlateSolution(
+    targetLb: Double,
+    fallbackUnit: WeightUnit,
+    bar: Bar,
+    gym: Gym?,
+    stationDenomination: WeightUnit? = nil
+) -> PlateSolution {
+    let fallback = fallbackUnit == .kg ? Plate.standardKg : Plate.standardLb
+    let rack = PlateMath.stationPlates(
+        preference: stationDenomination,
+        gymPlates: gym?.availablePlates ?? fallback
+    )
+    return PlateMath.solve(
+        targetLb: targetLb,
+        bar: bar,
+        plates: rack,
+        collarLb: gym?.collarWeightLb ?? 0,
+        policy: gym?.loadingPolicy ?? .closest
+    )
+}
+
 private enum PlatePalette {
     static let fill: [String: Color] = [
         "red": Color(hex: 0xD23B3B), "blue": Color(hex: 0x2F6FED), "green": Color(hex: 0x1FAA52),
@@ -82,8 +107,8 @@ struct BarbellView: View {
     var presentation: Presentation = .compactSide
 
     // Geometry shared with the web SVG.
-    private static let height: CGFloat = 34
-    private static let fullHeight: CGFloat = 96
+    private static let height: CGFloat = 46
+    private static let fullHeight: CGFloat = 124
     private static let sleeve: CGFloat = 18
 
     private func drawnPlateWidth(_ plate: Plate, scale: CGFloat = 1) -> CGFloat {
@@ -108,9 +133,13 @@ struct BarbellView: View {
 
     var body: some View {
         let solution = loadout.map { PlateSolution(loadout: $0, targetLb: weightLb) }
-            ?? PlateMath.solve(targetLb: weightLb, bar: bar, plates: stationPlates,
-                               collarLb: gym?.collarWeightLb ?? 0,
-                               policy: gym?.loadingPolicy ?? .closest)
+            ?? authoritativePlateSolution(
+                targetLb: weightLb,
+                fallbackUnit: unit,
+                bar: bar,
+                gym: gym,
+                stationDenomination: stationDenomination
+            )
         let plates = solution.loadout.perSide.flatMap { Array(repeating: $0.plate, count: $0.count) }
         let compactGap: CGFloat = plateStyle == .bumper ? 1 : 0.7
         let compactWidths = plates.map { drawnPlateWidth($0, scale: 0.72) }
@@ -173,11 +202,30 @@ struct BarbellView: View {
                                                         startPoint: CGPoint(x: faceX, y: rect.midY - hubRY),
                                                         endPoint: CGPoint(x: faceX, y: rect.midY + hubRY)))
                     ctx.stroke(hub, with: .color(Color(hex: 0x555B63)), lineWidth: 0.45)
+
+                    // A denomination belongs on the plate itself. Rotate the
+                    // exact metadata label so even a thin calibrated change
+                    // plate can carry "1.25 kg" without view-side rounding.
+                    // The web renderer uses the same metadata and orientation.
+                    var labelContext = ctx
+                    labelContext.translateBy(x: rect.midX, y: rect.midY)
+                    labelContext.rotate(by: .degrees(-90))
+                    labelContext.draw(
+                        Text(plate.label)
+                            .font(.system(
+                                size: presentation == .fullBar ? 9 : 5.6,
+                                weight: .black,
+                                design: .rounded
+                            ))
+                            .foregroundStyle(PlatePalette.labelColor(for: token)),
+                        at: .zero,
+                        anchor: .center
+                    )
                 }
                 if presentation == .fullBar {
                     let width = max(240, size.width)
                     let midY = h / 2
-                    let shoulder = min(82, max(62, width * 0.24))
+                    let shoulder = min(100, max(76, width * 0.24))
                     let rightShoulder = width - shoulder
                     let shaft = Path(roundedRect: CGRect(x: 8, y: midY - 2, width: width - 16, height: 4), cornerRadius: 2)
                     let leftSleeve = Path(roundedRect: CGRect(x: 8, y: midY - 3, width: shoulder - 8, height: 6), cornerRadius: 3)
@@ -284,6 +332,12 @@ struct BarbellView: View {
             .frame(width: presentation == .compactSide ? width : nil,
                    height: presentation == .compactSide ? Self.height : Self.fullHeight)
             .frame(maxWidth: presentation == .fullBar ? .infinity : nil)
+            .accessibilityChildren {
+                ForEach(Array(plates.enumerated()), id: \.offset) { index, plate in
+                    Text("Left plate \(index + 1) of \(plates.count), \(plate.label)")
+                    Text("Right plate \(index + 1) of \(plates.count), \(plate.label)")
+                }
+            }
 
             if solution.isOffTarget {
                 let total = unit == .kg ? Weight.kg(fromLb: solution.loadout.totalLb) : solution.loadout.totalLb
@@ -312,6 +366,86 @@ struct BarbellView: View {
             }
         }
         .accessibilityLabel("Barbell: \(accessibilityLoad)")
+    }
+}
+
+/// The one totals hierarchy used anywhere Cadence explains a solved or
+/// manually entered bar. Achieved weight is deliberately lb first, then kg,
+/// regardless of entry unit or the mix of denominations on the sleeves.
+struct LoadoutSummaryView: View {
+    let requestedLb: Double?
+    let loadout: Loadout
+
+    private var differenceLb: Double? {
+        requestedLb.map { loadout.totalLb - $0 }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("ACHIEVED — BAR INCLUDED")
+                .font(.caption.bold())
+                .tracking(0.8)
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                weight(Weight.trim(loadout.totalLb), unit: "lb", prominent: true)
+                Text("/")
+                    .font(.title3.weight(.light))
+                    .foregroundStyle(.tertiary)
+                weight(Weight.trim(Weight.kg(fromLb: loadout.totalLb)), unit: "kg", prominent: false)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Achieved total, bar included, \(Weight.both(lb: loadout.totalLb))")
+
+            Divider()
+
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                if let requestedLb {
+                    summaryRow("Requested", Weight.both(lb: requestedLb))
+                }
+                summaryRow("Bar", Weight.both(lb: loadout.bar.lb))
+                summaryRow("Plates / side", loadout.perSideLabel)
+                if loadout.collarLb > 0 {
+                    summaryRow("Collars", Weight.both(lb: loadout.collarLb))
+                }
+                if let differenceLb {
+                    let sign = differenceLb > 0.005 ? "+" : ""
+                    summaryRow(
+                        "Difference",
+                        "\(sign)\(Weight.trim(differenceLb, decimals: 2)) lb / "
+                            + "\(sign)\(Weight.trim(Weight.kg(fromLb: differenceLb), decimals: 2)) kg",
+                        warning: abs(differenceLb) > 0.01
+                    )
+                }
+            }
+        }
+    }
+
+    private func weight(_ value: String, unit: String, prominent: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(value)
+                .font(.system(size: prominent ? 36 : 27, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .minimumScaleFactor(0.65)
+                .lineLimit(1)
+            Text(unit)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func summaryRow(_ label: String, _ value: String, warning: Bool = false) -> some View {
+        GridRow {
+            Text(label)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.callout.weight(.semibold).monospacedDigit())
+                .foregroundStyle(warning ? Theme.warn : .primary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .multilineTextAlignment(.trailing)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 // Plate colours use the shared Color(hex:) from Theme.swift.

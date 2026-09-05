@@ -63,6 +63,14 @@ enum Theme {
     static var hardStop: Color { name.palette.hardStop }    // hard stop (semantic critical)
     static var good: Color { name.palette.good }            // clean rep (semantic)
     static let card = Color(.secondarySystemGroupedBackground)
+    static let raised = Color(.tertiarySystemGroupedBackground)
+    static let hairline = Color.primary.opacity(0.14)
+
+    /// Industrial geometry: almost square, but not sharp enough to snag a
+    /// thumb-sized control. Shared by the few surfaces that genuinely need a
+    /// boundary; spacing and dividers do the rest of the grouping.
+    static let cornerRadius: CGFloat = 4
+    static let shortMotion: Double = 0.16
 
     /// Minimum touch target for between-sets thumbs.
     static let bigTap: CGFloat = 56
@@ -108,7 +116,11 @@ extension View {
     func cardStyle() -> some View {
         padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 12))
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                    .stroke(Theme.hairline, lineWidth: 0.5)
+            }
     }
 }
 

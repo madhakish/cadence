@@ -99,8 +99,17 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
+            // The focused exercise is deliberately first. Between sets, the
+            // phone must answer load / plates / set / next action before it
+            // spends vertical space on venue or session metadata.
+            focusedExerciseSection
+
             Section {
                 VStack(alignment: .leading, spacing: 4) {
+                    Text("SESSION PROGRESS")
+                        .font(.caption.bold())
+                        .tracking(0.8)
+                        .foregroundStyle(.secondary)
                     Text("Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(totalWorkSetCount == 0 ? 0 : min(resolvedWorkSetCount + 1, totalWorkSetCount)) of \(totalWorkSetCount) work sets")
                         .font(.headline.monospacedDigit())
                     Text(session.date.formatted(date: .abbreviated, time: .omitted))
@@ -108,7 +117,7 @@ struct ActiveSessionView: View {
                 }
             }
             trainingAtSection
-            exerciseSections
+            remainingExerciseSections
 
             Section {
                 Button {
@@ -137,6 +146,7 @@ struct ActiveSessionView: View {
                 .listRowBackground(Color.clear)
             }
         }
+        .accessibilityIdentifier("active-session-screen")
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SessionBottomBar(
                 sessionStart: isTimingThisSession ? workoutClock.startDate : nil,
@@ -330,23 +340,41 @@ struct ActiveSessionView: View {
 
     /// Extracted from `body` — the multi-argument section call plus the recall
     /// lookup pushed the List builder past the type-checker's budget.
-    private var exerciseSections: some View {
+    private var focusedExerciseSection: some View {
         let recall = recallLines()
-        return ForEach(session.orderedExercises) { entry in
-            ExerciseSection(
-                entry: entry,
-                settings: settingsList.first,
-                gym: gym,
-                programFocus: sessionProgram?.focus,
-                allExercises: allExercises,
-                lastTime: recallLine(for: entry, in: recall),
-                adHocExposure: mostRecentTopExposure(for: entry),
-                onDropLoad: { autoregEntry = entry },
-                onWork: { currentEntry = $0 },
-                onRemove: { removeExercise(entry) },
-                onMove: { moveExercise(entry, direction: $0) }
-            )
+        let focusedID = currentOrFirst?.persistentModelID
+        return ForEach(session.orderedExercises.filter { $0.persistentModelID == focusedID }) { entry in
+            exerciseSection(for: entry, emphasized: true, recall: recall)
         }
+    }
+
+    private var remainingExerciseSections: some View {
+        let recall = recallLines()
+        let focusedID = currentOrFirst?.persistentModelID
+        return ForEach(session.orderedExercises.filter { $0.persistentModelID != focusedID }) { entry in
+            exerciseSection(for: entry, emphasized: false, recall: recall)
+        }
+    }
+
+    private func exerciseSection(
+        for entry: SessionExercise,
+        emphasized: Bool,
+        recall: [PersistentIdentifier: String]
+    ) -> some View {
+        ExerciseSection(
+            entry: entry,
+            emphasized: emphasized,
+            settings: settingsList.first,
+            gym: gym,
+            programFocus: sessionProgram?.focus,
+            allExercises: allExercises,
+            lastTime: recallLine(for: entry, in: recall),
+            adHocExposure: mostRecentTopExposure(for: entry),
+            onDropLoad: { autoregEntry = entry },
+            onWork: { currentEntry = $0 },
+            onRemove: { removeExercise(entry) },
+            onMove: { moveExercise(entry, direction: $0) }
+        )
     }
 
     private func recallLine(
@@ -577,6 +605,16 @@ private struct SummaryBox: Identifiable {
     let summary: SessionSummary
 }
 
+/// Immutable snapshot for the expanded bar sheet. Keeping the exact loadout
+/// here prevents the sheet from re-solving against a gym edited underneath it.
+private struct ExpandedLoadout: Identifiable {
+    let id = UUID()
+    let loadout: Loadout
+    let requestedLb: Double?
+    let unit: WeightUnit
+    let style: PlateVisualStyle
+}
+
 // MARK: - Exercise section
 
 private struct ExerciseSection: View {
@@ -585,6 +623,10 @@ private struct ExerciseSection: View {
 
     @Bindable var entry: SessionExercise
     @State private var showAllSets = false
+    @State private var expandedLoadout: ExpandedLoadout?
+    /// Only the actively worked exercise gets the full between-sets cockpit.
+    /// Remaining exercises stay in authored order underneath it.
+    let emphasized: Bool
     // Passed down from ActiveSessionView (which already queries them) — a
     // per-section @Query would register one redundant fetch per exercise.
     let settings: AppSettings?
@@ -751,6 +793,16 @@ private struct ExerciseSection: View {
     @State private var liftInfo: Exercise?
 
     private var restSeconds: Int { smartRestSeconds(for: entry.exercise, role: entry.programRole, settings: settings) }
+
+    private func solvedLoadout(for set: SetEntry) -> Loadout {
+        authoritativePlateSolution(
+            targetLb: set.weightLb,
+            fallbackUnit: set.enteredUnit,
+            bar: effectiveBar,
+            gym: gym,
+            stationDenomination: entry.exercise?.stationDenomination
+        ).loadout
+    }
     private var complementaryEffortCue: String? {
         guard let role = entry.programRole.flatMap(LiftRole.init(rawValue:)),
               let style = PrescriptionStyle(rawValue: entry.prescriptionStyleRaw) else { return nil }
@@ -838,13 +890,28 @@ private struct ExerciseSection: View {
 
     var body: some View {
         Section {
+            if emphasized, let exercise = entry.exercise {
+                HStack(spacing: 8) {
+                    Text(exercise.movementGroup.replacingOccurrences(of: "_", with: " ").uppercased())
+                    if let role = entry.programRole {
+                        Text(role.uppercased())
+                    }
+                    if let phase = entry.truthfulPhaseLabel {
+                        Text(phase.uppercased()).foregroundStyle(Theme.accent)
+                    }
+                }
+                .font(.caption2.bold())
+                .tracking(0.7)
+                .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+            }
             if let complementaryEffortCue {
                 Text(complementaryEffortCue)
                     .font(.caption.bold())
                     .foregroundStyle(Theme.accent)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
-                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
                     .accessibilityLabel("Effort target: \(complementaryEffortCue)")
             }
             ForEach(entry.orderedSets) { set in
@@ -854,6 +921,12 @@ private struct ExerciseSection: View {
                 let isCurrent = entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }?.persistentModelID == set.persistentModelID
                 let showLoadout = showAllSets || isCurrent || loadChanges(at: set)
                 VStack(alignment: .leading, spacing: 4) {
+                    if emphasized && isCurrent {
+                        Text("CURRENT SET · NEXT ACTION")
+                            .font(.caption.bold())
+                            .tracking(0.8)
+                            .foregroundStyle(Theme.accent)
+                    }
                     SetRow(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
                            compact: !showAllSets && !isCurrent,
                            targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onLogged: {
@@ -879,15 +952,49 @@ private struct ExerciseSection: View {
                     // Loadout visualization — plates for barbell lifts, the
                     // rack number for dumbbell lifts. Mirrors web.
                     if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
-                        BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
-                                    bar: effectiveBar, gym: gym,
-                                    targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                    stationDenomination: entry.exercise?.stationDenomination,
-                                    plateStyle: entry.exercise?.movementGroup == "olympic" ? .bumper : .steel)
+                        let exactLoadout = solvedLoadout(for: set)
+                        if emphasized && isCurrent {
+                            ScrollView(.horizontal, showsIndicators: true) {
+                                BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
+                                            bar: effectiveBar, gym: gym,
+                                            targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb,
+                                            loadout: exactLoadout,
+                                            stationDenomination: entry.exercise?.stationDenomination,
+                                            plateStyle: entry.exercise?.movementGroup == "olympic" ? .bumper : .steel,
+                                            presentation: .fullBar)
+                                .frame(width: 420, height: 132)
+                            }
+                            .accessibilityLabel("Loaded bar diagram; scroll horizontally if needed")
+                        } else {
+                            BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
+                                        bar: effectiveBar, gym: gym,
+                                        targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb,
+                                        loadout: exactLoadout,
+                                        stationDenomination: entry.exercise?.stationDenomination,
+                                        plateStyle: entry.exercise?.movementGroup == "olympic" ? .bumper : .steel,
+                                        presentation: .compactSide)
+                        }
+                        if emphasized && isCurrent {
+                            LoadoutSummaryView(
+                                requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
+                                loadout: exactLoadout
+                            )
+                            Button("Inspect loaded bar", systemImage: "arrow.up.left.and.arrow.down.right") {
+                                expandedLoadout = ExpandedLoadout(
+                                    loadout: exactLoadout,
+                                    requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
+                                    unit: set.enteredUnit,
+                                    style: entry.exercise?.movementGroup == "olympic" ? .bumper : .steel
+                                )
+                            }
+                            .font(.caption.bold())
+                            .frame(minHeight: 44)
+                        }
                     } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
                 }
+                .opacity(set.isWarmup ? 0.68 : (set.status == .completed ? 0.72 : 1))
             }
             .onDelete { offsets in
                 let ordered = entry.orderedSets
@@ -958,12 +1065,20 @@ private struct ExerciseSection: View {
                         liftInfo = exercise
                     } label: {
                         Text(exercise.name)
+                            .font(emphasized ? .title2.bold() : .headline)
+                            .foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("exercise-info-\(exercise.name)")
                     .accessibilityHint("Shows muscles worked, history, and exercise settings")
                     .sheet(item: $liftInfo) { exercise in
                         NavigationStack {
-                            ExerciseDetailView(exercise: exercise)
+                            ExerciseDetailView(
+                                exercise: exercise,
+                                sessionEntry: entry,
+                                sessionGym: gym,
+                                sessionProgramFocus: programFocus
+                            )
                         }
                     }
                 } else {
@@ -1024,6 +1139,37 @@ private struct ExerciseSection: View {
         } footer: {
             if let site = entry.exercise?.watchSite {
                 Text("Watch: \(site.rawValue.lowercased()) — \(site.watchNote)")
+            }
+        }
+        .sheet(item: $expandedLoadout) { detail in
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            BarbellView(
+                                weightLb: detail.loadout.totalLb,
+                                unit: detail.unit,
+                                bar: detail.loadout.bar,
+                                gym: gym,
+                                loadout: detail.loadout,
+                                plateStyle: detail.style,
+                                presentation: .fullBar
+                            )
+                            .frame(width: 620, height: 180)
+                            .padding(.horizontal)
+                        }
+                        LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.loadout)
+                            .padding(.horizontal)
+                    }
+                    .padding(.vertical)
+                }
+                .navigationTitle(entry.exercise?.name ?? "Loaded bar")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { expandedLoadout = nil }
+                    }
+                }
             }
         }
     }
@@ -1250,6 +1396,10 @@ private struct SetRow: View {
                 showDetail = true
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
+                    Text(isCurrent ? "NOW" : (set.status == .completed ? "COMPLETED" : (set.status == .skipped ? "SKIPPED" : "UPCOMING")))
+                        .font(.caption2.bold())
+                        .tracking(0.7)
+                        .foregroundStyle(isCurrent ? Theme.accent : .secondary)
                     // Cardio uses the shared CadenceCore formatter; lifts show
                     // weight in the unit used for entry.
                     Text(isCardio
@@ -1321,9 +1471,9 @@ private struct SetRow: View {
         .padding(isCurrent ? 12 : 0)
         .background {
             if isCurrent {
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: Theme.cornerRadius)
                     .fill(Theme.accent.opacity(0.10))
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.45)))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.accent.opacity(0.55)))
             }
         }
         .sheet(isPresented: $showDetail) {

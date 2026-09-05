@@ -67,28 +67,67 @@ export function icon(name) {
 
 // ---- overlays (full-screen pushed screens) ----
 const overlays = () => document.getElementById("overlays");
+let dialogSequence = 0;
+const focusable = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function dialogKeyboard(dialog, close, returnFocus) {
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") { event.preventDefault(); close(); return; }
+    if (event.key !== "Tab") return;
+    const controls = [...dialog.querySelectorAll(focusable)].filter((control) => control.getClientRects().length || control === document.activeElement);
+    if (!controls.length) { event.preventDefault(); dialog.focus(); return; }
+    const first = controls[0], last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  };
+  dialog.addEventListener("keydown", onKeyDown);
+  return () => {
+    dialog.removeEventListener("keydown", onKeyDown);
+    if (returnFocus?.isConnected) returnFocus.focus();
+  };
+}
+
 export function pushScreen({ title, build, actions = [], onClose }) {
+  const returnFocus = document.activeElement;
+  const headingId = `cadence-dialog-title-${++dialogSequence}`;
   const body = h("div", { class: "overlay-body" });
   const back = h("button", { class: "btn ghost sm", text: "‹ Back", onClick: () => close() });
-  const head = h("div", { class: "overlay-head" }, back, h("h2", { text: title || "" }), h("div", { class: "btn-row" }, ...actions));
-  const el = h("div", { class: "overlay" }, head, body);
+  const head = h("div", { class: "overlay-head" }, back, h("h2", { id: headingId, text: title || "" }), h("div", { class: "btn-row" }, ...actions));
+  const el = h("div", { class: "overlay", role: "dialog", "aria-modal": "true",
+    "aria-labelledby": headingId, tabIndex: -1 }, head, body);
   overlays().append(el);
   const api = { el, body, close, setTitle: (t) => { head.querySelector("h2").textContent = t; } };
+  let closed = false;
+  const restoreFocus = dialogKeyboard(el, close, returnFocus);
   // onClose mirrors sheet(): the screen underneath may need to repaint state
   // this screen edited (the logger under the lift-info editor).
-  function close() { el.remove(); onClose?.(); }
+  function close() {
+    if (closed) return;
+    closed = true; el.remove(); restoreFocus(); onClose?.();
+  }
   if (build) build(body, api);
+  back.focus();
   return api;
 }
 
 // ---- bottom sheets ----
 export function sheet({ title, build, onClose }) {
-  const content = h("div", { class: "sheet" }, h("div", { class: "grip" }), title ? h("h2", { text: title }) : null);
+  const returnFocus = document.activeElement;
+  const headingId = `cadence-dialog-title-${++dialogSequence}`;
+  const content = h("div", { class: "sheet", role: "dialog", "aria-modal": "true",
+    ...(title ? { "aria-labelledby": headingId } : { "aria-label": "Dialog" }), tabIndex: -1 },
+  h("div", { class: "grip", "aria-hidden": "true" }), title ? h("h2", { id: headingId, text: title }) : null);
   const scrim = h("div", { class: "scrim", onClick: (e) => { if (e.target === scrim) close(); } }, content);
   overlays().append(scrim);
   const api = { el: content, close };
-  function close() { scrim.remove(); onClose?.(); }
+  let closed = false;
+  const restoreFocus = dialogKeyboard(content, close, returnFocus);
+  function close() {
+    if (closed) return;
+    closed = true; scrim.remove(); restoreFocus(); onClose?.();
+  }
   if (build) build(content, api);
+  (content.querySelector(focusable) || content).focus();
   return api;
 }
 
@@ -119,12 +158,13 @@ export function toast(msg) {
 export function seg(options, value, onChange) {
   // options: [{ value, label }] or [value...]
   const opts = options.map((o) => (typeof o === "object" ? o : { value: o, label: o }));
-  const wrap = h("div", { class: "seg" });
+  const wrap = h("div", { class: "seg", role: "group" });
   const render = (val) => {
     clear(wrap);
     for (const o of opts) {
       wrap.append(h("button", {
         class: o.value === val ? "on" : "", text: o.label,
+        type: "button", "aria-pressed": String(o.value === val),
         onClick: () => { render(o.value); onChange(o.value); },
       }));
     }
@@ -144,9 +184,13 @@ export function stepper(value, { min = -Infinity, max = Infinity, step = 1, form
   );
 }
 
-export function toggle(value, onChange) {
-  const b = h("button", { class: "toggle" + (value ? " on" : "") , type: "button" });
-  b.addEventListener("click", () => { const nv = !b.classList.contains("on"); b.classList.toggle("on", nv); onChange(nv); });
+export function toggle(value, onChange, label = "Toggle") {
+  const b = h("button", { class: "toggle" + (value ? " on" : ""), type: "button",
+    role: "switch", "aria-checked": String(!!value), "aria-label": label });
+  b.addEventListener("click", () => {
+    const nv = !b.classList.contains("on");
+    b.classList.toggle("on", nv); b.setAttribute("aria-checked", String(nv)); onChange(nv);
+  });
   return b;
 }
 

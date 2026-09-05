@@ -5,7 +5,9 @@ import CadenceCore
 /// movers are red and supporting muscles blue; engraved linework stays above
 /// the colour so the figure keeps its hands, feet, face, and muscle boundaries.
 struct AnatomyFigureView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let profile: AnatomyData.Profile
+    @State private var selectedMuscle: String?
 
     private static let primaryColor = Color(red: 0.878, green: 0.271, blue: 0.227)   // #e0453a
     private static let secondaryColor = Color(red: 0.227, green: 0.482, blue: 0.835) // #3a7bd5
@@ -23,18 +25,33 @@ struct AnatomyFigureView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
-                labeledFigure(view: "front", label: "Ape front")
-                labeledFigure(view: "back", label: "Ape back")
+                labeledFigure(view: "front", label: "Front")
+                labeledFigure(view: "back", label: "Back")
             }
-            muscleLine("Primary", ids: profile.primary, color: Self.primaryColor)
+            muscleLegend("Primary", ids: profile.primary, color: Self.primaryColor)
             if !profile.secondary.isEmpty {
-                muscleLine("Supporting", ids: profile.secondary, color: Self.secondaryColor)
+                muscleLegend("Supporting", ids: profile.secondary, color: Self.secondaryColor)
+            }
+            if let selectedMuscle {
+                HStack {
+                    Text("Selected")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                    Text(AnatomyData.muscleNames[selectedMuscle] ?? selectedMuscle)
+                        .font(.callout.bold())
+                    Spacer()
+                    Button("Clear") { self.selectedMuscle = nil }
+                        .font(.caption.bold())
+                }
+                .padding(.top, 2)
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(AnatomyData.blurb(profile))
+        .animation(reduceMotion ? nil : .easeOut(duration: Theme.shortMotion), value: selectedMuscle)
+        .accessibilityIdentifier("anatomy-figure")
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Muscles worked. \(AnatomyData.blurb(profile))")
     }
 
     private func labeledFigure(view: String, label: String) -> some View {
@@ -46,14 +63,47 @@ struct AnatomyFigureView: View {
         }
     }
 
-    private func muscleLine(_ label: String, ids: [String], color: Color) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Circle().fill(color).frame(width: 8, height: 8)
-            Text(label).fontWeight(.semibold)
-            Text(ids.map { AnatomyData.muscleNames[$0] ?? $0 }.joined(separator: ", "))
-                .foregroundStyle(.secondary)
+    private func muscleLegend(_ label: String, ids: [String], color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Rectangle().fill(color).frame(width: 10, height: 10)
+                Text(label.uppercased())
+                    .font(.caption.bold())
+                    .tracking(0.7)
+                    .foregroundStyle(.secondary)
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 6)], alignment: .leading, spacing: 6) {
+                ForEach(ids, id: \.self) { id in
+                    let isSelected = selectedMuscle == id
+                    Button {
+                        selectedMuscle = isSelected ? nil : id
+                    } label: {
+                        HStack(spacing: 7) {
+                            Rectangle()
+                                .fill(color)
+                                .frame(width: 4, height: 22)
+                            Text(AnatomyData.muscleNames[id] ?? id)
+                                .font(.callout.weight(.semibold))
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 8)
+                        .frame(minHeight: 44)
+                        .background(
+                            isSelected ? color.opacity(0.16) : Theme.raised.opacity(0.55),
+                            in: RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                                .stroke(isSelected ? color.opacity(0.85) : Theme.hairline, lineWidth: 0.75)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(AnatomyData.muscleNames[id] ?? id), \(label.lowercased()) muscle")
+                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                }
+            }
         }
-        .font(.caption)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -76,7 +126,7 @@ struct AnatomyFigureView: View {
         .aspectRatio(1, contentMode: .fit)
         .compositingGroup()
         .mask {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
                 .fill(Color.black)
                 .padding(2)
                 .blur(radius: 4)
@@ -109,15 +159,16 @@ struct AnatomyFigureView: View {
 
             for r in AnatomyData.vitruvianFrontRegions {
                 let path = contour(r.points)
+                let focused = selectedMuscle == nil || selectedMuscle == r.id
                 if profile.primary.contains(r.id) {
                     ctx.fill(path, with: .linearGradient(
-                        Gradient(colors: [Self.primaryColor.opacity(0.48), Self.primaryColor.opacity(0.30)]),
+                        Gradient(colors: [Self.primaryColor.opacity(focused ? 0.50 : 0.10), Self.primaryColor.opacity(focused ? 0.30 : 0.06)]),
                         startPoint: CGPoint(x: size.width / 2, y: 0),
                         endPoint: CGPoint(x: size.width / 2, y: size.height)
                     ))
                 } else if profile.secondary.contains(r.id) {
                     ctx.fill(path, with: .linearGradient(
-                        Gradient(colors: [Self.secondaryColor.opacity(0.34), Self.secondaryColor.opacity(0.22)]),
+                        Gradient(colors: [Self.secondaryColor.opacity(focused ? 0.36 : 0.08), Self.secondaryColor.opacity(focused ? 0.22 : 0.05)]),
                         startPoint: CGPoint(x: size.width / 2, y: 0),
                         endPoint: CGPoint(x: size.width / 2, y: size.height)
                     ))
@@ -130,10 +181,10 @@ struct AnatomyFigureView: View {
     private var backHighlights: some View {
         ZStack {
             ForEach(backAssets(profile.secondary), id: \.self) { asset in
-                backMask(asset, color: Self.secondaryColor.opacity(0.32))
+                backMask(asset, color: Self.secondaryColor.opacity(backOpacity(asset: asset, primary: false)))
             }
             ForEach(backAssets(profile.primary), id: \.self) { asset in
-                backMask(asset, color: Self.primaryColor.opacity(0.50))
+                backMask(asset, color: Self.primaryColor.opacity(backOpacity(asset: asset, primary: true)))
             }
         }
         .aspectRatio(1, contentMode: .fit)
@@ -142,6 +193,13 @@ struct AnatomyFigureView: View {
     private func backAssets(_ ids: [String]) -> [String] {
         var seen = Set<String>()
         return ids.compactMap { Self.backAssetByMuscle[$0] }.filter { seen.insert($0).inserted }
+    }
+
+    private func backOpacity(asset: String, primary: Bool) -> Double {
+        guard let selectedMuscle,
+              let selectedAsset = Self.backAssetByMuscle[selectedMuscle]
+        else { return primary ? 0.50 : 0.32 }
+        return selectedAsset == asset ? (primary ? 0.58 : 0.44) : (primary ? 0.10 : 0.07)
     }
 
     private func backMask(_ asset: String, color: Color) -> some View {

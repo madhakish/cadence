@@ -29,6 +29,10 @@ enum ActivitySession {
         var loadLb: Double?
         var notes: String
         var woodSplitting: WoodSplittingFacts?
+        /// The implement field's entry denomination. `loadLb` remains the
+        /// canonical stored value; this only restores the keyboard/display
+        /// choice when a banked activity is edited.
+        var enteredUnit: WeightUnit = .lb
     }
 
     enum Error: LocalizedError {
@@ -36,6 +40,7 @@ enum ActivitySession {
         case invalidSessionRPE
         case invalidValue(String)
         case missingExercise(String)
+        case invalidSessionShape
 
         var errorDescription: String? {
             switch self {
@@ -44,6 +49,8 @@ enum ActivitySession {
             case .invalidValue(let label): return "\(label) must be a real number, zero or more."
             case .missingExercise(let name):
                 return "The exercise library is missing \(name). Sync or restore the library, then try again."
+            case .invalidSessionShape:
+                return "This activity record is incomplete and can't be edited safely."
             }
         }
     }
@@ -61,7 +68,7 @@ enum ActivitySession {
         guard value >= 0 else { throw Error.invalidValue(label) }
     }
 
-    static func create(input: Input, context: ModelContext) throws -> WorkoutSession {
+    private static func validatedExercise(input: Input, context: ModelContext) throws -> Exercise {
         guard input.durationSeconds > 0 else { throw Error.invalidDuration }
         // The write site is the guard: the recorded contract is 1.0–10.0,
         // and an out-of-contract RPE would persist as a "valid" row whose
@@ -88,6 +95,12 @@ enum ActivitySession {
         guard let exercise = try context.fetch(lookup).first else {
             throw Error.missingExercise(exerciseName)
         }
+        return exercise
+    }
+
+    static func create(input: Input, context: ModelContext) throws -> WorkoutSession {
+        let exercise = try validatedExercise(input: input, context: context)
+        let wood = input.kind == .woodSplitting ? input.woodSplitting : nil
 
         // Banked already complete: quick logging never opens the set-by-set
         // logger, and it must never advance program state, so no program
@@ -116,6 +129,7 @@ enum ActivitySession {
             weightLb: input.loadLb ?? 0,
             reps: 0,
             status: .completed,
+            enteredUnit: input.enteredUnit,
             durationSeconds: input.durationSeconds,
             loadBasis: exercise.loadBasis,
             implementCount: exercise.resolvedImplementCount,
@@ -135,6 +149,41 @@ enum ActivitySession {
         context.insert(detail)
         session.activityDetail = detail
         return session
+    }
+
+    /// Edits the same canonical row the quick logger created. This is not a
+    /// second workout path: it keeps the existing session identity and its
+    /// off-program shape, changing only the user-entered activity facts.
+    static func update(session: WorkoutSession, input: Input, context: ModelContext) throws {
+        let exercise = try validatedExercise(input: input, context: context)
+        let wood = input.kind == .woodSplitting ? input.woodSplitting : nil
+        guard let detail = session.activityDetail,
+              let entry = session.orderedExercises.first,
+              let set = entry.orderedSets.first
+        else { throw Error.invalidSessionShape }
+
+        session.date = input.startDate
+        session.completedAt = input.startDate.addingTimeInterval(TimeInterval(input.durationSeconds))
+        session.notes = input.notes
+        session.isCompleted = true
+
+        entry.exercise = exercise
+        entry.exerciseID = exercise.id
+        set.weightLb = input.loadLb ?? 0
+        set.enteredUnit = input.enteredUnit
+        set.durationSeconds = input.durationSeconds
+        set.status = .completed
+        set.reps = 0
+        set.loadBasis = exercise.loadBasis
+        set.implementCount = exercise.resolvedImplementCount
+        set.prescriptionBlock = .conditioning
+
+        detail.kindRaw = input.kind.rawValue
+        detail.sessionRPE = input.sessionRPE
+        detail.rounds = wood?.rounds
+        detail.splitPieces = wood?.splitPieces
+        detail.estimatedStrikes = wood?.estimatedStrikes
+        detail.cordVolume = wood?.cordVolume
     }
 
     /// Session-RPE workload (arbitrary units), derivable only when the
