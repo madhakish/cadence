@@ -311,6 +311,84 @@ final class PersistenceMigrationTests: XCTestCase {
                        "a rejected quick log leaves no partial rows behind")
     }
 
+    /// The iPhone quick editor mutates the one canonical activity row rather
+    /// than delete/recreate. Identity matters to history ordering and backup
+    /// diffs; the entry denomination matters when a kilogram maul is edited.
+    func testActivityQuickEditPreservesIdentityAndOffProgramShape() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        try Seeder.seedIfNeeded(context: context)
+        let original = try ActivitySession.create(
+            input: .init(kind: .woodSplitting, startDate: .now,
+                         durationSeconds: 3_600, sessionRPE: 7, loadLb: 8,
+                         notes: "First pile",
+                         woodSplitting: .init(rounds: 20, splitPieces: 30)),
+            context: context
+        )
+        // SwiftData relationship models use temporary persistent identifiers
+        // until their first save. Establish permanent IDs before proving that
+        // the editor mutates these rows instead of replacing them.
+        try context.save()
+        let originalID = original.id
+        let originalEntryID = try XCTUnwrap(original.orderedExercises.first?.id)
+        let originalSetID = try XCTUnwrap(original.orderedExercises.first?.orderedSets.first?.id)
+
+        try ActivitySession.update(
+            session: original,
+            input: .init(kind: .woodSplitting,
+                         startDate: original.date.addingTimeInterval(600),
+                         durationSeconds: 7_500, sessionRPE: 9,
+                         loadLb: Weight.toLb(4, from: .kg), notes: "Oak rounds",
+                         woodSplitting: .init(rounds: 60, cordVolume: 0.4),
+                         enteredUnit: .kg),
+            context: context
+        )
+        try context.save()
+
+        XCTAssertEqual(original.id, originalID)
+        XCTAssertEqual(original.orderedExercises.first?.id, originalEntryID)
+        XCTAssertEqual(original.orderedExercises.first?.orderedSets.first?.id, originalSetID)
+        XCTAssertNil(original.programID)
+        XCTAssertNil(original.programName)
+        XCTAssertNil(original.orderedExercises.first?.programRole)
+        XCTAssertEqual(original.orderedExercises.count, 1)
+        XCTAssertEqual(original.orderedExercises.first?.orderedSets.count, 1)
+        let editedSet = try XCTUnwrap(original.orderedExercises.first?.orderedSets.first)
+        XCTAssertEqual(editedSet.enteredUnit, .kg)
+        XCTAssertEqual(editedSet.durationSeconds, 7_500)
+        XCTAssertEqual(editedSet.weightLb, Weight.toLb(4, from: .kg), accuracy: 0.000_001)
+        XCTAssertEqual(original.activityDetail?.rounds, 60)
+        XCTAssertNil(original.activityDetail?.splitPieces,
+                     "an optional fact cleared by the user stays absent")
+        XCTAssertEqual(original.activityDetail?.cordVolume, 0.4)
+        XCTAssertEqual(ActivitySession.workload(for: original)?.arbitraryUnits, 1_125)
+
+        // A record that has drifted from the canonical shape (here, a second
+        // entry) is refused outright, never half-edited.
+        let drifted = try ActivitySession.create(
+            input: .init(kind: .woodSplitting, startDate: .now,
+                         durationSeconds: 1_800, sessionRPE: nil, loadLb: nil,
+                         notes: "", woodSplitting: nil),
+            context: context
+        )
+        let squat = try XCTUnwrap(try context.fetch(FetchDescriptor<Exercise>()).first { $0.name == "Back Squat" })
+        let extra = SessionExercise(order: 1, exercise: squat)
+        context.insert(extra)
+        drifted.exercises.append(extra)
+        try context.save()
+        XCTAssertThrowsError(try ActivitySession.update(
+            session: drifted,
+            input: .init(kind: .woodSplitting, startDate: .now, durationSeconds: 1_800,
+                         sessionRPE: 5, loadLb: nil, notes: "", woodSplitting: nil),
+            context: context
+        ), "an off-shape activity record must be refused, not partially edited")
+        XCTAssertNil(drifted.activityDetail?.sessionRPE, "the refused edit wrote nothing")
+    }
+
     func testV9StoreGainsIntervalsAndManualBarWithoutTouchingAnything() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cadence-v9-interval-migration-\(UUID().uuidString)", isDirectory: true)
@@ -576,6 +654,45 @@ final class PersistenceMigrationTests: XCTestCase {
         )
         XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<ActivityDetail>()).count, 0,
                        "a v11 restore invents no activity detail")
+
+        // A bundle whose declared version predates activities but still
+        // carries a valid object (a hand-relabelled v12 file) restores the
+        // facts rather than silently dropping them
+        // (INV-WOOD-WORK-ROUND-TRIPS).
+        var relabelledJSON = json
+        relabelledJSON["schemaVersion"] = 11
+        let relabelled = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        try ImportService.load(
+            JSONSerialization.data(withJSONObject: relabelledJSON),
+            into: relabelled.mainContext
+        )
+        XCTAssertEqual(try relabelled.mainContext.fetch(FetchDescriptor<ActivityDetail>()).count, 1,
+                       "a bundle that carries the facts never loses them to its version label")
+
+        // The importer is a second write path and refuses what the creator
+        // refuses: an activity session holding anything but the kind's one
+        // canonical entry with one timed set rejects before any write.
+        var offShapeJSON = json
+        var offShapeSessions = try XCTUnwrap(offShapeJSON["sessions"] as? [[String: Any]])
+        for index in offShapeSessions.indices where offShapeSessions[index]["activity"] != nil {
+            var exercises = try XCTUnwrap(offShapeSessions[index]["exercises"] as? [[String: Any]])
+            exercises.append(exercises[0])
+            offShapeSessions[index]["exercises"] = exercises
+        }
+        offShapeJSON["sessions"] = offShapeSessions
+        let offShape = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        )
+        XCTAssertThrowsError(try ImportService.load(
+            JSONSerialization.data(withJSONObject: offShapeJSON),
+            into: offShape.mainContext
+        ), "an activity session with a second entry must reject before writes, as web does")
+        XCTAssertEqual(try offShape.mainContext.fetch(FetchDescriptor<WorkoutSession>()).count, 0,
+                       "a rejected bundle writes nothing")
 
         // Native validation mirrors web validateBackup: an unregistered
         // kind or an out-of-contract RPE rejects the bundle before any

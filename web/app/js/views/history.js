@@ -4,6 +4,7 @@ import * as C from "../core.js";
 import { lineChart, multiLineChart, progressionChart, smoothLinePath, ROTATION_COLORS, ROLE_DASH } from "../charts.js";
 import { Sessions, Milestones, Exercises, Programs, Checkins, Intervals, intervalSnapshots, topSet, workingVolume } from "../db.js";
 import { coachingReport } from "../coaching-adapter.js";
+import { activityDurationLabel, activityDurationSeconds, activitySet, openActivityLog } from "./activity.js";
 
 import { COPY } from "../constants.js";
 
@@ -159,6 +160,24 @@ function renderLog(panel, sessions, exercises, intervals = []) {
   // under each card makes trends scannable while scrolling.
   const volumeOf = (s) => (s.exercises || []).reduce((a, e) => a + workingVolume(e, exerciseByName.get(e.exerciseName)), 0);
   const maxVolume = Math.max(1, ...sessions.map(volumeOf));
+  const year = new Date().getFullYear();
+  const yearActivities = sessions.filter((session) => session.activity
+    && new Date(session.date).getFullYear() === year);
+  if (yearActivities.length) {
+    const seconds = yearActivities.reduce((sum, session) => sum + activityDurationSeconds(session), 0);
+    const cords = yearActivities.reduce((sum, session) => sum + (session.activity.cordVolume || 0), 0);
+    const effort = yearActivities.reduce((sum, session) => {
+      const work = C.activityWorkload(activityDurationSeconds(session), session.activity.sessionRPE);
+      return sum + (work?.arbitraryUnits || 0);
+    }, 0);
+    panel.append(ui.h("div", { class: "section-title", text: `Ad-hoc work · ${year}` }),
+      ui.h("div", { class: "card activity-year" },
+        activityStat(yearActivities.length, "sessions"),
+        activityStat(activityDurationLabel(seconds), "logged time"),
+        cords > 0 ? activityStat(C.trim(cords, 3), "cords") : null,
+        effort > 0 ? activityStat(C.trim(effort), "effort AU") : null,
+        ui.h("p", { class: "sub full", text: "Reported separately from lifting volume and training cycles." })));
+  }
   // The log interleaves banked sessions with declared intervals — a break the
   // lifter chose is part of the training story, not a hole in it
   // (INV-INTERVAL-IS-NOT-A-GAP). Mirrors HistoryView.swift.
@@ -184,6 +203,17 @@ function renderLog(panel, sessions, exercises, intervals = []) {
       continue;
     }
     const s = row.s;
+    if (s.activity) {
+      panel.append(ui.h("div", { class: "card list activity-history-row", style: { margin: "6px 0" } },
+        ui.h("button", { class: "row wide", style: { borderBottom: "0", textAlign: "left" },
+          onClick: () => openActivityDetail(s) },
+          ui.h("div", { class: "lead" },
+            ui.h("span", { class: "sub", text: ui.fmtDate(s.date) }),
+            ui.h("span", { class: "title", text: C.activityExerciseName(s.activity.kind) || "Ad-hoc work" }),
+            ui.h("span", { class: "sub accent", text: activityRowLine(s) })),
+          ui.h("span", { class: "chev" }))));
+      continue;
+    }
     // Lead with the heaviest lift of the day; the rest ride in the sub line.
     const tops = (s.exercises || []).map((e) => ({ e, t: topSet(e) })).filter((x) => x.t);
     const lead = [...tops].sort((a, b) => b.t.weightLb - a.t.weightLb)[0];
@@ -203,6 +233,71 @@ function renderLog(panel, sessions, exercises, intervals = []) {
       vol > 0 ? bar : null));
   }
 }
+
+const activityStat = (value, label) => ui.h("div", { class: "session-stat" },
+  ui.h("strong", { class: "mono", text: String(value) }), ui.h("span", { text: label }));
+
+function activityRowLine(session) {
+  const detail = session.activity || {};
+  const set = activitySet(session);
+  const parts = [activityDurationLabel(activityDurationSeconds(session))];
+  if (detail.sessionRPE != null) parts.push(`RPE ${C.trim(detail.sessionRPE)}`);
+  if (set?.weightLb > 0) {
+    const unit = set.enteredUnit === "kg" ? "kg" : "lb";
+    const value = unit === "kg" ? C.kgFromLb(set.weightLb) : set.weightLb;
+    parts.push(`${C.trim(value, 2)} ${unit} maul`);
+  }
+  if (detail.cordVolume != null) parts.push(`${C.trim(detail.cordVolume, 3)} cords`);
+  return parts.join(" · ");
+}
+
+function openActivityDetail(session) {
+  const detail = session.activity || {};
+  const set = activitySet(session);
+  const durationSeconds = activityDurationSeconds(session);
+  let screen;
+  const edit = ui.h("button", { class: "btn ghost sm", text: "Edit",
+    "aria-label": "Edit this ad-hoc activity", onClick: () => openActivityLog(session, {
+      onDone: () => { screen.close(); ui.nav.refresh(); },
+    }) });
+  screen = ui.pushScreen({
+    title: ui.fmtDate(session.date),
+    actions: [edit],
+    build: (body) => {
+      body.append(ui.h("section", { class: "activity-detail-hero" },
+        ui.h("span", { class: "eyebrow accent", text: "AD-HOC WORK · OFF PROGRAM" }),
+        ui.h("h2", { text: C.activityExerciseName(detail.kind) || "Ad-hoc work" }),
+        ui.h("span", { class: "sub", text: `${ui.fmtDate(session.date)} · ${new Date(session.date).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` }),
+        ui.h("div", { class: "activity-duration-row" },
+          ui.h("strong", { class: "mono", text: activityDurationLabel(durationSeconds) }),
+          detail.sessionRPE != null ? ui.h("span", { class: "accent", text: `RPE ${C.trim(detail.sessionRPE)}` }) : null)));
+      const facts = ui.h("div", { class: "card fact-list" });
+      if (set?.weightLb > 0) {
+        const unit = set.enteredUnit === "kg" ? "kg" : "lb";
+        const value = unit === "kg" ? C.kgFromLb(set.weightLb) : set.weightLb;
+        facts.append(factRow("Maul", `${C.trim(value, 2)} ${unit}`));
+      }
+      if (detail.rounds != null) facts.append(factRow("Rounds", detail.rounds));
+      if (detail.splitPieces != null) facts.append(factRow("Split pieces", detail.splitPieces));
+      if (detail.estimatedStrikes != null) facts.append(factRow("Estimated strikes", detail.estimatedStrikes));
+      if (detail.cordVolume != null) facts.append(factRow("Cords split", C.trim(detail.cordVolume, 3)));
+      const workload = C.activityWorkload(durationSeconds, detail.sessionRPE);
+      if (workload) {
+        facts.append(factRow("Session workload", `${C.trim(workload.arbitraryUnits)} AU`),
+          ui.h("p", { class: "sub", text: `${activityDurationLabel(durationSeconds)} × RPE ${C.trim(workload.sessionRPE)}. Relative effort, not lifting volume.` }));
+      } else if (detail.sessionRPE == null) {
+        facts.append(ui.h("p", { class: "sub", text: "No effort workload calculated because session RPE was not recorded." }));
+      }
+      body.append(ui.h("div", { class: "section-title", text: "Recorded facts" }), facts);
+      if (session.notes) body.append(ui.h("div", { class: "section-title", text: "Notes" }),
+        ui.h("div", { class: "card", text: session.notes }));
+      body.append(ui.h("div", { class: "activity-boundary sub", text: "This work shares the History timeline, but it never advances a program rotation, changes progression, sets a PR, or contributes barbell tonnage." }));
+    },
+  });
+}
+
+const factRow = (label, value) => ui.h("div", { class: "row" },
+  ui.h("span", { class: "sub", text: label }), ui.h("strong", { class: "mono", text: String(value) }));
 
 // The stored weight's display form in the entry unit — what an untouched
 // field reads, and what the no-edit comparison in draftCorrections uses. C.trim on

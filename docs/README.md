@@ -29,6 +29,7 @@ section that matches what you're trying to do.
 - [Load a bar with the plate calculator](how-to/plate-calculator.md)
 - [Edit a program mid-cycle](how-to/edit-a-program-mid-cycle.md)
 - [Declare a training break](how-to/declare-a-training-break.md)
+- [Log ad-hoc work like wood splitting](how-to/log-ad-hoc-work.md)
 - [Back up and restore your data](how-to/back-up-and-restore.md)
 
 ## Reference — look something up
