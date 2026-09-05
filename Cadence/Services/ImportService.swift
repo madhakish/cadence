@@ -848,22 +848,29 @@ enum ImportService {
         let incomingSessions = (bundle.sessions ?? []).map { s -> BackupContract.NamedEntity in
             let id = s.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? ""
             let name = s.date.map { isoSessionName($0) } ?? "Untitled session"
-            return BackupContract.NamedEntity(id: id, name: name, signature: sessionSignature(
-                date: s.date, programId: s.programTag?.programId, exerciseCount: (s.exercises ?? []).count,
-                activity: activitySignature(
-                    kind: s.activity?.kind, sessionRPE: s.activity?.sessionRPE, rounds: s.activity?.rounds,
-                    splitPieces: s.activity?.splitPieces, estimatedStrikes: s.activity?.estimatedStrikes,
-                    cordVolume: s.activity?.cordVolume)))
+            // Bound step by step: nesting these calls inside the initializer
+            // is more than the type-checker will resolve in reasonable time.
+            let activity = s.activity
+            let activitySig = activitySignature(
+                kind: activity?.kind, sessionRPE: activity?.sessionRPE, rounds: activity?.rounds,
+                splitPieces: activity?.splitPieces, estimatedStrikes: activity?.estimatedStrikes,
+                cordVolume: activity?.cordVolume)
+            let signature = sessionSignature(
+                date: s.date, programId: s.programTag?.programId,
+                exerciseCount: (s.exercises ?? []).count, activity: activitySig)
+            return BackupContract.NamedEntity(id: id, name: name, signature: signature)
         }
         let currentSessions: [BackupContract.NamedEntity] = bundle.sessions == nil ? [] :
             try context.fetch(FetchDescriptor<WorkoutSession>()).map { session in
                 let detail = session.activityDetail
-                return BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: sessionSignature(
-                    date: session.date, programId: session.programID, exerciseCount: session.exercises.count,
-                    activity: activitySignature(
-                        kind: detail?.kindRaw, sessionRPE: detail?.sessionRPE, rounds: detail?.rounds,
-                        splitPieces: detail?.splitPieces, estimatedStrikes: detail?.estimatedStrikes,
-                        cordVolume: detail?.cordVolume)))
+                let activitySig = activitySignature(
+                    kind: detail?.kindRaw, sessionRPE: detail?.sessionRPE, rounds: detail?.rounds,
+                    splitPieces: detail?.splitPieces, estimatedStrikes: detail?.estimatedStrikes,
+                    cordVolume: detail?.cordVolume)
+                let signature = sessionSignature(
+                    date: session.date, programId: session.programID,
+                    exerciseCount: session.exercises.count, activity: activitySig)
+                return BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: signature)
             }
 
         // Mirrors `load`'s own program id derivation exactly (a v2+ bundle's
@@ -911,9 +918,12 @@ enum ImportService {
     private static func activitySignature(kind: String?, sessionRPE: Double?, rounds: Int?,
                                           splitPieces: Int?, estimatedStrikes: Int?, cordVolume: Double?) -> String {
         guard let kind else { return "" }
-        return [kind, sessionRPE.map { String($0) } ?? "", rounds.map(String.init) ?? "",
-                splitPieces.map(String.init) ?? "", estimatedStrikes.map(String.init) ?? "",
-                cordVolume.map { String($0) } ?? ""].joined(separator: ",")
+        let rpeText = sessionRPE.map { String($0) } ?? ""
+        let roundsText = rounds.map { String($0) } ?? ""
+        let piecesText = splitPieces.map { String($0) } ?? ""
+        let strikesText = estimatedStrikes.map { String($0) } ?? ""
+        let cordsText = cordVolume.map { String($0) } ?? ""
+        return [kind, rpeText, roundsText, piecesText, strikesText, cordsText].joined(separator: ",")
     }
 
     private static func programSignature(dayCount: Int, slotCount: Int) -> String {
