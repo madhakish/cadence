@@ -15,6 +15,9 @@ final class WorkoutClassificationTests: XCTestCase {
         XCTAssertEqual(WorkoutClassification.classify([
             CompletedExerciseKind(name: "Ruck", type: "conditioning", category: "Conditioning")
         ]), .hiking)
+        XCTAssertEqual(WorkoutClassification.classify([
+            CompletedExerciseKind(name: "Wood Splitting", type: "conditioning", category: "Conditioning")
+        ]), .crossTraining)
     }
 
     func testMixedWorkIsCrossTraining() {

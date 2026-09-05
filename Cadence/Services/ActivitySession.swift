@@ -10,6 +10,8 @@ import CadenceCore
 /// (INV-WOOD-WORK-DOES-NOT-GUESS keeps every optional user-entered).
 enum ActivitySession {
 
+    typealias HealthWorkout = (start: Date, end: Date, modality: WorkoutModality)
+
     /// Wood-splitting facts (kind `woodSplitting`). A future kind carries
     /// its own typed facts struct rather than widening this one.
     struct WoodSplittingFacts {
@@ -96,6 +98,20 @@ enum ActivitySession {
             throw Error.missingExercise(exerciseName)
         }
         return exercise
+    }
+
+    /// The picker normally uses half steps, but the portable contract accepts
+    /// every finite value from 1 through 10. Keep a valid imported value in the
+    /// option list so SwiftUI never receives a selection with no matching tag.
+    static func sessionRPEOptions(existing: Double?) -> [Double] {
+        var options = Array(stride(from: 1.0, through: 10.0, by: 0.5))
+        if let existing,
+           existing.isFinite,
+           ActivityWorkload.sessionRPERange.contains(existing),
+           !options.contains(existing) {
+            options.append(existing)
+        }
+        return options.sorted()
     }
 
     static func create(input: Input, context: ModelContext) throws -> WorkoutSession {
@@ -199,6 +215,35 @@ enum ActivitySession {
         detail.splitPieces = wood?.splitPieces
         detail.estimatedStrikes = wood?.estimatedStrikes
         detail.cordVolume = wood?.cordVolume
+    }
+
+    /// Exact interval and modality written to Health after a new activity has
+    /// committed. Keeping this derivation pure makes the post-save side effect
+    /// auditable and prevents a malformed or incomplete row from being sent.
+    static func healthWorkout(for session: WorkoutSession) -> HealthWorkout? {
+        guard session.isCompleted,
+              session.activityDetail?.kind != nil,
+              let end = session.completedAt,
+              end > session.date,
+              let entry = session.orderedExercises.first,
+              !entry.workingSets.isEmpty,
+              let exercise = entry.exercise
+        else { return nil }
+        let modality = WorkoutClassification.classify([
+            CompletedExerciseKind(
+                name: exercise.name,
+                type: exercise.typeRaw,
+                category: exercise.categoryRaw
+            ),
+        ])
+        return (session.date, end, modality)
+    }
+
+    /// Nil means no activity recorded a strike count. A recorded zero remains
+    /// a real total instead of being mistaken for absent data.
+    static func estimatedStrikesTotal(for sessions: [WorkoutSession]) -> Int? {
+        let recorded = sessions.compactMap { $0.activityDetail?.estimatedStrikes }
+        return recorded.isEmpty ? nil : recorded.reduce(0, +)
     }
 
     /// Session-RPE workload (arbitrary units), derivable only when the

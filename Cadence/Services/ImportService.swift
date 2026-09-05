@@ -334,6 +334,18 @@ enum ImportService {
                     throw ImportError.invalidData("\(path).exercises[0].sets: an activity session holds exactly one set")
                 }
                 try integer(sets[0].durationSeconds, "\(path).exercises[0].sets[0].durationSeconds", required: true, min: 1)
+                guard session.programTemplateId == nil,
+                      entries[0].role == nil,
+                      entries[0].programSlotId == nil,
+                      sets[0].isWarmup == false,
+                      sets[0].status == SetStatus.completed.rawValue,
+                      sets[0].prescriptionBlock == PrescriptionBlockKind.conditioning.rawValue,
+                      sets[0].reps == 0
+                else {
+                    throw ImportError.invalidData(
+                        "\(path).activity: expected one completed, non-warmup, off-program conditioning set"
+                    )
+                }
             }
             for (ei, exercise) in (session.exercises ?? []).enumerated() {
                 let exercisePath = "\(path).exercises[\(ei)]"

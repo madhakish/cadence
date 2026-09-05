@@ -40,9 +40,10 @@ changes shape and nothing else moved:
   preserved, never estimated from other fields.
 - A session carrying `activity` must have the canonical shape the app's own
   quick logger writes, and both importers reject anything else before any
-  write: `isCompleted` true, no `programTag`, exactly one exercise entry
-  named for the kind's canonical exercise (`"Wood Splitting"`), holding
-  exactly one set with a positive integer `durationSeconds`.
+  write: `isCompleted` true, no `programTag` or program-template/slot/role
+  linkage, exactly one exercise entry named for the kind's canonical exercise
+  (`"Wood Splitting"`), holding exactly one completed, non-warmup conditioning
+  set with zero reps and a positive integer `durationSeconds`.
 - The activity object is part of the named-restore preview's session
   signature, so an edit to the facts alone previews the session as changed.
 

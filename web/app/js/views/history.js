@@ -170,6 +170,9 @@ function renderLog(panel, sessions, exercises, intervals = []) {
   if (yearActivities.length) {
     const seconds = yearActivities.reduce((sum, session) => sum + activityDurationSeconds(session), 0);
     const cords = yearActivities.reduce((sum, session) => sum + (session.activity.cordVolume || 0), 0);
+    const recordedStrikes = yearActivities.map((session) => session.activity.estimatedStrikes)
+      .filter((value) => value != null);
+    const strikes = recordedStrikes.reduce((sum, value) => sum + value, 0);
     const effort = yearActivities.reduce((sum, session) => {
       const work = C.activityWorkload(activityDurationSeconds(session), session.activity.sessionRPE);
       return sum + (work?.arbitraryUnits || 0);
@@ -179,6 +182,7 @@ function renderLog(panel, sessions, exercises, intervals = []) {
         activityStat(yearActivities.length, "sessions"),
         activityStat(activityDurationLabel(seconds), "logged time"),
         cords > 0 ? activityStat(C.trim(cords, 3), "cords") : null,
+        recordedStrikes.length ? activityStat(strikes, "strikes") : null,
         effort > 0 ? activityStat(C.trim(effort), "effort AU") : null,
         ui.h("p", { class: "sub full", text: "Reported separately from lifting volume and training cycles." })));
   }

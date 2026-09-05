@@ -341,6 +341,9 @@ struct HistoryView: View {
         if cords > 0 {
             activityStat(Weight.trim(cords, decimals: 3), label: "cords")
         }
+        if let strikes = ActivitySession.estimatedStrikesTotal(for: currentYearActivities) {
+            activityStat("\(strikes)", label: "strikes")
+        }
         let workload = currentYearActivities.compactMap { ActivitySession.workload(for: $0) }.reduce(0) {
             $0 + $1.arbitraryUnits
         }

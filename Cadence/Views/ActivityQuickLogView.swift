@@ -33,7 +33,9 @@ struct ActivityQuickLogView: View {
     @State private var confirmDelete = false
     @State private var seededRecentImplement = false
 
-    private static let rpeOptions = Array(stride(from: 1.0, through: 10.0, by: 0.5))
+    private var rpeOptions: [Double] {
+        ActivitySession.sessionRPEOptions(existing: session?.activityDetail?.sessionRPE)
+    }
 
     /// The stored duration as banked, seconds included. The steppers show
     /// whole minutes; an untouched duration saves back exactly as stored so
@@ -118,7 +120,7 @@ struct ActivityQuickLogView: View {
                 Section {
                     Picker("Session effort", selection: $sessionRPE) {
                         Text("Not recorded").tag(Double?.none)
-                        ForEach(Self.rpeOptions, id: \.self) { value in
+                        ForEach(rpeOptions, id: \.self) { value in
                             Text("RPE \(Weight.trim(value))").tag(Double?.some(value))
                         }
                     }
@@ -236,15 +238,26 @@ struct ActivityQuickLogView: View {
         defer { isSaving = false }
         do {
             let input = try draftInput()
+            var newlyBanked: WorkoutSession?
             if let session {
                 try ActivitySession.update(session: session, input: input, context: context)
             } else {
-                _ = try ActivitySession.create(input: input, context: context)
+                newlyBanked = try ActivitySession.create(input: input, context: context)
             }
             if PersistenceErrorCenter.shared.save(
                 context,
                 operation: isEditing ? "Editing ad-hoc work" : "Banking ad-hoc work"
             ) {
+                if settingsList.first?.healthKitEnabled == true,
+                   let workout = newlyBanked.flatMap({ ActivitySession.healthWorkout(for: $0) }) {
+                    Task {
+                        await HealthKitService.shared.saveWorkout(
+                            start: workout.start,
+                            end: workout.end,
+                            modality: workout.modality
+                        )
+                    }
+                }
                 dismiss()
             }
         } catch {

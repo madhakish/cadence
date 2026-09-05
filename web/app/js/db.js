@@ -1140,6 +1140,11 @@ export function validateBackup(bundle) {
       const sets = Array.isArray(entries[0].sets) ? entries[0].sets : [];
       if (sets.length !== 1) invalid(`${path}.exercises[0].sets`, "an activity session holds exactly one set");
       numberValue(sets[0].durationSeconds, `${path}.exercises[0].sets[0].durationSeconds`, { required: true, integer: true, min: 1 });
+      if (session.programTemplateId != null || entries[0].role != null || entries[0].programSlotId != null
+          || sets[0].isWarmup !== false || sets[0].status !== "completed"
+          || sets[0].prescriptionBlock !== "conditioning" || sets[0].reps !== 0) {
+        invalid(`${path}.activity`, "expected one completed, non-warmup, off-program conditioning set");
+      }
     }
     each(array(session, "exercises", `${path}.exercises`), `${path}.exercises`, (exercise, exercisePath) => {
       textValue(exercise.name, `${exercisePath}.name`, true);

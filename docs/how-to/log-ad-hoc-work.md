@@ -22,6 +22,8 @@ cycle, sets a lifting PR, or counts as barbell tonnage.
 
 The session is banked immediately as complete. Nothing opens the set-by-set
 logger, and no program cursor moves.
+If Health writing is enabled, Cadence mirrors a newly banked activity as
+cross-training only after the local save succeeds.
 
 ## Review, edit, or delete
 

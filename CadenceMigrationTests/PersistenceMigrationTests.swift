@@ -258,6 +258,12 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(set.weightLb, 8, "maul weight lives only on the canonical set")
         XCTAssertEqual(wood.orderedExercises.first?.workingVolumeLb, 0,
                        "wood splitting is never lifting volume")
+        let healthWorkout = try XCTUnwrap(ActivitySession.healthWorkout(for: wood))
+        XCTAssertEqual(healthWorkout.start, wood.date)
+        XCTAssertEqual(healthWorkout.end, try XCTUnwrap(wood.completedAt))
+        XCTAssertEqual(healthWorkout.modality, .crossTraining,
+                       "quick-logged wood work routes to Health as cross-training")
+        XCTAssertEqual(ActivitySession.estimatedStrikesTotal(for: [wood]), 340)
     }
 
     /// The seed ships the registered activity kinds' canonical exercises by
@@ -309,6 +315,13 @@ final class PersistenceMigrationTests: XCTestCase {
         }
         XCTAssertEqual(try context.fetch(FetchDescriptor<ActivityDetail>()).count, 0,
                        "a rejected quick log leaves no partial rows behind")
+    }
+
+    func testActivityRPEOptionsRetainAValidImportedOffGridValue() {
+        XCTAssertEqual(ActivitySession.sessionRPEOptions(existing: nil).count, 19)
+        XCTAssertEqual(ActivitySession.sessionRPEOptions(existing: 8).count, 19)
+        XCTAssertTrue(ActivitySession.sessionRPEOptions(existing: 7.25).contains(7.25))
+        XCTAssertFalse(ActivitySession.sessionRPEOptions(existing: 7.25).contains(7.3))
     }
 
     /// The iPhone quick editor mutates the one canonical activity row rather
@@ -755,6 +768,42 @@ final class PersistenceMigrationTests: XCTestCase {
         ), "an activity session with a second entry must reject before writes, as web does")
         XCTAssertEqual(try offShape.mainContext.fetch(FetchDescriptor<WorkoutSession>()).count, 0,
                        "a rejected bundle writes nothing")
+
+        let canonicalShapeMutations: [(String, (inout [String: Any], inout [String: Any], inout [String: Any]) -> Void)] = [
+            ("warm-up set", { _, _, set in set["isWarmup"] = true }),
+            ("planned set", { _, _, set in set["status"] = "planned" }),
+            ("non-conditioning set", { _, _, set in set["prescriptionBlock"] = "work" }),
+            ("program role", { _, entry, _ in entry["role"] = "accessory" }),
+            ("program slot", { _, entry, _ in entry["programSlotId"] = UUID().uuidString }),
+            ("program template", { session, _, _ in session["programTemplateId"] = "conjugate" }),
+        ]
+        for (label, mutate) in canonicalShapeMutations {
+            var badJSON = json
+            var badSessions = try XCTUnwrap(badJSON["sessions"] as? [[String: Any]])
+            for index in badSessions.indices where badSessions[index]["activity"] != nil {
+                var session = badSessions[index]
+                var entries = try XCTUnwrap(session["exercises"] as? [[String: Any]])
+                var entry = entries[0]
+                var sets = try XCTUnwrap(entry["sets"] as? [[String: Any]])
+                var set = sets[0]
+                mutate(&session, &entry, &set)
+                sets[0] = set
+                entry["sets"] = sets
+                entries[0] = entry
+                session["exercises"] = entries
+                badSessions[index] = session
+            }
+            badJSON["sessions"] = badSessions
+            let rejected = try ModelContainer(
+                for: schema,
+                configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            )
+            XCTAssertThrowsError(try ImportService.load(
+                JSONSerialization.data(withJSONObject: badJSON),
+                into: rejected.mainContext
+            ), "an activity session carrying a \(label) must reject before writes")
+            XCTAssertEqual(try rejected.mainContext.fetch(FetchDescriptor<WorkoutSession>()).count, 0)
+        }
 
         // Native validation mirrors web validateBackup: an unregistered
         // kind or an out-of-contract RPE rejects the bundle before any

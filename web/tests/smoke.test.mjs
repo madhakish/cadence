@@ -4001,8 +4001,26 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
       (s) => { s.exercises[0].name = "Back Squat"; });
     rejects("an activity session without a timed set is rejected before writes",
       (s) => { s.exercises[0].sets[0].durationSeconds = null; });
+    rejects("an activity session with a warm-up set is rejected before writes",
+      (s) => { s.exercises[0].sets[0].isWarmup = true; });
+    rejects("an activity session with a planned set is rejected before writes",
+      (s) => { s.exercises[0].sets[0].status = "planned"; });
+    rejects("an activity session with a non-conditioning set is rejected before writes",
+      (s) => { s.exercises[0].sets[0].prescriptionBlock = "work"; });
+    rejects("an activity session with a program role is rejected before writes",
+      (s) => { s.exercises[0].role = "accessory"; });
+    rejects("an activity session with a program slot is rejected before writes",
+      (s) => { s.exercises[0].programSlotId = crypto.randomUUID(); });
+    rejects("an activity session with a program template is rejected before writes",
+      (s) => { s.programTemplateId = "conjugate"; });
     db.validateBackup(withWood(() => {}));
     ok(true, "the canonical activity shape still validates");
+
+    await history.render(host()); await tick();
+    [...host().querySelectorAll(".seg button")].find((button) => button.textContent === "Log")?.click();
+    await tick();
+    ok(host().querySelector(".activity-year")?.textContent.includes("340strikes"),
+      "the current-year activity summary includes recorded estimated strikes");
 
     // An edit to the facts alone is visible to the named-restore preview,
     // so it can never be refused as "nothing to restore"
