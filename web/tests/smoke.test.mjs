@@ -1212,7 +1212,20 @@ ok(["Main progression", "Compare program roles", "Compare like rotations"].every
   await db.Exercises.save(squat);
 }
 
-// plate calculator overlay
+// Plate calculator overlay. The second rack deliberately hides 15 kg so the
+// reverse-order controls have to map visible IDs back through a stored
+// [20, hidden 15, 10] order after the gym switch.
+const defaultPlateGym = await db.Gyms.default();
+const sparsePlateGymName = "Sparse Plate Fixture";
+await db.Gyms.save({
+  ...defaultPlateGym,
+  id: "fixture-sparse-plate-gym",
+  name: sparsePlateGymName,
+  isDefault: false,
+  plateToggles: C.ALL_STANDARD.map((plate) => ({
+    ...plate, enabled: plate.unit === "kg" && [20, 10].includes(plate.value),
+  })),
+});
 await plates.openPlateCalculator(); await tick();
 const plateOverlay = document.querySelector("#overlays .overlay");
 ok(plateOverlay, "plate calculator opened");
@@ -1244,8 +1257,27 @@ const updatedMixedTotal = plateOverlay.querySelector(".dual-weight");
 ok(updatedMixedTotal.textContent.includes(C.trim(mixedTotalLb))
   && updatedMixedTotal.textContent.includes(C.trim(C.kgFromLb(mixedTotalLb))),
 "a 45 lb bar plus mirrored kg plates is converted exactly in both displayed totals");
+for (const label of ["15 kg plate", "10 kg plate"]) {
+  plateOverlay.querySelector(`svg.plate-badge[aria-label="${label}"]`)
+    ?.closest(".row")?.querySelector(".stepper button:last-child")?.click();
+}
+const gymSelect = [...plateOverlay.querySelectorAll(".field")]
+  .find((field) => field.textContent.includes("Gym"))?.querySelector("select");
+ok(gymSelect, "multiple gyms expose the calculator rack selector");
+if (gymSelect) {
+  gymSelect.value = sparsePlateGymName;
+  gymSelect.dispatchEvent(new window.Event("change"));
+  await tick();
+  plateOverlay.querySelector('button[aria-label="Move 20 kg outward"]')?.click();
+  const visibleOrder = [...plateOverlay.querySelectorAll(".section-title")]
+    .find((heading) => heading.textContent.startsWith("Sleeve order"))
+    ?.nextElementSibling?.querySelectorAll(".plate-row strong");
+  ok([...(visibleOrder || [])].map((row) => row.textContent.split(" ×")[0]).join(",") === "10 kg,20 kg",
+    "web reverse-mode buttons move selected visible IDs around hidden old-gym denominations");
+}
 plateOverlay.querySelector(".overlay-head button").click(); // close
 await tick();
+await db.Gyms.del(sparsePlateGymName);
 
 ok(session.complementaryEffortCueForEntry(
   { programRole: "complementary", prescriptionStyle: "automatic" }, { movementGroup: "hinge" }, { focus: "strength" },

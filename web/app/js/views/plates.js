@@ -144,19 +144,20 @@ export async function openPlateCalculator() {
           const orderList = ui.h("div", { class: "card plate-list" });
           perSide.forEach((plateCount, index) => {
             const id = C.plateId(plateCount.plate);
+            const move = (offset) => {
+              const moved = C.movedVisiblePlateIDs(
+                id, offset, enteredOrder, perSide.map((count) => C.plateId(count.plate)),
+              );
+              enteredOrder.splice(0, enteredOrder.length, ...moved);
+              recompute();
+            };
             orderList.append(ui.h("div", { class: "row plate-row" },
               ui.h("strong", { class: "mono", text: `${C.plateLabel(plateCount.plate)} × ${plateCount.count}` }),
               ui.h("div", { class: "row-actions" },
                 ui.h("button", { class: "btn ghost icon", text: "↑", disabled: index === 0,
-                  "aria-label": `Move ${C.plateLabel(plateCount.plate)} inward`, onClick: () => {
-                    [enteredOrder[index - 1], enteredOrder[index]] = [enteredOrder[index], enteredOrder[index - 1]];
-                    recompute();
-                  } }),
+                  "aria-label": `Move ${C.plateLabel(plateCount.plate)} inward`, onClick: () => move(-1) }),
                 ui.h("button", { class: "btn ghost icon", text: "↓", disabled: index === perSide.length - 1,
-                  "aria-label": `Move ${C.plateLabel(plateCount.plate)} outward`, onClick: () => {
-                    [enteredOrder[index], enteredOrder[index + 1]] = [enteredOrder[index + 1], enteredOrder[index]];
-                    recompute();
-                  } }))));
+                  "aria-label": `Move ${C.plateLabel(plateCount.plate)} outward`, onClick: () => move(1) }))));
           });
           orderEditor.append(orderList);
         }
