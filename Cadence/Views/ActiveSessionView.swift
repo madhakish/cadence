@@ -741,11 +741,11 @@ private struct ExerciseSection: View {
     /// Previous-performance context, or nil for a first-ever lift.
     let lastTime: String?
     /// This entry's most recent completed top-of-session exposure, scoped by
-    /// `recallEntry` exactly like `lastTime` (program-slot matching for a
-    /// programmed entry, name+role matching for an off-program one).
-    /// Precomputed by `ActiveSessionView` (which owns
-    /// `completedSessions`/`recallEntry`); nil with no prior history. Drives
-    /// both the first-set default weight and its provenance disclosure.
+    /// `recallEntry` exactly like `lastTime`. Precomputed by
+    /// `ActiveSessionView` (which owns `completedSessions`/`recallEntry`); nil
+    /// with no prior history. It may drive a default and its disclosure only
+    /// when `usesAdHocFirstSetFallback` confirms the entry is truly unplanned
+    /// and off-program.
     let adHocExposure: RecentTopExposure?
     let onDropLoad: () -> Void
     /// Marks this exercise as the one being actively worked (drives the bottom bar).
@@ -1397,18 +1397,31 @@ private struct ExerciseSection: View {
             slotCategory: exercise.categoryRaw,
             exerciseType: exercise.typeRaw
         ).weightLb
-        let suggestedLb = ProgramProgression.suggestedAdHocFirstSetTarget(
-            fromLastTopExposure: adHocExposure
-        )?.weightLb ?? catalogLb
+        let usesHistory = ProgramProgression.usesAdHocFirstSetFallback(
+            programRole: entry.programRole,
+            programSlotID: entry.programSlotID,
+            plannedWeightLb: entry.plannedWeightLb
+        )
+        let suggestedLb = usesHistory
+            ? (ProgramProgression.suggestedAdHocFirstSetTarget(
+                fromLastTopExposure: adHocExposure
+            )?.weightLb ?? catalogLb)
+            : catalogLb
         return exercise.type == .barbell ? max(suggestedLb, effectiveBar.lb) : suggestedLb
     }
 
     /// Where the history-based suggestion prefilled into this entry's first
     /// working set came from, so the UI can disclose it instead of leaving a
-    /// history-derived number unexplained. Nil whenever there is no prior
-    /// exposure (the catalog default applied silently, as before).
+    /// history-derived number unexplained. Nil for program/explicit plans and
+    /// whenever there is no prior exposure (the catalog default applied
+    /// silently, as before).
     private var firstSetProvenance: String? {
-        guard let exposure = adHocExposure,
+        guard ProgramProgression.usesAdHocFirstSetFallback(
+                programRole: entry.programRole,
+                programSlotID: entry.programSlotID,
+                plannedWeightLb: entry.plannedWeightLb
+              ),
+              let exposure = adHocExposure,
               ProgramProgression.suggestedAdHocFirstSetTarget(fromLastTopExposure: exposure) != nil
         else { return nil }
         return ProgramProgression.historyProvenanceLabel(exposureDate: exposure.date, asOf: .now)

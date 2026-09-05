@@ -545,7 +545,8 @@ export async function openSession(id) {
     // it (never the silent catalog-default fallback). Mirrors native
     // ActiveSessionView's firstSetProvenance.
     const firstWorkingSet = se.sets.find((set) => !set.isWarmup);
-    const adHocExposure = mostRecentTopExposure(se);
+    const usesAdHocFallback = C.usesAdHocFirstSetFallback(se);
+    const adHocExposure = usesAdHocFallback ? mostRecentTopExposure(se) : null;
     const firstSetProvenance = C.suggestedAdHocFirstSetTarget(adHocExposure)
       ? C.historyProvenanceLabel(adHocExposure.date, Date.now())
       : null;
@@ -854,7 +855,9 @@ export async function openSession(id) {
     const catalogLb = ex
       ? ProgrammingDefaults.recommendation(se.exerciseName, ex.category, ex.type).weightLb
       : 0;
-    const suggested = C.suggestedAdHocFirstSetTarget(mostRecentTopExposure(se));
+    const suggested = C.usesAdHocFirstSetFallback(se)
+      ? C.suggestedAdHocFirstSetTarget(mostRecentTopExposure(se))
+      : null;
     const baseDefaultLb = suggested ? suggested.weightLb : catalogLb;
     const firstSetDefaultLb = ex && ex.type === "barbell"
       ? Math.max(baseDefaultLb, C.barLb(C.barById(se.barId || gymState.value?.defaultBarId)))

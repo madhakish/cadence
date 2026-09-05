@@ -1145,8 +1145,16 @@ for (const [loadBasis, weightLb] of [["bodyweight", 0], ["assisted", 40]]) {
     `${loadBasis} never receives a fabricated weight change, even with room in reserve`);
 }
 
-// ---- ad-hoc suggestion provenance (historyProvenanceLabel) ----
-// Mirrors CadenceCore ProgramProgressionTests' provenance block.
+// ---- ad-hoc suggestion provenance ----
+// Mirrors CadenceCore ProgramProgressionTests' fallback/provenance block.
+ok(C.usesAdHocFirstSetFallback({ programRole: null, programSlotId: null, plannedWeightLb: null }),
+  "an unplanned off-program entry uses the history fallback");
+ok(!C.usesAdHocFirstSetFallback({ programRole: "main", programSlotId: null, plannedWeightLb: null }),
+  "a program role suppresses ad-hoc provenance");
+ok(!C.usesAdHocFirstSetFallback({ programRole: null, programSlotId: "slot-1", plannedWeightLb: null }),
+  "a program slot suppresses ad-hoc provenance");
+ok(!C.usesAdHocFirstSetFallback({ programRole: null, programSlotId: null, plannedWeightLb: 135 }),
+  "an explicit entry-level plan suppresses ad-hoc provenance");
 eq(C.historyProvenanceLabel("2026-03-10T12:00:00Z", "2026-03-10T12:00:00Z"),
   "from your last exposure, today", "same day");
 eq(C.historyProvenanceLabel("2026-03-05T12:00:00Z", "2026-03-10T12:00:00Z"),

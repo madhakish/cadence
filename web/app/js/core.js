@@ -2668,6 +2668,16 @@ export function suggestedAdHocFirstSetTarget(exposure, incrementLb = 5) {
   return { weightLb, reps: exposure.reps };
 }
 
+// Whether an entry's first working set is eligible for the history-aware
+// off-program fallback above. Program identity and an explicit entry-level
+// plan are both authoritative provenance, even when their numeric load happens
+// to equal the historical suggestion. Mirrors ProgramProgression 1:1.
+export function usesAdHocFirstSetFallback(entry) {
+  return entry?.programRole == null
+    && entry?.programSlotId == null
+    && entry?.plannedWeightLb == null;
+}
+
 // A short "where did this number come from" disclosure for a history-based
 // ad-hoc first-set suggestion — the suggestion itself
 // (`suggestedAdHocFirstSetTarget`) is otherwise silent about its origin.

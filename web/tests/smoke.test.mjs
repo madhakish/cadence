@@ -4194,6 +4194,25 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     .find((t) => t.startsWith("from your last exposure"));
   ok(provenance === "from your last exposure, 3w ago",
     `the first working set discloses where its history-based suggestion came from (got ${provenance})`);
+
+  // The same prior slotless exposure must never be claimed as the source of a
+  // programmed load. ProgramSession owns this prescription; a coincidentally
+  // available history suggestion is context, not provenance.
+  const programmedId = await db.Sessions.save({
+    date: new Date().toISOString(), notes: "", isCompleted: false, gymName: null,
+    exercises: [{ order: 0, exerciseName: "Cable Fly", notes: "", phase: null,
+      programRole: "accessory", programSlotId: "fixture-cable-fly-slot",
+      plannedWeightLb: 35, plannedSets: 1, plannedReps: 10,
+      sets: [{ order: 0, weightLb: 35, reps: 10, isWarmup: false, status: "planned",
+        loadBasis: "externalTotal", flags: [], plannedWeightLb: 35, plannedReps: 10,
+        prescriptionBlock: "work" }] }],
+  });
+  await session.openSession(programmedId); await tick();
+  const programmedOverlay = [...document.querySelectorAll("#overlays .overlay")].pop();
+  ok(![...programmedOverlay.querySelectorAll(".sub")]
+    .some((el) => (el.textContent || "").startsWith("from your last exposure")),
+    "a program-prescribed first set never claims ad-hoc history as its provenance");
+  await db.Sessions.del(programmedId);
   await db.Sessions.del(priorId); await db.Sessions.del(hid);
 
   // A never-before-seen off-program exercise has no history to disclose —
