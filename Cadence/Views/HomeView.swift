@@ -40,6 +40,7 @@ struct HomeView: View {
     @State private var coachingMessage: String?
     @State private var recoveryMessage: String?
     @State private var showCoachDetail = false
+    @State private var showActivityLog = false
     @AppStorage(RootView.gymTagLastAutoDayKey) private var gymTagLastShownDay = 0.0
 
     private var settings: AppSettings? { settingsList.first }
@@ -270,6 +271,34 @@ struct HomeView: View {
                     .accessibilityHint("Shows the default membership barcode at full brightness")
                 }
 
+                // Ad-hoc work (#166): real physical work banked on the same
+                // timeline as training, never into a program.
+                Section {
+                    Button { showActivityLog = true } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text("Wood Splitting")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "plus")
+                                    .font(.headline)
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            Text("Log duration, effort, maul and wood counts")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Banks off-program physical work without starting a training session")
+                } header: {
+                    Text("Ad-hoc work")
+                } footer: {
+                    Text("Hard work outside the program. It appears in History but never advances your training cycle or lifting volume.")
+                }
+
                 if let recoveryMessage {
                     Section {
                         Label(recoveryMessage, systemImage: "arrow.triangle.2.circlepath")
@@ -480,6 +509,9 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showGymCard) {
                 GymCardView(gym: defaultGym)
+            }
+            .sheet(isPresented: $showActivityLog) {
+                ActivityQuickLogView()
             }
             .sheet(isPresented: $showCoachDetail) {
                 if let program = activeProgram, let report = coachingReport {

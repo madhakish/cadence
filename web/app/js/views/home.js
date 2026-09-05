@@ -8,6 +8,7 @@ import { coachingReport, applyCoachingRecommendation, coachingDecision } from ".
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, openSession, planningBase, previewProgramPlan, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
 import { gymTagShownOn, markGymTagShown } from "../gym-tag.js";
 import { exerciseDetail } from "./settings.js";
+import { openActivityLog } from "./activity.js";
 
 const barbellPrescriptionView = (achievedLb, targetLb, unit, gym, stationDenomination = null, movementGroup = null) => {
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
@@ -257,6 +258,14 @@ export async function render(host) {
   }
   root.append(list);
   root.append(ui.h("button", { class: "btn ghost wide", text: "Blank session", onClick: async () => openSession(await createBlankSession()) }));
+
+  root.append(ui.h("div", { class: "section-title", text: "Ad-hoc work" }));
+  root.append(ui.h("button", { class: "card row wide adhoc-entry", onClick: () => openActivityLog() },
+    ui.h("div", { class: "lead" },
+      ui.h("span", { class: "title", text: "Wood Splitting" }),
+      ui.h("span", { class: "sub", text: "Duration, effort, maul and wood counts" }),
+      ui.h("span", { class: "sub", text: "History only · never advances training" })),
+    ui.h("span", { class: "adhoc-plus accent", text: "+", "aria-hidden": "true" })));
 
   host.replaceChildren(root);
 

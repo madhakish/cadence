@@ -362,6 +362,26 @@ svg.anatomy { width: 100%; max-width: 430px; color: var(--text); overflow: visib
 .muscle-key strong { font-size: 13px; }
 .muscle-key span { color: var(--muted); }
 
+/* ad-hoc work (#166): physically serious, deliberately outside programming.
+   Entry and history rows are real <button>s so they are keyboard-reachable;
+   the reset keeps them looking like the cards around them. */
+.eyebrow { display: block; color: var(--muted); font-size: 10px; line-height: 1.25; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+button.adhoc-entry, .activity-history-row > button.row { width: 100%; border: 0; color: inherit; font: inherit; cursor: pointer; }
+button.adhoc-entry { text-align: left; border-left: 3px solid var(--accent); }
+.activity-history-row > button.row { background: none; }
+.adhoc-plus { font-size: 28px; font-weight: 500; }
+.activity-intro, .activity-detail-hero { margin: 2px 0 12px; padding: 16px 4px; border-top: 2px solid var(--accent); border-bottom: 1px solid var(--line); }
+.activity-intro h2, .activity-detail-hero h2 { margin: 4px 0 2px; font-size: clamp(27px, 8vw, 38px); line-height: 1.05; letter-spacing: -.025em; }
+.activity-intro p, .activity-detail-hero p { margin: 8px 0 0; }
+.form-grid { display: grid; gap: 4px 12px; }
+.duration-grid, .load-grid, .form-grid.two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.form-grid .full { grid-column: 1 / -1; }
+.sticky-actions { position: sticky; bottom: 0; z-index: 3; display: grid; gap: 7px; padding: 12px 0 calc(8px + var(--safe-bottom)); background: linear-gradient(transparent, var(--bg) 18%); }
+.activity-year { display: flex; flex-wrap: wrap; gap: 12px 20px; border-left: 3px solid var(--accent); }
+.activity-year .sub.full { flex-basis: 100%; margin: 0; }
+.activity-duration-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.activity-boundary { margin: 14px 2px; padding: 10px 0; border-block: 1px solid var(--line); }
+
 /* service-worker update prompt */
 #update-banner {
   position: fixed; left: 12px; right: 12px; bottom: calc(80px + var(--safe-bottom)); z-index: 70;

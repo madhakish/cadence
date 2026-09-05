@@ -32,6 +32,7 @@ const signals = await import("../app/js/views/signals.js");
 const settings = await import("../app/js/views/settings.js");
 const session = await import("../app/js/views/session.js");
 const plates = await import("../app/js/views/plates.js");
+const activity = await import("../app/js/views/activity.js");
 const barbell = await import("../app/js/barbell.js");
 const ui = await import("../app/js/ui.js");
 const C = await import("../app/js/core.js");
@@ -105,6 +106,61 @@ ok((await db.Bodyweight.all()).length === 0 && (await db.Checkins.all()).length 
   "fresh install has no body metrics or health signals");
 await db.ensureSeeded(); // idempotent
 ok((await db.Sessions.completed()).length === 0, "re-seed is a no-op");
+
+// Ad-hoc work uses the ordinary history timeline but owns a deliberately
+// off-program shape: one completed duration set, no bar, role, or program tag
+// [INV-WOOD-WORK-USES-ONE-TIMELINE]. The builder is the web write-site guard,
+// mirroring native ActivitySession.create/update.
+{
+  const wood = await db.Exercises.byName("Wood Splitting");
+  const built = activity.buildActivitySession({
+    kind: "woodSplitting", startDate: new Date("2026-01-17T14:00:00Z"),
+    durationSeconds: 7_200, sessionRPE: 8.5, loadLb: 8,
+    enteredUnit: "lb", notes: "Oak rounds",
+    woodSplitting: { rounds: 55, splitPieces: 15, estimatedStrikes: 340, cordVolume: 0.25 },
+  }, wood);
+  const set = activity.activitySet(built);
+  ok(built.isCompleted && built.programTag === null && built.activity.kind === "woodSplitting"
+    && built.exercises.length === 1 && set.status === "completed" && set.durationSeconds === 7_200,
+  "the quick logger builds one completed off-program duration exposure");
+  ok(set.weightLb === 8 && set.enteredUnit === "lb" && set.reps === 0 && set.loadBasis === "externalTotal",
+    "maul weight remains an exact implement fact instead of lifting volume");
+  ok(C.activityWorkload(activity.activityDurationSeconds(built), built.activity.sessionRPE)?.arbitraryUnits === 1_020,
+    "wood workload is duration × session effort, independent of maul weight");
+  const edited = activity.buildActivitySession({
+    kind: "woodSplitting", startDate: new Date("2026-01-17T14:00:00Z"),
+    durationSeconds: 7_500, sessionRPE: 9, loadLb: C.lbFromKg(4), enteredUnit: "kg",
+    notes: "More oak", woodSplitting: { rounds: 60 },
+  }, wood, built);
+  ok(edited.id === built.id && activity.activitySet(edited).enteredUnit === "kg"
+    && edited.activity.rounds === 60 && edited.activity.splitPieces === null,
+  "editing preserves identity and exact entered unit without inventing uncounted wood facts");
+  const rejects = (input) => {
+    try { activity.buildActivitySession(input, wood); return false; } catch { return true; }
+  };
+  ok(rejects({ kind: "woodSplitting", startDate: new Date(), durationSeconds: 0 }),
+    "ad-hoc work refuses a zero-duration record");
+  ok(rejects({ kind: "woodSplitting", startDate: new Date(), durationSeconds: 60, sessionRPE: 11 }),
+    "ad-hoc work refuses an out-of-contract session RPE");
+  ok(rejects({ kind: "woodSplitting", startDate: new Date(), durationSeconds: 60, woodSplitting: { rounds: -1 } }),
+    "ad-hoc work refuses a negative count, matching the backup validators");
+  ok(rejects({ kind: "hiking", startDate: new Date(), durationSeconds: 60 }),
+    "ad-hoc work refuses an unregistered kind");
+  let driftedRejected = false;
+  try {
+    activity.buildActivitySession({ kind: "woodSplitting", startDate: new Date(), durationSeconds: 60 }, wood,
+      { ...built, exercises: [...built.exercises, { exerciseName: "Back Squat", sets: [] }] });
+  } catch { driftedRejected = true; }
+  ok(driftedRejected, "editing refuses a record that drifted from the one-entry, one-set shape instead of truncating it");
+  ok(activity.activityDurationLabel(59 * 60 + 31) === "59 min",
+    "duration labels floor to whole minutes like native, never rounding 59m31s up to an hour");
+  await activity.openActivityLog(); await tick();
+  const activityOverlay = document.querySelector("#overlays .overlay");
+  ok(activityOverlay?.textContent.includes("Physical work, not a training session")
+    && activityOverlay?.textContent.includes("never advances a cycle"),
+  "the logger states its off-program boundary before anything is banked");
+  activityOverlay?.querySelector(".overlay-head button")?.click();
+}
 
 // Recover an install missing its seed stamp without touching user-owned data.
 await withCleanup(async (keep) => {
