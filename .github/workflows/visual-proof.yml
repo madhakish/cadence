@@ -1,5 +1,8 @@
 name: iPhone visual proof
 
+# Temporary PR trigger captures the one-time before/after evidence. The final
+# checked-in workflow is manual-only so ordinary PRs retain one gated iOS build.
+
 on:
   pull_request:
     paths:
