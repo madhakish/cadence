@@ -308,7 +308,7 @@ export function muscleBlurb(profile) {
 // ---- web-only SVG rendering ------------------------------------------------
 const NS = "http://www.w3.org/2000/svg";
 const PRIMARY_COLOR = "#e0453a";   // red — primary movers
-const SECONDARY_COLOR = "#a6abb2"; // forged steel — supporting
+const SECONDARY_COLOR = "var(--forged-steel)"; // shared forged-steel token
 const smoothPath = (points) => {
   if (points.length < 3) return "";
   const midpoint = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];

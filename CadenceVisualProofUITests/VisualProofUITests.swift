@@ -58,10 +58,22 @@ final class VisualProofUITests: XCTestCase {
     func test04PlateCalculatorHero() {
         app.buttons["Plate calculator"].tap()
         XCTAssertTrue(element("plate-calculator-screen").waitForExistence(timeout: 6))
+        let target = app.textFields["plate-target"]
+        XCTAssertTrue(target.waitForExistence(timeout: 3))
+        target.tap()
+        target.typeText("139")
+        app.swipeDown()
         XCTAssertTrue(app.staticTexts["ACHIEVED — BAR INCLUDED"].waitForExistence(timeout: 3))
         capture("after-07-plate-calculator-iphone")
 
-        app.buttons["Expand"].tap()
+        // A typical stack fits the phone with no redundant expand control.
+        XCTAssertFalse(element("expand-loaded-bar").exists)
+        target.tap()
+        target.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 3) + "1500")
+        app.swipeDown()
+        let expand = element("expand-loaded-bar")
+        XCTAssertTrue(expand.waitForExistence(timeout: 5))
+        expand.tap()
         XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
         capture("after-08-expanded-bar-iphone")
     }
@@ -79,6 +91,20 @@ final class VisualProofUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(activitySummary.waitForExistence(timeout: 5))
         capture("after-10-history-ad-hoc-iphone")
+    }
+
+    func test06ComplementaryTrainingFocusIsTruthful() {
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        let complementary = app.buttons["exercise-info-Romanian Deadlift"]
+        for _ in 0..<8 where !complementary.isHittable { app.swipeUp() }
+        XCTAssertTrue(complementary.waitForExistence(timeout: 4))
+        complementary.tap()
+        XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
+        let focus = element("training-focus-context")
+        XCTAssertTrue(focus.waitForExistence(timeout: 3))
+        XCTAssertEqual(focus.label, "Complementary lift · Hypertrophy focus")
+        XCTAssertFalse(app.staticTexts["Target 2–3 reps left. Adjust the next set if the load misses that range."].exists)
     }
 
     private func element(_ identifier: String) -> XCUIElement {

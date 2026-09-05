@@ -72,34 +72,33 @@ struct SettingsView: View {
                     // today's program role first, then movement type
                     // (RestDefaults in CadenceCore). Mirrors web settings.
                     Section {
-                        DisclosureGroup("Rest guidance") {
-                            Text("PROGRAM ROLE")
-                                .font(.caption.bold())
-                                .tracking(0.7)
-                                .foregroundStyle(.secondary)
-                            Stepper("Complementary lifts: \(mmss(settings.secondaryRestSeconds))",
-                                    value: bindable.secondaryRestSeconds, in: 0...600, step: 15)
-                            Stepper("Accessories: \(mmss(settings.accessoryRestSeconds))",
-                                    value: bindable.accessoryRestSeconds, in: 0...600, step: 15)
-                            Text("MOVEMENT FALLBACK")
-                                .font(.caption.bold())
-                                .tracking(0.7)
-                                .foregroundStyle(.secondary)
-                            Stepper("Squat & deadlift mains: \(mmss(settings.mainCompoundRestSeconds))",
-                                    value: bindable.mainCompoundRestSeconds, in: 0...600, step: 15)
-                            Stepper("Olympic lifts: \(mmss(settings.olympicRestSeconds))",
-                                    value: bindable.olympicRestSeconds, in: 0...600, step: 15)
-                            Stepper("Other main lifts: \(mmss(settings.mainUpperRestSeconds))",
-                                    value: bindable.mainUpperRestSeconds, in: 0...600, step: 15)
-                            Text("An exercise-specific rest value wins. 0:00 disables that fallback.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("Rest guidance").font(.headline)
+                        Text("PROGRAM ROLE")
+                            .font(.caption.bold())
+                            .tracking(0.7)
+                            .foregroundStyle(.secondary)
+                        Stepper("Complementary lifts: \(mmss(settings.secondaryRestSeconds))",
+                                value: bindable.secondaryRestSeconds, in: 0...600, step: 15)
+                        Stepper("Accessories: \(mmss(settings.accessoryRestSeconds))",
+                                value: bindable.accessoryRestSeconds, in: 0...600, step: 15)
+                        Text("MOVEMENT FALLBACK")
+                            .font(.caption.bold())
+                            .tracking(0.7)
+                            .foregroundStyle(.secondary)
+                        Stepper("Squat & deadlift mains: \(mmss(settings.mainCompoundRestSeconds))",
+                                value: bindable.mainCompoundRestSeconds, in: 0...600, step: 15)
+                        Stepper("Olympic lifts: \(mmss(settings.olympicRestSeconds))",
+                                value: bindable.olympicRestSeconds, in: 0...600, step: 15)
+                        Stepper("Other main lifts: \(mmss(settings.mainUpperRestSeconds))",
+                                value: bindable.mainUpperRestSeconds, in: 0...600, step: 15)
+                        Text("An exercise-specific rest value wins. 0:00 disables that fallback.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
                         Toggle("Haptics", isOn: bindable.haptics)
                         Toggle("Show gym tag on first launch of the day",
                                isOn: bindable.gymTagFirstLaunchOfDay)
-                        DisclosureGroup("Profile & Health") {
+                        Text("Profile & Health").font(.headline)
                         Picker("Year of birth", selection: bindable.birthYear) {
                             Text("Not set").tag(0)
                             ForEach(Self.selectableBirthYears, id: \.self) { year in
@@ -131,7 +130,6 @@ struct SettingsView: View {
                             Text("Write and compare are separate permissions. Health never edits a logged workout.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                        }
                     } header: {
                         Text("Training behavior")
                     } footer: {
@@ -170,53 +168,51 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    DisclosureGroup("Standalone progression") {
-                        if tracks.isEmpty {
-                            Text("No standalone lifts configured.").foregroundStyle(.secondary)
-                        }
-                        ForEach(tracks) { track in
-                            NavigationLink {
-                                TrackEditorView(track: track)
-                            } label: {
-                                VStack(alignment: .leading) {
-                                    Text(track.exerciseName)
-                                    Text("+\(settingsList.unitDisplay.format(lb: track.incrementLb)) per \(track.mode == .cycle ? "cycle" : "session") · next: \(settingsList.unitDisplay.format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                    Text("Standalone progression").font(.headline)
+                    if tracks.isEmpty {
+                        Text("No standalone lifts configured.").foregroundStyle(.secondary)
+                    }
+                    ForEach(tracks) { track in
+                        NavigationLink {
+                            TrackEditorView(track: track)
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(track.exerciseName)
+                                Text("+\(settingsList.unitDisplay.format(lb: track.incrementLb)) per \(track.mode == .cycle ? "cycle" : "session") · next: \(settingsList.unitDisplay.format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
-                    DisclosureGroup("Training breaks") {
-                        if !trainingIntervals.isEmpty {
-                            Text(declaredBreakDaysSummary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        ForEach(trainingIntervals) { interval in
-                            NavigationLink {
-                                IntervalEditorView(interval: interval)
-                            } label: {
-                                VStack(alignment: .leading) {
-                                    Text(interval.kind.name)
-                                    Text(Self.intervalRangeLabel(interval))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        Button {
-                            let today = Calendar.current.startOfDay(for: .now)
-                            let interval = TrainingInterval(startDate: today, endDate: today)
-                            context.insert(interval)
-                            PersistenceErrorCenter.shared.save(context, operation: "Adding the break")
-                        } label: {
-                            Label("Add break", systemImage: "plus")
-                        }
-                        Text("Breaks keep a chosen gap from reading as a lapse. Work during active recovery stays in history but never advances progression or PR baselines.")
+                    Text("Training breaks").font(.headline)
+                    if !trainingIntervals.isEmpty {
+                        Text(declaredBreakDaysSummary)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    ForEach(trainingIntervals) { interval in
+                        NavigationLink {
+                            IntervalEditorView(interval: interval)
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(interval.kind.name)
+                                Text(Self.intervalRangeLabel(interval))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Button {
+                        let today = Calendar.current.startOfDay(for: .now)
+                        let interval = TrainingInterval(startDate: today, endDate: today)
+                        context.insert(interval)
+                        PersistenceErrorCenter.shared.save(context, operation: "Adding the break")
+                    } label: {
+                        Label("Add break", systemImage: "plus")
+                    }
+                    Text("Breaks keep a chosen gap from reading as a lapse. Work during active recovery stays in history but never advances progression or PR baselines.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     NavigationLink("Exercise library") { LibraryView() }
                 } header: {
                     Text("Programming & library")
@@ -225,59 +221,57 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    DisclosureGroup("Export") {
-                        Button("Prepare JSON export") {
-                            do { exportJSON = try ExportService.jsonData(context: context) }
-                            catch {
-                                exportJSON = nil
-                                importAlert = "Couldn't prepare the JSON export: \(error.localizedDescription)"
-                            }
-                        }
-                        if let exportJSON {
-                            ShareLink(
-                                item: TransferableFile(data: exportJSON, filename: "cadence-export.json"),
-                                preview: SharePreview("cadence-export.json")
-                            ) {
-                                Label("Share JSON", systemImage: "square.and.arrow.up")
-                            }
-                        }
-                        Button("Prepare CSV export") {
-                            do { exportCSV = try ExportService.csvData(context: context) }
-                            catch {
-                                exportCSV = nil
-                                importAlert = "Couldn't prepare the CSV export: \(error.localizedDescription)"
-                            }
-                        }
-                        if let exportCSV {
-                            ShareLink(
-                                item: TransferableFile(data: exportCSV, filename: "cadence-sets.csv"),
-                                preview: SharePreview("cadence-sets.csv")
-                            ) {
-                                Label("Share CSV", systemImage: "square.and.arrow.up")
-                            }
+                    Text("Export").font(.headline)
+                    Button("Prepare JSON export") {
+                        do { exportJSON = try ExportService.jsonData(context: context) }
+                        catch {
+                            exportJSON = nil
+                            importAlert = "Couldn't prepare the JSON export: \(error.localizedDescription)"
                         }
                     }
-                    DisclosureGroup("Local recovery") {
-                        Button("Checkpoint now") {
-                            do {
-                                try BackupCheckpointService.create(context: context, reason: "manual")
-                                importAlert = "Local recovery checkpoint created."
-                            } catch {
-                                BackupCheckpointService.recordFailure(error)
-                                importAlert = "Couldn't create a recovery checkpoint: \(error.localizedDescription)"
-                            }
+                    if let exportJSON {
+                        ShareLink(
+                            item: TransferableFile(data: exportJSON, filename: "cadence-export.json"),
+                            preview: SharePreview("cadence-export.json")
+                        ) {
+                            Label("Share JSON", systemImage: "square.and.arrow.up")
                         }
-                        if !checkpointLastSuccess.isEmpty {
-                            Button("Restore latest checkpoint") { importAlert = restoreLatestCheckpoint() }
-                            Text("Latest: \(checkpointLastSuccess)").font(.caption).foregroundStyle(.secondary)
-                        }
-                        if !checkpointLastFailure.isEmpty {
-                            Text("Last checkpoint failed: \(checkpointLastFailure)").font(.caption).foregroundStyle(.red)
-                        }
-                        Text("Cadence keeps the last three local checkpoints. Deleting the app removes them; exported JSON is the durable backup.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
+                    Button("Prepare CSV export") {
+                        do { exportCSV = try ExportService.csvData(context: context) }
+                        catch {
+                            exportCSV = nil
+                            importAlert = "Couldn't prepare the CSV export: \(error.localizedDescription)"
+                        }
+                    }
+                    if let exportCSV {
+                        ShareLink(
+                            item: TransferableFile(data: exportCSV, filename: "cadence-sets.csv"),
+                            preview: SharePreview("cadence-sets.csv")
+                        ) {
+                            Label("Share CSV", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                    Text("Local recovery").font(.headline)
+                    Button("Checkpoint now") {
+                        do {
+                            try BackupCheckpointService.create(context: context, reason: "manual")
+                            importAlert = "Local recovery checkpoint created."
+                        } catch {
+                            BackupCheckpointService.recordFailure(error)
+                            importAlert = "Couldn't create a recovery checkpoint: \(error.localizedDescription)"
+                        }
+                    }
+                    if !checkpointLastSuccess.isEmpty {
+                        Button("Restore latest checkpoint") { importAlert = restoreLatestCheckpoint() }
+                        Text("Latest: \(checkpointLastSuccess)").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if !checkpointLastFailure.isEmpty {
+                        Text("Last checkpoint failed: \(checkpointLastFailure)").font(.caption).foregroundStyle(.red)
+                    }
+                    Text("Cadence keeps the last three local checkpoints. Deleting the app removes them; exported JSON is the durable backup.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Button {
                         showImporter = true
                     } label: {

@@ -205,14 +205,20 @@ for (const track of [
     "nonempty all-disabled inventory remains an intentional bar-only rack");
   ok(barbell.stationPlates("lb", barOnlyRack).length === 0,
     "bar-only intent survives in the loadout renderer");
-  const fullBar = barbell.barbellSVG(135, "lb", C.BARS.bar45lb, legacyRack, null, null, "full").svg;
+  const solveAt = (targetLb, rack = legacyRack) => C.solve(
+    targetLb, C.BARS.bar45lb, barbell.stationPlates("lb", rack), 10,
+    rack.collarWeightLb || 0, rack.loadingPolicy || "closest",
+  );
+  const fullRendered = barbell.barbellSVG(solveAt(135), "full");
+  const fullBar = fullRendered.svg;
   ok(fullBar.classList.contains("full") && fullBar.querySelectorAll("rect").length > 6,
     "plate calculator can render the solved load across the complete mirrored bar");
   const fullPlateRects = [...fullBar.querySelectorAll("rect")].filter((rect) => rect.getAttribute("stroke"));
   ok(fullPlateRects.length > 0 && fullPlateRects.length % 2 === 0,
     "every solved plate is drawn once on each side");
-  const mixedBar = barbell.barbellSVG(195, "lb", C.BARS.bar45lb,
-    { ...legacyRack, collarWeightLb: 0 }, null, null, "full").svg;
+  const noCollarRack = { ...legacyRack, collarWeightLb: 0 };
+  const mixedSolution = solveAt(195, noCollarRack);
+  const mixedBar = barbell.barbellSVG(mixedSolution, "full").svg;
   const leftStack = [...mixedBar.querySelectorAll('.barbell-plate[data-side="left"]')];
   const rightStack = [...mixedBar.querySelectorAll('.barbell-plate[data-side="right"]')];
   const plateValues = (stack) => stack.map((plate) => Number(plate.dataset.plateValue));
@@ -223,8 +229,7 @@ for (const track of [
   ok(plateXs(leftStack).every((x, index, xs) => index === 0 || x < xs[index - 1])
     && plateXs(rightStack).every((x, index, xs) => index === 0 || x > xs[index - 1]),
   "left and right sleeve coordinates mirror while preserving the same collar-first load order");
-  const bumperBar = barbell.barbellSVG(195, "lb", C.BARS.bar45lb,
-    { ...legacyRack, collarWeightLb: 0 }, null, null, "full", "bumper").svg;
+  const bumperBar = barbell.barbellSVG(mixedSolution, "full", "bumper").svg;
   const bumperRight = [...bumperBar.querySelectorAll('.barbell-plate[data-side="right"]')];
   ok(Number(bumperRight[0].getAttribute("height")) === Number(bumperRight[1].getAttribute("height"))
     && Number(rightStack[0].getAttribute("height")) > Number(rightStack[1].getAttribute("height")),
@@ -239,8 +244,9 @@ for (const track of [
     "adjacent denominations use staggered label rails instead of printing on top of one another");
   ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
     "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
-  ok(fullBar.getAttribute("viewBox") === "0 0 420 124",
-    "the complete bar has enough vertical canvas for plates to be legible on a phone");
+  ok(fullBar.getAttribute("viewBox") === `0 0 ${fullRendered.minimumLegibleWidth} 124`
+    && fullRendered.minimumLegibleWidth <= 390,
+  "a normal complete bar derives a legible width that fits the primary phone viewport");
   ok([...fullBar.querySelectorAll(".barbell-plate-body")].every((plate) =>
     plate.tabIndex === 0 && plate.dataset.plateDenomination && plate.getAttribute("aria-label")?.includes("plate")),
   "every visible plate exposes its exact denomination to keyboard and assistive technology");
@@ -251,15 +257,15 @@ for (const track of [
   "calculator rows use a large face-on plate key with visible denomination and unit");
   ok(barbell.plateBadgeSVG({ value: 1.25, unit: "kg" }, "steel").textContent.includes("1.25"),
     "fractional plate badges preserve the exact denomination instead of rounding to one decimal");
-  const collarsOnly = barbell.barbellSVG(50, "lb", C.BARS.bar45lb, legacyRack,
-    null, null, "full").svg;
+  const collarSolution = solveAt(50);
+  const collarsOnly = barbell.barbellSVG(collarSolution, "full").svg;
   ok(collarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 2,
     "a collar-only full bar draws one lock collar on each sleeve");
   ok(collarsOnly.textContent.includes("bar + collars") && !collarsOnly.textContent.includes("bar only")
     && collarsOnly.getAttribute("aria-label").includes("with collars, no plates")
     && !collarsOnly.getAttribute("aria-label").includes("bar only"),
   "a collar-only load is labeled as bar plus collars visually and accessibly");
-  const compactCollarsOnly = barbell.barbellSVG(50, "lb", C.BARS.bar45lb, legacyRack).svg;
+  const compactCollarsOnly = barbell.barbellSVG(collarSolution).svg;
   ok(compactCollarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 1
     && compactCollarsOnly.textContent.includes("bar + collars"),
   "the compact one-sleeve load also shows its collar instead of claiming bar only");
@@ -724,11 +730,77 @@ for (let i = 0; i < 10; i++) {
   await db.Settings.save(s);
 }
 
+// The current lift may be emphasized, but its position remains authored. Once
+// exercise 1 is resolved, it collapses above exercise 2 instead of producing
+// the misleading visual sequence 2,1,3,4.
+{
+  const prog = await db.Programs.active();
+  const day = [...prog.days].sort((a, b) => a.order - b.order)[0];
+  const sid = await session.createSessionFromProgramDay(prog, day);
+  const workout = await db.Sessions.get(sid);
+  workout.exercises.sort((a, b) => a.order - b.order);
+  for (const set of workout.exercises[0].sets || []) if (!set.isWarmup) set.status = "completed";
+  await db.Sessions.save(workout);
+  await session.openSession(sid); await tick();
+  const logger = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const prior = logger.querySelector("details.prior-exercises");
+  const current = logger.querySelector(".exercise-card.emphasized");
+  ok(prior?.textContent.includes(workout.exercises[0].exerciseName)
+      && current?.getAttribute("aria-label")?.startsWith(workout.exercises[1].exerciseName),
+  "resolved authored work collapses above the current exercise without being reordered");
+  ok((prior?.compareDocumentPosition(current) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "DOM and visual order both keep earlier exercises before the current lift");
+  const moveUp = [...(current?.querySelectorAll("button") || [])]
+    .find((button) => button.getAttribute("aria-label") === `Move ${workout.exercises[1].exerciseName} up`);
+  ok(moveUp && !moveUp.disabled, "move controls reflect the authored index shown by the disclosure");
+  moveUp?.click(); await tick();
+  const repainted = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  ok(!repainted.querySelector("details.prior-exercises")
+      && repainted.querySelector(".exercise-card.emphasized")?.getAttribute("aria-label")
+        ?.startsWith(workout.exercises[1].exerciseName),
+  "moving the current lift upward updates the represented authored order immediately");
+  repainted.querySelector(".overlay-head button")?.click(); await tick();
+  await db.Sessions.del(sid);
+}
+
+{
+  const gym = await db.Gyms.default();
+  const kgGym = {
+    ...gym,
+    defaultBarId: C.barId(C.BARS.bar45lb),
+    collarWeightLb: 0,
+    loadingPolicy: "closest",
+    plateToggles: C.ALL_STANDARD.map((plate) => ({ ...plate, enabled: plate.unit === "kg" })),
+  };
+  const exercise = { type: "barbell", stationDenomination: "kg" };
+  const physical = (targetLb) => C.solve(targetLb, C.BARS.bar45lb, C.STANDARD_KG).totalLb;
+  const sets = [
+    { isWarmup: true, status: "completed", weightLb: 45 },
+    { isWarmup: true, status: "completed", weightLb: physical(89) },
+    { isWarmup: false, status: "completed", weightLb: physical(139) },
+    { isWarmup: false, status: "planned", weightLb: physical(139) },
+    { isWarmup: false, status: "planned", weightLb: physical(149) },
+  ];
+  ok(sets.every((set) => {
+    const solution = session.plateSolutionForSet(set, C.BARS.bar45lb, kgGym, exercise);
+    const rendered = barbell.barbellSVG(solution, set.isWarmup ? "compact" : "full");
+    return rendered.solution === solution && Math.abs(solution.totalLb - set.weightLb) < 1e-8;
+  }),
+  "every warmup/completed/current/upcoming fixture diagram uses the exact load recorded on its set");
+}
+
 // ---- render every tab without throwing ----
 for (const [name, view] of [["home", home], ["program", programView], ["history", history], ["body", body], ["signals", signals], ["settings", settings]]) {
   try { await view.render(host()); ok(host().childElementCount > 0, `${name} rendered`); }
   catch (e) { ok(false, `${name} threw: ${e.message}`); }
 }
+const settingsGroups = [...host().querySelectorAll("section.settings-group")];
+ok(settingsGroups.length === 6
+    && settingsGroups.map((group) => group.getAttribute("aria-label")).join("|")
+      === "Gym & equipment|Units & loading|Training behavior|Appearance & accessibility|Programming & library|Data, import, export & backup",
+"settings exposes six task-oriented sections backed by actual product capabilities");
+ok(settingsGroups.every((group) => !group.matches("details") && group.querySelector("input, select, button, a")),
+  "settings controls are one tap from the page rather than hidden behind nested doors");
 
 // ---- style-aware labels and the exposure preview render (#105, #106) -------
 // Today used to print a Volume/Load/Peak name against every slot on the screen,
@@ -1094,6 +1166,31 @@ ok(session.complementaryEffortCueForEntry(
 ok(session.complementaryEffortCueForEntry(
   { programRole: "complementary", prescriptionStyle: "automatic" }, { movementGroup: "hinge" }, null,
 ) === null, "an orphaned automatic session stays silent when its focus cannot be recovered");
+
+{
+  const deadlift = await db.Exercises.byName("Deadlift");
+  const gym = await db.Gyms.default();
+  settings.exerciseDetail(deadlift, {
+    sessionEntry: {
+      exerciseName: "Deadlift", programRole: "complementary", prescriptionStyle: "automatic",
+      barId: gym.defaultBarId, targetWeightLb: 185,
+      sets: [{ order: 0, weightLb: 185, targetWeightLb: 185, enteredUnit: "lb",
+        reps: 8, isWarmup: false, status: "planned" }],
+    },
+    sessionGym: gym,
+    sessionProgramFocus: "hypertrophy",
+    restSeconds: 120,
+  });
+  await tick();
+  const pane = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const focusContext = pane.querySelector(".training-focus-context");
+  ok(focusContext?.textContent === "Complementary lift · Hypertrophy focus"
+      && focusContext.getAttribute("aria-label")?.includes("Hypertrophy focus"),
+  "exercise pane names the complementary relationship and its originating training focus");
+  ok(!pane.textContent.includes("2–3 reps left"),
+    "hypertrophy complementary work is not mislabeled with the strength effort contract");
+  pane.querySelector(".overlay-head button")?.click(); await tick();
+}
 
 // ---- full session flow: start Deadlift (245 target snapped to achieved load), complete, expect PR + advance ----
 // First prove untouched prescriptions are not performed work.
@@ -3532,7 +3629,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
     "face pulls highlight rear delts instead of the generic shoulder cap");
   ok(svg.querySelectorAll('path[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
-  ok(svg.querySelectorAll('path[fill="#a6abb2"]').length >= 1,
+  ok(svg.querySelectorAll('path[fill="var(--forged-steel)"]').length >= 1,
     "supporting muscles use the restrained forged-steel treatment");
   ok(svg.querySelectorAll("image.anatomy-region-mask.primary").length >= 2
     && svg.querySelectorAll("image.anatomy-region-mask.supporting").length >= 1,

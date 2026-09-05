@@ -1,6 +1,5 @@
-// Compact one-side barbell graphic: renders the actual loaded plates for a
-// weight at a given station (lb rack vs kg platform), coloured to the gym scheme.
-// Reuses the plate solver + colour/size tokens from core.js.
+// Shared compact/full barbell graphics. Callers resolve the rack through core;
+// this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -64,7 +63,7 @@ export function prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, s
 const plateWidth = (plate, style, scale = 1) => {
   const base = style === "bumper" ? 4.5 + 8.5 * C.plateThicknessFactor(plate, style)
     : 3.2 + 5 * C.plateThicknessFactor(plate, style);
-  return Math.max(style === "bumper" ? 4.2 : 3.1, base * scale);
+  return Math.max(style === "bumper" ? 4.2 : 3.1, base) * scale;
 };
 
 const addPlateGradients = (defs, style) => {
@@ -135,20 +134,14 @@ const appendPlate = (svg, plate, { x, y, width, height, side, style, stackIndex 
   }
 };
 
-// Returns { svg, solution }. svg is a per-side barbell (heaviest plate inboard).
-// `bar` is explicit (selectable); `unit` only chooses the plate denominations.
-// Pass `preSolved` to DRAW an existing solution (or user-entered stack) instead
-// of re-solving — the plate calculator's hero must match its own answer, which
-// may span both unit systems. `plateStyle` changes physical geometry as well as
-// the kg change-plate colour: full-diameter rubber bumpers vs calibrated steel.
-export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDenomination = null,
-  presentation = "compact", plateStyle = "steel") {
-  const solution = preSolved || C.solve(weightLb, bar, stationPlates(unit, gym, stationDenomination), 10,
-    gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
-  // Views consume this same solution for totals and labels. Stamp the bar on
-  // the authoritative object once instead of asking every caller to remember
-  // which independently selected bar produced the stack.
-  if (!solution.bar) solution.bar = bar;
+// Render a domain-produced solution verbatim. Solving, summing, ordering, and
+// rack selection belong to core/callers; this function deliberately has no
+// target or inventory arguments with which it could manufacture a second truth.
+export function barbellSVG(solution, presentation = "compact", plateStyle = "steel") {
+  if (!solution?.bar || !Array.isArray(solution?.perSide)) {
+    throw new TypeError("barbellSVG requires a complete plate solution");
+  }
+  const bar = solution.bar;
   const plates = [];
   for (const pc of solution.perSide) for (let i = 0; i < pc.count; i += 1) plates.push(pc.plate);
   const barLabel = C.barLabel(bar);
@@ -157,7 +150,14 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     : solution.collarLb > 0 ? `${barLabel} with collars, no plates` : `${barLabel}, bar only`;
 
   if (presentation === "full") {
-    const W = 420, H = 124, midY = H / 2, shoulder = 100, rightShoulder = W - shoulder;
+    const nominalGap = plateStyle === "bumper" ? 1.05 : .75;
+    const nominalWidths = plates.map((plate) => plateWidth(plate, plateStyle));
+    const nominalTotal = nominalWidths.reduce((sum, width) => sum + width, 0)
+      + Math.max(0, plates.length - 1) * nominalGap;
+    const minimumLegibleWidth = Math.max(320, 204 + 2 * nominalTotal);
+    const W = minimumLegibleWidth, H = 124, midY = H / 2;
+    const shoulder = Math.min(W / 2 - 84, Math.max(76, nominalTotal + 18));
+    const rightShoulder = W - shoulder;
     const svg = el("svg", { class: `barbell full ${plateStyle}`, viewBox: `0 0 ${W} ${H}`,
       preserveAspectRatio: "xMidYMid meet", role: "img",
       "aria-label": `${plateStyle === "bumper" ? "Bumper" : "Steel"} barbell: ${accessibilityLoad}` });
@@ -182,10 +182,6 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
       el("circle", { cx: W - 8, cy: midY, r: 3, fill: "#6c727a" }));
 
     const available = shoulder - 18;
-    const nominalGap = plateStyle === "bumper" ? 1.05 : .75;
-    const nominalWidths = plates.map((plate) => plateWidth(plate, plateStyle));
-    const nominalTotal = nominalWidths.reduce((sum, width) => sum + width, 0)
-      + Math.max(0, plates.length - 1) * nominalGap;
     const scale = nominalTotal > available ? available / nominalTotal : 1;
     const widths = plates.map((plate) => plateWidth(plate, plateStyle, scale));
     const gap = Math.max(.45, nominalGap * scale);
@@ -217,7 +213,7 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
       t.textContent = solution.collarLb > 0 ? "bar + collars" : "bar only";
       svg.append(t);
     }
-    return { svg, solution, bar };
+    return { svg, solution, bar, minimumLegibleWidth, baseLabelSize: 9 };
   }
 
   const H = 46, gap = plateStyle === "bumper" ? 1 : .7, sleeve = 18;
@@ -256,31 +252,71 @@ export function barbellSVG(weightLb, unit, bar, gym, preSolved = null, stationDe
     t.textContent = solution.collarLb > 0 ? "bar + collars" : "bar only";
     svg.append(t);
   }
-  return { svg, solution, bar };
+  return { svg, solution, bar, minimumLegibleWidth: W, baseLabelSize: 5.2 };
 }
 
-// One responsive shell for every complete-bar presentation. It preserves a
-// minimum physical drawing size and exposes horizontal keyboard/touch scroll
-// when the viewport is too narrow; callers may add an expanded-screen action
-// without duplicating or re-solving the loadout.
-export function barbellStage(rendered, { caption = "", emphasis = "standard" } = {}) {
+// One responsive shell for every complete-bar presentation. Inline stages fit
+// their container, keep denomination text at a legible physical size, and show
+// Expand only when the solution-derived natural width does not fit. The focused
+// expanded screen alone may scroll at natural scale.
+export function barbellStage(rendered, {
+  caption = "", emphasis = "standard", onExpand = null, containerWidth = null,
+} = {}) {
   const stage = document.createElement("div");
   stage.className = `barbell-stage ${emphasis}`;
   stage.tabIndex = 0;
   stage.setAttribute("role", "group");
-  stage.setAttribute("aria-label", "Barbell loading diagram; scroll horizontally if needed");
+  stage.setAttribute("aria-label", "Barbell loading diagram");
   const track = document.createElement("div");
   track.className = "barbell-stage-track";
+  track.style.setProperty("--barbell-natural-width", `${rendered.minimumLegibleWidth}px`);
   track.append(rendered.svg);
   stage.append(track);
-  if (caption) {
-    const note = document.createElement("div");
-    note.className = "sub centered barbell-caption";
-    note.textContent = caption;
-    stage.append(note);
+
+  const footer = document.createElement("div");
+  footer.className = "barbell-stage-footer";
+  if (caption) footer.append(uiText("div", "sub barbell-caption", caption));
+  const expand = onExpand ? uiText("button", "btn ghost sm barbell-expand", "Expand") : null;
+  if (expand) {
+    expand.type = "button";
+    expand.hidden = true;
+    expand.setAttribute("aria-label", "Expand loaded bar");
+    expand.addEventListener("click", onExpand);
+    footer.append(expand);
+  }
+  if (footer.childNodes.length) stage.append(footer);
+
+  const syncLegibility = (measuredWidth = null) => {
+    const width = Number.isFinite(measuredWidth) ? measuredWidth : stage.getBoundingClientRect().width;
+    if (!(width > 0)) return;
+    const expanded = emphasis === "expanded";
+    const scale = expanded ? 1 : Math.min(1, width / rendered.minimumLegibleWidth);
+    for (const label of rendered.svg.querySelectorAll(".barbell-plate-label")) {
+      label.setAttribute("font-size", String(rendered.baseLabelSize / scale));
+    }
+    const constrained = !expanded && width + .5 < rendered.minimumLegibleWidth;
+    stage.classList.toggle("constrained", constrained);
+    if (expand) expand.hidden = !constrained;
+    stage.setAttribute("aria-label", constrained
+      ? "Barbell loading diagram; expanded view available"
+      : "Barbell loading diagram");
+  };
+  syncLegibility(containerWidth);
+  if (typeof ResizeObserver !== "undefined" && containerWidth == null) {
+    const observer = new ResizeObserver((entries) => {
+      syncLegibility(entries[0]?.contentRect?.width ?? null);
+    });
+    observer.observe(stage);
   }
   return stage;
 }
+
+const uiText = (tag, className, value) => {
+  const node = document.createElement(tag);
+  node.className = className;
+  node.textContent = value;
+  return node;
+};
 
 const dom = (tag, className = "", text = "") => {
   const node = document.createElement(tag);

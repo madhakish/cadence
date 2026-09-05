@@ -7,7 +7,7 @@ import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BA
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
-import { barbellSVG, barbellStage, loadoutSummary, mixedEquipmentNote } from "../barbell.js";
+import { barbellSVG, barbellStage, loadoutSummary, mixedEquipmentNote, stationPlates } from "../barbell.js";
 import { Sessions } from "../db.js";
 // Module cycle with session.js is safe: these are hoisted function exports
 // used only at runtime (session.js likewise imports exerciseDetail from here).
@@ -51,14 +51,15 @@ export async function render(host) {
   const [settings, gyms, tracks, exercises, programs, checkpoints, intervals] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all(), Programs.all(), Checkpoints.all(), Intervals.all()]);
   const root = ui.h("div", { class: "settings-index" });
   const saveS = async () => { await Settings.save(settings); ui.prefs.unitDisplay = settings.unitDisplay; };
-  const group = (title, description, open = false) => {
+  const group = (title, description) => {
     const content = ui.h("div", { class: "settings-group-content" });
-    root.append(ui.h("details", { class: "settings-group", open },
-      ui.h("summary", {}, ui.h("span", { class: "title", text: title }),
-        ui.h("span", { class: "sub", text: description })), content));
+    root.append(ui.h("section", { class: "settings-group", "aria-label": title },
+      ui.h("header", { class: "settings-group-heading" },
+        ui.h("h2", { class: "title", text: title }),
+        ui.h("p", { class: "sub", text: description })), content));
     return content;
   };
-  const gymAndEquipment = group("Gym & equipment", "Profiles, bars, plates, collars, and membership tags", true);
+  const gymAndEquipment = group("Gym & equipment", "Profiles, bars, plates, collars, and membership tags");
   const unitsAndLoading = group("Units & loading", "Display preference and mixed-unit behavior");
   const trainingBehavior = group("Training behavior", "Rest, feedback, arrival, and profile inputs");
   const appearance = group("Appearance & accessibility", "Theme and interface presentation");
@@ -1251,10 +1252,16 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
             && !(sessionEntry.prescriptionStyle === "automatic" && !sessionProgramFocus)
             ? C.complementaryEffortCue(sessionEntry.programRole, sessionEntry.prescriptionStyle,
               e.movementGroup, sessionProgramFocus || "strength") : null;
+          const relationship = sessionEntry.programRole ? [
+            sessionEntry.programRole === "complementary" ? "Complementary lift" : "Main lift",
+            sessionProgramFocus ? `${sessionProgramFocus[0].toUpperCase()}${sessionProgramFocus.slice(1)} focus` : null,
+          ].filter(Boolean).join(" · ") : null;
           const live = ui.h("section", { class: "current-prescription", "aria-label": "Current prescription" },
             ui.h("span", { class: "eyebrow", text: "CURRENT PRESCRIPTION" }),
             ui.h("div", { class: "prescription-line mono", text: current
               ? `${current.weightLb === 0 ? "BW" : C.both(current.weightLb)} × ${current.reps}` : "No working sets" }),
+            relationship ? ui.h("div", { class: "sub training-focus-context", text: relationship,
+              "aria-label": `Training context: ${relationship}` }) : null,
             ui.h("div", { class: "sub", text: current
               ? [`Set ${currentNumber} of ${working.length}`, effortCue,
                 Number.isFinite(restSeconds) ? `${ui.mmss(restSeconds)} rest` : null].filter(Boolean).join(" · ")
@@ -1263,12 +1270,22 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
             const selectedBar = sessionEntry.barId ? C.barById(sessionEntry.barId)
               : C.barById(sessionGym?.defaultBarId || C.barId(C.BARS.bar45lb));
             const style = e.movementGroup === "olympic" ? "bumper" : "steel";
-            const rendered = barbellSVG(current.weightLb, current.enteredUnit || "lb", selectedBar,
-              sessionGym, null, e.stationDenomination ?? null, "full", style);
+            const enteredUnit = current.enteredUnit || "lb";
+            const solution = C.solve(current.weightLb, selectedBar,
+              stationPlates(enteredUnit, sessionGym, e.stationDenomination ?? null), 10,
+              sessionGym?.collarWeightLb || 0, sessionGym?.loadingPolicy || "closest");
+            const rendered = barbellSVG(solution, "full", style);
             const requestedLb = current.targetWeightLb ?? sessionEntry.targetWeightLb ?? current.weightLb;
-            live.append(barbellStage(rendered, { caption: "Exact mirrored stack · counts are per side", emphasis: "session" }),
-              loadoutSummary(requestedLb, rendered.solution, { compact: true }));
-            const mixed = mixedEquipmentNote(rendered.solution); if (mixed) live.append(mixed);
+            live.append(barbellStage(rendered, {
+              caption: "Exact mirrored stack · counts are per side", emphasis: "session",
+              onExpand: () => ui.pushScreen({ title: `${e.name} · loaded bar`, build: (screen) => {
+                screen.append(barbellStage(barbellSVG(solution, "full", style), {
+                  caption: "Exact mirrored stack · counts are per side", emphasis: "expanded",
+                }), loadoutSummary(requestedLb, solution));
+                const expandedMixed = mixedEquipmentNote(solution); if (expandedMixed) screen.append(expandedMixed);
+              } }),
+            }), loadoutSummary(requestedLb, solution, { compact: true }));
+            const mixed = mixedEquipmentNote(solution); if (mixed) live.append(mixed);
           }
           body.append(live);
         }

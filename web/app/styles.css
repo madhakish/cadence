@@ -40,6 +40,7 @@
   --radius: 5px;
   --radius-tight: 3px;
   --short-motion: 160ms;
+  --forged-steel: #a6abb2;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; }
@@ -83,7 +84,7 @@ body {
 #fab {
   position: fixed; right: 18px; bottom: calc(74px + var(--safe-bottom)); z-index: 21;
   width: var(--bigtap); height: var(--bigtap); border-radius: 50%; border: 0;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 72%, white), var(--accent)); color: #16090a;
+  background: var(--accent); color: #16090a;
   box-shadow: 0 6px 18px rgba(0,0,0,0.5); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
@@ -367,7 +368,7 @@ svg.anatomy { width: 100%; max-width: 430px; color: var(--text); overflow: visib
 button.muscle-key { min-height: 44px; display: inline-grid; grid-template-columns: 10px auto; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card2); color: var(--text); font: inherit; cursor: pointer; }
 .muscle-key i { width: 8px; height: 8px; border-radius: 50%; }
 .muscle-key.primary i { background: #e0453a; }
-.muscle-key.supporting i { background: #a6abb2; }
+.muscle-key.supporting i { background: var(--forged-steel); }
 .muscle-key span { font-size: 14px; font-weight: 650; }
 .muscle-key.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
 .anatomy-region, .anatomy-region-mask { transition: opacity var(--short-motion), filter var(--short-motion); }
@@ -393,15 +394,23 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0; }
 .section-heading .section-title { margin: 0; }
 
-/* Shared complete-bar stage. Its 420px physical floor makes phone layouts
-   scroll a short distance instead of shrinking denomination labels away. */
-.barbell-stage { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; padding: 8px 0 6px; border-block: 1px solid var(--line); }
+/* Shared complete-bar stage. Natural width is derived from the exact stack;
+   inline stages fit without sideways drift and preserve label size, while the
+   focused expanded surface alone may scroll at 1:1 geometry. */
+.barbell-stage { width: 100%; overflow: hidden; padding: 8px 0 6px; border-block: 1px solid var(--line); }
 .barbell-stage:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.barbell-stage-track { min-width: 420px; }
+.barbell-stage-track { width: 100%; }
 .barbell-stage-track svg.barbell.full { display: block; width: 100%; height: auto; }
 .barbell-stage.hero { margin: 4px 0 10px; background: color-mix(in srgb, var(--card) 82%, transparent); }
-.barbell-stage.expanded .barbell-stage-track { min-width: 620px; }
-.barbell-caption { margin-top: 4px; min-width: 420px; }
+.barbell-stage.expanded { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.barbell-stage.expanded .barbell-stage-track { width: max(100%, var(--barbell-natural-width)); }
+.barbell-stage-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }
+.barbell-caption { margin-top: 4px; }
+.barbell-expand[hidden] { display: none; }
+.prior-exercises { margin: 4px 0 10px; border-block: 1px solid var(--line); }
+.prior-exercises > summary { display: grid; gap: 2px; min-height: 54px; padding: 9px 4px; align-content: center; cursor: pointer; }
+.prior-exercises[open] > summary { border-bottom: 1px solid var(--line); }
+.row-actions { display: flex; gap: 4px; margin-left: auto; }
 .load-summary { margin-top: 10px; border-top: 2px solid var(--accent); }
 .load-summary.compact { padding: 12px; box-shadow: none; }
 .load-summary-grid { display: grid; gap: 0; margin-top: 7px; border-top: 1px solid var(--line); }
@@ -427,14 +436,14 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
 .disclosure-content { padding-bottom: 10px; }
 .settings-rows { margin: 8px 0; border-block: 1px solid var(--line); }
 
-/* Six task-oriented settings doors replace the undifferentiated wall of
-   toggles while retaining every supported control exactly once. */
+/* Six task-oriented settings sections replace the undifferentiated wall of
+   toggles while keeping every supported control one tap from the page. */
 .settings-index { display: grid; gap: 8px; }
-.settings-group { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); overflow: clip; }
-.settings-group > summary { min-height: 64px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 10px 14px; cursor: pointer; }
-.settings-group > summary::marker { color: var(--accent); }
-.settings-group[open] > summary { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--text) 3%, var(--card)); }
-.settings-group-content { padding: 2px 14px 14px; }
+.settings-group { padding: 12px 0 16px; border-top: 2px solid var(--line); }
+.settings-group-heading { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 2px; }
+.settings-group-heading .title { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+.settings-group-heading .sub { margin: 0; }
+.settings-group-content { padding: 0; }
 
 /* Ad-hoc work is physically serious but deliberately outside programming. */
 .adhoc-entry { text-align: left; border-left: 3px solid var(--accent); }
@@ -452,7 +461,6 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
 @media (min-width: 760px) {
   #topbar { padding-inline: max(24px, calc((100vw - 1120px) / 2)); }
   .plate-calculator { max-width: 920px; margin-inline: auto; }
-  .barbell-stage-track { min-width: 620px; }
   .form-grid.two-col { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .settings-index { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }

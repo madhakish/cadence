@@ -9,10 +9,9 @@ const plateKey = (plate, style) => ui.h("span", { class: "plate-key" },
   plateBadgeSVG(plate, style),
   ui.h("span", { class: `title${plate.unit === "kg" ? " accent" : ""}`, text: C.plateLabel(plate) }));
 
-function expandedBar(solution, unit, gym, plateStyle, requestedLb = null) {
+function expandedBar(solution, plateStyle, requestedLb = null) {
   ui.pushScreen({ title: "Loaded bar", build: (body) => {
-    const rendered = barbellSVG(solution.totalLb, unit, solution.bar, gym, solution,
-      null, "full", plateStyle);
+    const rendered = barbellSVG(solution, "full", plateStyle);
     body.append(barbellStage(rendered, { caption: "Mirrored stack · counts are per side", emphasis: "expanded" }),
       loadoutSummary(requestedLb, solution),
       ui.h("div", { class: "section-title", text: "Plates per side" }));
@@ -35,6 +34,7 @@ export async function openPlateCalculator() {
   let plateStyle = "steel";
   let targetVal = unit === "kg" ? C.kgFromLb(135) : 135;
   const counts = {};
+  const enteredOrder = [];
 
   const availablePlates = () => {
     const list = gym && Array.isArray(gym.plateToggles) && gym.plateToggles.length
@@ -95,14 +95,14 @@ export async function openPlateCalculator() {
         const targetLb = C.toLb(targetVal, unit);
         const solution = C.solve(targetLb, bar, availablePlates(), 10,
           gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
-        solution.bar = bar;
         ui.clear(output);
-        const rendered = barbellSVG(targetLb, unit, bar, gym, solution, null, "full", plateStyle);
-        const expand = ui.h("button", { class: "btn ghost sm", text: "Expand",
-          onClick: () => expandedBar(solution, unit, gym, plateStyle, targetLb) });
+        const rendered = barbellSVG(solution, "full", plateStyle);
         output.append(ui.h("div", { class: "section-heading" },
-          ui.h("div", { class: "section-title", text: "Load on the bar" }), expand),
-        barbellStage(rendered, { caption: "Mirrored stack · counts are per side", emphasis: "hero" }),
+          ui.h("div", { class: "section-title", text: "Load on the bar" })),
+        barbellStage(rendered, {
+          caption: "Mirrored stack · counts are per side", emphasis: "hero",
+          onExpand: () => expandedBar(solution, plateStyle, targetLb),
+        }),
         loadoutSummary(targetLb, solution));
         const mixed = mixedEquipmentNote(solution); if (mixed) output.append(mixed);
         if (!solution.satisfiesPolicy) output.append(ui.h("div", { class: "warning-panel", text: `No available plate stack satisfies ${C.loadingPolicyLabel(solution.policy).toLowerCase()}; showing the closest load.` }));
@@ -121,30 +121,67 @@ export async function openPlateCalculator() {
       const plates = availablePlates();
       const output = ui.h("div");
       const editor = ui.h("div", { class: "card plate-list" });
+      const orderEditor = ui.h("div");
       const recompute = () => {
-        const perSide = plates.map((plate) => ({ plate, count: counts[C.plateId(plate)] || 0 }))
-          .filter((count) => count.count > 0);
-        const solution = { bar, perSide, collarLb: gym?.collarWeightLb || 0 };
-        solution.totalLb = C.totalOnBar(bar, perSide, solution.collarLb);
+        const byId = new Map(plates.map((plate) => [C.plateId(plate), plate]));
+        const perSide = enteredOrder.map((id) => ({ plate: byId.get(id), count: counts[id] || 0 }))
+          .filter((count) => count.plate && count.count > 0);
+        const solution = C.enteredPlateSolution(bar, perSide, gym?.collarWeightLb || 0);
         ui.clear(output);
-        const rendered = barbellSVG(solution.totalLb, "lb", bar, gym, solution, null, "full", plateStyle);
+        const rendered = barbellSVG(solution, "full", plateStyle);
         output.append(ui.h("div", { class: "section-heading" },
-          ui.h("div", { class: "section-title", text: "On the bar" }),
-          ui.h("button", { class: "btn ghost sm", text: "Expand",
-            onClick: () => expandedBar(solution, "lb", gym, plateStyle) })),
-        barbellStage(rendered, { caption: "Entered stack · mirrored exactly", emphasis: "hero" }),
+          ui.h("div", { class: "section-title", text: "On the bar" })),
+        barbellStage(rendered, {
+          caption: "Entered stack · mirrored exactly", emphasis: "hero",
+          onExpand: () => expandedBar(solution, plateStyle),
+        }),
         loadoutSummary(null, solution));
         const mixed = mixedEquipmentNote(solution); if (mixed) output.append(mixed);
+
+        ui.clear(orderEditor);
+        if (perSide.length) {
+          orderEditor.append(ui.h("div", { class: "section-title", text: "Sleeve order · inside to outside" }));
+          const orderList = ui.h("div", { class: "card plate-list" });
+          perSide.forEach((plateCount, index) => {
+            const id = C.plateId(plateCount.plate);
+            orderList.append(ui.h("div", { class: "row plate-row" },
+              ui.h("strong", { class: "mono", text: `${C.plateLabel(plateCount.plate)} × ${plateCount.count}` }),
+              ui.h("div", { class: "row-actions" },
+                ui.h("button", { class: "btn ghost icon", text: "↑", disabled: index === 0,
+                  "aria-label": `Move ${C.plateLabel(plateCount.plate)} inward`, onClick: () => {
+                    [enteredOrder[index - 1], enteredOrder[index]] = [enteredOrder[index], enteredOrder[index - 1]];
+                    recompute();
+                  } }),
+                ui.h("button", { class: "btn ghost icon", text: "↓", disabled: index === perSide.length - 1,
+                  "aria-label": `Move ${C.plateLabel(plateCount.plate)} outward`, onClick: () => {
+                    [enteredOrder[index], enteredOrder[index + 1]] = [enteredOrder[index + 1], enteredOrder[index]];
+                    recompute();
+                  } }))));
+          });
+          orderEditor.append(orderList);
+        }
       };
-      panel.append(output, ui.h("div", { class: "section-title", text: "Plates on one side" }), editor);
+      panel.append(output, ui.h("div", { class: "section-title", text: "Plates on one side" }), editor, orderEditor);
       for (const plate of plates) {
         const id = C.plateId(plate);
         editor.append(ui.h("div", { class: "row plate-row" }, plateKey(plate, plateStyle),
           ui.stepper(counts[id] || 0, { min: 0, max: 12,
-            onChange: (value) => { counts[id] = value; recompute(); } })));
+            onChange: (value) => {
+              const previous = counts[id] || 0;
+              counts[id] = value;
+              if (previous === 0 && value > 0 && !enteredOrder.includes(id)) enteredOrder.push(id);
+              if (value === 0) {
+                const orderIndex = enteredOrder.indexOf(id);
+                if (orderIndex >= 0) enteredOrder.splice(orderIndex, 1);
+              }
+              recompute();
+            } })));
       }
       panel.append(ui.h("button", { class: "btn ghost danger wide", text: "Clear entered plates",
-        onClick: () => { Object.keys(counts).forEach((key) => { counts[key] = 0; }); draw(); } }));
+        onClick: () => {
+          Object.keys(counts).forEach((key) => { counts[key] = 0; });
+          enteredOrder.splice(0); draw();
+        } }));
       recompute();
     };
 

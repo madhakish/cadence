@@ -375,4 +375,27 @@ final class PlateMathTests: XCTestCase {
                        "no twin label → the next grid step up, never understating")
         XCTAssertEqual(PlateMath.performedLabel(0), 0, "no load, no label")
     }
+
+    func testEnteredLoadoutPreservesCollarToSleeveOrder() {
+        let entered = [45.0, 10, 25, 2.5].map {
+            PlateCount(plate: Plate(value: $0, unit: .lb), count: 1)
+        }
+        let loadout = Loadout(
+            bar: .bar45lb,
+            perSide: entered,
+            preservesOrder: true
+        )
+
+        XCTAssertEqual(loadout.perSide.map(\.plate.value), [45, 10, 25, 2.5])
+        XCTAssertEqual(loadout.perSideLabel, "45 lb + 10 lb + 25 lb + 2.5 lb")
+        XCTAssertEqual(loadout.totalLb, 210, accuracy: 1e-9)
+    }
+
+    func testSolvedLoadoutStillUsesPhysicalHeaviestFirstOrder() {
+        let unsorted = [10.0, 45, 2.5, 25].map {
+            PlateCount(plate: Plate(value: $0, unit: .lb), count: 1)
+        }
+        let loadout = Loadout(bar: .bar45lb, perSide: unsorted)
+        XCTAssertEqual(loadout.perSide.map(\.plate.value), [45, 25, 10, 2.5])
+    }
 }

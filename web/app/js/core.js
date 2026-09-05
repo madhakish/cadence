@@ -887,6 +887,26 @@ function makeSolution(bar, perSide, targetLb, collarLb = 0, policy = "closest", 
 // Reverse mode: what's on the bar → total.
 export const totalOnBar = (bar, perSide, collarLb = 0) => loadoutTotalLb(bar, perSide, collarLb);
 
+// Reverse-mode domain result. Unlike a target solve, the entered collar→sleeve
+// order is evidence and must not be sorted away before the renderer sees it.
+export function enteredPlateSolution(bar, perSide, collarLb = 0) {
+  const orderedPerSide = perSide.map((count) => ({
+    plate: { ...count.plate }, count: count.count,
+  }));
+  const totalLb = loadoutTotalLb(bar, orderedPerSide, collarLb);
+  return {
+    bar,
+    collarLb,
+    perSide: orderedPerSide,
+    targetLb: totalLb,
+    policy: "entered",
+    satisfiesPolicy: true,
+    totalLb,
+    deviationLb: 0,
+    isOffTarget: false,
+  };
+}
+
 // ---- Warmup ramp -----------------------------------------------------------
 
 const RAMP_STEPS = [

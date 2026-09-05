@@ -421,11 +421,17 @@ struct HomeView: View {
                                     let previewExercise = exercises.first(where: { $0.name == lift.exerciseName })
                                     let type = previewExercise?.type
                                     if type == .barbell {
-                                        BarbellView(weightLb: plan.weightLb, unit: entryUnit,
-                                                    bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym,
-                                                    targetWeightLb: target.weightLb,
-                                                    stationDenomination: previewExercise?.stationDenomination,
-                                                    plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel)
+                                        let bar = defaultGym?.defaultBar ?? .bar45lb
+                                        BarbellView(
+                                            solution: authoritativePlateSolution(
+                                                targetLb: plan.weightLb,
+                                                fallbackUnit: entryUnit,
+                                                bar: bar,
+                                                gym: defaultGym,
+                                                stationDenomination: previewExercise?.stationDenomination
+                                            ),
+                                            plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel
+                                        )
                                     } else if type == .dumbbell {
                                         DumbbellView(weightLb: plan.weightLb, unit: entryUnit)
                                     }

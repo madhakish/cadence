@@ -1,10 +1,9 @@
 import SwiftUI
 import CadenceCore
 
-/// One rack-resolution path for every native plate surface. Views may pass a
-/// previously chosen `Loadout`, but whenever a target still needs solving it
-/// comes through this function so station units, mixed inventory, collars and
-/// loading policy cannot drift between the calculator, logger and lift pane.
+/// One rack-resolution path for native callers. The resulting `PlateSolution`
+/// is the only value `BarbellView` accepts, so station units, mixed inventory,
+/// collars, and loading policy cannot drift inside the presentation layer.
 func authoritativePlateSolution(
     targetLb: Double,
     fallbackUnit: WeightUnit,
@@ -77,28 +76,15 @@ struct PlateFaceBadge: View {
 
 /// The actual loaded bar: collar-first mirrored stacks, competition colours,
 /// reflective steel, and distinct bumper/calibrated-steel geometry. Mirrors
-/// web/app/js/barbell.js. `unit` picks denominations; `plateStyle` picks the
-/// physical plate family.
+/// web/app/js/barbell.js. The renderer accepts only a solver-owned solution:
+/// it never sorts, sums, substitutes inventory, or solves a target itself.
 struct BarbellView: View {
     enum Presentation: Equatable {
         case compactSide
         case fullBar
     }
 
-    let weightLb: Double
-    let unit: WeightUnit
-    let bar: Bar
-    let gym: Gym?
-    /// The unsnapped programming target. When it differs from `weightLb`, the
-    /// view explains the selected rack load and both directional alternatives.
-    var targetWeightLb: Double? = nil
-    /// Draw THIS loadout instead of re-solving — the plate calculator's hero
-    /// must match its own answer (which may span both unit systems), and
-    /// reverse mode must draw exactly what the user says is on the bar.
-    var loadout: Loadout? = nil
-    /// The lift's station plate denomination (v8): the deadlift platform by
-    /// the window stocks only kg plates. nil = the gym inventory.
-    var stationDenomination: WeightUnit? = nil
+    let solution: PlateSolution
     /// Olympic lifts use full-diameter rubber bumpers; strength work and the
     /// calculator default to thinner, stepped calibrated steel.
     var plateStyle: PlateVisualStyle = .steel
@@ -112,58 +98,49 @@ struct BarbellView: View {
     private static let fullHeight: CGFloat = 124
     private static let sleeve: CGFloat = 18
 
-    private func drawnPlateWidth(_ plate: Plate, scale: CGFloat = 1) -> CGFloat {
-        let factor = CGFloat(plate.thicknessFactor(for: plateStyle))
-        let base = plateStyle == .bumper ? 4.5 + 8.5 * factor : 3.2 + 5 * factor
-        return max(plateStyle == .bumper ? 4.2 : 3.1, base * scale)
+    private static func drawnPlateWidth(
+        _ plate: Plate,
+        style: PlateVisualStyle,
+        scale: CGFloat = 1
+    ) -> CGFloat {
+        let factor = CGFloat(plate.thicknessFactor(for: style))
+        let base = style == .bumper ? 4.5 + 8.5 * factor : 3.2 + 5 * factor
+        return max(style == .bumper ? 4.2 : 3.1, base) * scale
     }
 
-    /// Every enabled denomination at this gym. `unit` is only the fallback
-    /// rack when no gym exists; a configured mixed rack must draw the same
-    /// achieved load the prescription solver stored. `Gym.availablePlates`
-    /// also repairs legacy empty inventories without erasing an intentional
-    /// nonempty/all-disabled bar-only rack.
-    private var stationPlates: [Plate] {
-        // The lift's station preference filters the rack to its own
-        // denomination — applied to the no-gym fallback too, matching web:
-        // a kg-only station stays kg even before any gym is configured.
-        let rack = gym?.availablePlates
-            ?? (unit == .kg ? Plate.standardKg : Plate.standardLb)
-        return PlateMath.stationPlates(preference: stationDenomination, gymPlates: rack)
+    private func drawnPlateWidth(_ plate: Plate, scale: CGFloat = 1) -> CGFloat {
+        Self.drawnPlateWidth(plate, style: plateStyle, scale: scale)
+    }
+
+    /// Natural width at which every plate keeps its metadata thickness and the
+    /// bar retains a useful central shaft. Smaller containers receive a scaled
+    /// stack preview plus an expand affordance from `BarbellStageView`.
+    static func minimumLegibleWidth(
+        for loadout: Loadout,
+        style: PlateVisualStyle
+    ) -> CGFloat {
+        let plates = loadout.perSide.flatMap { Array(repeating: $0.plate, count: $0.count) }
+        let gap: CGFloat = style == .bumper ? 1.05 : 0.75
+        let stackWidth = plates.map { drawnPlateWidth($0, style: style) }.reduce(0, +)
+            + CGFloat(max(0, plates.count - 1)) * gap
+        return max(320, 204 + 2 * stackWidth)
     }
 
     var body: some View {
-        let solution = loadout.map { PlateSolution(loadout: $0, targetLb: weightLb) }
-            ?? authoritativePlateSolution(
-                targetLb: weightLb,
-                fallbackUnit: unit,
-                bar: bar,
-                gym: gym,
-                stationDenomination: stationDenomination
-            )
+        let bar = solution.loadout.bar
         let plates = solution.loadout.perSide.flatMap { Array(repeating: $0.plate, count: $0.count) }
         let compactGap: CGFloat = plateStyle == .bumper ? 1 : 0.7
         let compactWidths = plates.map { drawnPlateWidth($0, scale: 0.72) }
         let compactStackWidth = compactWidths.reduce(0, +) + CGFloat(max(0, plates.count - 1)) * compactGap
         let emptyWidth: CGFloat = solution.loadout.collarLb > 0 ? 96 : 74
         let width = max(plates.isEmpty ? emptyWidth : 50, Self.sleeve + 11 + compactStackWidth)
-        let theoreticalTarget = targetWeightLb ?? weightLb
-        let alternatives = PlateMath.prescriptionOptions(
-            targetLb: theoreticalTarget, bar: bar, plates: stationPlates,
-            collarLb: gym?.collarWeightLb ?? 0, policy: gym?.loadingPolicy ?? .closest
-        )
-        let shown: (Double) -> String = { lb in
-            let value = unit == .kg ? Weight.kg(fromLb: lb) : lb
-            return "\(Weight.trim(value)) \(unit.rawValue)"
-        }
         let accessibilityLoad = plates.isEmpty
             ? (solution.loadout.collarLb > 0
                ? "\(bar.label) with collars, no plates"
                : "\(bar.label), bar only")
             : "\(solution.loadout.perSideLabel) per side on \(bar.label)\(solution.loadout.collarLb > 0 ? ", including collars" : "")"
 
-        VStack(alignment: .leading, spacing: 2) {
-            Canvas { ctx, size in
+        Canvas { ctx, size in
                 let h = presentation == .fullBar ? size.height : Self.height
                 func drawPlate(_ plate: Plate, rect: CGRect, side: String, labelYOffset: CGFloat = 0) {
                     let token = plate.colorToken(for: plateStyle)
@@ -227,7 +204,14 @@ struct BarbellView: View {
                 if presentation == .fullBar {
                     let width = max(240, size.width)
                     let midY = h / 2
-                    let shoulder = min(100, max(76, width * 0.24))
+                    let nominalGap: CGFloat = plateStyle == .bumper ? 1.05 : 0.75
+                    let nominalWidths = plates.map { drawnPlateWidth($0) }
+                    let nominal = nominalWidths.reduce(0, +)
+                        + CGFloat(max(0, plates.count - 1)) * nominalGap
+                    // Keep 168pt of central shaft. At or above the computed
+                    // legibility width, the stack is shown at true metadata
+                    // thickness; constrained previews scale only the stack.
+                    let shoulder = min(width / 2 - 84, max(76, nominal + 18))
                     let rightShoulder = width - shoulder
                     let shaft = Path(roundedRect: CGRect(x: 8, y: midY - 2, width: width - 16, height: 4), cornerRadius: 2)
                     let leftSleeve = Path(roundedRect: CGRect(x: 8, y: midY - 3, width: shoulder - 8, height: 6), cornerRadius: 3)
@@ -266,9 +250,6 @@ struct BarbellView: View {
                              with: .color(Color(hex: 0x6C727A)))
 
                     let available = max(30, shoulder - 18)
-                    let nominalGap: CGFloat = plateStyle == .bumper ? 1.05 : 0.75
-                    let nominalWidths = plates.map { drawnPlateWidth($0) }
-                    let nominal = nominalWidths.reduce(0, +) + CGFloat(max(0, plates.count - 1)) * nominalGap
                     let scale = nominal > available ? available / nominal : 1
                     let widths = plates.map { drawnPlateWidth($0, scale: scale) }
                     let gap = max(0.45, nominalGap * scale)
@@ -334,44 +315,92 @@ struct BarbellView: View {
                                              y: h / 2), anchor: .leading)
                     }
                 }
-            }
-            .frame(width: presentation == .compactSide ? width : nil,
-                   height: presentation == .compactSide ? Self.height : Self.fullHeight)
-            .frame(maxWidth: presentation == .fullBar ? .infinity : nil)
-            .accessibilityChildren {
-                ForEach(Array(plates.enumerated()), id: \.offset) { index, plate in
+        }
+        .frame(width: presentation == .compactSide ? width : nil,
+               height: presentation == .compactSide ? Self.height : Self.fullHeight)
+        .frame(maxWidth: presentation == .fullBar ? .infinity : nil)
+        .accessibilityChildren {
+            ForEach(Array(plates.enumerated()), id: \.offset) { index, plate in
+                if presentation == .fullBar {
                     Text("Left plate \(index + 1) of \(plates.count), \(plate.label)")
-                    Text("Right plate \(index + 1) of \(plates.count), \(plate.label)")
                 }
-            }
-
-            if solution.isOffTarget {
-                let total = unit == .kg ? Weight.kg(fromLb: solution.loadout.totalLb) : solution.loadout.totalLb
-                Text("≈ closest \(Weight.trim(total)) \(unit.rawValue)")
-                    .font(.caption2)
-                    .foregroundStyle(Theme.warn)
-            } else if !solution.satisfiesPolicy {
-                Text("closest available · policy not exact")
-                    .font(.caption2)
-                    .foregroundStyle(Theme.warn)
-            }
-            if abs(theoreticalTarget - solution.loadout.totalLb) > 0.01 {
-                Text("Target \(shown(theoreticalTarget)) · load \(shown(solution.loadout.totalLb))")
-                    .font(.caption2.bold())
-                    .foregroundStyle(Theme.warn)
-                if let below = alternatives.below {
-                    Text("Below \(shown(below.loadout.totalLb)) · \(below.loadout.perSideLabel)/side")
-                        .font(.caption2).foregroundStyle(.secondary)
-                }
-                if let above = alternatives.above,
-                   alternatives.below == nil
-                    || abs(above.loadout.totalLb - (alternatives.below?.loadout.totalLb ?? 0)) > 0.01 {
-                    Text("Above \(shown(above.loadout.totalLb)) · \(above.loadout.perSideLabel)/side")
-                        .font(.caption2).foregroundStyle(.secondary)
-                }
+                Text("Right plate \(index + 1) of \(plates.count), \(plate.label)")
             }
         }
         .accessibilityLabel("Barbell: \(accessibilityLoad)")
+    }
+}
+
+/// Responsive host for the complete bar. It keeps a normal two-plate stack
+/// readable on a 390pt iPhone without horizontal scrolling, and offers the
+/// focused view only when the solution's physical stack needs more width.
+struct BarbellStageView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let solution: PlateSolution
+    let unit: WeightUnit
+    var plateStyle: PlateVisualStyle = .steel
+    var caption = "Mirrored stack · counts are per side"
+    var onExpand: (() -> Void)?
+
+    var body: some View {
+        GeometryReader { proxy in
+            let floor = BarbellView.minimumLegibleWidth(
+                for: solution.loadout,
+                style: plateStyle
+            )
+            let constrained = proxy.size.width + 0.5 < floor
+
+            VStack(alignment: .leading, spacing: 6) {
+                BarbellView(
+                    solution: solution,
+                    plateStyle: plateStyle,
+                    presentation: .fullBar
+                )
+                .frame(width: proxy.size.width, height: 124)
+                .id(solution.loadout)
+                .animation(
+                    reduceMotion ? nil : .easeOut(duration: Theme.shortMotion),
+                    value: solution.loadout
+                )
+
+                HStack(spacing: 8) {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    if constrained, let onExpand {
+                        Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") {
+                            onExpand()
+                        }
+                        .font(.caption.bold())
+                        .labelStyle(.titleAndIcon)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("expand-loaded-bar")
+                    }
+                }
+
+                if abs(solution.deviationLb) > 0.01 {
+                    Text(targetDifferenceLabel)
+                        .font(.caption.bold())
+                        .foregroundStyle(Theme.warn)
+                } else if !solution.satisfiesPolicy {
+                    Text("Closest available · policy not exact")
+                        .font(.caption.bold())
+                        .foregroundStyle(Theme.warn)
+                }
+            }
+        }
+        // Reserve the warning rail so changing one plate never shifts the
+        // controls below the bar during a between-set interaction.
+        .frame(height: 194)
+        .accessibilityLabel("Loaded bar diagram")
+    }
+
+    private var targetDifferenceLabel: String {
+        let target = unit == .kg ? Weight.kg(fromLb: solution.targetLb) : solution.targetLb
+        let achieved = unit == .kg ? Weight.kg(fromLb: solution.loadout.totalLb) : solution.loadout.totalLb
+        return "Target \(Weight.trim(target)) \(unit.rawValue) · load \(Weight.trim(achieved)) \(unit.rawValue)"
     }
 }
 

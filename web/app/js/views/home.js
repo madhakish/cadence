@@ -2,7 +2,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { sparkline } from "../charts.js";
-import { barbellSVG, dumbbellSVG, prescriptionPlateDetails } from "../barbell.js";
+import { barbellSVG, dumbbellSVG, prescriptionPlateDetails, stationPlates } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, Intervals, intervalSnapshots, topSet, localDayKey } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, openSession, planningBase, previewProgramPlan, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
@@ -12,8 +12,10 @@ import { openActivityLog } from "./activity.js";
 
 const barbellPrescriptionView = (achievedLb, targetLb, unit, gym, stationDenomination = null, movementGroup = null) => {
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
+  const solution = C.solve(achievedLb, bar, stationPlates(unit, gym, stationDenomination), 10,
+    gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
   const wrap = ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
-    barbellSVG(achievedLb, unit, bar, gym, null, stationDenomination, "compact",
+    barbellSVG(solution, "compact",
       movementGroup === "olympic" ? "bumper" : "steel").svg);
   for (const detail of prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, stationDenomination)) {
     wrap.append(ui.h("span", { class: `sub plate-detail${detail.kind === "target" ? " warn" : ""}`, text: detail.text }));

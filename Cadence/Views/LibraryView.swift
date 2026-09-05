@@ -96,6 +96,7 @@ struct ExerciseDetailView: View {
     @State private var showProgramming = false
     @State private var showSetup = false
     @State private var showStatus = false
+    @State private var showExpandedContextBar = false
 
     private var profile: AnatomyData.Profile? {
         AnatomyData.muscleProfile(name: exercise.name, movementGroup: exercise.movementGroup)
@@ -112,7 +113,7 @@ struct ExerciseDetailView: View {
         sessionEntry?.barID.map { Bar.by(id: $0) } ?? sessionGym?.defaultBar ?? .bar45lb
     }
 
-    private var contextualLoadout: Loadout? {
+    private var contextualSolution: PlateSolution? {
         guard exercise.type == .barbell, let set = contextualSet, set.weightLb > 0 else { return nil }
         return authoritativePlateSolution(
             targetLb: set.weightLb,
@@ -120,7 +121,7 @@ struct ExerciseDetailView: View {
             bar: contextualBar,
             gym: sessionGym,
             stationDenomination: exercise.stationDenomination
-        ).loadout
+        )
     }
 
     private var contextualEffortCue: String? {
@@ -135,6 +136,13 @@ struct ExerciseDetailView: View {
             movementGroup: exercise.movementGroup,
             focus: sessionProgramFocus ?? .strength
         )
+    }
+
+    private var contextualTrainingRelationship: String? {
+        guard let role = sessionEntry?.programRole.flatMap(LiftRole.init(rawValue:)) else { return nil }
+        let relationship = role == .complementary ? "Complementary lift" : "Main lift"
+        guard let sessionProgramFocus else { return relationship }
+        return "\(relationship) · \(sessionProgramFocus.rawValue.capitalized) focus"
     }
 
     private struct CycleMembership: Identifiable {
@@ -248,30 +256,28 @@ struct ExerciseDetailView: View {
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        if let contextualTrainingRelationship {
+                            Text(contextualTrainingRelationship)
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("training-focus-context")
+                        }
                         if let contextualEffortCue {
                             Text(contextualEffortCue)
                                 .font(.callout.bold())
                                 .foregroundStyle(Theme.accent)
                         }
-                        if let contextualLoadout {
-                            ScrollView(.horizontal, showsIndicators: true) {
-                                BarbellView(
-                                    weightLb: set.weightLb,
-                                    unit: set.enteredUnit,
-                                    bar: contextualBar,
-                                    gym: sessionGym,
-                                    targetWeightLb: set.targetWeightLb ?? sessionEntry?.targetWeightLb,
-                                    loadout: contextualLoadout,
-                                    stationDenomination: exercise.stationDenomination,
-                                    plateStyle: exercise.movementGroup == "olympic" ? .bumper : .steel,
-                                    presentation: .fullBar
-                                )
-                                .frame(width: 420, height: 132)
-                            }
-                            .accessibilityLabel("Loaded bar diagram; scroll horizontally if needed")
+                        if let contextualSolution {
+                            let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
+                            BarbellStageView(
+                                solution: contextualSolution,
+                                unit: set.enteredUnit,
+                                plateStyle: style,
+                                onExpand: { showExpandedContextBar = true }
+                            )
                             LoadoutSummaryView(
                                 requestedLb: set.targetWeightLb ?? sessionEntry?.targetWeightLb,
-                                loadout: contextualLoadout
+                                loadout: contextualSolution.loadout
                             )
                         }
                     }
@@ -538,6 +544,45 @@ struct ExerciseDetailView: View {
         .accessibilityIdentifier("exercise-detail-screen")
         .navigationTitle(exercise.name)
         .saveChangesOnDisappear(context, operation: "Saving the exercise")
+        .sheet(isPresented: $showExpandedContextBar) {
+            if let solution = contextualSolution {
+                NavigationStack {
+                    ScrollView {
+                        let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
+                        VStack(alignment: .leading, spacing: 18) {
+                            ScrollView(.horizontal, showsIndicators: true) {
+                                BarbellView(
+                                    solution: solution,
+                                    plateStyle: style,
+                                    presentation: .fullBar
+                                )
+                                .frame(
+                                    width: max(
+                                        360,
+                                        BarbellView.minimumLegibleWidth(for: solution.loadout, style: style)
+                                    ),
+                                    height: 180
+                                )
+                                .padding(.horizontal)
+                            }
+                            LoadoutSummaryView(
+                                requestedLb: contextualSet?.targetWeightLb ?? sessionEntry?.targetWeightLb,
+                                loadout: solution.loadout
+                            )
+                            .padding(.horizontal)
+                        }
+                        .padding(.vertical)
+                    }
+                    .navigationTitle(exercise.name)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showExpandedContextBar = false }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private static func splitList(_ text: String) -> [String] {

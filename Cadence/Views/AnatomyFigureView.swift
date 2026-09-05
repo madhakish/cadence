@@ -11,7 +11,7 @@ struct AnatomyFigureView: View {
     @State private var selectedMuscle: String?
 
     private static let primaryColor = Color(red: 0.878, green: 0.271, blue: 0.227)   // #e0453a
-    private static let secondaryColor = Color(hex: 0xA6ABB2) // forged-steel supporting wash
+    private static let secondaryColor = Theme.forgedSteel
     private static let backAssetByMuscle = [
         "traps": "VitruvianBackTraps",
         "delts": "VitruvianBackDelts",

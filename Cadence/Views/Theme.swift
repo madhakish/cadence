@@ -65,6 +65,7 @@ enum Theme {
     static let card = Color(.secondarySystemGroupedBackground)
     static let raised = Color(.tertiarySystemGroupedBackground)
     static let hairline = Color.primary.opacity(0.14)
+    static let forgedSteel = Color(hex: 0xA6ABB2)
 
     /// Industrial geometry: almost square, but not sharp enough to snag a
     /// thumb-sized control. Shared by the few surfaces that genuinely need a

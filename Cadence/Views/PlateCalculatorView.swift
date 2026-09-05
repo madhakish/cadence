@@ -5,16 +5,11 @@ import CadenceCore
 /// The killer feature. Target → per-side loading in mixed units, or
 /// reverse: what's on the bar → total. Big digits, zero ceremony.
 struct PlateCalculatorView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
 
     @State private var mode: Mode = .target
-#if DEBUG
-    @State private var targetText = ProcessInfo.processInfo.arguments.contains("--visual-proof") ? "139" : ""
-#else
     @State private var targetText = ""
-#endif
     @State private var targetUnit: WeightUnit = .lb
     @State private var bar: Bar = .bar45lb
     @State private var plateStyle: PlateVisualStyle = .steel
@@ -22,6 +17,7 @@ struct PlateCalculatorView: View {
     @State private var showExpandedBar = false
     // Reverse mode: counts per plate denomination on ONE side.
     @State private var reverseCounts: [String: Int] = [:]
+    @State private var reverseOrder: [String] = []
 
     enum Mode: String, CaseIterable {
         case target = "Target"
@@ -53,7 +49,9 @@ struct PlateCalculatorView: View {
     }
 
     private var reversePerSide: [PlateCount] {
-        availablePlates.compactMap { plate in
+        let plateByID = Dictionary(uniqueKeysWithValues: availablePlates.map { ($0.id, $0) })
+        return reverseOrder.compactMap { id in
+            guard let plate = plateByID[id] else { return nil }
             let count = reverseCounts[plate.id] ?? 0
             return count > 0 ? PlateCount(plate: plate, count: count) : nil
         }
@@ -61,12 +59,17 @@ struct PlateCalculatorView: View {
 
     private var reverseCollarLb: Double { gym?.collarWeightLb ?? 0 }
 
-    private var reverseTotalLb: Double {
-        PlateMath.total(bar: bar, perSide: reversePerSide, collarLb: reverseCollarLb)
+    private var reverseLoadout: Loadout {
+        Loadout(
+            bar: bar,
+            perSide: reversePerSide,
+            collarLb: reverseCollarLb,
+            preservesOrder: true
+        )
     }
 
-    private var reverseLoadout: Loadout {
-        Loadout(bar: bar, perSide: reversePerSide, collarLb: reverseCollarLb)
+    private var reverseSolution: PlateSolution {
+        PlateSolution(loadout: reverseLoadout, targetLb: reverseLoadout.totalLb)
     }
 
     var body: some View {
@@ -85,6 +88,7 @@ struct PlateCalculatorView: View {
             equipmentSection
         }
         .listStyle(.plain)
+        .scrollDismissesKeyboard(.immediately)
         .accessibilityIdentifier("plate-calculator-screen")
         .navigationTitle("Plates")
         .navigationBarTitleDisplayMode(.inline)
@@ -119,27 +123,12 @@ struct PlateCalculatorView: View {
 
         if let solution {
             Section {
-                ScrollView(.horizontal, showsIndicators: true) {
-                    BarbellView(weightLb: solution.targetLb, unit: targetUnit, bar: bar, gym: gym,
-                                loadout: solution.loadout, plateStyle: plateStyle, presentation: .fullBar)
-                        .frame(width: 420, height: 132)
-                        .id(solution.loadout)
-                        .animation(reduceMotion ? nil : .easeOut(duration: Theme.shortMotion),
-                                   value: solution.loadout)
-                }
-                .accessibilityLabel("Loaded bar diagram; scroll horizontally if needed")
-                HStack {
-                    Text("Mirrored stack · counts are per side")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") {
-                        showExpandedBar = true
-                    }
-                    .font(.caption.bold())
-                    .labelStyle(.titleAndIcon)
-                }
-                .frame(minHeight: 44)
+                BarbellStageView(
+                    solution: solution,
+                    unit: targetUnit,
+                    plateStyle: plateStyle,
+                    onExpand: { showExpandedBar = true }
+                )
             } header: {
                 Text("Load on the bar")
             }
@@ -199,26 +188,12 @@ struct PlateCalculatorView: View {
     private var reverseSections: some View {
         Section {
             // Draw exactly what the user says is on the bar — never re-solve it.
-            ScrollView(.horizontal, showsIndicators: true) {
-                BarbellView(weightLb: reverseTotalLb, unit: .lb, bar: bar, gym: gym,
-                            loadout: reverseLoadout,
-                            plateStyle: plateStyle, presentation: .fullBar)
-                    .frame(width: 420, height: 132)
-                    .id(reverseLoadout)
-                    .animation(reduceMotion ? nil : .easeOut(duration: Theme.shortMotion), value: reverseLoadout)
-            }
-            .accessibilityLabel("Loaded bar diagram; scroll horizontally if needed")
-            HStack {
-                Text("Mirrored stack · counts are per side")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") {
-                    showExpandedBar = true
-                }
-                .font(.caption.bold())
-            }
-            .frame(minHeight: 44)
+            BarbellStageView(
+                solution: reverseSolution,
+                unit: .lb,
+                plateStyle: plateStyle,
+                onExpand: { showExpandedBar = true }
+            )
         } header: {
             Text("On the bar")
         }
@@ -238,7 +213,7 @@ struct PlateCalculatorView: View {
             ForEach(availablePlates.sorted(by: >).reversed(), id: \.id) { plate in
                 Stepper(value: Binding(
                     get: { reverseCounts[plate.id] ?? 0 },
-                    set: { reverseCounts[plate.id] = $0 }
+                    set: { setReverseCount($0, for: plate) }
                 ), in: 0...12) {
                     HStack {
                         PlateFaceBadge(plate: plate, style: plateStyle)
@@ -252,8 +227,36 @@ struct PlateCalculatorView: View {
                     }
                 }
             }
-            Button("Clear", role: .destructive) { reverseCounts = [:] }
+            Button("Clear", role: .destructive) {
+                reverseCounts = [:]
+                reverseOrder = []
+            }
                 .frame(minHeight: 44)
+        }
+
+        if !reversePerSide.isEmpty {
+            Section("Sleeve order · inside to outside") {
+                ForEach(Array(reversePerSide.enumerated()), id: \.element.id) { index, plateCount in
+                    HStack {
+                        Text(plateCount.label)
+                            .font(.callout.bold().monospacedDigit())
+                        Spacer()
+                        Button("Move inward", systemImage: "arrow.up") {
+                            moveReversePlate(at: index, by: -1)
+                        }
+                        .labelStyle(.iconOnly)
+                        .disabled(index == 0)
+                        .frame(minWidth: 44, minHeight: 44)
+                        Button("Move outward", systemImage: "arrow.down") {
+                            moveReversePlate(at: index, by: 1)
+                        }
+                        .labelStyle(.iconOnly)
+                        .disabled(index == reversePerSide.count - 1)
+                        .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityElement(children: .contain)
+                }
+            }
         }
     }
 
@@ -293,34 +296,57 @@ struct PlateCalculatorView: View {
         return "Mixed equipment: \(loadout.bar.label) with \(loadout.perSideLabel) per side. The achieved total above already includes every conversion."
     }
 
+    private func setReverseCount(_ count: Int, for plate: Plate) {
+        let previous = reverseCounts[plate.id] ?? 0
+        reverseCounts[plate.id] = count
+        if previous == 0, count > 0, !reverseOrder.contains(plate.id) {
+            reverseOrder.append(plate.id)
+        } else if count == 0 {
+            reverseOrder.removeAll { $0 == plate.id }
+        }
+    }
+
+    private func moveReversePlate(at index: Int, by offset: Int) {
+        let destination = index + offset
+        guard reverseOrder.indices.contains(index), reverseOrder.indices.contains(destination) else { return }
+        reverseOrder.swapAt(index, destination)
+    }
+
     private var expandedBarView: some View {
-        let loadout = mode == .target ? solution?.loadout : reverseLoadout
+        let displayedSolution = mode == .target ? solution : reverseSolution
         let requested = mode == .target ? targetLb : nil
         return NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    if let loadout {
-                        BarbellView(
-                            weightLb: loadout.totalLb,
-                            unit: mode == .target ? targetUnit : .lb,
-                            bar: bar,
-                            gym: gym,
-                            loadout: loadout,
-                            plateStyle: plateStyle,
-                            presentation: .fullBar
-                        )
-                        .frame(maxWidth: 620)
-                        .frame(height: 180)
-                        .padding(.horizontal)
-                        LoadoutSummaryView(requestedLb: requested, loadout: loadout)
+                    if let displayedSolution {
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            BarbellView(
+                                solution: displayedSolution,
+                                plateStyle: plateStyle,
+                                presentation: .fullBar
+                            )
+                            .frame(
+                                width: max(
+                                    360,
+                                    BarbellView.minimumLegibleWidth(
+                                        for: displayedSolution.loadout,
+                                        style: plateStyle
+                                    )
+                                ),
+                                height: 180
+                            )
+                            .padding(.horizontal)
+                        }
+                        .accessibilityLabel("Expanded loaded bar diagram")
+                        LoadoutSummaryView(requestedLb: requested, loadout: displayedSolution.loadout)
                             .padding(.horizontal)
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Plates per side")
                                 .font(.headline)
-                            if loadout.perSide.isEmpty {
-                                Text(loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+                            if displayedSolution.loadout.perSide.isEmpty {
+                                Text(displayedSolution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
                             } else {
-                                ForEach(loadout.perSide) { plateCount in
+                                ForEach(displayedSolution.loadout.perSide) { plateCount in
                                     HStack {
                                         PlateFaceBadge(plate: plateCount.plate, style: plateStyle)
                                         Text(plateCount.plate.label).font(.title3.bold())

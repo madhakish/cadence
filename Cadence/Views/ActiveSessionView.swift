@@ -29,6 +29,7 @@ struct ActiveSessionView: View {
     @State private var showBankError = false            // failed save: everything rolled back, Bank stays retryable
     @State private var bankErrorMessage = ""
     @State private var showIncompleteBankConfirmation = false
+    @State private var showEarlierExercises = false
 
     private var currentOrFirst: SessionExercise? {
         currentEntry
@@ -99,9 +100,10 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
-            // The focused exercise is deliberately first. Between sets, the
-            // phone must answer load / plates / set / next action before it
-            // spends vertical space on venue or session metadata.
+            // Preserve the authored exercise order. Work already passed stays
+            // represented above the current lift as one compact disclosure,
+            // rather than moving the current lift ahead of exercises 1...N.
+            earlierExerciseSections
             focusedExerciseSection
 
             Section {
@@ -342,6 +344,55 @@ struct ActiveSessionView: View {
 
     /// Extracted from `body` — the multi-argument section call plus the recall
     /// lookup pushed the List builder past the type-checker's budget.
+    @ViewBuilder
+    private var earlierExerciseSections: some View {
+        let recall = recallLines()
+        let focusedID = currentOrFirst?.persistentModelID
+        let earlier = exercises(before: focusedID)
+
+        if !earlier.isEmpty {
+            if showEarlierExercises {
+                ForEach(earlier) { entry in
+                    exerciseSection(for: entry, emphasized: false, recall: recall)
+                }
+                Section {
+                    Button("Collapse earlier exercises") {
+                        showEarlierExercises = false
+                    }
+                    .accessibilityIdentifier("collapse-earlier-exercises")
+                }
+            } else {
+                Section {
+                    Button {
+                        showEarlierExercises = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Theme.good)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Earlier in session")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(earlierExerciseSummary(earlier))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(minHeight: Theme.bigTap - 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("expand-earlier-exercises")
+                    .accessibilityHint("Shows exercises that remain in their authored positions before the current exercise")
+                }
+            }
+        }
+    }
+
     private var focusedExerciseSection: some View {
         let recall = recallLines()
         let focusedID = currentOrFirst?.persistentModelID
@@ -353,9 +404,32 @@ struct ActiveSessionView: View {
     private var remainingExerciseSections: some View {
         let recall = recallLines()
         let focusedID = currentOrFirst?.persistentModelID
-        return ForEach(session.orderedExercises.filter { $0.persistentModelID != focusedID }) { entry in
+        return ForEach(exercises(after: focusedID)) { entry in
             exerciseSection(for: entry, emphasized: false, recall: recall)
         }
+    }
+
+    private func exercises(before focusedID: PersistentIdentifier?) -> [SessionExercise] {
+        guard let focusedID,
+              let index = session.orderedExercises.firstIndex(where: { $0.persistentModelID == focusedID })
+        else { return [] }
+        return Array(session.orderedExercises.prefix(index))
+    }
+
+    private func exercises(after focusedID: PersistentIdentifier?) -> [SessionExercise] {
+        guard let focusedID,
+              let index = session.orderedExercises.firstIndex(where: { $0.persistentModelID == focusedID })
+        else { return session.orderedExercises }
+        return Array(session.orderedExercises.dropFirst(index + 1))
+    }
+
+    private func earlierExerciseSummary(_ entries: [SessionExercise]) -> String {
+        entries.map { entry in
+            let resolved = entry.plannedWorkingSets.filter { $0.status != .planned }.count
+            let total = entry.plannedWorkingSets.count
+            return "\(entry.exercise?.name ?? "Exercise") \(resolved)/\(total)"
+        }
+        .joined(separator: " · ")
     }
 
     private func exerciseSection(
@@ -611,9 +685,8 @@ private struct SummaryBox: Identifiable {
 /// here prevents the sheet from re-solving against a gym edited underneath it.
 private struct ExpandedLoadout: Identifiable {
     let id = UUID()
-    let loadout: Loadout
+    let solution: PlateSolution
     let requestedLb: Double?
-    let unit: WeightUnit
     let style: PlateVisualStyle
 }
 
@@ -796,14 +869,14 @@ private struct ExerciseSection: View {
 
     private var restSeconds: Int { smartRestSeconds(for: entry.exercise, role: entry.programRole, settings: settings) }
 
-    private func solvedLoadout(for set: SetEntry) -> Loadout {
+    private func solvedPlateSolution(for set: SetEntry) -> PlateSolution {
         authoritativePlateSolution(
             targetLb: set.weightLb,
             fallbackUnit: set.enteredUnit,
             bar: effectiveBar,
             gym: gym,
             stationDenomination: entry.exercise?.stationDenomination
-        ).loadout
+        )
     }
     private var complementaryEffortCue: String? {
         guard let role = entry.programRole.flatMap(LiftRole.init(rawValue:)),
@@ -985,43 +1058,33 @@ private struct ExerciseSection: View {
                     // Loadout visualization — plates for barbell lifts, the
                     // rack number for dumbbell lifts. Mirrors web.
                     if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
-                        let exactLoadout = solvedLoadout(for: set)
+                        let exactSolution = solvedPlateSolution(for: set)
+                        let style: PlateVisualStyle = entry.exercise?.movementGroup == "olympic" ? .bumper : .steel
                         if emphasized && isCurrent {
-                            ScrollView(.horizontal, showsIndicators: true) {
-                                BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
-                                            bar: effectiveBar, gym: gym,
-                                            targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                            loadout: exactLoadout,
-                                            stationDenomination: entry.exercise?.stationDenomination,
-                                            plateStyle: entry.exercise?.movementGroup == "olympic" ? .bumper : .steel,
-                                            presentation: .fullBar)
-                                .frame(width: 420, height: 132)
-                            }
-                            .accessibilityLabel("Loaded bar diagram; scroll horizontally if needed")
+                            BarbellStageView(
+                                solution: exactSolution,
+                                unit: set.enteredUnit,
+                                plateStyle: style,
+                                onExpand: {
+                                    expandedLoadout = ExpandedLoadout(
+                                        solution: exactSolution,
+                                        requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
+                                        style: style
+                                    )
+                                }
+                            )
                         } else {
-                            BarbellView(weightLb: set.weightLb, unit: set.enteredUnit,
-                                        bar: effectiveBar, gym: gym,
-                                        targetWeightLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                        loadout: exactLoadout,
-                                        stationDenomination: entry.exercise?.stationDenomination,
-                                        plateStyle: entry.exercise?.movementGroup == "olympic" ? .bumper : .steel,
-                                        presentation: .compactSide)
+                            BarbellView(
+                                solution: exactSolution,
+                                plateStyle: style,
+                                presentation: .compactSide
+                            )
                         }
                         if emphasized && isCurrent {
                             LoadoutSummaryView(
                                 requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                loadout: exactLoadout
+                                loadout: exactSolution.loadout
                             )
-                            Button("Inspect loaded bar", systemImage: "arrow.up.left.and.arrow.down.right") {
-                                expandedLoadout = ExpandedLoadout(
-                                    loadout: exactLoadout,
-                                    requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                    unit: set.enteredUnit,
-                                    style: entry.exercise?.movementGroup == "olympic" ? .bumper : .steel
-                                )
-                            }
-                            .font(.caption.bold())
-                            .frame(minHeight: 44)
                         }
                     } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
@@ -1181,19 +1244,28 @@ private struct ExerciseSection: View {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        BarbellView(
-                            weightLb: detail.loadout.totalLb,
-                            unit: detail.unit,
-                            bar: detail.loadout.bar,
-                            gym: gym,
-                            loadout: detail.loadout,
-                            plateStyle: detail.style,
-                            presentation: .fullBar
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            BarbellView(
+                                solution: detail.solution,
+                                plateStyle: detail.style,
+                                presentation: .fullBar
+                            )
+                            .frame(
+                                width: max(
+                                    360,
+                                    BarbellView.minimumLegibleWidth(
+                                        for: detail.solution.loadout,
+                                        style: detail.style
+                                    )
+                                ),
+                                height: 180
+                            )
+                            .padding(.horizontal)
+                        }
+                        LoadoutSummaryView(
+                            requestedLb: detail.requestedLb,
+                            loadout: detail.solution.loadout
                         )
-                        .frame(maxWidth: 620)
-                        .frame(height: 180)
-                        .padding(.horizontal)
-                        LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.loadout)
                             .padding(.horizontal)
                     }
                     .padding(.vertical)
@@ -2032,9 +2104,16 @@ private struct SetDetailSheet: View {
                     }
 
                     if isBarbell && lb > 0 {
-                        BarbellView(weightLb: lb, unit: unit, bar: bar, gym: gym,
-                                    stationDenomination: exercise?.stationDenomination,
-                                    plateStyle: exercise?.movementGroup == "olympic" ? .bumper : .steel)
+                        BarbellView(
+                            solution: authoritativePlateSolution(
+                                targetLb: lb,
+                                fallbackUnit: unit,
+                                bar: bar,
+                                gym: gym,
+                                stationDenomination: exercise?.stationDenomination
+                            ),
+                            plateStyle: exercise?.movementGroup == "olympic" ? .bumper : .steel
+                        )
                             .frame(maxWidth: .infinity, alignment: .center)
                     } else if exercise?.type == .dumbbell && lb > 0 {
                         DumbbellView(weightLb: lb, unit: unit)

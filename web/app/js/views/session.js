@@ -39,6 +39,13 @@ const availablePlates = (gym, exercise = null) => {
   return C.stationPlates(exercise?.stationDenomination ?? null, rack);
 };
 
+/// The single plate solution for a stored session set. Both the inline diagram
+/// and tests consume this result; the renderer is never allowed to solve again.
+export function plateSolutionForSet(set, bar, gym = null, exercise = null) {
+  return C.solve(set.weightLb, bar, availablePlates(gym, exercise), 10,
+    gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
+}
+
 // The theoretical ramp describes useful jumps; the stored ramp must describe
 // plates that actually exist. Collapse duplicate/equal-to-working results when
 // a sparse rack maps several targets to the same achievable load.
@@ -410,19 +417,24 @@ export async function openSession(id) {
     // workout forward, so the ordinal must count it or skipping every set
     // would read "1 of N" forever. Mirrors the native progress card.
     const resolvedWork = workSets.filter((set) => set.status === "completed" || set.status === "skipped").length;
-    const currentWork = current?.sets?.find((set) => !set.isWarmup && set.status === "planned") || null;
-    const currentWorkSets = current?.sets?.filter((set) => !set.isWarmup) || [];
-    const currentSetNumber = currentWork ? currentWorkSets.indexOf(currentWork) + 1 : currentWorkSets.length;
+    const currentIndex = current ? session.exercises.indexOf(current) : -1;
+    const earlier = currentIndex > 0 ? session.exercises.slice(0, currentIndex) : [];
+    // Do not rewrite 1,2,3,4 as 3,1,2,4. Earlier authored entries stay above
+    // the current lift inside one compact disclosure; move controls still act
+    // on exactly the sequence represented on screen.
+    if (earlier.length) {
+      const names = earlier.map((entry) => {
+        const sets = (entry.sets || []).filter((set) => !set.isWarmup);
+        const resolved = sets.filter((set) => set.status !== "planned").length;
+        return `${entry.exerciseName} ${resolved}/${sets.length}`;
+      }).join(" · ");
+      const prior = ui.h("details", { class: "prior-exercises" },
+        ui.h("summary", {}, ui.h("span", { class: "title", text: "Earlier in session" }),
+          ui.h("span", { class: "sub", text: names })));
+      earlier.forEach((entry) => prior.append(exerciseCard(entry, body, false)));
+      body.append(prior);
+    }
     if (current) {
-      body.append(ui.h("section", { class: "session-now", "aria-label": "Current work" },
-        ui.h("span", { class: "eyebrow", text: "NOW" }),
-        ui.h("h2", { text: current.exerciseName }),
-        ui.h("div", { class: "session-now-prescription mono", text: currentWork
-          ? `${currentWork.weightLb === 0 ? "BW" : C.both(currentWork.weightLb)} · ${currentWork.reps} reps`
-          : "All working sets resolved" }),
-        ui.h("div", { class: "sub", text: currentWork
-          ? `Set ${currentSetNumber} of ${currentWorkSets.length} · complete the set, then ${ui.mmss(restFor(exMap.get(current.exerciseName), current.programRole))} rest`
-          : "Review the session, then bank it." })));
       body.append(exerciseCard(current, body, true));
     }
     body.append(ui.h("div", { class: "session-progress" },
@@ -455,7 +467,7 @@ export async function openSession(id) {
       });
       body.append(ui.field("Training at", gymSelect));
     }
-    session.exercises.filter((entry) => entry !== current)
+    session.exercises.slice(currentIndex + 1)
       .forEach((se) => body.append(exerciseCard(se, body, false)));
 
     body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "12px" }, text: "+ Add exercise", onClick: () => pickExercise(body) }));
@@ -722,26 +734,25 @@ export async function openSession(id) {
     if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
       const selectedBar = barFor(se);
       const plateStyle = ex?.movementGroup === "olympic" ? "bumper" : "steel";
-      const rendered = barbellSVG(s.weightLb, u, selectedBar, gymState.value, null,
-        ex?.stationDenomination ?? null, isCurrent ? "full" : "compact", plateStyle);
-      const { solution } = rendered;
+      const solution = plateSolutionForSet(s, selectedBar, gymState.value, ex);
+      const rendered = barbellSVG(solution, isCurrent ? "full" : "compact", plateStyle);
       const requestedLb = s.targetWeightLb ?? se.targetWeightLb ?? s.weightLb;
       const wrap = ui.h("div", { class: `barbell-wrap${isCurrent ? " current-loadout" : ""}` });
       if (isCurrent) {
         wrap.append(ui.h("div", { class: "section-heading" },
           ui.h("div", {}, ui.h("span", { class: "eyebrow", text: "PUT THIS ON THE BAR" }),
-            ui.h("div", { class: "title", text: C.barLabel(selectedBar) })),
-          ui.h("button", { class: "btn ghost sm", text: "Expand", onClick: () => {
+            ui.h("div", { class: "title", text: C.barLabel(selectedBar) }))));
+        wrap.append(barbellStage(rendered, {
+          caption: "Exact mirrored stack · counts are per side", emphasis: "session",
+          onExpand: () => {
             ui.pushScreen({ title: `${se.exerciseName} · loaded bar`, build: (screen) => {
-              const expanded = barbellSVG(solution.totalLb, u, selectedBar, gymState.value, solution,
-                ex?.stationDenomination ?? null, "full", plateStyle);
+              const expanded = barbellSVG(solution, "full", plateStyle);
               screen.append(barbellStage(expanded, { caption: "Exact mirrored stack · counts are per side", emphasis: "expanded" }),
                 loadoutSummary(requestedLb, solution));
               const mixed = mixedEquipmentNote(solution); if (mixed) screen.append(mixed);
             } });
-          } })));
-        wrap.append(barbellStage(rendered, { caption: "Exact mirrored stack · counts are per side", emphasis: "session" }),
-          loadoutSummary(requestedLb, solution, { compact: true }));
+          },
+        }), loadoutSummary(requestedLb, solution, { compact: true }));
         const mixed = mixedEquipmentNote(solution); if (mixed) wrap.append(mixed);
       } else {
         wrap.append(rendered.svg);
