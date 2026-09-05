@@ -135,7 +135,7 @@ struct HistoryView: View {
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: .now) ?? .distantPast
         // Ad-hoc activities are not training load: their timed set would
         // otherwise read as program conditioning minutes
-        // (INV-WOOD-WORK-USES-ONE-TIMELINE). Mirrors web history.js rolling.
+        // (INV-WOOD-WORK-USES-ONE-TIMELINE). Web excludes them the same way.
         let recent = sessions.filter { $0.date >= cutoff && $0.activityDetail == nil }
         let work = recent.flatMap(\.exercises).flatMap(\.workingSets).filter {
             guard let exercise = $0.sessionExercise?.exercise else { return true }

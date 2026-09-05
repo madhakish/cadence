@@ -161,7 +161,9 @@ struct ActivityQuickLogView: View {
                         .lineLimit(3...8)
                 }
 
-                if isEditing {
+                // The presenter performs the delete, so the action exists
+                // only when a presenter has wired it; never a silent no-op.
+                if isEditing, onDelete != nil {
                     Section {
                         Button("Delete activity", role: .destructive) { confirmDelete = true }
                             .frame(minHeight: 44)

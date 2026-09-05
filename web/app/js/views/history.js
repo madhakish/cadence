@@ -53,7 +53,7 @@ function renderRotations(panel, sessions, exercises, program, checkins, interval
     const cutoff = Date.now() - days * 86_400_000;
     // Ad-hoc activities are not training load: their timed set would otherwise
     // read as program conditioning minutes (INV-WOOD-WORK-USES-ONE-TIMELINE).
-    // Mirrors HistoryView.rollingSummary.
+    // Native excludes them the same way.
     const recent = sessions.filter((session) => !session.activity
       && Date.parse(session.completedAt || session.date) >= cutoff);
     let sets = 0, conditioningSeconds = 0;
