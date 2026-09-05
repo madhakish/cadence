@@ -9,10 +9,10 @@ import XCTest
 @MainActor
 final class ProgramActivationTests: XCTestCase {
     private func makeContainer() throws -> ModelContainer {
-        // These are current-service behavior tests and instantiate the live
-        // Program/ProgramDay/ProgramLift models. V11 is a frozen namespaced
-        // migration snapshot; mixing its schema with the live V12 classes
-        // traps in SwiftData's relationship casts on Xcode 26.
+        // The current schema, like every other live-model container in this
+        // suite. V11 is a frozen snapshot of nested classes on this branch;
+        // inserting a live `Program` into a V11 container is the SwiftData
+        // "Failed to cast model" crash.
         let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         return try ModelContainer(
             for: schema,

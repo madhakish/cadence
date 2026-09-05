@@ -98,30 +98,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: 1bdcc3d68ac5eb51b352ddddb0f98cf25e4dfa5c
+          ref: 3bbb5ae4b89fa08f059b8dfa4dffb38abd898549
           path: baseline
       - name: Install proof-only instrumentation
         run: |
           cp proof-source/Cadence/Seed/VisualProofSeed.swift baseline/Cadence/Seed/VisualProofSeed.swift
           mkdir -p baseline/CadenceBaselineVisualProofUITests
           cp proof-source/.github/visual-proof/BaselineVisualProofUITests.swift baseline/CadenceBaselineVisualProofUITests/VisualProofUITests.swift
-          # The pass added only display-unit restoration to ActivitySession.Input.
-          # The pre-pass model has no such argument; remove it from the copied
-          # deterministic fixture without touching any baseline production view.
-          python3 - <<'PY'
-          from pathlib import Path
-
-          seed = Path("baseline/Cadence/Seed/VisualProofSeed.swift")
-          source = seed.read_text()
-          source = source.replace(
-              "                    cordVolume: 0.42\n"
-              "                ),\n"
-              "                enteredUnit: .kg\n",
-              "                    cordVolume: 0.42\n"
-              "                )\n",
-          )
-          seed.write_text(source)
-          PY
           cd baseline
           git apply ../proof-source/.github/visual-proof/baseline-instrumentation.patch
       - name: Install XcodeGen

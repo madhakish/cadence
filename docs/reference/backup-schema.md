@@ -38,8 +38,18 @@ changes shape and nothing else moved:
   their one canonical location stays the session's conditioning set
   (`durationSeconds` / `weightLb`). All values are user-entered: absence is
   preserved, never estimated from other fields.
+- A session carrying `activity` must have the canonical shape the app's own
+  quick logger writes, and both importers reject anything else before any
+  write: `isCompleted` true, no `programTag`, exactly one exercise entry
+  named for the kind's canonical exercise (`"Wood Splitting"`), holding
+  exactly one set with a positive integer `durationSeconds`.
+- The activity object is part of the named-restore preview's session
+  signature, so an edit to the facts alone previews the session as changed.
 
-A version-11-or-older bundle restores with no detail on any session. Older
+A bundle exported at version 11 or older carries no `activity` and restores
+with no detail on any session. The importers do not gate the object on the
+declared version: a bundle that carries a valid `activity` restores it
+whatever its label says, so recorded facts are never dropped silently. Older
 importers reject a v12 bundle on the version gate, which is correct: parsing
 it would silently drop the recorded facts, and every recorded field must
 survive native/web backup and restore (`INV-WOOD-WORK-ROUND-TRIPS`).

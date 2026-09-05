@@ -4,11 +4,19 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { Exercises, Sessions, Settings, iso } from "../db.js";
 
+// Whole minutes, floored — the same reading native gives, so a 59m 31s log
+// never reports as an hour on one client and 59 minutes on the other.
 const durationLabel = (seconds) => {
   const minutes = Math.max(0, Math.floor((seconds || 0) / 60));
   if (minutes < 60) return `${minutes} min`;
   return minutes % 60 ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : `${minutes / 60} hr`;
 };
+
+// The form's hour and minute fields are whole units, the same contract as
+// native's steppers: a decimal entry is floored, never turned into fractional
+// seconds that the builder would reject with the wrong message.
+export const wholeMinuteSeconds = (hours, minutes) =>
+  Math.max(0, Math.floor(Number(hours) || 0)) * 3600 + Math.max(0, Math.floor(Number(minutes) || 0)) * 60;
 
 export function activitySet(session, kind = session?.activity?.kind) {
   const name = C.activityExerciseName(kind);
@@ -46,15 +54,6 @@ export function buildActivitySession(input, exercise, existing = null) {
   if (!exercise || exercise.name !== C.activityExerciseName(input.kind)) {
     throw new Error(`The exercise library is missing ${C.activityExerciseName(input.kind)}.`);
   }
-  if (existing) {
-    const entries = Array.isArray(existing.exercises) ? existing.exercises : [];
-    const sets = Array.isArray(entries[0]?.sets) ? entries[0].sets : [];
-    if (!existing.activity || entries.length !== 1 || sets.length !== 1 || sets[0].isWarmup
-        || existing.programTemplateId != null || existing.programTag != null
-        || entries[0].programRole != null || entries[0].programSlotId != null) {
-      throw new Error("This activity record is incomplete and can't be edited safely.");
-    }
-  }
   const loadLb = nonNegative(input.loadLb, "Implement weight") ?? 0;
   const wood = input.kind === "woodSplitting" ? (input.woodSplitting || {}) : {};
   const activity = {
@@ -67,6 +66,19 @@ export function buildActivitySession(input, exercise, existing = null) {
   };
   const start = new Date(input.startDate);
   if (Number.isNaN(start.getTime())) throw new Error("Choose a valid start date.");
+  // Editing rewrites the record wholesale, so it must only ever rewrite the
+  // canonical shape: one activity, one entry, one set, no program. Anything
+  // else is refused rather than silently truncated. Mirrors native
+  // ActivitySession.update's invalidSessionShape guard.
+  if (existing) {
+    const entries = Array.isArray(existing.exercises) ? existing.exercises : [];
+    const sets = Array.isArray(entries[0]?.sets) ? entries[0].sets : [];
+    if (!existing.activity || entries.length !== 1 || sets.length !== 1 || sets[0].isWarmup
+        || existing.programTemplateId != null || existing.programTag != null
+        || entries[0].programRole != null || entries[0].programSlotId != null) {
+      throw new Error("This activity record is incomplete and can't be edited safely.");
+    }
+  }
   const oldEntry = (existing?.exercises || [])[0] || {};
   const oldSet = oldEntry.sets?.[0] || {};
   const set = {
@@ -204,7 +216,7 @@ export async function openActivityLog(existing = null, { onDone = () => ui.nav.r
     const actions = ui.h("div", { class: "sticky-actions" },
       ui.h("button", { class: "btn primary wide", text: existing ? "Save" : "Bank work", onClick: async () => {
         try {
-          const durationSeconds = Number(hours.value) * 3600 + Number(minutes.value) * 60;
+          const durationSeconds = wholeMinuteSeconds(hours.value, minutes.value);
           const exercise = await Exercises.byName(C.activityExerciseName(activityKind));
           const displayLoad = nonNegative(load.value, "Maul weight");
           const session = buildActivitySession({

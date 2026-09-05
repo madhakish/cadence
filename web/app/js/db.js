@@ -1126,6 +1126,20 @@ export function validateBackup(bundle) {
       numberValue(activity.splitPieces, `${path}.activity.splitPieces`, { integer: true, min: 0 });
       numberValue(activity.estimatedStrikes, `${path}.activity.estimatedStrikes`, { integer: true, min: 0 });
       numberValue(activity.cordVolume, `${path}.activity.cordVolume`, { min: 0 });
+      // The importer is a second write path: it refuses what the creator
+      // refuses. An activity session is one completed, off-program session
+      // holding exactly the kind's canonical entry with one timed set
+      // (INV-WOOD-WORK-USES-ONE-TIMELINE). Mirrors native ImportService.
+      if (session.isCompleted !== true) invalid(`${path}.activity`, "an activity session must be completed");
+      if (session.programTag != null) invalid(`${path}.activity`, "an activity session carries no program tag");
+      const entries = Array.isArray(session.exercises) ? session.exercises : [];
+      const canonicalName = C.activityExerciseName(activity.kind);
+      if (entries.length !== 1 || typeof entries[0]?.name !== "string" || entries[0].name.trim() !== canonicalName) {
+        invalid(`${path}.exercises`, `an activity session holds exactly one ${canonicalName} entry`);
+      }
+      const sets = Array.isArray(entries[0].sets) ? entries[0].sets : [];
+      if (sets.length !== 1) invalid(`${path}.exercises[0].sets`, "an activity session holds exactly one set");
+      numberValue(sets[0].durationSeconds, `${path}.exercises[0].sets[0].durationSeconds`, { required: true, integer: true, min: 1 });
     }
     each(array(session, "exercises", `${path}.exercises`), `${path}.exercises`, (exercise, exercisePath) => {
       textValue(exercise.name, `${exercisePath}.name`, true);
@@ -1368,8 +1382,13 @@ const gymSignature = (g) => [
 // session's sets and a program's slot contents are themselves nested
 // structures) — the shared BackupContract explicitly asks for a
 // collection-appropriate shallow comparison here, not a deep recursive diff.
+// The v12 activity object is the first user-entered session-level fact
+// outside `exercises`, so it joins the shallow signature: an edit to RPE or
+// cords on one device must not preview as "unchanged" on the other
+// (INV-WOOD-WORK-ROUND-TRIPS). Mirrors native ImportService.
 const sessionSignature = (s) => [
   strOrEmpty(s.date), strOrEmpty(s.programTag?.programId), numOrZero((s.exercises || []).length),
+  s.activity ? JSON.stringify(portableActivity(s.activity)) : "",
 ].join("");
 
 const programSignature = (p) => [
@@ -1551,8 +1570,11 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       programTag: importProgramTag(s.programTag),
       // v12 typed ad-hoc activity facts. Values — the kind included —
       // restore verbatim; absence stays absent
-      // (INV-WOOD-WORK-DOES-NOT-GUESS). Mirrors native ImportService.
-      ...(schemaVersion >= 12 && s.activity ? { activity: portableActivity(s.activity) } : {}),
+      // (INV-WOOD-WORK-DOES-NOT-GUESS). Not gated on the declared version:
+      // validateBackup has already proven any object present, and a bundle
+      // that carries the facts never drops them (INV-WOOD-WORK-ROUND-TRIPS).
+      // Mirrors native ImportService.
+      ...(s.activity ? { activity: portableActivity(s.activity) } : {}),
       exercises: (s.exercises || []).map((e, oi) => ({
         order: oi, exerciseName: e.name, exerciseId: importedID(e.exerciseId, e.name), notes: e.notes || "", phase: recoverPhase(e.phase),
         programRole: e.role || null, programSlotId: e.programSlotId || null, barId: e.barId || null,

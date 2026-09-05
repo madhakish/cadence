@@ -68,13 +68,21 @@ struct HomeView: View {
         return Set(p.days.flatMap { $0.lifts.map(\.exerciseName) })
     }
 
+    /// Ad-hoc activities share the timeline but are not training: the spacing
+    /// and return-from-away advisories read only banked workouts, so splitting
+    /// wood never reads as "trained today" (INV-WOOD-WORK-USES-ONE-TIMELINE).
+    /// Mirrors web home.js `lastTraining`.
+    private var lastTrainingSession: WorkoutSession? {
+        completedSessions.last { $0.activityDetail == nil }
+    }
+
     /// Advisory only — the preference used to be write-only, set by a stepper
     /// and never read back. It never blocks a session: the lifter's calendar
     /// beats the app's opinion.
     private func spacingNote(_ program: Program) -> String? {
         // `completedSessions` is oldest → newest (`recentTops` relies on that
-        // order), so the most recent banked session is the last element.
-        guard let last = completedSessions.last?.date else { return nil }
+        // order), so the most recent banked workout is the last training row.
+        guard let last = lastTrainingSession?.date else { return nil }
         // A declared break (rest/away/active recovery) overlapping the open
         // time excuses the gap entirely — a chosen break is not a lapse, and
         // nagging about spacing through it reads the calendar as a failure
@@ -99,7 +107,7 @@ struct HomeView: View {
     private var returnFromAwayNote: String? {
         guard TrainingIntervals.recentReturnFromAway(
             nowMs: Date.now.timeIntervalSince1970 * 1000,
-            lastSessionMs: completedSessions.last.map { $0.date.timeIntervalSince1970 * 1000 },
+            lastSessionMs: lastTrainingSession.map { $0.date.timeIntervalSince1970 * 1000 },
             intervals: intervalSnapshots
         ) != nil else { return nil }
         return "Back from time away — the first session back is re-entry, not a test. Ease in and let the log rebuild."
@@ -275,6 +283,8 @@ struct HomeView: View {
                     .accessibilityHint("Shows the default membership barcode at full brightness")
                 }
 
+                // Ad-hoc work (#166): real physical work banked on the same
+                // timeline as training, never into a program.
                 Section {
                     Button { showActivityLog = true } label: {
                         VStack(alignment: .leading, spacing: 5) {

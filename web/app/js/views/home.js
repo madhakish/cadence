@@ -28,6 +28,11 @@ export async function render(host) {
     Sessions.openAll(), Tracks.all(), Gyms.default(), Settings.get(), Programs.active(), Exercises.all(), Sessions.completed(), CoachingDecisions.all(), Checkins.all(), Intervals.all(),
   ]);
   const intervalSnaps = intervalSnapshots(intervals);
+  // Ad-hoc activities share the timeline but are not training: the spacing
+  // and return-from-away advisories read only banked workouts, so splitting
+  // wood never reads as "trained today" (INV-WOOD-WORK-USES-ONE-TIMELINE).
+  // `completed` is newest-first. Mirrors HomeView.lastTrainingSession.
+  const lastTraining = completed.find((s) => !s.activity) || null;
   const recoveryCompletion = await reconcileRecoveryBridge(program, completed);
   // Last 8 top working weights for a lift, oldest→newest (sparkline source).
   const topsFor = (name) => completed
@@ -104,7 +109,7 @@ export async function render(host) {
   // — it never blocks starting anything. Mirrors HomeView.returnFromAwayNote.
   if (C.recentReturnFromAway(
     Date.now(),
-    completed[0]?.date ? new Date(completed[0].date).getTime() : null,
+    lastTraining?.date ? new Date(lastTraining.date).getTime() : null,
     intervalSnaps,
   )) {
     root.append(ui.h("div", { class: "card" },
@@ -174,7 +179,7 @@ export async function render(host) {
     root.append(heading);
     // Advisory only. The preference used to be write-only — a stepper set it
     // and nothing read it back.
-    const lastBanked = completed[0]?.date ? new Date(completed[0].date) : null;
+    const lastBanked = lastTraining?.date ? new Date(lastTraining.date) : null;
     const daysSinceLast = lastBanked
       ? Math.floor((Date.now() - lastBanked.getTime()) / 86400000) : null;
     // A declared break (rest/away/active recovery) overlapping the open time

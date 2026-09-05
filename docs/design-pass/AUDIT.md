@@ -112,7 +112,7 @@ exercise pane, anatomy, calculator, expanded bar, Settings, and History surfaces
 It cannot read or mutate a user's store.
 
 The comparison baseline is not a reconstruction. A proof-only workflow checks
-out pre-pass commit `1bdcc3d68ac5eb51b352ddddb0f98cf25e4dfa5c`, injects only
+out pre-pass commit `3bbb5ae4b89fa08f059b8dfa4dffb38abd898549`, injects only
 an in-memory fixture and UI-test target, and captures its unmodified production
 views on the same iPhone simulator. That instrumentation is removed after the
 baseline artifact is committed.

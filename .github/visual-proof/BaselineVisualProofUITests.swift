@@ -19,8 +19,16 @@ final class BaselineVisualProofUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Today"].waitForExistence(timeout: 20))
     }
 
-    func test01Home() {
+    func test01HomeAndAdHocWork() {
         capture("before-01-home-iphone")
+
+        let activity = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Wood Splitting'")
+        ).firstMatch
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        activity.tap()
+        XCTAssertTrue(app.navigationBars["Log ad-hoc work"].waitForExistence(timeout: 6))
+        capture("before-02-ad-hoc-work-iphone")
     }
 
     func test02SessionAndExercisePane() {
@@ -30,7 +38,7 @@ final class BaselineVisualProofUITests: XCTestCase {
         XCTAssertTrue(resume.waitForExistence(timeout: 5))
         resume.tap()
         XCTAssertTrue(app.staticTexts["Back Squat"].waitForExistence(timeout: 8))
-        capture("before-02-current-session-iphone")
+        capture("before-03-current-session-iphone")
 
         let squat = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH 'Back Squat'")
@@ -38,7 +46,7 @@ final class BaselineVisualProofUITests: XCTestCase {
         XCTAssertTrue(squat.waitForExistence(timeout: 5))
         squat.tap()
         XCTAssertTrue(app.navigationBars["Back Squat"].waitForExistence(timeout: 6))
-        capture("before-03-exercise-anatomy-iphone")
+        capture("before-04-exercise-anatomy-iphone")
     }
 
     func test03PlateCalculator() {
@@ -50,13 +58,19 @@ final class BaselineVisualProofUITests: XCTestCase {
         target.typeText("139")
         app.swipeDown()
         XCTAssertTrue(app.staticTexts["Total on bar"].waitForExistence(timeout: 3))
-        capture("before-04-plate-calculator-iphone")
+        capture("before-05-plate-calculator-iphone")
     }
 
-    func test04Settings() {
+    func test04SettingsAndHistory() {
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 6))
-        capture("before-05-settings-iphone")
+        capture("before-06-settings-iphone")
+
+        app.tabBars.buttons["History"].tap()
+        XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 6))
+        app.segmentedControls.buttons["Log"].tap()
+        XCTAssertTrue(app.staticTexts["Wood Splitting"].firstMatch.waitForExistence(timeout: 5))
+        capture("before-07-history-ad-hoc-iphone")
     }
 
     private func capture(_ name: String) {
