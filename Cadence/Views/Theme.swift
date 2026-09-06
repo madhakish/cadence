@@ -2,49 +2,73 @@ import SwiftUI
 import UIKit
 
 /// The selectable themes. Raw values match the web `[data-theme]` keys and the
-/// persisted `AppSettings.themeNameRaw`, so the two apps stay in lockstep.
+/// persisted `AppSettings.themeNameRaw`, so the two apps stay in lockstep. The
+/// keys are a theme's identity; the labels are what the visual pass renamed
+/// (Foundry was Carbon, Heritage Gold was Memento), so a saved choice never
+/// changes meaning. Declaration order is picker order: Foundry leads as the
+/// recommended default.
 enum ThemeName: String, CaseIterable, Identifiable, Codable {
-    case memento, carbon, slate, system
+    case carbon, memento, titanium, slate, system
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .memento: return "Memento"
-        case .carbon: return "Carbon"
+        case .carbon: return "Foundry"
+        case .memento: return "Heritage Gold"
+        case .titanium: return "Titanium"
         case .slate: return "Slate"
         case .system: return "System"
         }
     }
 
-    /// The three custom themes are dark by design; System follows the OS.
-    var colorScheme: ColorScheme? { self == .system ? nil : .dark }
+    /// Foundry, Heritage Gold, and Slate are dark by design; Titanium is the
+    /// one light theme; System follows the OS.
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .titanium: return .light
+        case .carbon, .memento, .slate: return .dark
+        }
+    }
 
     /// Accent + semantic colours, mirroring web styles.css token blocks 1:1.
     /// (Backgrounds stay on the system grouped surfaces, which resolve dark
-    /// under the forced dark scheme and follow the OS under System.)
+    /// under the forced dark scheme, light under Titanium, and follow the OS
+    /// under System.) `onAccent` is the label colour on an accent-filled
+    /// control — chosen per theme to clear WCAG AA on that fill, never assumed
+    /// white. Physical plate colours and anatomy role colours are not here:
+    /// they come from equipment and muscle metadata, never from the theme.
     var palette: Palette {
         switch self {
-        case .memento:
-            return Palette(accent: Color(hex: 0xC9A24B), warn: Color(hex: 0xD29A3A),
-                           hardStop: Color(hex: 0xFF7A73), good: Color(hex: 0x5BA06A))
         case .carbon:
-            return Palette(accent: Color(hex: 0xFF5A5F), warn: Color(hex: 0xEAB308),
-                           hardStop: Color(hex: 0xFF7A73), good: Color(hex: 0x4ADE80))
+            return Palette(accent: Color(hex: 0xFF5A5F), onAccent: Color(hex: 0x0C0D0E),
+                           warn: Color(hex: 0xEAB308), hardStop: Color(hex: 0xFF7A73),
+                           good: Color(hex: 0x4ADE80))
+        case .memento:
+            return Palette(accent: Color(hex: 0xC9A24B), onAccent: Color(hex: 0x0A0908),
+                           warn: Color(hex: 0xD29A3A), hardStop: Color(hex: 0xFF7A73),
+                           good: Color(hex: 0x5BA06A))
+        case .titanium:
+            return Palette(accent: Color(hex: 0x0B615C), onAccent: Color(hex: 0xFFFFFF),
+                           warn: Color(hex: 0x7A4F00), hardStop: Color(hex: 0xA51111),
+                           good: Color(hex: 0x146633))
         case .slate:
-            return Palette(accent: Color(hex: 0xFF5A5F), warn: Color(hex: 0xD29922),
-                           hardStop: Color(hex: 0xFF7A73), good: Color(hex: 0x3FB950))
+            return Palette(accent: Color(hex: 0xFF5A5F), onAccent: Color(hex: 0x0D1117),
+                           warn: Color(hex: 0xD29922), hardStop: Color(hex: 0xFF7A73),
+                           good: Color(hex: 0x3FB950))
         case .system:
             return Palette(accent: Color(lightHex: 0xC81E1E, darkHex: 0xFF5A5F),
-                           warn: Color(lightHex: 0xB8860B, darkHex: 0xEAB308),
+                           onAccent: Color(lightHex: 0xFFFFFF, darkHex: 0x0C0D0E),
+                           warn: Color(lightHex: 0x7A4F00, darkHex: 0xEAB308),
                            hardStop: Color(lightHex: 0xA51111, darkHex: 0xFF7A73),
-                           good: Color(lightHex: 0x1A8F43, darkHex: 0x4ADE80))
+                           good: Color(lightHex: 0x146633, darkHex: 0x4ADE80))
         }
     }
 }
 
 struct Palette {
-    let accent, warn, hardStop, good: Color
+    let accent, onAccent, warn, hardStop, good: Color
 }
 
 /// Dark, minimal, chalk-hands-friendly. No streaks, no badges, no quotes.
@@ -62,6 +86,7 @@ enum Theme {
     static var warn: Color { name.palette.warn }            // grindy / wobble (semantic)
     static var hardStop: Color { name.palette.hardStop }    // hard stop (semantic critical)
     static var good: Color { name.palette.good }            // clean rep (semantic)
+    static var onAccent: Color { name.palette.onAccent }    // label on an accent fill
     static let card = Color(.secondarySystemGroupedBackground)
     static let raised = Color(.tertiarySystemGroupedBackground)
     static let hairline = Color.primary.opacity(0.14)
@@ -114,6 +139,15 @@ enum Copy {
 }
 
 extension View {
+    /// The one primary-action treatment: accent fill, the theme's own label
+    /// colour, industrial corner. Web twin: `.btn.primary`. A site that needs
+    /// a different fill still adds `.tint(...)` after it.
+    func primaryActionStyle() -> some View {
+        buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+            .foregroundStyle(Theme.onAccent)
+    }
+
     func cardStyle() -> some View {
         padding()
             .frame(maxWidth: .infinity, alignment: .leading)

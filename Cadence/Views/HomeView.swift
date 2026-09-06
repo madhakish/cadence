@@ -180,8 +180,7 @@ struct HomeView: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                        .primaryActionStyle()
                         .accessibilityIdentifier("resume-session")
                         Button(role: .destructive) { discardSession = open } label: {
                             Label("Discard session", systemImage: "trash").font(.caption)
@@ -238,8 +237,7 @@ struct HomeView: View {
                             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                         }
                         Button("Start \(day.name)") { startProgramDay(program, day) }
-                            .buttonStyle(.borderedProminent)
-                            .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                            .primaryActionStyle()
                     }
                 }
 
@@ -277,8 +275,7 @@ struct HomeView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                    .primaryActionStyle()
                     .tint(prominentGymTag ? Theme.accent : Color(.tertiarySystemFill))
                     .accessibilityHint("Shows the default membership barcode at full brightness")
                 }
@@ -457,8 +454,7 @@ struct HomeView: View {
                         } label: {
                             Text("Start \(day.name)").frame(maxWidth: .infinity).font(.headline)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                        .primaryActionStyle()
                     }
                 }
 
@@ -553,8 +549,7 @@ struct HomeView: View {
                                         Text(recommendation.explanation).font(.caption).foregroundStyle(.secondary)
                                         HStack {
                                             Button("Apply") { apply(recommendation, report: report, program: program) }
-                                                .buttonStyle(.borderedProminent)
-                                                .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                                                .primaryActionStyle()
                                             Button("Not now") { deferRecommendation(recommendation, report: report, program: program) }
                                                 .buttonStyle(.bordered)
                                         }

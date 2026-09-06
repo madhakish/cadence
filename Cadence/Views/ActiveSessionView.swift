@@ -144,8 +144,7 @@ struct ActiveSessionView: View {
                         .frame(maxWidth: .infinity, minHeight: Theme.bigTap - 16)
                 }
                 .disabled(banking)
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                .primaryActionStyle()
                 .listRowBackground(Color.clear)
             }
         }
@@ -2376,8 +2375,7 @@ private struct SessionBottomBar: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                    .primaryActionStyle()
                     .accessibilityHint("Begins the workout clock for this session")
                 }
 
@@ -2421,8 +2419,7 @@ private struct SessionBottomBar: View {
                             .font(.body.weight(.semibold).monospacedDigit())
                             .padding(.horizontal, 4)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                    .primaryActionStyle()
                 }
             }
             .padding(.horizontal)

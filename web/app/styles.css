@@ -3,12 +3,15 @@
    hydrates. All four themes remain available on both surfaces.
    Accent = the single interactive/active signal. warn/good/hard stay
    semantic (grindy·wobble / clean / hard stop) and separate from accent. */
-:root, :root[data-theme="carbon"] {    /* Carbon — greyscale + red signal (default) */
-  --accent: #ff5a5f; --warn: #eab308; --hard: #ff7a73; --good: #4ade80;
-  --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
+:root, :root[data-theme="carbon"] {    /* Foundry — charcoal, controlled red, cool steel edges (default; key stays "carbon") */
+  --accent: #ff5a5f; --on-accent: #0c0d0e; --warn: #eab308; --hard: #ff7a73; --good: #4ade80;
+  --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2c3136;
+  color-scheme: dark;
 }
-:root[data-theme="memento"] {           /* Memento — brass on warm near-black */
+:root[data-theme="memento"] {           /* Heritage Gold — muted brass on warm carbon (key stays "memento") */
   --accent: #c9a24b;
+  --on-accent: #0a0908;
+  color-scheme: dark;
   --warn: #d29a3a;
   --hard: #ff7a73;
   --good: #5ba06a;
@@ -20,17 +23,25 @@
   --line: #2f2718;
 }
 :root[data-theme="slate"] {            /* Slate — cool gunmetal + crimson */
-  --accent: #ff5a5f; --warn: #d29922; --hard: #ff7a73; --good: #3fb950;
+  --accent: #ff5a5f; --on-accent: #0d1117; --warn: #d29922; --hard: #ff7a73; --good: #3fb950;
   --bg: #0d1117; --card: #161b22; --card2: #1e252e; --text: #eaeef4; --muted: #8a97a6; --line: #2a323c;
+  color-scheme: dark;
+}
+:root[data-theme="titanium"] {         /* Titanium — light mineral surfaces, deep teal controls */
+  --accent: #0b615c; --on-accent: #ffffff; --warn: #7a4f00; --hard: #a51111; --good: #146633;
+  --bg: #e6e9ec; --card: #f5f6f8; --card2: #d9dde2; --text: #171a1d; --muted: #525a62; --line: #c4cad1;
+  color-scheme: light;
 }
 :root[data-theme="system"] {           /* System — follows OS; light by default, dark below */
-  --accent: #c81e1e; --warn: #b8860b; --hard: #a51111; --good: #1a8f43;
+  --accent: #c81e1e; --on-accent: #ffffff; --warn: #7a4f00; --hard: #a51111; --good: #146633;
   --bg: #f5f5f7; --card: #ffffff; --card2: #ececee; --text: #1a1a1c; --muted: #66666e; --line: #d9d9de;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
-    --accent: #ff5a5f; --warn: #eab308; --hard: #ff7a73; --good: #4ade80;
-    --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2b2e31;
+    --accent: #ff5a5f; --on-accent: #0c0d0e; --warn: #eab308; --hard: #ff7a73; --good: #4ade80;
+    --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2c3136;
+    color-scheme: dark;
   }
 }
 :root {
@@ -84,7 +95,7 @@ body {
 #fab {
   position: fixed; right: 18px; bottom: calc(74px + var(--safe-bottom)); z-index: 21;
   width: var(--bigtap); height: var(--bigtap); border-radius: 50%; border: 0;
-  background: var(--accent); color: #16090a;
+  background: var(--accent); color: var(--on-accent);
   box-shadow: 0 6px 18px rgba(0,0,0,0.5); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
@@ -121,7 +132,7 @@ button.btn, a.btn {
 }
 button.btn:active, a.btn:active { filter: brightness(1.14); transform: translateY(1px); }
 button.btn:disabled, .seg button:disabled { cursor: not-allowed; opacity: .45; }
-.btn.primary { background: var(--accent); color: #0b0b0c; border-color: color-mix(in srgb, var(--accent) 72%, black); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: color-mix(in srgb, var(--accent) 72%, black); }
 .btn.ghost { background: transparent; border: 1px solid var(--line); }
 .btn.danger { color: var(--hard); }
 .btn.wide { width: 100%; }
@@ -242,7 +253,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .flagbtn.on-grindy, .flagbtn.on-wobble { background: var(--warn); color: #221c00; }
 /* Reps in reserve is an observation, not a verdict — it reads as set, not as
    good or bad, so it takes the accent rather than the good/warn palette. */
-.flagbtn.on-rir { background: var(--accent); color: #041018; }
+.flagbtn.on-rir { background: var(--accent); color: var(--on-accent); }
 .gym-img { width: 100%; background: #fff; border-radius: 12px; padding: 12px; }
 .annot { font-size: 12px; }
 

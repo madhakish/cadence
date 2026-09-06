@@ -1388,7 +1388,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // Every other assertion here compares against the constant, so a JS-only bump
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
-ok(db.BACKUP_SCHEMA_VERSION === 12, `backup schema is pinned at 12 (got ${db.BACKUP_SCHEMA_VERSION})`);
+ok(db.BACKUP_SCHEMA_VERSION === 13, `backup schema is pinned at 13 (got ${db.BACKUP_SCHEMA_VERSION})`);
 
 // An app must never write a backup it cannot itself restore. A corrupted or
 // out-of-range birthYear is clamped to the not-set sentinel on the way through
@@ -1417,6 +1417,41 @@ ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
 ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 159, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
+// Themes: Foundry leads and keeps the carbon key, Heritage Gold keeps the
+// memento key, and Titanium is the one new value — a version-13 enum
+// addition (v4/v5 pattern). Older bundles keep restoring their own theme; an
+// unregistered value rejects the whole bundle before any write.
+{
+  ok(ui.THEMES[0].value === "carbon" && ui.THEMES[0].label === "Foundry",
+    "Foundry is the first, default theme and keeps the carbon key");
+  ok(ui.THEMES.some((t) => t.value === "memento" && t.label === "Heritage Gold"),
+    "Heritage Gold keeps the memento key");
+  ok(ui.THEMES.some((t) => t.value === "titanium" && t.label === "Titanium"), "Titanium is selectable");
+  ok(["slate", "system"].every((v) => ui.THEMES.some((t) => t.value === v)),
+    "Slate and System remain available so saved choices are not discarded");
+  ok(db.BACKUP_ENUMS.themes.includes("titanium") && db.BACKUP_SCHEMA_VERSION === 13,
+    "titanium is a version-13 backup enum value");
+  const original = await db.Settings.get();
+  await db.Settings.save({ ...original, theme: "titanium" });
+  const titanium = JSON.parse(await db.exportJSON());
+  ok(titanium.schemaVersion === 13 && titanium.settings.theme === "titanium", "titanium exports at version 13");
+  await db.importBundle(titanium);
+  ok((await db.Settings.get()).theme === "titanium", "titanium survives the round trip");
+  await db.importBundle({ ...titanium, schemaVersion: 12, settings: { ...titanium.settings, theme: "slate" } });
+  ok((await db.Settings.get()).theme === "slate", "an older Slate backup restores Slate");
+  let threw = false;
+  try { await db.importBundle({ ...titanium, settings: { ...titanium.settings, theme: "chrome" } }); } catch { threw = true; }
+  ok(threw && (await db.Settings.get()).theme === "slate",
+    "an unregistered theme value rejects the bundle before any write");
+  // applyTheme reads the resolved --bg for the PWA status-bar colour; this
+  // harness has no layout engine, so give it an inert getComputedStyle.
+  globalThis.getComputedStyle ??= () => ({ getPropertyValue: () => "" });
+  ui.applyTheme("titanium");
+  ok(document.documentElement.dataset.theme === "titanium", "applyTheme accepts titanium");
+  ui.applyTheme("chrome");
+  ok(document.documentElement.dataset.theme === "carbon", "unknown theme values fall back to Foundry");
+  await db.Settings.save(original);
+}
 ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
 ok(parsed.sessions.some((s) => s.exercises.some((e) => e.barId === "35-lb")), "export carries session-local bar overrides");
 const csv = await db.exportCSV();
@@ -1930,7 +1965,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 12, "climbed flights ship inside the current backup schema");
+    ok(climbBundle.schemaVersion === 13, "climbed flights ship inside the current backup schema");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -4117,7 +4152,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(sessions.every((s) => (s.exercises || []).every((e) => e.exerciseId === C.exerciseLegacyID(e.exerciseName))),
     "v10 session entries derive their exercise ids");
   const reexport = await db.exportBundle();
-  ok(reexport.schemaVersion === 12, "importing v10 re-exports as the current version");
+  ok(reexport.schemaVersion === 13, "importing v10 re-exports as the current version");
 }
 
 
