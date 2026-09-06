@@ -147,7 +147,7 @@ struct WorkoutPreviewView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 40)
             }
-            .buttonStyle(.borderedProminent)
+            .primaryActionStyle()
             .padding(.horizontal)
             .padding(.vertical, 8)
             .background(.bar)

@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **12**. A missing version means the legacy version-0 shape.
+version **13**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,21 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 13 Titanium theme
+
+Version 13 adds one enum value and nothing else: `settings.theme` accepts
+`"titanium"`, the light mineral theme, alongside `"carbon"` (Foundry),
+`"memento"` (Heritage Gold), `"slate"`, and `"system"`. The keys are a
+theme's persisted identity; the visual pass renamed the labels, not the keys,
+so every saved choice restores as the same theme. No SwiftData model,
+IndexedDB store, workout record, or field type changes shape.
+
+A version-12-or-older bundle can only carry the four older values and
+restores exactly the theme it names. An unregistered value rejects the bundle
+in preflight, as every enum has since version 1. Older importers reject a
+version-13 bundle on the version gate — silently falling back to the default
+theme would discard a saved choice.
 
 ## Version 12 ad-hoc activity detail
 
@@ -333,6 +348,8 @@ instead — see [program file](program-file.md).
 - Version-10-and-older bundles carry no exercise/template identity; every
   id is derived deterministically from the recorded names during import, so
   both clients agree on identity for identical content.
+- Version-12-and-older bundles cannot carry `"titanium"`; the theme they name
+  restores verbatim, and an unregistered theme value rejects the bundle.
 - Missing top-level sections leave the corresponding local store untouched.
 - Import runs a full preflight before storage is touched. Missing identifiers,
   invalid dates or numbers, unknown enum values, duplicate keys, and impossible

@@ -256,9 +256,13 @@ export function download(filename, text, type = "application/json") {
 }
 
 // ---- Theme ----
+// Keys are the persisted identity (they match native ThemeName raw values and
+// the backup enum); labels are what the visual pass renamed. Foundry leads as
+// the recommended default. Slate and System stay so saved choices survive.
 export const THEMES = [
-  { value: "memento", label: "Memento" },
-  { value: "carbon", label: "Carbon" },
+  { value: "carbon", label: "Foundry" },
+  { value: "memento", label: "Heritage Gold" },
+  { value: "titanium", label: "Titanium" },
   { value: "slate", label: "Slate" },
   { value: "system", label: "System" },
 ];

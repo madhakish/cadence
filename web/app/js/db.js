@@ -9,7 +9,7 @@ import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 8;
-export const BACKUP_SCHEMA_VERSION = 12;
+export const BACKUP_SCHEMA_VERSION = 13;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -998,7 +998,7 @@ function normalizeSettings(s) {
 // a drift source: it goes stale the first time a prescription style is added.
 export const BACKUP_ENUMS = {
   units: ["lb", "kg"], unitDisplay: ["lbPrimary", "kgPrimary", "both"],
-  themes: ["memento", "carbon", "slate", "system"],
+  themes: ["memento", "carbon", "slate", "system", "titanium"],
   roles: ["main", "complementary", "accessory"], liftRoles: ["main", "complementary"],
   statuses: C.SET_STATUSES,
   flags: [...C.SET_QUALITIES, ...C.SET_RIRS, "stopped early"],

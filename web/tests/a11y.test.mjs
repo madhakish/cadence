@@ -35,8 +35,15 @@ const css = read("app/styles.css");
 ok(css.indexOf(':root, :root[data-theme="carbon"]') >= 0
   && css.indexOf(':root, :root[data-theme="carbon"]') < css.indexOf(':root[data-theme="memento"]'),
   "Carbon tokens paint before JavaScript applies the persisted theme (no light/brass flash)");
-const carbonTokens = /:root, :root\[data-theme="carbon"\]\s*\{([^}]*)\}/.exec(css)?.[1] || "";
-const colorToken = (name) => new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, "i").exec(carbonTokens)?.[1];
+// Every selectable theme defines the same three surface levels, and every
+// text/semantic token clears WCAG AA on each of them. The primary action pair
+// (accent fill + its foreground) is checked separately: the foreground is a
+// per-theme token, never a hard-coded near-black, so a light theme with a
+// deep accent still gets a legible label.
+const themeBlock = (name) => (name === "carbon"
+  ? /:root, :root\[data-theme="carbon"\]\s*\{([^}]*)\}/
+  : new RegExp(`:root\\[data-theme="${name}"\\]\\s*\\{([^}]*)\\}`)).exec(css)?.[1] || "";
+const tokenIn = (block, name) => new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, "i").exec(block)?.[1];
 const relativeLuminance = (hex) => {
   const channels = [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255)
     .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
@@ -46,11 +53,26 @@ const contrast = (a, b) => {
   const values = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
   return (values[0] + 0.05) / (values[1] + 0.05);
 };
-const carbonSurfaces = ["bg", "card", "card2"].map(colorToken);
-ok(["text", "muted", "accent", "warn", "hard", "good"].every((name) =>
-  carbonSurfaces.every((surface) => contrast(colorToken(name), surface) >= 4.5)),
-"Carbon text and semantic tokens meet WCAG AA on every app elevation");
+const clearsAA = (a, b) => Boolean(a && b) && contrast(a, b) >= 4.5;
+const THEMES = ["carbon", "memento", "titanium", "slate", "system"];
+const systemDark = /@media \(prefers-color-scheme: dark\)\s*\{\s*:root\[data-theme="system"\]\s*\{([^}]*)\}/.exec(css)?.[1] || "";
+for (const [theme, block] of [...THEMES.map((t) => [t, themeBlock(t)]), ["system (dark)", systemDark]]) {
+  const surfaces = ["bg", "card", "card2"].map((name) => tokenIn(block, name));
+  ok(surfaces.every(Boolean), `${theme} defines all three surface levels`);
+  ok(["text", "muted", "accent", "warn", "hard", "good"].every((name) =>
+    surfaces.every((surface) => clearsAA(tokenIn(block, name), surface))),
+  `${theme} text and semantic tokens meet WCAG AA on every app elevation`);
+  ok(clearsAA(tokenIn(block, "on-accent"), tokenIn(block, "accent")),
+    `${theme} primary action foreground meets WCAG AA on its accent fill`);
+}
+ok(/:root\[data-theme="titanium"\]\s*\{[^}]*color-scheme:\s*light/.test(css),
+  "Titanium declares itself a light theme so form controls and scrollbars follow");
+ok(!/color:\s*#0b0b0c|color:\s*#16090a|color:\s*#041018/.test(css),
+  "no accent-filled control hard-codes its foreground; they read --on-accent");
 ok(/button:focus-visible[^{]*\{/.test(css), "buttons have a visible keyboard-focus style");
+ok(/--focus:\s*var\(--accent\)/.test(css), "one --focus token, defined once, follows the active theme's accent");
+ok(!/focus(?:-visible)?[^{]*\{[^}]*var\(--accent\)/.test(css),
+  "every focus ring reads --focus, never the accent directly");
 ok(/input:focus|input:focus-visible/.test(css), "text inputs have a visible focus style");
 
 // ---- Logger grading controls: one labelling pattern for quality and RIR ----

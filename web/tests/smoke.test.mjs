@@ -797,6 +797,22 @@ for (let i = 0; i < 10; i++) {
     "the logger reports exercise and whole-workout set progress");
   ok(logger.querySelector(".current-set-card") && [...logger.querySelectorAll("button")].some((button) => button.textContent === "Show all sets"),
     "the current set owns the cockpit while a full-set control remains available");
+  // The focused exercise leads with the approved hierarchy: a set track with
+  // exactly one current segment, then the working-set position, reps, and
+  // the set load — pounds first, kilograms after — before any set row.
+  {
+    const focused = logger.querySelector(".exercise-card.emphasized");
+    const segments = focused ? [...focused.querySelectorAll(".set-track .set-track-segment")] : [];
+    ok(segments.length >= 2 && segments.filter((seg) => seg.classList.contains("now")).length === 1,
+      "the focused exercise shows a set track with exactly one current segment");
+    const heroSet = builtProgramSession.exercises[0].sets.find((x) => !x.isWarmup);
+    const hero = focused?.querySelector(".current-set-hero");
+    const heroText = hero?.textContent || "";
+    ok(hero && /WORKING SET 1 OF \d+/i.test(heroText) && heroText.includes(`${heroSet.reps} reps`)
+        && heroText.includes(C.trim(heroSet.weightLb)) && /\blb\b[\s\S]*\bkg\b/.test(heroText)
+        && hero.compareDocumentPosition(focused.querySelector(".setrow")) & Node.DOCUMENT_POSITION_FOLLOWING,
+      "the hero states working-set position, reps, and the set load lb-first with kg, above the set rows");
+  }
   const restBtn = [...document.querySelectorAll("#session-bar button")].find((b) => b.textContent.startsWith("Rest "));
   ok(restBtn && restBtn.textContent === "Rest 4:00", `main squat rest follows the bucket stepper (got ${restBtn && restBtn.textContent})`);
   const chips = [...document.querySelectorAll("#overlays .overlay button")].filter((b) => b.textContent.startsWith("⏱"));
@@ -884,13 +900,17 @@ for (const [name, view] of [["home", home], ["program", programView], ["history"
   try { await view.render(host()); ok(host().childElementCount > 0, `${name} rendered`); }
   catch (e) { ok(false, `${name} threw: ${e.message}`); }
 }
-const settingsGroups = [...host().querySelectorAll("section.settings-group")];
+// The visual pass (2026-09-06) turned the six groups into disclosures whose
+// collapsed face states the group's standing value; that supersedes the
+// earlier "no details" rule. Inside a group there are still no nested doors.
+const settingsGroups = [...host().querySelectorAll("details.settings-group")];
 ok(settingsGroups.length === 6
     && settingsGroups.map((group) => group.getAttribute("aria-label")).join("|")
-      === "Gym & equipment|Units & loading|Training behavior|Appearance & accessibility|Programming & library|Data, import, export & backup",
-"settings exposes six task-oriented sections backed by actual product capabilities");
-ok(settingsGroups.every((group) => !group.matches("details") && group.querySelector("input, select, button, a")),
-  "settings controls are one tap from the page rather than hidden behind nested doors");
+      === "Gym & equipment|Units & loading|Rest & training behavior|Appearance & accessibility|Programming & library|Data, import, export & backup",
+"settings exposes six task-oriented disclosures backed by actual product capabilities");
+ok(settingsGroups.every((group) => group.querySelector(":scope > summary") && group.querySelector("input, select, button, a")
+    && !group.querySelector(".settings-group-content details")),
+  "each settings group opens from its own face straight to real controls — no nested doors inside");
 
 // ---- style-aware labels and the exposure preview render (#105, #106) -------
 // Today used to print a Volume/Load/Peak name against every slot on the screen,
@@ -916,6 +936,8 @@ ok(settingsGroups.every((group) => !group.matches("details") && group.querySelec
       "a per-exposure slot is badged with what it actually does");
     ok(!host().querySelector(".wave"), "the rising wave glyph is gone from the program header");
     ok(host().querySelector(".rotation"), "a style-neutral rotation indicator took its place");
+    ok(host().querySelector(".wt-big") && !host().querySelector(".barbell-wrap") && !host().querySelector("svg.barbell"),
+      "Today states each lift's load as a number; plate stacks belong to loading surfaces, not the program card");
 
     // The phase name survives ONLY against the wave slot.
     const badges = [...host().querySelectorAll(".slot-badge")];
@@ -1388,7 +1410,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // Every other assertion here compares against the constant, so a JS-only bump
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
-ok(db.BACKUP_SCHEMA_VERSION === 12, `backup schema is pinned at 12 (got ${db.BACKUP_SCHEMA_VERSION})`);
+ok(db.BACKUP_SCHEMA_VERSION === 13, `backup schema is pinned at 13 (got ${db.BACKUP_SCHEMA_VERSION})`);
 
 // An app must never write a backup it cannot itself restore. A corrupted or
 // out-of-range birthYear is clamped to the not-set sentinel on the way through
@@ -1417,6 +1439,122 @@ ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
 ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 159, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
+// ---- Plate reference (visual pass, #181 / #65) ----------------------------
+// The calculator carries a reference-only guide: colour, denomination, and
+// the other-unit conversion per family. It is never inventory: the 55 lb
+// disc appears for recognition and is not a solver candidate.
+{
+  await plates.openPlateCalculator(); await tick();
+  const calc = () => [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const reference = () => calc().querySelector("details.plate-reference");
+  ok(reference() && !reference().open, "the plate reference is a collapsed disclosure below the calculator");
+  const pick = (label) => [...reference().querySelectorAll(".seg button")].find((b) => b.textContent === label).click();
+  pick("Kilograms");
+  let rows = [...reference().querySelectorAll(".plate-reference-row")];
+  ok(rows.length === 7 && rows[0].textContent.includes("Red") && rows[0].textContent.includes("25 kg")
+      && rows[0].textContent.includes("55.12 lb") && rows[6].textContent.includes("1.25 kg"),
+    "the kilogram family lists seven IWF/IPF plates with their pound conversion");
+  pick("Pounds");
+  rows = [...reference().querySelectorAll(".plate-reference-row")];
+  ok(rows.length === 7 && rows[0].textContent.includes("Red") && rows[0].textContent.includes("55 lb")
+      && rows[0].textContent.includes("24.95 kg") && rows[4].textContent.includes("White") && rows[5].textContent.includes("Black"),
+    "the pound family lists the manufacturer colours with their kilogram conversion");
+  ok(C.STANDARD_LB.every((p) => p.value !== 55) && C.ALL_STANDARD.every((p) => p.value !== 55)
+      && /reference only/i.test(reference().textContent),
+    "the 55 lb disc is a recognition row only — inventory and solver lists never carry it");
+  ok(reference().open, "choosing a family keeps the reference open");
+  calc().querySelector(".overlay-head button").click(); await tick();
+}
+// ---- Settings and library presentation (visual pass, #186 / #63) ----------
+// Both clients group Settings the same six ways in the same order, a rest
+// override says where its default comes from, and the library browses by
+// filter and collapsed category instead of one long scroll.
+{
+  await settings.render(host());
+  const order = [...host().querySelectorAll("details.settings-group")].map((s) => s.getAttribute("aria-label"));
+  ok(JSON.stringify(order) === JSON.stringify(["Gym & equipment", "Units & loading", "Rest & training behavior",
+    "Appearance & accessibility", "Programming & library", "Data, import, export & backup"]),
+  "Settings groups are six collapsed disclosures in the shared order");
+  ok([...host().querySelectorAll("details.settings-group")].every((g) => !g.open),
+    "settings groups start collapsed, each showing where it stands");
+  ok(host().querySelector("details.settings-group[aria-label='Appearance & accessibility'] .settings-group-value")?.textContent === "Foundry",
+    "the appearance group summarises the active theme by its label");
+  const exercises = await db.Exercises.all();
+  const plain = exercises.find((e) => !(e.defaultRestSeconds > 0));
+  settings.exerciseDetail(plain);
+  await tick();
+  let screen = [...document.querySelectorAll(".overlay")].pop();
+  ok(screen && screen.textContent.includes("Default (Settings)"),
+    "a rest override at zero says its default comes from Settings, as native does");
+  screen.querySelector(".overlay-head button").click();
+
+  settings.exerciseLibrary(exercises);
+  await tick();
+  screen = [...document.querySelectorAll(".overlay")].pop();
+  const groups = () => [...screen.querySelectorAll("details.library-group")];
+  ok(groups().length === 3 && groups().every((g) => !g.open), "category groups start collapsed");
+  ok(groups().every((g) => /\d+\s*$/.test(g.querySelector("summary").textContent.trim())),
+    "each collapsed group states how many exercises it holds");
+  const movement = screen.querySelector("select[aria-label='Movement']");
+  movement.value = "squat";
+  movement.dispatchEvent(new window.Event("change"));
+  ok(groups().length >= 1 && groups().every((g) => g.open && g.querySelectorAll(".row").length > 0),
+    "an active filter lists only the groups with matches, opened");
+  const search = screen.querySelector("input[type=search]");
+  search.value = "front";
+  search.dispatchEvent(new window.Event("input"));
+  const titles = [...screen.querySelectorAll(".row .title")].map((t) => t.textContent);
+  ok(titles.length > 0 && titles.every((t) => /front/i.test(t)), "search composes with the movement filter");
+  screen.querySelector("button.library-clear").click();
+  ok(movement.value === "" && search.value === "" && groups().length === 3 && groups().every((g) => !g.open),
+    "clearing the filters returns every group, collapsed");
+  groups()[0].open = true;
+  groups()[0].dispatchEvent(new window.Event("toggle"));
+  const first = groups()[0].querySelector("summary").textContent;
+  const equipment = screen.querySelector("select[aria-label='Equipment']");
+  equipment.value = "barbell";
+  equipment.dispatchEvent(new window.Event("change"));
+  equipment.value = "";
+  equipment.dispatchEvent(new window.Event("change"));
+  ok(groups()[0].open && groups()[0].querySelector("summary").textContent === first,
+    "a group the user opened stays open across a filter round trip");
+  screen.querySelector(".overlay-head button").click();
+}
+// Themes: Foundry leads and keeps the carbon key, Heritage Gold keeps the
+// memento key, and Titanium is the one new value — a version-13 enum
+// addition (v4/v5 pattern). Older bundles keep restoring their own theme; an
+// unregistered value rejects the whole bundle before any write.
+{
+  ok(ui.THEMES[0].value === "carbon" && ui.THEMES[0].label === "Foundry",
+    "Foundry is the first, default theme and keeps the carbon key");
+  ok(ui.THEMES.some((t) => t.value === "memento" && t.label === "Heritage Gold"),
+    "Heritage Gold keeps the memento key");
+  ok(ui.THEMES.some((t) => t.value === "titanium" && t.label === "Titanium"), "Titanium is selectable");
+  ok(["slate", "system"].every((v) => ui.THEMES.some((t) => t.value === v)),
+    "Slate and System remain available so saved choices are not discarded");
+  ok(db.BACKUP_ENUMS.themes.includes("titanium") && db.BACKUP_SCHEMA_VERSION === 13,
+    "titanium is a version-13 backup enum value");
+  const original = await db.Settings.get();
+  await db.Settings.save({ ...original, theme: "titanium" });
+  const titanium = JSON.parse(await db.exportJSON());
+  ok(titanium.schemaVersion === 13 && titanium.settings.theme === "titanium", "titanium exports at version 13");
+  await db.importBundle(titanium);
+  ok((await db.Settings.get()).theme === "titanium", "titanium survives the round trip");
+  await db.importBundle({ ...titanium, schemaVersion: 12, settings: { ...titanium.settings, theme: "slate" } });
+  ok((await db.Settings.get()).theme === "slate", "an older Slate backup restores Slate");
+  let threw = false;
+  try { await db.importBundle({ ...titanium, settings: { ...titanium.settings, theme: "chrome" } }); } catch { threw = true; }
+  ok(threw && (await db.Settings.get()).theme === "slate",
+    "an unregistered theme value rejects the bundle before any write");
+  // applyTheme reads the resolved --bg for the PWA status-bar colour; this
+  // harness has no layout engine, so give it an inert getComputedStyle.
+  globalThis.getComputedStyle ??= () => ({ getPropertyValue: () => "" });
+  ui.applyTheme("titanium");
+  ok(document.documentElement.dataset.theme === "titanium", "applyTheme accepts titanium");
+  ui.applyTheme("chrome");
+  ok(document.documentElement.dataset.theme === "carbon", "unknown theme values fall back to Foundry");
+  await db.Settings.save(original);
+}
 ok(parsed.settings.rest && parsed.settings.rest.mainCompoundSeconds === 300, "export carries the nested rest buckets");
 ok(parsed.sessions.some((s) => s.exercises.some((e) => e.barId === "35-lb")), "export carries session-local bar overrides");
 const csv = await db.exportCSV();
@@ -1930,7 +2068,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 12, "climbed flights ship inside the current backup schema");
+    ok(climbBundle.schemaVersion === 13, "climbed flights ship inside the current backup schema");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -4117,7 +4255,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(sessions.every((s) => (s.exercises || []).every((e) => e.exerciseId === C.exerciseLegacyID(e.exerciseName))),
     "v10 session entries derive their exercise ids");
   const reexport = await db.exportBundle();
-  ok(reexport.schemaVersion === 12, "importing v10 re-exports as the current version");
+  ok(reexport.schemaVersion === 13, "importing v10 re-exports as the current version");
 }
 
 

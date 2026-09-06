@@ -26,261 +26,300 @@ struct SettingsView: View {
     @AppStorage(BackupCheckpointService.lastFailureKey) private var checkpointLastFailure = ""
     /// Device-local on purpose — a Health read grant must not ride in a backup.
     @AppStorage(HealthKitService.readEnabledKey) private var healthReadEnabled = false
+    /// Which of the six groups are open. Everything starts collapsed; the
+    /// collapsed face already says where each group stands.
+    @State private var expandedGroups: Set<String> = []
+
+    private func expanded(_ key: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedGroups.contains(key) },
+            set: { open in
+                if open { expandedGroups.insert(key) } else { expandedGroups.remove(key) }
+            }
+        )
+    }
+
+    private func unitDisplayLabel(_ raw: String) -> String {
+        switch UnitDisplay(rawValue: raw) {
+        case .kgPrimary?: return "kg first"
+        case .both?: return "Both"
+        default: return "lb first"
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    DisclosureGroup(isExpanded: expanded("gym")) {
+                        ForEach(gyms) { gym in
+                            NavigationLink {
+                                GymEditorView(gym: gym)
+                            } label: {
+                                HStack {
+                                    Text(gym.name)
+                                    if gym.isDefault {
+                                        Text("default").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    if gym.barcodeImageData != nil {
+                                        Image(systemName: "barcode").foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                        Button {
+                            let gym = Gym(name: "Gym \(gyms.count + 1)")
+                            context.insert(gym)
+                            PersistenceErrorCenter.shared.save(context, operation: "Adding the gym")
+                        } label: {
+                            Label("Add gym", systemImage: "plus")
+                        }
+                        Text("Each gym owns its available bars, plate denominations, collars and loading policy. Exercise station overrides remain in the exercise library.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } label: {
+                        SettingsGroupLabel(title: "Gym & equipment", value: gyms.first(where: \.isDefault)?.name ?? gyms.first?.name)
+                    }
+                }
+
                 if let settings = settingsList.first {
                     let bindable = Bindable(settings)
 
                     Section {
-                        Picker("Theme", selection: Binding(
-                            get: { ThemeName(rawValue: settings.themeNameRaw) ?? .carbon },
-                            set: { settings.themeNameRaw = $0.rawValue }
-                        )) {
-                            ForEach(ThemeName.allCases) { theme in
-                                Label {
-                                    Text(theme.label)
-                                } icon: {
-                                    Circle().fill(theme.palette.accent).frame(width: 14, height: 14)
-                                }
-                                .tag(theme)
+                        DisclosureGroup(isExpanded: expanded("units")) {
+                            Picker("Weight display", selection: bindable.unitDisplayRaw) {
+                                Text("lb primary").tag(UnitDisplay.lbPrimary.rawValue)
+                                Text("kg primary").tag(UnitDisplay.kgPrimary.rawValue)
+                                Text("Both").tag(UnitDisplay.both.rawValue)
                             }
+                            Text("This changes display and entry defaults, not stored loads. Bars and plate denominations remain independent in mixed-unit gyms.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            SettingsGroupLabel(title: "Units & loading", value: unitDisplayLabel(settings.unitDisplayRaw))
                         }
-                        .pickerStyle(.inline)
-                        .labelsHidden()
-                    } header: {
-                        Text("Appearance & accessibility")
-                    } footer: {
-                        Text("Carbon is the default high-contrast training surface. System follows the device appearance.")
-                    }
-
-                    Section {
-                        Picker("Weight display", selection: bindable.unitDisplayRaw) {
-                            Text("lb primary").tag(UnitDisplay.lbPrimary.rawValue)
-                            Text("kg primary").tag(UnitDisplay.kgPrimary.rawValue)
-                            Text("Both").tag(UnitDisplay.both.rawValue)
-                        }
-                    } header: {
-                        Text("Units & loading")
-                    } footer: {
-                        Text("This changes display and entry defaults, not stored loads. Bars and plate denominations remain independent in mixed-unit gyms.")
                     }
 
                     // The smart defaults an exercise falls to when it has no
                     // rest of its own, listed in the order they're checked:
                     // today's program role first, then movement type
                     // (RestDefaults in CadenceCore). Mirrors web settings.
+
                     Section {
-                        Text("Rest guidance").font(.headline)
-                        Text("PROGRAM ROLE")
-                            .font(.caption.bold())
-                            .tracking(0.7)
-                            .foregroundStyle(.secondary)
-                        Stepper("Complementary lifts: \(mmss(settings.secondaryRestSeconds))",
-                                value: bindable.secondaryRestSeconds, in: 0...600, step: 15)
-                        Stepper("Accessories: \(mmss(settings.accessoryRestSeconds))",
-                                value: bindable.accessoryRestSeconds, in: 0...600, step: 15)
-                        Text("MOVEMENT FALLBACK")
-                            .font(.caption.bold())
-                            .tracking(0.7)
-                            .foregroundStyle(.secondary)
-                        Stepper("Squat & deadlift mains: \(mmss(settings.mainCompoundRestSeconds))",
-                                value: bindable.mainCompoundRestSeconds, in: 0...600, step: 15)
-                        Stepper("Olympic lifts: \(mmss(settings.olympicRestSeconds))",
-                                value: bindable.olympicRestSeconds, in: 0...600, step: 15)
-                        Stepper("Other main lifts: \(mmss(settings.mainUpperRestSeconds))",
-                                value: bindable.mainUpperRestSeconds, in: 0...600, step: 15)
-                        Text("An exercise-specific rest value wins. 0:00 disables that fallback.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
-                        Toggle("Haptics", isOn: bindable.haptics)
-                        Toggle("Show gym tag on first launch of the day",
-                               isOn: bindable.gymTagFirstLaunchOfDay)
-                        Text("Profile & Health").font(.headline)
-                        Picker("Year of birth", selection: bindable.birthYear) {
-                            Text("Not set").tag(0)
-                            ForEach(Self.selectableBirthYears, id: \.self) { year in
-                                Text(String(year)).tag(year)
-                            }
-                        }
-                            Text("Birth year only adjusts the per-meal protein figure on Body; it never changes training.")
+                        DisclosureGroup(isExpanded: expanded("training")) {
+                            Text("Rest guidance").font(.headline)
+                            Text("PROGRAM ROLE")
+                                .font(.caption.bold())
+                                .tracking(0.7)
+                                .foregroundStyle(.secondary)
+                            Stepper("Complementary lifts: \(mmss(settings.secondaryRestSeconds))",
+                                    value: bindable.secondaryRestSeconds, in: 0...600, step: 15)
+                            Stepper("Accessories: \(mmss(settings.accessoryRestSeconds))",
+                                    value: bindable.accessoryRestSeconds, in: 0...600, step: 15)
+                            Text("MOVEMENT FALLBACK")
+                                .font(.caption.bold())
+                                .tracking(0.7)
+                                .foregroundStyle(.secondary)
+                            Stepper("Squat & deadlift mains: \(mmss(settings.mainCompoundRestSeconds))",
+                                    value: bindable.mainCompoundRestSeconds, in: 0...600, step: 15)
+                            Stepper("Olympic lifts: \(mmss(settings.olympicRestSeconds))",
+                                    value: bindable.olympicRestSeconds, in: 0...600, step: 15)
+                            Stepper("Other main lifts: \(mmss(settings.mainUpperRestSeconds))",
+                                    value: bindable.mainUpperRestSeconds, in: 0...600, step: 15)
+                            Text("An exercise-specific rest value wins. 0:00 disables that fallback.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Toggle("Write workouts & bodyweight to Health", isOn: Binding(
-                                get: { settings.healthKitEnabled },
-                                set: { on in
-                                    settings.healthKitEnabled = on
-                                    if on {
-                                        Task { _ = await HealthKitService.shared.requestWriteAuthorization() }
-                                    }
+                            Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
+                            Toggle("Haptics", isOn: bindable.haptics)
+                            Toggle("Show gym tag on first launch of the day",
+                                   isOn: bindable.gymTagFirstLaunchOfDay)
+                            Text("Profile & Health").font(.headline)
+                            Picker("Year of birth", selection: bindable.birthYear) {
+                                Text("Not set").tag(0)
+                                ForEach(Self.selectableBirthYears, id: \.self) { year in
+                                    Text(String(year)).tag(year)
                                 }
-                            ))
-                            Toggle("Compare conditioning with Health", isOn: Binding(
-                                get: { healthReadEnabled },
-                                set: { on in
-                                    healthReadEnabled = on
-                                    HealthKitService.shared.isReadEnabled = on
-                                    if on {
-                                        Task { _ = await HealthKitService.shared.requestReadAuthorization() }
+                            }
+                                Text("Birth year only adjusts the per-meal protein figure on Body; it never changes training.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Toggle("Write workouts & bodyweight to Health", isOn: Binding(
+                                    get: { settings.healthKitEnabled },
+                                    set: { on in
+                                        settings.healthKitEnabled = on
+                                        if on {
+                                            Task { _ = await HealthKitService.shared.requestWriteAuthorization() }
+                                        }
                                     }
+                                ))
+                                Toggle("Compare conditioning with Health", isOn: Binding(
+                                    get: { healthReadEnabled },
+                                    set: { on in
+                                        healthReadEnabled = on
+                                        HealthKitService.shared.isReadEnabled = on
+                                        if on {
+                                            Task { _ = await HealthKitService.shared.requestReadAuthorization() }
+                                        }
+                                    }
+                                ))
+                                Text("Write and compare are separate permissions. Health never edits a logged workout.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            Text("Auto-start off keeps rest manual. The arrival tag appears once per day, then returns to Today.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            SettingsGroupLabel(title: "Rest & training behavior", value: mmss(settings.mainCompoundRestSeconds))
+                        }
+                    }
+
+                    Section {
+                        DisclosureGroup(isExpanded: expanded("appearance")) {
+                            Picker("Theme", selection: Binding(
+                                get: { ThemeName(rawValue: settings.themeNameRaw) ?? .carbon },
+                                set: { settings.themeNameRaw = $0.rawValue }
+                            )) {
+                                ForEach(ThemeName.allCases) { theme in
+                                    Label {
+                                        Text(theme.label)
+                                    } icon: {
+                                        Circle().fill(theme.palette.accent).frame(width: 14, height: 14)
+                                    }
+                                    .tag(theme)
                                 }
-                            ))
-                            Text("Write and compare are separate permissions. Health never edits a logged workout.")
+                            }
+                            .pickerStyle(.inline)
+                            .labelsHidden()
+                            Text("Foundry is the default training surface. Titanium is the light option; System follows the device appearance.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            SettingsGroupLabel(title: "Appearance & accessibility", value: (ThemeName(rawValue: settings.themeNameRaw) ?? .carbon).label)
+                        }
+                    }
+                }
+
+                Section {
+                    DisclosureGroup(isExpanded: expanded("programming")) {
+                        Text("Standalone progression").font(.headline)
+                        if tracks.isEmpty {
+                            Text("No standalone lifts configured.").foregroundStyle(.secondary)
+                        }
+                        ForEach(tracks) { track in
+                            NavigationLink {
+                                TrackEditorView(track: track)
+                            } label: {
+                                VStack(alignment: .leading) {
+                                    Text(track.exerciseName)
+                                    Text("+\(settingsList.unitDisplay.format(lb: track.incrementLb)) per \(track.mode == .cycle ? "cycle" : "session") · next: \(settingsList.unitDisplay.format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        Text("Training breaks").font(.headline)
+                        if !trainingIntervals.isEmpty {
+                            Text(declaredBreakDaysSummary)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                    } header: {
-                        Text("Training behavior")
-                    } footer: {
-                        Text("Auto-start off keeps rest manual. The arrival tag appears once per day, then returns to Today.")
-                    }
-                }
-
-                Section {
-                    ForEach(gyms) { gym in
-                        NavigationLink {
-                            GymEditorView(gym: gym)
-                        } label: {
-                            HStack {
-                                Text(gym.name)
-                                if gym.isDefault {
-                                    Text("default").font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if gym.barcodeImageData != nil {
-                                    Image(systemName: "barcode").foregroundStyle(.secondary)
+                        }
+                        ForEach(trainingIntervals) { interval in
+                            NavigationLink {
+                                IntervalEditorView(interval: interval)
+                            } label: {
+                                VStack(alignment: .leading) {
+                                    Text(interval.kind.name)
+                                    Text(Self.intervalRangeLabel(interval))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
-                    }
-                    Button {
-                        let gym = Gym(name: "Gym \(gyms.count + 1)")
-                        context.insert(gym)
-                        PersistenceErrorCenter.shared.save(context, operation: "Adding the gym")
-                    } label: {
-                        Label("Add gym", systemImage: "plus")
-                    }
-                } header: {
-                    Text("Gym & equipment")
-                } footer: {
-                    Text("Each gym owns its available bars, plate denominations, collars and loading policy. Exercise station overrides remain in the exercise library.")
-                }
-
-                Section {
-                    Text("Standalone progression").font(.headline)
-                    if tracks.isEmpty {
-                        Text("No standalone lifts configured.").foregroundStyle(.secondary)
-                    }
-                    ForEach(tracks) { track in
-                        NavigationLink {
-                            TrackEditorView(track: track)
+                        Button {
+                            let today = Calendar.current.startOfDay(for: .now)
+                            let interval = TrainingInterval(startDate: today, endDate: today)
+                            context.insert(interval)
+                            PersistenceErrorCenter.shared.save(context, operation: "Adding the break")
                         } label: {
-                            VStack(alignment: .leading) {
-                                Text(track.exerciseName)
-                                Text("+\(settingsList.unitDisplay.format(lb: track.incrementLb)) per \(track.mode == .cycle ? "cycle" : "session") · next: \(settingsList.unitDisplay.format(lb: track.suggestion.weightLb)) · \(track.suggestion.sets)×\(track.suggestion.reps)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                            Label("Add break", systemImage: "plus")
                         }
-                    }
-                    Text("Training breaks").font(.headline)
-                    if !trainingIntervals.isEmpty {
-                        Text(declaredBreakDaysSummary)
+                        Text("Breaks keep a chosen gap from reading as a lapse. Work during active recovery stays in history but never advances progression or PR baselines.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-                    ForEach(trainingIntervals) { interval in
-                        NavigationLink {
-                            IntervalEditorView(interval: interval)
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text(interval.kind.name)
-                                Text(Self.intervalRangeLabel(interval))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    Button {
-                        let today = Calendar.current.startOfDay(for: .now)
-                        let interval = TrainingInterval(startDate: today, endDate: today)
-                        context.insert(interval)
-                        PersistenceErrorCenter.shared.save(context, operation: "Adding the break")
+                        NavigationLink("Exercise library") { LibraryView() }
+                        Text("Standalone lift settings do not change the active program. Program structure remains cycle- and rotation-based.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     } label: {
-                        Label("Add break", systemImage: "plus")
+                        SettingsGroupLabel(title: "Programming & library", value: tracks.isEmpty ? nil : "\(tracks.count) standalone")
                     }
-                    Text("Breaks keep a chosen gap from reading as a lapse. Work during active recovery stays in history but never advances progression or PR baselines.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    NavigationLink("Exercise library") { LibraryView() }
-                } header: {
-                    Text("Programming & library")
-                } footer: {
-                    Text("Standalone lift settings do not change the active program. Program structure remains cycle- and rotation-based.")
                 }
 
                 Section {
-                    Text("Export").font(.headline)
-                    Button("Prepare JSON export") {
-                        do { exportJSON = try ExportService.jsonData(context: context) }
-                        catch {
-                            exportJSON = nil
-                            importAlert = "Couldn't prepare the JSON export: \(error.localizedDescription)"
+                    DisclosureGroup(isExpanded: expanded("data")) {
+                        Text("Export").font(.headline)
+                        Button("Prepare JSON export") {
+                            do { exportJSON = try ExportService.jsonData(context: context) }
+                            catch {
+                                exportJSON = nil
+                                importAlert = "Couldn't prepare the JSON export: \(error.localizedDescription)"
+                            }
                         }
-                    }
-                    if let exportJSON {
-                        ShareLink(
-                            item: TransferableFile(data: exportJSON, filename: "cadence-export.json"),
-                            preview: SharePreview("cadence-export.json")
-                        ) {
-                            Label("Share JSON", systemImage: "square.and.arrow.up")
+                        if let exportJSON {
+                            ShareLink(
+                                item: TransferableFile(data: exportJSON, filename: "cadence-export.json"),
+                                preview: SharePreview("cadence-export.json")
+                            ) {
+                                Label("Share JSON", systemImage: "square.and.arrow.up")
+                            }
                         }
-                    }
-                    Button("Prepare CSV export") {
-                        do { exportCSV = try ExportService.csvData(context: context) }
-                        catch {
-                            exportCSV = nil
-                            importAlert = "Couldn't prepare the CSV export: \(error.localizedDescription)"
+                        Button("Prepare CSV export") {
+                            do { exportCSV = try ExportService.csvData(context: context) }
+                            catch {
+                                exportCSV = nil
+                                importAlert = "Couldn't prepare the CSV export: \(error.localizedDescription)"
+                            }
                         }
-                    }
-                    if let exportCSV {
-                        ShareLink(
-                            item: TransferableFile(data: exportCSV, filename: "cadence-sets.csv"),
-                            preview: SharePreview("cadence-sets.csv")
-                        ) {
-                            Label("Share CSV", systemImage: "square.and.arrow.up")
+                        if let exportCSV {
+                            ShareLink(
+                                item: TransferableFile(data: exportCSV, filename: "cadence-sets.csv"),
+                                preview: SharePreview("cadence-sets.csv")
+                            ) {
+                                Label("Share CSV", systemImage: "square.and.arrow.up")
+                            }
                         }
-                    }
-                    Text("Local recovery").font(.headline)
-                    Button("Checkpoint now") {
-                        do {
-                            try BackupCheckpointService.create(context: context, reason: "manual")
-                            importAlert = "Local recovery checkpoint created."
-                        } catch {
-                            BackupCheckpointService.recordFailure(error)
-                            importAlert = "Couldn't create a recovery checkpoint: \(error.localizedDescription)"
+                        Text("Local recovery").font(.headline)
+                        Button("Checkpoint now") {
+                            do {
+                                try BackupCheckpointService.create(context: context, reason: "manual")
+                                importAlert = "Local recovery checkpoint created."
+                            } catch {
+                                BackupCheckpointService.recordFailure(error)
+                                importAlert = "Couldn't create a recovery checkpoint: \(error.localizedDescription)"
+                            }
                         }
-                    }
-                    if !checkpointLastSuccess.isEmpty {
-                        Button("Restore latest checkpoint") { importAlert = restoreLatestCheckpoint() }
-                        Text("Latest: \(checkpointLastSuccess)").font(.caption).foregroundStyle(.secondary)
-                    }
-                    if !checkpointLastFailure.isEmpty {
-                        Text("Last checkpoint failed: \(checkpointLastFailure)").font(.caption).foregroundStyle(.red)
-                    }
-                    Text("Cadence keeps the last three local checkpoints. Deleting the app removes them; exported JSON is the durable backup.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        showImporter = true
+                        if !checkpointLastSuccess.isEmpty {
+                            Button("Restore latest checkpoint") { importAlert = restoreLatestCheckpoint() }
+                            Text("Latest: \(checkpointLastSuccess)").font(.caption).foregroundStyle(.secondary)
+                        }
+                        if !checkpointLastFailure.isEmpty {
+                            Text("Last checkpoint failed: \(checkpointLastFailure)").font(.caption).foregroundStyle(.red)
+                        }
+                        Text("Cadence keeps the last three local checkpoints. Deleting the app removes them; exported JSON is the durable backup.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            showImporter = true
+                        } label: {
+                            Label("Import JSON backup", systemImage: "square.and.arrow.down")
+                        }
+                        Text("Import previews every material change before restore and offers a checkpoint rollback immediately afterward.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     } label: {
-                        Label("Import JSON backup", systemImage: "square.and.arrow.down")
+                        SettingsGroupLabel(title: "Data, import, export & backup", value: nil)
                     }
-                } header: {
-                    Text("Data, import, export & backup")
-                } footer: {
-                    Text("Import previews every material change before restore and offers a checkpoint rollback immediately afterward.")
                 }
         }
         .listStyle(.plain)
@@ -1789,5 +1828,23 @@ private struct ExercisePickerSheetView: View {
                 }
             }
         }
+    }
+}
+
+/// A settings group's collapsed face: what it is, and the one value that says
+/// where it stands. Web twin: `details.settings-group > summary`.
+private struct SettingsGroupLabel: View {
+    let title: String
+    var value: String? = nil
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).font(.headline)
+            Spacer()
+            if let value {
+                Text(value).font(.subheadline).foregroundStyle(.secondary)
+            }
+        }
+        .frame(minHeight: Theme.bigTap - 16)
     }
 }
