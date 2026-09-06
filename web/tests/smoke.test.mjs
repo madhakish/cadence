@@ -1439,6 +1439,32 @@ ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
 ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 159, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
+// ---- Plate reference (visual pass, #181 / #65) ----------------------------
+// The calculator carries a reference-only guide: colour, denomination, and
+// the other-unit conversion per family. It is never inventory: the 55 lb
+// disc appears for recognition and is not a solver candidate.
+{
+  await plates.openPlateCalculator(); await tick();
+  const calc = () => [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const reference = () => calc().querySelector("details.plate-reference");
+  ok(reference() && !reference().open, "the plate reference is a collapsed disclosure below the calculator");
+  const pick = (label) => [...reference().querySelectorAll(".seg button")].find((b) => b.textContent === label).click();
+  pick("Kilograms");
+  let rows = [...reference().querySelectorAll(".plate-reference-row")];
+  ok(rows.length === 7 && rows[0].textContent.includes("Red") && rows[0].textContent.includes("25 kg")
+      && rows[0].textContent.includes("55.12 lb") && rows[6].textContent.includes("1.25 kg"),
+    "the kilogram family lists seven IWF/IPF plates with their pound conversion");
+  pick("Pounds");
+  rows = [...reference().querySelectorAll(".plate-reference-row")];
+  ok(rows.length === 7 && rows[0].textContent.includes("Red") && rows[0].textContent.includes("55 lb")
+      && rows[0].textContent.includes("24.95 kg") && rows[4].textContent.includes("White") && rows[5].textContent.includes("Black"),
+    "the pound family lists the manufacturer colours with their kilogram conversion");
+  ok(C.STANDARD_LB.every((p) => p.value !== 55) && C.ALL_STANDARD.every((p) => p.value !== 55)
+      && /reference only/i.test(reference().textContent),
+    "the 55 lb disc is a recognition row only — inventory and solver lists never carry it");
+  ok(reference().open, "choosing a family keeps the reference open");
+  calc().querySelector(".overlay-head button").click(); await tick();
+}
 // ---- Settings and library presentation (visual pass, #186 / #63) ----------
 // Both clients group Settings the same six ways in the same order, a rest
 // override says where its default comes from, and the library browses by
