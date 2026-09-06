@@ -601,7 +601,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         let backup = try ExportService.jsonData(context: context)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
-        XCTAssertEqual(json["schemaVersion"] as? Int, 12)
+        XCTAssertEqual(json["schemaVersion"] as? Int, BackupContract.currentSchemaVersion)
         let exportedInterval = try XCTUnwrap((json["intervals"] as? [[String: Any]])?.first)
         XCTAssertEqual(exportedInterval["kind"] as? String, "activeRecovery")
         XCTAssertEqual(exportedInterval["startDate"] as? String, "2026-06-01")
@@ -903,7 +903,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         let backup = try ExportService.jsonData(context: source.mainContext)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
-        XCTAssertEqual(json["schemaVersion"] as? Int, 12)
+        XCTAssertEqual(json["schemaVersion"] as? Int, BackupContract.currentSchemaVersion)
         let exportedProgram = try XCTUnwrap((json["programs"] as? [[String: Any]])?.first)
         XCTAssertEqual(exportedProgram["equipmentPolicy"] as? String, "freeWeightsOnly")
         let exportedDay = try XCTUnwrap((exportedProgram["days"] as? [[String: Any]])?.first)
