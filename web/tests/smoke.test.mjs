@@ -884,13 +884,17 @@ for (const [name, view] of [["home", home], ["program", programView], ["history"
   try { await view.render(host()); ok(host().childElementCount > 0, `${name} rendered`); }
   catch (e) { ok(false, `${name} threw: ${e.message}`); }
 }
-const settingsGroups = [...host().querySelectorAll("section.settings-group")];
+// The visual pass (2026-09-06) turned the six groups into disclosures whose
+// collapsed face states the group's standing value; that supersedes the
+// earlier "no details" rule. Inside a group there are still no nested doors.
+const settingsGroups = [...host().querySelectorAll("details.settings-group")];
 ok(settingsGroups.length === 6
     && settingsGroups.map((group) => group.getAttribute("aria-label")).join("|")
-      === "Gym & equipment|Units & loading|Training behavior|Appearance & accessibility|Programming & library|Data, import, export & backup",
-"settings exposes six task-oriented sections backed by actual product capabilities");
-ok(settingsGroups.every((group) => !group.matches("details") && group.querySelector("input, select, button, a")),
-  "settings controls are one tap from the page rather than hidden behind nested doors");
+      === "Gym & equipment|Units & loading|Rest & training behavior|Appearance & accessibility|Programming & library|Data, import, export & backup",
+"settings exposes six task-oriented disclosures backed by actual product capabilities");
+ok(settingsGroups.every((group) => group.querySelector(":scope > summary") && group.querySelector("input, select, button, a")
+    && !group.querySelector(".settings-group-content details")),
+  "each settings group opens from its own face straight to real controls — no nested doors inside");
 
 // ---- style-aware labels and the exposure preview render (#105, #106) -------
 // Today used to print a Volume/Load/Peak name against every slot on the screen,
@@ -916,6 +920,8 @@ ok(settingsGroups.every((group) => !group.matches("details") && group.querySelec
       "a per-exposure slot is badged with what it actually does");
     ok(!host().querySelector(".wave"), "the rising wave glyph is gone from the program header");
     ok(host().querySelector(".rotation"), "a style-neutral rotation indicator took its place");
+    ok(host().querySelector(".wt-big") && !host().querySelector(".barbell-wrap") && !host().querySelector("svg.barbell"),
+      "Today states each lift's load as a number; plate stacks belong to loading surfaces, not the program card");
 
     // The phase name survives ONLY against the wave slot.
     const badges = [...host().querySelectorAll(".slot-badge")];
@@ -1417,6 +1423,61 @@ ok(Array.isArray(parsed.gyms) && parsed.gyms.length > 0, "export carries gyms");
 ok(Array.isArray(parsed.exercises) && parsed.exercises.length === 159, "export carries the exercise library");
 ok(parsed.settings && parsed.settings.unitDisplay === "lbPrimary" && parsed.settings.id === undefined, "export carries settings (sans row id)");
 ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips");
+// ---- Settings and library presentation (visual pass, #186 / #63) ----------
+// Both clients group Settings the same six ways in the same order, a rest
+// override says where its default comes from, and the library browses by
+// filter and collapsed category instead of one long scroll.
+{
+  await settings.render(host());
+  const order = [...host().querySelectorAll("details.settings-group")].map((s) => s.getAttribute("aria-label"));
+  ok(JSON.stringify(order) === JSON.stringify(["Gym & equipment", "Units & loading", "Rest & training behavior",
+    "Appearance & accessibility", "Programming & library", "Data, import, export & backup"]),
+  "Settings groups are six collapsed disclosures in the shared order");
+  ok([...host().querySelectorAll("details.settings-group")].every((g) => !g.open),
+    "settings groups start collapsed, each showing where it stands");
+  ok(host().querySelector("details.settings-group[aria-label='Appearance & accessibility'] .settings-group-value")?.textContent === "Foundry",
+    "the appearance group summarises the active theme by its label");
+  const exercises = await db.Exercises.all();
+  const plain = exercises.find((e) => !(e.defaultRestSeconds > 0));
+  settings.exerciseDetail(plain);
+  await tick();
+  let screen = [...document.querySelectorAll(".overlay")].pop();
+  ok(screen && screen.textContent.includes("Default (Settings)"),
+    "a rest override at zero says its default comes from Settings, as native does");
+  screen.querySelector(".overlay-head button").click();
+
+  settings.exerciseLibrary(exercises);
+  await tick();
+  screen = [...document.querySelectorAll(".overlay")].pop();
+  const groups = () => [...screen.querySelectorAll("details.library-group")];
+  ok(groups().length === 3 && groups().every((g) => !g.open), "category groups start collapsed");
+  ok(groups().every((g) => /\d+\s*$/.test(g.querySelector("summary").textContent.trim())),
+    "each collapsed group states how many exercises it holds");
+  const movement = screen.querySelector("select[aria-label='Movement']");
+  movement.value = "squat";
+  movement.dispatchEvent(new window.Event("change"));
+  ok(groups().length >= 1 && groups().every((g) => g.open && g.querySelectorAll(".row").length > 0),
+    "an active filter lists only the groups with matches, opened");
+  const search = screen.querySelector("input[type=search]");
+  search.value = "front";
+  search.dispatchEvent(new window.Event("input"));
+  const titles = [...screen.querySelectorAll(".row .title")].map((t) => t.textContent);
+  ok(titles.length > 0 && titles.every((t) => /front/i.test(t)), "search composes with the movement filter");
+  screen.querySelector("button.library-clear").click();
+  ok(movement.value === "" && search.value === "" && groups().length === 3 && groups().every((g) => !g.open),
+    "clearing the filters returns every group, collapsed");
+  groups()[0].open = true;
+  groups()[0].dispatchEvent(new window.Event("toggle"));
+  const first = groups()[0].querySelector("summary").textContent;
+  const equipment = screen.querySelector("select[aria-label='Equipment']");
+  equipment.value = "barbell";
+  equipment.dispatchEvent(new window.Event("change"));
+  equipment.value = "";
+  equipment.dispatchEvent(new window.Event("change"));
+  ok(groups()[0].open && groups()[0].querySelector("summary").textContent === first,
+    "a group the user opened stays open across a filter round trip");
+  screen.querySelector(".overlay-head button").click();
+}
 // Themes: Foundry leads and keeps the carbon key, Heritage Gold keeps the
 // memento key, and Titanium is the one new value — a version-13 enum
 // addition (v4/v5 pattern). Older bundles keep restoring their own theme; an

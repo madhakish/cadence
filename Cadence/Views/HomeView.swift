@@ -420,29 +420,10 @@ struct HomeView: View {
                                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                                     }
                                 }
-                                // The bar you'll load / the pair you'll grab —
-                                // every wave lift, matching the preview screen
-                                // (a complementary barbell lift is loaded just
-                                // the same as the main).
-                                if plan.weightLb > 0 {
-                                    let previewExercise = exercises.first(where: { $0.name == lift.exerciseName })
-                                    let type = previewExercise?.type
-                                    if type == .barbell {
-                                        let bar = defaultGym?.defaultBar ?? .bar45lb
-                                        BarbellView(
-                                            solution: authoritativePlateSolution(
-                                                targetLb: plan.weightLb,
-                                                fallbackUnit: entryUnit,
-                                                bar: bar,
-                                                gym: defaultGym,
-                                                stationDenomination: previewExercise?.stationDenomination
-                                            ),
-                                            plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel
-                                        )
-                                    } else if type == .dumbbell {
-                                        DumbbellView(weightLb: plan.weightLb, unit: entryUnit)
-                                    }
-                                }
+                                // The load is stated as a number here. The
+                                // loaded bar itself belongs to the preview and
+                                // the logger — equipment imagery stays with
+                                // loading, never decorates Today.
                             }
                         }
                         if !day.accessories.isEmpty {

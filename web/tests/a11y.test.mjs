@@ -70,6 +70,9 @@ ok(/:root\[data-theme="titanium"\]\s*\{[^}]*color-scheme:\s*light/.test(css),
 ok(!/color:\s*#0b0b0c|color:\s*#16090a|color:\s*#041018/.test(css),
   "no accent-filled control hard-codes its foreground; they read --on-accent");
 ok(/button:focus-visible[^{]*\{/.test(css), "buttons have a visible keyboard-focus style");
+ok(/--focus:\s*var\(--accent\)/.test(css), "one --focus token, defined once, follows the active theme's accent");
+ok(!/focus(?:-visible)?[^{]*\{[^}]*var\(--accent\)/.test(css),
+  "every focus ring reads --focus, never the accent directly");
 ok(/input:focus|input:focus-visible/.test(css), "text inputs have a visible focus style");
 
 // ---- Logger grading controls: one labelling pattern for quality and RIR ----

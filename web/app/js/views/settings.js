@@ -51,27 +51,40 @@ export async function render(host) {
   const [settings, gyms, tracks, exercises, programs, checkpoints, intervals] = await Promise.all([Settings.get(), Gyms.all(), Tracks.all(), Exercises.all(), Programs.all(), Checkpoints.all(), Intervals.all()]);
   const root = ui.h("div", { class: "settings-index" });
   const saveS = async () => { await Settings.save(settings); ui.prefs.unitDisplay = settings.unitDisplay; };
+  // Six task-oriented disclosures. Each collapsed face names the group and
+  // the one value that says where it stands (default gym, unit order, theme).
+  // Mirrors native SettingsView's DisclosureGroups.
   const group = (title, description) => {
     const content = ui.h("div", { class: "settings-group-content" });
-    root.append(ui.h("section", { class: "settings-group", "aria-label": title },
-      ui.h("header", { class: "settings-group-heading" },
+    const value = ui.h("span", { class: "settings-group-value" });
+    root.append(ui.h("details", { class: "settings-group", "aria-label": title },
+      ui.h("summary", {},
         ui.h("h2", { class: "title", text: title }),
-        ui.h("p", { class: "sub", text: description })), content));
+        ui.h("p", { class: "sub", text: description }),
+        value,
+        ui.h("span", { class: "settings-group-mark", "aria-hidden": "true" })), content));
+    content.setValue = (text) => { value.textContent = text || ""; };
     return content;
   };
   const gymAndEquipment = group("Gym & equipment", "Profiles, bars, plates, collars, and membership tags");
   const unitsAndLoading = group("Units & loading", "Display preference and mixed-unit behavior");
-  const trainingBehavior = group("Training behavior", "Rest, feedback, arrival, and profile inputs");
+  const trainingBehavior = group("Rest & training behavior", "Rest, feedback, arrival, and profile inputs");
   const appearance = group("Appearance & accessibility", "Theme and interface presentation");
   const programming = group("Programming & library", "Standalone progression, planned breaks, and exercises");
   const data = group("Data, import, export & backup", "Portable backups and local recovery points");
 
   // Theme
+  const themeLabel = (value) => ui.THEMES.find((t) => t.value === value)?.label || "Foundry";
+  appearance.setValue(themeLabel(settings.theme || "carbon"));
   appearance.append(ui.h("div", { class: "section-title", text: "Theme" }));
   appearance.append(ui.h("div", { class: "card" },
-    ui.seg(ui.THEMES, settings.theme || "carbon", async (v) => { settings.theme = v; ui.applyTheme(v); await saveS(); })));
+    ui.seg(ui.THEMES, settings.theme || "carbon", async (v) => {
+      settings.theme = v; ui.applyTheme(v); appearance.setValue(themeLabel(v)); await saveS();
+    })));
 
   // Units
+  const unitLabel = (v) => ({ lbPrimary: "lb first", kgPrimary: "kg first", both: "Both" })[v] || "lb first";
+  unitsAndLoading.setValue(unitLabel(settings.unitDisplay));
   unitsAndLoading.append(ui.h("div", { class: "section-title", text: "Display & entry" }));
   unitsAndLoading.append(ui.h("div", { class: "card" },
     ui.seg([{ value: "lbPrimary", label: "lb" }, { value: "kgPrimary", label: "kg" }, { value: "both", label: "Both" }],
@@ -127,6 +140,7 @@ export async function render(host) {
     ui.h("div", { class: "muted", text: "Used only to adjust the per-meal protein figure on the Body screen — muscle responds less to a given dose with age. Nothing else reads it, and it never affects your program." })));
 
   // Gyms
+  gymAndEquipment.setValue(gyms.find((g) => g.isDefault)?.name || (gyms.length ? gyms[0].name : ""));
   gymAndEquipment.append(ui.h("div", { class: "section-title", text: "Gym profiles" }));
   const gymList = ui.h("div", { class: "card list" });
   for (const g of gyms) {
@@ -1069,22 +1083,46 @@ function intervalEditor(interval) {
   });
 }
 
-function exerciseLibrary(exercises) {
+export function exerciseLibrary(exercises) {
   ui.pushScreen({
     title: "Exercise library",
     build: (body) => {
-      const search = ui.h("input", { type: "search", placeholder: "Exercise, movement, or equipment" });
-      const results = ui.h("div");
-      body.append(ui.h("button", { class: "btn primary wide", text: "+ New exercise", onClick: () => newExerciseSheet(exercises, () => paint()) }));
+      // Search first, then two composable filters, then the categories as
+      // collapsed groups that state their counts — nobody scrolls the whole
+      // catalog to find one lift. A filter reveals only the groups with
+      // matches, opened; clearing it returns every group, collapsed, except
+      // the ones the user opened themselves. Mirrors native LibraryView.
+      const search = ui.h("input", { type: "search", placeholder: "Name, equipment or movement", "aria-label": "Search exercises" });
+      const movement = ui.h("select", { "aria-label": "Movement" },
+        ui.h("option", { value: "", text: "All movements" }),
+        ...C.MOVEMENT_PATTERNS.map((p) => ui.h("option", { value: p, text: C.movementPatternName(p) })));
+      const equipment = ui.h("select", { "aria-label": "Equipment" },
+        ui.h("option", { value: "", text: "All equipment" }),
+        ...BACKUP_ENUMS.exerciseTypes.map((t) => ui.h("option", { value: t, text: t })));
+      const clear = ui.h("button", { class: "btn ghost sm library-clear", text: "Clear filters",
+        onClick: () => { search.value = ""; movement.value = ""; equipment.value = ""; paint(); } });
+      const results = ui.h("div", { class: "library-groups" });
+      const opened = new Map();
+      const filtering = () => search.value.trim() !== "" || movement.value !== "" || equipment.value !== "";
       const paint = () => {
         ui.clear(results);
+        clear.hidden = !filtering();
         // Raw query in: the shared matcher owns normalization and returns
         // true on empty, so no pre-trim/lowercase or empty-branch here.
-        const visible = exercises.filter((exercise) => C.exerciseMatchesSearch(exercise, search.value));
+        const visible = exercises.filter((e) => C.exerciseMatchesSearch(e, search.value)
+          && (!movement.value || e.movementPattern === movement.value || e.secondaryMovementPattern === movement.value)
+          && (!equipment.value || e.type === equipment.value));
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-          if (!inCat.length) continue;
-          results.append(ui.h("div", { class: "section-title", text: cat }));
+          if (filtering() && !inCat.length) continue;
+          const group = ui.h("details", { class: "library-group" },
+            ui.h("summary", {},
+              ui.h("span", { class: "title", text: cat }),
+              ui.h("span", { class: "count mono", text: String(inCat.length) })));
+          group.open = filtering() ? true : (opened.get(cat) ?? false);
+          // Only a toggle the user makes on a live, unfiltered group is a
+          // preference; the programmatic opens above are not.
+          group.addEventListener("toggle", () => { if (group.isConnected && !filtering()) opened.set(cat, group.open); });
           const card = ui.h("div", { class: "card list" });
           for (const e of inCat) {
             const meta = [C.movementPatternName(e.movementPattern), e.type, C.loadBasisLabel(C.resolvedLoadBasis(e)),
@@ -1095,11 +1133,25 @@ function exerciseLibrary(exercises) {
                 ui.h("span", { class: "sub", text: meta })),
               ui.h("span", { class: "chev" })));
           }
-          results.append(card);
+          group.append(card);
+          results.append(group);
         }
       };
       search.addEventListener("input", paint);
-      body.append(search, results);
+      movement.addEventListener("change", paint);
+      equipment.addEventListener("change", paint);
+      body.append(
+        ui.h("header", { class: "library-hero" },
+          ui.h("span", { class: "eyebrow accent", text: "Exercise library" }),
+          ui.h("h3", { class: "display", text: "Find your lift." })),
+        search,
+        ui.h("div", { class: "library-filters" },
+          ui.h("label", {}, ui.h("span", { text: "Movement" }), movement),
+          ui.h("label", {}, ui.h("span", { text: "Equipment" }), equipment)),
+        ui.h("div", { class: "library-toolbar" },
+          ui.h("button", { class: "btn ghost sm", text: "+ New exercise", onClick: () => newExerciseSheet(exercises, () => paint()) }),
+          clear),
+        results);
       paint();
     },
   });
@@ -1347,7 +1399,7 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
           // buckets in Settings; any value set here wins everywhere.
           // `|| 0`: a raw-imported record can lack the field — an undefined
           // seed would render NaN:NaN and persist NaN on the first tap.
-          ui.h("div", { class: "row" }, ui.h("span", { text: "Rest" }), ui.stepper(e.defaultRestSeconds || 0, { min: 0, max: 600, step: 15, format: (v) => (v === 0 ? "Default" : ui.mmss(v)), onChange: async (v) => { e.defaultRestSeconds = v; await Exercises.save(e); } }))));
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Rest" }), ui.stepper(e.defaultRestSeconds || 0, { min: 0, max: 600, step: 15, format: (v) => (v === 0 ? "Default (Settings)" : ui.mmss(v)), onChange: async (v) => { e.defaultRestSeconds = v; await Exercises.save(e); } }))));
         if (e.type === "barbell") {
           // The station this lift lives at can stock a single plate
           // denomination — a kg-only deadlift platform beside lb squat racks.
