@@ -1038,6 +1038,22 @@ private struct ExerciseSection: View {
                 .foregroundStyle(.secondary)
                 .accessibilityElement(children: .combine)
             }
+            // The approved hierarchy for the lift you're on: the set track,
+            // then the working set's position, reps, and load — stated once,
+            // above the set rows. The load is the set's own value, never a
+            // re-solve; the diagram under the set row stays the loading truth.
+            if emphasized, !entry.plannedWorkingSets.isEmpty {
+                SetTrackView(sets: entry.plannedWorkingSets, currentID: currentWorkingSet?.persistentModelID)
+            }
+            if emphasized, let current = currentWorkingSet,
+               let type = entry.exercise?.type, type != .conditioning, type != .timed {
+                CurrentSetHero(
+                    set: current,
+                    ordinal: (entry.plannedWorkingSets.firstIndex { $0.persistentModelID == current.persistentModelID } ?? 0) + 1,
+                    total: entry.plannedWorkingSets.count,
+                    barIncluded: type == .barbell
+                )
+            }
             if let complementaryEffortCue {
                 Text(complementaryEffortCue)
                     .font(.caption.bold())
@@ -2584,5 +2600,91 @@ private struct SessionSummarySheet: View {
                 }
             }
         }
+    }
+}
+
+/// The focused exercise's set track: one segment per working set, the current
+/// one carrying the accent, resolved ones quieter. Web twin: `.set-track`.
+private struct SetTrackView: View {
+    let sets: [SetEntry]
+    let currentID: PersistentIdentifier?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(sets.enumerated()), id: \.element.persistentModelID) { index, set in
+                let isCurrent = set.persistentModelID == currentID
+                let isDone = !isCurrent && set.status != .planned
+                VStack(alignment: .leading, spacing: 6) {
+                    Rectangle()
+                        .fill(isCurrent ? Theme.accent : isDone ? Color.primary.opacity(0.45) : Theme.hairline)
+                        .frame(height: 3)
+                    Text(isDone ? "✓ Set \(index + 1)" : isCurrent ? "Set \(index + 1) · now" : "Set \(index + 1)")
+                        .font(isCurrent ? .footnote.bold() : .footnote.weight(.semibold))
+                        .foregroundStyle(isCurrent ? .primary : .secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Set \(index + 1) of \(sets.count), \(isCurrent ? "current" : isDone ? "resolved" : "upcoming")")
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Working sets")
+    }
+}
+
+/// The working set the lifter is on: position, reps, and the set load —
+/// pounds first, kilograms after. Web twin: `.current-set-hero`.
+private struct CurrentSetHero: View {
+    let set: SetEntry
+    let ordinal: Int
+    let total: Int
+    let barIncluded: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("WORKING SET \(ordinal) OF \(total)")
+                .font(.caption.bold())
+                .tracking(0.8)
+                .foregroundStyle(Theme.accent)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(set.reps)")
+                    .font(.title2.bold().monospacedDigit())
+                Text(set.isPerSide ? "reps / side" : "reps")
+                    .foregroundStyle(.secondary)
+                if set.prescriptionBlock == .amrap {
+                    Text("AMRAP")
+                        .font(.caption.bold())
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if set.weightLb > 0 {
+                    Text(Weight.trim(set.weightLb))
+                        .font(.system(size: 44, weight: .black, design: .rounded).monospacedDigit())
+                    Text("lb")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                    Text(Weight.trim(Weight.kg(fromLb: set.weightLb)))
+                        .font(.title.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 6)
+                    Text("kg")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("BW")
+                        .font(.system(size: 44, weight: .black, design: .rounded))
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(set.weightLb > 0 ? "Set load \(Weight.both(lb: set.weightLb))" : "Bodyweight")
+            Text(barIncluded ? "Set load · bar included" : "Set load")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
     }
 }

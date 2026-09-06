@@ -498,6 +498,39 @@ export async function openSession(id) {
       onClick: () => discard() }));
   }
 
+  // The focused exercise's set track: one segment per working set, the
+  // current one carrying the accent, resolved ones quieter. Mirrors native
+  // SetTrackView.
+  const setTrack = (workSets, currentSet) => ui.h("div", { class: "set-track", role: "list", "aria-label": "Working sets" },
+    ...workSets.map((set, index) => {
+      const state = set === currentSet ? "now" : set.status === "planned" ? "upcoming" : "done";
+      const label = state === "done" ? `✓ Set ${index + 1}` : state === "now" ? `Set ${index + 1} · now` : `Set ${index + 1}`;
+      return ui.h("span", { class: `set-track-segment ${state}`, role: "listitem", text: label,
+        "aria-label": `Set ${index + 1} of ${workSets.length}, ${state === "done" ? set.status : state === "now" ? "current" : state}` });
+    }));
+  // The working set the lifter is on: position, reps, and the set load —
+  // pounds first, kilograms after — stated once, above the set rows. The load
+  // is the set's own recorded/prescribed value, not a re-solve. Mirrors
+  // native CurrentSetHero.
+  const currentSetHero = (ex, set, workSets) => {
+    const ordinal = workSets.indexOf(set) + 1;
+    const load = ui.h("div", { class: "current-set-load", "aria-label": set.weightLb > 0 ? `Set load ${C.both(set.weightLb)}` : "Bodyweight" });
+    if (set.weightLb > 0) {
+      load.append(ui.h("span", { class: "load-primary mono", text: C.trim(set.weightLb) }), ui.h("span", { class: "unit", text: " lb " }),
+        ui.h("span", { class: "load-secondary mono", text: C.trim(C.kgFromLb(set.weightLb)) }), ui.h("span", { class: "unit", text: " kg " }));
+    } else {
+      load.append(ui.h("span", { class: "load-primary mono", text: "BW" }));
+    }
+    return ui.h("div", { class: "current-set-hero", "aria-label": `Working set ${ordinal} of ${workSets.length}` },
+      ui.h("span", { class: "eyebrow accent", text: `Working set ${ordinal} of ${workSets.length} ` }),
+      ui.h("div", { class: "current-set-reps" },
+        ui.h("span", { class: "count mono", text: String(set.reps) }),
+        ui.h("span", { class: "unit", text: set.isPerSide ? " reps / side" : " reps" }),
+        set.prescriptionBlock === "amrap" ? ui.h("span", { class: "pill accent", text: "AMRAP" }) : null),
+      load,
+      ui.h("span", { class: "sub", text: ex && ex.type === "barbell" ? "Set load · bar included" : "Set load" }));
+  };
+
   function exerciseCard(se, body, emphasized = false) {
     const ex = exMap.get(se.exerciseName);
     const phaseLabel = ui.sessionPhaseLabel(se, ex);
@@ -528,15 +561,20 @@ export async function openSession(id) {
         ex && ex.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null));
     const card = ui.h("section", { class: `card exercise-card${emphasized ? " emphasized" : ""}`,
       "aria-label": `${se.exerciseName}${emphasized ? ", current exercise" : ""}` }, head);
+    se.sets.sort((a, b) => a.order - b.order);
+    const workSets = se.sets.filter((set) => !set.isWarmup);
+    const currentSet = workSets.find((set) => set.status === "planned");
+    if (emphasized && workSets.length) card.append(setTrack(workSets, currentSet));
+    if (emphasized && currentSet && !(ex && (ex.type === "conditioning" || ex.type === "timed"))) {
+      card.append(currentSetHero(ex, currentSet, workSets));
+    }
     const last = lastTimeLine(se);
     if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
     const effortCue = complementaryEffortCueForEntry(se, ex, sessionProgram);
     if (effortCue) card.append(ui.h("div", { class: "effort-cue", text: effortCue,
       "aria-label": `Effort target: ${effortCue}` }));
 
-    se.sets.sort((a, b) => a.order - b.order);
     const showAll = expandedEntries.has(se);
-    const currentSet = se.sets.find((set) => !set.isWarmup && set.status === "planned");
     const focusedIndices = new Set(emphasized && !showAll
       ? C.focusedSetIndices(se.sets)
       : se.sets.map((_, index) => index));

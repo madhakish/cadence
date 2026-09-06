@@ -797,6 +797,22 @@ for (let i = 0; i < 10; i++) {
     "the logger reports exercise and whole-workout set progress");
   ok(logger.querySelector(".current-set-card") && [...logger.querySelectorAll("button")].some((button) => button.textContent === "Show all sets"),
     "the current set owns the cockpit while a full-set control remains available");
+  // The focused exercise leads with the approved hierarchy: a set track with
+  // exactly one current segment, then the working-set position, reps, and
+  // the set load — pounds first, kilograms after — before any set row.
+  {
+    const focused = logger.querySelector(".exercise-card.emphasized");
+    const segments = focused ? [...focused.querySelectorAll(".set-track .set-track-segment")] : [];
+    ok(segments.length >= 2 && segments.filter((seg) => seg.classList.contains("now")).length === 1,
+      "the focused exercise shows a set track with exactly one current segment");
+    const heroSet = builtProgramSession.exercises[0].sets.find((x) => !x.isWarmup);
+    const hero = focused?.querySelector(".current-set-hero");
+    const heroText = hero?.textContent || "";
+    ok(hero && /WORKING SET 1 OF \d+/i.test(heroText) && heroText.includes(`${heroSet.reps} reps`)
+        && heroText.includes(C.trim(heroSet.weightLb)) && /\blb\b[\s\S]*\bkg\b/.test(heroText)
+        && hero.compareDocumentPosition(focused.querySelector(".setrow")) & Node.DOCUMENT_POSITION_FOLLOWING,
+      "the hero states working-set position, reps, and the set load lb-first with kg, above the set rows");
+  }
   const restBtn = [...document.querySelectorAll("#session-bar button")].find((b) => b.textContent.startsWith("Rest "));
   ok(restBtn && restBtn.textContent === "Rest 4:00", `main squat rest follows the bucket stepper (got ${restBtn && restBtn.textContent})`);
   const chips = [...document.querySelectorAll("#overlays .overlay button")].filter((b) => b.textContent.startsWith("⏱"));

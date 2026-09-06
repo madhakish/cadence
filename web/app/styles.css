@@ -397,6 +397,18 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
 .session-progress { padding: 12px 4px; margin: 4px 0 10px; border-bottom: 1px solid var(--line); }
 .exercise-card { position: relative; }
 .exercise-card.emphasized { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 14px 32px rgba(0,0,0,.20); }
+/* The focused exercise's set track and working-set hero. */
+.set-track { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin: 10px 0 12px; padding: 0; }
+.set-track-segment { display: block; padding-top: 8px; border-top: 3px solid var(--line); color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.set-track-segment.done { border-top-color: color-mix(in srgb, var(--text) 45%, var(--line)); }
+.set-track-segment.now { border-top-color: var(--accent); color: var(--text); font-weight: 800; }
+.current-set-hero { display: grid; gap: 4px; margin: 2px 0 12px; }
+.current-set-reps { display: flex; align-items: baseline; gap: 4px; }
+.current-set-reps .count { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.current-set-load { display: flex; align-items: baseline; gap: 4px; }
+.current-set-load .load-primary { font-size: clamp(40px, 12vw, 56px); font-weight: 900; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.current-set-load .load-secondary { margin-left: 10px; font-size: clamp(22px, 6vw, 30px); font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.current-set-hero .unit { color: var(--muted); font-size: 16px; }
 .set-state-line { display: flex; flex-wrap: wrap; gap: 5px; }
 .set-state { padding: 2px 5px; border-left: 2px solid var(--line); color: var(--muted); font-size: 9px; font-weight: 850; letter-spacing: .08em; }
 .set-state.now { border-color: var(--accent); color: var(--accent); }
