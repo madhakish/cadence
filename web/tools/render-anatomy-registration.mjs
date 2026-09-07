@@ -1,14 +1,15 @@
 // Static registration proof, NOT browser/native screenshots. Uses production
 // figureSVG and its exact assets; Sharp only composites the transparent washes.
 // Run: node web/tools/render-anatomy-registration.mjs <output-directory>
-import { readFile, mkdir } from "node:fs/promises";
+import { readFile, mkdir, mkdtemp } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { tmpdir } from "node:os";
 import { JSDOM } from "jsdom";
 const sharp = createRequire(import.meta.url)("sharp");
 import { figureSVG, muscleProfile, MUSCLE_NAMES } from "../app/js/anatomy.js";
 globalThis.document = new JSDOM("<!doctype html>").window.document;
-const out = resolve(process.argv[2] || "docs/design-pass/anatomy-registration");
+const out = process.argv[2] ? resolve(process.argv[2]) : await mkdtemp(join(tmpdir(), "cadence-anatomy-"));
 await mkdir(out, { recursive: true });
 const asset = (name) => readFile(new URL(`../app/${name}`, import.meta.url));
 const profiles = ["Front Squat", "Romanian Deadlift", "Barbell Bench", "Overhead Press", "Face Pulls"];

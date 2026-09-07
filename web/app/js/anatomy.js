@@ -79,6 +79,32 @@ export const ANATOMY_REGIONS = [
   { id: "calves", view: "back", points: mirror([[71, 175], [84, 181], [78, 203], [70, 211], [61, 208], [63, 196]]) },
 ];
 
+// Deprecated compatibility export. Production rendering uses registered SVG
+// assets, never these old midpoint control loops. Keep existing imports valid.
+export const VITRUVIAN_FRONT_REGIONS = [
+  { id: "traps", points: [[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]] },
+  { id: "traps", points: mirror([[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]]) },
+  { id: "delts", points: [[68, 61], [82, 58], [91, 64], [87, 76], [76, 81], [65, 73]] },
+  { id: "delts", points: mirror([[68, 61], [82, 58], [91, 64], [87, 76], [76, 81], [65, 73]]) },
+  { id: "chest", points: [[79, 74], [103, 73], [103, 94], [92, 98], [78, 91], [75, 82]] },
+  { id: "chest", points: mirror([[79, 74], [103, 73], [103, 94], [92, 98], [78, 91], [75, 82]]) },
+  { id: "biceps", points: [[76, 69], [63, 67], [49, 71], [47, 80], [61, 84], [75, 78]] },
+  { id: "biceps", points: mirror([[76, 69], [63, 67], [49, 71], [47, 80], [61, 84], [75, 78]]) },
+  { id: "biceps", points: [[70, 48], [61, 43], [48, 38], [43, 45], [53, 55], [65, 60]] },
+  { id: "biceps", points: mirror([[70, 48], [61, 43], [48, 38], [43, 45], [53, 55], [65, 60]]) },
+  { id: "forearms", points: [[50, 70], [36, 69], [21, 72], [16, 78], [24, 84], [39, 82], [51, 78]] },
+  { id: "forearms", points: mirror([[50, 70], [36, 69], [21, 72], [16, 78], [24, 84], [39, 82], [51, 78]]) },
+  { id: "forearms", points: [[48, 39], [40, 31], [32, 27], [29, 34], [36, 44], [45, 49], [54, 54]] },
+  { id: "forearms", points: mirror([[48, 39], [40, 31], [32, 27], [29, 34], [36, 44], [45, 49], [54, 54]]) },
+  { id: "obliques", points: [[80, 91], [94, 94], [96, 113], [92, 122], [83, 119], [78, 105]] },
+  { id: "obliques", points: mirror([[80, 91], [94, 94], [96, 113], [92, 122], [83, 119], [78, 105]]) },
+  { id: "abs", points: [[94, 87], [116, 87], [121, 112], [114, 126], [105, 130], [96, 126], [89, 112]] },
+  { id: "quads", points: [[78, 123], [101, 126], [100, 145], [94, 161], [82, 169], [72, 161], [73, 143]] },
+  { id: "quads", points: mirror([[78, 123], [101, 126], [100, 145], [94, 161], [82, 169], [72, 161], [73, 143]]) },
+  { id: "adductors", points: [[92, 125], [104, 128], [102, 151], [96, 159], [89, 149], [88, 135]] },
+  { id: "adductors", points: mirror([[92, 125], [104, 128], [102, 151], [96, 159], [89, 149], [88, 135]]) },
+];
+
 // Exercise → { primary, secondary } by canonical library name.
 export const MUSCLE_MAP = {
   "Deadlift": { primary: ["hamstrings", "glutes", "lowerback"], secondary: ["lats", "traps", "forearms", "quads"] },

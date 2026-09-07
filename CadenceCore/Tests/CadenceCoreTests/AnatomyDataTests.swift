@@ -7,6 +7,13 @@ import XCTest
 /// job. Regenerate with web/tools/generate-anatomy-fixture.mjs.
 final class AnatomyDataTests: XCTestCase {
 
+    func testLegacyVitruvianRegionsRemainSourceCompatible() {
+        let regions = AnatomyData.vitruvianFrontRegions
+        XCTAssertEqual(regions.count, 21)
+        XCTAssertEqual(regions.first?.points.first, [80, 67])
+        XCTAssertEqual(regions.filter { $0.id == "forearms" }.count, 4)
+    }
+
     private struct Fixture: Codable {
         let names: [String: String]
         let body: [[[Double]]]
