@@ -365,9 +365,9 @@ public struct PrescriptionBlock: Hashable, Sendable {
 }
 
 public struct SessionPrescription: Hashable, Sendable {
-    /// The methodology that produced these blocks, never the `automatic`
-    /// placeholder. Persist with the work so later program edits cannot
-    /// reinterpret the session's effort contract.
+    /// The engine supplies the methodology that produced these blocks.
+    /// Legacy callers that construct blocks themselves retain `automatic`;
+    /// there is no sound way to infer a methodology from arbitrary blocks.
     public let resolvedStyle: PrescriptionStyle
     public let mainWork: SessionPlan
     public let blocks: [PrescriptionBlock]
@@ -376,6 +376,11 @@ public struct SessionPrescription: Hashable, Sendable {
         self.resolvedStyle = resolvedStyle
         self.mainWork = mainWork
         self.blocks = blocks
+    }
+
+    /// Preserve the public initializer shipped before resolvedStyle existed.
+    public init(mainWork: SessionPlan, blocks: [PrescriptionBlock]) {
+        self.init(resolvedStyle: .automatic, mainWork: mainWork, blocks: blocks)
     }
 }
 
