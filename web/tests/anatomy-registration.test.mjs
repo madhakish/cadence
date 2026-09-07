@@ -16,6 +16,9 @@ const all = figureSVG({ primary: Object.keys(MUSCLE_NAMES), secondary: [] });
 const masks = [...all.querySelectorAll("image.anatomy-region-mask")];
 
 test("proof renderer runs using only locked development dependencies", async () => {
+  const source = await read("web/tools/render-anatomy-registration.mjs");
+  assert.equal(source.split('g.anatomy-figure-panel[data-view="${view}"]').length - 1, 2,
+    "both proof paths select anatomical view by identity, not DOM order");
   const out = await mkdtemp(join(tmpdir(), "cadence-anatomy-test-"));
   const { NODE_PATH, ...env } = process.env;
   try {
