@@ -873,6 +873,17 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<AppSettings>()).first?.themeNameRaw,
                        "slate")
 
+        // Downgrading only the version must not smuggle a new enum into an
+        // older contract or overwrite the existing store during rejection.
+        for version in [0, 1, 12] {
+            var misversioned = json
+            misversioned["schemaVersion"] = version
+            XCTAssertThrowsError(try ImportService.load(
+                JSONSerialization.data(withJSONObject: misversioned), into: legacy.mainContext))
+            XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<AppSettings>()).first?.themeNameRaw,
+                           "slate", "preflight rejection preserves the existing settings")
+        }
+
         // An unregistered value rejects the bundle before any write.
         var badJSON = json
         var badSettings = try XCTUnwrap(badJSON["settings"] as? [String: Any])

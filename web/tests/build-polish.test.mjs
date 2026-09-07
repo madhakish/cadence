@@ -9,7 +9,35 @@ Object.assign(globalThis, { window: dom.window, document: dom.window.document, N
 const db = await import('../app/js/db.js');
 const session = await import('../app/js/views/session.js');
 const plates = await import('../app/js/views/plates.js');
+const settingsView = await import('../app/js/views/settings.js');
 await db.ensureSeeded();
+const classified = { name: 'Fixture Secondary Classification', category: 'Main',
+  type: 'barbell', movementPattern: 'hipHinge', secondaryMovementPattern: 'squat' };
+for (const [pattern, expected] of [[null, true], ['hipHinge', true], ['squat', true], ['horizontalPress', false]])
+  assert.equal(C.exerciseMatchesMovement(classified, pattern), expected);
+assert.equal(C.exerciseMatchesMovement({ ...classified, secondaryMovementPattern: null }, 'squat'), false);
+settingsView.exerciseLibrary([classified]);
+const library = [...document.querySelectorAll('.overlay')].at(-1);
+const filter = library.querySelector('select[aria-label="Movement"]');
+filter.value = 'squat'; filter.dispatchEvent(new window.Event('change'));
+assert.equal(library.querySelector('.library-group .row .title')?.textContent, classified.name);
+library.querySelector('.overlay-head button').click();
+// A v13-only enum must reject before any store writes if the bundle claims
+// an older version. The four previously shipped themes remain accepted.
+const themeBefore = (await db.Settings.get()).theme;
+const backup = JSON.parse(await db.exportJSON());
+for (const schemaVersion of [0, 1, 12]) {
+  await assert.rejects(() => db.importBundle({ ...backup, schemaVersion,
+    settings: { ...backup.settings, theme: 'titanium' } }), /settings.theme/);
+  assert.equal((await db.Settings.get()).theme, themeBefore);
+}
+for (const theme of ['carbon', 'memento', 'slate', 'system']) {
+  await db.importBundle({ ...backup, schemaVersion: 12, settings: { ...backup.settings, theme } });
+  assert.equal((await db.Settings.get()).theme, theme);
+}
+await db.importBundle({ ...backup, schemaVersion: 13, settings: { ...backup.settings, theme: 'titanium' } });
+assert.equal((await db.Settings.get()).theme, 'titanium');
+await db.importBundle(backup);
 for (const [value, colour] of [[2,'blue'],[1.5,'yellow'],[1,'green'],[0.5,'white']]) {
   assert.equal(C.plateColorToken({ value, unit: 'kg' }, 'bumper'), colour);
   assert.equal(C.plateColorToken({ value, unit: 'kg' }, 'steel'), 'black');

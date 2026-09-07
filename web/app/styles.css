@@ -5,12 +5,14 @@
    semantic (grindy·wobble / clean / hard stop) and separate from accent. */
 :root, :root[data-theme="carbon"] {    /* Foundry — charcoal, controlled red, cool steel edges (default; key stays "carbon") */
   --accent: #ff5a5f; --on-accent: #0c0d0e; --warn: #eab308; --hard: #ff7a73; --good: #4ade80;
+  --on-good: #0c0d0e; --on-warn: #0c0d0e;
   --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2c3136;
   color-scheme: dark;
 }
 :root[data-theme="memento"] {           /* Heritage Gold — muted brass on warm carbon (key stays "memento") */
   --accent: #c9a24b;
   --on-accent: #0a0908;
+  --on-good: #0a0908; --on-warn: #0a0908;
   color-scheme: dark;
   --warn: #d29a3a;
   --hard: #ff7a73;
@@ -24,22 +26,26 @@
 }
 :root[data-theme="slate"] {            /* Slate — cool gunmetal + crimson */
   --accent: #ff5a5f; --on-accent: #0d1117; --warn: #d29922; --hard: #ff7a73; --good: #3fb950;
+  --on-good: #0d1117; --on-warn: #0d1117;
   --bg: #0d1117; --card: #161b22; --card2: #1e252e; --text: #eaeef4; --muted: #8a97a6; --line: #2a323c;
   color-scheme: dark;
 }
 :root[data-theme="titanium"] {         /* Titanium — light mineral surfaces, deep teal controls */
   --accent: #0b615c; --on-accent: #ffffff; --warn: #7a4f00; --hard: #a51111; --good: #146633;
+  --on-good: #ffffff; --on-warn: #ffffff;
   --bg: #e6e9ec; --card: #f5f6f8; --card2: #d9dde2; --text: #171a1d; --muted: #525a62; --line: #c4cad1;
   color-scheme: light;
 }
 :root[data-theme="system"] {           /* System — follows OS; light by default, dark below */
   --accent: #c81e1e; --on-accent: #ffffff; --warn: #7a4f00; --hard: #a51111; --good: #146633;
+  --on-good: #ffffff; --on-warn: #ffffff;
   --bg: #f5f5f7; --card: #ffffff; --card2: #ececee; --text: #1a1a1c; --muted: #66666e; --line: #d9d9de;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
     --accent: #ff5a5f; --on-accent: #0c0d0e; --warn: #eab308; --hard: #ff7a73; --good: #4ade80;
+    --on-good: #0c0d0e; --on-warn: #0c0d0e;
     --bg: #0c0d0e; --card: #17181a; --card2: #202225; --text: #fafafa; --muted: #8b9196; --line: #2c3136;
     color-scheme: dark;
   }
@@ -81,7 +87,7 @@ body {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
   display: grid; grid-template-columns: repeat(5, 1fr);
   padding: 6px 6px calc(6px + var(--safe-bottom));
-  background: rgba(20,20,22,0.92); backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--card) 96%, transparent); backdrop-filter: blur(14px);
   border-top: 1px solid var(--line);
 }
 .tab {
@@ -100,7 +106,7 @@ body {
   box-shadow: 0 6px 18px rgba(0,0,0,0.5); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
-#fab svg { width: 30px; height: 30px; fill: #16090a; }
+#fab svg { width: 30px; height: 30px; fill: currentColor; }
 
 /* cards & lists */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 10px 0; box-shadow: 0 8px 24px rgba(0,0,0,.10); }
@@ -250,8 +256,8 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .readiness-dots i.readiness-red { background: var(--hard); }
 .program-day-card { display: block; text-align: left; margin: 8px 0; }
 .program-slot { padding: 8px 0; }
-.flagbtn.on-clean { background: var(--good); color: #022; }
-.flagbtn.on-grindy, .flagbtn.on-wobble { background: var(--warn); color: #221c00; }
+.flagbtn.on-clean { background: var(--good); color: var(--on-good); }
+.flagbtn.on-grindy, .flagbtn.on-wobble { background: var(--warn); color: var(--on-warn); }
 /* Reps in reserve is an observation, not a verdict — it reads as set, not as
    good or bad, so it takes the accent rather than the good/warn palette. */
 .flagbtn.on-rir { background: var(--accent); color: var(--on-accent); }

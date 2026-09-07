@@ -64,7 +64,17 @@ for (const [theme, block] of [...THEMES.map((t) => [t, themeBlock(t)]), ["system
   `${theme} text and semantic tokens meet WCAG AA on every app elevation`);
   ok(clearsAA(tokenIn(block, "on-accent"), tokenIn(block, "accent")),
     `${theme} primary action foreground meets WCAG AA on its accent fill`);
+  for (const semantic of ["good", "warn"]) {
+    ok(clearsAA(tokenIn(block, `on-${semantic}`), tokenIn(block, semantic)),
+      `${theme} ${semantic}-filled quality control meets WCAG AA`);
+  }
 }
+ok(/#fab svg\s*\{[^}]*fill:\s*currentColor/.test(css), "the FAB icon inherits the contrast-tested on-accent foreground");
+ok(/\.flagbtn\.on-clean\s*\{[^}]*color:\s*var\(--on-good\)/.test(css)
+  && /\.flagbtn\.on-wobble\s*\{[^}]*color:\s*var\(--on-warn\)/.test(css),
+  "quality buttons use the contrast-tested semantic foregrounds");
+ok(/#tabbar\s*\{[^}]*background:[^;]*var\(--card\)/.test(css),
+  "navigation uses a theme surface instead of retaining a dark fill in light themes");
 ok(/:root\[data-theme="titanium"\]\s*\{[^}]*color-scheme:\s*light/.test(css),
   "Titanium declares itself a light theme so form controls and scrollbars follow");
 ok(!/color:\s*#0b0b0c|color:\s*#16090a|color:\s*#041018/.test(css),
@@ -100,6 +110,8 @@ const nativeBadge = nativeBarbell.slice(nativeBarbell.indexOf("struct PlateFaceB
 ok(/\.accessibilityHidden\(true\)/.test(nativeBadge) && !/\.accessibilityLabel/.test(nativeBadge),
   "native decorative badges do not duplicate the row's denomination label");
 const nativePlates = read("../Cadence/Views/PlateCalculatorView.swift");
+ok(/if !referenceInitialized\s*\{\s*referenceUnit = preferredUnit; referenceInitialized = true/.test(nativePlates),
+  "native reference starts in the preferred unit once and preserves later manual choices");
 ok(/\.accessibilityLabel\("\\\(plate\.label\) plates per side"\)/.test(nativePlates)
   && /\.accessibilityValue\("\\\(reverseCounts\[plate\.id\] \?\? 0\)"\)/.test(nativePlates),
   "native reverse steppers expose one denomination label and the current count separately");

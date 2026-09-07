@@ -46,23 +46,27 @@ stretched over the gorilla. Reference illustrations are not copied into assets.
 
 ## Comparable evidence
 
-The before render uses main at `6c317293fbe20043398bb85da9776a6271ad6106`.
+The archived before render uses main at `6c317293fbe20043398bb85da9776a6271ad6106`.
 Both sides use the same static compositor. It reads `figureSVG`, resolves the
 production image/mask assets, and multiplies red/steel washes over the art.
 Blur and container feather are intentionally omitted to expose contour errors.
 Review JPEGs are encoded identically; production JPEGs are untouched.
 
+Generated JPEGs are no longer tracked in this candidate. The links below retain
+the original review evidence at its immutable historical commit; new renders
+belong in a temporary directory or a CI artifact, not the source tree.
+
 | Profile | Before | After | Small after (180 px per figure) |
 | --- | --- | --- | --- |
-| Front Squat | [large](before/front-squat-626.jpg) | [large](after/front-squat-626.jpg) | [small](after/front-squat-180.jpg) |
-| Romanian Deadlift | [large](before/romanian-deadlift-626.jpg) | [large](after/romanian-deadlift-626.jpg) | [small](after/romanian-deadlift-180.jpg) |
-| Barbell Bench | [large](before/barbell-bench-626.jpg) | [large](after/barbell-bench-626.jpg) | [small](after/barbell-bench-180.jpg) |
-| Overhead Press | [large](before/overhead-press-626.jpg) | [large](after/overhead-press-626.jpg) | [small](after/overhead-press-180.jpg) |
-| Face Pulls | [large](before/face-pulls-626.jpg) | [large](after/face-pulls-626.jpg) | [small](after/face-pulls-180.jpg) |
+| Front Squat | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/before/front-squat-626.jpg) | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/front-squat-626.jpg) | [small](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/front-squat-180.jpg) |
+| Romanian Deadlift | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/before/romanian-deadlift-626.jpg) | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/romanian-deadlift-626.jpg) | [small](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/romanian-deadlift-180.jpg) |
+| Barbell Bench | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/before/barbell-bench-626.jpg) | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/barbell-bench-626.jpg) | [small](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/barbell-bench-180.jpg) |
+| Overhead Press | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/before/overhead-press-626.jpg) | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/overhead-press-626.jpg) | [small](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/overhead-press-180.jpg) |
+| Face Pulls | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/before/face-pulls-626.jpg) | [large](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/face-pulls-626.jpg) | [small](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/face-pulls-180.jpg) |
 
-All isolated selections: [front before](before/front-isolated.jpg),
-[front after](after/front-isolated.jpg), [back before](before/back-isolated.jpg),
-[back after](after/back-isolated.jpg).
+All isolated selections: [front before](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/before/front-isolated.jpg),
+[front after](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/front-isolated.jpg), [back before](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/before/back-isolated.jpg),
+[back after](https://raw.githubusercontent.com/madhakish/cadence/156f4459af6977135927cae719df2ebb4286b8d6/docs/design-pass/anatomy-registration/after/back-isolated.jpg).
 
 ## Verification and remaining gates
 
@@ -84,11 +88,13 @@ All isolated selections: [front before](before/front-isolated.jpg),
    actual CSS tint, VoiceOver/keyboard, focus contrast and reduced motion.
    Static registration proof and DOM tests do not satisfy this device/UI gate.
 
-Regenerate the after registration proof with Node, the web test dependencies,
-and a locally available Sharp installation:
+Regenerate the after registration proof from a clean checkout. Sharp is pinned
+in the web development dependencies and lockfile. The default output is a new
+temporary directory, printed when rendering completes:
 
 ```sh
-node web/tools/render-anatomy-registration.mjs docs/design-pass/anatomy-registration/after
+npm --prefix web ci
+node web/tools/render-anatomy-registration.mjs
 ```
 
 Sharp is a proof-rendering tool only; it is not an app/runtime dependency.

@@ -601,6 +601,9 @@ enum ImportService {
         if let settings = bundle.settings {
             try known(settings.unitDisplay, ["lbPrimary", "kgPrimary", "both"], "settings.unitDisplay", required: schemaVersion >= 1)
             try known(settings.theme, ["memento", "carbon", "slate", "system", "titanium"], "settings.theme", required: schemaVersion >= 1)
+            if settings.theme == "titanium", schemaVersion < 13 {
+                throw ImportError.invalidData("settings.theme: titanium requires backup schemaVersion 13")
+            }
             // 0 is the "not set" sentinel and always valid. Any other year has
             // to produce a plausible age, so a corrupted field cannot silently
             // move the lifter across the older-adult protein threshold.
@@ -1349,7 +1352,8 @@ enum ImportService {
         // garbage on the next export (the UI would silently show Carbon anyway).
         // Keep the backup codec platform-neutral. `ThemeName` lives beside the
         // SwiftUI palette and imports UIKit, while the wire contract is just
-        // these four stable strings (mirrored by web `[data-theme]`).
+        // these stable strings (mirrored by web `[data-theme]`). The full
+        // bundle preflight already enforces each value's version contract.
         if let v = st.theme, ["memento", "carbon", "slate", "system", "titanium"].contains(v) {
             settings.themeNameRaw = v
         }

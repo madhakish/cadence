@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdtemp, readdir, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { figureSVG, muscleLegend, MUSCLE_NAMES } from "../app/js/anatomy.js";
 
@@ -10,6 +14,24 @@ globalThis.document = dom.window.document;
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const all = figureSVG({ primary: Object.keys(MUSCLE_NAMES), secondary: [] });
 const masks = [...all.querySelectorAll("image.anatomy-region-mask")];
+
+test("proof renderer runs using only locked development dependencies", async () => {
+  const out = await mkdtemp(join(tmpdir(), "cadence-anatomy-test-"));
+  const { NODE_PATH, ...env } = process.env;
+  try {
+    execFileSync(process.execPath, [fileURLToPath(new URL("../tools/render-anatomy-registration.mjs", import.meta.url)), out],
+      { env, timeout: 60000, stdio: "pipe" });
+    assert.equal((await readdir(out)).filter(name => name.endsWith(".jpg")).length, 12);
+  } finally { await rm(out, { recursive: true, force: true }); }
+});
+
+test("legacy exported anatomy geometry remains source compatible, not a renderer input", async () => {
+  const legacy = (await import("../app/js/anatomy.js")).VITRUVIAN_FRONT_REGIONS;
+  assert.equal(legacy?.length, 21);
+  assert.deepEqual(legacy[0].points[0], [80, 67]);
+  assert.equal(legacy.filter(region => region.id === "forearms").length, 4);
+  assert.equal(all.querySelectorAll("path").length, 0);
+});
 
 // Sample the authored cubic curves, not the retired midpoint control loops.
 // Deliberately supports only the M/L/C/Z commands used by these static masks.

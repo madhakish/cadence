@@ -2,6 +2,14 @@ import XCTest
 @testable import CadenceCore
 
 final class BuildPolishTests: XCTestCase {
+    func testMovementFilterIncludesSecondaryClassification() {
+        XCTAssertTrue(ExerciseSearch.matchesMovement(nil, primary: .hipHinge, secondary: .squat))
+        XCTAssertTrue(ExerciseSearch.matchesMovement(.hipHinge, primary: .hipHinge, secondary: .squat))
+        XCTAssertTrue(ExerciseSearch.matchesMovement(.squat, primary: .hipHinge, secondary: .squat))
+        XCTAssertFalse(ExerciseSearch.matchesMovement(.squat, primary: .hipHinge))
+        XCTAssertFalse(ExerciseSearch.matchesMovement(.horizontalPress, primary: .hipHinge, secondary: .squat))
+    }
+
     func testIWFChangePlateColoursDoNotAlterInventoryOrIPFSteel() {
         for (value, colour) in [(2.0, "blue"), (1.5, "yellow"), (1.0, "green"), (0.5, "white")] {
             let plate = Plate(value: value, unit: .kg)

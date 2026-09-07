@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "fake-indexeddb": "6.2.5",
-    "jsdom": "30.0.1"
+    "jsdom": "30.0.1",
+    "sharp": "0.35.4"
   }
 }

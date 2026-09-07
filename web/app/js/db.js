@@ -1329,6 +1329,9 @@ export function validateBackup(bundle) {
     const settings = object(bundle.settings, "settings");
     enumValue(settings.unitDisplay, BACKUP_ENUMS.unitDisplay, "settings.unitDisplay", schemaVersion >= 1);
     enumValue(settings.theme, BACKUP_ENUMS.themes, "settings.theme", schemaVersion >= 1);
+    if (settings.theme === "titanium" && schemaVersion < 13) {
+      invalid("settings.theme", "titanium requires backup schemaVersion 13");
+    }
     // 0 is the "not set" sentinel and always valid. Any other year has to
     // produce a plausible age, so a corrupted field cannot silently move the
     // lifter across the older-adult protein threshold.

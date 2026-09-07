@@ -14,6 +14,7 @@ struct PlateCalculatorView: View {
     @State private var bar: Bar = .bar45lb
     @State private var plateStyle: PlateVisualStyle = .steel
     @State private var referenceUnit: WeightUnit = .lb
+    @State private var referenceInitialized = false
     @State private var selectedGymName: String?
     @State private var showExpandedBar = false
     @FocusState private var targetFieldFocused: Bool
@@ -104,6 +105,7 @@ struct PlateCalculatorView: View {
             }
         }
         .onAppear {
+            if !referenceInitialized { referenceUnit = preferredUnit; referenceInitialized = true }
             if targetText.isEmpty { targetUnit = preferredUnit }
             if selectedGymName == nil { bar = gym?.defaultBar ?? .bar45lb }
         }

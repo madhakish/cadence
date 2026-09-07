@@ -6,6 +6,12 @@ import Foundation
 /// exercise may be programmed is a different question from whether its name,
 /// aliases, or programming tags match what the lifter typed.
 public enum ExerciseSearch {
+    /// Both classifications participate in library filtering; nil means all.
+    public static func matchesMovement(_ selected: MovementPattern?, primary: MovementPattern,
+                                       secondary: MovementPattern? = nil) -> Bool {
+        selected == nil || selected == primary || selected == secondary
+    }
+
     /// One locale for every fold — this runs per keystroke over the whole
     /// library, and the folding rule is deliberately locale-fixed anyway.
     private static let foldingLocale = Locale(identifier: "en_US_POSIX")

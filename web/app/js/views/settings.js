@@ -1110,7 +1110,7 @@ export function exerciseLibrary(exercises) {
         // Raw query in: the shared matcher owns normalization and returns
         // true on empty, so no pre-trim/lowercase or empty-branch here.
         const visible = exercises.filter((e) => C.exerciseMatchesSearch(e, search.value)
-          && (!movement.value || e.movementPattern === movement.value || e.secondaryMovementPattern === movement.value)
+          && C.exerciseMatchesMovement(e, movement.value)
           && (!equipment.value || e.type === equipment.value));
         for (const cat of CATEGORIES) {
           const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));

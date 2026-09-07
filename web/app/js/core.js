@@ -3367,6 +3367,10 @@ export const movementPatternName = (pattern) => ({
 const normalizedExerciseSearchText = (value) => String(value ?? "")
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
+export function exerciseMatchesMovement(exercise, selected) {
+  return !selected || exercise.movementPattern === selected || exercise.secondaryMovementPattern === selected;
+}
+
 export function exerciseMatchesSearch(exercise, query) {
   const term = normalizedExerciseSearchText(query).trim();
   if (!term) return true;

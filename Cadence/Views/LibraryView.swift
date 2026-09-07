@@ -26,7 +26,8 @@ struct LibraryView: View {
         let term = search.isEmpty ? nil : ExerciseSearch.preparedTerm(search)
         return exercises.filter { exercise in
             if let term, !exercise.matchesSearch(preparedTerm: term) { return false }
-            if let movementFilter, exercise.movementPattern != movementFilter { return false }
+            if !ExerciseSearch.matchesMovement(movementFilter, primary: exercise.movementPattern,
+                                               secondary: exercise.secondaryMovementPattern) { return false }
             if let typeFilter, exercise.type != typeFilter { return false }
             return true
         }
