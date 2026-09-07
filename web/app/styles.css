@@ -349,16 +349,14 @@ svg.anatomy { width: 100%; max-width: 430px; color: var(--text); overflow: visib
   mask-size: 100% 100%;
 }
 .anatomy-reference { opacity: 1; }
-.anatomy-highlight-layer { filter: blur(2.1px); }
-.anatomy-region.primary, .anatomy-region.supporting { stroke-width: .65; mix-blend-mode: multiply; }
 .anatomy-region-mask { pointer-events: none; mix-blend-mode: multiply; }
 .anatomy-region-mask.primary {
   opacity: .50;
-  filter: invert(37%) sepia(70%) saturate(1876%) hue-rotate(335deg) brightness(95%) contrast(84%) blur(1.8px);
+  filter: invert(37%) sepia(70%) saturate(1876%) hue-rotate(335deg) brightness(95%) contrast(84%) blur(.35px);
 }
 .anatomy-region-mask.supporting {
   opacity: .32;
-  filter: invert(72%) sepia(7%) saturate(360%) hue-rotate(175deg) brightness(92%) contrast(86%) blur(1.8px);
+  filter: invert(72%) sepia(7%) saturate(360%) hue-rotate(175deg) brightness(92%) contrast(86%) blur(.35px);
 }
 .anatomy-view-label { fill: var(--muted); font-size: 10px; letter-spacing: .04em; }
 .anatomy-legend { display: grid; gap: 12px; margin-top: 10px; text-align: left; }
@@ -371,9 +369,8 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
 .muscle-key.supporting i { background: var(--forged-steel); }
 .muscle-key span { font-size: 14px; font-weight: 650; }
 .muscle-key.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
-.anatomy-region, .anatomy-region-mask { transition: opacity var(--short-motion), filter var(--short-motion); }
-.anatomy-region.is-muted, .anatomy-region-mask.is-muted { opacity: .08; }
-.anatomy-region.is-selected { fill-opacity: .78; filter: none; }
+.anatomy-region-mask { transition: opacity var(--short-motion), filter var(--short-motion); }
+.anatomy-region-mask.is-muted { opacity: .08; }
 .anatomy-region-mask.is-selected { opacity: .72; }
 
 /* The current task is a single, continuous work surface. Section boundaries,

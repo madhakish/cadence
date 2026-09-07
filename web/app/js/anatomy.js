@@ -5,8 +5,8 @@
 // DATA is ported 1:1 from CadenceCore/Sources/CadenceCore/AnatomyData.swift;
 // parity is ENFORCED against web/tests/fixtures/anatomy.json by both test
 // suites — regenerate with web/tools/generate-anatomy-fixture.mjs after edits.
-// The SVG rendering at the bottom is web-only (native draws the same contours
-// with SwiftUI Path).
+// Presentation uses byte-identical SVG masks in web assets and the native asset
+// catalog. Registration is in source-image pixels, not the legacy geometry below.
 
 // Region display names (also the blurb vocabulary).
 export const MUSCLE_NAMES = {
@@ -79,10 +79,8 @@ export const ANATOMY_REGIONS = [
   { id: "calves", view: "back", points: mirror([[71, 175], [84, 181], [78, 203], [70, 211], [61, 208], [63, 196]]) },
 ];
 
-// Rendering contours tuned to the Vitruvian weightlifting ape's 210×210 square.
-// These are deliberately separate from the legacy fixture geometry above:
-// the data/map parity contract stays stable while the visible wash follows both
-// superimposed arm and leg poses in the engraved source art.
+// Deprecated compatibility export. Production rendering uses registered SVG
+// assets, never these old midpoint control loops. Keep existing imports valid.
 export const VITRUVIAN_FRONT_REGIONS = [
   { id: "traps", points: [[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]] },
   { id: "traps", points: mirror([[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]]) },
@@ -307,35 +305,12 @@ export function muscleBlurb(profile) {
 
 // ---- web-only SVG rendering ------------------------------------------------
 const NS = "http://www.w3.org/2000/svg";
-const PRIMARY_COLOR = "#e0453a";   // red — primary movers
-const SECONDARY_COLOR = "var(--forged-steel)"; // shared forged-steel token
-const smoothPath = (points) => {
-  if (points.length < 3) return "";
-  const midpoint = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  const start = midpoint(points.at(-1), points[0]);
-  let d = `M${start[0]} ${start[1]}`;
-  points.forEach((point, index) => {
-    const end = midpoint(point, points[(index + 1) % points.length]);
-    d += ` Q${point[0]} ${point[1]} ${end[0]} ${end[1]}`;
-  });
-  return `${d} Z`;
-};
-const shape = (points, fill, stroke, opacity, className) => {
-  const p = document.createElementNS(NS, "path");
-  p.setAttribute("d", smoothPath(points));
-  if (className) p.setAttribute("class", className);
-  if (fill) p.setAttribute("fill", fill);
-  if (opacity != null) p.setAttribute("fill-opacity", String(opacity));
-  p.setAttribute("stroke", stroke || "none");
-  p.setAttribute("stroke-width", "0.7");
-  p.setAttribute("vector-effect", "non-scaling-stroke");
-  return p;
-};
-
-const BACK_REGION_ASSET = {
-  traps: "traps", delts: "delts", reardelts: "delts", lats: "lats",
-  triceps: "triceps", lowerback: "lowerback", forearms: "forearms",
-  glutes: "glutes", hamstrings: "hamstrings", calves: "calves",
+const REGION_ASSET = {
+  front: { traps: "traps", delts: "delts", chest: "chest", biceps: "biceps",
+    forearms: "forearms", obliques: "obliques", abs: "abs", quads: "quads", adductors: "adductors" },
+  back: { traps: "traps", delts: "delts", reardelts: "delts", lats: "lats",
+    triceps: "triceps", lowerback: "lowerback", forearms: "forearms",
+    glutes: "glutes", hamstrings: "hamstrings", calves: "calves" },
 };
 
 const referenceImage = (href, className = "anatomy-reference") => {
@@ -350,11 +325,11 @@ const referenceImage = (href, className = "anatomy-reference") => {
   return image;
 };
 
-const appendBackMask = (g, id, role) => {
-  const asset = BACK_REGION_ASSET[id];
+const appendMask = (g, view, id, role) => {
+  const asset = REGION_ASSET[view][id];
   if (!asset) return;
   if (g.querySelector(`image[data-role="${role}"][data-asset="${asset}"]`)) return;
-  const image = referenceImage(`assets/vitruvian-back-${asset}.svg`, `anatomy-region-mask ${role}`);
+  const image = referenceImage(`assets/vitruvian-${view}-${asset}.svg`, `anatomy-region-mask ${role}`);
   image.setAttribute("data-role", role);
   image.setAttribute("data-asset", asset);
   image.setAttribute("data-muscle", id);
@@ -372,29 +347,19 @@ export function figureSVG(profile) {
   for (const [view, dx] of [["front", 0], ["back", 220]]) {
     const g = document.createElementNS(NS, "g");
     g.setAttribute("class", "anatomy-figure-panel");
+    g.setAttribute("data-view", view);
     g.setAttribute("transform", `translate(${dx},0)`);
     const image = referenceImage(`assets/vitruvian-${view}.jpeg`);
     image.setAttribute("data-species", "gorilla");
     image.setAttribute("data-source", "exact-reference");
     g.append(image);
-    if (view === "front") {
-      const regions = document.createElementNS(NS, "g");
-      regions.setAttribute("class", "anatomy-highlight-layer");
-      for (const r of VITRUVIAN_FRONT_REGIONS) {
-        const isP = profile && profile.primary.includes(r.id);
-        const isS = profile && !isP && profile.secondary.includes(r.id);
-        const region = isP
-          ? shape(r.points, PRIMARY_COLOR, "none", 0.46, "anatomy-region primary")
-          : isS ? shape(r.points, SECONDARY_COLOR, "none", 0.30, "anatomy-region supporting") : null;
-        if (region) {
-          region.setAttribute("data-muscle", r.id);
-          regions.append(region);
-        }
+    if (profile) {
+      // A shared rear-deltoid asset receives primary treatment only once.
+      const primaryAssets = new Set(profile.primary.map(id => REGION_ASSET[view][id]));
+      for (const id of profile.secondary) {
+        if (!primaryAssets.has(REGION_ASSET[view][id])) appendMask(g, view, id, "supporting");
       }
-      g.append(regions);
-    } else if (profile) {
-      for (const id of profile.secondary) appendBackMask(g, id, "supporting");
-      for (const id of profile.primary) appendBackMask(g, id, "primary");
+      for (const id of profile.primary) appendMask(g, view, id, "primary");
     }
     svg.append(g);
   }
@@ -421,7 +386,8 @@ export function muscleLegend(profile, figure = null) {
   const paint = (id) => {
     if (figure) {
       for (const region of figure.querySelectorAll("[data-muscle]")) {
-        const selected = !!id && region.dataset.muscle === id;
+        const view = region.closest(".anatomy-figure-panel").dataset.view;
+        const selected = !!id && REGION_ASSET[view][id] === region.dataset.asset;
         region.classList.toggle("is-selected", selected);
         region.classList.toggle("is-muted", !!id && !selected);
       }

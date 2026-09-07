@@ -95,9 +95,9 @@ public enum AnatomyData {
         Region("calves", "back", mirrorAnatomy([[71, 175], [84, 181], [78, 203], [70, 211], [61, 208], [63, 196]])),
     ]
 
-    /// Visible front-view washes aligned to the Vitruvian weightlifting ape's
-    /// 210×210 square. Both superimposed limb poses highlight together, while
-    /// the exercise → muscle data contract above stays unchanged.
+    /// Legacy public geometry retained for source compatibility only.
+    /// Rendering uses the registered SVG assets, never these control points.
+    @available(*, deprecated, message: "Legacy geometry; use the registered SVG masks for rendering")
     public static let vitruvianFrontRegions: [Region] = [
         Region("traps", "front", [[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]]),
         Region("traps", "front", mirrorAnatomy([[80, 67], [91, 63], [100, 68], [98, 78], [89, 84], [79, 76]])),

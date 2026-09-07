@@ -3813,12 +3813,12 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     && [...svg.querySelectorAll("image.anatomy-reference")].every((image) => image.dataset.species === "gorilla"
       && image.dataset.source === "exact-reference" && image === image.parentElement.firstElementChild)
     && svg.querySelectorAll("g.anatomy-figure-panel").length === 2
-    && svg.querySelectorAll("g.anatomy-highlight-layer").length === 1,
+    && [...svg.querySelectorAll("g.anatomy-figure-panel")].every(panel => panel.querySelector("image.anatomy-region-mask")),
   "the anatomy view uses the exact supplied gorilla drawings beneath the muscle washes");
   ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
     "face pulls highlight rear delts instead of the generic shoulder cap");
-  ok(svg.querySelectorAll('path[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
-  ok(svg.querySelectorAll('path[fill="var(--forged-steel)"]').length >= 1,
+  ok(svg.querySelectorAll('image.anatomy-region-mask.primary').length >= 2, "primary movers use red-tinted registered masks");
+  ok(svg.querySelectorAll('image.anatomy-region-mask.supporting').length >= 1,
     "supporting muscles use the restrained forged-steel treatment");
   ok(svg.querySelectorAll("image.anatomy-region-mask.primary").length >= 2
     && svg.querySelectorAll("image.anatomy-region-mask.supporting").length >= 1,
@@ -3849,14 +3849,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const anatomyStyles = await readFile(new URL("../app/styles.css", import.meta.url), "utf8");
   ok(anatomyStyles.includes(".anatomy-figure-panel")
     && anatomyStyles.includes("mask-image: radial-gradient(ellipse closest-side")
-    && anatomyStyles.includes(".anatomy-highlight-layer { filter: blur(2.1px); }"),
+    && anatomyStyles.includes("blur(.35px)"),
   "anatomy art feathers into its card and colour washes have softened boundaries");
-  const frontTraps = A.VITRUVIAN_FRONT_REGIONS.find((region) => region.id === "traps");
-  ok(Math.min(...frontTraps.points.map((point) => point[1])) >= 55
-    && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms").length === 4
-    && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms")
-      .every((region) => Math.max(...region.points.map((point) => point[1])) <= 85),
-  "front washes align to the ape's neck and both Vitruvian arm poses");
 }
 
 // ---- program: a cycle-scoped swap reverts at rollover (issue 20) ----

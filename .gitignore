@@ -73,6 +73,10 @@ DerivedData/
 node_modules/
 web/node_modules/
 
+# Reproducible anatomy review renders, never source artwork or masks.
+docs/design-pass/anatomy-registration/before/
+docs/design-pass/anatomy-registration/after/
+
 # fastlane / iOS signing (never commit credentials or generated outputs)
 fastlane/report.xml
 fastlane/Preview.html

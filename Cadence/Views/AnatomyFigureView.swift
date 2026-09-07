@@ -3,7 +3,7 @@ import CadenceCore
 
 /// A weightlifting gorilla drawn in Da Vinci's Vitruvian construction. Primary
 /// movers use the interaction red while supporting muscles use a quiet forged-
-/// steel wash; engraved linework stays above both so the figure keeps its
+/// steel wash; multiply blending preserves the engraved linework and the figure's
 /// hands, feet, face, and muscle boundaries.
 struct AnatomyFigureView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -12,6 +12,13 @@ struct AnatomyFigureView: View {
 
     private static let primaryColor = Color(red: 0.878, green: 0.271, blue: 0.227)   // #e0453a
     private static let secondaryColor = Theme.forgedSteel
+    private static let frontAssetByMuscle = [
+        "traps": "VitruvianFrontTraps", "delts": "VitruvianFrontDelts",
+        "chest": "VitruvianFrontChest", "biceps": "VitruvianFrontBiceps",
+        "forearms": "VitruvianFrontForearms", "obliques": "VitruvianFrontObliques",
+        "abs": "VitruvianFrontAbs", "quads": "VitruvianFrontQuads",
+        "adductors": "VitruvianFrontAdductors",
+    ]
     private static let backAssetByMuscle = [
         "traps": "VitruvianBackTraps",
         "delts": "VitruvianBackDelts",
@@ -114,15 +121,9 @@ struct AnatomyFigureView: View {
                 .resizable()
                 .renderingMode(.original)
                 .aspectRatio(1, contentMode: .fit)
-            if view == "front" {
-                frontHighlights
-                    .blur(radius: 2.1)
-                    .blendMode(.multiply)
-            } else {
-                backHighlights
-                    .blur(radius: 1.8)
-                    .blendMode(.multiply)
-            }
+            highlights(view: view)
+                .blur(radius: 0.35)
+                .blendMode(.multiply)
         }
         .aspectRatio(1, contentMode: .fit)
         .compositingGroup()
@@ -134,79 +135,36 @@ struct AnatomyFigureView: View {
         }
     }
 
-    private var frontHighlights: some View {
-        Canvas { ctx, size in
-            let sx = size.width / 210.0
-            let sy = size.height / 210.0
-            func contour(_ pts: [[Double]]) -> Path {
-                var p = Path()
-                let points = pts.compactMap { point -> CGPoint? in
-                    guard point.count == 2 else { return nil }
-                    return CGPoint(x: point[0] * sx, y: point[1] * sy)
-                }
-                guard points.count > 2, let first = points.first, let last = points.last else { return p }
-                func midpoint(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
-                    CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
-                }
-                p.move(to: midpoint(last, first))
-                for index in points.indices {
-                    let point = points[index]
-                    let next = points[(index + 1) % points.count]
-                    p.addQuadCurve(to: midpoint(point, next), control: point)
-                }
-                p.closeSubpath()
-                return p
+    // Both views use the exact SVG contours shared with web, registered to the
+    // 1254×1254 source image. Do not smooth or mirror them again in presentation.
+    private func highlights(view: String) -> some View {
+        let primaryAssets = assets(profile.primary, view: view)
+        let supportingAssets = assets(profile.secondary, view: view)
+            .filter { !primaryAssets.contains($0) }
+        return ZStack {
+            ForEach(supportingAssets, id: \.self) { asset in
+                regionMask(asset, color: Self.secondaryColor.opacity(maskOpacity(asset: asset, view: view, primary: false)))
             }
-
-            for r in AnatomyData.vitruvianFrontRegions {
-                let path = contour(r.points)
-                let focused = selectedMuscle == nil || selectedMuscle == r.id
-                if profile.primary.contains(r.id) {
-                    ctx.fill(path, with: .linearGradient(
-                        Gradient(colors: [Self.primaryColor.opacity(focused ? 0.50 : 0.10), Self.primaryColor.opacity(focused ? 0.30 : 0.06)]),
-                        startPoint: CGPoint(x: size.width / 2, y: 0),
-                        endPoint: CGPoint(x: size.width / 2, y: size.height)
-                    ))
-                } else if profile.secondary.contains(r.id) {
-                    ctx.fill(path, with: .linearGradient(
-                        Gradient(colors: [Self.secondaryColor.opacity(focused ? 0.36 : 0.08), Self.secondaryColor.opacity(focused ? 0.22 : 0.05)]),
-                        startPoint: CGPoint(x: size.width / 2, y: 0),
-                        endPoint: CGPoint(x: size.width / 2, y: size.height)
-                    ))
-                }
+            ForEach(primaryAssets, id: \.self) { asset in
+                regionMask(asset, color: Self.primaryColor.opacity(maskOpacity(asset: asset, view: view, primary: true)))
             }
         }
         .aspectRatio(1, contentMode: .fit)
     }
 
-    private var backHighlights: some View {
-        ZStack {
-            ForEach(backAssets(profile.secondary), id: \.self) { asset in
-                backMask(asset, color: Self.secondaryColor.opacity(backOpacity(asset: asset, primary: false)))
-            }
-            ForEach(backAssets(profile.primary), id: \.self) { asset in
-                backMask(asset, color: Self.primaryColor.opacity(backOpacity(asset: asset, primary: true)))
-            }
-        }
-        .aspectRatio(1, contentMode: .fit)
-    }
-
-    private func backAssets(_ ids: [String]) -> [String] {
+    private func assets(_ ids: [String], view: String) -> [String] {
+        let map = view == "front" ? Self.frontAssetByMuscle : Self.backAssetByMuscle
         var seen = Set<String>()
-        return ids.compactMap { Self.backAssetByMuscle[$0] }.filter { seen.insert($0).inserted }
+        return ids.compactMap { map[$0] }.filter { seen.insert($0).inserted }
     }
 
-    private func backOpacity(asset: String, primary: Bool) -> Double {
+    private func maskOpacity(asset: String, view: String, primary: Bool) -> Double {
         guard let selectedMuscle else { return primary ? 0.50 : 0.32 }
-        // A front-only selection (quads, chest, abs…) has no back mask.
-        // In that case every unrelated back region should recede instead of
-        // remaining fully highlighted and contradicting the selected state.
-        guard let selectedAsset = Self.backAssetByMuscle[selectedMuscle]
-        else { return primary ? 0.10 : 0.07 }
-        return selectedAsset == asset ? (primary ? 0.58 : 0.44) : (primary ? 0.10 : 0.07)
+        let map = view == "front" ? Self.frontAssetByMuscle : Self.backAssetByMuscle
+        return map[selectedMuscle] == asset ? 0.72 : 0.08
     }
 
-    private func backMask(_ asset: String, color: Color) -> some View {
+    private func regionMask(_ asset: String, color: Color) -> some View {
         Image(asset)
             .resizable()
             .renderingMode(.template)
