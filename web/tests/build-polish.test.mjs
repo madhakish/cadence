@@ -71,6 +71,27 @@ assert.equal((await db.Sessions.get(sid)).exercises[0].sets[0].status, 'planned'
 assert.equal(overlay.querySelector('.prior-exercises'), null);
 overlay.querySelector('.overlay-head button').click(); await db.Sessions.del(sid);
 
+// The new glance display must preserve the stored load meaning and must not
+// turn a skipped set into a completion checkmark. Use a barbell library entry
+// deliberately: the set snapshot, not current equipment metadata, owns this.
+for (const [basis, label] of [['perImplement', 'Per implement'], ['assisted', 'Assistance'], ['totalBar', 'bar included']]) {
+  const id = await session.createBlankSession();
+  const stored = await db.Sessions.get(id);
+  stored.exercises = [{ order: 0, exerciseName: 'Deadlift', notes: '', barId: '45-lb', sets:
+    ['completed', 'skipped', 'planned'].map((status, index) => ({ ...mkSet(index, false, 50), status, loadBasis: basis })) }];
+  await db.Sessions.save(stored); await session.openSession(id); await tick();
+  const screen = [...document.querySelectorAll('.overlay')].at(-1);
+  const segments = [...screen.querySelectorAll('.set-track-segment')];
+  assert.equal(segments[0].textContent, '✓ Set 1');
+  assert.equal(segments[1].textContent, '− Set 2', 'skipped sets use the same minus as the status control');
+  assert.match(segments[1].getAttribute('aria-label'), /skipped$/);
+  assert.match(segments[2].getAttribute('aria-label'), /current$/);
+  assert.ok(screen.querySelector('.current-set-hero .sub').textContent.includes(label),
+    `the hero explains the stored ${basis} load`);
+  assert.ok(screen.querySelector('.current-set-load').getAttribute('aria-label').endsWith(C.loadBasisSuffix(basis)));
+  screen.querySelector('.overlay-head button').click(); await db.Sessions.del(id);
+}
+
 // Date fixtures execute in a separate real timezone, never mutate process TZ
 // after Date initialization, and compare the same cases as Swift.
 const dates = [

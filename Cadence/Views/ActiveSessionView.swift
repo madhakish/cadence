@@ -1027,8 +1027,7 @@ private struct ExerciseSection: View {
                 CurrentSetHero(
                     set: current,
                     ordinal: (entry.plannedWorkingSets.firstIndex { $0.persistentModelID == current.persistentModelID } ?? 0) + 1,
-                    total: entry.plannedWorkingSets.count,
-                    barIncluded: type == .barbell
+                    total: entry.plannedWorkingSets.count
                 )
             }
             if let complementaryEffortCue {
@@ -2607,14 +2606,14 @@ private struct SetTrackView: View {
                     Rectangle()
                         .fill(isCurrent ? Theme.accent : isDone ? Color.primary.opacity(0.45) : Theme.hairline)
                         .frame(height: 3)
-                    Text(isDone ? "✓ Set \(index + 1)" : isCurrent ? "Set \(index + 1) · now" : "Set \(index + 1)")
+                    Text(isDone ? "\(set.status == .completed ? "✓" : "−") Set \(index + 1)" : isCurrent ? "Set \(index + 1) · now" : "Set \(index + 1)")
                         .font(isCurrent ? .footnote.bold() : .footnote.weight(.semibold))
                         .foregroundStyle(isCurrent ? .primary : .secondary)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Set \(index + 1) of \(sets.count), \(isCurrent ? "current" : isDone ? "resolved" : "upcoming")")
+                .accessibilityLabel("Set \(index + 1) of \(sets.count), \(isCurrent ? "current" : isDone ? set.status.rawValue : "upcoming")")
             }
         }
         .padding(.vertical, 4)
@@ -2629,7 +2628,6 @@ private struct CurrentSetHero: View {
     let set: SetEntry
     let ordinal: Int
     let total: Int
-    let barIncluded: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2668,8 +2666,8 @@ private struct CurrentSetHero: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(set.weightLb > 0 ? "Set load \(Weight.both(lb: set.weightLb))" : "Bodyweight")
-            Text(barIncluded ? "Set load · bar included" : "Set load")
+            .accessibilityLabel(set.weightLb > 0 ? "Set load \(Weight.both(lb: set.weightLb))\(set.loadBasis.shortSuffix)" : "Bodyweight")
+            Text(set.loadBasis == .totalBar ? "Set load · bar included" : "Set load · \(set.loadBasis.label)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

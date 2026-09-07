@@ -506,7 +506,8 @@ export async function openSession(id) {
   const setTrack = (workSets, currentSet) => ui.h("div", { class: "set-track", role: "list", "aria-label": "Working sets" },
     ...workSets.map((set, index) => {
       const state = set === currentSet ? "now" : set.status === "planned" ? "upcoming" : "done";
-      const label = state === "done" ? `✓ Set ${index + 1}` : state === "now" ? `Set ${index + 1} · now` : `Set ${index + 1}`;
+      const label = state === "done" ? `${set.status === "completed" ? "✓" : "−"} Set ${index + 1}`
+        : state === "now" ? `Set ${index + 1} · now` : `Set ${index + 1}`;
       return ui.h("span", { class: `set-track-segment ${state}`, role: "listitem", text: label,
         "aria-label": `Set ${index + 1} of ${workSets.length}, ${state === "done" ? set.status : state === "now" ? "current" : state}` });
     }));
@@ -516,7 +517,9 @@ export async function openSession(id) {
   // native CurrentSetHero.
   const currentSetHero = (ex, set, workSets) => {
     const ordinal = workSets.indexOf(set) + 1;
-    const load = ui.h("div", { class: "current-set-load", "aria-label": set.weightLb > 0 ? `Set load ${C.both(set.weightLb)}` : "Bodyweight" });
+    const basis = set.loadBasis || ex?.loadBasis || C.inferredLoadBasis(ex?.type);
+    const load = ui.h("div", { class: "current-set-load", "aria-label": set.weightLb > 0
+      ? `Set load ${C.both(set.weightLb)}${C.loadBasisSuffix(basis)}` : "Bodyweight" });
     if (set.weightLb > 0) {
       load.append(ui.h("span", { class: "load-primary mono", text: C.trim(set.weightLb) }), ui.h("span", { class: "unit", text: " lb " }),
         ui.h("span", { class: "load-secondary mono", text: C.trim(C.kgFromLb(set.weightLb)) }), ui.h("span", { class: "unit", text: " kg " }));
@@ -530,7 +533,7 @@ export async function openSession(id) {
         ui.h("span", { class: "unit", text: set.isPerSide ? " reps / side" : " reps" }),
         set.prescriptionBlock === "amrap" ? ui.h("span", { class: "pill accent", text: "AMRAP" }) : null),
       load,
-      ui.h("span", { class: "sub", text: ex && ex.type === "barbell" ? "Set load · bar included" : "Set load" }));
+      ui.h("span", { class: "sub", text: basis === "totalBar" ? "Set load · bar included" : `Set load · ${C.loadBasisLabel(basis)}` }));
   };
 
   function exerciseCard(se, body, emphasized = false) {

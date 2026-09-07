@@ -1,6 +1,6 @@
 # Visual build candidate — 7 September 2026
 
-**Status: review candidate; the full visual brief is not finished.**
+**Status: ready for independent review at the owner's request; the full visual brief is not finished.**
 
 This candidate combines the Foundry/Heritage Gold/Titanium and screen work
 from #201, the session-effort and accessible plate-label fixes from #204,
@@ -36,6 +36,7 @@ fixes the confirmed #192–195 review defects.
 - #194: with no gym, a stored set uses its entered denomination; an explicit station denomination wins. Configured mixed racks are unchanged.
 - #195: shared focus selection counts planned warmups as unresolved. It changes focus only, never set status. A real logger regression completes the final working set and asserts that its warmup remains visible and planned.
 - #204 review: preserve the existing public `SessionPrescription(mainWork:blocks:)` initializer. Engine-created sessions still freeze the resolved methodology.
+- #201 review: the working-set track distinguishes skipped from completed sets, including its native spoken label. The load hero states the set's stored load basis (per implement, assistance or total bar), rather than inferring it from the current exercise type. Runtime regressions reproduced both display defects before the fixes; set values and statuses are unchanged.
 
 ## Verification and screenshot provenance
 
@@ -76,7 +77,7 @@ History and Program before claiming native layout acceptance.
 
 | PR | Disposition |
 | --- | --- |
-| #201 | Combined application candidate; keep draft until its remaining implementation and UI/device gates are met. Includes #204/#205; their focused discussions remain useful review boundaries. |
+| #201 | Ready for independent review at the owner's request so reviewers can run. Remaining implementation and UI/device gates stay open before merge/release. Includes #204/#205; their focused discussions remain useful review boundaries. |
 | #204 | Source-compatible initializer restored in `bc44d056aacf38297a551d219f600258dc6f6158`; compile regression added. Included here. |
 | #205 | Owner approved contours on 7 September. Included unchanged; full pane/VoiceOver validation remains. |
 | #202 | Independent `deploy-pages` 5.0.1 action pin. The official tag resolves to `368f82528645a54fb793d4d04e342629a3f51346`; two workflow references change, permissions/application sources do not. Its head CI is green. Kept separate from the visual changes. |
