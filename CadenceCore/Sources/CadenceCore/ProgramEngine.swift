@@ -365,10 +365,15 @@ public struct PrescriptionBlock: Hashable, Sendable {
 }
 
 public struct SessionPrescription: Hashable, Sendable {
+    /// The methodology that produced these blocks, never the `automatic`
+    /// placeholder. Persist with the work so later program edits cannot
+    /// reinterpret the session's effort contract.
+    public let resolvedStyle: PrescriptionStyle
     public let mainWork: SessionPlan
     public let blocks: [PrescriptionBlock]
 
-    public init(mainWork: SessionPlan, blocks: [PrescriptionBlock]) {
+    public init(resolvedStyle: PrescriptionStyle, mainWork: SessionPlan, blocks: [PrescriptionBlock]) {
+        self.resolvedStyle = resolvedStyle
         self.mainWork = mainWork
         self.blocks = blocks
     }
@@ -888,7 +893,7 @@ public enum ProgramEngine {
             kind: isFiveThreeOnePlusSet ? .amrap : .work,
             weightLb: work.weightLb, sets: work.sets, reps: work.reps
         ))
-        return SessionPrescription(mainWork: work, blocks: blocks)
+        return SessionPrescription(resolvedStyle: style, mainWork: work, blocks: blocks)
     }
 
     /// The authored schedule surrounding a slot preview. The current pointer is

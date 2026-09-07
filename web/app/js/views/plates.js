@@ -165,18 +165,22 @@ export async function openPlateCalculator() {
       panel.append(output, ui.h("div", { class: "section-title", text: "Plates on one side" }), editor, orderEditor);
       for (const plate of plates) {
         const id = C.plateId(plate);
-        editor.append(ui.h("div", { class: "row plate-row" }, plateKey(plate, plateStyle),
-          ui.stepper(counts[id] || 0, { min: 0, max: 12,
-            onChange: (value) => {
-              const previous = counts[id] || 0;
-              counts[id] = value;
-              if (previous === 0 && value > 0 && !enteredOrder.includes(id)) enteredOrder.push(id);
-              if (value === 0) {
-                const orderIndex = enteredOrder.indexOf(id);
-                if (orderIndex >= 0) enteredOrder.splice(orderIndex, 1);
-              }
-              recompute();
-            } })));
+        const counter = ui.stepper(counts[id] || 0, { min: 0, max: 12,
+          onChange: (value) => {
+            const previous = counts[id] || 0;
+            counts[id] = value;
+            if (previous === 0 && value > 0 && !enteredOrder.includes(id)) enteredOrder.push(id);
+            if (value === 0) {
+              const orderIndex = enteredOrder.indexOf(id);
+              if (orderIndex >= 0) enteredOrder.splice(orderIndex, 1);
+            }
+            recompute();
+          } });
+        const [remove, add] = counter.querySelectorAll("button");
+        remove.setAttribute("aria-label", `Remove one ${C.plateLabel(plate)} plate per side`);
+        add.setAttribute("aria-label", `Add one ${C.plateLabel(plate)} plate per side`);
+        counter.querySelector("span").setAttribute("aria-live", "polite");
+        editor.append(ui.h("div", { class: "row plate-row" }, plateKey(plate, plateStyle), counter));
       }
       panel.append(ui.h("button", { class: "btn ghost danger wide", text: "Clear entered plates",
         onClick: () => {

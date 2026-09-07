@@ -185,6 +185,7 @@ struct PlateCalculatorView: View {
                             Text("× \(pc.count)")
                                 .font(.title3.monospacedDigit())
                         }
+                        .accessibilityElement(children: .combine)
                     }
                 }
             }
@@ -235,6 +236,8 @@ struct PlateCalculatorView: View {
                         }
                     }
                 }
+                .accessibilityLabel("\(plate.label) plates per side")
+                .accessibilityValue("\(reverseCounts[plate.id] ?? 0)")
             }
             Button("Clear", role: .destructive) {
                 reverseCounts = [:]
@@ -365,6 +368,7 @@ struct PlateCalculatorView: View {
                                         Spacer()
                                         Text("× \(plateCount.count)").font(.title3.bold().monospacedDigit())
                                     }
+                                    .accessibilityElement(children: .combine)
                                 }
                             }
                         }

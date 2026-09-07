@@ -44,6 +44,7 @@ private enum PlatePalette {
 /// A readable, face-on denomination key for a plate in the calculator. The
 /// bar graphic stays an honest edge-on load-order diagram; this companion
 /// view owns the large number that an edge-on plate cannot physically carry.
+/// Decorative: every use pairs it with a readable denomination label.
 struct PlateFaceBadge: View {
     let plate: Plate
     let style: PlateVisualStyle
@@ -69,8 +70,7 @@ struct PlateFaceBadge: View {
             .foregroundStyle(foreground)
         }
         .frame(width: 52, height: 52)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(plate.label) plate")
+        .accessibilityHidden(true)
     }
 }
 

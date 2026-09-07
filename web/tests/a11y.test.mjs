@@ -70,8 +70,17 @@ ok(/\.flagbtn\.labeled \.microlabel/.test(css),
 const barbell = read("app/js/barbell.js");
 ok(/role: "img"/.test(barbell) && /aria-label[^\n]*barbell/i.test(barbell),
   "the barbell graphic is an image with a spoken load");
-ok(/plateBadgeSVG/.test(barbell) && /aria-label[^\n]*plate/i.test(barbell),
-  "readable plate denomination badges also carry spoken labels");
+const plateBadgeSource = barbell.slice(barbell.indexOf("export function plateBadgeSVG"), barbell.indexOf("return svg;"));
+ok(/"aria-hidden": "true"/.test(plateBadgeSource) && !/"aria-label"/.test(plateBadgeSource),
+  "decorative plate badges leave the adjacent denomination as the single spoken label");
+const nativeBarbell = read("../Cadence/Views/BarbellView.swift");
+const nativeBadge = nativeBarbell.slice(nativeBarbell.indexOf("struct PlateFaceBadge"), nativeBarbell.indexOf("struct BarbellView"));
+ok(/\.accessibilityHidden\(true\)/.test(nativeBadge) && !/\.accessibilityLabel/.test(nativeBadge),
+  "native decorative badges do not duplicate the row's denomination label");
+const nativePlates = read("../Cadence/Views/PlateCalculatorView.swift");
+ok(/\.accessibilityLabel\("\\\(plate\.label\) plates per side"\)/.test(nativePlates)
+  && /\.accessibilityValue\("\\\(reverseCounts\[plate\.id\] \?\? 0\)"\)/.test(nativePlates),
+  "native reverse steppers expose one denomination label and the current count separately");
 ok(/\["white", "yellow", "green"\]\.includes\(token\) \? "#24262a" : "#fff"/.test(barbell),
   "yellow, white, and green plates use the high-contrast dark denomination ink");
 ok(/aria-label[^\n]*Dumbbell/.test(barbell), "the dumbbell graphic carries a spoken load");

@@ -243,6 +243,14 @@ the persisted `baseWeightLb` is the training max, not a working weight.
 
 ## Version 3 coaching and prescription contract
 
+Newly generated session entries write their resolved methodology into the
+existing `prescriptionStyle` field (`prescriptionStyleRaw` natively), rather
+than the `automatic` placeholder. These are already-supported enum values;
+the record shape, backup version, SwiftData schema, and IndexedDB version are
+unchanged. Import/export preserves the value verbatim. Legacy `automatic`
+and absent values remain accepted and are never backfilled from a program's
+current focus.
+
 Version 3 preserves performed work separately from the prescription that
 produced it. A session may include `completedAt`; each exercise may include the
 strategy `targetWeightLb`, gym-resolved `plannedWeightLb`, duration target,

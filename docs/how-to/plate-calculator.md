@@ -17,3 +17,14 @@ In **On the bar** mode, enter the count of each denomination on one side.
 Cadence mirrors the stack and totals the bar, both sides, and configured
 collars. Plate colours follow the competition denomination scheme; the plate
 type changes physical diameter and thickness, not the loading math.
+
+Both modes show the achieved total **in pounds first, then kilograms**, with
+the bar, both sleeves, and configured collars included. Input units and bar
+units are independent: a 45 lb bar with one 20 kg plate on each side is
+133.18 lb / 60.41 kg, before collars. Changing the input unit never hides the
+other measurement. Conversions use 1 lb = 0.45359237 kg; only the displayed
+number is rounded.
+
+Face-on plate badges keep the denomination and unit visible. Their adjacent
+text supplies the spoken label once; reverse-mode controls identify which
+plate they add or remove **per side** and expose the current count.
