@@ -46,7 +46,7 @@ struct RootView: View {
                     .font(.title)
                     .frame(width: Theme.bigTap, height: Theme.bigTap)
                     .background(Theme.accent, in: Circle())
-                    .foregroundStyle(.black)
+                    .foregroundStyle(Theme.onAccent)
             }
             .padding(.trailing, 16)
             .padding(.bottom, 64)

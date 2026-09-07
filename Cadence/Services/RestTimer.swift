@@ -64,6 +64,14 @@ final class RestTimer {
         apply(RestClock.add(state, seconds: TimeInterval(seconds)))
     }
 
+    /// Direct entry adjusts this countdown, preserving pause and elapsed rest.
+    /// An expired timer stays expired if its editor is still open.
+    func setRemaining(seconds: Int) {
+        guard isRunning, let state = clock else { return }
+        guard let updated = RestClock.settingRemaining(state, seconds: seconds, now: now) else { stop(); return }
+        apply(updated)
+    }
+
     func pause() {
         guard isRunning, let state = clock, !state.paused else { return }
         invalidate()

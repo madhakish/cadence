@@ -281,6 +281,17 @@ export function nextSetStatus(status) {
   return SET_STATUSES[((index < 0 ? 0 : index) + 1) % SET_STATUSES.length];
 }
 
+// Preserve authored exercise order and keep any unresolved warmup in context.
+// Mirrors SetLifecycle.focusAfterResolving; never mutates a set.
+export function focusAfterResolving(entries, resolvedIndex) {
+  if (!Number.isInteger(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= entries.length) return null;
+  if (entries[resolvedIndex].includes("planned")) return resolvedIndex;
+  const later = entries.findIndex((sets, index) => index > resolvedIndex && sets.includes("planned"));
+  if (later >= 0) return later;
+  const earlier = entries.findIndex((sets) => sets.includes("planned"));
+  return earlier >= 0 ? earlier : resolvedIndex;
+}
+
 // Focus one working set without hiding unresolved warmups. Resolved ramp rows
 // collapse; planned warmups retain their authored positions. With no current
 // working set, preserve the complete plan for correction. Mirrors
@@ -357,6 +368,12 @@ export function plateColorToken(plate, style = "bumper") {
   if (plate.value === 10) return "green";
   if (plate.value === 5) return "white";
   if (plate.value === 2.5) return style === "bumper" ? "red" : "black";
+  if (style === "bumper") {
+    if (plate.value === 2) return "blue";
+    if (plate.value === 1.5) return "yellow";
+    if (plate.value === 1) return "green";
+    if (plate.value === 0.5) return "white";
+  }
   return "black"; // 1.25 + misc
 }
 
@@ -2688,7 +2705,10 @@ export function usesAdHocFirstSetFallback(entry) {
 // the lifter would have to learn. Mirrors CadenceCore
 // `ProgramProgression.historyProvenanceLabel` 1:1.
 export function historyProvenanceLabel(exposureDate, asOfDate) {
-  const days = Math.max(0, Math.floor((new Date(asOfDate) - new Date(exposureDate)) / 86400000));
+  // Compare local date components on a UTC grid: DST changes the length of
+  // a local day, but never its position in the Gregorian calendar.
+  const day = (value) => { const d = new Date(value); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
+  const days = Math.max(0, Math.round((day(asOfDate) - day(exposureDate)) / 86400000));
   let when;
   if (days === 0) when = "today";
   else if (days === 1) when = "yesterday";
@@ -2903,6 +2923,23 @@ export function exposurePreview({
 // Five user-tunable rest buckets (seconds) — the SMART DEFAULTS an exercise
 // falls to when it has no explicit rest of its own. Mirrors CadenceCore
 // RestConfig.standard.
+// Duration entry matches the existing 0...3600-second portable contract.
+export const REST_DURATION_MAX = 3600;
+
+export function restDurationParse(hours, minutes, seconds) {
+  const fields = [hours, minutes, seconds].map((part) => String(part).trim());
+  if (fields.some((part) => !/^\d*$/.test(part))) return null;
+  const values = fields.map(Number);
+  if (values.some((part) => !Number.isSafeInteger(part) || part > REST_DURATION_MAX)) return null;
+  const total = values[0] * 3600 + values[1] * 60 + values[2];
+  return total <= REST_DURATION_MAX ? total : null;
+}
+export function restDurationLabel(seconds) {
+  const value = Math.max(0, seconds);
+  return [Math.floor(value / 3600), Math.floor(value / 60) % 60, value % 60]
+    .map((part) => String(part).padStart(2, "0")).join(":");
+}
+
 export const REST_DEFAULTS = {
   mainCompoundSeconds: 300, // main squat & hinge lifts
   olympicSeconds: 240,      // main olympic lifts
@@ -2976,6 +3013,11 @@ export function restClockAdd(s, seconds) {
 }
 export function restClockRemaining(s, now) {
   return s.paused ? s.pausedRemaining : Math.max(0, s.endEpoch - now);
+}
+export function restClockSettingRemaining(s, seconds, now) {
+  const left = restClockRemaining(s, now);
+  if (seconds <= 0 || (!s.paused && left <= 0)) return null;
+  return restClockAdd(s, seconds - left);
 }
 // 1 at the start of the rest, 0 when it's over (the progress-ring source).
 export function restClockFractionRemaining(s, now) {
@@ -3324,6 +3366,10 @@ export const movementPatternName = (pattern) => ({
 // availability is deliberately filtered by each caller: a gate is not search.
 const normalizedExerciseSearchText = (value) => String(value ?? "")
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+export function exerciseMatchesMovement(exercise, selected) {
+  return !selected || exercise.movementPattern === selected || exercise.secondaryMovementPattern === selected;
+}
 
 export function exerciseMatchesSearch(exercise, query) {
   const term = normalizedExerciseSearchText(query).trim();

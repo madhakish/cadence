@@ -9,7 +9,7 @@ import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
 const DB_VERSION = 8;
-export const BACKUP_SCHEMA_VERSION = 12;
+export const BACKUP_SCHEMA_VERSION = 13;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -998,7 +998,7 @@ function normalizeSettings(s) {
 // a drift source: it goes stale the first time a prescription style is added.
 export const BACKUP_ENUMS = {
   units: ["lb", "kg"], unitDisplay: ["lbPrimary", "kgPrimary", "both"],
-  themes: ["memento", "carbon", "slate", "system"],
+  themes: ["memento", "carbon", "slate", "system", "titanium"],
   roles: ["main", "complementary", "accessory"], liftRoles: ["main", "complementary"],
   statuses: C.SET_STATUSES,
   flags: [...C.SET_QUALITIES, ...C.SET_RIRS, "stopped early"],
@@ -1329,6 +1329,9 @@ export function validateBackup(bundle) {
     const settings = object(bundle.settings, "settings");
     enumValue(settings.unitDisplay, BACKUP_ENUMS.unitDisplay, "settings.unitDisplay", schemaVersion >= 1);
     enumValue(settings.theme, BACKUP_ENUMS.themes, "settings.theme", schemaVersion >= 1);
+    if (settings.theme === "titanium" && schemaVersion < 13) {
+      invalid("settings.theme", "titanium requires backup schemaVersion 13");
+    }
     // 0 is the "not set" sentinel and always valid. Any other year has to
     // produce a plausible age, so a corrupted field cannot silently move the
     // lifter across the older-adult protein threshold.

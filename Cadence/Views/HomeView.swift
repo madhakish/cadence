@@ -180,8 +180,7 @@ struct HomeView: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                        .primaryActionStyle()
                         .accessibilityIdentifier("resume-session")
                         Button(role: .destructive) { discardSession = open } label: {
                             Label("Discard session", systemImage: "trash").font(.caption)
@@ -238,8 +237,7 @@ struct HomeView: View {
                             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                         }
                         Button("Start \(day.name)") { startProgramDay(program, day) }
-                            .buttonStyle(.borderedProminent)
-                            .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                            .primaryActionStyle()
                     }
                 }
 
@@ -277,8 +275,7 @@ struct HomeView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                    .primaryActionStyle()
                     .tint(prominentGymTag ? Theme.accent : Color(.tertiarySystemFill))
                     .accessibilityHint("Shows the default membership barcode at full brightness")
                 }
@@ -423,29 +420,10 @@ struct HomeView: View {
                                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                                     }
                                 }
-                                // The bar you'll load / the pair you'll grab —
-                                // every wave lift, matching the preview screen
-                                // (a complementary barbell lift is loaded just
-                                // the same as the main).
-                                if plan.weightLb > 0 {
-                                    let previewExercise = exercises.first(where: { $0.name == lift.exerciseName })
-                                    let type = previewExercise?.type
-                                    if type == .barbell {
-                                        let bar = defaultGym?.defaultBar ?? .bar45lb
-                                        BarbellView(
-                                            solution: authoritativePlateSolution(
-                                                targetLb: plan.weightLb,
-                                                fallbackUnit: entryUnit,
-                                                bar: bar,
-                                                gym: defaultGym,
-                                                stationDenomination: previewExercise?.stationDenomination
-                                            ),
-                                            plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel
-                                        )
-                                    } else if type == .dumbbell {
-                                        DumbbellView(weightLb: plan.weightLb, unit: entryUnit)
-                                    }
-                                }
+                                // The load is stated as a number here. The
+                                // loaded bar itself belongs to the preview and
+                                // the logger — equipment imagery stays with
+                                // loading, never decorates Today.
                             }
                         }
                         if !day.accessories.isEmpty {
@@ -457,8 +435,7 @@ struct HomeView: View {
                         } label: {
                             Text("Start \(day.name)").frame(maxWidth: .infinity).font(.headline)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                        .primaryActionStyle()
                     }
                 }
 
@@ -553,8 +530,7 @@ struct HomeView: View {
                                         Text(recommendation.explanation).font(.caption).foregroundStyle(.secondary)
                                         HStack {
                                             Button("Apply") { apply(recommendation, report: report, program: program) }
-                                                .buttonStyle(.borderedProminent)
-                                                .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                                                .primaryActionStyle()
                                             Button("Not now") { deferRecommendation(recommendation, report: report, program: program) }
                                                 .buttonStyle(.bordered)
                                         }

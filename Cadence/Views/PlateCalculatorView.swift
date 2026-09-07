@@ -13,6 +13,8 @@ struct PlateCalculatorView: View {
     @State private var targetUnit: WeightUnit = .lb
     @State private var bar: Bar = .bar45lb
     @State private var plateStyle: PlateVisualStyle = .steel
+    @State private var referenceUnit: WeightUnit = .lb
+    @State private var referenceInitialized = false
     @State private var selectedGymName: String?
     @State private var showExpandedBar = false
     @FocusState private var targetFieldFocused: Bool
@@ -87,6 +89,7 @@ struct PlateCalculatorView: View {
             }
 
             equipmentSection
+            referenceSection
         }
         .listStyle(.plain)
         .scrollDismissesKeyboard(.immediately)
@@ -102,6 +105,7 @@ struct PlateCalculatorView: View {
             }
         }
         .onAppear {
+            if !referenceInitialized { referenceUnit = preferredUnit; referenceInitialized = true }
             if targetText.isEmpty { targetUnit = preferredUnit }
             if selectedGymName == nil { bar = gym?.defaultBar ?? .bar45lb }
         }
@@ -268,6 +272,54 @@ struct PlateCalculatorView: View {
                     }
                     .accessibilityElement(children: .contain)
                 }
+            }
+        }
+    }
+
+    /// Reference-only plate families — colour, denomination, other-unit
+    /// conversion — for recognising what's on the rack. Not inventory: nothing
+    /// here reaches the solver; the 55 lb disc is listed for recognition only.
+    /// Web twin: `.plate-reference` in views/plates.js.
+    private static let referenceKg: [Plate] = [25, 20, 15, 10, 5, 2.5, 2, 1.5, 1.25, 1, 0.5].map { Plate(value: $0, unit: .kg) }
+    private static let referenceLb: [Plate] = [55, 45, 35, 25, 10, 5, 2.5].map { Plate(value: $0, unit: .lb) }
+
+    private static func otherUnitLabel(_ plate: Plate) -> String {
+        plate.unit == .kg
+            ? "\(Weight.trim(Weight.lb(fromKg: plate.value), decimals: 2)) lb"
+            : "\(Weight.trim(Weight.kg(fromLb: plate.value), decimals: 2)) kg"
+    }
+
+    private var referenceSection: some View {
+        Section {
+            DisclosureGroup("Plate reference") {
+                Picker("Reference unit", selection: $referenceUnit) {
+                    Text("Kilograms").tag(WeightUnit.kg)
+                    Text("Pounds").tag(WeightUnit.lb)
+                }
+                .pickerStyle(.segmented)
+                Text(referenceUnit == .kg ? "KG · IWF COLOURS / IPF REFERENCE" : "LB · MANUFACTURER CONVENTION")
+                    .font(.caption.bold())
+                    .tracking(0.7)
+                    .foregroundStyle(.secondary)
+                ForEach(referenceUnit == .kg ? Self.referenceKg : Self.referenceLb) { plate in
+                    HStack(spacing: 12) {
+                        PlateFaceBadge(plate: plate, style: .bumper)
+                            .scaleEffect(0.6)
+                            .frame(width: 32, height: 32)
+                        Text(plate.colorToken(for: .bumper).capitalized)
+                            .frame(width: 64, alignment: .leading)
+                        Text(plate.label)
+                            .monospacedDigit()
+                        Spacer()
+                        Text(Self.otherUnitLabel(plate))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                Text("IWF colours are shown for kilogram plates; 1.25 kg is an IPF denomination. IPF requires 25 kg red, 20 kg blue and 15 kg yellow; 10 kg and below may be any colour. Pound colours are a manufacturer convention, not IPF rules. Black plates also exist. This reference does not add plates to your gym inventory.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

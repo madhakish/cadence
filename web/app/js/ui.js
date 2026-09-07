@@ -5,6 +5,82 @@ import * as C from "./core.js";
 // Live display preference, kept in sync by app.js after settings load.
 export const prefs = { unitDisplay: "lbPrimary" };
 
+// Shared by global rest defaults, exercise overrides and the running timer.
+// Draft fields are local to the dialog; only Save calls the existing owner.
+export function durationEditor({ title, seconds, zeroLabel = "Off", onSave }) {
+  return sheet({ title, build: (content, api) => {
+    const initial = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
+    const inputs = ["Hours", "Minutes", "Seconds"].map((name, index) => h("input", {
+      class: "input mono", type: "number", inputmode: "numeric", min: "0", step: "1",
+      value: String(initial[index]), "aria-label": name,
+    }));
+    const status = h("p", { class: "duration-status mono", role: "status", "aria-live": "polite" });
+    let saving = false;
+    const parsed = () => C.restDurationParse(...inputs.map((input) => input.value));
+    const form = h("form", { class: "duration-editor" });
+    const save = h("button", { class: "btn primary", type: "submit", text: "Save" });
+    const paint = () => {
+      const value = parsed();
+      const invalid = value === null || inputs.some((input) => input.validity.badInput);
+      status.textContent = invalid ? "Enter a duration from 00:00:00 to 01:00:00."
+        : value === 0 ? zeroLabel : C.restDurationLabel(value);
+      status.classList.toggle("warn", invalid);
+      for (const input of inputs) input.setAttribute("aria-invalid", String(invalid));
+      save.disabled = saving || invalid;
+    };
+    inputs.forEach((input) => {
+      input.addEventListener("input", paint);
+      input.addEventListener("paste", (event) => {
+        const text = event.clipboardData?.getData("text").trim();
+        if (!text?.includes(":")) return;
+        event.preventDefault();
+        const parts = text.split(":");
+        if (parts.length !== 3 || C.restDurationParse(...parts) === null) {
+          status.textContent = "Paste HH:MM:SS between 00:00:00 and 01:00:00.";
+          return;
+        }
+        inputs.forEach((field, index) => { field.value = parts[index].trim(); });
+        paint();
+      });
+    });
+    form.append(h("div", { class: "duration-fields" }, ...inputs.map((input, index) =>
+      h("label", {}, h("span", { text: ["Hours", "Minutes", "Seconds"][index] }), input))),
+    status,
+    h("p", { class: "sub", text: "Up to one hour. Extra seconds and minutes carry into the next unit when saved. You can paste HH:MM:SS into any field." }),
+    h("button", { class: "btn ghost", type: "button", text: zeroLabel, onClick: () => {
+      inputs.forEach((input) => { input.value = "0"; }); paint();
+    } }),
+    h("div", { class: "btn-row duration-actions" },
+      h("button", { class: "btn ghost", type: "button", text: "Cancel", onClick: () => api.close() }), save));
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (save.disabled || saving) return;
+      const value = parsed();
+      if (value === null) return;
+      saving = true; paint();
+      try { await onSave(value); api.close(); }
+      catch {
+        saving = false; paint();
+        status.textContent = "Could not save the duration. Your changes are still here; try again.";
+      }
+    });
+    content.append(form); paint();
+  } });
+}
+
+export function durationButton(seconds, { title, zeroLabel = "Off", onChange }) {
+  const label = () => seconds === 0 ? zeroLabel : C.restDurationLabel(seconds);
+  const button = h("button", { class: "btn duration-value mono", type: "button", text: label(),
+    "aria-label": `${title}: ${label()}`, "aria-haspopup": "dialog", onClick: () => durationEditor({
+      title, seconds, zeroLabel, onSave: async (value) => {
+        await onChange(value); seconds = value;
+        button.textContent = label(); button.setAttribute("aria-label", `${title}: ${label()}`);
+      },
+    }),
+  });
+  return button;
+}
+
 // Navigation hub — app.js fills these in; views call them without importing
 // app.js (avoids an import cycle).
 export const nav = {
@@ -256,9 +332,13 @@ export function download(filename, text, type = "application/json") {
 }
 
 // ---- Theme ----
+// Keys are the persisted identity (they match native ThemeName raw values and
+// the backup enum); labels are what the visual pass renamed. Foundry leads as
+// the recommended default. Slate and System stay so saved choices survive.
 export const THEMES = [
-  { value: "memento", label: "Memento" },
-  { value: "carbon", label: "Carbon" },
+  { value: "carbon", label: "Foundry" },
+  { value: "memento", label: "Heritage Gold" },
+  { value: "titanium", label: "Titanium" },
   { value: "slate", label: "Slate" },
   { value: "system", label: "System" },
 ];

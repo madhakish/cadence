@@ -228,17 +228,8 @@ export async function render(host) {
         ui.h("div", { style: { textAlign: "right" } },
           ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) }),
           ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
-      // The bar you'll load / the pair you'll grab — every wave lift, matching
-      // the preview (a complementary barbell lift is loaded just the same).
-      if (ex && ex.type === "barbell" && plan.weightLb > 0) {
-        card.append(barbellPrescriptionView(
-          plan.weightLb, targetWeightLb, C.primaryUnit(settings.unitDisplay), gym,
-          ex.stationDenomination ?? null, ex.movementGroup,
-        ));
-      } else if (ex && ex.type === "dumbbell" && plan.weightLb > 0) {
-        card.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
-          dumbbellSVG(plan.weightLb, C.primaryUnit(settings.unitDisplay)), ui.h("span", { class: "sub", text: C.primaryUnit(settings.unitDisplay) })));
-      }
+      // The load is stated as a number here. The loaded bar itself belongs to
+      // the preview and the logger — equipment imagery stays with loading.
     }
     if (day.accessories.length) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: `+ ${day.accessories.map((a) => a.exerciseName).join(", ")}` }));
     card.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "10px" }, text: `Start ${day.name}`, onClick: async () => openSession(await createSessionFromProgramDay(program, day)) }));

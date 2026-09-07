@@ -25,6 +25,16 @@ function expandedBar(solution, plateStyle, requestedLb = null) {
   } });
 }
 
+// Reference-only plate families: colour, denomination, and the other-unit
+// conversion, for recognising what's on the rack. Not inventory — nothing
+// here reaches the solver; the 55 lb disc is listed for recognition only.
+// Mirrors native PlateCalculatorView.referenceSection.
+const PLATE_REFERENCE = {
+  kg: [25, 20, 15, 10, 5, 2.5, 2, 1.5, 1.25, 1, 0.5].map((value) => ({ value, unit: "kg" })),
+  lb: [55, 45, 35, 25, 10, 5, 2.5].map((value) => ({ value, unit: "lb" })),
+};
+const PLATE_REFERENCE_NOTE = "IWF colours are shown for kilogram plates; 1.25 kg is an IPF denomination. IPF requires 25 kg red, 20 kg blue and 15 kg yellow; 10 kg and below may be any colour. Pound colours are a manufacturer convention, not IPF rules. Black plates also exist. This reference does not add plates to your gym inventory.";
+
 export async function openPlateCalculator() {
   const [gyms, settings] = await Promise.all([Gyms.all(), Settings.get()]);
   let gym = gyms.find((option) => option.isDefault) || gyms[0] || null;
@@ -32,6 +42,8 @@ export async function openPlateCalculator() {
   let bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   let unit = C.primaryUnit(settings.unitDisplay);
   let plateStyle = "steel";
+  let referenceUnit = unit;
+  let referenceOpen = false;
   let targetVal = unit === "kg" ? C.kgFromLb(135) : 135;
   const counts = {};
   const enteredOrder = [];
@@ -54,6 +66,38 @@ export async function openPlateCalculator() {
         mode, (next) => { mode = next; draw(); }));
       if (mode === "target") drawTarget(); else drawReverse();
       drawEquipment();
+      drawReference();
+    };
+
+    const drawReference = () => {
+      const details = ui.h("details", { class: "card plate-reference" },
+        ui.h("summary", {},
+          ui.h("span", { class: "title", text: "Plate reference" }),
+          ui.h("span", { class: "sub", text: referenceUnit === "kg" ? "KG · IWF colours / IPF reference" : "LB · manufacturer convention" })));
+      details.open = referenceOpen;
+      details.addEventListener("toggle", () => { if (details.isConnected) referenceOpen = details.open; });
+      const table = ui.h("div", { class: "plate-reference-table", role: "table", "aria-label": "Plate reference" });
+      table.append(ui.h("div", { class: "plate-reference-head", role: "row" },
+        ui.h("span", { role: "columnheader", text: "Colour" }),
+        ui.h("span", { role: "columnheader", text: "Plate" }),
+        ui.h("span", { role: "columnheader", text: "Other unit" })));
+      for (const plate of PLATE_REFERENCE[referenceUnit]) {
+        const token = C.plateColorToken(plate, "bumper");
+        const other = plate.unit === "kg"
+          ? `${C.trim(C.lbFromKg(plate.value), 2)} lb`
+          : `${C.trim(C.kgFromLb(plate.value), 2)} kg`;
+        table.append(ui.h("div", { class: "plate-reference-row", role: "row" },
+          ui.h("span", { class: "plate-reference-colour", role: "cell" },
+            plateBadgeSVG(plate, "bumper"), ui.h("span", { text: token.charAt(0).toUpperCase() + token.slice(1) })),
+          ui.h("span", { class: "mono", role: "cell", text: C.plateLabel(plate) }),
+          ui.h("span", { class: "mono muted", role: "cell", text: other })));
+      }
+      details.append(
+        ui.seg([{ value: "kg", label: "Kilograms" }, { value: "lb", label: "Pounds" }], referenceUnit,
+          (next) => { referenceUnit = next; referenceOpen = true; draw(); }),
+        table,
+        ui.h("p", { class: "sub", text: PLATE_REFERENCE_NOTE }));
+      panel.append(details);
     };
 
     const drawEquipment = () => {
@@ -92,6 +136,7 @@ export async function openPlateCalculator() {
       panel.append(target, output);
 
       function update() {
+        input.setAttribute("aria-label", `Requested target in ${unit}`);
         const targetLb = C.toLb(targetVal, unit);
         const solution = C.solve(targetLb, bar, availablePlates(), 10,
           gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");

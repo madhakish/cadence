@@ -8,7 +8,7 @@ final class BackupContractTests: XCTestCase {
     ///
     /// Must stay in lockstep with `BACKUP_SCHEMA_VERSION` in web/app/js/db.js.
     func testCurrentVersionIsPinned() {
-        XCTAssertEqual(BackupContract.currentSchemaVersion, 12)
+        XCTAssertEqual(BackupContract.currentSchemaVersion, 13)
     }
 
     func testCurrentAndLegacyVersionsAreSupported() {

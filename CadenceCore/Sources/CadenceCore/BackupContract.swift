@@ -66,7 +66,7 @@
 /// which is correct: parsing it would silently drop the recorded facts
 /// (INV-WOOD-WORK-ROUND-TRIPS).
 public enum BackupContract {
-    public static let currentSchemaVersion = 12
+    public static let currentSchemaVersion = 13
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

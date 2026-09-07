@@ -601,7 +601,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         let backup = try ExportService.jsonData(context: context)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
-        XCTAssertEqual(json["schemaVersion"] as? Int, 12)
+        XCTAssertEqual(json["schemaVersion"] as? Int, BackupContract.currentSchemaVersion)
         let exportedInterval = try XCTUnwrap((json["intervals"] as? [[String: Any]])?.first)
         XCTAssertEqual(exportedInterval["kind"] as? String, "activeRecovery")
         XCTAssertEqual(exportedInterval["startDate"] as? String, "2026-06-01")
@@ -829,6 +829,97 @@ final class PersistenceMigrationTests: XCTestCase {
         }
     }
 
+    func testNativeBackupCarriesTitaniumThemeAndRestoresOlderThemeBundles() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        func container() throws -> ModelContainer {
+            try ModelContainer(
+                for: schema,
+                configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            )
+        }
+        let source = try container()
+        let context = source.mainContext
+        try Seeder.seedIfNeeded(context: context)
+        let settings: AppSettings
+        if let existing = try context.fetch(FetchDescriptor<AppSettings>()).first {
+            settings = existing
+        } else {
+            settings = AppSettings()
+            context.insert(settings)
+        }
+        settings.themeNameRaw = "titanium"
+        try context.save()
+
+        // Titanium is a version-13 enum value: it rides out under the bumped
+        // version and restores verbatim.
+        let backup = try ExportService.jsonData(context: context)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        XCTAssertEqual(json["schemaVersion"] as? Int, 13)
+        XCTAssertEqual((json["settings"] as? [String: Any])?["theme"] as? String, "titanium")
+        let restored = try container()
+        try ImportService.load(backup, into: restored.mainContext)
+        XCTAssertEqual(try restored.mainContext.fetch(FetchDescriptor<AppSettings>()).first?.themeNameRaw,
+                       "titanium")
+
+        // A version-12 bundle can only carry the four older values; a saved
+        // Slate choice restores as Slate, never as the new default.
+        var legacyJSON = json
+        legacyJSON["schemaVersion"] = 12
+        var legacySettings = try XCTUnwrap(legacyJSON["settings"] as? [String: Any])
+        legacySettings["theme"] = "slate"
+        legacyJSON["settings"] = legacySettings
+        let legacy = try container()
+        try ImportService.load(JSONSerialization.data(withJSONObject: legacyJSON), into: legacy.mainContext)
+        XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<AppSettings>()).first?.themeNameRaw,
+                       "slate")
+
+        // Downgrading only the version must not smuggle a new enum into an
+        // older contract or overwrite the existing store during rejection.
+        for version in [0, 1, 12] {
+            var misversioned = json
+            misversioned["schemaVersion"] = version
+            XCTAssertThrowsError(try ImportService.load(
+                JSONSerialization.data(withJSONObject: misversioned), into: legacy.mainContext))
+            XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<AppSettings>()).first?.themeNameRaw,
+                           "slate", "preflight rejection preserves the existing settings")
+        }
+
+        // An unregistered value rejects the bundle before any write.
+        var badJSON = json
+        var badSettings = try XCTUnwrap(badJSON["settings"] as? [String: Any])
+        badSettings["theme"] = "chrome"
+        badJSON["settings"] = badSettings
+        let rejected = try container()
+        XCTAssertThrowsError(
+            try ImportService.load(JSONSerialization.data(withJSONObject: badJSON), into: rejected.mainContext),
+            "an unknown theme value must fail preflight")
+        XCTAssertEqual(try rejected.mainContext.fetch(FetchDescriptor<AppSettings>()).count, 0,
+                       "a rejected bundle writes nothing")
+    }
+
+    func testExactRestDurationsRoundTripThroughTheExistingBackupContract() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        func container() throws -> ModelContainer {
+            try ModelContainer(for: schema,
+                configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
+        }
+        let source = try container()
+        try Seeder.seedIfNeeded(context: source.mainContext)
+        let settings = try XCTUnwrap(source.mainContext.fetch(FetchDescriptor<AppSettings>()).first)
+        let exercise = try XCTUnwrap(source.mainContext.fetch(FetchDescriptor<Exercise>()).first)
+        for seconds in [0, 1, 97, 3599, 3600] {
+            settings.secondaryRestSeconds = seconds
+            exercise.defaultRestSeconds = seconds
+            try source.mainContext.save()
+            let backup = try ExportService.jsonData(context: source.mainContext)
+            let restored = try container()
+            try ImportService.load(backup, into: restored.mainContext)
+            XCTAssertEqual(try restored.mainContext.fetch(FetchDescriptor<AppSettings>()).first?.secondaryRestSeconds, seconds)
+            XCTAssertEqual(try restored.mainContext.fetch(FetchDescriptor<Exercise>())
+                .first(where: { $0.name == exercise.name })?.defaultRestSeconds, seconds)
+        }
+    }
+
     func testNativeBackupRoundTripsProgrammingPoliciesAndDefaultsLegacyBundles() throws {
         let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let source = try ModelContainer(
@@ -846,7 +937,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         let backup = try ExportService.jsonData(context: source.mainContext)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
-        XCTAssertEqual(json["schemaVersion"] as? Int, 12)
+        XCTAssertEqual(json["schemaVersion"] as? Int, BackupContract.currentSchemaVersion)
         let exportedProgram = try XCTUnwrap((json["programs"] as? [[String: Any]])?.first)
         XCTAssertEqual(exportedProgram["equipmentPolicy"] as? String, "freeWeightsOnly")
         let exportedDay = try XCTUnwrap((exportedProgram["days"] as? [[String: Any]])?.first)
