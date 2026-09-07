@@ -79,10 +79,10 @@ export function includesEmptyBarWarmup(exerciseName) {
   return !["backsquat", "deadlift"].includes(key);
 }
 
-// A session freezes the requested methodology, but `automatic` still needs
-// the originating program's focus to resolve truthfully. If that program has
-// gone missing, silence is more honest than defaulting a legacy session to a
-// strength cue it may never have prescribed. Mirrors ActiveSessionView.
+// New sessions freeze the resolved methodology. Legacy `automatic` entries
+// still need the originating program's focus; if it is gone, stay silent
+// instead of guessing a strength cue. Never write that guess into history.
+// Mirrors ActiveSessionView.
 export function complementaryEffortCueForEntry(entry, exercise, program) {
   const style = entry?.prescriptionStyle;
   if (!style || (style === "automatic" && !program?.focus)) return null;
@@ -2265,7 +2265,7 @@ export async function createSessionFromProgramDay(program, day) {
     exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek,
       barId: barStamp(ex, bar),
       targetWeightLb: plan.weightLb, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps,
-      fallbackWeightLb, prescriptionStyle: lift.prescription || "automatic",
+      fallbackWeightLb, prescriptionStyle: prescription.resolvedStyle,
       programRole: lift.role, programSlotId: lift.id, sets });
     if (ex?.movementGroup) preparedMovementGroups.add(ex.movementGroup);
   }

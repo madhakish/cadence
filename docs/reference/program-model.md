@@ -145,6 +145,20 @@ bridges with the last **two** ramp steps only, then goes straight to its
 working sets. A complementary slot ordered first in the day still ramps
 fully, and an explicit per-slot warmup policy always wins.
 
+New sessions snapshot the **resolved** prescription style with their planned
+work. A program slot can remain `automatic`, but the session stores the
+specific style that generated its sets, such as `secondary`, `hypertrophy`, or
+`technique`. Later program edits or deletion do not change that session's
+effort cue. Older sessions still marked `automatic` retain the existing live
+focus lookup; without an originating program, their cue stays silent. There
+is no historical backfill guessing which focus was active at creation.
+
+Complementary work using `secondary` shows “Target 2–3 reps left. Adjust the
+next set if the load misses that range.” This explains the intended effort,
+not a conversion from the main lift's working weight. It does not rewrite
+loads, progression bases, or the immutable planned targets. Explicit styles
+such as double progression keep their own contract.
+
 Roles shape the default prescription, not every program. A main lift left on
 `automatic` follows the phase wave
 (5×5 → 5×3 → 3×3 → deload). A complementary lift on the automatic style is

@@ -1417,7 +1417,9 @@ export function sessionPrescription(state, programRoundingLb, exerciseType = nul
   // "+" set, so it stays ordinary work.
   const isFiveThreeOnePlusSet = style === "fiveThreeOne" && state.nextPhase !== 4;
   blocks.push({ kind: isFiveThreeOnePlusSet ? "amrap" : "work", weightLb: work.weightLb, sets: work.sets, reps: work.reps });
-  return { mainWork: work, blocks };
+  // Persist the methodology that produced the work, not `automatic`: future
+  // program edits must not reinterpret an already-generated session.
+  return { resolvedStyle: style, mainWork: work, blocks };
 }
 
 export function advancing(state, afterCompleting) {
