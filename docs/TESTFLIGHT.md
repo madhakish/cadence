@@ -128,6 +128,18 @@ second serialization boundary. GitHub currently caps a concurrency queue at
 100 pending runs; if Cadence ever approaches that limit, stop merging and clear
 the release backlog rather than accepting a skipped production candidate.
 
+Queueing does not freeze the remote `main` branch. If another PR merges while
+an older candidate builds, semantic-release can complete successfully but
+decline to publish that older commit because it is behind remote `main`.
+The reconciliation step reports the presence or absence of an exact release
+tag; it cannot infer why an untagged candidate was not published. Check the
+final combined head's release, asset-upload, and TestFlight jobs separately
+from its test/build checks. A green validation run alone is not a new release.
+
+The TestFlight upload lane does not wait for Apple's build processing. A
+successful upload proves App Store Connect accepted the binary, not that it
+has finished processing or is already visible to every tester.
+
 The build then appears in **App Store Connect → TestFlight** and the
 **TestFlight app** on your phone (install TestFlight from the App Store and sign
 in with the same Apple ID). Builds last **90 days**.

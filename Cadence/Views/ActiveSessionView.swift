@@ -681,12 +681,7 @@ func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: Ap
 
 /// Compact "how long ago" for the last-session recall line.
 private func agoLabel(_ date: Date) -> String {
-    let days = max(0, Calendar.current.dateComponents([.day], from: date, to: .now).day ?? 0)
-    if days == 0 { return "today" }
-    if days == 1 { return "yesterday" }
-    if days < 14 { return "\(days)d ago" }
-    if days < 70 { return "\(days / 7)w ago" }
-    return "\(days / 30)mo ago"
+    ProgramProgression.historyAgeLabel(exposureDate: date, asOf: .now, calendar: .current)
 }
 
 /// Identifiable wrapper so the summary sheet can drive off .sheet(item:).

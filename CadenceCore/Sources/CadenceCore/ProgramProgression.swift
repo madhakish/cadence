@@ -1236,15 +1236,10 @@ public enum ProgramProgression {
         programRole == nil && programSlotID == nil && plannedWeightLb == nil
     }
 
-    /// A short "where did this number come from" disclosure for a
-    /// history-based ad-hoc first-set suggestion — the suggestion itself
-    /// (`suggestedAdHocFirstSetTarget`) is otherwise silent about its origin.
-    /// Reuses the app's existing relative-time wording (`agoLabel` in
-    /// `ActiveSessionView.swift` / `views/session.js`) rather than inventing a
-    /// second "how long ago" vocabulary the lifter would have to learn.
-    /// Mirrored 1:1 in web/app/js/core.js as `historyProvenanceLabel`.
-    public static func historyProvenanceLabel(exposureDate: Date, asOf now: Date,
-                                            calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
+    /// Calendar-day age shared by last-session recall and suggestion provenance.
+    /// Mirrored 1:1 in web/app/js/core.js as `historyAgeLabel`.
+    public static func historyAgeLabel(exposureDate: Date, asOf now: Date,
+                                      calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
         let days = Swift.max(0, calendar.dateComponents([.day],
             from: calendar.startOfDay(for: exposureDate), to: calendar.startOfDay(for: now)).day ?? 0)
         let when: String
@@ -1253,6 +1248,12 @@ public enum ProgramProgression {
         else if days < 14 { when = "\(days)d ago" }
         else if days < 70 { when = "\(days / 7)w ago" }
         else { when = "\(days / 30)mo ago" }
-        return "from your last exposure, \(when)"
+        return when
+    }
+
+    /// Where a history-based ad-hoc first-set suggestion came from.
+    public static func historyProvenanceLabel(exposureDate: Date, asOf now: Date,
+                                            calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
+        "from your last exposure, \(historyAgeLabel(exposureDate: exposureDate, asOf: now, calendar: calendar))"
     }
 }

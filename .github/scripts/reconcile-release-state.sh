@@ -31,4 +31,4 @@ if [[ "$semantic_release_outcome" != "success" ]]; then
   exit 1
 fi
 
-echo "No release-producing commit at $GITHUB_SHA."
+echo "semantic-release completed without an exact release tag at $GITHUB_SHA; no release was published for this commit."
