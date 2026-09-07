@@ -15,7 +15,7 @@ const asset = (name) => readFile(new URL(`../app/${name}`, import.meta.url));
 const profiles = ["Front Squat", "Romanian Deadlift", "Barbell Bench", "Overhead Press", "Face Pulls"];
 const sizes = [180, 626];
 async function panel(figure, view, size) {
-  const g = figure.querySelectorAll("g.anatomy-figure-panel")[view === "front" ? 0 : 1];
+  const g = figure.querySelector(`g.anatomy-figure-panel[data-view="${view}"]`);
   const layers = [];
   for (const region of g.querySelectorAll("[data-muscle]")) {
     const primary = region.classList.contains("primary");
@@ -45,7 +45,7 @@ for (const view of ["front", "back"]) {
   const cells = [];
   for (const id of Object.keys(MUSCLE_NAMES)) {
     const figure = figureSVG({ primary: [id], secondary: [] });
-    const g = figure.querySelectorAll("g.anatomy-figure-panel")[view === "front" ? 0 : 1];
+    const g = figure.querySelector(`g.anatomy-figure-panel[data-view="${view}"]`);
     if (!g.querySelector("[data-muscle]")) continue;
     const size = 314;
     const label = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="314" height="32"><text x="12" y="22" fill="#eee" font-family="sans-serif" font-size="16">${MUSCLE_NAMES[id]}</text></svg>`);
