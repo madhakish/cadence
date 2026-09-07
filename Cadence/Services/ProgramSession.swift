@@ -139,7 +139,7 @@ enum ProgramSession {
             entry.targetWeightLb = plan.weightLb
             entry.plannedSets = plan.sets
             entry.plannedReps = plan.reps
-            entry.prescriptionStyleRaw = lift.prescription.rawValue
+            entry.prescriptionStyleRaw = prescription.resolvedStyle.rawValue
             let automaticDrop = (exercise.movementGroup == "squat" || exercise.movementGroup == "hinge") ? 10.0 : 5.0
             entry.fallbackWeightLb = fallbackWeight(
                 from: weightLb, exercise: exercise, gym: defaultGym, bar: selectedBar,

@@ -187,6 +187,7 @@ struct PlateCalculatorView: View {
                             Text("× \(pc.count)")
                                 .font(.title3.monospacedDigit())
                         }
+                        .accessibilityElement(children: .combine)
                     }
                 }
             }
@@ -237,6 +238,8 @@ struct PlateCalculatorView: View {
                         }
                     }
                 }
+                .accessibilityLabel("\(plate.label) plates per side")
+                .accessibilityValue("\(reverseCounts[plate.id] ?? 0)")
             }
             Button("Clear", role: .destructive) {
                 reverseCounts = [:]
@@ -275,7 +278,7 @@ struct PlateCalculatorView: View {
     /// conversion — for recognising what's on the rack. Not inventory: nothing
     /// here reaches the solver; the 55 lb disc is listed for recognition only.
     /// Web twin: `.plate-reference` in views/plates.js.
-    private static let referenceKg: [Plate] = [25, 20, 15, 10, 5, 2.5, 1.25].map { Plate(value: $0, unit: .kg) }
+    private static let referenceKg: [Plate] = [25, 20, 15, 10, 5, 2.5, 2, 1.5, 1.25, 1, 0.5].map { Plate(value: $0, unit: .kg) }
     private static let referenceLb: [Plate] = [55, 45, 35, 25, 10, 5, 2.5].map { Plate(value: $0, unit: .lb) }
 
     private static func otherUnitLabel(_ plate: Plate) -> String {
@@ -292,7 +295,7 @@ struct PlateCalculatorView: View {
                     Text("Pounds").tag(WeightUnit.lb)
                 }
                 .pickerStyle(.segmented)
-                Text(referenceUnit == .kg ? "KG · IWF / IPF COLOUR CODE" : "LB · MANUFACTURER CONVENTION")
+                Text(referenceUnit == .kg ? "KG · IWF COLOURS / IPF REFERENCE" : "LB · MANUFACTURER CONVENTION")
                     .font(.caption.bold())
                     .tracking(0.7)
                     .foregroundStyle(.secondary)
@@ -312,7 +315,7 @@ struct PlateCalculatorView: View {
                     }
                     .accessibilityElement(children: .combine)
                 }
-                Text("Kilogram colours follow the IWF and IPF code; pound bumpers follow the common manufacturer code, and 5 lb and under are black iron. Colours never change with the theme. This guide is reference only: the 55 lb disc is listed for recognition and is never added to a gym's inventory or offered to the solver.")
+                Text("IWF colours are shown for kilogram plates; 1.25 kg is an IPF denomination. IPF requires 25 kg red, 20 kg blue and 15 kg yellow; 10 kg and below may be any colour. Pound colours are a manufacturer convention, not IPF rules. Black plates also exist. This reference does not add plates to your gym inventory.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -415,6 +418,7 @@ struct PlateCalculatorView: View {
                                         Spacer()
                                         Text("× \(plateCount.count)").font(.title3.bold().monospacedDigit())
                                     }
+                                    .accessibilityElement(children: .combine)
                                 }
                             }
                         }

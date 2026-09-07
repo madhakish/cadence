@@ -886,6 +886,29 @@ final class PersistenceMigrationTests: XCTestCase {
                        "a rejected bundle writes nothing")
     }
 
+    func testExactRestDurationsRoundTripThroughTheExistingBackupContract() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        func container() throws -> ModelContainer {
+            try ModelContainer(for: schema,
+                configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
+        }
+        let source = try container()
+        try Seeder.seedIfNeeded(context: source.mainContext)
+        let settings = try XCTUnwrap(source.mainContext.fetch(FetchDescriptor<AppSettings>()).first)
+        let exercise = try XCTUnwrap(source.mainContext.fetch(FetchDescriptor<Exercise>()).first)
+        for seconds in [0, 1, 97, 3599, 3600] {
+            settings.secondaryRestSeconds = seconds
+            exercise.defaultRestSeconds = seconds
+            try source.mainContext.save()
+            let backup = try ExportService.jsonData(context: source.mainContext)
+            let restored = try container()
+            try ImportService.load(backup, into: restored.mainContext)
+            XCTAssertEqual(try restored.mainContext.fetch(FetchDescriptor<AppSettings>()).first?.secondaryRestSeconds, seconds)
+            XCTAssertEqual(try restored.mainContext.fetch(FetchDescriptor<Exercise>())
+                .first(where: { $0.name == exercise.name })?.defaultRestSeconds, seconds)
+        }
+    }
+
     func testNativeBackupRoundTripsProgrammingPoliciesAndDefaultsLegacyBundles() throws {
         let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let source = try ModelContainer(

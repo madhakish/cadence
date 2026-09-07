@@ -42,7 +42,9 @@ const availablePlates = (gym, exercise = null) => {
 /// The single plate solution for a stored session set. Both the inline diagram
 /// and tests consume this result; the renderer is never allowed to solve again.
 export function plateSolutionForSet(set, bar, gym = null, exercise = null) {
-  return C.solve(set.weightLb, bar, availablePlates(gym, exercise), 10,
+  const rack = gym ? availablePlates(gym, exercise)
+    : C.stationPlates(exercise?.stationDenomination || set.enteredUnit || "lb", C.ALL_STANDARD);
+  return C.solve(set.weightLb, bar, rack, 10,
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
 }
 
@@ -79,10 +81,10 @@ export function includesEmptyBarWarmup(exerciseName) {
   return !["backsquat", "deadlift"].includes(key);
 }
 
-// A session freezes the requested methodology, but `automatic` still needs
-// the originating program's focus to resolve truthfully. If that program has
-// gone missing, silence is more honest than defaulting a legacy session to a
-// strength cue it may never have prescribed. Mirrors ActiveSessionView.
+// New sessions freeze the resolved methodology. Legacy `automatic` entries
+// still need the originating program's focus; if it is gone, stay silent
+// instead of guessing a strength cue. Never write that guess into history.
+// Mirrors ActiveSessionView.
 export function complementaryEffortCueForEntry(entry, exercise, program) {
   const style = entry?.prescriptionStyle;
   if (!style || (style === "automatic" && !program?.focus)) return null;
@@ -156,6 +158,12 @@ function makeRestTimer(onTick, onDone) {
       onTick();
     },
     add(sec) { if (handle && clock) { clock = C.restClockAdd(clock, sec); onTick(); } },
+    setRemaining(sec) {
+      if (!handle || !clock) return; // expired while its editor was open
+      clock = C.restClockSettingRemaining(clock, sec, nowS());
+      if (!clock) { stop(); return; }
+      onTick();
+    },
     stop,
   };
 }
@@ -351,25 +359,15 @@ export async function openSession(id) {
   // exercises[0] with currentSE's (null) role resolved the first lift's rest
   // without its program role (mirrors native currentOrFirst).
   const currentEntry = () => currentSE
-    || session.exercises.find((entry) => (entry.sets || []).some((set) => !set.isWarmup && set.status === "planned"))
+    || session.exercises.find((entry) => (entry.sets || []).some((set) => set.status === "planned"))
     || session.exercises[0] || null;
   const currentExercise = () => exMap.get((currentEntry() || {}).exerciseName);
   const expandedEntries = new Set();
 
-  const hasPlannedWork = (entry) => (entry?.sets || [])
-    .some((set) => !set.isWarmup && set.status === "planned");
   function focusAfterVerdict(entry, status) {
-    // Undoing a verdict is an explicit return to this lift. A resolving
-    // verdict stays here until its final work set, then advances through the
-    // authored sequence (skipping already-finished entries).
-    if (status === "planned" || hasPlannedWork(entry)) {
-      currentSE = entry;
-      return;
-    }
-    const index = session.exercises.indexOf(entry);
-    const later = index < 0 ? null
-      : session.exercises.slice(index + 1).find(hasPlannedWork);
-    currentSE = later || session.exercises.find(hasPlannedWork) || entry;
+    const index = C.focusAfterResolving(session.exercises.map((exercise) =>
+      (exercise.sets || []).map((set) => set.status)), session.exercises.indexOf(entry));
+    currentSE = status === "planned" || index === null ? entry : session.exercises[index];
   }
 
   const rest = makeRestTimer(() => paintBar(), () => onRestDone());
@@ -405,7 +403,11 @@ export async function openSession(id) {
 
   function buildBottomBar() {
     const clock = ui.h("span", { class: "clock mono" });
-    const restTime = ui.h("span", { class: "rest-time mono", style: { display: "none" } });
+    const restTime = ui.h("button", { class: "btn ghost rest-time mono", style: { display: "none" },
+      "aria-label": "Edit remaining rest", "aria-haspopup": "dialog", onClick: () => ui.durationEditor({
+        title: "Remaining rest", seconds: Math.max(0, Math.round(rest.remaining)), zeroLabel: "End rest",
+        onSave: (seconds) => { rest.setRemaining(seconds); paintBar(); },
+      }) });
     const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex, currentEntry()?.programRole), ex ? ex.name : ""); } });
     const subBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "−1:00", onClick: () => { rest.add(-60); paintBar(); } });
     const addBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "+1:00", onClick: () => { rest.add(60); paintBar(); } });
@@ -652,26 +654,16 @@ export async function openSession(id) {
 
   function editRest(se, ex, body) {
     if (!ex) { ui.toast("No library entry for this exercise."); return; }
-    ui.sheet({
-      title: `Rest — ${ex.name}`,
-      build: (c) => {
-        const render = () => {
-          ui.clear(c);
-          // Floor: the stepper shows the EFFECTIVE rest, so it can't offer 0
-          // ("Default") without the display snapping to the bucket value —
-          // except where the bucket itself is 0 (conditioning). Clearing an
-          // override back to bucket-driven is the explicit Reset below.
-          const floor = C.restDefaultSeconds(ex.category, ex.movementGroup, se.programRole, restCfg, 0) === 0 ? 0 : 15;
-          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Rest between sets" }),
-            ui.stepper(restFor(ex, se.programRole), { min: floor, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { ex.defaultRestSeconds = v; await Exercises.save(ex); renderBody(body); render(); } })));
-          if (ex.defaultRestSeconds > 0) {
-            c.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "8px" }, text: "Reset to default", onClick: async () => {
-              ex.defaultRestSeconds = 0; await Exercises.save(ex); renderBody(body); render();
-            } }));
-          }
-          c.append(ui.h("div", { class: "sub", style: { marginTop: "8px" }, text: "Saved on the exercise — applies everywhere it's used. Default = the rest buckets in Settings." }));
-        };
-        render();
+    ui.durationEditor({
+      title: `Rest override — ${ex.name}`,
+      seconds: ex.defaultRestSeconds || 0,
+      zeroLabel: `Use default (${C.restDurationLabel(C.restDefaultSeconds(ex.category, ex.movementGroup, se.programRole, restCfg, 0))})`,
+      onSave: async (value) => {
+        const previous = ex.defaultRestSeconds;
+        ex.defaultRestSeconds = value;
+        try { await Exercises.save(ex); }
+        catch (error) { ex.defaultRestSeconds = previous; throw error; }
+        renderBody(body); paintBar();
       },
     });
   }
@@ -2303,7 +2295,7 @@ export async function createSessionFromProgramDay(program, day) {
     exercises.push({ order: order++, exerciseName: lift.exerciseName, notes: "", phase: program.currentWeek,
       barId: barStamp(ex, bar),
       targetWeightLb: plan.weightLb, plannedWeightLb: weightLb, plannedSets: plan.sets, plannedReps: plan.reps,
-      fallbackWeightLb, prescriptionStyle: lift.prescription || "automatic",
+      fallbackWeightLb, prescriptionStyle: prescription.resolvedStyle,
       programRole: lift.role, programSlotId: lift.id, sets });
     if (ex?.movementGroup) preparedMovementGroups.add(ex.movementGroup);
   }

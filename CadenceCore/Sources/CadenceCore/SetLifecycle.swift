@@ -12,6 +12,16 @@ public enum SetStatus: String, Codable, CaseIterable, Sendable {
 public enum SetLifecycle {
     public static let qualityValues = ["clean", "grindy", "wobble"]
 
+    /// Any unresolved set, including a warmup, keeps its exercise in context.
+    /// Only focus changes; the authored entries and set statuses are untouched.
+    public static func focusAfterResolving(_ entries: [[SetStatus]], resolvedIndex: Int) -> Int? {
+        guard entries.indices.contains(resolvedIndex) else { return nil }
+        if entries[resolvedIndex].contains(.planned) { return resolvedIndex }
+        return entries.indices.dropFirst(resolvedIndex + 1).first { entries[$0].contains(.planned) }
+            ?? entries.indices.first { entries[$0].contains(.planned) }
+            ?? resolvedIndex
+    }
+
     /// The lifecycle state needed to choose the focused set rows. This is a
     /// deterministic cross-client rule: planned warmups cannot disappear
     /// behind the first working set merely because resolved rows collapse.

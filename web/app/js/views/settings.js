@@ -98,7 +98,7 @@ export async function render(host) {
   const rest = settings.rest;
   const restCard = ui.h("div", { class: "card" });
   const restRow = (label, key) => restCard.append(ui.h("div", { class: "row" }, ui.h("span", { text: label }),
-    ui.stepper(rest[key], { min: 0, max: 600, step: 15, format: ui.mmss, onChange: async (v) => { rest[key] = v; await saveS(); } })));
+    ui.durationButton(rest[key], { title: label, onChange: async (v) => { const previous = rest[key]; rest[key] = v; try { await saveS(); } catch (error) { rest[key] = previous; throw error; } } })));
   restCard.append(ui.h("div", { class: "sub", style: { padding: "6px 0 2px" }, text: "In a program day, by role" }));
   restRow("Complementary lifts", "secondarySeconds");
   restRow("Accessories", "accessorySeconds");
@@ -1399,7 +1399,7 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
           // buckets in Settings; any value set here wins everywhere.
           // `|| 0`: a raw-imported record can lack the field — an undefined
           // seed would render NaN:NaN and persist NaN on the first tap.
-          ui.h("div", { class: "row" }, ui.h("span", { text: "Rest" }), ui.stepper(e.defaultRestSeconds || 0, { min: 0, max: 600, step: 15, format: (v) => (v === 0 ? "Default (Settings)" : ui.mmss(v)), onChange: async (v) => { e.defaultRestSeconds = v; await Exercises.save(e); } }))));
+          ui.h("div", { class: "row" }, ui.h("span", { text: "Rest" }), ui.durationButton(e.defaultRestSeconds || 0, { title: "Rest override", zeroLabel: "Use default from Settings", onChange: async (v) => { const previous = e.defaultRestSeconds; e.defaultRestSeconds = v; try { await Exercises.save(e); } catch (error) { e.defaultRestSeconds = previous; throw error; } } }))));
         if (e.type === "barbell") {
           // The station this lift lives at can stock a single plate
           // denomination — a kg-only deadlift platform beside lb squat racks.

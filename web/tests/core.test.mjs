@@ -208,6 +208,24 @@ eq(C.complementaryEffortCue("complementary", "doubleProgression", "pull"), null,
   "explicit complementary methodologies keep their own contract");
 eq(C.complementaryEffortCue("complementary", "automatic", "hinge", "hypertrophy"), null,
   "automatic hypertrophy work does not borrow the strength secondary-volume cue");
+for (const [requested, movement, role, focus, expected] of [
+  ["automatic", "hinge", "complementary", "strength", "secondary"],
+  ["automatic", "hinge", "complementary", "hypertrophy", "hypertrophy"],
+  ["automatic", "olympic", "complementary", "strength", "technique"],
+  ["automatic", "squat", "main", "strength", "wave"],
+  ["automatic", "squat", "main", "maintain", "secondary"],
+  ["doubleProgression", "pull", "complementary", "strength", "doubleProgression"],
+  ["secondary", "hinge", "complementary", "hypertrophy", "secondary"],
+]) {
+  const prescription = C.sessionPrescription({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 10 },
+    5, "barbell", movement, role, focus, requested);
+  eq(prescription.resolvedStyle, expected, "[INV-SESSION-STYLE-IS-FROZEN] the engine result carries its resolved methodology");
+  for (const laterFocus of ["strength", "hypertrophy", "maintain"]) {
+    eq(C.complementaryEffortCue(role, prescription.resolvedStyle, movement, laterFocus) !== null,
+      role === "complementary" && expected === "secondary",
+      "[INV-SESSION-STYLE-IS-FROZEN] later program focus cannot reinterpret the prescription");
+  }
+}
 let rolePlan = C.programPlanFor({ cycleNumber: 1, baseWeightLb: 200, nextPhase: 1, incrementLb: 0 }, 5,
   "barbell", "hinge", "complementary", "strength", "automatic");
 eq(`${rolePlan.sets}x${rolePlan.reps}@${rolePlan.weightLb}`, "3x8@180", "complementary volume avoids a second 5x5");

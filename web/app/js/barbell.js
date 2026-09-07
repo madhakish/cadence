@@ -9,12 +9,13 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 
 // A readable, face-on denomination key for calculator rows. The hero remains
 // an honest edge-on load-order diagram, where a large horizontal number would
-// imply physically impossible plate thickness. Mirrors PlateFaceBadge.
+// imply physically impossible plate thickness. Decorative: callers provide
+// the adjacent denomination label. Mirrors PlateFaceBadge.
 export function plateBadgeSVG(plate, style = "steel") {
   const token = C.plateColorToken(plate, style);
   const foreground = ["white", "yellow", "green"].includes(token) ? "#24262a" : "#fff";
   const svg = el("svg", { class: `plate-badge ${style}`, viewBox: "0 0 52 52",
-    role: "img", "aria-label": `${C.plateLabel(plate)} plate` });
+    "aria-hidden": "true", focusable: "false" });
   svg.append(
     el("circle", { cx: 26, cy: 26, r: 24, fill: FILL[token] || "#888",
       stroke: STROKE[token] || "#333", "stroke-width": 2 }),

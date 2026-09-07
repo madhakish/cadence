@@ -1243,9 +1243,10 @@ public enum ProgramProgression {
     /// `ActiveSessionView.swift` / `views/session.js`) rather than inventing a
     /// second "how long ago" vocabulary the lifter would have to learn.
     /// Mirrored 1:1 in web/app/js/core.js as `historyProvenanceLabel`.
-    public static func historyProvenanceLabel(exposureDate: Date, asOf now: Date) -> String {
-        let days = Swift.max(0, Calendar(identifier: .gregorian)
-            .dateComponents([.day], from: exposureDate, to: now).day ?? 0)
+    public static func historyProvenanceLabel(exposureDate: Date, asOf now: Date,
+                                            calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
+        let days = Swift.max(0, calendar.dateComponents([.day],
+            from: calendar.startOfDay(for: exposureDate), to: calendar.startOfDay(for: now)).day ?? 0)
         let when: String
         if days == 0 { when = "today" }
         else if days == 1 { when = "yesterday" }

@@ -223,6 +223,36 @@ final class ProgramEngineTests: XCTestCase {
         ))
     }
 
+    func testSessionPrescriptionCarriesResolvedStyle() {
+        // [INV-SESSION-STYLE-IS-FROZEN] The same engine result owns the work
+        // and its methodology; callers persist it without re-resolving later.
+        let cases: [(PrescriptionStyle, String, LiftRole, TrainingFocus, PrescriptionStyle)] = [
+            (.automatic, "hinge", .complementary, .strength, .secondary),
+            (.automatic, "hinge", .complementary, .hypertrophy, .hypertrophy),
+            (.automatic, "olympic", .complementary, .strength, .technique),
+            (.automatic, "squat", .main, .strength, .wave),
+            (.automatic, "squat", .main, .maintain, .secondary),
+            (.doubleProgression, "pull", .complementary, .strength, .doubleProgression),
+            (.secondary, "hinge", .complementary, .hypertrophy, .secondary),
+        ]
+        for (requested, movement, role, focus, expected) in cases {
+            let prescription = ProgramEngine.sessionPrescription(
+                for: CycleState(baseWeightLb: 200, nextPhase: .volume),
+                programRoundingLb: 5, exerciseType: "barbell",
+                movementGroup: movement, role: role, focus: focus,
+                prescriptionStyle: requested
+            )
+            XCTAssertEqual(prescription.resolvedStyle, expected)
+            for laterFocus in [TrainingFocus.strength, .hypertrophy, .maintain] {
+                let cue = ProgramEngine.complementaryEffortCue(
+                    role: role, prescriptionStyle: prescription.resolvedStyle,
+                    movementGroup: movement, focus: laterFocus
+                )
+                XCTAssertEqual(cue != nil, role == .complementary && expected == .secondary)
+            }
+        }
+    }
+
     func testComplementaryVolumeDoesNotInheritMainFiveByFive() {
         let state = CycleState(baseWeightLb: 200, nextPhase: .volume)
         let plan = ProgramEngine.programPlan(for: state, programRoundingLb: 5, exerciseType: "barbell",

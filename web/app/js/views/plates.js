@@ -30,13 +30,10 @@ function expandedBar(solution, plateStyle, requestedLb = null) {
 // here reaches the solver; the 55 lb disc is listed for recognition only.
 // Mirrors native PlateCalculatorView.referenceSection.
 const PLATE_REFERENCE = {
-  kg: [25, 20, 15, 10, 5, 2.5, 1.25].map((value) => ({ value, unit: "kg" })),
+  kg: [25, 20, 15, 10, 5, 2.5, 2, 1.5, 1.25, 1, 0.5].map((value) => ({ value, unit: "kg" })),
   lb: [55, 45, 35, 25, 10, 5, 2.5].map((value) => ({ value, unit: "lb" })),
 };
-const PLATE_REFERENCE_NOTE = "Kilogram colours follow the IWF and IPF code; pound bumpers follow the common "
-  + "manufacturer code, and 5 lb and under are black iron. Colours never change with the theme. "
-  + "This guide is reference only: the 55 lb disc is listed for recognition and is never added "
-  + "to a gym's inventory or offered to the solver.";
+const PLATE_REFERENCE_NOTE = "IWF colours are shown for kilogram plates; 1.25 kg is an IPF denomination. IPF requires 25 kg red, 20 kg blue and 15 kg yellow; 10 kg and below may be any colour. Pound colours are a manufacturer convention, not IPF rules. Black plates also exist. This reference does not add plates to your gym inventory.";
 
 export async function openPlateCalculator() {
   const [gyms, settings] = await Promise.all([Gyms.all(), Settings.get()]);
@@ -76,7 +73,7 @@ export async function openPlateCalculator() {
       const details = ui.h("details", { class: "card plate-reference" },
         ui.h("summary", {},
           ui.h("span", { class: "title", text: "Plate reference" }),
-          ui.h("span", { class: "sub", text: referenceUnit === "kg" ? "KG · IWF / IPF colour code" : "LB · manufacturer convention" })));
+          ui.h("span", { class: "sub", text: referenceUnit === "kg" ? "KG · IWF colours / IPF reference" : "LB · manufacturer convention" })));
       details.open = referenceOpen;
       details.addEventListener("toggle", () => { if (details.isConnected) referenceOpen = details.open; });
       const table = ui.h("div", { class: "plate-reference-table", role: "table", "aria-label": "Plate reference" });
@@ -139,6 +136,7 @@ export async function openPlateCalculator() {
       panel.append(target, output);
 
       function update() {
+        input.setAttribute("aria-label", `Requested target in ${unit}`);
         const targetLb = C.toLb(targetVal, unit);
         const solution = C.solve(targetLb, bar, availablePlates(), 10,
           gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
@@ -212,18 +210,22 @@ export async function openPlateCalculator() {
       panel.append(output, ui.h("div", { class: "section-title", text: "Plates on one side" }), editor, orderEditor);
       for (const plate of plates) {
         const id = C.plateId(plate);
-        editor.append(ui.h("div", { class: "row plate-row" }, plateKey(plate, plateStyle),
-          ui.stepper(counts[id] || 0, { min: 0, max: 12,
-            onChange: (value) => {
-              const previous = counts[id] || 0;
-              counts[id] = value;
-              if (previous === 0 && value > 0 && !enteredOrder.includes(id)) enteredOrder.push(id);
-              if (value === 0) {
-                const orderIndex = enteredOrder.indexOf(id);
-                if (orderIndex >= 0) enteredOrder.splice(orderIndex, 1);
-              }
-              recompute();
-            } })));
+        const counter = ui.stepper(counts[id] || 0, { min: 0, max: 12,
+          onChange: (value) => {
+            const previous = counts[id] || 0;
+            counts[id] = value;
+            if (previous === 0 && value > 0 && !enteredOrder.includes(id)) enteredOrder.push(id);
+            if (value === 0) {
+              const orderIndex = enteredOrder.indexOf(id);
+              if (orderIndex >= 0) enteredOrder.splice(orderIndex, 1);
+            }
+            recompute();
+          } });
+        const [remove, add] = counter.querySelectorAll("button");
+        remove.setAttribute("aria-label", `Remove one ${C.plateLabel(plate)} plate per side`);
+        add.setAttribute("aria-label", `Add one ${C.plateLabel(plate)} plate per side`);
+        counter.querySelector("span").setAttribute("aria-live", "polite");
+        editor.append(ui.h("div", { class: "row plate-row" }, plateKey(plate, plateStyle), counter));
       }
       panel.append(ui.h("button", { class: "btn ghost danger wide", text: "Clear entered plates",
         onClick: () => {

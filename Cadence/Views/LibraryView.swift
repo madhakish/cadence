@@ -507,12 +507,8 @@ struct ExerciseDetailView: View {
                     }
                     // 0 = no rest of its own → the timer falls to the configurable
                     // rest buckets in Settings; any value set here wins everywhere.
-                    Stepper(
-                        exercise.defaultRestSeconds == 0
-                            ? "Rest: default (Settings)"
-                            : "Rest: \(exercise.defaultRestSeconds / 60):\(String(format: "%02d", exercise.defaultRestSeconds % 60))",
-                        value: $exercise.defaultRestSeconds, in: 0...600, step: 15
-                    )
+                    DurationEditorButton(title: "Rest override", seconds: $exercise.defaultRestSeconds,
+                                         zeroLabel: "Use default from Settings")
                     if exercise.type == .barbell {
                     // The station this lift lives at can stock a single plate
                     // denomination — a kg-only deadlift platform beside lb

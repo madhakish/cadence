@@ -368,6 +368,17 @@ advertises what the engine will actually run rather than the placeholder.
 > peak was labelled "Peak". A wave glyph drawn above them claimed a weight wave
 > that, for most styles, does not exist.
 
+### INV-SESSION-STYLE-IS-FROZEN
+*platforms: core, web*
+
+A newly generated session stores the engine's **resolved** prescription style
+alongside its planned work. Editing or deleting the originating program cannot
+change that session's effort cue or reinterpret its sets. Explicit styles stay
+explicit; the program slot itself may remain `automatic` for future sessions.
+Legacy entries retaining `automatic` keep their existing focus lookup and stay
+silent when no originating program is available. Never guess a historical
+resolved style from today's program and write it back.
+
 ### INV-PREVIEW-RUNS-THE-REAL-ENGINE
 *platforms: core, web*
 

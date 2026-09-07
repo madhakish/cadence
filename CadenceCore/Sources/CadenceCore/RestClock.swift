@@ -68,6 +68,14 @@ public enum RestClock {
         s.paused ? s.pausedRemaining : max(0, s.endEpoch - now)
     }
 
+    /// Direct duration entry. Preserve pause and elapsed time; an expired
+    /// countdown cannot be restarted by saving an editor left open at zero.
+    public static func settingRemaining(_ s: State, seconds: Int, now: Double) -> State? {
+        let left = remaining(s, now: now)
+        guard seconds > 0, s.paused || left > 0 else { return nil }
+        return add(s, seconds: Double(seconds) - left)
+    }
+
     /// 1 at the start of the rest, 0 when it's over (the progress-ring source).
     public static func fractionRemaining(_ s: State, now: Double) -> Double {
         s.total > 0 ? min(1, max(0, remaining(s, now: now) / s.total)) : 0

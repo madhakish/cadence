@@ -35,3 +35,17 @@
 - Focused exercise — leads with a set track (resolved quiet, current in the accent, upcoming neutral), then the working set's position, reps, and load, pounds first then kilograms, above the set rows. The load is the set's own value; the diagram under the set row remains the loading truth.
 - Plate reference — the calculators carry a reference-only guide (colour, denomination, other-unit conversion) per family. It is never inventory: the 55 lb disc is listed for recognition and is not a solver candidate.
 - Out of this pass — the plate renderer's physical-profile geometry (gated on approving persisted equipment dimensions), the HH:MM:SS duration picker (#199), Lock Screen set progression (#200), and the rest-completion bell (#197).
+
+## Build review, 2026-09-07
+
+- Approved anatomy — carry PR #205 verbatim; the owner approved these contours. No new gorilla artwork, plate logos, or altered masks.
+- Duration entry — one native editor and one web editor serve global defaults, exercise overrides and remaining rest. Staged Save/Cancel prevents partial entries from changing training guidance. Existing integer seconds and the 0–3600 portable range stay unchanged.
+- Rest layout — iOS separates countdown text from four compact rest actions to avoid shrinking the countdown; each action has a 44-point target. Its progress transition uses the existing motion token and becomes instant under Reduce Motion. Device layout still needs inspection.
+- Override wording — zero explicitly means “Use default from Settings” on an exercise; the effective rest is shown independently. Global zero means Off.
+- Loading accessibility — a target input's spoken unit changes in place, retaining its value and node; plate badges defer to one adjacent denomination announcement.
+- No-gym loading — the per-set solution falls back to its entered unit, with an explicit station denomination taking precedence, matching native. Configured gym inventory and solver policy stay unchanged.
+- Focus — an unresolved warmup keeps its exercise current. Focus cannot silently skip a set; completed/current/upcoming still follow authored order.
+- History dates — “yesterday” is a local calendar-date relationship, including midnight and DST. Stored timestamps, tonnage and progression calculations are unchanged.
+- Plate guide — add the IWF small denominations using shared plate colour metadata. Explain that IPF fixes colours only for 15/20/25 kg; the guide never adds inventory.
+- Compatibility — retain the public SessionPrescription(mainWork:blocks:) initializer; only engine-produced blocks assert a resolved methodology.
+- Scope correction — #199's duration implementation is now included; its native/UI validation is still pending. Approved physical plate geometry, Lock Screen set completion and the headphone cue remain unfinished; the earlier “out of this pass” note is historical scope, not completion evidence.

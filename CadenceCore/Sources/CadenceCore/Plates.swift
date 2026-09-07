@@ -50,6 +50,12 @@ public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
         if value == 10 { return "green" }
         if value == 5 { return "white" }
         if value == 2.5 { return style == .bumper ? "red" : "black" }
+        if style == .bumper {
+            if value == 2 { return "blue" }
+            if value == 1.5 { return "yellow" }
+            if value == 1 { return "green" }
+            if value == 0.5 { return "white" }
+        }
         return "black" // 1.25 + misc
     }
 

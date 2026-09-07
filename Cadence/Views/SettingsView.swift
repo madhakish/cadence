@@ -113,20 +113,15 @@ struct SettingsView: View {
                                 .font(.caption.bold())
                                 .tracking(0.7)
                                 .foregroundStyle(.secondary)
-                            Stepper("Complementary lifts: \(mmss(settings.secondaryRestSeconds))",
-                                    value: bindable.secondaryRestSeconds, in: 0...600, step: 15)
-                            Stepper("Accessories: \(mmss(settings.accessoryRestSeconds))",
-                                    value: bindable.accessoryRestSeconds, in: 0...600, step: 15)
+                            DurationEditorButton(title: "Complementary lifts", seconds: bindable.secondaryRestSeconds)
+                            DurationEditorButton(title: "Accessories", seconds: bindable.accessoryRestSeconds)
                             Text("MOVEMENT FALLBACK")
                                 .font(.caption.bold())
                                 .tracking(0.7)
                                 .foregroundStyle(.secondary)
-                            Stepper("Squat & deadlift mains: \(mmss(settings.mainCompoundRestSeconds))",
-                                    value: bindable.mainCompoundRestSeconds, in: 0...600, step: 15)
-                            Stepper("Olympic lifts: \(mmss(settings.olympicRestSeconds))",
-                                    value: bindable.olympicRestSeconds, in: 0...600, step: 15)
-                            Stepper("Other main lifts: \(mmss(settings.mainUpperRestSeconds))",
-                                    value: bindable.mainUpperRestSeconds, in: 0...600, step: 15)
+                            DurationEditorButton(title: "Squat & deadlift mains", seconds: bindable.mainCompoundRestSeconds)
+                            DurationEditorButton(title: "Olympic lifts", seconds: bindable.olympicRestSeconds)
+                            DurationEditorButton(title: "Other main lifts", seconds: bindable.mainUpperRestSeconds)
                             Text("An exercise-specific rest value wins. 0:00 disables that fallback.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)

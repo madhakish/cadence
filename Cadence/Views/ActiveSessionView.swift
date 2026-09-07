@@ -33,7 +33,7 @@ struct ActiveSessionView: View {
 
     private var currentOrFirst: SessionExercise? {
         currentEntry
-            ?? session.orderedExercises.first { $0.plannedWorkingSets.contains { $0.status == .planned } }
+            ?? session.orderedExercises.first { $0.orderedSets.contains { $0.status == .planned } }
             ?? session.orderedExercises.first
     }
     private var gym: Gym? {
@@ -458,26 +458,13 @@ struct ActiveSessionView: View {
     /// set, advance through authored order to the next exercise that can be
     /// performed. Undoing a verdict deliberately returns focus to that entry.
     private func focusAfterResolving(_ entry: SessionExercise) {
-        if entry.plannedWorkingSets.contains(where: { $0.status == .planned }) {
-            currentEntry = entry
-            return
-        }
-
         let ordered = session.orderedExercises
-        guard let index = ordered.firstIndex(where: {
-            $0.persistentModelID == entry.persistentModelID
-        }) else {
-            currentEntry = entry
-            return
-        }
-        let later = ordered.dropFirst(index + 1).first {
-            $0.plannedWorkingSets.contains(where: { $0.status == .planned })
-        }
-        let remaining = later ?? ordered.first {
-            $0.plannedWorkingSets.contains(where: { $0.status == .planned })
-        }
-        currentEntry = remaining ?? entry
-        if remaining != nil { showEarlierExercises = false }
+        let resolvedIndex = ordered.firstIndex { $0.persistentModelID == entry.persistentModelID } ?? -1
+        guard let next = SetLifecycle.focusAfterResolving(
+            ordered.map { $0.orderedSets.map(\.status) }, resolvedIndex: resolvedIndex
+        ) else { currentEntry = entry; return }
+        currentEntry = ordered[next]
+        if next != resolvedIndex { showEarlierExercises = false }
     }
 
     private func recallLine(
@@ -948,21 +935,11 @@ private struct ExerciseSection: View {
         return "Warmups \(warmupsDone)/\(warmups.count) · \(position) · \(max(0, work.count - workDone - (currentWorkingSet == nil ? 0 : 1))) after"
     }
     private var restBinding: Binding<Int> {
-        Binding(get: { restSeconds },
+        Binding(get: { entry.exercise?.defaultRestSeconds ?? 0 },
                 set: {
                     entry.exercise?.defaultRestSeconds = $0
                     PersistenceErrorCenter.shared.save(context, operation: "Changing the rest timer")
                 })
-    }
-    // Stepper floor: writing 0 clears the override, and the stepper displays
-    // the EFFECTIVE rest — so 0 is only offered where clearing lands on 0
-    // (conditioning, or a bucket the user zeroed); elsewhere a decrement to 0
-    // would snap the display up to the movement default. Same role + config as
-    // the effective rest (mirrors web editRest's floor).
-    private var restFloor: Int {
-        guard let ex = entry.exercise else { return 15 }
-        return RestDefaults.seconds(category: ex.categoryRaw, movementGroup: ex.movementGroup, role: entry.programRole,
-                                    config: settings?.restConfig ?? .standard) == 0 ? 0 : 15
     }
 
     @ViewBuilder
@@ -1192,19 +1169,11 @@ private struct ExerciseSection: View {
                 .font(.caption)
             }
 
-            Stepper("Rest between sets: \(mmss(restSeconds))", value: restBinding, in: restFloor...600, step: 15)
-                .font(.caption)
-            // The stepper shows the EFFECTIVE rest, so its floor can't offer
-            // 0 ("Default") without the display snapping to the bucket value —
-            // clearing an override back to bucket-driven is an explicit action
-            // instead, offered only while an override exists.
-            if (entry.exercise?.defaultRestSeconds ?? 0) > 0 {
-                Button("Reset rest to default") {
-                    entry.exercise?.defaultRestSeconds = 0
-                    PersistenceErrorCenter.shared.save(context, operation: "Resetting the rest timer")
-                }
-                .font(.caption)
-            }
+            DurationEditorButton(title: "Rest override", seconds: restBinding,
+                                 zeroLabel: "Use default from Settings")
+            Text("Effective rest: \(RestDuration.label(restSeconds)). Changes apply to this exercise everywhere; a running timer is unchanged.")
+                .font(.footnote).foregroundStyle(.secondary)
+
         } header: {
             HStack {
                 // The name is the door to the lift itself — muscles figure,
@@ -2352,6 +2321,9 @@ private struct SetDetailSheet: View {
 /// Rest button for the lift you're working.
 private struct SessionBottomBar: View {
     @Environment(RestTimer.self) private var restTimer
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var editingRest = false
+    @State private var restAtOpen = 0
     /// nil until the workout is explicitly started — opening the logger to
     /// read the plan must not display a running clock.
     let sessionStart: Date?
@@ -2367,11 +2339,10 @@ private struct SessionBottomBar: View {
             ProgressView(value: restTimer.isRunning ? min(1, 1 - restTimer.progress) : 0)
                 .tint(Theme.accent)
                 .scaleEffect(x: 1, y: restTimer.isRunning ? 2 : 1, anchor: .top)
-                .animation(.default, value: restTimer.isRunning)
+                .animation(reduceMotion ? nil : .easeOut(duration: Theme.shortMotion), value: restTimer.isRunning)
 
-            // While resting the bar carries the countdown + FOUR controls —
-            // text everywhere here must be single-line (scaling down before
-            // truncating) or narrow phones wrap the digits mid-string.
+            // Give the countdown its own row; rest actions below it stay
+            // reachable without shrinking the weight-room glance text.
             HStack(spacing: 10) {
                 // Session stopwatch — always visible, with an icon so it reads
                 // as a running clock.
@@ -2404,29 +2375,22 @@ private struct SessionBottomBar: View {
                                 .font(.caption2).foregroundStyle(.secondary)
                                 .lineLimit(1).truncationMode(.middle)
                         }
-                        Text(restTimer.display)
-                            .font(.system(size: 28, weight: .heavy, design: .rounded).monospacedDigit())
-                            .foregroundStyle(Theme.accent)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                            .layoutPriority(1) // the countdown is the point — buttons shrink first
-                    }
-                    Group {
                         Button {
-                            restTimer.isPaused ? restTimer.resume() : restTimer.pause()
-                        } label: { Image(systemName: restTimer.isPaused ? "play.fill" : "pause.fill") }
-                            .accessibilityLabel(restTimer.isPaused ? "Resume rest" : "Pause rest")
-                        Button { restTimer.add(seconds: -60) } label: { Image(systemName: "gobackward.60") }
-                            .accessibilityLabel("Subtract one minute")
-                        Button { restTimer.add(seconds: 60) } label: { Image(systemName: "goforward.60") }
-                            .accessibilityLabel("Add one minute")
-                        Button {
-                            restTimer.stop()
-                        } label: { Image(systemName: "xmark") }
-                            .accessibilityLabel("Skip rest")
+                            restAtOpen = max(0, Int(restTimer.remaining.rounded()))
+                            editingRest = true
+                        } label: {
+                            Text(restTimer.display)
+                                .font(.system(size: 28, weight: .heavy).monospacedDigit())
+                                .foregroundStyle(Theme.accent)
+                                .lineLimit(1)
+                                .frame(minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Edit remaining rest")
+                        .accessibilityValue(restTimer.display)
+                        .layoutPriority(1)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+
                 } else {
                     Button {
                         restTimer.start(seconds: restSeconds, exerciseName: restLabel)
@@ -2440,8 +2404,33 @@ private struct SessionBottomBar: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
+            if restTimer.isRunning {
+                    HStack(spacing: 12) {
+                        Button {
+                            restTimer.isPaused ? restTimer.resume() : restTimer.pause()
+                        } label: { Image(systemName: restTimer.isPaused ? "play.fill" : "pause.fill").frame(minWidth: 44, minHeight: 44) }
+                            .accessibilityLabel(restTimer.isPaused ? "Resume rest" : "Pause rest")
+                        Button { restTimer.add(seconds: -60) } label: { Image(systemName: "gobackward.60").frame(minWidth: 44, minHeight: 44) }
+                            .accessibilityLabel("Subtract one minute")
+                        Button { restTimer.add(seconds: 60) } label: { Image(systemName: "goforward.60").frame(minWidth: 44, minHeight: 44) }
+                            .accessibilityLabel("Add one minute")
+                        Button {
+                            restTimer.stop()
+                        } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
+                            .accessibilityLabel("Skip rest")
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(minHeight: 44)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 10)
+            }
         }
         .background(.bar)
+        .sheet(isPresented: $editingRest) {
+            DurationEditor(title: "Remaining rest", seconds: restAtOpen, zeroLabel: "End rest") {
+                restTimer.setRemaining(seconds: $0)
+            }
+        }
     }
 
     private func elapsedLabel(at date: Date) -> String {

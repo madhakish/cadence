@@ -21,6 +21,11 @@ global.localStorage = dom.window.localStorage;
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.error("FAIL:", m); } };
 const tick = () => new Promise((r) => setTimeout(r, 60));
+const waitFor = async (predicate) => {
+  const deadline = Date.now() + 2000;
+  while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+  if (!predicate()) throw new Error("Timed out waiting for the UI to finish saving");
+};
 const host = () => document.getElementById("view");
 
 const db = await import("../app/js/db.js");
@@ -329,10 +334,10 @@ for (const track of [
     plate.tabIndex === 0 && plate.dataset.plateDenomination && plate.getAttribute("aria-label")?.includes("plate")),
   "every visible plate exposes its exact denomination to keyboard and assistive technology");
   const plateBadge = barbell.plateBadgeSVG({ value: 20, unit: "kg" }, "steel");
-  ok(plateBadge.getAttribute("aria-label") === "20 kg plate"
+  ok(plateBadge.getAttribute("aria-hidden") === "true" && !plateBadge.hasAttribute("aria-label")
     && plateBadge.textContent.includes("20") && plateBadge.textContent.includes("kg")
     && plateBadge.querySelectorAll("circle").length >= 2,
-  "calculator rows use a large face-on plate key with visible denomination and unit");
+  "calculator badges keep visible denominations without duplicating the adjacent spoken label");
   ok(barbell.plateBadgeSVG({ value: 1.25, unit: "kg" }, "steel").textContent.includes("1.25"),
     "fractional plate badges preserve the exact denomination instead of rounding to one decimal");
   const collarSolution = solveAt(50);
@@ -833,7 +838,8 @@ for (let i = 0; i < 10; i++) {
   const sid = await session.createSessionFromProgramDay(prog, day);
   const workout = await db.Sessions.get(sid);
   workout.exercises.sort((a, b) => a.order - b.order);
-  for (const set of workout.exercises[0].sets || []) if (!set.isWarmup) set.status = "completed";
+  for (const set of workout.exercises[0].sets || []) set.status = "completed";
+  for (const set of workout.exercises[1].sets || []) if (set.isWarmup) set.status = "completed";
   const secondWork = (workout.exercises[1].sets || []).filter((set) => !set.isWarmup);
   secondWork.forEach((set, index) => { set.status = index === secondWork.length - 1 ? "planned" : "completed"; });
   const nextExerciseName = workout.exercises[2].exerciseName;
@@ -1269,19 +1275,27 @@ ok(reverseTotal?.textContent.includes("lb") && reverseTotal?.textContent.include
   "reverse mode always shows mixed bar-and-plate totals in both units");
 ok((reverseTotal?.compareDocumentPosition(reversePlateList) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
   "reverse mode keeps the dual-unit total above the plate controls");
-ok(plateOverlay.querySelectorAll("svg.plate-badge[aria-label$='plate']").length > 0,
-  "reverse controls keep plate numbers visible instead of relying on colour");
-const kg20Row = plateOverlay.querySelector('svg.plate-badge[aria-label="20 kg plate"]')?.closest(".row");
+const plateKeys = [...plateOverlay.querySelectorAll(".plate-key")];
+ok(plateKeys.length > 0 && plateKeys.every((key) => key.querySelector('svg.plate-badge[aria-hidden="true"]')
+  && key.querySelector(".title")?.textContent),
+"reverse rows keep visible plate numbers with only one spoken denomination");
+const plateRow = (label) => [...plateOverlay.querySelectorAll(".plate-key .title")]
+  .find((title) => title.textContent === label)?.closest(".row");
+const kg20Row = plateRow("20 kg");
 ok(kg20Row, "reverse mode exposes the 20 kg plate control");
+ok(kg20Row?.querySelector('.stepper button:first-child')?.getAttribute("aria-label") === "Remove one 20 kg plate per side"
+  && kg20Row?.querySelector('.stepper button:last-child')?.getAttribute("aria-label") === "Add one 20 kg plate per side",
+"reverse plate controls name their denomination and per-side action");
 kg20Row?.querySelector(".stepper button:last-child")?.click();
+ok(kg20Row?.querySelector('.stepper [aria-live="polite"]')?.textContent === "1",
+  "changing a plate count exposes the updated value for announcement");
 const mixedTotalLb = 45 + (2 * C.lbFromKg(20));
 const updatedMixedTotal = plateOverlay.querySelector(".dual-weight");
 ok(updatedMixedTotal.textContent.includes(C.trim(mixedTotalLb))
   && updatedMixedTotal.textContent.includes(C.trim(C.kgFromLb(mixedTotalLb))),
 "a 45 lb bar plus mirrored kg plates is converted exactly in both displayed totals");
-for (const label of ["15 kg plate", "10 kg plate"]) {
-  plateOverlay.querySelector(`svg.plate-badge[aria-label="${label}"]`)
-    ?.closest(".row")?.querySelector(".stepper button:last-child")?.click();
+for (const label of ["15 kg", "10 kg"]) {
+  plateRow(label)?.querySelector(".stepper button:last-child")?.click();
 }
 const gymSelect = [...plateOverlay.querySelectorAll(".field")]
   .find((field) => field.textContent.includes("Gym"))?.querySelector("select");
@@ -1310,6 +1324,65 @@ ok(session.complementaryEffortCueForEntry(
 ok(session.complementaryEffortCueForEntry(
   { programRole: "complementary", prescriptionStyle: "automatic" }, { movementGroup: "hinge" }, null,
 ) === null, "an orphaned automatic session stays silent when its focus cannot be recovered");
+
+// Exercise the production builder, storage, logger and detail pane, not just
+// a hand-built entry that already contains the expected style.
+await withCleanup(async (keep) => {
+  for (const originalFocus of ["strength", "hypertrophy"]) {
+    const pid = keep(db.Programs, await db.Programs.save({
+      name: `Fixture Frozen Style ${originalFocus}`, focus: originalFocus,
+      cycleNumber: 1, currentWeek: 1, nextDayIndex: 0, roundingLb: 5, isActive: false,
+      days: [{ name: "Fixture Pull", order: 0, lifts: [{
+        exerciseName: "Deadlift", role: "complementary", prescription: "automatic",
+        baseWeightLb: 200, estimatedMaxLb: 260, stallCount: 0, lastIncrementLb: 0,
+      }], accessories: [] }],
+    }));
+    const program = await db.Programs.get(pid);
+    const sid = keep(db.Sessions, await session.createSessionFromProgramDay(program, program.days[0]));
+    const initial = await db.Sessions.get(sid);
+    const expectedStyle = originalFocus === "strength" ? "secondary" : "hypertrophy";
+    ok(initial.exercises[0].prescriptionStyle === expectedStyle,
+      "[INV-SESSION-STYLE-IS-FROZEN] new sessions store the resolved style, not automatic");
+    ok((await db.Programs.get(pid)).days[0].lifts[0].prescription === "automatic",
+      "[INV-SESSION-STYLE-IS-FROZEN] freezing a session does not change the program slot's requested style");
+    const exported = (await db.exportBundle()).sessions.find((workout) => workout.programTag?.programId === program.uuid);
+    ok(exported?.exercises[0].prescriptionStyle === expectedStyle,
+      "[INV-SESSION-STYLE-IS-FROZEN] backups carry the resolved style in the existing field");
+    const performed = initial.exercises[0].sets.find((set) => !set.isWarmup);
+    performed.status = "completed";
+    performed.weightLb -= 5;
+    performed.flags = ["clean", "rir2"];
+    await db.Sessions.save(initial);
+    const originalSets = JSON.stringify(initial.exercises[0].sets);
+    program.focus = originalFocus === "strength" ? "hypertrophy" : "strength";
+    await db.Programs.save(program);
+    for (const orphaned of [false, true]) {
+      if (orphaned) await db.Programs.del(pid);
+      await session.openSession(sid); await tick();
+      const overlay = [...document.querySelectorAll(".overlay")].at(-1);
+      const cue = overlay.querySelector(".effort-cue");
+      ok(!!cue === (originalFocus === "strength"),
+        `[INV-SESSION-STYLE-IS-FROZEN] logger keeps ${expectedStyle} after program ${orphaned ? "deletion" : "edit"}`);
+      overlay.querySelector('button[aria-label="Deadlift — muscles, history, and settings"]')?.click();
+      await tick();
+      const detail = [...document.querySelectorAll(".overlay")].at(-1);
+      ok(detail !== overlay && !!detail.querySelector(".current-prescription")
+        && detail.querySelector(".current-prescription").textContent.includes("2–3 reps left") === (originalFocus === "strength"),
+      "[INV-SESSION-STYLE-IS-FROZEN] the exercise detail agrees with the stored session");
+      if (detail !== overlay) detail.querySelector(".overlay-head button").click();
+      overlay.querySelector(".overlay-head button").click();
+      const reopened = await db.Sessions.get(sid);
+      ok(JSON.stringify(reopened.exercises[0].sets) === originalSets,
+        "[INV-SESSION-STYLE-IS-FROZEN] reopening never rewrites planned or performed sets");
+    }
+  }
+  // Hostless native tests cannot compile ProgramSession's HealthKit-linked
+  // dependency. Pin this write-site wiring in addition to Swift core tests.
+  const nativeBuilder = await (await import("node:fs/promises")).readFile(
+    new URL("../../Cadence/Services/ProgramSession.swift", import.meta.url), "utf8");
+  ok(/entry\.prescriptionStyleRaw = prescription\.resolvedStyle\.rawValue/.test(nativeBuilder),
+    "[INV-SESSION-STYLE-IS-FROZEN] native creation stores the engine's resolved style");
+})();
 
 {
   const deadlift = await db.Exercises.byName("Deadlift");
@@ -1451,16 +1524,16 @@ ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips
   const pick = (label) => [...reference().querySelectorAll(".seg button")].find((b) => b.textContent === label).click();
   pick("Kilograms");
   let rows = [...reference().querySelectorAll(".plate-reference-row")];
-  ok(rows.length === 7 && rows[0].textContent.includes("Red") && rows[0].textContent.includes("25 kg")
-      && rows[0].textContent.includes("55.12 lb") && rows[6].textContent.includes("1.25 kg"),
-    "the kilogram family lists seven IWF/IPF plates with their pound conversion");
+  ok(rows.length === 11 && rows[0].textContent.includes("Red") && rows[0].textContent.includes("25 kg")
+      && rows[0].textContent.includes("55.12 lb") && rows[8].textContent.includes("1.25 kg"),
+    "the kilogram reference includes IWF change plates and the IPF 1.25 kg with pound conversions");
   pick("Pounds");
   rows = [...reference().querySelectorAll(".plate-reference-row")];
   ok(rows.length === 7 && rows[0].textContent.includes("Red") && rows[0].textContent.includes("55 lb")
       && rows[0].textContent.includes("24.95 kg") && rows[4].textContent.includes("White") && rows[5].textContent.includes("Black"),
     "the pound family lists the manufacturer colours with their kilogram conversion");
   ok(C.STANDARD_LB.every((p) => p.value !== 55) && C.ALL_STANDARD.every((p) => p.value !== 55)
-      && /reference only/i.test(reference().textContent),
+      && /does not add plates/i.test(reference().textContent),
     "the 55 lb disc is a recognition row only — inventory and solver lists never carry it");
   ok(reference().open, "choosing a family keeps the reference open");
   calc().querySelector(".overlay-head button").click(); await tick();
@@ -1484,7 +1557,7 @@ ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips
   settings.exerciseDetail(plain);
   await tick();
   let screen = [...document.querySelectorAll(".overlay")].pop();
-  ok(screen && screen.textContent.includes("Default (Settings)"),
+  ok(screen && screen.textContent.includes("Use default from Settings"),
     "a rest override at zero says its default comes from Settings, as native does");
   screen.querySelector(".overlay-head button").click();
 
@@ -3884,12 +3957,12 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     && [...svg.querySelectorAll("image.anatomy-reference")].every((image) => image.dataset.species === "gorilla"
       && image.dataset.source === "exact-reference" && image === image.parentElement.firstElementChild)
     && svg.querySelectorAll("g.anatomy-figure-panel").length === 2
-    && svg.querySelectorAll("g.anatomy-highlight-layer").length === 1,
+    && [...svg.querySelectorAll("g.anatomy-figure-panel")].every(panel => panel.querySelector("image.anatomy-region-mask")),
   "the anatomy view uses the exact supplied gorilla drawings beneath the muscle washes");
   ok(A.muscleProfile("Face Pulls", "pull").primary[0] === "reardelts",
     "face pulls highlight rear delts instead of the generic shoulder cap");
-  ok(svg.querySelectorAll('path[fill="#e0453a"]').length >= 2, "primary movers highlighted red");
-  ok(svg.querySelectorAll('path[fill="var(--forged-steel)"]').length >= 1,
+  ok(svg.querySelectorAll('image.anatomy-region-mask.primary').length >= 2, "primary movers use red-tinted registered masks");
+  ok(svg.querySelectorAll('image.anatomy-region-mask.supporting').length >= 1,
     "supporting muscles use the restrained forged-steel treatment");
   ok(svg.querySelectorAll("image.anatomy-region-mask.primary").length >= 2
     && svg.querySelectorAll("image.anatomy-region-mask.supporting").length >= 1,
@@ -3920,14 +3993,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const anatomyStyles = await readFile(new URL("../app/styles.css", import.meta.url), "utf8");
   ok(anatomyStyles.includes(".anatomy-figure-panel")
     && anatomyStyles.includes("mask-image: radial-gradient(ellipse closest-side")
-    && anatomyStyles.includes(".anatomy-highlight-layer { filter: blur(2.1px); }"),
+    && anatomyStyles.includes("blur(.35px)"),
   "anatomy art feathers into its card and colour washes have softened boundaries");
-  const frontTraps = A.VITRUVIAN_FRONT_REGIONS.find((region) => region.id === "traps");
-  ok(Math.min(...frontTraps.points.map((point) => point[1])) >= 55
-    && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms").length === 4
-    && A.VITRUVIAN_FRONT_REGIONS.filter((region) => region.id === "forearms")
-      .every((region) => Math.max(...region.points.map((point) => point[1])) <= 85),
-  "front washes align to the ape's neck and both Vitruvian arm poses");
 }
 
 // ---- program: a cycle-scoped swap reverts at rollover (issue 20) ----
@@ -4410,8 +4477,11 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   // Back must repaint the logger, or the card keeps showing the pre-edit
   // state: bump the lift's own rest and check the ⏱ chip caught up.
   const restRow = [...detail.querySelectorAll(".row")].find((r) => r.textContent.startsWith("Rest"));
-  const plus = [...restRow.querySelectorAll(".stepper button")].pop();
-  plus.click(); await tick(); // Default → 0:15 of the lift's own rest
+  restRow.querySelector(".duration-value").click(); await tick();
+  const durationDialog = [...document.querySelectorAll(".sheet")].pop();
+  const secondsField = durationDialog.querySelector('input[aria-label="Seconds"]');
+  secondsField.value = "15"; secondsField.dispatchEvent(new window.Event("input"));
+  durationDialog.querySelector('button[type="submit"]').click(); await tick();
   detail.querySelector(".overlay-head button").click(); await tick();
   const replacementTitle = [...logger.querySelectorAll(".title")]
     .find((candidate) => candidate.textContent === "Deadlift");
@@ -4874,7 +4944,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const plannedStatus = overlay.querySelector('button[aria-label^="Status: planned"]');
   ok(plannedStatus, "the never-ticked set shows its planned status");
   plannedStatus.click(); await tick();
-  editBtn.click(); await tick(); // Save
+  editBtn.click(); await waitFor(() => editBtn.textContent === "Edit"); // Save includes milestone rebuild
 
   const corrected = await db.Sessions.get(sid);
   const [reweighed, ticked] = corrected.exercises[0].sets;
@@ -4897,7 +4967,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   editBtn.click(); await tick();
   const kgInput = [...overlay.querySelectorAll('input[aria-label^="Weight"]')][0];
   kgInput.dispatchEvent(new window.Event("input", { bubbles: true }));
-  editBtn.click(); await tick(); // Save
+  editBtn.click(); await waitFor(() => editBtn.textContent === "Edit"); // Save includes milestone rebuild
   ok((await db.Sessions.get(sid)).exercises[0].sets[0].weightLb === 205,
     "[INV-BANKED-SETS-CORRECTABLE] an untouched kg field never drifts the stored pounds");
   ui.prefs.unitDisplay = "lbPrimary";

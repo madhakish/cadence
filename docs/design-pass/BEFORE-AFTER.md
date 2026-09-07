@@ -1,5 +1,10 @@
 # iPhone design-pass proof
 
+**Historical captures:** the pairs below belong to the stated older commits.
+They do not verify the combined PR #201 candidate, its themes, duration editor,
+or approved PR #205 anatomy masks. See [current readiness](BUILD-READINESS.md).
+
+
 These are simulator captures, not mockups. The baseline checks out the exact
 PR base (`11895fb95cde9e4b938831098d00dd0350b45bc2`); the final capture runs the
 production views at candidate head
