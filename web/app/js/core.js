@@ -4084,3 +4084,185 @@ export function activityWorkload(durationSeconds, sessionRPE) {
   const durationMinutes = durationSeconds / 60;
   return { durationMinutes, sessionRPE, arbitraryUnits: durationMinutes * sessionRPE };
 }
+
+// TFH policy. These bounded decisions are design rules, not fitted physiological
+// curves. Mirrors TFHProgression.swift. Inputs are immutable authored targets
+// plus canonical completed work; no cached stall counter participates.
+const TFH_TOLERANCE = 0.001;
+const tfhSame = (a, b) => Number.isFinite(a) && Number.isFinite(b)
+  && Math.abs(a - b) <= TFH_TOLERANCE;
+const tfhIntent = anchor => anchor.intent || "develop";
+
+function tfhValidAnchor(a) {
+  return a && typeof a.id === "string" && a.id.length > 0
+    && typeof a.exerciseId === "string" && a.exerciseId.length > 0
+    && Number.isFinite(a.weightLb) && a.weightLb >= 0
+    && Number.isInteger(a.minReps) && a.minReps > 0
+    && Number.isInteger(a.maxReps) && a.maxReps >= a.minReps && a.maxReps <= 1000
+    && Array.isArray(a.reps) && a.reps.length > 0 && a.reps.length <= 10
+    && a.reps.every(r => Number.isInteger(r) && r >= a.minReps && r <= a.maxReps)
+    && ["totalBar", "perImplement", "externalTotal", "bodyweight", "assisted"].includes(a.loadBasis)
+    && Number.isInteger(a.implementCount) && a.implementCount > 0
+    && Number.isFinite(a.incrementLb) && a.incrementLb >= 0
+    && ["loadFirst", "repsFirst", "bodyweight", "assisted"].includes(a.mode)
+    && ["develop", "maintain", "practice"].includes(tfhIntent(a))
+    && (a.loadBasis !== "bodyweight" || a.weightLb === 0);
+}
+
+function tfhHistory(anchor, exposures, cycle, rotation) {
+  return exposures.filter(e => e.anchorId === anchor.id && e.exerciseId === anchor.exerciseId
+    && Number.isInteger(e.cycle) && e.cycle > 0
+    && [1,2,3].includes(e.rotation)
+    && (e.cycle < cycle || (e.cycle === cycle && e.rotation < rotation)))
+    .sort((a,b) => a.cycle - b.cycle || a.rotation - b.rotation);
+}
+
+function tfhPlanSets(anchor, e) {
+  return Array.isArray(e.sets) && e.sets.length === anchor.reps.length
+    && e.sets.every(s => Number.isFinite(s.plannedWeightLb) && s.plannedWeightLb >= 0
+      && Number.isInteger(s.plannedReps) && s.plannedReps > 0 && s.plannedReps <= 1000
+      && s.loadBasis === anchor.loadBasis && s.implementCount === anchor.implementCount
+      && !!s.isPerSide === !!anchor.isPerSide);
+}
+
+function tfhUsableSets(anchor, e) {
+  return tfhPlanSets(anchor, e) && e.sets.every(s => s.status === "completed"
+    && s.quality === "clean" && !s.stoppedEarly && !s.hasBodyFlag
+    && Number.isFinite(s.weightLb) && s.weightLb >= 0
+    && Number.isInteger(s.reps) && s.reps > 0 && s.reps <= 1000);
+}
+
+function tfhAmbiguous(history) {
+  const keys = history.map(e => `${e.cycle}:${e.rotation}`);
+  return new Set(keys).size !== keys.length;
+}
+
+export function tfhProject(anchor, exposures, cycle, rotation) {
+  if (!tfhValidAnchor(anchor) || !Number.isInteger(cycle) || cycle < 1
+      || ![1,2,3,4].includes(rotation)) return null;
+  const plan = { weightLb: anchor.weightLb, reps: [...anchor.reps], benchmark: false,
+    state: "learning", reason: "Starting from the authored TFH targets.", evidenceIds: [] };
+  let history = tfhHistory(anchor, exposures, cycle, rotation);
+  const ambiguous = tfhAmbiguous(history);
+  // An imported duplicate is ambiguous evidence, never another earned step.
+  if (ambiguous) {
+    history = [];
+    plan.reason = "More than one exposure occupies a TFH phase; review the history.";
+  }
+  // Match R1 to prior R1, R2 to prior R2, R3 to prior R3. During the first
+  // cycle, the previous completed build phase can seed the next exposure.
+  const matched = history.filter(e => e.rotation === rotation);
+  const reference = matched.at(-1) || history.at(-1);
+  if (reference && tfhPlanSets(anchor, reference)) {
+    const sets = reference.sets;
+    const uniformLoad = sets.every(s => tfhSame(s.plannedWeightLb, sets[0].plannedWeightLb));
+    if (uniformLoad) {
+      plan.weightLb = sets[0].plannedWeightLb;
+      plan.reps = sets.map(s => Math.min(anchor.maxReps, Math.max(anchor.minReps, s.plannedReps)));
+      plan.evidenceIds = [reference.id];
+    }
+    const made = uniformLoad && tfhUsableSets(anchor, reference) && sets.every(s => tfhSame(s.weightLb, s.plannedWeightLb)
+      && s.reps >= s.plannedReps);
+    plan.state = "hold";
+    plan.reason = "Repeat the comparable prescription; more work has not been earned.";
+    if (made && tfhIntent(anchor) === "develop" && rotation !== 4) {
+      const index = plan.reps.findIndex(r => r < anchor.maxReps);
+      if (index >= 0) {
+        plan.reps[index] += 1;
+        plan.state = "progress";
+        plan.reason = "Add one total work rep while preserving the load and number of sets.";
+      } else {
+        // Two successful matching-phase exposures at the top of the range
+        // are required before reducing reps to introduce a new load.
+        const top = history.filter(e => e.rotation === reference.rotation
+          && tfhUsableSets(anchor, e) && e.sets.every(s => tfhSame(s.weightLb, plan.weightLb)
+            && tfhSame(s.plannedWeightLb, plan.weightLb)
+            && s.plannedReps >= anchor.maxReps && s.reps >= s.plannedReps));
+        const step = anchor.incrementLb;
+        const relativeStep = plan.weightLb > 0 ? step / plan.weightLb : Infinity;
+        const canLoad = anchor.loadBasis !== "bodyweight" && anchor.mode !== "bodyweight"
+          && step > 0 && relativeStep <= 0.10 + TFH_TOLERANCE && top.length >= 2;
+        if (canLoad && (anchor.loadBasis !== "assisted" || step <= plan.weightLb)) {
+          plan.weightLb += anchor.loadBasis === "assisted" ? -step : step;
+          plan.reps = plan.reps.map(() => anchor.minReps);
+          plan.state = "progress";
+          plan.reason = "Two matching top-range exposures support one equipment step; reps restart at the authored minimum.";
+          plan.evidenceIds = top.slice(-2).map(e => e.id);
+        } else {
+          plan.reason = "The rep range is complete. Hold while the next equipment step or skill change is reviewed.";
+        }
+      }
+    }
+  }
+  if (tfhIntent(anchor) !== "develop") {
+    plan.state = tfhIntent(anchor) === "maintain" ? "maintain" : "practice";
+    plan.reason = "Preserve the authored capability while other priorities develop.";
+  }
+  if (rotation === 4) {
+    plan.reps = plan.reps.slice(0, Math.max(1, Math.ceil(plan.reps.length / 2)))
+      .map(() => anchor.minReps);
+    if (anchor.loadBasis !== "bodyweight" && anchor.loadBasis !== "assisted") {
+      const step = anchor.incrementLb;
+      plan.weightLb = step > 0 ? Math.floor((plan.weightLb * 0.8 + 1e-9) / step) * step : plan.weightLb * 0.8;
+    }
+    plan.state = "recover";
+    plan.reason = "Light recovery work; no progression or capacity test.";
+  }
+  plan.benchmark = !ambiguous && rotation === 3 && tfhIntent(anchor) === "develop" && anchor.benchmarkEnabled !== false;
+  return plan;
+}
+
+export function tfhPlateau(anchor, exposures, completedCycles, currentCycle) {
+  const result = (state, reason, evidenceIds = []) => ({state, reason, evidenceIds});
+  if (!tfhValidAnchor(anchor)) return result("learning", "TFH targets are incomplete.");
+  if (tfhIntent(anchor) !== "develop") return result("notAssessing",
+    "Intentional maintenance and skill practice are not plateau attempts.");
+  const cycles = [...new Set(completedCycles)].filter(c => Number.isInteger(c) && c > 0 && c < currentCycle)
+    .sort((a,b) => a-b).slice(-3);
+  if (cycles.length < 3 || cycles[2] - cycles[0] !== 2) return result("learning",
+    "A complete baseline and two subsequent complete comparable cycles are required.");
+  const history = tfhHistory(anchor, exposures, currentCycle, 1).filter(e => cycles.includes(e.cycle));
+  if (history.length !== 9 || tfhAmbiguous(history) || history.some(e => !tfhUsableSets(anchor, e))) {
+    return result("learning", "The three-cycle evidence is incomplete or ambiguous.");
+  }
+  const ids = history.map(e => e.id);
+  let changedContext = false;
+  let declined = false;
+  for (let c = 1; c < cycles.length; c++) {
+    for (let rotation = 1; rotation <= 3; rotation++) {
+      const old = history.find(e => e.cycle === cycles[c-1] && e.rotation === rotation);
+      const next = history.find(e => e.cycle === cycles[c] && e.rotation === rotation);
+      const sameLoads = old.sets.every((s,i) => tfhSame(s.weightLb, next.sets[i].weightLb));
+      const oldReps = old.sets.reduce((t,s) => t+s.reps,0);
+      const nextReps = next.sets.reduce((t,s) => t+s.reps,0);
+      // More performed reps at the same load are positive evidence, even
+      // when the changed preceding work makes an AMRAP comparison invalid.
+      if (sameLoads && nextReps > oldReps) return result("progressing", "More clean work at the same load.", ids);
+      const harder = old.sets.every((s,i) => anchor.loadBasis === "assisted"
+        ? next.sets[i].weightLb <= s.weightLb : next.sets[i].weightLb >= s.weightLb);
+      if (!sameLoads && harder && next.sets.every((s,i) => s.reps >= old.sets[i].reps)) {
+        return result("progressing", "The same or greater work was completed at a harder load.", ids);
+      }
+      if (!sameLoads || oldReps !== nextReps) changedContext = true;
+      if (sameLoads && nextReps < oldReps) declined = true;
+      if (!old.context || old.context !== next.context) changedContext = true;
+    }
+  }
+  if (declined) return result("review", "Comparable performance fell; review recovery and workload.", ids);
+  if (changedContext) return result("learning", "Changed load or context prevents a flat-capacity comparison.", ids);
+  const peaks = history.filter(e => e.rotation === 3);
+  for (const e of peaks) {
+    const last = e.sets.at(-1);
+    if (!last.benchmark || last.stopReason !== "technicalLimit"
+        || !Number.isFinite(last.restSeconds) || last.restSeconds <= 0) {
+      return result("learning", "A comparable uncapped technical benchmark is missing.", ids);
+    }
+    const base = peaks[0];
+    if (!tfhSame(last.restSeconds, base.sets.at(-1).restSeconds)
+        || e.sets.slice(0,-1).some((s,i) => s.reps !== base.sets[i].reps
+          || !tfhSame(s.weightLb, base.sets[i].weightLb))) {
+      return result("learning", "Benchmark rest or preceding work changed.", ids);
+    }
+  }
+  return result("possiblePlateau", "No measurable improvement across two complete cycles after the baseline. Review the plan.", ids);
+}
