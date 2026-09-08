@@ -16,6 +16,10 @@ no quotes.
 [Build your first program](docs/tutorials/first-program.md) or
 [pick a pre-programmed style](docs/how-to/start-from-a-style.md).
 
+The [TFH policy prototype](docs/explanation/tfh-method.md) documents ongoing
+work on development, maintenance, and practice across useful capabilities.
+It is not yet connected to live program prescriptions or coaching.
+
 ## What it does
 
 - **Plate math calculator** — the killer feature, one tap from anywhere

@@ -12,7 +12,6 @@ public struct TFHAnchor: Codable, Equatable, Sendable {
     public var minReps: Int
     public var maxReps: Int
     public var incrementLb: Double
-    public var mode: String
     public var loadBasis: LoadBasis
     public var implementCount: Int
     public var isPerSide: Bool
@@ -20,12 +19,12 @@ public struct TFHAnchor: Codable, Equatable, Sendable {
     public var benchmarkEnabled: Bool
 
     public init(id: String, exerciseId: String, weightLb: Double, reps: [Int],
-                minReps: Int, maxReps: Int, incrementLb: Double, mode: String,
+                minReps: Int, maxReps: Int, incrementLb: Double,
                 loadBasis: LoadBasis, implementCount: Int, isPerSide: Bool = false,
-                intent: TFHIntent = .develop, benchmarkEnabled: Bool = true) {
+                intent: TFHIntent = .develop, benchmarkEnabled: Bool = false) {
         self.id = id; self.exerciseId = exerciseId; self.weightLb = weightLb; self.reps = reps
         self.minReps = minReps; self.maxReps = maxReps; self.incrementLb = incrementLb
-        self.mode = mode; self.loadBasis = loadBasis; self.implementCount = implementCount
+        self.loadBasis = loadBasis; self.implementCount = implementCount
         self.isPerSide = isPerSide; self.intent = intent; self.benchmarkEnabled = benchmarkEnabled
     }
 
@@ -34,7 +33,6 @@ public struct TFHAnchor: Codable, Equatable, Sendable {
             && minReps > 0 && maxReps >= minReps && maxReps <= 1000 && !reps.isEmpty && reps.count <= 10
             && reps.allSatisfy { $0 >= minReps && $0 <= maxReps }
             && implementCount > 0 && incrementLb.isFinite && incrementLb >= 0
-            && ["loadFirst", "repsFirst", "bodyweight", "assisted"].contains(mode)
             && (loadBasis != .bodyweight || weightLb == 0)
     }
 }
@@ -123,6 +121,7 @@ public enum TFHProgression {
         e.sets.count == a.reps.count && e.sets.allSatisfy { s in
             guard let plannedWeight = s.plannedWeightLb, let plannedReps = s.plannedReps else { return false }
             return plannedWeight.isFinite && plannedWeight >= 0 && plannedReps > 0 && plannedReps <= 1000
+                && (a.loadBasis != .bodyweight || plannedWeight == 0)
                 && s.loadBasis == a.loadBasis && s.implementCount == a.implementCount
                 && s.isPerSide == a.isPerSide
         }
@@ -132,6 +131,13 @@ public enum TFHProgression {
         planSets(a, e) && e.sets.allSatisfy { s in
             s.status == "completed" && s.quality == "clean" && !s.stoppedEarly && !s.hasBodyFlag
                 && s.weightLb.isFinite && s.weightLb >= 0 && s.reps > 0 && s.reps <= 1000
+                && (a.loadBasis != .bodyweight || s.weightLb == 0)
+        }
+    }
+
+    private static func made(_ a: TFHAnchor, _ e: TFHExposure) -> Bool {
+        usable(a, e) && e.sets.allSatisfy {
+            same($0.weightLb, $0.plannedWeightLb) && $0.reps >= ($0.plannedReps ?? Int.max)
         }
     }
 
@@ -144,40 +150,46 @@ public enum TFHProgression {
         guard a.isValid, cycle > 0, (1...4).contains(rotation) else { return nil }
         var plan = TFHPrescription(weightLb: a.weightLb, reps: a.reps, benchmark: false,
                                   state: "learning", reason: "Starting from the authored TFH targets.", evidenceIds: [])
-        var history = history(a, exposures, cycle, rotation)
-        let isAmbiguous = ambiguous(history)
-        if isAmbiguous {
-            history = []
-            plan.reason = "More than one exposure occupies a TFH phase; review the history."
-        }
+        let history = history(a, exposures, cycle, rotation)
+        // Abstain instead of silently resetting progressed work to the starting anchor.
+        guard !ambiguous(history) else { return nil }
         let reference = history.last(where: { $0.rotation == rotation }) ?? history.last
-        if let reference, planSets(a, reference) {
+        let recentWorkSupportsProgress = history.last.map { made(a, $0) } ?? true
+        if let reference {
+            guard planSets(a, reference), reference.sets.allSatisfy({
+                guard let reps = $0.plannedReps else { return false }
+                return reps >= a.minReps && reps <= a.maxReps
+            }) else { return nil }
             let sets = reference.sets
             let uniform = sets.allSatisfy { same($0.plannedWeightLb, sets[0].plannedWeightLb) }
+            guard uniform else { return nil }
             if uniform, let weight = sets[0].plannedWeightLb {
                 plan.weightLb = weight
-                plan.reps = sets.map { min(a.maxReps, max(a.minReps, $0.plannedReps ?? a.minReps)) }
+                plan.reps = sets.compactMap(\.plannedReps)
                 plan.evidenceIds = [reference.id]
             }
-            let made = uniform && usable(a, reference) && sets.allSatisfy { same($0.weightLb, $0.plannedWeightLb) && $0.reps >= ($0.plannedReps ?? Int.max) }
+            let earned = uniform && made(a, reference) && recentWorkSupportsProgress
             plan.state = "hold"
             plan.reason = "Repeat the comparable prescription; more work has not been earned."
-            if made && a.intent == .develop && rotation != 4 {
+            if earned && a.intent == .develop && rotation != 4 {
                 if let index = plan.reps.firstIndex(where: { $0 < a.maxReps }) {
                     plan.reps[index] += 1
                     plan.state = "progress"
                     plan.reason = "Add one total work rep while preserving the load and number of sets."
                 } else {
-                    let top = history.filter { e in
-                        e.rotation == reference.rotation && usable(a, e) && e.sets.allSatisfy { s in
+                    let top = Array(history.filter { $0.rotation == reference.rotation }.suffix(2))
+                    let topIsConsecutive = top.count == 2 && top[1].cycle - top[0].cycle == 1
+                    let topIsComplete = topIsConsecutive && top.allSatisfy { e in
+                        usable(a, e) && e.sets.allSatisfy { s in
                             same(s.weightLb, plan.weightLb) && same(s.plannedWeightLb, plan.weightLb)
                                 && (s.plannedReps ?? 0) >= a.maxReps && s.reps >= (s.plannedReps ?? Int.max)
                         }
                     }
                     let step = a.incrementLb
                     let relativeStep = plan.weightLb > 0 ? step / plan.weightLb : Double.infinity
-                    let canLoad = a.loadBasis != .bodyweight && a.mode != "bodyweight"
-                        && step > 0 && relativeStep <= 0.10 + tolerance && top.count >= 2
+                    // TFH candidate guard, not a measured physiological threshold.
+                    let canLoad = a.loadBasis != .bodyweight && step > 0
+                        && relativeStep <= 0.10 + 1e-9 && topIsComplete
                     if canLoad && (a.loadBasis != .assisted || step <= plan.weightLb) {
                         plan.weightLb += a.loadBasis == .assisted ? -step : step
                         plan.reps = plan.reps.map { _ in a.minReps }
@@ -203,7 +215,8 @@ public enum TFHProgression {
             plan.state = "recover"
             plan.reason = "Light recovery work; no progression or capacity test."
         }
-        plan.benchmark = !isAmbiguous && rotation == 3 && a.intent == .develop && a.benchmarkEnabled
+        plan.benchmark = recentWorkSupportsProgress && rotation == 3
+            && a.intent == .develop && a.benchmarkEnabled
         return plan
     }
 
@@ -212,12 +225,12 @@ public enum TFHProgression {
         func result(_ state: String, _ reason: String, _ ids: [String] = []) -> TFHAssessment {
             TFHAssessment(state: state, reason: reason, evidenceIds: ids)
         }
-        guard a.isValid else { return result("learning", "TFH targets are incomplete.") }
+        guard a.isValid, currentCycle > 0 else { return result("learning", "TFH targets are incomplete.") }
         guard a.intent == .develop else {
             return result("notAssessing", "Intentional maintenance and skill practice are not plateau attempts.")
         }
         let cycles = Array(Set(completedCycles).filter { $0 > 0 && $0 < currentCycle }.sorted().suffix(3))
-        guard cycles.count == 3, cycles[2] - cycles[0] == 2 else {
+        guard cycles.count == 3, cycles[2] - cycles[0] == 2, cycles[2] == currentCycle - 1 else {
             return result("learning", "A complete baseline and two subsequent complete comparable cycles are required.")
         }
         let history = history(a, exposures, currentCycle, 1).filter { cycles.contains($0.cycle) }
@@ -227,6 +240,7 @@ public enum TFHProgression {
         let ids = history.map(\.id)
         var changed = false
         var declined = false
+        var progressReason: String?
         for c in 1..<cycles.count {
             for rotation in 1...3 {
                 guard let old = history.first(where: { $0.cycle == cycles[c - 1] && $0.rotation == rotation }),
@@ -236,21 +250,23 @@ public enum TFHProgression {
                 let sameLoads = zip(old.sets, next.sets).allSatisfy { same($0.weightLb, $1.weightLb) }
                 let oldReps = old.sets.reduce(0) { $0 + $1.reps }
                 let nextReps = next.sets.reduce(0) { $0 + $1.reps }
-                if sameLoads && nextReps > oldReps {
-                    return result("progressing", "More clean work at the same load.", ids)
+                let comparableContext = old.context != nil && old.context != "" && old.context == next.context
+                if comparableContext && sameLoads && nextReps > oldReps {
+                    progressReason = "More clean work at the same load."
                 }
                 let harder = zip(old.sets, next.sets).allSatisfy {
                     a.loadBasis == .assisted ? $1.weightLb <= $0.weightLb : $1.weightLb >= $0.weightLb
                 }
-                if !sameLoads && harder && zip(old.sets, next.sets).allSatisfy({ $1.reps >= $0.reps }) {
-                    return result("progressing", "The same or greater work was completed at a harder load.", ids)
+                if comparableContext && !sameLoads && harder && zip(old.sets, next.sets).allSatisfy({ $1.reps >= $0.reps }) {
+                    progressReason = "The same or greater work was completed at a harder load."
                 }
                 if !sameLoads || oldReps != nextReps { changed = true }
-                if sameLoads && nextReps < oldReps { declined = true }
-                if old.context == nil || old.context == "" || old.context != next.context { changed = true }
+                if comparableContext && sameLoads && nextReps < oldReps { declined = true }
+                if !comparableContext { changed = true }
             }
         }
         if declined { return result("review", "Comparable performance fell; review recovery and workload.", ids) }
+        if let progressReason { return result("progressing", progressReason, ids) }
         if changed { return result("learning", "Changed load or context prevents a flat-capacity comparison.", ids) }
         let peaks = history.filter { $0.rotation == 3 }
         for e in peaks {
