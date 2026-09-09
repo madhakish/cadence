@@ -30,13 +30,25 @@ function suggestion(program, history) {
     .find((item) => item.change.type === "useDumbbellRepProgression");
 }
 
+test("conversion preserves completed work within the three-set rep window", () => {
+  for (const [sets, reps, expected] of [[3, 3, 4], [4, 3, 4], [5, 3, 5], [6, 3, 6], [3, 6, 6], [5, 4, null]]) {
+    const { program, history } = fixture();
+    const entry = history[0].exercises[0];
+    entry.plannedSets = sets;
+    entry.sets = Array.from({ length: sets }, () => ({ ...entry.sets[0], reps }));
+    const result = suggestion(program, history);
+    assert.equal(result?.change.currentReps ?? null, expected, `${sets}×${reps} transition`);
+    if (result) assert.ok(3 * result.change.currentReps >= sets * reps, "conversion cannot discard completed volume");
+  }
+});
+
 test("collapsed wave offers an earned rep target at the performed dumbbell load", () => {
   const { program, history } = fixture();
   const before = JSON.stringify({ program, history });
   const result = suggestion(program, history);
   assert.ok(result, "the repeated load/peak target needs an actionable rep-progression proposal");
   assert.equal(result.change.weightLb, 85);
-  assert.equal(result.change.currentReps, 4);
+  assert.equal(result.change.currentReps, 5);
   assert.match(result.explanation, /3–6/);
   assert.equal(JSON.stringify({ program, history }), before, "evaluation is read-only");
 });
@@ -95,7 +107,7 @@ test("latest failure blocks older success; bonus reps cannot inflate the convers
   bad.exercises[0].sets[0].reps = 2;
   assert.equal(suggestion(program, [...history, bad]), undefined);
   history[0].exercises[0].sets.push({ ...history[0].exercises[0].sets[0], reps: 10 });
-  assert.equal(suggestion(program, history).change.currentReps, 4);
+  assert.equal(suggestion(program, history).change.currentReps, 5);
 });
 
 test("open workouts guard conversion without entering readiness history", () => {
@@ -136,16 +148,16 @@ test("acceptance changes one slot, clears wave pending state, and preserves hist
   const recommendation = suggestion(program, history);
   const before = structuredClone(program);
   const message = await applyCoachingRecommendation(program, recommendation, exercises, history);
-  assert.match(message, /3×4 at 85 lb each/);
+  assert.match(message, /3×5 at 85 lb each/);
   assert.deepEqual([lift.prescription, lift.baseWeightLb, lift.doubleProgressionSets, lift.minimumReps,
-    lift.maximumReps, lift.currentReps], ["doubleProgression", 85, 3, 3, 6, 4]);
+    lift.maximumReps, lift.currentReps], ["doubleProgression", 85, 3, 3, 6, 5]);
   assert.equal(lift.pending, undefined);
   assert.equal(lift.stallCount, 0); assert.equal(lift.lastIncrementLb, 0);
   assert.equal(JSON.stringify(history), originalHistory);
   assert.equal(JSON.stringify(other), originalOther);
   assert.deepEqual([program.cycleNumber, program.currentWeek, program.nextDayIndex], [1, 3, 0]);
   assert.equal(coachingDecision(program, recommendation, "accepted", [], before).afterValue,
-    "dumbbellReps:slot:db-slot:3x4@85:range:3-6");
+    "dumbbellReps:slot:db-slot:3x5@85:range:3-6");
   assert.equal(suggestion(program, history), undefined);
   await assert.rejects(applyCoachingRecommendation(program, recommendation, exercises, history));
 });
@@ -174,7 +186,7 @@ test("converted slot earns reps, holds a miss, earns one rack step, and preserve
   const perf = (reps) => ({ completedSets: 3, minRepsAchieved: reps, anyStoppedEarly: false,
     performedAtPlannedLoad: true, grindyOrWobbleSets: 0, bodyFlagSets: 0 });
   const held = C.advanceAccessory(state, perf(3));
-  assert.deepEqual([held.currentReps, held.weightLb], [4, 85]);
+  assert.deepEqual([held.currentReps, held.weightLb], [5, 85]);
   const sequence = [];
   for (let i = 0; i < 4; i++) {
     const work = C.programPlanFor({ baseWeightLb: state.weightLb, nextPhase: 3 }, 5,
@@ -183,7 +195,7 @@ test("converted slot earns reps, holds a miss, earns one rack step, and preserve
     sequence.push([work.sets, work.reps, work.weightLb]);
     state = C.advanceAccessory(state, perf(work.reps));
   }
-  assert.deepEqual(sequence, [[3, 4, 85], [3, 5, 85], [3, 6, 85], [3, 3, 90]]);
+  assert.deepEqual(sequence, [[3, 5, 85], [3, 6, 85], [3, 3, 90], [3, 4, 90]]);
   const recovery = C.programPlanFor({ baseWeightLb: 85, nextPhase: 4 }, 5,
     "dumbbell", "press", "main", "strength", "doubleProgression",
     { workingSets: 3, minimumReps: 3, maximumReps: 6, currentReps: 4 });

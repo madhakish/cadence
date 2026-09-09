@@ -1155,11 +1155,15 @@ public enum CoachingEngine {
                     && $0.plannedWeightLb?.isFinite == true && ($0.plannedReps ?? 0) > 0 && setMeetsPlan($0) }),
                   work.filter({ $0.quality == .grindy || $0.quality == .wobble }).count <= 1,
                   let reps = work.map(\.actualReps).min() else { return nil }
-            let nextReps = min(5, reps) + 1
+            // Redistributing five triples into three sets must not discard
+            // completed work. Abstain if the rep window cannot hold it.
+            let totalReps = work.reduce(0.0) { $0 + Double($1.actualReps) }
+            guard totalReps <= 3 * 6 else { return nil }
+            let nextReps = max(min(5, reps) + 1, Int(ceil(totalReps / 3)))
             return CoachingRecommendation(
                 ruleID: "program.slot.dumbbell-reps.v1", priority: 65,
                 title: "Build reps before adding dumbbell weight",
-                explanation: "\(slot.exerciseName)'s load and peak both use \(Weight.trim(weight)) lb each, but the peak drops sets. Your latest completed work earns 3×\(nextReps) at that load. Use three sets in a 3–6 rep window; earn reps before adding the configured load step, then return to triples. Recovery stays separate.",
+                explanation: "\(slot.exerciseName)'s load and peak both use \(Weight.trim(weight)) lb each, but the peak drops sets. Start with 3×\(nextReps) at that load, preserving at least the total reps in your latest completed work. Use three sets in a 3–6 rep window; earn reps before adding the configured load step, then return to triples. Recovery stays separate.",
                 change: .useDumbbellRepProgression(slotID: slot.id, exerciseName: slot.exerciseName,
                     expectedBaseWeightLb: slot.baseWeightLb, weightLb: weight, currentReps: nextReps),
                 evidenceKey: "\(slot.id):c\(session.cycleNumber)-r\(session.rotation)-d\(session.dayIndex):\(Weight.trim(slot.baseWeightLb)):3x\(nextReps)@\(Weight.trim(weight))"

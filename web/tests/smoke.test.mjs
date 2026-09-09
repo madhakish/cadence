@@ -670,11 +670,20 @@ await withCleanup(async (keep) => {
     host().querySelector(".coach-summary").click();
     const card = [...document.querySelectorAll("#overlays .card")]
       .find((node) => node.textContent.includes("Build reps before adding dumbbell weight"));
-    ok(!!card && card.textContent.includes("3×4"), "Coach renders the earned dumbbell target and explanation");
+    ok(!!card && card.textContent.includes("3×5"), "Coach renders the earned dumbbell target and explanation");
     return [...card.querySelectorAll("button")].find((button) => button.textContent === "Apply");
   };
   try {
     await db.Programs.save(program);
+    await home.render(host());
+    const dayCard = [...host().querySelectorAll(".card")]
+      .find((card) => card.querySelector(".wt-big")
+        && [...card.querySelectorAll("button")].some((button) => button.textContent === `Start ${day.name}`));
+    ok(dayCard?.textContent.includes("85 lb each"), "Today identifies a dumbbell load as per implement");
+    dayCard.querySelector(".row").click();
+    ok(document.getElementById("overlays").textContent.includes("85 lb each"),
+      "the actual workout preview preserves the per-implement load label");
+    document.getElementById("overlays").replaceChildren();
     const staleApply = await openProposal();
     evidence.exercises[0].sets[0].reps = 2;
     await db.Sessions.save(evidence);
@@ -690,17 +699,17 @@ await withCleanup(async (keep) => {
     const accepted = await db.Programs.get(program.id);
     const decisions = (await db.CoachingDecisions.all()).filter((d) => d.ruleId === "program.slot.dumbbell-reps.v1");
     for (const decision of decisions) keep(db.CoachingDecisions, decision.id);
-    ok(decisions.length === 1 && accepted.days[0].lifts[0].currentReps === 4,
+    ok(decisions.length === 1 && accepted.days[0].lifts[0].currentReps === 5,
       "Apply persists the rep window and its audit record together");
     const historyBefore = JSON.stringify(await db.Sessions.get(evidence.id));
     const sessionID = keep(db.Sessions, await session.createSessionFromProgramDay(accepted, accepted.days[0]));
     const workout = await db.Sessions.get(sessionID);
     const work = workout.exercises[0].sets.filter((set) => !set.isWarmup);
-    ok(work.length === 3 && work.every((set) => set.weightLb === 85 && set.reps === 4),
+    ok(work.length === 3 && work.every((set) => set.weightLb === 85 && set.reps === 5),
       "the real session builder prescribes the accepted dumbbell rep target");
     await completeAll(workout);
     const advanced = (await db.Programs.get(program.id)).days[0].lifts[0];
-    ok(advanced.baseWeightLb === 85 && advanced.currentReps === 5,
+    ok(advanced.baseWeightLb === 85 && advanced.currentReps === 6,
       "banking the real session earns reps without adding load");
     ok(JSON.stringify(await db.Sessions.get(evidence.id)) === historyBefore,
       "converting and banking preserve the historical prescription and performed work");

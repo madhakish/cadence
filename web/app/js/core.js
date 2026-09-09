@@ -3848,11 +3848,15 @@ function dumbbellRepProgressionSuggestions(program, sessions) {
           && set.actualReps >= 3 && Number.isFinite(set.plannedWeightLb)
           && Number.isInteger(set.plannedReps) && set.plannedReps > 0 && atPlan(set))
         || work.filter((set) => ["grindy", "wobble"].includes(set.quality)).length > 1) return [];
-    const currentReps = Math.min(6, Math.min(...work.map((set) => set.actualReps)) + 1);
+    // Preserve completed work when redistributing it into three sets.
+    const totalReps = work.reduce((sum, set) => sum + set.actualReps, 0);
+    if (totalReps > 3 * 6) return [];
+    const currentReps = Math.max(Math.min(6, Math.min(...work.map((set) => set.actualReps)) + 1),
+      Math.ceil(totalReps / 3));
     const ruleID = "program.slot.dumbbell-reps.v1";
     return [{ id: `${ruleID}:${slot.id}:c${session.cycleNumber}-r${session.rotation}-d${session.dayIndex}:${trim(slot.baseWeightLb)}:3x${currentReps}@${trim(weight)}`,
       ruleID, priority: 65, title: "Build reps before adding dumbbell weight",
-      explanation: `${slot.exerciseName}'s load and peak both use ${trim(weight)} lb each, but the peak drops sets. Your latest completed work earns 3×${currentReps} at that load. Use three sets in a 3–6 rep window; earn reps before adding the configured load step, then return to triples. Recovery stays separate.`,
+      explanation: `${slot.exerciseName}'s load and peak both use ${trim(weight)} lb each, but the peak drops sets. Start with 3×${currentReps} at that load, preserving at least the total reps in your latest completed work. Use three sets in a 3–6 rep window; earn reps before adding the configured load step, then return to triples. Recovery stays separate.`,
       change: { type: "useDumbbellRepProgression", slotID: slot.id, exerciseName: slot.exerciseName,
         expectedBaseWeightLb: slot.baseWeightLb, weightLb: weight, currentReps } }];
   });

@@ -50,9 +50,13 @@ and newer unsuccessful work cannot be bypassed by finding an older success.
 
 **Apply** changes that slot to the existing double-progression style: three
 sets, a 3–6 rep window, and the demonstrated load. The initial rep target is
-one above the lowest completed working-set reps, capped at six. Thus a
-synthetic 5×3 at 85 lb each becomes 3×4 at 85, then successful hard exposures
-earn 3×5, 3×6, and finally 3×3 at 90 with a 5 lb step. The range and initial
+one above the lowest completed working-set reps, capped at six, and high enough
+to preserve the total completed working reps across the three sets. If the
+3–6 window cannot hold that work, no conversion is offered. Thus a
+synthetic 5×3 at 85 lb each becomes 3×5 at 85, then successful hard exposures
+earn 3×6 and finally 3×3 at 90 with a 5 lb step. Three triples become three
+sets of four. Equal total reps do not prove equal difficulty when the work is
+redistributed into longer sets. The range and initial
 transition are Cadence policy choices, not a claim of a physiologically optimal
 sequence. Rep and load progression both have experimental support, with the
 available trial studying lower-body training rather than this dumbbell rule

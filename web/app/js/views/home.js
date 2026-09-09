@@ -226,7 +226,7 @@ export async function render(host) {
             : ui.h("span", { class: "title", text: l.exerciseName }),
           ui.slotBadge(l, program.currentWeek, ex?.movementGroup, program.focus)),
         ui.h("div", { style: { textAlign: "right" } },
-          ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) }),
+          ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) + C.loadBasisSuffix(C.resolvedLoadBasis(ex)) }),
           ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
       // The load is stated as a number here. The loaded bar itself belongs to
       // the preview and the logger — equipment imagery stays with loading.
@@ -371,7 +371,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
               : ui.h("span", { class: "title", text: l.exerciseName }),
             ui.slotBadge(l, program.currentWeek, ex?.movementGroup, program.focus)),
           ui.h("div", { style: { textAlign: "right" } },
-            ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) }),
+            ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) + C.loadBasisSuffix(C.resolvedLoadBasis(ex)) }),
             ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
         if (ex && ex.type === "barbell" && plan.weightLb > 0) {
           liftCard.append(barbellPrescriptionView(
@@ -404,7 +404,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
               : ui.h("span", { class: "title", text: a.exerciseName }),
             ui.h("span", { class: "sub mono", text: isTimed
               ? `${a.sets} × ${C.cardioDurationLabel(a.targetSeconds || 30)}`
-              : (a.weightLb > 0 ? `${a.sets}×${accReps} @ ${ui.fmtWeight(a.weightLb)}` : `${a.sets}×${accReps}`) })));
+              : (a.weightLb > 0 ? `${a.sets}×${accReps} @ ${ui.fmtWeight(a.weightLb)}${C.loadBasisSuffix(C.resolvedLoadBasis(accessoryExercise))}` : `${a.sets}×${accReps}`) })));
         }
         body.append(accCard);
       }

@@ -394,6 +394,7 @@ struct HomeView: View {
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(day.orderedLifts) { lift in
+                            let exercise = exercises.first { $0.name == lift.exerciseName }
                             let target = rawProgramPlan(program, day, lift)
                             let plan = programPlan(program, day, lift)
                             VStack(alignment: .leading, spacing: 4) {
@@ -414,7 +415,7 @@ struct HomeView: View {
                                     }
                                     Spacer()
                                     VStack(alignment: .trailing, spacing: 2) {
-                                        Text(unitDisplay.format(lb: plan.weightLb))
+                                        Text(unitDisplay.format(lb: plan.weightLb) + (exercise?.loadBasis.shortSuffix ?? ""))
                                             .font(.body.bold().monospacedDigit())
                                         Text("\(plan.sets)×\(plan.reps)")
                                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)

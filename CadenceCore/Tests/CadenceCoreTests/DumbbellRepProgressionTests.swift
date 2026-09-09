@@ -55,12 +55,32 @@ final class DumbbellRepProgressionTests: XCTestCase {
         XCTAssertEqual(peak.sets, 3)
     }
 
-    func testCompletedTriplesEarnOneRepAtThePerformedLoad() throws {
+    func testConversionPreservesCompletedWorkWithinTheRepWindow() {
+        let cases: [(Int, Int, Int?)] = [(3, 3, 4), (4, 3, 4), (5, 3, 5), (6, 3, 6), (3, 6, 6), (5, 4, nil)]
+        for (sets, reps, expected) in cases {
+            let (program, original) = fixture()
+            var sessions = original
+            var set = sessions[0].exercises[0].sets[0]
+            set.actualReps = reps
+            sessions[0].exercises[0].plannedSets = sets
+            sessions[0].exercises[0].sets = Array(repeating: set, count: sets)
+            let proposed = suggestion(program, sessions)
+            if let expected {
+                XCTAssertEqual(proposed?.change, .useDumbbellRepProgression(slotID: "db-slot",
+                    exerciseName: "Fixture DB Press", expectedBaseWeightLb: 80, weightLb: 85, currentReps: expected))
+                XCTAssertGreaterThanOrEqual(3 * expected, sets * reps)
+            } else {
+                XCTAssertNil(proposed, "do not compress more work than the rep window can hold")
+            }
+        }
+    }
+
+    func testFiveTriplesBecomeThreeFivesAtThePerformedLoad() throws {
         let (program, sessions) = fixture()
         let proposed = try XCTUnwrap(suggestion(program, sessions))
         XCTAssertEqual(proposed.change, .useDumbbellRepProgression(slotID: "db-slot",
-            exerciseName: "Fixture DB Press", expectedBaseWeightLb: 80, weightLb: 85, currentReps: 4))
-        XCTAssertEqual(proposed.id, "program.slot.dumbbell-reps.v1:db-slot:c1-r2-d0:80:3x4@85")
+            exerciseName: "Fixture DB Press", expectedBaseWeightLb: 80, weightLb: 85, currentReps: 5))
+        XCTAssertEqual(proposed.id, "program.slot.dumbbell-reps.v1:db-slot:c1-r2-d0:80:3x5@85")
         XCTAssertTrue(proposed.explanation.contains("3–6"))
         XCTAssertEqual(sessions[0].exercises[0].sets[0].actualReps, 3)
     }
@@ -124,7 +144,7 @@ final class DumbbellRepProgressionTests: XCTestCase {
         bonus.actualReps = 10
         sessions[0].exercises[0].sets.append(bonus)
         XCTAssertEqual(suggestion(program, sessions)?.change, .useDumbbellRepProgression(slotID: "db-slot",
-            exerciseName: "Fixture DB Press", expectedBaseWeightLb: 80, weightLb: 85, currentReps: 4))
+            exerciseName: "Fixture DB Press", expectedBaseWeightLb: 80, weightLb: 85, currentReps: 5))
     }
 
     func testNewerIdentitylessHistoryBlocksAnOlderExactSlotSuccess() {
