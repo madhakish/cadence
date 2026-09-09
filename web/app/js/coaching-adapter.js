@@ -68,7 +68,7 @@ export function coachingReport(program, sessions, exMap, checkins = [], interval
   ]);
   const history = sessions.flatMap((session) => {
     const tag = session.programTag;
-    if (!tag || !sessionBelongsToProgram(session, program)
+    if (!session.isCompleted || !tag || !sessionBelongsToProgram(session, program)
         || tag.cycleNumber == null || tag.week == null || tag.dayIndex == null) return [];
     const sessionDate = Date.parse(session.completedAt || session.date);
     return [{ id: String(session.id), date: session.completedAt || session.date, programID: id,

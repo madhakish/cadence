@@ -98,6 +98,36 @@ test("latest failure blocks older success; bonus reps cannot inflate the convers
   assert.equal(suggestion(program, history).change.currentReps, 4);
 });
 
+test("open workouts guard conversion without entering readiness history", () => {
+  const { program, history } = fixture();
+  const before = coachingReport(program, history, exMap);
+  const open = structuredClone(history[0]);
+  open.id = 12; open.date = "2026-01-02T12:00:00Z"; open.isCompleted = false;
+  open.programTag.week = 3;
+  open.exercises[0].sets.forEach((set) => { set.status = "planned"; });
+  const after = coachingReport(program, [...history, open], exMap);
+  assert.deepEqual(after.rotations, before.rotations);
+  assert.equal(after.currentReadiness, before.currentReadiness);
+  assert.equal(after.greenRotationStreak, before.greenRotationStreak);
+  assert.equal(suggestion(program, [...history, open]), undefined);
+});
+
+test("recommendation identity survives replacement of a local session key by a portable UUID", () => {
+  const { program, history } = fixture();
+  const before = suggestion(program, history);
+  history[0].id = "efb7de65-3dc5-4e80-a79f-f07379c2e912";
+  assert.equal(suggestion(program, history).id, before.id);
+});
+
+test("newer ambiguous slot history blocks an older exact-slot success", () => {
+  const { program, history } = fixture();
+  const newer = structuredClone(history[0]);
+  newer.id = 12; newer.date = "2026-01-02T12:00:00Z";
+  delete newer.exercises[0].programSlotId;
+  newer.exercises[0].sets[0].reps = 2;
+  assert.equal(suggestion(program, [...history, newer]), undefined);
+});
+
 test("acceptance changes one slot, clears wave pending state, and preserves history and cursor", async () => {
   const { program, lift, history } = fixture();
   const other = { ...lift, id: "other-slot", exerciseName: "Fixture Other Press" };

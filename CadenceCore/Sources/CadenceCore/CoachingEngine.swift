@@ -1126,8 +1126,17 @@ public enum CoachingEngine {
         guard !candidates.isEmpty else { return [] }
         let newest = sessions.sorted { ($0.date, $0.id) > ($1.date, $1.id) }
         return candidates.compactMap { slot in
+            // Legacy/imported entries can be relevant without proving a slot
+            // identity. They must block older success, never earn a target.
+            func potentiallyMatches(_ session: CoachingSessionSnapshot) -> Bool {
+                session.exercises.contains {
+                    $0.slotID == slot.id || (($0.slotID ?? "").isEmpty
+                        && session.dayIndex == slot.dayIndex && $0.exerciseName == slot.exerciseName
+                        && $0.programRole == slot.role)
+                }
+            }
             guard let weight = slot.collapsedDumbbellWaveLoadLb, weight.isFinite, weight > 0,
-                  let session = newest.first(where: { $0.exercises.contains { $0.slotID == slot.id } }),
+                  let session = newest.first(where: potentiallyMatches),
                   session.dayIndex == slot.dayIndex,
                   (1...3).contains(session.rotation), !session.hasHardStopCheckIn else { return nil }
             let entries = session.exercises.filter { $0.slotID == slot.id }
@@ -1153,7 +1162,7 @@ public enum CoachingEngine {
                 explanation: "\(slot.exerciseName)'s load and peak both use \(Weight.trim(weight)) lb each, but the peak drops sets. Your latest completed work earns 3×\(nextReps) at that load. Use three sets in a 3–6 rep window; earn reps before adding the configured load step, then return to triples. Recovery stays separate.",
                 change: .useDumbbellRepProgression(slotID: slot.id, exerciseName: slot.exerciseName,
                     expectedBaseWeightLb: slot.baseWeightLb, weightLb: weight, currentReps: nextReps),
-                evidenceKey: "\(slot.id):\(session.id):\(Weight.trim(slot.baseWeightLb)):3x\(nextReps)@\(Weight.trim(weight))"
+                evidenceKey: "\(slot.id):c\(session.cycleNumber)-r\(session.rotation)-d\(session.dayIndex):\(Weight.trim(slot.baseWeightLb)):3x\(nextReps)@\(Weight.trim(weight))"
             )
         }
     }

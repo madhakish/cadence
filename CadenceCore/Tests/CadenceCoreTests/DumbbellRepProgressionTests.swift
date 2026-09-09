@@ -60,7 +60,7 @@ final class DumbbellRepProgressionTests: XCTestCase {
         let proposed = try XCTUnwrap(suggestion(program, sessions))
         XCTAssertEqual(proposed.change, .useDumbbellRepProgression(slotID: "db-slot",
             exerciseName: "Fixture DB Press", expectedBaseWeightLb: 80, weightLb: 85, currentReps: 4))
-        XCTAssertEqual(proposed.id, "program.slot.dumbbell-reps.v1:db-slot:11:80:3x4@85")
+        XCTAssertEqual(proposed.id, "program.slot.dumbbell-reps.v1:db-slot:c1-r2-d0:80:3x4@85")
         XCTAssertTrue(proposed.explanation.contains("3–6"))
         XCTAssertEqual(sessions[0].exercises[0].sets[0].actualReps, 3)
     }
@@ -125,6 +125,22 @@ final class DumbbellRepProgressionTests: XCTestCase {
         sessions[0].exercises[0].sets.append(bonus)
         XCTAssertEqual(suggestion(program, sessions)?.change, .useDumbbellRepProgression(slotID: "db-slot",
             exerciseName: "Fixture DB Press", expectedBaseWeightLb: 80, weightLb: 85, currentReps: 4))
+    }
+
+    func testNewerIdentitylessHistoryBlocksAnOlderExactSlotSuccess() {
+        let (program, sessions) = fixture()
+        var newer = sessions[0]
+        newer.id = "12"; newer.date = Date(timeIntervalSince1970: 200)
+        newer.exercises[0].slotID = nil
+        newer.exercises[0].sets[0].actualReps = 2
+        XCTAssertNil(suggestion(program, sessions + [newer]))
+    }
+
+    func testRecommendationIdentityUsesPortableEvidence() {
+        let (program, original) = fixture()
+        var restored = original
+        restored[0].id = "efb7de65-3dc5-4e80-a79f-f07379c2e912"
+        XCTAssertEqual(suggestion(program, original)?.id, suggestion(program, restored)?.id)
     }
 
     func testRepWindowPreviewPreservesRecoveryAndEarnsOneRackStep() {

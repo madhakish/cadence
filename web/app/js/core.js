@@ -3830,7 +3830,9 @@ function dumbbellRepProgressionSuggestions(program, sessions) {
     || (String(a.id) < String(b.id) ? 1 : String(a.id) > String(b.id) ? -1 : 0));
   return candidates.flatMap((slot) => {
     const weight = slot.collapsedDumbbellWaveLoadLb;
-    const session = newest.find((item) => item.exercises.some((entry) => entry.slotID === slot.id));
+    const session = newest.find((item) => item.exercises.some((entry) => entry.slotID === slot.id
+      || (!entry.slotID && item.dayIndex === slot.dayIndex && entry.exerciseName === slot.exerciseName
+        && entry.programRole === slot.role)));
     if (!Number.isFinite(weight) || weight <= 0 || !session || session.dayIndex !== slot.dayIndex
         || ![1, 2, 3].includes(session.rotation) || session.hasHardStopCheckIn) return [];
     const entries = session.exercises.filter((entry) => entry.slotID === slot.id);
@@ -3848,7 +3850,7 @@ function dumbbellRepProgressionSuggestions(program, sessions) {
         || work.filter((set) => ["grindy", "wobble"].includes(set.quality)).length > 1) return [];
     const currentReps = Math.min(6, Math.min(...work.map((set) => set.actualReps)) + 1);
     const ruleID = "program.slot.dumbbell-reps.v1";
-    return [{ id: `${ruleID}:${slot.id}:${session.id}:${trim(slot.baseWeightLb)}:3x${currentReps}@${trim(weight)}`,
+    return [{ id: `${ruleID}:${slot.id}:c${session.cycleNumber}-r${session.rotation}-d${session.dayIndex}:${trim(slot.baseWeightLb)}:3x${currentReps}@${trim(weight)}`,
       ruleID, priority: 65, title: "Build reps before adding dumbbell weight",
       explanation: `${slot.exerciseName}'s load and peak both use ${trim(weight)} lb each, but the peak drops sets. Your latest completed work earns 3×${currentReps} at that load. Use three sets in a 3–6 rep window; earn reps before adding the configured load step, then return to triples. Recovery stays separate.`,
       change: { type: "useDumbbellRepProgression", slotID: slot.id, exerciseName: slot.exerciseName,
