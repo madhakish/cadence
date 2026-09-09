@@ -201,10 +201,11 @@ final class SessionExercise {
     /// Only performed work belongs in history, PRs, volume, or progression.
     var workingSets: [SetEntry] { plannedWorkingSets.filter { $0.status == .completed } }
 
-    var prescribedWork: [SetEntry] {
+    var prescribedSets: [SetEntry] {
         let candidates = orderedSets.filter { !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork }
-        return Array(candidates.prefix(plannedSets ?? candidates.count)).filter { $0.status == .completed }
+        return Array(candidates.prefix(plannedSets ?? candidates.count))
     }
+    var prescribedWork: [SetEntry] { prescribedSets.filter { $0.status == .completed } }
 
     var workingVolumeLb: Double {
         // A carried pack is not tonnage. Twenty pounds for three miles is not

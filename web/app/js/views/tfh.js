@@ -1,7 +1,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import {Programs,Exercises,Sessions} from "../db.js";
-import {tfhDraft,tfhSynchronize} from "../tfh.js";
+import {tfhDraft,tfhSynchronize,tfhCurrentPosition,tfhPractice} from "../tfh.js";
 import {tfhPreview} from "./session.js";
 
 export async function tfhEditor(program) {
@@ -67,8 +67,11 @@ export function tfhPlanRow(program,slot,exercise,sessions,gym,rotation=null) {
   let text;
   try {
     const r = tfhPreview(program,slot,exercise,sessions,gym,rotation);
-    text = r ? `TFH · ${ui.fmtWeight(r.plan.weightLb)} · ${r.plan.reps.join("/")} reps${r.plan.benchmark ? " · last set optional AMRAP" : ""}\n${r.plan.reason}`
-      : "TFH · authored timed practice";
+    if(r) text = `TFH · ${ui.fmtWeight(r.plan.weightLb)} · ${r.plan.reps.join("/")} reps${r.plan.benchmark ? " · last set optional AMRAP" : ""}\n${r.plan.reason}`;
+    else {
+      const phase = rotation ?? tfhCurrentPosition(program,sessions).rotation, t = tfhPractice(slot,exercise,phase);
+      text = `TFH · ${ui.fmtWeight(t.weightLb)} · ${t.sets} × ${t.seconds}s · ${phase === 4 ? "light recovery" : "authored practice"}`;
+    }
   } catch(e) {text=e.message;}
   return ui.h("div",{class:"row"},ui.h("div",{class:"lead"},
     ui.h("span",{class:"title",text:slot.exerciseName}),ui.h("span",{class:"sub",style:{whiteSpace:"pre-line"},text})));
@@ -85,7 +88,8 @@ export function tfhEvidence(session,save) {
     await save();ui.toast("Set quality recorded.");
   }}));
   for(const e of session.exercises) for(const s of e.sets) if(s.tfhBenchmark!=null) {
-    const stop = ui.h("select",{},...["","technicalLimit","repCap","pain","interrupted","voluntary"].map(v=>ui.h("option",{value:v,text:v || "Not recorded",selected:(s.tfhBenchmark.stopReason || "")===v})));
+    const labels = {"":"Not recorded",technicalLimit:"Technical limit",repCap:"Rep cap",pain:"Pain",interrupted:"Interrupted",voluntary:"Chose to stop"};
+    const stop = ui.h("select",{},...Object.entries(labels).map(([value,text])=>ui.h("option",{value,text,selected:(s.tfhBenchmark.stopReason || "")===value})));
     const rest = ui.h("input",{type:"number",min:1,max:3600,value:s.tfhBenchmark.restSeconds ?? "",placeholder:"Unknown"});
     box.append(ui.field(`${e.exerciseName} · why you stopped`,stop),ui.field("Actual rest before final set (seconds)",rest));
     box.append(ui.h("button",{class:"btn ghost",text:"Record benchmark context",onClick:async()=>{

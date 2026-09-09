@@ -451,9 +451,22 @@ enum ImportService {
         for (pi, program) in (bundle.programs ?? []).enumerated() {
             let path = "programs[\(pi)]"
             if let policy = program.tfhPolicy {
+                var layout: [String: String] = [:]
+                for day in program.days ?? [] {
+                    for lift in day.lifts ?? [] {
+                        if let id = lift.id, let order = lift.order, let dayOrder = day.order, let role = lift.role {
+                            layout[id] = "\(dayOrder):\(role):\(order)"
+                        }
+                    }
+                    for accessory in day.accessories ?? [] {
+                        if let id = accessory.id, let order = accessory.order, let dayOrder = day.order {
+                            layout[id] = "\(dayOrder):accessory:\(order)"
+                        }
+                    }
+                }
                 let slots = (program.days ?? []).flatMap { ($0.lifts ?? []).map { ($0.id, $0.exerciseId) }
                     + ($0.accessories ?? []).map { ($0.id, $0.exerciseId) } }
-                guard schemaVersion >= 14, policy.isValid,
+                guard schemaVersion >= 14, policy.isValid, policy.layout == layout,
                       policy.dayOrders == (program.days ?? []).compactMap(\.order).sorted(),
                       Set(slots.compactMap { $0.0 }).count == slots.count,
                       policy.anchors.allSatisfy({ id, anchor in slots.contains { $0.0 == id && $0.1 == anchor.exerciseId } }) else {

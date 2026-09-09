@@ -47,7 +47,9 @@ enum TFHProgramService {
             s.isCompleted && s.programID == program.id && s.tfhPolicyID == policy.id
                 && s.tfhExcludedFromProgression != true
                 && s.exercises.contains { e in
-                    e.programSlotID != nil && e.workingSets.contains { PrescriptionBlockKind(rawValue: $0.prescriptionBlockRaw) != .warmup }
+                    guard e.programSlotID != nil else { return false }
+                    let instructions = e.orderedSets.filter { !$0.isWarmup && $0.prescriptionBlock.countsAsProgramInstruction }
+                    return instructions.prefix(e.plannedSets ?? instructions.count).contains { $0.status == .completed }
                 }
         }
     }
@@ -84,7 +86,7 @@ enum TFHProgramService {
                       let rotation = session.programWeek, entry.exerciseID == anchor.exerciseId else {
                     throw Failure.invalid("A session's TFH identity or prescription is incomplete.")
                 }
-                let sets = try entry.plannedWorkingSets.map { set -> TFHSet in
+                let sets = try entry.prescribedSets.map { set -> TFHSet in
                     let benchmark = try decode(TFHBenchmarkResult.self, set.tfhBenchmarkData)
                     guard benchmark?.isValid != false else { throw Failure.invalid("Invalid benchmark evidence.") }
                     return TFHSet(weightLb: set.weightLb, reps: set.reps,
@@ -119,7 +121,9 @@ enum TFHProgramService {
     /// Only an exact slot and exercise match can seed actual performed loading.
     static func draft(_ program: Program, exercises: [Exercise], sessions: [WorkoutSession]) throws -> TFHProgramPolicy {
         var anchors: [String: TFHAnchor] = [:]
-        let mine = sessions.filter { $0.isCompleted && $0.programID == program.id }
+        let prior = try decode(TFHProgramPolicy.self, program.tfhPolicyData)
+        guard prior?.isValid != false else { throw Failure.invalid("The stored TFH policy is invalid.") }
+        let mine = sessions.filter { $0.isCompleted && $0.programID == program.id && $0.tfhExcludedFromProgression != true }
             .sorted { $0.effectiveCompletionDate > $1.effectiveCompletionDate }
         func make(id: String, name: String, weight: Double, sets: Int, reps: Int, min: Int, max: Int,
                   step: Double) throws {
@@ -130,8 +134,19 @@ enum TFHProgramService {
             let previous = mine.lazy.compactMap { s in
                 s.exercises.first { $0.programSlotID == id && $0.exerciseID == exerciseID }
             }.first
-            let work = previous?.workingSets ?? []
-            let uniform = !work.isEmpty && work.allSatisfy { abs($0.weightLb - work[0].weightLb) < 0.001 }
+            let work = previous?.prescribedWork ?? []
+            let uniform = !work.isEmpty && work.allSatisfy {
+                abs($0.weightLb - work[0].weightLb) < 0.001 && $0.loadBasis == ex.loadBasis
+                    && $0.resolvedImplementCount == ex.resolvedImplementCount && $0.isPerSide == ex.isUnilateral
+            }
+            if var authored = prior?.anchors[id], authored.exerciseId == exerciseID,
+               authored.loadBasis == ex.loadBasis, authored.implementCount == ex.resolvedImplementCount,
+               authored.isPerSide == ex.isUnilateral {
+                authored.id = UUID().uuidString
+                if uniform { authored.weightLb = ex.loadBasis == .bodyweight ? 0 : work[0].weightLb }
+                anchors[id] = authored
+                return
+            }
             let startingWeight = ex.loadBasis == .bodyweight ? 0 : (uniform ? work[0].weightLb : weight)
             let lo = Swift.max(1, min), hi = Swift.max(Swift.max(1, min), max)
             let startingReps = Swift.min(hi, Swift.max(lo, reps))
@@ -155,8 +170,10 @@ enum TFHProgramService {
         let maxCycle = mine.compactMap(\.programCycleNumber).max() ?? 0
         let start = Swift.max(program.cycleNumber, maxCycle + 1)
         let orders = program.orderedDays.map(\.order)
+        let previousRecovery = prior?.recoveryDayOrders.filter { orders.contains($0) } ?? []
         return TFHProgramPolicy(id: UUID().uuidString, startCycle: start, dayOrders: orders,
-                                recoveryDayOrders: Array(orders.prefix(2)), anchors: anchors, layout: layout(program))
+                                recoveryDayOrders: previousRecovery.count >= 2 ? previousRecovery : Array(orders.prefix(2)),
+                                anchors: anchors, layout: layout(program))
     }
 
     static func activate(_ draft: TFHProgramPolicy, program: Program,

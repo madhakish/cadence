@@ -38,9 +38,9 @@ struct TFHProgramView: View {
                     }
                 }
                 ForEach(slots, id: \.id) { slot in
-                    if draft.anchors[slot.id] != nil {
+                    if let anchor = draft.anchors[slot.id] {
                         TFHAnchorEditor(name: slot.name, anchor: Binding(
-                            get: { self.draft!.anchors[slot.id]! },
+                            get: { self.draft?.anchors[slot.id] ?? anchor },
                             set: { self.draft?.anchors[slot.id] = $0 }
                         ))
                     }
@@ -190,8 +190,19 @@ struct TFHSlotPlanView: View {
     }
     private var result: Result<String, Error> {
         Result {
-            guard let (_, plan) = try TFHProgramService.prescription(program, slotID: slotID, sessions: sessions),
-                  let exercise = exercises.first(where: { $0.name == name }) else { return "TFH · authored timed practice" }
+            guard let exercise = exercises.first(where: { $0.name == name }) else {
+                throw TFHProgramService.Failure.invalid("\(name) is missing from the exercise library.")
+            }
+            guard let (_, plan) = try TFHProgramService.prescription(program, slotID: slotID, sessions: sessions) else {
+                guard let slot = program.days.flatMap(\.accessories).first(where: { $0.id == slotID }),
+                      let policy = try TFHProgramService.policy(program) else {
+                    throw TFHProgramService.Failure.invalid("\(name) needs an authored practice target.")
+                }
+                let next = try TFHProgramService.position(program, policy: policy, sessions: sessions)
+                let target = try TFHSession.practice(exercise: exercise, weight: slot.weightLb, sets: slot.sets,
+                                                      seconds: slot.targetSeconds, rotation: next.rotation)
+                return "TFH · \(settings.unitDisplay.format(lb: target.weightLb)) · \(target.sets) × \(target.seconds)s · \(next.rotation == 4 ? "light recovery" : "authored practice")"
+            }
             let load = TFHSession.achieved(plan, exercise: exercise, program: program,
                                            gym: gyms.first { $0.isDefault } ?? gyms.first)
             let label = plan.reps.map(String.init).joined(separator: "/")

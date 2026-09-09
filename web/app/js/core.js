@@ -4153,8 +4153,14 @@ export function tfhProject(anchor, exposures, cycle, rotation) {
   if (tfhAmbiguous(history)) return null;
   // Match R1 to prior R1, R2 to prior R2, R3 to prior R3. During the first
   // cycle, the previous completed build phase can seed the next exposure.
-  const matched = history.filter(e => e.rotation === rotation);
-  const reference = matched.at(-1) || history.at(-1);
+  // Deliberate loading changes invalidate older phase targets, including on
+  // the second and subsequent exposures after the adjustment.
+  const adjustment = history.findLastIndex(e => tfhPlanSets(anchor,e)
+    && e.sets.every(s=>s.status === "completed" && Number.isFinite(s.weightLb) && s.weightLb >= 0)
+    && e.sets.some(s=>!tfhSame(s.weightLb,s.plannedWeightLb)));
+  const comparable = history.slice(adjustment + 1);
+  const matched = comparable.filter(e => e.rotation === rotation);
+  const reference = matched.at(-1) || comparable.at(-1) || history.at(-1);
   const recentWorkSupportsProgress = !history.length || tfhMade(anchor, history.at(-1));
   if (reference) {
     if (!tfhPlanSets(anchor, reference) || reference.sets.some(s => s.plannedReps < anchor.minReps
@@ -4179,7 +4185,7 @@ export function tfhProject(anchor, exposures, cycle, rotation) {
       } else {
         // Two successful matching-phase exposures at the top of the range
         // are required before reducing reps to introduce a new load.
-        const top = history.filter(e => e.rotation === reference.rotation).slice(-2);
+        const top = comparable.filter(e => e.rotation === reference.rotation).slice(-2);
         const topIsConsecutive = top.length === 2 && top[1].cycle - top[0].cycle === 1;
         const topIsComplete = topIsConsecutive && top.every(e => tfhUsableSets(anchor, e)
           && e.sets.every(s => tfhSame(s.weightLb, plan.weightLb)

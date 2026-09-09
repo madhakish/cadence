@@ -116,6 +116,41 @@ final class TFHIntegrationTests: XCTestCase {
         XCTAssertEqual(try TFHProgramService.decode(TFHBenchmarkResult.self, set.tfhBenchmarkData)?.restSeconds, 180)
     }
 
+    func testSkippedAndBonusWorkRespectTheOriginalInstructionCap() throws {
+        let c = try container(), ctx = c.mainContext, p = try fixture(ctx)
+        let session = try ProgramSession.make(program: p, day: p.nextDay!, context: ctx)
+        let entry = try XCTUnwrap(session.orderedExercises.first)
+        for s in entry.orderedSets { s.status = .skipped }
+        let bonus = SetEntry(order: 99, weightLb: 10, reps: 20)
+        bonus.status = .completed; ctx.insert(bonus); entry.sets.append(bonus)
+        session.isCompleted = true
+        let policy = try XCTUnwrap(TFHProgramService.policy(p))
+        XCTAssertTrue(TFHProgramService.cohort(p, policy, [session]).isEmpty)
+        for s in entry.prescribedSets { s.status = .completed; s.quality = .clean }
+        XCTAssertEqual(TFHProgramService.cohort(p, policy, [session]).count, 1)
+        let plan = try XCTUnwrap(TFHProgramService.prescription(p, slotID: entry.programSlotID!, sessions: [session], rotation: 2))
+        XCTAssertEqual(plan.1.reps, [4,3,3]); XCTAssertEqual(plan.1.weightLb, 60)
+        session.tfhExcludedFromProgression = true
+        XCTAssertTrue(TFHProgramService.cohort(p, policy, [session]).isEmpty)
+    }
+
+    func testReviewPreservesAuthoredConfigurationAndTimedRecovery() throws {
+        let c = try container(), ctx = c.mainContext, p = try fixture(ctx)
+        var policy = try XCTUnwrap(TFHProgramService.policy(p))
+        let id = try XCTUnwrap(policy.anchors.keys.sorted().first)
+        policy.anchors[id]?.incrementLb = 2.5; policy.anchors[id]?.intent = .maintain
+        policy.anchors[id]?.reps = [4,3,3]; policy.anchors[id]?.benchmarkEnabled = true
+        p.tfhPolicyData = try TFHProgramService.encode(policy)
+        let revised = try TFHProgramService.draft(p, exercises: ctx.fetch(FetchDescriptor<Exercise>()), sessions: [])
+        var newAnchor = try XCTUnwrap(revised.anchors[id])
+        XCTAssertNotEqual(newAnchor.id, policy.anchors[id]?.id)
+        newAnchor.id = policy.anchors[id]!.id
+        XCTAssertEqual(newAnchor, policy.anchors[id])
+        let ruck = Exercise(name: "Ruck", category: .conditioning, type: .conditioning)
+        let practice = try TFHSession.practice(exercise: ruck, weight: 0, sets: 2, seconds: 600, rotation: 4)
+        XCTAssertEqual(practice.weightLb, 20); XCTAssertEqual(practice.sets, 1); XCTAssertEqual(practice.seconds, 300)
+    }
+
     private func writeV12Store(_ url: URL) throws {
         let schema = Schema(versionedSchema: CadenceSchemaV12.self)
         let c = try ModelContainer(for: schema, configurations: ModelConfiguration("migration", schema: schema, url: url))

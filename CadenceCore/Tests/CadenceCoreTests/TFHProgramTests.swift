@@ -49,4 +49,21 @@ final class TFHProgramTests: XCTestCase {
         XCTAssertEqual(plan?.weightLb, 50); XCTAssertEqual(plan?.reps, [3,3,3])
         XCTAssertEqual(plan?.state, "hold")
     }
+
+    func testOldMatchingPhasesCannotUndoARepeatedManualAdjustment() throws {
+        let anchor = try XCTUnwrap(policy.anchors["slot"])
+        func exposure(_ cycle: Int, _ rotation: Int, actual: Double, planned: Double) -> TFHExposure {
+            TFHExposure(id: "\(cycle)-\(rotation)", anchorId: anchor.id, exerciseId: anchor.exerciseId,
+                cycle: cycle, rotation: rotation, sets: (0..<3).map { _ in
+                    TFHSet(weightLb: actual, reps: 3, plannedWeightLb: planned, plannedReps: 3,
+                           loadBasis: .perImplement, implementCount: 2, quality: "clean")
+                })
+        }
+        var history = [exposure(3, 1, actual: 60, planned: 60),
+                       exposure(3, 2, actual: 50, planned: 60),
+                       exposure(3, 3, actual: 50, planned: 50)]
+        XCTAssertEqual(TFHProgression.project(anchor: anchor, exposures: history, cycle: 4, rotation: 1)?.weightLb, 50)
+        history.append(exposure(4, 1, actual: 50, planned: 50))
+        XCTAssertEqual(TFHProgression.project(anchor: anchor, exposures: history, cycle: 4, rotation: 2)?.weightLb, 50)
+    }
 }

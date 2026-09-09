@@ -153,7 +153,14 @@ public enum TFHProgression {
         let history = history(a, exposures, cycle, rotation)
         // Abstain instead of silently resetting progressed work to the starting anchor.
         guard !ambiguous(history) else { return nil }
-        let reference = history.last(where: { $0.rotation == rotation }) ?? history.last
+        // A deliberate load change starts a new comparison window. Older
+        // phases must not resurrect the target the athlete just adjusted.
+        let adjustment = history.lastIndex { e in
+            planSets(a, e) && e.sets.allSatisfy { $0.status == "completed" && $0.weightLb.isFinite && $0.weightLb >= 0 }
+                && e.sets.contains { !same($0.weightLb, $0.plannedWeightLb) }
+        }
+        let comparable = adjustment.map { Array(history.suffix(from: $0 + 1)) } ?? history
+        let reference = comparable.last(where: { $0.rotation == rotation }) ?? comparable.last ?? history.last
         let recentWorkSupportsProgress = history.last.map { made(a, $0) } ?? true
         if let reference {
             guard planSets(a, reference), reference.sets.allSatisfy({
@@ -177,7 +184,7 @@ public enum TFHProgression {
                     plan.state = "progress"
                     plan.reason = "Add one total work rep while preserving the load and number of sets."
                 } else {
-                    let top = Array(history.filter { $0.rotation == reference.rotation }.suffix(2))
+                    let top = Array(comparable.filter { $0.rotation == reference.rotation }.suffix(2))
                     let topIsConsecutive = top.count == 2 && top[1].cycle - top[0].cycle == 1
                     let topIsComplete = topIsConsecutive && top.allSatisfy { e in
                         usable(a, e) && e.sets.allSatisfy { s in

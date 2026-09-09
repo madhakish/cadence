@@ -3,6 +3,16 @@ import SwiftData
 import CadenceCore
 
 enum TFHSession {
+    static func practice(exercise: Exercise, weight: Double, sets: Int, seconds: Int?, rotation: Int) throws
+        -> (weightLb: Double, sets: Int, seconds: Int) {
+        guard let seconds, seconds > 0, sets > 0, weight.isFinite, weight >= 0 else {
+            throw TFHProgramService.Failure.invalid("\(exercise.name) needs an authored duration and load.")
+        }
+        let load = exercise.type == .conditioning && CardioFormat.carriesLoad(exerciseName: exercise.name)
+            ? (weight > 0 ? weight : (CardioFormat.defaultLoadLb(exerciseName: exercise.name) ?? 0)) : weight
+        return (load, rotation == 4 ? 1 : sets, rotation == 4 ? max(1, seconds / 2) : seconds)
+    }
+
     static func achieved(_ plan: TFHPrescription, exercise: Exercise, program: Program, gym: Gym?) -> Double {
         return ProgramSession.achievableWeight(plan.weightLb, exercise: exercise, isMain: true,
             gym: gym, bar: gym?.defaultBar ?? .bar45lb, stepLb: program.roundingLb,
@@ -53,12 +63,12 @@ enum TFHSession {
             entry.stampBarID(for: ex, bar: gym?.defaultBar ?? .bar45lb)
             entry.phase = CyclePhase(rawValue: next.rotation)
             entry.tfhAnchorData = try TFHProgramService.encode(projected?.0)
-            let carry = ex.type == .conditioning && CardioFormat.carriesLoad(exerciseName: ex.name)
-                ? (weight > 0 ? weight : (CardioFormat.defaultLoadLb(exerciseName: ex.name) ?? 0)) : weight
-            let load = projected.map { achieved($0.1, exercise: ex, program: program, gym: gym) } ?? carry
-            let duration = seconds.map { next.rotation == 4 ? max(1, $0 / 2) : $0 }
-            let targets = projected?.1.reps ?? Array(repeating: 1, count: next.rotation == 4 ? 1 : max(1, sets))
-            entry.targetWeightLb = projected?.1.weightLb ?? weight
+            let timed = projected == nil ? try practice(exercise: ex, weight: weight, sets: sets,
+                                                         seconds: seconds, rotation: next.rotation) : nil
+            let load = projected.map { achieved($0.1, exercise: ex, program: program, gym: gym) } ?? timed?.weightLb ?? weight
+            let duration = timed?.seconds
+            let targets = projected?.1.reps ?? Array(repeating: 1, count: timed?.sets ?? 1)
+            entry.targetWeightLb = projected?.1.weightLb ?? load
             entry.plannedWeightLb = load; entry.plannedSets = targets.count; entry.plannedReps = targets.first
             entry.plannedDurationSeconds = duration
             entry.prescriptionStyleRaw = "doubleProgression"

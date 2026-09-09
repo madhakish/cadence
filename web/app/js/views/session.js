@@ -2,7 +2,7 @@
 // rest timer, autoregulation, body signals, completion + PR detection.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { tfhCurrentPosition, tfhPrescription, tfhSynchronize } from "../tfh.js";
+import { tfhCurrentPosition, tfhPrescription, tfhSynchronize, tfhPractice } from "../tfh.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram , Intervals, intervalSnapshots } from "../db.js";
 import { barbellSVG, barbellStage, dumbbellSVG, loadoutSummary, mixedEquipmentNote, prescriptionPlateDetails } from "../barbell.js";
@@ -2398,12 +2398,10 @@ async function createTFHSession(program) {
     const result = tfhPreview(program,slot,ex,sessions,gym);
     const timed = ["timed","conditioning"].includes(ex.type);
     if (!result && !timed) throw new Error(`TFH: ${slot.exerciseName} needs an anchor. Review setup.`);
-    const authored = slot.weightLb ?? slot.baseWeightLb ?? 0;
-    const carry = ex.type === "conditioning" && C.cardioCarriesLoad(ex.name)
-      ? (authored > 0 ? authored : (C.cardioDefaultLoadLb(ex.name) ?? 0)) : authored;
-    const weight = result?.plan.weightLb ?? carry;
-    const duration = timed ? (next.rotation === 4 ? Math.max(1,Math.floor(slot.targetSeconds/2)) : slot.targetSeconds) : null;
-    const reps = result?.plan.reps ?? Array(next.rotation === 4 ? 1 : Math.max(1,slot.sets || 1)).fill(1);
+    const practice = !result ? tfhPractice(slot,ex,next.rotation) : null;
+    const weight = result?.plan.weightLb ?? practice.weightLb;
+    const duration = practice?.seconds ?? null;
+    const reps = result?.plan.reps ?? Array(practice.sets).fill(1);
     const sets = [], role = slot.role || "accessory";
     if (role !== "accessory" && ex.type === "barbell") {
       const ramp = achievableWarmups(C.warmupRamp(weight,C.barLb(bar),program.roundingLb,includesEmptyBarWarmup(ex.name)),weight,bar,gym,ex);

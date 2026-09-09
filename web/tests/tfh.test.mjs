@@ -95,4 +95,12 @@ const bwHistory = history.map(e=>({...e,sets:e.sets.slice(0,2).map(s=>({...s,
   weightLb:12,plannedWeightLb:12,loadBasis:"bodyweight",implementCount:1,reps:6,plannedReps:6}))}));
 assert.equal(C.tfhPlateau(alteredBW,bwHistory,[1,2,3],4).state,"learning",
   "a bodyweight record with external mass needs identity/load-basis repair");
+const adjusted = exposure(1,2);
+adjusted.sets = adjusted.sets.map(s=>({...s,weightLb:32}));
+const repeated = exposure(1,3);
+repeated.sets = repeated.sets.map(s=>({...s,weightLb:32,plannedWeightLb:32}));
+const afterAdjustment = [exposure(1,1),adjusted,repeated];
+assert.equal(C.tfhProject(anchor,afterAdjustment,2,1).weightLb,32,"old matching phases cannot undo a repeated load reduction");
+afterAdjustment.push({...repeated,id:"2-1",cycle:2,rotation:1});
+assert.equal(C.tfhProject(anchor,afterAdjustment,2,2).weightLb,32,"the old adjusted phase cannot resurrect its old target either");
 console.log("TFH regression tests passed");

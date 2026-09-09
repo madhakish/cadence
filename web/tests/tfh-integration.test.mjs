@@ -28,6 +28,19 @@ assert.equal(e.exerciseId,program.days[0].lifts[0].exerciseId);
 assert.equal(e.tfhAnchor.id,p.tfhPolicy.anchors[e.programSlotId].id);
 assert.deepEqual(e.sets.filter(s=>!s.isWarmup).map(s=>s.reps),[3,3,3]);
 assert.ok(e.sets.every(s=>s.loadBasis==="perImplement" && s.implementCount===2));
+const onlyBonus=structuredClone(first);onlyBonus.isCompleted=true;
+for(const s of onlyBonus.exercises[0].sets)s.status="skipped";
+onlyBonus.exercises[0].sets.push({...onlyBonus.exercises[0].sets[0],order:99,status:"completed"});
+assert.equal(T.tfhCohort(p,[onlyBonus]).length,0,"bonus work cannot complete an otherwise skipped day");
+onlyBonus.exercises[0].sets[0].status="completed";
+assert.equal(T.tfhCohort(p,[onlyBonus]).length,1);
+onlyBonus.tfhExcludedFromProgression=true;
+assert.equal(T.tfhCohort(p,[onlyBonus]).length,0,"off-program work stays outside the cohort");
+const configured=structuredClone(p), a=configured.tfhPolicy.anchors[e.programSlotId];
+a.incrementLb=2.5;a.intent="maintain";a.reps=[4,3,3];
+const revised=T.tfhDraft(configured,exs,[]);
+assert.deepEqual({...revised.anchors[e.programSlotId],id:a.id},a,"reviewing setup preserves authored configuration");
+assert.notEqual(revised.anchors[e.programSlotId].id,a.id,"a revised cohort has fresh evidence identities");
 const bank = async s => {
   for(const e of s.exercises)for(const x of e.sets){x.status="completed";x.flags=["clean"];}
   s.tfhContext="same setup and preceding work";
@@ -40,6 +53,13 @@ let history=await db.Sessions.all();
 let next=T.tfhPrescription(p,e.programSlotId,history,2);
 assert.equal(next.plan.weightLb,60);
 assert.deepEqual(next.plan.reps,[4,3,3],"one total rep, no volume collapse or forced DB increment");
+const bonus=structuredClone(history);
+bonus[0].exercises[0].sets.push({...bonus[0].exercises[0].sets[0],order:99,weightLb:10,reps:20});
+assert.deepEqual(T.tfhPrescription(p,e.programSlotId,bonus,2).plan,next.plan,"bonus work does not rewrite the frozen prescription");
+const ruck=exs.find(x=>x.name==="Ruck"), practiceSlot={id:"practice",exerciseName:"Ruck",weightLb:0,sets:2,targetSeconds:600};
+assert.deepEqual(T.tfhPractice(practiceSlot,ruck,4),{weightLb:20,sets:1,seconds:300});
+const practiceRow=UI.tfhPlanRow(p,practiceSlot,ruck,history,null,4);
+assert.match(practiceRow.textContent,/1 × 300s/);assert.match(practiceRow.textContent,/20/);
 // A correction must change the next prescription without a persisted stall grade.
 const corrected=await db.Sessions.get(firstID);
 const last=corrected.exercises[0].sets.filter(s=>!s.isWarmup).at(-1);
