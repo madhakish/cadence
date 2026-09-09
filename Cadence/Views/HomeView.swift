@@ -58,7 +58,7 @@ struct HomeView: View {
     private var coachingReport: CoachingReport? {
         guard let program = activeProgram, program.coachEnabled else { return nil }
         return CoachingService.report(
-            program: program, sessions: completedSessions,
+            program: program, sessions: completedSessions + openSessions,
             exercises: exercises, checkIns: checkIns,
             intervals: intervalSnapshots
         )
@@ -616,7 +616,9 @@ struct HomeView: View {
                 recommendation,
                 for: program,
                 exercises: exercises,
-                sessions: completedSessions,
+                sessions: completedSessions + openSessions,
+                checkIns: checkIns,
+                intervals: intervalSnapshots,
                 evidence: report.rotations.last?.reasons ?? [],
                 context: context
             )

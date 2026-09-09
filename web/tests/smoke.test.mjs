@@ -645,6 +645,71 @@ await withCleanup(async (keep) => {
   ok(staleRefused, "a stale stage recommendation cannot overwrite a prescription changed since evaluation");
 }
 
+// Exercise the rendered Coach -> Apply path, including a correction made
+// while its sheet is open and the real subsequent session/banking path.
+await withCleanup(async (keep) => {
+  const original = await db.Programs.active();
+  const program = structuredClone(original);
+  const day = program.days[0];
+  const lift = day.lifts[0];
+  Object.assign(lift, { exerciseName: "Incline DB Press", role: "main", prescription: "automatic",
+    baseWeightLb: 80, estimatedMaxLb: 110, capacityManaged: true, maximumSets: 6, revertToExerciseName: null });
+  day.lifts = [lift]; day.accessories = []; day.order = 0; day.trainingIntent = "general";
+  program.days = [day]; program.currentWeek = 3; program.cycleNumber = 1; program.nextDayIndex = 0;
+  program.roundingLb = 5; program.focus = "strength"; program.coachEnabled = true; program.reliableHistoryStart = null;
+  const evidence = { date: "2026-01-01T12:00:00Z", isCompleted: true,
+    programTag: { programId: program.uuid, cycleNumber: 1, week: 2, dayIndex: 0 },
+    exercises: [{ exerciseName: lift.exerciseName, programSlotId: lift.id, programRole: "main",
+      prescriptionStyle: "wave", plannedSets: 5, plannedReps: 3, plannedWeightLb: 85,
+      sets: Array.from({ length: 5 }, () => ({ weightLb: 85, reps: 3, plannedWeightLb: 85,
+        plannedReps: 3, status: "completed", flags: ["clean"], loadBasis: "perImplement",
+        implementCount: 2, prescriptionBlock: "work" })) }] };
+  evidence.id = keep(db.Sessions, await db.Sessions.save(evidence));
+  const openProposal = async () => {
+    await home.render(host());
+    host().querySelector(".coach-summary").click();
+    const card = [...document.querySelectorAll("#overlays .card")]
+      .find((node) => node.textContent.includes("Build reps before adding dumbbell weight"));
+    ok(!!card && card.textContent.includes("3×4"), "Coach renders the earned dumbbell target and explanation");
+    return [...card.querySelectorAll("button")].find((button) => button.textContent === "Apply");
+  };
+  try {
+    await db.Programs.save(program);
+    const staleApply = await openProposal();
+    evidence.exercises[0].sets[0].reps = 2;
+    await db.Sessions.save(evidence);
+    staleApply.click();
+    await waitFor(() => document.getElementById("toast").textContent.includes("rep progression was not applied"));
+    ok((await db.Programs.get(program.id)).days[0].lifts[0].prescription === "automatic",
+      "Apply reloads corrected history instead of accepting the sheet's stale snapshot");
+    document.getElementById("overlays").replaceChildren();
+    evidence.exercises[0].sets[0].reps = 3;
+    await db.Sessions.save(evidence);
+    (await openProposal()).click();
+    await waitFor(() => document.getElementById("toast").textContent.includes("build to 3×6"));
+    const accepted = await db.Programs.get(program.id);
+    const decisions = (await db.CoachingDecisions.all()).filter((d) => d.ruleId === "program.slot.dumbbell-reps.v1");
+    for (const decision of decisions) keep(db.CoachingDecisions, decision.id);
+    ok(decisions.length === 1 && accepted.days[0].lifts[0].currentReps === 4,
+      "Apply persists the rep window and its audit record together");
+    const historyBefore = JSON.stringify(await db.Sessions.get(evidence.id));
+    const sessionID = keep(db.Sessions, await session.createSessionFromProgramDay(accepted, accepted.days[0]));
+    const workout = await db.Sessions.get(sessionID);
+    const work = workout.exercises[0].sets.filter((set) => !set.isWarmup);
+    ok(work.length === 3 && work.every((set) => set.weightLb === 85 && set.reps === 4),
+      "the real session builder prescribes the accepted dumbbell rep target");
+    await completeAll(workout);
+    const advanced = (await db.Programs.get(program.id)).days[0].lifts[0];
+    ok(advanced.baseWeightLb === 85 && advanced.currentReps === 5,
+      "banking the real session earns reps without adding load");
+    ok(JSON.stringify(await db.Sessions.get(evidence.id)) === historyBefore,
+      "converting and banking preserve the historical prescription and performed work");
+  } finally {
+    document.getElementById("overlays").replaceChildren();
+    await db.Programs.save(original);
+  }
+})();
+
 const serviceWorkerSource = await (await import("node:fs/promises")).readFile(
   new URL("../app/sw.js", import.meta.url), "utf8");
 ok(serviceWorkerSource.includes('"js/coaching-adapter.js"'),

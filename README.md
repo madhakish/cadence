@@ -26,7 +26,8 @@ no quotes.
 - **Program engine** — three completed progression rotations per mesocycle
   (Volume 5×5 → Load 5×3 → Peak 3×3), followed by a two-exposure Recovery
   bridge (one lower, one upper; main work 2×3), offset-based strength waves,
-  double progression,
+  double progression, and an explicit coaching switch to rep-first dumbbell
+  work when load/peak rotations collapse to the same weight,
   optional primers/top singles, and rotation-first readiness. Each lift keys
   off completed performed work, never the calendar. Rack-aware targets keep
   the theoretical prescription, achieved load, and final performed load

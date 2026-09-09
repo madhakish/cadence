@@ -6,6 +6,8 @@ import { iso, sessionBelongsToProgram } from "./db.js";
 
 export function coachingReport(program, sessions, exMap, checkins = [], intervals = []) {
   const id = program.uuid || program.id;
+  const canChangeDumbbellStyle = program.currentWeek !== C.DELOAD_WEEK
+    && !sessions.some((session) => !session.isCompleted && sessionBelongsToProgram(session, program));
   // The library the apply path can draw from (availability + equipment
   // policy) — used both for pattern availability and for the per-slot
   // rotation-candidate flag, so evaluation and Apply cannot disagree.
@@ -40,6 +42,10 @@ export function coachingReport(program, sessions, exMap, checkins = [], interval
         maximumSets: lift.maximumSets || C.DEFAULT_MAXIMUM_SETS,
         prescriptionStyle: resolvedStyle,
         rotationCandidateAvailable,
+        collapsedDumbbellWaveLoadLb: canChangeDumbbellStyle && !lift.revertToExerciseName
+          && exercise?.loadBasis === "perImplement"
+          ? C.collapsedDumbbellWaveLoad(lift.baseWeightLb, program.roundingLb, exercise.type,
+            exercise.movementGroup, lift.role, program.focus, lift.prescription || "automatic", lift) : null,
         baseWeightLb: lift.baseWeightLb,
         workingSets: lift.doubleProgressionSets ?? 3,
         workingReps: (lift.currentReps ?? 5) <= 3 ? 3 : 5,
@@ -86,7 +92,7 @@ export function coachingReport(program, sessions, exMap, checkins = [], interval
             prescriptionBlock: C.resolvedPrescriptionBlock(set),
             completed: set.status === "completed", stoppedEarly: (set.flags || []).includes("stopped early"),
             hasBodyFlag: !!set.bodyFlagSite, quality: C.setQuality(set.flags) || "ungraded",
-            durationSeconds: set.durationSeconds ?? null })) };
+            durationSeconds: set.durationSeconds ?? null, loadBasis: set.loadBasis ?? null })) };
       }) }];
   });
   // What the apply path could actually resolve for each pattern, so the
@@ -116,7 +122,7 @@ function resolveExercise(pattern, available) {
     || available.find((item) => item.movementPattern === pattern);
 }
 
-export async function applyCoachingRecommendation(program, recommendation, exercises, sessions) {
+export async function applyCoachingRecommendation(program, recommendation, exercises, sessions, checkins = [], intervals = []) {
   const change = recommendation.change;
   let message = "Program held unchanged.";
   const automaticExercises = exercises.filter((item) => C.exerciseIsAvailableForProgramming(item)
@@ -294,6 +300,27 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     const old = program.preferredSessionSpacingDays || 3;
     program.preferredSessionSpacingDays = Math.max(2, change.days);
     message = `Preferred spacing: ${old} → ${program.preferredSessionSpacingDays} days.`;
+  } else if (change.type === "useDumbbellRepProgression") {
+    const lift = (program.days || []).flatMap((day) => day.lifts || [])
+      .find((slot) => slot.id === change.slotID);
+    const fresh = coachingReport(program, sessions || [], new Map(exercises.map((item) => [item.name, item])), checkins, intervals)
+      .recommendations.find((item) => item.id === recommendation.id);
+    if (!lift || !fresh || fresh.change.type !== change.type
+        || fresh.change.slotID !== change.slotID || fresh.change.exerciseName !== change.exerciseName
+        || fresh.change.expectedBaseWeightLb !== change.expectedBaseWeightLb
+        || fresh.change.weightLb !== change.weightLb || fresh.change.currentReps !== change.currentReps) {
+      throw new Error(`The program slot or completed work for ${change.exerciseName} changed after this recommendation, so rep progression was not applied.`);
+    }
+    lift.prescription = "doubleProgression";
+    lift.baseWeightLb = change.weightLb;
+    lift.doubleProgressionSets = 3;
+    lift.minimumReps = 3;
+    lift.maximumReps = 6;
+    lift.currentReps = change.currentReps;
+    lift.stallCount = 0;
+    lift.lastIncrementLb = 0;
+    delete lift.pending;
+    message = `${change.exerciseName}: 3×${change.currentReps} at ${C.trim(change.weightLb)} lb each; build to 3×6 before adding weight.`;
   } else if (change.type === "useLinearTriples") {
     const lift = (program.days || []).flatMap((day) => day.lifts || [])
       .find((slot) => slot.id === change.slotID);
@@ -340,6 +367,8 @@ export function coachingDecision(program, recommendation, action, evidence, befo
     ? temporaryAccessoryValue(Math.max(1, 100 - recommendation.change.percent), program.cycleNumber, program.currentWeek)
     : accepted && recommendation.change.type === "useLinearTriples"
       ? `linearTriples:slot:${recommendation.change.slotID}:5x3`
+      : accepted && recommendation.change.type === "useDumbbellRepProgression"
+        ? `dumbbellReps:slot:${recommendation.change.slotID}:3x${recommendation.change.currentReps}@${C.trim(recommendation.change.weightLb)}:range:3-6`
       : null;
   return { id: crypto.randomUUID(), date: iso(new Date()), programId: program.uuid || program.id,
     ruleId: recommendation.ruleID, recommendationId: recommendation.id, action,

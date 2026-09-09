@@ -16,6 +16,9 @@ enum CoachingService {
     ) -> CoachingReport {
         let exerciseByName = exercises.indexedByName()
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
+        let canChangeDumbbellStyle = phase != .deload && !sessions.contains {
+            !$0.isCompleted && $0.belongs(to: program)
+        }
         // The library the apply path can draw from (availability + equipment
         // policy) — used both for pattern availability and for the per-slot
         // rotation-candidate flag, so evaluation and Apply cannot disagree.
@@ -87,7 +90,15 @@ enum CoachingService {
                     // whole cycle — exactly the cycle worth rotating out of.
                     stallCount: lift.pendingStallCount ?? lift.stallCount,
                     exerciseIsShelved: exercise?.gateStatus == .shelved,
-                    rotationCandidateAvailable: rotationCandidateAvailable
+                    rotationCandidateAvailable: rotationCandidateAvailable,
+                    collapsedDumbbellWaveLoadLb: canChangeDumbbellStyle
+                        && lift.revertToExerciseName == nil && exercise?.loadBasis == .perImplement
+                        ? ProgramEngine.collapsedDumbbellWaveLoad(
+                            baseWeightLb: lift.baseWeightLb, programRoundingLb: program.roundingLb,
+                            exerciseType: exercise?.typeRaw, movementGroup: exercise?.movementGroup,
+                            role: lift.role, focus: program.focus, prescriptionStyle: lift.prescription,
+                            configuration: configuration
+                        ) : nil
                 )
             }
             let accessorySlots = day.accessories.map { accessory in
@@ -143,7 +154,8 @@ enum CoachingService {
                         stoppedEarly: set.flags.contains(.stoppedEarly),
                         hasBodyFlag: set.bodyFlagSite != nil,
                         quality: coachingQuality(set.quality),
-                        durationSeconds: set.durationSeconds
+                        durationSeconds: set.durationSeconds,
+                        loadBasis: LoadBasis(rawValue: set.loadBasisRaw)
                     )
                 }
                 return CoachingExerciseSnapshot(
@@ -195,6 +207,8 @@ enum CoachingService {
         // seed, and a forgotten argument would compile cleanly while every
         // returning variation silently fell to the 80% calibration ceiling.
         sessions: [WorkoutSession],
+        checkIns: [CheckIn] = [],
+        intervals: [TrainingIntervalSnapshot] = [],
         evidence: [String],
         context: ModelContext
     ) throws -> String {
@@ -302,6 +316,30 @@ enum CoachingService {
             let old = program.preferredSessionSpacingDays
             program.preferredSessionSpacingDays = max(2, days)
             result = "Preferred spacing: \(old) → \(program.preferredSessionSpacingDays) days."
+        case .useDumbbellRepProgression(let slotID, let exerciseName, _, let weight, let reps):
+            // Re-evaluate against current history/settings before touching any
+            // model. A banked correction, open session, swap, or new base makes
+            // the old proposal stale instead of overwriting the lifter's edit.
+            guard let lift = program.days.flatMap(\.lifts).first(where: { $0.id == slotID }),
+                  report(program: program, sessions: sessions, exercises: exercises,
+                         checkIns: checkIns, intervals: intervals).recommendations.contains(where: {
+                      $0.id == recommendation.id && $0.change == recommendation.change
+                  }) else { throw CoachingApplyError.prescriptionChanged(exerciseName) }
+            lift.prescription = .doubleProgression
+            lift.baseWeightLb = weight
+            lift.doubleProgressionSets = 3
+            lift.minimumReps = 3
+            lift.maximumReps = 6
+            lift.currentReps = reps
+            lift.stallCount = 0
+            lift.lastIncrementLb = 0
+            lift.pendingBaseWeightLb = nil
+            lift.pendingEstimatedMaxLb = nil
+            lift.pendingStallCount = nil
+            lift.pendingLastIncrementLb = nil
+            lift.pendingNote = nil
+            decisionAfterValue = "dumbbellReps:slot:\(slotID):3x\(reps)@\(Weight.trim(weight)):range:3-6"
+            result = "\(exerciseName): 3×\(reps) at \(Weight.trim(weight)) lb each; build to 3×6 before adding weight."
         case .useLinearTriples(let slotID, let exerciseName, let expectedBaseWeightLb):
             guard let lift = program.days.flatMap(\.lifts).first(where: { $0.id == slotID }) else {
                 throw CoachingApplyError.unknownSlot(exerciseName)

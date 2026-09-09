@@ -467,6 +467,34 @@ public enum ProgramEngine {
         )
     }
 
+    /// A wave whose load and peak resolve to the same dumbbells has no
+    /// heavier peak. The coach can offer the existing rep-window style;
+    /// authored prescriptions themselves remain unchanged until accepted.
+    public static func collapsedDumbbellWaveLoad(
+        baseWeightLb: Double, programRoundingLb: Double, exerciseType: String?,
+        movementGroup: String?, role: LiftRole, focus: TrainingFocus,
+        prescriptionStyle: PrescriptionStyle,
+        configuration: LiftPrescriptionConfiguration = .init()
+    ) -> Double? {
+        let style = resolvedStyle(prescriptionStyle, movementGroup: movementGroup, role: role, focus: focus)
+        guard exerciseType == "dumbbell", role == .main, focus == .strength,
+              style == .wave || style == .offsetWave,
+              baseWeightLb.isFinite, baseWeightLb > 0,
+              programRoundingLb.isFinite, programRoundingLb > 0 else { return nil }
+        func work(_ phase: CyclePhase) -> SessionPlan {
+            programPlan(for: CycleState(baseWeightLb: baseWeightLb, nextPhase: phase),
+                        programRoundingLb: programRoundingLb, exerciseType: exerciseType,
+                        movementGroup: movementGroup, role: role, focus: focus,
+                        prescriptionStyle: style, configuration: configuration)
+        }
+        let load = work(.load), peak = work(.peak)
+        guard load.weightLb > baseWeightLb, abs(load.weightLb - peak.weightLb) < 0.01,
+              abs(Weight.round(load.weightLb, to: loadStep(programRoundingLb: programRoundingLb,
+                  exerciseType: exerciseType)) - load.weightLb) < 0.01,
+              peak.sets * peak.reps < load.sets * load.reps else { return nil }
+        return load.weightLb
+    }
+
     /// The order a day's slots were AUTHORED in, recovered from an imported
     /// payload. Distinct orders are the author's numbers and pass through
     /// verbatim. When every order in the list ties — a hand-written program

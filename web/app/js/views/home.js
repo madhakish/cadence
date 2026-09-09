@@ -145,7 +145,7 @@ export async function render(host) {
   // the block below dereferences it unconditionally. An optional chain here
   // reads as a presence check but isn't one — `undefined !== false` is true.
   if (program && program.coachEnabled !== false) {
-    const report = coachingReport(program, completed, exMap, checkins, intervalSnaps);
+    const report = coachingReport(program, [...completed, ...openSessions], exMap, checkins, intervalSnaps);
     const handled = new Set(decisions.filter((decision) => (decision.programId || decision.programID) === (program.uuid || program.id))
       .map((decision) => decision.recommendationId || decision.recommendationID));
     // No cap, matching native: the engine already prioritizes, and hiding a
@@ -290,11 +290,19 @@ function showCoachDetail({ program, report, visible, latest, allExercises, compl
           ui.h("div", { class: "sub", style: { margin: "6px 0 10px" }, text: recommendation.explanation }),
           ui.h("div", { class: "btn-row" },
             ui.h("button", { class: "btn primary", text: "Apply", onClick: async () => {
-              const proposed = structuredClone(program);
               try {
-                const message = await applyCoachingRecommendation(proposed, recommendation, allExercises, completed);
+                // A rep-window proposal must see current state, including a
+                // workout opened or a banked set corrected after this sheet.
+                const refresh = recommendation.change.type === "useDumbbellRepProgression";
+                const [current, history, library, checkins, intervals] = refresh
+                  ? await Promise.all([Programs.get(program.id), Sessions.all(), Exercises.all(), Checkins.all(), Intervals.all()])
+                  : [program, completed, allExercises, [], []];
+                if (!current) throw new Error("This program no longer exists.");
+                const proposed = structuredClone(current);
+                const message = await applyCoachingRecommendation(proposed, recommendation, library, history,
+                  checkins, intervalSnapshots(intervals));
                 await Programs.saveWithDecision(proposed,
-                  coachingDecision(proposed, recommendation, "accepted", latest?.reasons || [], program));
+                  coachingDecision(proposed, recommendation, "accepted", latest?.reasons || [], current));
                 api.close(); ui.toast(message); ui.nav.refresh();
               } catch (error) {
                 ui.toast(error?.message || "That change could not be applied.");
