@@ -4202,6 +4202,16 @@ export function tfhProject(anchor, exposures, cycle, rotation) {
       }
     }
   }
+  const latest = history.at(-1);
+  if (latest && tfhPlanSets(anchor,latest)
+      && latest.sets.every(s=>s.status === "completed" && Number.isFinite(s.weightLb) && s.weightLb >= 0)
+      && latest.sets.some(s=>!tfhSame(s.weightLb,s.plannedWeightLb))) {
+    const actual = latest.sets[0].weightLb;
+    if (!latest.sets.every(s=>tfhSame(s.weightLb,actual))) return null;
+    plan.weightLb=actual;plan.reps=latest.sets.map(s=>s.plannedReps);plan.state="hold";
+    plan.reason="Repeat the last deliberately adjusted load before considering more work.";
+    plan.evidenceIds=[latest.id];
+  }
   if (tfhIntent(anchor) !== "develop") {
     plan.state = tfhIntent(anchor) === "maintain" ? "maintain" : "practice";
     plan.reason = "Preserve the authored capability while other priorities develop.";
@@ -4211,7 +4221,7 @@ export function tfhProject(anchor, exposures, cycle, rotation) {
       .map(() => anchor.minReps);
     if (anchor.loadBasis !== "bodyweight" && anchor.loadBasis !== "assisted") {
       const step = anchor.incrementLb;
-      plan.weightLb = step > 0 ? Math.floor((plan.weightLb * 0.8 + 1e-9) / step) * step : plan.weightLb * 0.8;
+      plan.weightLb = step > 0 ? Math.min(plan.weightLb,Math.max(step,Math.floor((plan.weightLb * 0.8 + 1e-9) / step) * step)) : plan.weightLb * 0.8;
     }
     plan.state = "recover";
     plan.reason = "Light recovery work; no progression or capacity test.";
@@ -4276,4 +4286,89 @@ export function tfhPlateau(anchor, exposures, completedCycles, currentCycle) {
     }
   }
   return result("possiblePlateau", "No measurable improvement across two complete cycles after the baseline. Review the plan.", ids);
+}
+
+// Portable TFH policy and schedule; mirrors TFHProgram.swift.
+export function tfhValidPolicy(p) {
+  if (!p || p.version !== 1 || typeof p.id !== "string" || !p.id
+      || !Number.isSafeInteger(p.startCycle) || p.startCycle < 1
+      || !Array.isArray(p.dayOrders) || p.dayOrders.length < 2 || p.dayOrders.length > 20
+      || p.dayOrders.some(d => !Number.isSafeInteger(d) || d < 0)
+      || new Set(p.dayOrders).size !== p.dayOrders.length
+      || !Array.isArray(p.recoveryDayOrders) || p.recoveryDayOrders.length < 2 || p.recoveryDayOrders.length > 3
+      || new Set(p.recoveryDayOrders).size !== p.recoveryDayOrders.length
+      || p.recoveryDayOrders.some(d => !p.dayOrders.includes(d))
+      || !p.anchors || typeof p.anchors !== "object" || Array.isArray(p.anchors)) return false;
+  const entries = Object.entries(p.anchors);
+  return entries.length > 0 && entries.length <= 100
+    && entries.every(([id,a]) => !!id && tfhValidPortableAnchor(a))
+    && new Set(entries.map(([,a]) => a.id)).size === entries.length
+    && p.layout && typeof p.layout === "object" && !Array.isArray(p.layout)
+    && Object.keys(p.layout).length > 0 && Object.keys(p.layout).length <= 200
+    && entries.every(([id])=>typeof p.layout[id] === "string");
+}
+
+export function tfhValidBenchmark(b) {
+  return b != null && typeof b === "object" && !Array.isArray(b)
+    && (b.stopReason == null || ["technicalLimit", "repCap", "pain", "interrupted", "voluntary"].includes(b.stopReason))
+    && (b.restSeconds == null || (Number.isFinite(b.restSeconds) && b.restSeconds > 0 && b.restSeconds <= 3600));
+}
+
+function tfhValidPortableAnchor(a) {
+  return tfhValidAnchor(a) && typeof a.isPerSide === "boolean" && typeof a.benchmarkEnabled === "boolean"
+    && ["develop","maintain","practice"].includes(a.intent);
+}
+
+export function tfhPosition(policy, completions) {
+  if (!tfhValidPolicy(policy)) return null;
+  const key = (c,r,d) => `${c}:${r}:${d}`, occupied = new Set();
+  for (const e of completions.filter(e => e.cycle >= policy.startCycle)) {
+    const days = e.rotation === 4 ? policy.recoveryDayOrders : policy.dayOrders;
+    const k = key(e.cycle,e.rotation,e.dayOrder);
+    if (!Number.isSafeInteger(e.cycle) || ![1,2,3,4].includes(e.rotation)
+        || !days.includes(e.dayOrder) || occupied.has(k)) return null;
+    occupied.add(k);
+  }
+  let cycle = policy.startCycle;
+  const completedCycles = [];
+  for (let n = 0; n <= completions.length; n++) {
+    for (let rotation = 1; rotation <= 4; rotation++) {
+      for (const dayOrder of rotation === 4 ? policy.recoveryDayOrders : policy.dayOrders) {
+        if (!occupied.has(key(cycle,rotation,dayOrder))) return { cycle, rotation, dayOrder, completedCycles };
+      }
+    }
+    completedCycles.push(cycle);
+    if (!Number.isSafeInteger(cycle + 1)) return null;
+    cycle++;
+  }
+  return null;
+}
+
+export function tfhValidateSession(session, version = 14) {
+  const fail = () => { throw new Error("Invalid TFH session identity or benchmark evidence."); };
+  const tag = session.programTag;
+  if (session.tfhPolicyId != null && (version < 14 || typeof session.tfhPolicyId !== "string" || !session.tfhPolicyId
+      || !tag?.programId || !Number.isSafeInteger(tag.cycleNumber) || tag.cycleNumber < 1
+      || ![1,2,3,4].includes(tag.week) || !Number.isSafeInteger(tag.dayIndex) || tag.dayIndex < 0)) fail();
+  if (session.tfhContext != null && (!session.tfhPolicyId || typeof session.tfhContext !== "string" || session.tfhContext.length > 500)) fail();
+  if (session.tfhExcludedFromProgression != null && (!session.tfhPolicyId || typeof session.tfhExcludedFromProgression !== "boolean")) fail();
+  for (const e of session.exercises || []) {
+    if (e.tfhAnchor != null && (version < 14 || !session.tfhPolicyId || !tfhValidPortableAnchor(e.tfhAnchor)
+        || e.exerciseId !== e.tfhAnchor.exerciseId || !e.programSlotId)) fail();
+    for (const s of e.sets || []) if (s.tfhBenchmark != null
+        && (!e.tfhAnchor || !tfhValidBenchmark(s.tfhBenchmark) || s.isWarmup || s.prescriptionBlock !== "amrap")) fail();
+  }
+}
+
+export function tfhValidateProgram(program, version = 14) {
+  const p = program.tfhPolicy;
+  if (p == null) return;
+  const days = [...(program.days || [])].sort((a,b) => a.order-b.order);
+  const slots = days.flatMap(d => [...(d.lifts || []), ...(d.accessories || [])]);
+  if (version < 14 || !tfhValidPolicy(p) || JSON.stringify(p.dayOrders) !== JSON.stringify(days.map(d => d.order))
+      || new Set(slots.map(s => s.id)).size !== slots.length
+      || slots.length !== Object.keys(p.layout).length
+      || !days.every(d=>[...(d.lifts || []),...(d.accessories || [])].every(s=>p.layout[s.id] === `${d.order}:${s.role || "accessory"}:${s.order}`))
+      || !Object.entries(p.anchors).every(([id,a]) => slots.some(s => s.id === id && s.exerciseId === a.exerciseId)))
+    throw new Error("TFH program composition changed. Review setup before starting.");
 }

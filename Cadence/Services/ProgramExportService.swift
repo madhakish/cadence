@@ -135,6 +135,9 @@ enum ProgramExportService {
     /// Deterministic bytes: sorted keys, no date encoding (the payload carries
     /// no timestamp at all), so the same program always produces the same file.
     static func jsonData(for program: Program, options: Options = .plan) throws -> Data {
+        guard program.tfhPolicyData == nil else {
+            throw TFHProgramService.Failure.invalid("Use a full backup to transfer this program's targets and evidence.")
+        }
         // Validate what we are about to hand over. A blank name or a day with no
         // slots writes a file every Cadence importer rejects, and the lifter
         // finds out on the other device. Mirrors the web export button; the

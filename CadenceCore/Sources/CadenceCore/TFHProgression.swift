@@ -202,6 +202,20 @@ public enum TFHProgression {
                 }
             }
         }
+        // A deliberate load adjustment is stronger evidence than a stale
+        // authored target. Do not re-prescribe 90 after the athlete used 70.
+        // Mixed-load work is not a uniform anchor; abstain rather than guess.
+        if let latest = history.last, planSets(a, latest),
+           latest.sets.allSatisfy({ $0.status == "completed" && $0.weightLb.isFinite && $0.weightLb >= 0 }),
+           latest.sets.contains(where: { !same($0.weightLb, $0.plannedWeightLb) }) {
+            guard let actual = latest.sets.first?.weightLb,
+                  latest.sets.allSatisfy({ same($0.weightLb, actual) }) else { return nil }
+            plan.weightLb = actual
+            plan.reps = latest.sets.compactMap(\.plannedReps)
+            plan.state = "hold"
+            plan.reason = "Repeat the last deliberately adjusted load before considering more work."
+            plan.evidenceIds = [latest.id]
+        }
         if a.intent != .develop {
             plan.state = a.intent == .maintain ? "maintain" : "practice"
             plan.reason = "Preserve the authored capability while other priorities develop."
@@ -210,7 +224,7 @@ public enum TFHProgression {
             plan.reps = Array(plan.reps.prefix(max(1, (plan.reps.count + 1) / 2))).map { _ in a.minReps }
             if a.loadBasis != .bodyweight && a.loadBasis != .assisted {
                 let step = a.incrementLb
-                plan.weightLb = step > 0 ? floor((plan.weightLb * 0.8 + 1e-9) / step) * step : plan.weightLb * 0.8
+                plan.weightLb = step > 0 ? min(plan.weightLb, max(step, floor((plan.weightLb * 0.8 + 1e-9) / step) * step)) : plan.weightLb * 0.8
             }
             plan.state = "recover"
             plan.reason = "Light recovery work; no progression or capacity test."

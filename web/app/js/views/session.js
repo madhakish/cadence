@@ -2,6 +2,7 @@
 // rest timer, autoregulation, body signals, completion + PR detection.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
+import { tfhCurrentPosition, tfhPrescription, tfhSynchronize } from "../tfh.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram , Intervals, intervalSnapshots } from "../db.js";
 import { barbellSVG, barbellStage, dumbbellSVG, loadoutSummary, mixedEquipmentNote, prescriptionPlateDetails } from "../barbell.js";
@@ -9,6 +10,7 @@ import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.j
 import * as ProgrammingDefaults from "../programming-defaults.js";
 import { exerciseDetail, exercisePickerList } from "./settings.js";
 import { writeClockRecord, clearClockRecord, storedClockStart } from "../workout-clock.js";
+import {tfhEvidence} from "./tfh.js";
 
 const trackState = (t) => ({ cycleNumber: t.cycleNumber, baseWeightLb: t.baseWeightLb, nextPhase: t.nextPhase, incrementLb: t.incrementLb });
 const mkSet = (order, w, r, o = {}) => ({
@@ -86,6 +88,7 @@ export function includesEmptyBarWarmup(exerciseName) {
 // instead of guessing a strength cue. Never write that guess into history.
 // Mirrors ActiveSessionView.
 export function complementaryEffortCueForEntry(entry, exercise, program) {
+  if(entry?.tfhAnchor) return "TFH · complete clean work; leave capacity for the rest of your training.";
   const style = entry?.prescriptionStyle;
   if (!style || (style === "automatic" && !program?.focus)) return null;
   return C.complementaryEffortCue(entry.programRole, style, exercise?.movementGroup,
@@ -427,6 +430,7 @@ export async function openSession(id) {
 
   function renderBody(body) {
     ui.clear(body);
+    if(session.tfhPolicyId != null) body.append(tfhEvidence(session,()=>Sessions.save(session)));
     session.exercises.sort((a, b) => a.order - b.order);
     const current = currentEntry();
     const exerciseNumber = current ? session.exercises.indexOf(current) + 1 : 0;
@@ -1315,6 +1319,8 @@ async function completeSessionInner(session) {
   // SessionCompletion.finish.
   const intervalSnaps = intervalSnapshots(await Intervals.all());
   const offProgram = C.isOffProgramTime(new Date(session.date).getTime(), intervalSnaps);
+  if (session.tfhPolicyId != null) session.tfhExcludedFromProgression = offProgram;
+  C.tfhValidateSession(session);
   // An active-recovery session never joins the PR baseline either —
   // suppressing its OWN milestones at bank time is not enough, because a
   // heavy recovery set left in history would suppress every later legitimate
@@ -1694,6 +1700,11 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
 // another reduced workout. The seven-day threshold only expires the bridge;
 // ordinary progression remains driven by completed cycles.
 export async function reconcileRecoveryBridge(program, completed = null, now = new Date()) {
+  if (program?.tfhPolicy != null) {
+    tfhSynchronize(program, completed || await Sessions.completed());
+    await Programs.save(program);
+    return null;
+  }
   if (!program || program.currentWeek !== C.DELOAD_WEEK) return null;
   // Never advance the program out from under a workout in progress. The open
   // session was built against this rotation; rolling the cycle while it is on
@@ -1743,6 +1754,12 @@ async function advanceProgram(session, milestones) {
   const program = await Programs.byStableId(tag.programId)
     || (await Programs.all()).find((candidate) => candidate.name === tag.programName);
   if (!program) return null;
+  if (session.tfhPolicyId != null || program.tfhPolicy != null) {
+    if (session.tfhPolicyId !== program.tfhPolicy?.id) return null;
+    const history = (await Sessions.all()).filter(s => s.id !== session.id);
+    tfhSynchronize(program, [...history,session]);
+    return {program,noteRecords:[]};
+  }
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const day = program.days.find((d) => d.order === tag.dayIndex);
   if (!day) return null;
@@ -2183,6 +2200,7 @@ function sessionTargetsMatch(session, program, day, exMap, allSessions) {
 }
 
 export async function createSessionFromProgramDay(program, day) {
+  if (program.tfhPolicy != null) return createTFHSession(program);
   const recovery = await reconcileRecoveryBridge(program);
   if (recovery) {
     program = recovery.program;
@@ -2345,6 +2363,73 @@ export async function createSessionFromProgramDay(program, day) {
     exercises,
   });
   return id;
+}
+
+export function tfhPreview(program, slot, exercise, sessions, gym, rotation = null) {
+  const result = tfhPrescription(program,slot.id,sessions,rotation);
+  if (!result) return null;
+  const {anchor,plan} = result;
+  if (exercise?.id !== anchor.exerciseId || C.resolvedLoadBasis(exercise) !== anchor.loadBasis
+      || C.resolvedImplementCount(exercise) !== anchor.implementCount || !!exercise?.isUnilateral !== anchor.isPerSide)
+    throw new Error(`TFH: ${slot.exerciseName}'s load convention changed. Review setup.`);
+  const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
+  const weightLb = neatProgramWeight(plan.weightLb,exercise,true,C.barLb(bar),program.roundingLb,gym,
+    plan.state === "recover" ? 4 : 1);
+  return {anchor,plan:{...plan,weightLb},targetWeightLb:plan.weightLb};
+}
+
+async function createTFHSession(program) {
+  const [sessions,library,gym,settings] = await Promise.all([Sessions.all(),Exercises.all(),Gyms.default(),Settings.get()]);
+  const next = tfhSynchronize(program,sessions), p = program.tfhPolicy;
+  const day = program.days.find(d=>d.order === next.dayOrder);
+  if (!day) throw new Error("TFH: No next training day.");
+  const open = sessions.filter(s=>!s.isCompleted && s.programTag?.programId === (program.uuid || program.id));
+  if (open.length) {
+    const s = open[0], t = s.programTag;
+    if (open.length !== 1 || s.tfhPolicyId !== p.id || t.cycleNumber !== next.cycle || t.week !== next.rotation || t.dayIndex !== next.dayOrder)
+      throw new Error("TFH: Finish or discard the existing session before starting another.");
+    return s.id;
+  }
+  const unit = C.primaryUnit(settings.unitDisplay), bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
+  const entries = [];
+  for (const slot of [...C.orderedProgramSlots(day.lifts),...C.orderedProgramSlots(day.accessories)]) {
+    const ex = library.find(e=>e.name === slot.exerciseName);
+    if (!ex?.id) throw new Error(`TFH: ${slot.exerciseName} is missing from the exercise library.`);
+    const result = tfhPreview(program,slot,ex,sessions,gym);
+    const timed = ["timed","conditioning"].includes(ex.type);
+    if (!result && !timed) throw new Error(`TFH: ${slot.exerciseName} needs an anchor. Review setup.`);
+    const authored = slot.weightLb ?? slot.baseWeightLb ?? 0;
+    const carry = ex.type === "conditioning" && C.cardioCarriesLoad(ex.name)
+      ? (authored > 0 ? authored : (C.cardioDefaultLoadLb(ex.name) ?? 0)) : authored;
+    const weight = result?.plan.weightLb ?? carry;
+    const duration = timed ? (next.rotation === 4 ? Math.max(1,Math.floor(slot.targetSeconds/2)) : slot.targetSeconds) : null;
+    const reps = result?.plan.reps ?? Array(next.rotation === 4 ? 1 : Math.max(1,slot.sets || 1)).fill(1);
+    const sets = [], role = slot.role || "accessory";
+    if (role !== "accessory" && ex.type === "barbell") {
+      const ramp = achievableWarmups(C.warmupRamp(weight,C.barLb(bar),program.roundingLb,includesEmptyBarWarmup(ex.name)),weight,bar,gym,ex);
+      for (const wu of ramp) sets.push(mkSet(sets.length,wu.weightLb,wu.reps,{warm:true,unit,...loadOptions(ex)}));
+    }
+    for (const [index,rep] of reps.entries()) {
+      const benchmark = result?.plan.benchmark && index === reps.length-1;
+      const s = mkSet(sets.length,weight,rep,{unit,perSide:!!ex.isUnilateral,...loadOptions(ex),
+        targetWeightLb:result?.targetWeightLb ?? weight,plannedWeightLb:weight,plannedReps:rep,
+        plannedDurationSeconds:duration,
+        prescriptionBlock:timed ? "conditioning" : (benchmark ? "amrap" : "work")});
+      if (timed) s.durationSeconds = duration;
+      if (benchmark) s.tfhBenchmark = {};
+      sets.push(s);
+    }
+    entries.push({order:entries.length,exerciseName:ex.name,exerciseId:ex.id,notes:"",phase:next.rotation,
+      programRole:role,programSlotId:slot.id,barId:barStamp(ex,bar),tfhAnchor:result?.anchor ?? null,
+      plannedWeightLb:weight,targetWeightLb:result?.targetWeightLb ?? weight,plannedSets:reps.length,plannedReps:reps[0],
+      plannedDurationSeconds:duration,prescriptionStyle:"doubleProgression",sets});
+  }
+  const session = {uuid:crypto.randomUUID(),date:iso(new Date()),notes:"",isCompleted:false,...await defaultGymTag(),
+    programTag:{programId:program.uuid || program.id,programName:program.name,cycleNumber:next.cycle,
+      week:next.rotation,dayIndex:next.dayOrder,planNames:entries.map(e=>e.exerciseName)},
+    programTemplateId:program.templateId || null,tfhPolicyId:p.id,exercises:entries};
+  C.tfhValidateSession(session);
+  return Sessions.save(session);
 }
 
 function showSummary(summary, onDone) {

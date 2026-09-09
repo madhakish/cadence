@@ -452,6 +452,12 @@ public struct CoachingReport: Sendable {
     public let currentReadiness: ReadinessState
     public let greenRotationStreak: Int
     public let recommendations: [CoachingRecommendation]
+
+    public init(rotations: [RotationAssessment], currentReadiness: ReadinessState,
+                greenRotationStreak: Int, recommendations: [CoachingRecommendation]) {
+        self.rotations = rotations; self.currentReadiness = currentReadiness
+        self.greenRotationStreak = greenRotationStreak; self.recommendations = recommendations
+    }
 }
 
 /// Pure, explainable coaching rules. Safety/body output wins over holds;

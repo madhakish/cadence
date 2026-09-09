@@ -159,6 +159,7 @@ const pick = (source, fields) => {
 /// `includeIdentity` opts into carrying UUIDs so the file can update in place.
 export function exportProgramFile(program, { includeState = false, includeIdentity = false } = {}) {
   if (!program) throw new Error("Program export failed: no program was given.");
+  if (program.tfhPolicy != null) throw new Error("Use a full backup to transfer TFH targets and evidence; the shared-program format cannot carry this method yet.");
 
   const liftFields = includeState ? [...LIFT_PLAN_FIELDS, ...LIFT_STATE_FIELDS] : LIFT_PLAN_FIELDS;
   const accessoryFields = includeState

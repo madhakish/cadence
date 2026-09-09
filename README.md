@@ -16,9 +16,9 @@ no quotes.
 [Build your first program](docs/tutorials/first-program.md) or
 [pick a pre-programmed style](docs/how-to/start-from-a-style.md).
 
-The [TFH policy prototype](docs/explanation/tfh-method.md) documents ongoing
-work on development, maintenance, and practice across useful capabilities.
-It is not yet connected to live program prescriptions or coaching.
+The opt-in [TFH method](docs/explanation/tfh-method.md) connects bounded
+development, maintenance, and practice targets to live programming and coaching
+on native and web. Set it up from your existing program's editor.
 
 ## What it does
 

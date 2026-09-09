@@ -2,9 +2,11 @@
 // Evaluation is read-only. Program mutations cross an explicit user-accepted
 // boundary and the caller persists a CoachingDecision audit record.
 import * as C from "./core.js";
+import { tfhCoachingReport } from "./tfh.js";
 import { iso, sessionBelongsToProgram } from "./db.js";
 
 export function coachingReport(program, sessions, exMap, checkins = [], intervals = []) {
+  if (program.tfhPolicy != null) return tfhCoachingReport(program,sessions);
   const id = program.uuid || program.id;
   // The library the apply path can draw from (availability + equipment
   // policy) — used both for pattern availability and for the per-slot
@@ -117,6 +119,8 @@ function resolveExercise(pattern, available) {
 }
 
 export async function applyCoachingRecommendation(program, recommendation, exercises, sessions) {
+  if (program.tfhPolicy != null && recommendation.change.type !== "hold")
+    throw new Error("Review TFH targets before changing workload. This proposal belongs to the previous method.");
   const change = recommendation.change;
   let message = "Program held unchanged.";
   const automaticExercises = exercises.filter((item) => C.exerciseIsAvailableForProgramming(item)

@@ -393,6 +393,14 @@ struct HomeView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        if program.tfhPolicyData != nil {
+                            ForEach(day.orderedLifts) { lift in
+                                TFHSlotPlanView(program: program, slotID: lift.id, name: lift.exerciseName)
+                            }
+                            ForEach(day.orderedAccessories) { accessory in
+                                TFHSlotPlanView(program: program, slotID: accessory.id, name: accessory.exerciseName)
+                            }
+                        } else {
                         ForEach(day.orderedLifts) { lift in
                             let target = rawProgramPlan(program, day, lift)
                             let plan = programPlan(program, day, lift)
@@ -429,6 +437,7 @@ struct HomeView: View {
                         if !day.accessories.isEmpty {
                             Text("+ " + day.accessories.map(\.exerciseName).joined(separator: ", "))
                                 .font(.caption).foregroundStyle(.secondary)
+                        }
                         }
                         Button {
                             startProgramDay(program, day)

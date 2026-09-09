@@ -12,6 +12,7 @@ import { Sessions } from "../db.js";
 // Module cycle with session.js is safe: these are hoisted function exports
 // used only at runtime (session.js likewise imports exerciseDetail from here).
 import { planningBase, previewProgramPlan, volumeFallbackSets } from "./session.js";
+import {tfhEditor,tfhPlanRow} from "./tfh.js";
 
 // Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
 // Peak result would otherwise make the next rollover treat the skipped Peak as a
@@ -508,6 +509,9 @@ export async function suspendProgram(p) {
 export async function programEditor(p) {
   const exerciseByName = new Map((await Exercises.all()).map((exercise) => [exercise.name, exercise]));
   const warningsFor = () => {
+    if (p.tfhPolicy != null) {
+      try { C.tfhValidateProgram(p); return []; } catch(e) { return [e.message]; }
+    }
     const warnings = [];
     const rotation = new Map(), patterns = new Map();
     let intervalSlots = 0;
@@ -630,6 +634,7 @@ export async function programEditor(p) {
         const nameInput = ui.h("input", { type: "text", value: p.name });
         nameInput.addEventListener("change", async () => { p.name = nameInput.value || p.name; api.setTitle(p.name); await Programs.save(p); });
         body.append(ui.field("Program name", nameInput));
+        body.append(ui.h("button",{class:"btn primary wide",text:p.tfhPolicy ? "Review TFH targets / new cohort" : "Set up TFH method",onClick:()=>tfhEditor(p)}));
         body.append(ui.field("Training focus", ui.seg(
           [{ value: "strength", label: "Strength" }, { value: "hypertrophy", label: "Hypertrophy" }, { value: "maintain", label: "Maintain" }],
           p.focus, async (v) => { p.focus = v; await Programs.save(p); })));
@@ -681,6 +686,7 @@ export async function programEditor(p) {
           daySel.addEventListener("change", async () => { p.nextDayIndex = Number(daySel.value); await Programs.save(p); });
           pos.append(ui.h("div", { class: "row", style: { borderBottom: "0" } }, ui.h("span", { text: "Next day" }), daySel));
         }
+        if(p.tfhPolicy != null) pos.querySelectorAll("input,button,select").forEach(el=>{el.disabled=true;});
         body.append(pos);
         body.append(ui.h("div", { class: "sub", style: { margin: "4px" }, text: "Set your position mid-cycle. Rotations 1–3 are complete authored passes (volume/load/peak); recovery is one representative lower and upper exposure, then rollover. Weights are the rotation-1 base." }));
         body.append(ui.h("div", { class: "section-title", text: "Days" }));
@@ -713,6 +719,7 @@ export async function programEditor(p) {
           // Validate what we are about to hand over. A blank name or a day with
           // no slots writes a file every Cadence importer rejects, and the
           // lifter finds out on the other device.
+          if(p.tfhPolicy != null) {ui.toast("Use a full backup to transfer TFH targets and evidence.");return;}
           const text = exportProgramText(p);
           const problems = validateProgramFile(JSON.parse(text));
           if (problems.length) { ui.toast(`Not exported — ${problems[0]}`); return; }
@@ -726,7 +733,16 @@ export async function programEditor(p) {
           const copy = structuredClone(p);
           delete copy.id; delete copy.uuid;
           copy.name = name; copy.isActive = false;
-          for (const day of copy.days || []) for (const slot of [...(day.lifts || []), ...(day.accessories || [])]) delete slot.id;
+          const mapping=new Map();
+          for (const day of copy.days || []) for (const slot of [...(day.lifts || []), ...(day.accessories || [])]) {
+            const id=crypto.randomUUID();mapping.set(slot.id,id);slot.id=id;
+          }
+          if(copy.tfhPolicy != null){
+            const policy=copy.tfhPolicy;policy.id=crypto.randomUUID();policy.startCycle=1;
+            policy.anchors=Object.fromEntries(Object.entries(policy.anchors).map(([id,a])=>[mapping.get(id),{...a,id:crypto.randomUUID()}]));
+            policy.layout=Object.fromEntries(Object.entries(policy.layout).map(([id,v])=>[mapping.get(id),v]));
+            copy.cycleNumber=1;copy.currentWeek=1;copy.nextDayIndex=policy.dayOrders[0];
+          }
           await Programs.save(copy); ui.toast(`Created ${name}.`); ui.nav.refresh();
         } }));
         body.append(ui.h("button", { class: "btn ghost wide danger", style: { marginTop: "12px" }, text: "Delete program", onClick: () => {
@@ -1248,6 +1264,10 @@ async function exerciseInsight(wrap, e) {
   if (cycleMemberships.length) {
     wrap.append(ui.h("div", { class: "section-title", text: "Program cycle" }));
     for (const { program, day, lift } of cycleMemberships) {
+      if (program.tfhPolicy != null) {
+        wrap.append(tfhPlanRow(program,lift,e,completed,gym));
+        continue;
+      }
       const cycle = ui.h("div", { class: "card" },
         ui.h("div", { class: "title", style: { marginBottom: "4px" }, text: `${program.name} · ${day.name}` }));
       // The shared preview pipeline (planningBase + volume-fallback sets +

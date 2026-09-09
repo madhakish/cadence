@@ -100,6 +100,7 @@ struct ActiveSessionView: View {
 
     var body: some View {
         List {
+            if session.tfhPolicyID != nil { TFHEvidenceView(session: session) }
             // Preserve the authored exercise order. Work already passed stays
             // represented above the current lift as one compact disclosure,
             // rather than moving the current lift ahead of exercises 1...N.
@@ -895,6 +896,7 @@ private struct ExerciseSection: View {
         )
     }
     private var complementaryEffortCue: String? {
+        if entry.tfhAnchorData != nil { return "TFH · complete clean work; leave capacity for the rest of your training." }
         guard let role = entry.programRole.flatMap(LiftRole.init(rawValue:)),
               let style = PrescriptionStyle(rawValue: entry.prescriptionStyleRaw) else { return nil }
         guard style != .automatic || programFocus != nil else { return nil }

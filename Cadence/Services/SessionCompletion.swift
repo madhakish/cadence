@@ -90,6 +90,7 @@ enum SessionCompletion {
             session.date.timeIntervalSince1970 * 1000,
             intervals: intervalSnapshots
         )
+        if session.tfhPolicyID != nil { session.tfhExcludedFromProgression = offProgram }
 
         var lines: [SessionSummary.LiftLine] = []
         var allEvents: [PREvent] = []
@@ -274,11 +275,7 @@ enum SessionCompletion {
     // Shared with ProgramSession.lastVolumeEvidence so both clients read the
     // same evidence window (planned-set cap included).
     static func prescribedWork(_ entry: SessionExercise) -> [SetEntry] {
-        let candidates = entry.orderedSets.filter {
-            !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork
-        }
-        return Array(candidates.prefix(entry.plannedSets ?? candidates.count))
-            .filter { $0.status == .completed }
+        entry.prescribedWork
     }
 
     private static func hasCompletedProgramInstruction(in session: WorkoutSession) -> Bool {
@@ -609,6 +606,11 @@ enum SessionCompletion {
     static func reconcileRecoveryBridge(
         program: Program, context: ModelContext, asOf now: Date = .now
     ) throws -> RecoveryBridgeReconciliation? {
+        if program.tfhPolicyData != nil {
+            _ = try TFHProgramService.synchronize(program, sessions: context.fetch(FetchDescriptor<WorkoutSession>()))
+            try context.save()
+            return nil
+        }
         guard program.currentWeek == ProgramProgression.deloadWeek else { return nil }
 
         // Never advance the program out from under a workout in progress. The
@@ -723,6 +725,10 @@ enum SessionCompletion {
         let programs = try context.fetch(FetchDescriptor<Program>())
         guard let program = programs.matching(sessionProgramID: session.programID,
                                               name: session.programName) else { return }
+        if session.tfhPolicyID != nil || program.tfhPolicyData != nil {
+            try TFHProgramService.complete(session, program: program, context: context)
+            return
+        }
         let dayIndex = session.programDayIndex ?? 0
         guard let day = program.day(order: dayIndex) else { return }
         let week = session.programWeek ?? program.currentWeek

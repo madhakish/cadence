@@ -52,6 +52,8 @@ enum ImportService {
         var completedAt: Date?
         var programTag: ProgramTag?; var exercises: [ExerciseEntry]?
         var activity: ActivityDTO?
+        var tfhPolicyId: String?; var tfhContext: String?
+        var tfhExcludedFromProgression: Bool?
     }
     /// v12 typed ad-hoc activity facts (wood splitting first). Absent on
     /// every older bundle — the session simply restores with no detail;
@@ -82,6 +84,7 @@ enum ImportService {
         var plannedWeightLb: Double?; var targetWeightLb: Double?; var plannedSets: Int?; var plannedReps: Int?
         var plannedDurationSeconds: Int?; var fallbackWeightLb: Double?; var prescriptionStyle: String?
         var sets: [SetDTO]?
+        var tfhAnchor: TFHAnchor?
     }
     private struct SetDTO: Decodable {
         var weightLb: Double?; var reps: Int?; var isWarmup: Bool?; var isPerSide: Bool?
@@ -92,6 +95,7 @@ enum ImportService {
         var enteredUnit: String?; var flags: [String]?; var bodyFlagSite: String?; var bodyFlagNote: String?
         var durationSeconds: Int?; var distanceMiles: Double?; var flights: Double?
         var inclinePercent: Double?; var autoregReason: String?
+        var tfhBenchmark: TFHBenchmarkResult?
     }
     private struct Bodyweight: Decodable { var date: Date?; var weightLb: Double?; var bodyFatPercent: Double?; var milestoneLabel: String? }
     private struct CheckInDTO: Decodable { var date: Date?; var site: String?; var response: String?; var note: String? }
@@ -102,10 +106,12 @@ enum ImportService {
         var equipmentPolicy: String?
         var coachEnabled: Bool?; var reliableHistoryStart: Date?; var preferredSessionSpacingDays: Int?
         var maximumAddedSetsPerRotation: Int?
+        var tfhPolicy: TFHProgramPolicy?
 
         private enum CodingKeys: String, CodingKey {
             case id, templateId, name, focus, cycleNumber, currentWeek, nextDayIndex, roundingLb, isActive, days
             case equipmentPolicy
+            case tfhPolicy
             case coachEnabled, reliableHistoryStart, preferredSessionSpacingDays, maximumAddedSetsPerRotation
         }
         init(from decoder: Decoder) throws {
@@ -126,6 +132,7 @@ enum ImportService {
             reliableHistoryStart = try? c.decode(Date.self, forKey: .reliableHistoryStart)
             preferredSessionSpacingDays = try? c.decode(Int.self, forKey: .preferredSessionSpacingDays)
             maximumAddedSetsPerRotation = try? c.decode(Int.self, forKey: .maximumAddedSetsPerRotation)
+            tfhPolicy = try c.decodeIfPresent(TFHProgramPolicy.self, forKey: .tfhPolicy)
         }
     }
     private struct DayDTO: Decodable {
@@ -282,6 +289,31 @@ enum ImportService {
 
         for (si, session) in (bundle.sessions ?? []).enumerated() {
             let path = "sessions[\(si)]"
+            if let id = session.tfhPolicyId {
+                guard schemaVersion >= 14, !id.isEmpty, let tag = session.programTag,
+                      tag.programId != nil, (tag.cycleNumber ?? 0) > 0,
+                      (1...4).contains(tag.week ?? 0), (tag.dayIndex ?? -1) >= 0 else {
+                    throw ImportError.invalidData("\(path).tfhPolicyId or position")
+                }
+            }
+            guard (session.tfhContext == nil || (session.tfhPolicyId != nil && (session.tfhContext?.count ?? 0) <= 500)),
+                  session.tfhExcludedFromProgression == nil || session.tfhPolicyId != nil else {
+                throw ImportError.invalidData("\(path).tfhContext")
+            }
+            for entry in session.exercises ?? [] {
+                if let anchor = entry.tfhAnchor {
+                    guard schemaVersion >= 14, session.tfhPolicyId != nil, anchor.isValid,
+                          entry.exerciseId == anchor.exerciseId, entry.programSlotId != nil else {
+                        throw ImportError.invalidData("\(path).tfhAnchor")
+                    }
+                }
+                for set in entry.sets ?? [] where set.tfhBenchmark != nil {
+                    guard entry.tfhAnchor != nil, set.tfhBenchmark?.isValid == true,
+                          set.isWarmup != true, set.prescriptionBlock == "amrap" else {
+                        throw ImportError.invalidData("\(path).tfhBenchmark")
+                    }
+                }
+            }
             if session.id != nil { _ = try portableID(session.id, "\(path).id") }
             try requireDate(session.date, "\(path).date")
             if schemaVersion >= 3, session.isCompleted == true, session.completedAt != nil {
@@ -418,6 +450,16 @@ enum ImportService {
 
         for (pi, program) in (bundle.programs ?? []).enumerated() {
             let path = "programs[\(pi)]"
+            if let policy = program.tfhPolicy {
+                let slots = (program.days ?? []).flatMap { ($0.lifts ?? []).map { ($0.id, $0.exerciseId) }
+                    + ($0.accessories ?? []).map { ($0.id, $0.exerciseId) } }
+                guard schemaVersion >= 14, policy.isValid,
+                      policy.dayOrders == (program.days ?? []).compactMap(\.order).sorted(),
+                      Set(slots.compactMap { $0.0 }).count == slots.count,
+                      policy.anchors.allSatisfy({ id, anchor in slots.contains { $0.0 == id && $0.1 == anchor.exerciseId } }) else {
+                    throw ImportError.invalidData("\(path).tfhPolicy")
+                }
+            }
             if schemaVersion >= 2 { _ = try portableID(program.id, "\(path).id") }
             _ = try requiredText(program.name, "\(path).name")
             try known(program.focus, ["strength", "hypertrophy", "maintain"], "\(path).focus", required: schemaVersion >= 1)
@@ -700,7 +742,7 @@ enum ImportService {
                 // caught. Validation only checks uniqueness within a program.
                 var seenSlotIDs: Set<String> = []
                 for p in programs {
-                    let program = makeProgram(p, preserveID: schemaVersion >= 2, schemaVersion: schemaVersion,
+                    let program = try makeProgram(p, preserveID: schemaVersion >= 2, schemaVersion: schemaVersion,
                                               seenSlotIDs: &seenSlotIDs, repairedSlotIDs: &repairedSlotIDs)
                     context.insert(program)
                     imported[program.name] = program.id
@@ -735,7 +777,7 @@ enum ImportService {
             if let sessions = bundle.sessions {
                 try context.delete(model: WorkoutSession.self)
                 for s in sessions {
-                    context.insert(makeSession(s, schemaVersion: schemaVersion, exByName: exByName,
+                    context.insert(try makeSession(s, schemaVersion: schemaVersion, exByName: exByName,
                                                programIDsByName: programIDsByName))
                 }
             }
@@ -860,7 +902,7 @@ enum ImportService {
         // A session id that isn't a valid UUID can never match a current
         // one (`makeSession` mints a fresh random id the same way), so it
         // always previews as new.
-        let incomingSessions = (bundle.sessions ?? []).map { s -> BackupContract.NamedEntity in
+        let incomingSessions = try (bundle.sessions ?? []).map { s -> BackupContract.NamedEntity in
             let id = s.id.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? ""
             let name = s.date.map { isoSessionName($0) } ?? "Untitled session"
             // Bound step by step: nesting these calls inside the initializer
@@ -870,9 +912,11 @@ enum ImportService {
                 kind: activity?.kind, sessionRPE: activity?.sessionRPE, rounds: activity?.rounds,
                 splitPieces: activity?.splitPieces, estimatedStrikes: activity?.estimatedStrikes,
                 cordVolume: activity?.cordVolume)
+            let tfh = try tfhSignature(policyId: s.tfhPolicyId, context: s.tfhContext, excluded: s.tfhExcludedFromProgression,
+                anchors: (s.exercises ?? []).map(\.tfhAnchor), benchmarks: (s.exercises ?? []).map { ($0.sets ?? []).map(\.tfhBenchmark) })
             let signature = sessionSignature(
                 date: s.date, programId: s.programTag?.programId,
-                exerciseCount: (s.exercises ?? []).count, activity: activitySig)
+                exerciseCount: (s.exercises ?? []).count, activity: activitySig) + tfh
             return BackupContract.NamedEntity(id: id, name: name, signature: signature)
         }
         let currentSessions: [BackupContract.NamedEntity] = bundle.sessions == nil ? [] :
@@ -882,9 +926,12 @@ enum ImportService {
                     kind: detail?.kindRaw, sessionRPE: detail?.sessionRPE, rounds: detail?.rounds,
                     splitPieces: detail?.splitPieces, estimatedStrikes: detail?.estimatedStrikes,
                     cordVolume: detail?.cordVolume)
+                let tfh = try tfhSignature(policyId: session.tfhPolicyID, context: session.tfhContext, excluded: session.tfhExcludedFromProgression,
+                    anchors: session.orderedExercises.map { try TFHProgramService.decode(TFHAnchor.self, $0.tfhAnchorData) },
+                    benchmarks: session.orderedExercises.map { e in try e.orderedSets.map { try TFHProgramService.decode(TFHBenchmarkResult.self, $0.tfhBenchmarkData) } })
                 let signature = sessionSignature(
                     date: session.date, programId: session.programID,
-                    exerciseCount: session.exercises.count, activity: activitySig)
+                    exerciseCount: session.exercises.count, activity: activitySig) + tfh
                 return BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: signature)
             }
 
@@ -893,16 +940,17 @@ enum ImportService {
         // bundle — mints a fresh random id `makeProgram` the same way), so
         // the preview classifies a program the same way the restore will
         // actually key it.
-        let incomingPrograms = (bundle.programs ?? []).map { p -> BackupContract.NamedEntity in
+        let incomingPrograms = try (bundle.programs ?? []).map { p -> BackupContract.NamedEntity in
             let id = (schemaVersion >= 2 ? p.id : nil) ?? ""
             let dayCount = p.days?.count ?? 0
             let slotCount = (p.days ?? []).reduce(0) { $0 + ($1.lifts?.count ?? 0) + ($1.accessories?.count ?? 0) }
-            return BackupContract.NamedEntity(id: id, name: trimmed(p.name), signature: programSignature(dayCount: dayCount, slotCount: slotCount))
+            return BackupContract.NamedEntity(id: id, name: trimmed(p.name), signature: programSignature(dayCount: dayCount, slotCount: slotCount) + (try tfhJSON(p.tfhPolicy)))
         }
         let currentPrograms: [BackupContract.NamedEntity] = bundle.programs == nil ? [] :
             try context.fetch(FetchDescriptor<Program>()).map { program in
                 let slotCount = program.days.reduce(0) { $0 + $1.lifts.count + $1.accessories.count }
-                return BackupContract.NamedEntity(id: program.id, name: program.name, signature: programSignature(dayCount: program.days.count, slotCount: slotCount))
+                let tfh = try tfhJSON(TFHProgramService.decode(TFHProgramPolicy.self, program.tfhPolicyData))
+                return BackupContract.NamedEntity(id: program.id, name: program.name, signature: programSignature(dayCount: program.days.count, slotCount: slotCount) + tfh)
             }
 
         return BackupContract.namedRestorePreview(
@@ -919,6 +967,23 @@ enum ImportService {
 
     private static func isoSessionName(_ date: Date) -> String {
         ISO8601DateFormatter().string(from: date)
+    }
+
+    private static func tfhJSON<T: Encodable>(_ value: T?) throws -> String {
+        guard let value else { return "" }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        return String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+
+    private struct TFHSignature: Encodable {
+        var policyId: String?; var context: String?; var excluded: Bool?
+        var anchors: [TFHAnchor?]; var benchmarks: [[TFHBenchmarkResult?]]
+    }
+    private static func tfhSignature(policyId: String?, context: String?, excluded: Bool?,
+                                     anchors: [TFHAnchor?], benchmarks: [[TFHBenchmarkResult?]]) throws -> String {
+        guard policyId != nil || anchors.contains(where: { $0 != nil }) else { return "" }
+        return try tfhJSON(TFHSignature(policyId: policyId, context: context, excluded: excluded,
+                                       anchors: anchors, benchmarks: benchmarks))
     }
 
     private static func sessionSignature(date: Date?, programId: String?, exerciseCount: Int, activity: String) -> String {
@@ -1127,7 +1192,7 @@ enum ImportService {
     private static func makeProgram(
         _ p: ProgramDTO, preserveID: Bool, schemaVersion: Int,
         seenSlotIDs: inout Set<String>, repairedSlotIDs: inout Int
-    ) -> Program {
+    ) throws -> Program {
         let prog = Program(name: p.name ?? "Program", focus: TrainingFocus(rawValue: p.focus ?? "strength") ?? .strength,
                            cycleNumber: p.cycleNumber ?? 1, currentWeek: p.currentWeek ?? 1,
                            nextDayIndex: p.nextDayIndex ?? 0, roundingLb: p.roundingLb ?? 5, isActive: p.isActive ?? false)
@@ -1136,6 +1201,7 @@ enum ImportService {
         // bundles, never guessed for older ones.
         prog.templateID = schemaVersion >= 11 ? p.templateId : nil
         prog.equipmentPolicyRaw = p.equipmentPolicy ?? EquipmentPolicy.any.rawValue
+        prog.tfhPolicyData = try TFHProgramService.encode(p.tfhPolicy)
         prog.coachEnabled = p.coachEnabled ?? true
         prog.reliableHistoryStart = p.reliableHistoryStart
         prog.preferredSessionSpacingDays = p.preferredSessionSpacingDays ?? 3
@@ -1209,14 +1275,17 @@ enum ImportService {
         // banked work to the wrong day in history and coaching. Gaps are
         // handled where they matter instead, by ProgramProgression
         // .scheduleAdvance walking real order values.
+        _ = try TFHProgramService.policy(prog)
         return prog
     }
 
     private static func makeSession(_ s: Session, schemaVersion: Int, exByName: [String: Exercise],
-                                    programIDsByName: [String: String]) -> WorkoutSession {
+                                    programIDsByName: [String: String]) throws -> WorkoutSession {
         let session = WorkoutSession(date: s.date ?? .now, notes: s.notes ?? "", gymID: s.gymId, gymName: s.gym)
         if let id = s.id, UUID(uuidString: id) != nil { session.id = id }
         session.programTemplateID = schemaVersion >= 11 ? s.programTemplateId : nil
+        session.tfhPolicyID = s.tfhPolicyId; session.tfhContext = s.tfhContext
+        session.tfhExcludedFromProgression = s.tfhExcludedFromProgression
         // Legacy, unversioned backups only contained completed sessions, so a
         // missing flag means completed. Version 1 carries the actual state.
         session.isCompleted = s.isCompleted ?? true
@@ -1234,6 +1303,7 @@ enum ImportService {
         for (oi, e) in (s.exercises ?? []).enumerated() {
             let entry = SessionExercise(order: oi, exercise: e.name.flatMap { exByName[$0] }, notes: e.notes ?? "")
             entry.exerciseID = importedExerciseID(e.exerciseId, name: e.name, schemaVersion: schemaVersion)
+            entry.tfhAnchorData = try TFHProgramService.encode(e.tfhAnchor)
             // Empty means roleless, matching web's `e.role || null`: importing
             // "" as a role would flip an unprogrammed entry's chart role.
             entry.programRole = e.role.flatMap { $0.isEmpty ? nil : $0 }
@@ -1272,6 +1342,7 @@ enum ImportService {
                                    plannedDurationSeconds: x.plannedDurationSeconds,
                                    prescriptionBlock: PrescriptionBlockKind(rawValue: x.prescriptionBlock ?? "")
                                        ?? (x.isWarmup == true ? .warmup : .work))
+                set.tfhBenchmarkData = try TFHProgramService.encode(x.tfhBenchmark)
                 entry.sets.append(set)
             }
             session.exercises.append(entry)

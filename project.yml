@@ -134,6 +134,9 @@ targets:
       # here lets the hostless suite pin correction semantics on real SwiftData
       # rows (epic #155 Stage 0).
       - Cadence/Services/SessionCorrectionService.swift
+      - Cadence/Services/TFHProgramService.swift
+      - Cadence/Services/ProgramSession.swift
+      - Cadence/Services/TFHSession.swift
       # The activity creator is a models-only service too; compiling it
       # here lets the V11->V12 migration test bank the canonical session
       # shape into a real migrated store (#166).

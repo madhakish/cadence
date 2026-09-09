@@ -1,9 +1,9 @@
 # TFH method: useful capability with room to use it
 
-**Status: research and pure policy prototype.** The native and web domain
-functions are implemented and tested. Program activation, session planning,
-logging, coaching, recovery scheduling, and persistence integration are still
-required. This document does not describe an enabled app feature.
+**Status: opt-in native and web program method.** Open the existing program's
+editor and choose **Set up TFH method**. Review the starting load, bounded rep
+range, set count, smallest equipment step, and purpose of each slot. Saving
+starts a new evidence cohort without rewriting existing history.
 
 ## Objective
 
@@ -55,8 +55,10 @@ are being established. A phase is not a calendar week.
 Recovery is two or three light sessions, normally one to three days apart.
 That is the authored TFH structure, not an experimentally established optimum.
 Sport workload also matters during recovery. Time alone cannot complete it.
-The pure prescription function returns a light-work candidate for R4; it does
-not implement the session-count or scheduling rule.
+`TFHSchedule` / `tfhPosition` advances through the actual completed session
+tags. Deleting a counted session exposes the missing position again. Duplicate
+positions require review. An empty bank or off-program recovery interval does
+not satisfy a training day.
 
 ## Current strength-endurance policy
 
@@ -71,7 +73,7 @@ IDs without changing stored progression state.
   cycles to complete the top of the range. It takes one authored equipment
   step and restarts at the minimum reps, preserving the set count.
 - A candidate step greater than 10% of the entered load is withheld for
-  review. This is a conservative prototype guard, not a measured capacity
+  review. This is a conservative policy guard, not a measured capacity
   threshold; being below it does not prove a jump is appropriate.
 - Per-implement, total external, bodyweight, and assisted load retain distinct
   semantics. Bodyweight has zero added load; decreasing assistance is harder.
@@ -84,14 +86,15 @@ IDs without changing stored progression state.
   `notAssessing` means no plateau verdict, not proof that maintenance is
   succeeding. Deteriorating maintenance still needs separate monitoring.
 - Technical benchmarks require explicit selection and only occur in R3 for
-  development intent. The eventual logger must replace the final work set,
-  record its stop reason and actual conditions, and permit opting out. This
+  development intent. The logger marks the final work set, records optional
+  stop reason and actual rest, and permits opting out. This
   controller must not prescribe AMRAPs for explosive or technical practice.
 - The R4 candidate halves the set count, rounding up, and uses the minimum
   reps. External load is reduced to 80% and rounded down to the authored step;
-  bodyweight and assisted work reduce volume only. These are provisional dose
-  policies. Equipment availability and a suitable light movement still need
-  the program adapter's review.
+  bodyweight and assisted work reduce volume only. The minimum available load
+  is retained when rounding would create zero. These are provisional dose
+  policies. Barbell plans use the selected gym's plate solver. Timed practice
+  uses one half-duration set in recovery, without treating it as lifting volume.
 - Duplicate phase records, missing target data, mixed prescribed loads, or
   targets outside the anchor's range cause abstention (`nil` / `null`). The
   adapter must surface the need for review and preserve the current program;
@@ -105,30 +108,39 @@ Changed context, capped tests, missing benchmark evidence, stale cycles, or
 ambiguous history cannot establish a plateau. A possible plateau prompts a
 review; it cannot automatically swap an exercise or cut weight.
 
-## Integration required before activation
+## Integration and data compatibility
 
-1. Add explicit TFH program selection, per-slot intent, immutable anchor and
-   cohort identity, and reviewable initial targets. Preserve stable program,
-   slot, exercise, and session identities and manual settings.
-2. Snapshot the selected policy and actual benchmark context in sessions.
-   Planned work and performed work remain separate. Historical sessions
-   without context cannot become retrospective capacity tests.
-3. Freeze the shipped SwiftData schema before adding model fields. Add the
-   new schema, every production migration path, real on-disk migration tests,
-   IndexedDB upgrade, and compatible portable-backup changes together.
-4. Wire the same pure function into both clients' previews, session builders,
-   completion, recovery, and coaching. TFH must bypass legacy percentage-wave
-   and mutable stall-counter decisions. Corrections and restores must produce
-   the same result from canonical history.
-5. Account for other activities with their own duration, distance, rounds,
-   effort, and conditions. Do not convert them into invented lifting sets or
-   use tonnage to stand in for power, skill, or recovery.
-6. Verify activation, manual changes, recovery completion, corrections,
-   export/restore, and native/web parity before enabling the feature. Existing
-   authored methods must retain their behavior.
+The program keeps a typed `TFHProgramPolicy`, including stable slot anchors and
+the authored day/role/order layout. Sessions carry the cohort ID, immutable
+anchor and planned sets, and optional benchmark/context facts. Changing the
+composition or load convention requires reviewing setup and starting a new
+cohort. Names remain presentation metadata. Clones receive new cohort, slot,
+and anchor identities.
 
-The prototype deliberately represents only strength-endurance candidates. It
-does not optimize all sports or control the overall workload allocation yet.
+TFH bypasses the legacy percentage-wave, pending-load, stall-counter, and
+calendar-expiry paths. Completion commits the session and next position in the
+existing transaction. Future plans and coaching read canonical corrected sets,
+so they do not need to replay legacy mutable grades. A deliberate uniform load
+adjustment holds that performed load for the following prescription.
+
+SwiftData V13 follows a frozen V12 schema through every supported migration
+path. IndexedDB V9 adds opt-in metadata to existing V8 records. Neither upgrade
+invents TFH evidence for old sessions. Backup version 14 carries the typed
+policy and evidence on both clients; all supported older backups still import.
+Malformed TFH data rejects the restore before committing any changes. Restore
+previews include policy and benchmark changes. Use a full backup to move TFH
+between devices: the separate shared-program file format remains version 2 and
+explicitly refuses to export TFH as an ordinary legacy program.
+
+The logger's clean-work action is an explicit athlete report, not a default
+derived from checking a set complete. Missing quality, rest, or comparison
+conditions stays unknown. Coaching describes capacity evidence without
+claiming that it establishes today's readiness, and never applies a plateau
+cut or exercise rotation automatically.
+
+This controller governs strength-endurance slots. Timed work and conditioning
+retain authored practice targets and their own measurements. It does not infer
+sport skill, optimize all sports, or automate total workload allocation.
 
 ## Verification
 
@@ -138,3 +150,9 @@ bounded reps, real load steps, recent difficult work, maintenance, practice,
 selected benchmarks, incomplete and duplicate history, changed conditions,
 later declines, and bodyweight semantics. Native validation also requires the
 repository's exact-commit Darwin tests and unsigned device build.
+
+`TFHIntegrationTests` exercises the production native builder and TFH completion
+boundary, correction, recovery, backup restore, and an on-disk V12 migration.
+`tfh-integration.test.mjs` drives the web builder and full completion transaction,
+correction, recovery, previews, and portable round trips. `db-v9-migration.test.mjs`
+starts with an actual V8 IndexedDB database and verifies manual work survives.

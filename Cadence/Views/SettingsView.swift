@@ -874,6 +874,10 @@ struct ProgramEditorView: View {
     @Bindable var program: Program
 
     private var validationMessages: [String] {
+        if program.tfhPolicyData != nil {
+            do { _ = try TFHProgramService.policy(program); return [] }
+            catch { return [error.localizedDescription] }
+        }
         var messages: [String] = []
         let exerciseByName = exercises.indexedByName()
         var rotationSets: [String: Int] = [:]
@@ -1034,6 +1038,11 @@ struct ProgramEditorView: View {
             Section("Name") {
                 TextField("Program name", text: $program.name)
             }
+            Section {
+                NavigationLink(program.tfhPolicyData == nil ? "Set up TFH method" : "Review TFH targets / start a new cohort") {
+                    TFHProgramView(program: program)
+                }
+            }
             Section("Training focus") {
                 Picker("Focus", selection: Binding(get: { program.focus }, set: { program.focus = $0 })) {
                     Text("Strength").tag(TrainingFocus.strength)
@@ -1100,6 +1109,7 @@ struct ProgramEditorView: View {
             } footer: {
                 Text("Set your position mid-cycle. Rotations 1–3 are complete authored passes (volume/load/peak); recovery is one representative lower and upper exposure, then rollover. Weights are the rotation-1 base.")
             }
+            .disabled(program.tfhPolicyData != nil)
             Section("Days") {
                 ForEach(program.orderedDays) { day in
                     NavigationLink {
@@ -1151,6 +1161,10 @@ struct ProgramEditorView: View {
                     ) {
                         Label("Export program", systemImage: "square.and.arrow.up")
                     }
+                }
+                if program.tfhPolicyData != nil {
+                    Text("Use a full backup to move TFH targets and evidence between devices. The shared-program format does not carry this method yet.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Button {
                     cloneProgram()
@@ -1237,11 +1251,15 @@ struct ProgramEditorView: View {
     }
 
     private func cloneProgram() {
+        do {
+        let sourcePolicy = try TFHProgramService.policy(program)
+        var slotIDs: [String: String] = [:]
         let copy = Program(
             name: ProgramTemplates.uniqueProgramName("\(program.name) Copy", existing: allPrograms.map(\.name)),
             focus: program.focus, cycleNumber: program.cycleNumber, currentWeek: program.currentWeek,
             nextDayIndex: program.nextDayIndex, roundingLb: program.roundingLb, isActive: false)
         copy.coachEnabled = program.coachEnabled
+        copy.templateID = program.templateID
         copy.equipmentPolicy = program.equipmentPolicy
         copy.reliableHistoryStart = program.reliableHistoryStart
         copy.preferredSessionSpacingDays = program.preferredSessionSpacingDays
@@ -1261,6 +1279,7 @@ struct ProgramEditorView: View {
                                        baseWeightLb: source.baseWeightLb, estimatedMaxLb: source.estimatedMaxLb,
                                        stallCount: source.stallCount, lastIncrementLb: source.lastIncrementLb)
                 lift.exerciseID = source.exerciseID
+                slotIDs[source.id] = lift.id
                 lift.loadOffsetLb = source.loadOffsetLb
                 lift.peakOffsetLb = source.peakOffsetLb
                 lift.deloadMultiplier = source.deloadMultiplier
@@ -1285,6 +1304,7 @@ struct ProgramEditorView: View {
                                                  durationStepSeconds: source.durationStepSeconds, weightLb: source.weightLb,
                                                  incrementLb: source.incrementLb, stallCount: source.stallCount)
                 accessory.exerciseID = source.exerciseID
+                slotIDs[source.id] = accessory.id
                 accessory.capacityManaged = source.capacityManaged
                 accessory.maximumSets = source.maximumSets
                 accessory.conditioningEffortRaw = source.conditioningEffortRaw
@@ -1293,7 +1313,19 @@ struct ProgramEditorView: View {
                 dayCopy.accessories.append(accessory)
             }
         }
+        if var p = sourcePolicy {
+            p.id = UUID().uuidString; p.startCycle = 1
+            var anchors: [String: TFHAnchor] = [:]
+            for (id, value) in p.anchors {
+                guard let newID = slotIDs[id] else { throw TFHProgramService.Failure.invalid("Cannot match the copied slots.") }
+                var anchor = value; anchor.id = UUID().uuidString; anchors[newID] = anchor
+            }
+            p.anchors = anchors; p.layout = TFHProgramService.layout(copy)
+            copy.tfhPolicyData = try TFHProgramService.encode(p)
+            _ = try TFHProgramService.synchronize(copy, sessions: [])
+        }
         PersistenceErrorCenter.shared.save(context, operation: "Duplicating the program")
+        } catch { context.rollback(); activationError = error.localizedDescription }
     }
 }
 

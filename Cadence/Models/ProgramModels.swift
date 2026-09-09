@@ -56,6 +56,8 @@ final class Program {
     /// Automatic exercise selection may use any equipment unless a program
     /// explicitly narrows itself to free-weight/bodyweight work.
     var equipmentPolicyRaw: String = "any"
+    /// Codable TFHProgramPolicy; nil preserves the program's authored method.
+    var tfhPolicyData: Data?
     @Relationship(deleteRule: .cascade, inverse: \ProgramDay.program)
     var days: [ProgramDay]
     var createdAt: Date
