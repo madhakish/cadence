@@ -2697,14 +2697,9 @@ export function usesAdHocFirstSetFallback(entry) {
     && entry?.plannedWeightLb == null;
 }
 
-// A short "where did this number come from" disclosure for a history-based
-// ad-hoc first-set suggestion — the suggestion itself
-// (`suggestedAdHocFirstSetTarget`) is otherwise silent about its origin.
-// Reuses the app's existing relative-time wording (`agoLabel` in
-// views/session.js) rather than inventing a second "how long ago" vocabulary
-// the lifter would have to learn. Mirrors CadenceCore
-// `ProgramProgression.historyProvenanceLabel` 1:1.
-export function historyProvenanceLabel(exposureDate, asOfDate) {
+// Calendar-day age shared by last-session recall and suggestion provenance.
+// Mirrors CadenceCore ProgramProgression.historyAgeLabel 1:1.
+export function historyAgeLabel(exposureDate, asOfDate) {
   // Compare local date components on a UTC grid: DST changes the length of
   // a local day, but never its position in the Gregorian calendar.
   const day = (value) => { const d = new Date(value); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
@@ -2715,7 +2710,12 @@ export function historyProvenanceLabel(exposureDate, asOfDate) {
   else if (days < 14) when = `${days}d ago`;
   else if (days < 70) when = `${Math.floor(days / 7)}w ago`;
   else when = `${Math.floor(days / 30)}mo ago`;
-  return `from your last exposure, ${when}`;
+  return when;
+}
+
+// Where a history-based ad-hoc first-set suggestion came from.
+export function historyProvenanceLabel(exposureDate, asOfDate) {
+  return `from your last exposure, ${historyAgeLabel(exposureDate, asOfDate)}`;
 }
 
 // The next `count` exposures a slot will actually produce.

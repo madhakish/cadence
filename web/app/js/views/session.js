@@ -189,12 +189,7 @@ function beep(haptics = true) {
 
 // Compact "how long ago" for the last-session recall line.
 function agoLabel(date) {
-  const days = Math.max(0, Math.floor((Date.now() - new Date(date)) / 86400000));
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 14) return `${days}d ago`;
-  if (days < 70) return `${Math.floor(days / 7)}w ago`;
-  return `${Math.floor(days / 30)}mo ago`;
+  return C.historyAgeLabel(date, Date.now());
 }
 
 export async function openSession(id) {

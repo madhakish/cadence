@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import 'fake-indexeddb/auto';
 import { JSDOM } from 'jsdom';
 import * as C from '../app/js/core.js';
@@ -131,4 +132,6 @@ const moduleURL = new URL('../app/js/core.js', import.meta.url).href;
 const code = `import {historyProvenanceLabel} from ${JSON.stringify(moduleURL)}; process.stdout.write(JSON.stringify(${JSON.stringify(dates)}.map(([a,b])=>historyProvenanceLabel(a,b))));`;
 assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module','-e',code],
   { env: { ...process.env, TZ: 'America/Chicago' }, encoding: 'utf8' })), Array(3).fill('from your last exposure, yesterday'));
+execFileSync(process.execPath, [fileURLToPath(new URL('./session-recall.test.mjs', import.meta.url))],
+  { env: { ...process.env, TZ: 'America/Chicago' }, stdio: 'inherit', timeout: 60_000 });
 console.log('PASS build polish: target accessible unit, no-gym denomination, unresolved warmup focus, DST/calendar labels');
