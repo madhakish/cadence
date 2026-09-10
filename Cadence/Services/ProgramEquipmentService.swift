@@ -10,6 +10,21 @@ enum ProgramEquipmentService {
         var errorDescription: String? { message }
     }
 
+    /// Commit existing form edits before this operation takes ownership of a
+    /// rollback. Refusal or a failed equipment save cannot discard those edits.
+    @discardableResult
+    static func applyAndSave(_ policy: EquipmentPolicy, to program: Program, context: ModelContext) throws -> [String] {
+        try context.save()
+        do {
+            let removed = try apply(policy, to: program, context: context)
+            try context.save()
+            return removed
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
     static func assertAllowed(_ program: Program, exercises: [Exercise]) throws {
         guard program.equipmentPolicy != .any else { return }
         let byName = exercises.indexedByName()

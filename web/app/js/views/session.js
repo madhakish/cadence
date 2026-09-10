@@ -207,8 +207,7 @@ export async function openSession(id) {
     .filter((s) => s.id !== session.id)
     .sort((a, b) => new Date(b.date) - new Date(a.date)); // newest first, sorted once
   const sessionProgram = session.programTag
-    ? await Programs.byStableId(session.programTag.programId)
-      || (await Programs.all()).find((candidate) => candidate.name === session.programTag.programName)
+    ? (await Programs.all()).find((candidate) => sessionBelongsToProgram(session, candidate))
     : null;
   const sessionDayName = session.programTag
     ? sessionProgram?.days?.find((day) => day.order === session.programTag.dayIndex)?.name

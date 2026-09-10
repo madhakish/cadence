@@ -61,5 +61,21 @@ const before = await db.Programs.get(id);
 await assert.rejects(() => applyProgramEquipmentPolicy(blocked, "freeWeightsOnly"), /Finish the current workout/);
 assert.deepEqual(await db.Programs.get(id), before);
 await db.Sessions.del(openID);
+
+// A deleted program's stable ID must never pick up the restriction of a
+// different program that happens to reuse its display name.
+await db.Programs.save(revised);
+const orphanID = await db.Sessions.save({ date: "2026-01-04T12:00:00Z", isCompleted: false,
+  programTag: { programId: "00000000-0000-4000-8000-000000000099", programName: revised.name,
+    cycleNumber: 1, week: 1, dayIndex: 0 }, exercises: [] });
+const { openSession } = await import("../app/js/views/session.js");
+await openSession(orphanID);
+const logger = [...document.querySelectorAll(".overlay")].at(-1);
+[...logger.querySelectorAll("button")].find((button) => button.textContent === "+ Add exercise").click();
+await new Promise((resolve) => setTimeout(resolve, 60));
+assert.ok([...document.querySelectorAll(".sheet")].at(-1).textContent.includes("Face Pulls"),
+  "an unrelated same-name program cannot restrict an orphan session");
+logger.querySelector(".overlay-head button").click();
+await db.Sessions.del(orphanID);
 console.log("Equipment boundary applies to existing slots, cycle reverts, and preserves recorded work.");
 dom.window.close();

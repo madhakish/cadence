@@ -1199,10 +1199,8 @@ struct ProgramEditorView: View {
 
     private func applyEquipmentPolicy(_ policy: EquipmentPolicy) {
         do {
-            try ProgramEquipmentService.apply(policy, to: program, context: context)
-            try context.save()
+            try ProgramEquipmentService.applyAndSave(policy, to: program, context: context)
         } catch {
-            context.rollback()
             activationError = error.localizedDescription
         }
     }

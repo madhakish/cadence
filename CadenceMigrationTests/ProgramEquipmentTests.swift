@@ -69,7 +69,11 @@ final class ProgramEquipmentTests: XCTestCase {
         session.programID = program.id
         context.insert(session)
         try context.save()
-        XCTAssertThrowsError(try ProgramEquipmentService.apply(.freeWeightsOnly, to: program, context: context))
+        program.name = "Unsaved renamed program"
+        program.roundingLb = 2.5
+        XCTAssertThrowsError(try ProgramEquipmentService.applyAndSave(.freeWeightsOnly, to: program, context: context))
+        XCTAssertEqual(program.name, "Unsaved renamed program", "refused equipment changes preserve other form edits")
+        XCTAssertEqual(program.roundingLb, 2.5)
         XCTAssertEqual(program.equipmentPolicy, .any)
         XCTAssertEqual(day.accessories.count, 1)
         program.equipmentPolicy = .freeWeightsOnly
