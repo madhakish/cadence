@@ -1189,22 +1189,22 @@ enum SessionCompletion {
                     lift.lastIncrementLb = 0
                 }
                 // A cycle-scoped swap ends with the cycle (mirrors web).
-                if let original = lift.revertToExerciseName {
+                if let original = lift.revertToExerciseName, program.equipmentPolicy.allows(exerciseType: exerciseTypeByName[original] ?? "") {
                     let label = "\(original): cycle swap over — slot reverts from \(lift.exerciseName) for the new cycle."
                     lift.exerciseName = original
-                    lift.revertToExerciseName = nil
                     context.insert(Milestone(date: date, exerciseName: original, kind: .programNote, label: label))
                     events.append(PREvent(kind: .programNote, exercise: original, label: label))
                 }
+                lift.revertToExerciseName = nil
             }
             for acc in d.accessories {
-                if let original = acc.revertToExerciseName {
+                if let original = acc.revertToExerciseName, program.equipmentPolicy.allows(exerciseType: exerciseTypeByName[original] ?? "") {
                     let label = "\(original): cycle swap over — slot reverts from \(acc.exerciseName) for the new cycle."
                     acc.exerciseName = original
-                    acc.revertToExerciseName = nil
                     context.insert(Milestone(date: date, exerciseName: original, kind: .programNote, label: label))
                     events.append(PREvent(kind: .programNote, exercise: original, label: label))
                 }
+                acc.revertToExerciseName = nil
             }
         }
         program.cycleNumber += 1

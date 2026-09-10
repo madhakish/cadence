@@ -204,9 +204,8 @@ export const inferredLoadBasis = (exerciseType) => {
 };
 export const inferredImplementCount = (exerciseType) => exerciseType === "dumbbell" ? 2 : 1;
 
-// A program policy constrains automatic substitutions, not the exercise
-// library or an athlete's deliberate manual edits. Keep this pure so the
-// native and web coaching adapters enforce the same boundary.
+// A program policy constrains its slots and substitutions. The exercise
+// library and recorded history remain intact on both clients.
 export function equipmentPolicyAllows(policy, exerciseType) {
   if (policy !== "freeWeightsOnly") return true;
   // "timed" is a LOGGING type, not equipment: every timed movement in the
@@ -302,11 +301,18 @@ export function nextSetStatus(status) {
 // Mirrors SetLifecycle.focusAfterResolving; never mutates a set.
 export function focusAfterResolving(entries, resolvedIndex) {
   if (!Number.isInteger(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= entries.length) return null;
+  return nextPendingExerciseIndex(entries, resolvedIndex) ?? resolvedIndex;
+}
+
+// Rest alerts name pending work; the final completed entry is not a next set.
+// Mirrors SetLifecycle.nextPendingExerciseIndex.
+export function nextPendingExerciseIndex(entries, resolvedIndex) {
+  if (!Number.isInteger(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= entries.length) return null;
   if (entries[resolvedIndex].includes("planned")) return resolvedIndex;
   const later = entries.findIndex((sets, index) => index > resolvedIndex && sets.includes("planned"));
   if (later >= 0) return later;
   const earlier = entries.findIndex((sets) => sets.includes("planned"));
-  return earlier >= 0 ? earlier : resolvedIndex;
+  return earlier >= 0 ? earlier : null;
 }
 
 // Focus one working set without hiding unresolved warmups. Resolved ramp rows

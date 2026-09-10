@@ -2,6 +2,15 @@ import XCTest
 @testable import CadenceCore
 
 final class SetLifecycleTests: XCTestCase {
+    func testRestTargetsOnlyUnfinishedExercises() {
+        XCTAssertEqual(SetLifecycle.nextPendingExerciseIndex([[.completed, .planned], [.planned]], after: 0), 0)
+        XCTAssertEqual(SetLifecycle.nextPendingExerciseIndex([[.completed], [.skipped], [.planned]], after: 0), 2)
+        XCTAssertEqual(SetLifecycle.nextPendingExerciseIndex([[.planned], [.completed]], after: 1), 0)
+        XCTAssertNil(SetLifecycle.nextPendingExerciseIndex([[.completed], [.skipped]], after: 0))
+        XCTAssertNil(SetLifecycle.nextPendingExerciseIndex([], after: 0))
+        XCTAssertNil(SetLifecycle.nextPendingExerciseIndex([[.planned]], after: -1))
+    }
+
     func testCurrentSetFollowsTheAuthoredRampBeforeWorkingSets() {
         typealias State = SetLifecycle.PresentationState
         func states(_ statuses: [SetStatus]) -> [State] {

@@ -84,7 +84,7 @@ enum WorkoutActivityController {
         guard isSupported else { return }
         if let a = current {
             var s = a.content.state
-            if !exerciseName.isEmpty { s.currentLift = exerciseName }
+            s.currentLift = exerciseName
             s.rest = rest
             await a.update(content(for: s))
         } else {
@@ -118,6 +118,7 @@ enum WorkoutActivityController {
         }
         var s = a.content.state
         s.rest = rest
+        s.currentLift = exerciseName
         await a.update(content(for: s))
     }
 
@@ -274,7 +275,7 @@ enum WorkoutActivityController {
         let add = {
             let content = UNMutableNotificationContent()
             content.title = "Rest over."
-            content.body = exerciseName.isEmpty ? "Next set." : "\(exerciseName) — next set."
+            content.body = exerciseName.isEmpty ? "Rest complete." : "\(exerciseName) — next set."
             content.sound = .default
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
             center.add(UNNotificationRequest(identifier: notificationID, content: content, trigger: trigger))

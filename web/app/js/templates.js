@@ -11,6 +11,7 @@
 import { Exercises, Programs, Sessions } from "./db.js";
 import { ex } from "./seed.js";
 import * as C from "./core.js";
+import { restrictProgramEquipment } from "./program-equipment.js";
 import * as ProgrammingDefaults from "./programming-defaults.js";
 
 const lift = (exercise, role, baseWeightLb, estimatedMaxLb, options = {}) =>
@@ -384,7 +385,8 @@ export async function createProgramFromTemplate(template) {
   const anchorHistory = historyNames.length ? await anchorHistoryFor(historyNames) : {};
   const shelved = historyNames.length ? await shelvedExerciseNames() : [];
   const programs = await Programs.all();
-  return Programs.save({
+  const equipmentPolicy = programs.find((program) => program.isActive)?.equipmentPolicy || "any";
+  const program = {
     // The methodology origin (schema V11): recorded at instantiation, never
     // inferred later. Hand-built programs stay null.
     templateId: template.id,
@@ -448,5 +450,6 @@ export async function createProgramFromTemplate(template) {
         return record;
       }),
     })),
-  });
+  };
+  return Programs.save(restrictProgramEquipment(program, equipmentPolicy, [...byName.values()]).program);
 }
