@@ -58,7 +58,7 @@ struct HomeView: View {
     private var coachingReport: CoachingReport? {
         guard let program = activeProgram, program.coachEnabled else { return nil }
         return CoachingService.report(
-            program: program, sessions: completedSessions,
+            program: program, sessions: completedSessions + openSessions,
             exercises: exercises, checkIns: checkIns,
             intervals: intervalSnapshots
         )
@@ -402,6 +402,7 @@ struct HomeView: View {
                             }
                         } else {
                         ForEach(day.orderedLifts) { lift in
+                            let exercise = exercises.first { $0.name == lift.exerciseName }
                             let target = rawProgramPlan(program, day, lift)
                             let plan = programPlan(program, day, lift)
                             VStack(alignment: .leading, spacing: 4) {
@@ -422,7 +423,7 @@ struct HomeView: View {
                                     }
                                     Spacer()
                                     VStack(alignment: .trailing, spacing: 2) {
-                                        Text(unitDisplay.format(lb: plan.weightLb))
+                                        Text(unitDisplay.format(lb: plan.weightLb) + (exercise?.loadBasis.shortSuffix ?? ""))
                                             .font(.body.bold().monospacedDigit())
                                         Text("\(plan.sets)×\(plan.reps)")
                                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -625,7 +626,9 @@ struct HomeView: View {
                 recommendation,
                 for: program,
                 exercises: exercises,
-                sessions: completedSessions,
+                sessions: completedSessions + openSessions,
+                checkIns: checkIns,
+                intervals: intervalSnapshots,
                 evidence: report.rotations.last?.reasons ?? [],
                 context: context
             )

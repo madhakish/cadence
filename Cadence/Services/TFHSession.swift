@@ -44,7 +44,9 @@ enum TFHSession {
         session.programPlanNames = day.orderedLifts.map(\.exerciseName) + day.orderedAccessories.map(\.exerciseName)
         session.tfhPolicyID = p.id
         context.insert(session)
-        func add(id: String, name: String, role: String, weight: Double, sets: Int, seconds: Int?) throws {
+        var preparedMovementGroups: Set<String> = []
+        func add(id: String, name: String, role: String, weight: Double, sets: Int, seconds: Int?,
+                 warmupPolicy: WarmupPolicy = .none) throws {
             guard let ex = exercises.first(where: { $0.name == name }), let exID = ex.id else {
                 throw TFHProgramService.Failure.invalid("\(name) is missing from the exercise library.")
             }
@@ -73,17 +75,26 @@ enum TFHSession {
             entry.plannedDurationSeconds = duration
             entry.prescriptionStyleRaw = "doubleProgression"
             context.insert(entry); session.exercises.append(entry)
-            if role != "accessory" && ex.type == .barbell {
+            let resolvedWarmup = warmupPolicy == .automatic
+                ? ((role == "complementary" && entry.order > 0) || preparedMovementGroups.contains(ex.movementGroup) ? WarmupPolicy.short : .full)
+                : warmupPolicy
+            var ramp: [WarmupSet] = []
+            if resolvedWarmup != .none && ex.type == .barbell {
                 let bar = gym?.defaultBar ?? .bar45lb
-                let ramp = WarmupRamp.ramp(workingLb: load, barLb: bar.lb, roundingLb: program.roundingLb,
+                let fullRamp = WarmupRamp.ramp(workingLb: load, barLb: bar.lb, roundingLb: program.roundingLb,
                                           includeEmptyBar: ProgramSession.includesEmptyBarWarmup(for: ex))
-                for wu in ProgramSession.achievableWarmups(ramp, workingLb: load, gym: gym, bar: bar, exercise: ex) {
-                    let set = SetEntry(order: entry.sets.count, weightLb: wu.weightLb, reps: wu.reps,
-                        isWarmup: true, enteredUnit: unit, loadBasis: ex.loadBasis,
-                        implementCount: ex.resolvedImplementCount, targetWeightLb: wu.weightLb,
-                        plannedWeightLb: wu.weightLb, plannedReps: wu.reps, prescriptionBlock: .warmup)
-                    context.insert(set); entry.sets.append(set)
-                }
+                ramp = ProgramSession.achievableWarmups(fullRamp, workingLb: load, gym: gym, bar: bar, exercise: ex)
+            } else if resolvedWarmup != .none && ex.type == .dumbbell {
+                ramp = WarmupRamp.dumbbellRamp(workingLb: load,
+                    roundingLb: ProgramEngine.loadStep(programRoundingLb: program.roundingLb, exerciseType: ex.typeRaw))
+            }
+            if resolvedWarmup == .short { ramp = Array(ramp.suffix(2)) }
+            for wu in ramp {
+                let set = SetEntry(order: entry.sets.count, weightLb: wu.weightLb, reps: wu.reps,
+                    isWarmup: true, isPerSide: ex.isUnilateral, enteredUnit: unit, loadBasis: ex.loadBasis,
+                    implementCount: ex.resolvedImplementCount, targetWeightLb: wu.weightLb,
+                    plannedWeightLb: wu.weightLb, plannedReps: wu.reps, prescriptionBlock: .warmup)
+                context.insert(set); entry.sets.append(set)
             }
             for (index, reps) in targets.enumerated() {
                 let benchmark = projected?.1.benchmark == true && index == targets.count - 1
@@ -96,9 +107,11 @@ enum TFHSession {
                 if benchmark { set.tfhBenchmarkData = try TFHProgramService.encode(TFHBenchmarkResult()) }
                 context.insert(set); entry.sets.append(set)
             }
+            if role != "accessory" && !ex.movementGroup.isEmpty { preparedMovementGroups.insert(ex.movementGroup) }
         }
         for l in day.orderedLifts { try add(id: l.id, name: l.exerciseName, role: l.roleRaw,
-                                           weight: l.baseWeightLb, sets: l.doubleProgressionSets, seconds: nil) }
+                                           weight: l.baseWeightLb, sets: l.doubleProgressionSets, seconds: nil,
+                                           warmupPolicy: l.warmupPolicy) }
         for a in day.orderedAccessories {
             let ex = exercises.first { $0.name == a.exerciseName }
             try add(id: a.id, name: a.exerciseName, role: "accessory", weight: a.weightLb, sets: a.sets,

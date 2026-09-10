@@ -16,6 +16,17 @@ const exposure = (cycle, rotation, reps = anchor.reps, extra = {}) => ({
 });
 
 assert.equal(typeof C.tfhProject, "function", "TFH must expose a pure core policy");
+{
+  const partial = exposure(1,2);
+  partial.sets.forEach((set,index)=>{set.weightLb=index<2?37:42;set.status=index<2?"completed":"skipped";});
+  const plan = C.tfhProject(anchor,[exposure(1,1),partial],2,1);
+  assert.equal(plan.weightLb,37,"completed adjusted loads survive skipped sets and older matching phases");
+  assert.deepEqual(plan.reps,anchor.reps);assert.equal(plan.state,"hold");
+  partial.sets[1].weightLb=39;
+  assert.equal(C.tfhProject(anchor,[partial],2,1),null,"mixed performed loads require review");
+  partial.sets.forEach(set=>{set.status="skipped";});
+  assert.equal(C.tfhProject(anchor,[partial],2,1).weightLb,42,"unperformed edits cannot establish a load");
+}
 const empty = C.tfhProject(anchor, [], 1, 1);
 assert.deepEqual(empty.reps, anchor.reps, "new method preserves authored performed shape");
 const next = C.tfhProject(anchor, [exposure(1, 1)], 1, 2);

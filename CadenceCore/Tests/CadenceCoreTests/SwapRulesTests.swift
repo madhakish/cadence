@@ -41,10 +41,22 @@ final class SwapRulesTests: XCTestCase {
         XCTAssertFalse(compatible(current: walkingLunges, candidate: backSquat), "accessory can't jump to a main competition lift")
         XCTAssertFalse(compatible(current: dbPress, candidate: dips), "loaded press can't swap to an unloadable accessory")
         XCTAssertFalse(compatible(current: dbPress, candidate: bwPress), "loadability mismatch alone filters (same tier/group)")
-        XCTAssertTrue(compatible(current: dbPress, candidate: machinePress), "equipment change within loadable types is fine")
+        XCTAssertFalse(compatible(current: dbPress, candidate: machinePress), "per-hand loads cannot become machine totals")
+        XCTAssertFalse(compatible(current: machinePress, candidate: dbPress), "machine totals cannot become per-hand loads")
+        XCTAssertFalse(compatible(current: dbPress, candidate: benchShelved), "per-hand loads cannot become bar totals")
+        XCTAssertTrue(compatible(current: dbPress, candidate: ("Flat DB Press", "Main", .perImplement, "press")))
         XCTAssertFalse(compatible(current: dbPress, candidate: benchShelved, shelved: true), "shelved is never offered")
         XCTAssertFalse(compatible(current: backSquat, candidate: dbPress), "different movement pattern")
         XCTAssertFalse(compatible(current: backSquat, candidate: backSquat), "never itself")
         XCTAssertFalse(compatible(current: ungrouped, candidate: frontSquat), "ungrouped lift offers no swaps")
+    }
+
+    func testCompletedWorkPreventsReplacingTheEntry() {
+        XCTAssertTrue(SwapRules.canReplaceEntry(setStatuses: []))
+        XCTAssertTrue(SwapRules.canReplaceEntry(setStatuses: [.planned, .skipped]))
+        XCTAssertFalse(SwapRules.canReplaceEntry(setStatuses: [.completed, .planned]),
+                       "a completed warmup also belongs to the original exercise")
+        XCTAssertFalse(SwapRules.canReplaceEntry(setStatuses: [.skipped, .completed]),
+                       "completed working sets cannot be relabeled")
     }
 }

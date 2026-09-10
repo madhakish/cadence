@@ -68,6 +68,7 @@ struct WorkoutPreviewView: View {
                     }
                 } else {
                 ForEach(day.orderedLifts) { lift in
+                    let exercise = exercises.first { $0.name == lift.exerciseName }
                     let target = targetPlan(for: lift)
                     let p = plan(for: lift)
                     VStack(alignment: .leading, spacing: 4) {
@@ -87,7 +88,8 @@ struct WorkoutPreviewView: View {
                             .buttonStyle(.plain)
                             Spacer()
                             VStack(alignment: .trailing, spacing: 2) {
-                                Text(unitDisplay.format(lb: p.weightLb)).font(.body.bold().monospacedDigit())
+                                Text(unitDisplay.format(lb: p.weightLb) + (exercise?.loadBasis.shortSuffix ?? ""))
+                                    .font(.body.bold().monospacedDigit())
                                 Text("\(p.sets)×\(p.reps)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                             }
                         }
@@ -141,7 +143,7 @@ struct WorkoutPreviewView: View {
                             Text(isTimed
                                  ? "\(acc.sets) × \(CardioFormat.durationLabel(seconds: acc.targetSeconds))"
                                  : (acc.weightLb > 0
-                                    ? "\(acc.sets)×\(accReps) @ \(unitDisplay.format(lb: acc.weightLb))"
+                                    ? "\(acc.sets)×\(accReps) @ \(unitDisplay.format(lb: acc.weightLb))\(exercise?.loadBasis.shortSuffix ?? "")"
                                     : "\(acc.sets)×\(accReps)"))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)

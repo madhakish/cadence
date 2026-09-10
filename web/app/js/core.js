@@ -44,6 +44,23 @@ export function programPlanFor(state, programRoundingLb, exerciseType = null, mo
   return { ...plan, weightLb: Math.min(plan.weightLb, state.baseWeightLb + 5) };
 }
 
+// Mirrors ProgramEngine.collapsedDumbbellWaveLoad. Detection never rewrites
+// an authored wave; the coach offers an explicit switch to the rep window.
+export function collapsedDumbbellWaveLoad(baseWeightLb, programRoundingLb, exerciseType,
+  movementGroup, role, focus, prescriptionStyle, configuration = {}) {
+  const style = resolvedPrescriptionStyle(prescriptionStyle, movementGroup, role, focus);
+  if (exerciseType !== "dumbbell" || role !== "main" || focus !== "strength"
+      || !["wave", "offsetWave"].includes(style)
+      || !Number.isFinite(baseWeightLb) || baseWeightLb <= 0
+      || !Number.isFinite(programRoundingLb) || programRoundingLb <= 0) return null;
+  const work = (nextPhase) => programPlanFor({ baseWeightLb, nextPhase, cycleNumber: 1 },
+    programRoundingLb, exerciseType, movementGroup, role, focus, style, configuration);
+  const load = work(2), peak = work(3);
+  return load.weightLb > baseWeightLb && Math.abs(load.weightLb - peak.weightLb) < 0.01
+    && Math.abs(roundTo(load.weightLb, programLoadStep(programRoundingLb, exerciseType)) - load.weightLb) < 0.01
+    && peak.sets * peak.reps < load.sets * load.reps ? load.weightLb : null;
+}
+
 // ---- Methodology styles (mirrors PrescriptionStyle helpers in Swift) -------
 
 // Styles whose base advances after every banked exposure of the slot instead
@@ -301,6 +318,11 @@ export function focusedSetIndices(sets = []) {
   if (currentWorkIndex < 0) return sets.map((_, index) => index);
   return sets.flatMap((set, index) => (index === currentWorkIndex
     || (set.isWarmup && (set.status || "planned") === "planned") ? [index] : []));
+}
+
+// Mirrors SetLifecycle.currentPresentationIndex; callers supply authored order.
+export function currentSetIndex(sets = []) {
+  return sets.findIndex((set) => (set.status || "planned") === "planned");
 }
 
 // Whether a set of this kind counts as the slot's prescribed work — the sets
@@ -1851,10 +1873,10 @@ export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, cu
 // ---- Swap rules (issue 20) ----------------------------------------------
 // A candidate is offered only when it trains the same movement pattern
 // (non-empty matching group), sits in the same programming tier
-// (Main/Accessory/Conditioning), matches the current lift's loadability,
+// (Main/Accessory/Conditioning), matches the current lift's exact load basis,
 // isn't the same exercise, and isn't shelved. `current`/`candidate` are
-// exercise records. Loadability follows the resolved load basis, not equipment
-// type: a weighted pull-up is bodyweight-typed but still carries external load.
+// exercise records. Equipment type alone cannot establish the load convention:
+// a weighted pull-up is bodyweight-typed but carries external load.
 // ---- Program slot ordering (one spelling) ----------------------------------
 // Main work always precedes complementary work; authored order is preserved
 // inside each role. Ties break on exerciseName with ORDINAL comparison
@@ -1891,9 +1913,14 @@ export function swapCompatible(current, candidate) {
   return !!current.movementGroup
     && candidate.movementGroup === current.movementGroup
     && candidate.name !== current.name
-    && !candidate.isShelved
+    && !exerciseIsShelved(candidate)
     && candidate.category === current.category
-    && supportsLoadPR(resolvedLoadBasis(candidate)) === supportsLoadPR(resolvedLoadBasis(current));
+    && resolvedLoadBasis(candidate) === resolvedLoadBasis(current);
+}
+
+// Mirrors SwapRules.canReplaceEntry. Warmups are recorded work too.
+export function canReplaceExerciseEntry(setStatuses) {
+  return !setStatuses.includes("completed");
 }
 
 // The transactional boundary for banking a session (issue 19), mirroring
@@ -2697,14 +2724,9 @@ export function usesAdHocFirstSetFallback(entry) {
     && entry?.plannedWeightLb == null;
 }
 
-// A short "where did this number come from" disclosure for a history-based
-// ad-hoc first-set suggestion — the suggestion itself
-// (`suggestedAdHocFirstSetTarget`) is otherwise silent about its origin.
-// Reuses the app's existing relative-time wording (`agoLabel` in
-// views/session.js) rather than inventing a second "how long ago" vocabulary
-// the lifter would have to learn. Mirrors CadenceCore
-// `ProgramProgression.historyProvenanceLabel` 1:1.
-export function historyProvenanceLabel(exposureDate, asOfDate) {
+// Calendar-day age shared by last-session recall and suggestion provenance.
+// Mirrors CadenceCore ProgramProgression.historyAgeLabel 1:1.
+export function historyAgeLabel(exposureDate, asOfDate) {
   // Compare local date components on a UTC grid: DST changes the length of
   // a local day, but never its position in the Gregorian calendar.
   const day = (value) => { const d = new Date(value); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
@@ -2715,7 +2737,12 @@ export function historyProvenanceLabel(exposureDate, asOfDate) {
   else if (days < 14) when = `${days}d ago`;
   else if (days < 70) when = `${Math.floor(days / 7)}w ago`;
   else when = `${Math.floor(days / 30)}mo ago`;
-  return `from your last exposure, ${when}`;
+  return when;
+}
+
+// Where a history-based ad-hoc first-set suggestion came from.
+export function historyProvenanceLabel(exposureDate, asOfDate) {
+  return `from your last exposure, ${historyAgeLabel(exposureDate, asOfDate)}`;
 }
 
 // The next `count` exposures a slot will actually produce.
@@ -3802,7 +3829,50 @@ function linearStageSuggestions(program, sessions, evidenceKey) {
   });
 }
 
-function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions, intervals = []) {
+// Same newest-exposure and prescription gates as the Swift coaching rule.
+function dumbbellRepProgressionSuggestions(program, sessions) {
+  const candidates = program.slots.filter((slot) => slot.collapsedDumbbellWaveLoadLb != null
+    && slot.isMain && slot.role === "main" && slot.capacityManaged !== false
+    && slot.maximumSets >= 3 && !slot.exerciseIsShelved && supportsAddedCapacity(slot)
+    && ["wave", "offsetWave"].includes(slot.prescriptionStyle));
+  if (!candidates.length) return [];
+  const newest = [...sessions].sort((a, b) => epoch(b.date) - epoch(a.date)
+    || (String(a.id) < String(b.id) ? 1 : String(a.id) > String(b.id) ? -1 : 0));
+  return candidates.flatMap((slot) => {
+    const weight = slot.collapsedDumbbellWaveLoadLb;
+    const session = newest.find((item) => item.exercises.some((entry) => entry.slotID === slot.id
+      || (!entry.slotID && item.dayIndex === slot.dayIndex && entry.exerciseName === slot.exerciseName
+        && entry.programRole === slot.role)));
+    if (!Number.isFinite(weight) || weight <= 0 || !session || session.dayIndex !== slot.dayIndex
+        || ![1, 2, 3].includes(session.rotation) || session.hasHardStopCheckIn) return [];
+    const entries = session.exercises.filter((entry) => entry.slotID === slot.id);
+    const entry = entries[0];
+    if (entries.length !== 1 || entry.exerciseName !== slot.exerciseName || entry.programRole !== "main"
+        || !["wave", "offsetWave", "automatic"].includes(entry.prescriptionStyle)
+        || entry.plannedSets < 3) return [];
+    const work = entry.sets.filter((set) => !set.isWarmup && countsAsPrescribedWork(set.prescriptionBlock))
+      .slice(0, entry.plannedSets);
+    if (work.length !== entry.plannedSets || entry.sets.some((set) => set.hasBodyFlag || set.stoppedEarly)
+        || !work.every((set) => set.completed !== false && set.loadBasis === "perImplement" && Number.isFinite(set.actualWeightLb)
+          && Math.abs(set.actualWeightLb - weight) < 0.01 && Number.isInteger(set.actualReps)
+          && set.actualReps >= 3 && Number.isFinite(set.plannedWeightLb)
+          && Number.isInteger(set.plannedReps) && set.plannedReps > 0 && atPlan(set))
+        || work.filter((set) => ["grindy", "wobble"].includes(set.quality)).length > 1) return [];
+    // Preserve completed work when redistributing it into three sets.
+    const totalReps = work.reduce((sum, set) => sum + set.actualReps, 0);
+    if (totalReps > 3 * 6) return [];
+    const currentReps = Math.max(Math.min(6, Math.min(...work.map((set) => set.actualReps)) + 1),
+      Math.ceil(totalReps / 3));
+    const ruleID = "program.slot.dumbbell-reps.v1";
+    return [{ id: `${ruleID}:${slot.id}:c${session.cycleNumber}-r${session.rotation}-d${session.dayIndex}:${trim(slot.baseWeightLb)}:3x${currentReps}@${trim(weight)}`,
+      ruleID, priority: 65, title: "Build reps before adding dumbbell weight",
+      explanation: `${slot.exerciseName}'s load and peak both use ${trim(weight)} lb each, but the peak drops sets. Start with 3×${currentReps} at that load, preserving at least the total reps in your latest completed work. Use three sets in a 3–6 rep window; earn reps before adding the configured load step, then return to triples. Recovery stays separate.`,
+      change: { type: "useDumbbellRepProgression", slotID: slot.id, exerciseName: slot.exerciseName,
+        expectedBaseWeightLb: slot.baseWeightLb, weightLb: weight, currentReps } }];
+  });
+}
+
+function coachingRecommendations(program, latest, previousReadiness, greenRotationStreak, sessions, intervals = [], dumbbellSessions = sessions) {
   if (!latest) return [];
   const evidenceKey = `c${latest.key.cycleNumber}-r${latest.key.rotation}`;
   // Rotation suggestions are program hygiene, not capacity: a slot pointing at
@@ -3813,6 +3883,7 @@ function coachingRecommendations(program, latest, previousReadiness, greenRotati
   const programChanges = [
     ...rotationSuggestions(program, sessions, evidenceKey),
     ...linearStageSuggestions(program, sessions, evidenceKey),
+    ...dumbbellRepProgressionSuggestions(program, dumbbellSessions),
     ...verticalPullPromotions(program),
   ];
   // Ordinal tiebreak (see rotationSuggestions): the surfaced-first ordering
@@ -3933,10 +4004,10 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null,
   // the schedule for it, so letting it complete a rotation or seed a
   // readiness baseline here would grade the program on work the program
   // never prescribed. Mirrors CoachingEngine.evaluate.
-  const relevant = sessions.filter((session) => session.completed !== false
+  const reliableSessions = sessions.filter((session) => session.completed !== false
     && session.programID === program.id && epoch(session.date) >= reliable
-    && !isOffProgramTime(epoch(session.date), intervals))
-    .map((session) => programmedCoachingSession(session, program.slots || []));
+    && !isOffProgramTime(epoch(session.date), intervals));
+  const relevant = reliableSessions.map((session) => programmedCoachingSession(session, program.slots || []));
   const groups = new Map();
   for (const session of relevant) {
     const id = `${session.programID}:${session.cycleNumber}:${session.rotation}`;
@@ -3988,7 +4059,7 @@ export function evaluateCoaching(program, sessions, reliableHistoryStart = null,
     // The rotation before the latest verified one, so a red that persists can
     // escalate past a red that is one bad week.
     recommendations: coachingRecommendations(program, completed.at(-1),
-      completed.at(-2)?.readiness ?? "unknown", greenRotationStreak, relevant, intervals),
+      completed.at(-2)?.readiness ?? "unknown", greenRotationStreak, relevant, intervals, reliableSessions),
   };
 }
 
@@ -4125,6 +4196,14 @@ function tfhPlanSets(anchor, e) {
       && !!s.isPerSide === !!anchor.isPerSide);
 }
 
+function tfhAdjustedSets(anchor, e) {
+  if (!tfhPlanSets(anchor, e)) return null;
+  const performed = e.sets.filter(s => s.status === "completed");
+  if (!performed.length || !performed.every(s => Number.isFinite(s.weightLb) && s.weightLb >= 0)
+      || !performed.some(s => !tfhSame(s.weightLb, s.plannedWeightLb))) return null;
+  return performed;
+}
+
 function tfhUsableSets(anchor, e) {
   return tfhPlanSets(anchor, e) && e.sets.every(s => s.status === "completed"
     && s.quality === "clean" && !s.stoppedEarly && !s.hasBodyFlag
@@ -4155,9 +4234,7 @@ export function tfhProject(anchor, exposures, cycle, rotation) {
   // cycle, the previous completed build phase can seed the next exposure.
   // Deliberate loading changes invalidate older phase targets, including on
   // the second and subsequent exposures after the adjustment.
-  const adjustment = history.findLastIndex(e => tfhPlanSets(anchor,e)
-    && e.sets.every(s=>s.status === "completed" && Number.isFinite(s.weightLb) && s.weightLb >= 0)
-    && e.sets.some(s=>!tfhSame(s.weightLb,s.plannedWeightLb)));
+  const adjustment = history.findLastIndex(e => tfhAdjustedSets(anchor, e) !== null);
   const comparable = history.slice(adjustment + 1);
   const matched = comparable.filter(e => e.rotation === rotation);
   const reference = matched.at(-1) || comparable.at(-1) || history.at(-1);
@@ -4209,11 +4286,10 @@ export function tfhProject(anchor, exposures, cycle, rotation) {
     }
   }
   const latest = history.at(-1);
-  if (latest && tfhPlanSets(anchor,latest)
-      && latest.sets.every(s=>s.status === "completed" && Number.isFinite(s.weightLb) && s.weightLb >= 0)
-      && latest.sets.some(s=>!tfhSame(s.weightLb,s.plannedWeightLb))) {
-    const actual = latest.sets[0].weightLb;
-    if (!latest.sets.every(s=>tfhSame(s.weightLb,actual))) return null;
+  const performed = latest && tfhAdjustedSets(anchor, latest);
+  if (performed) {
+    const actual = performed[0].weightLb;
+    if (!performed.every(s=>tfhSame(s.weightLb,actual))) return null;
     plan.weightLb=actual;plan.reps=latest.sets.map(s=>s.plannedReps);plan.state="hold";
     plan.reason="Repeat the last deliberately adjusted load before considering more work.";
     plan.evidenceIds=[latest.id];
@@ -4351,7 +4427,7 @@ export function tfhPosition(policy, completions) {
 }
 
 export function tfhValidateSession(session, version = 14) {
-  const fail = () => { throw new Error("Invalid TFH session identity or benchmark evidence."); };
+  const fail = () => { throw new Error("TFH: invalid session identity or benchmark evidence."); };
   const tag = session.programTag;
   if (session.tfhPolicyId != null && (version < 14 || typeof session.tfhPolicyId !== "string" || !session.tfhPolicyId
       || !tag?.programId || !Number.isSafeInteger(tag.cycleNumber) || tag.cycleNumber < 1

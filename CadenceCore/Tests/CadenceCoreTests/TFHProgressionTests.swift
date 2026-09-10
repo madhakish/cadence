@@ -19,6 +19,25 @@ final class TFHProgressionTests: XCTestCase {
         (1...3).flatMap { cycle in (1...3).map { exposure(cycle, $0) } }
     }
 
+    func testPartialWorkPreservesOnlyPerformedLoadAdjustments() throws {
+        var partial = exposure(1, 2)
+        for i in partial.sets.indices {
+            partial.sets[i].weightLb = i < 2 ? 37 : 42
+            partial.sets[i].status = i < 2 ? "completed" : "skipped"
+        }
+        let plan = try XCTUnwrap(TFHProgression.project(anchor: anchor,
+            exposures: [exposure(1, 1), partial], cycle: 2, rotation: 1))
+        XCTAssertEqual(plan.weightLb, 37)
+        XCTAssertEqual(plan.reps, anchor.reps)
+        XCTAssertEqual(plan.state, "hold")
+        partial.sets[1].weightLb = 39
+        XCTAssertNil(TFHProgression.project(anchor: anchor, exposures: [partial], cycle: 2, rotation: 1),
+                     "mixed performed loads cannot establish a uniform target")
+        for i in partial.sets.indices { partial.sets[i].status = "skipped" }
+        XCTAssertEqual(TFHProgression.project(anchor: anchor, exposures: [partial], cycle: 2, rotation: 1)?.weightLb, 42,
+                       "unperformed load edits are not evidence")
+    }
+
     func testStartingShapeAndOneTotalRep() throws {
         let empty = try XCTUnwrap(TFHProgression.project(anchor: anchor, exposures: [], cycle: 1, rotation: 1))
         XCTAssertEqual(empty.reps, anchor.reps)

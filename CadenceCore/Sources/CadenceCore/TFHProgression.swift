@@ -127,6 +127,15 @@ public enum TFHProgression {
         }
     }
 
+    private static func adjustedSets(_ a: TFHAnchor, _ e: TFHExposure) -> [TFHSet]? {
+        guard planSets(a, e) else { return nil }
+        let performed = e.sets.filter { $0.status == "completed" }
+        guard !performed.isEmpty,
+              performed.allSatisfy({ $0.weightLb.isFinite && $0.weightLb >= 0 }),
+              performed.contains(where: { !same($0.weightLb, $0.plannedWeightLb) }) else { return nil }
+        return performed
+    }
+
     private static func usable(_ a: TFHAnchor, _ e: TFHExposure) -> Bool {
         planSets(a, e) && e.sets.allSatisfy { s in
             s.status == "completed" && s.quality == "clean" && !s.stoppedEarly && !s.hasBodyFlag
@@ -155,10 +164,7 @@ public enum TFHProgression {
         guard !ambiguous(history) else { return nil }
         // A deliberate load change starts a new comparison window. Older
         // phases must not resurrect the target the athlete just adjusted.
-        let adjustment = history.lastIndex { e in
-            planSets(a, e) && e.sets.allSatisfy { $0.status == "completed" && $0.weightLb.isFinite && $0.weightLb >= 0 }
-                && e.sets.contains { !same($0.weightLb, $0.plannedWeightLb) }
-        }
+        let adjustment = history.lastIndex { adjustedSets(a, $0) != nil }
         let comparable = adjustment.map { Array(history.suffix(from: $0 + 1)) } ?? history
         let reference = comparable.last(where: { $0.rotation == rotation }) ?? comparable.last ?? history.last
         let recentWorkSupportsProgress = history.last.map { made(a, $0) } ?? true
@@ -212,11 +218,9 @@ public enum TFHProgression {
         // A deliberate load adjustment is stronger evidence than a stale
         // authored target. Do not re-prescribe 90 after the athlete used 70.
         // Mixed-load work is not a uniform anchor; abstain rather than guess.
-        if let latest = history.last, planSets(a, latest),
-           latest.sets.allSatisfy({ $0.status == "completed" && $0.weightLb.isFinite && $0.weightLb >= 0 }),
-           latest.sets.contains(where: { !same($0.weightLb, $0.plannedWeightLb) }) {
-            guard let actual = latest.sets.first?.weightLb,
-                  latest.sets.allSatisfy({ same($0.weightLb, actual) }) else { return nil }
+        if let latest = history.last, let performed = adjustedSets(a, latest) {
+            guard let actual = performed.first?.weightLb,
+                  performed.allSatisfy({ same($0.weightLb, actual) }) else { return nil }
             plan.weightLb = actual
             plan.reps = latest.sets.compactMap(\.plannedReps)
             plan.state = "hold"

@@ -22,6 +22,11 @@ custom exercises a group in the library.
 
 ## History and membership
 
+The active workout's **Last** recall and history-based load suggestion use the
+same local-calendar wording: a workout before midnight reads **yesterday** after
+midnight, including daylight-saving transitions. This only formats the date;
+it does not change recorded timestamps, loads, or progression.
+
 - **Last done** — the most recent banked session containing the lift:
   date, top working set, and which program it ran under (blank when it
   was a standalone or blank-session lift).

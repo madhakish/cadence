@@ -192,12 +192,7 @@ function beep(haptics = true) {
 
 // Compact "how long ago" for the last-session recall line.
 function agoLabel(date) {
-  const days = Math.max(0, Math.floor((Date.now() - new Date(date)) / 86400000));
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 14) return `${days}d ago`;
-  if (days < 70) return `${Math.floor(days / 7)}w ago`;
-  return `${Math.floor(days / 30)}mo ago`;
+  return C.historyAgeLabel(date, Date.now());
 }
 
 export async function openSession(id) {
@@ -515,12 +510,13 @@ export async function openSession(id) {
       return ui.h("span", { class: `set-track-segment ${state}`, role: "listitem", text: label,
         "aria-label": `Set ${index + 1} of ${workSets.length}, ${state === "done" ? set.status : state === "now" ? "current" : state}` });
     }));
-  // The working set the lifter is on: position, reps, and the set load —
+  // The current warmup or work set: position, reps, and the set load —
   // pounds first, kilograms after — stated once, above the set rows. The load
   // is the set's own recorded/prescribed value, not a re-solve. Mirrors
   // native CurrentSetHero.
-  const currentSetHero = (ex, set, workSets) => {
-    const ordinal = workSets.indexOf(set) + 1;
+  const currentSetHero = (ex, set, phaseSets) => {
+    const ordinal = phaseSets.indexOf(set) + 1;
+    const position = `${set.isWarmup ? "Warmup" : "Working set"} ${ordinal} of ${phaseSets.length}`;
     const basis = set.loadBasis || ex?.loadBasis || C.inferredLoadBasis(ex?.type);
     const load = ui.h("div", { class: "current-set-load", "aria-label": set.weightLb > 0
       ? `Set load ${C.both(set.weightLb)}${C.loadBasisSuffix(basis)}` : "Bodyweight" });
@@ -530,8 +526,8 @@ export async function openSession(id) {
     } else {
       load.append(ui.h("span", { class: "load-primary mono", text: "BW" }));
     }
-    return ui.h("div", { class: "current-set-hero", "aria-label": `Working set ${ordinal} of ${workSets.length}` },
-      ui.h("span", { class: "eyebrow accent", text: `Working set ${ordinal} of ${workSets.length} ` }),
+    return ui.h("div", { class: "current-set-hero", "aria-label": position },
+      ui.h("span", { class: "eyebrow accent", text: `${position} ` }),
       ui.h("div", { class: "current-set-reps" },
         ui.h("span", { class: "count mono", text: String(set.reps) }),
         ui.h("span", { class: "unit", text: set.isPerSide ? " reps / side" : " reps" }),
@@ -572,10 +568,10 @@ export async function openSession(id) {
       "aria-label": `${se.exerciseName}${emphasized ? ", current exercise" : ""}` }, head);
     se.sets.sort((a, b) => a.order - b.order);
     const workSets = se.sets.filter((set) => !set.isWarmup);
-    const currentSet = workSets.find((set) => set.status === "planned");
+    const currentSet = se.sets[C.currentSetIndex(se.sets)];
     if (emphasized && workSets.length) card.append(setTrack(workSets, currentSet));
     if (emphasized && currentSet && !(ex && (ex.type === "conditioning" || ex.type === "timed"))) {
-      card.append(currentSetHero(ex, currentSet, workSets));
+      card.append(currentSetHero(ex, currentSet, se.sets.filter((set) => !!set.isWarmup === !!currentSet.isWarmup)));
     }
     const last = lastTimeLine(se);
     if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
@@ -693,7 +689,7 @@ export async function openSession(id) {
   function setRow(se, s, body, { compact = false, showLoadout = true, provenance = null } = {}) {
     const ex = exMap.get(se.exerciseName);
     const u = setUnit(se, s);
-    const isCurrent = se.sets.find((x) => !x.isWarmup && x.status === "planned") === s;
+    const isCurrent = se.sets[C.currentSetIndex(se.sets)] === s;
     // Steady-state cardio (type conditioning: Walk/Bike/Ruck…) logs
     // distance/time/incline, not weight×reps — keyed on the exercise TYPE so
     // rep-based conditioning (burpees, type bodyweight) keeps the lifting row.
@@ -772,9 +768,7 @@ export async function openSession(id) {
     // Graded, the caption completes the value ("2" + "left"); ungraded it
     // names the control, same as the quality button.
     ui.h("span", { class: "microlabel", "aria-hidden": "true", text: rir ? "left" : "reserve" }));
-    // The set you're ON — the first WORKING set with no verdict yet — gets
-    // the accent rail; warmups sit quiet (and often go unflagged, so they
-    // must not hold the rail hostage).
+    // The first unresolved authored set gets the accent rail, warmup or work.
     const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "")
       + (isCurrent ? " current current-set-card" : "") + (compact ? " compact" : "") }, wt, tags,
       ui.h("div", { class: "flagbtns" }, statusButton,
@@ -2391,7 +2385,7 @@ async function createTFHSession(program) {
     return s.id;
   }
   const unit = C.primaryUnit(settings.unitDisplay), bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
-  const entries = [];
+  const entries = [], preparedMovementGroups = new Set();
   for (const slot of [...C.orderedProgramSlots(day.lifts),...C.orderedProgramSlots(day.accessories)]) {
     const ex = library.find(e=>e.name === slot.exerciseName);
     if (!ex?.id) throw new Error(`TFH: ${slot.exerciseName} is missing from the exercise library.`);
@@ -2403,10 +2397,16 @@ async function createTFHSession(program) {
     const duration = practice?.seconds ?? null;
     const reps = result?.plan.reps ?? Array(practice.sets).fill(1);
     const sets = [], role = slot.role || "accessory";
-    if (role !== "accessory" && ex.type === "barbell") {
-      const ramp = achievableWarmups(C.warmupRamp(weight,C.barLb(bar),program.roundingLb,includesEmptyBarWarmup(ex.name)),weight,bar,gym,ex);
-      for (const wu of ramp) sets.push(mkSet(sets.length,wu.weightLb,wu.reps,{warm:true,unit,...loadOptions(ex)}));
-    }
+    const warmupPolicy = role === "accessory" ? "none" : (slot.warmupPolicy || "automatic") === "automatic"
+      ? ((role === "complementary" && entries.length > 0) || preparedMovementGroups.has(ex.movementGroup) ? "short" : "full")
+      : slot.warmupPolicy;
+    let ramp = [];
+    if (warmupPolicy !== "none" && ex.type === "barbell")
+      ramp = achievableWarmups(C.warmupRamp(weight,C.barLb(bar),program.roundingLb,includesEmptyBarWarmup(ex.name)),weight,bar,gym,ex);
+    else if (warmupPolicy !== "none" && ex.type === "dumbbell")
+      ramp = C.dumbbellWarmupRamp(weight,C.programLoadStep(program.roundingLb,ex.type));
+    for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp)
+      sets.push(mkSet(sets.length,wu.weightLb,wu.reps,{warm:true,unit,perSide:!!ex.isUnilateral,prescriptionBlock:"warmup",...loadOptions(ex)}));
     for (const [index,rep] of reps.entries()) {
       const benchmark = result?.plan.benchmark && index === reps.length-1;
       const s = mkSet(sets.length,weight,rep,{unit,perSide:!!ex.isUnilateral,...loadOptions(ex),
@@ -2421,6 +2421,7 @@ async function createTFHSession(program) {
       programRole:role,programSlotId:slot.id,barId:barStamp(ex,bar),tfhAnchor:result?.anchor ?? null,
       plannedWeightLb:weight,targetWeightLb:result?.targetWeightLb ?? weight,plannedSets:reps.length,plannedReps:reps[0],
       plannedDurationSeconds:duration,prescriptionStyle:"doubleProgression",sets});
+    if (role !== "accessory" && ex.movementGroup) preparedMovementGroups.add(ex.movementGroup);
   }
   const session = {uuid:crypto.randomUUID(),date:iso(new Date()),notes:"",isCompleted:false,...await defaultGymTag(),
     programTag:{programId:program.uuid || program.id,programName:program.name,cycleNumber:next.cycle,

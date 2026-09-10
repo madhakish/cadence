@@ -7,12 +7,13 @@ the **⇄ swap icon** on the exercise in your session (iOS app).
 
 Only sensible substitutes: same movement pattern (all presses, all
 squat/hinge variants, the olympic lifts…), same tier (an accessory is
-never offered your competition lift), same loadability (a loaded lift
-won't swap to a bodyweight one or vice versa), and never a shelved
+never offered your competition lift), the same load convention (a machine total
+will not carry over as a per-hand dumbbell weight), and never a shelved
 exercise. Full matrix: [Swap rules](../reference/swap-rules.md).
 
-If no swap icon appears, the exercise has no movement group set — add
-one in **Settings → Exercise library**.
+Swaps require a matching candidate and a movement group in
+**Settings → Exercise library**. After logging any set, including a warmup,
+add the replacement as a separate exercise to preserve the work already logged.
 
 ## Choose how long the swap lasts
 
@@ -32,7 +33,9 @@ session for a swap to affect.
 
 The swap also fixes up today's session: per-side flags follow the new
 exercise, and the barbell warmup ramp is added or removed when the
-equipment type changes. Your logged working sets are never altered.
+equipment type changes. Check its starting weight before logging: matching
+load units do not mean two exercises use the same weight. To change between
+load conventions, add/configure the replacement with its own starting weight.
 
 Cycle-scoped swap state travels in [backups](back-up-and-restore.md), so
 a swap made on iOS reverts on schedule even if the cycle finishes on web.

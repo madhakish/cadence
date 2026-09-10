@@ -74,7 +74,11 @@ export function tfhDraft(program,exercises,sessions) {
   for (const d of program.days || []) for (const slot of [...(d.lifts || []), ...(d.accessories || [])]) {
     const ex = exercises.find(e => e.name === slot.exerciseName);
     if (!ex?.id) fail(`${slot.exerciseName} needs a stable exercise identity.`);
-    if (["timed","conditioning"].includes(ex.type)) continue;
+    if (["timed","conditioning"].includes(ex.type)) {
+      if ((d.lifts || []).includes(slot))
+        fail(`Move ${slot.exerciseName} to an accessory slot and set its duration before enabling TFH.`);
+      continue;
+    }
     const previous = mine.map(s => s.exercises.find(e => e.programSlotId === slot.id && e.exerciseId === ex.id)).find(Boolean);
     const candidates = [...(previous?.sets || [])].sort((a,b)=>a.order-b.order)
       .filter(s=>!s.isWarmup && C.countsAsPrescribedWork(s.prescriptionBlock));

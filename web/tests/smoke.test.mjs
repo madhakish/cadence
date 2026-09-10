@@ -452,6 +452,30 @@ await withCleanup(async (keep) => {
     "a stale recommendation never overwrites a manual slot change");
 }
 
+// A stale rotation offer must not carry a machine total into a per-hand slot.
+{
+  const program = { roundingLb: 5, days: [{ name: "Synthetic pull day", accessories: [], lifts: [{
+    id: "synthetic-row-slot", exerciseName: "Synthetic Machine Row", role: "complementary",
+    prescription: "secondary", baseWeightLb: 120, estimatedMaxLb: 160,
+    stallCount: 1, lastIncrementLb: 5, pending: { outcome: "hold" },
+  }] }] };
+  const original = JSON.stringify(program);
+  const exercises = [
+    { name: "Synthetic Machine Row", category: "Main", type: "machine", movementGroup: "pull" },
+    { name: "Synthetic One-arm Row", category: "Main", type: "dumbbell", movementGroup: "pull" },
+  ];
+  let refused = false;
+  try {
+    await coach.applyCoachingRecommendation(program, {
+      id: "synthetic-cross-basis", ruleID: "program.slot.rotate.stalled", title: "Rotate",
+      explanation: "Synthetic regression",
+      change: { type: "rotateExercise", slotID: "synthetic-row-slot", exerciseName: "Synthetic Machine Row" },
+    }, exercises);
+  } catch { refused = true; }
+  ok(refused, "coaching refuses a rotation when only an incompatible load basis is available");
+  ok(JSON.stringify(program) === original, "rejected rotation preserves the entire slot and its progression state");
+}
+
 // A program-level equipment boundary applies to automatic coaching changes.
 // The alphabetically first compatible candidate is deliberately a machine so
 // this proves the adapter filters before its deterministic ranking.
@@ -645,6 +669,80 @@ await withCleanup(async (keep) => {
   ok(staleRefused, "a stale stage recommendation cannot overwrite a prescription changed since evaluation");
 }
 
+// Exercise the rendered Coach -> Apply path, including a correction made
+// while its sheet is open and the real subsequent session/banking path.
+await withCleanup(async (keep) => {
+  const original = await db.Programs.active();
+  const program = structuredClone(original);
+  const day = program.days[0];
+  const lift = day.lifts[0];
+  Object.assign(lift, { exerciseName: "Incline DB Press", role: "main", prescription: "automatic",
+    baseWeightLb: 80, estimatedMaxLb: 110, capacityManaged: true, maximumSets: 6, revertToExerciseName: null });
+  day.lifts = [lift]; day.accessories = []; day.order = 0; day.trainingIntent = "general";
+  program.days = [day]; program.currentWeek = 3; program.cycleNumber = 1; program.nextDayIndex = 0;
+  program.roundingLb = 5; program.focus = "strength"; program.coachEnabled = true; program.reliableHistoryStart = null;
+  const evidence = { date: "2026-01-01T12:00:00Z", isCompleted: true,
+    programTag: { programId: program.uuid, cycleNumber: 1, week: 2, dayIndex: 0 },
+    exercises: [{ exerciseName: lift.exerciseName, programSlotId: lift.id, programRole: "main",
+      prescriptionStyle: "wave", plannedSets: 5, plannedReps: 3, plannedWeightLb: 85,
+      sets: Array.from({ length: 5 }, () => ({ weightLb: 85, reps: 3, plannedWeightLb: 85,
+        plannedReps: 3, status: "completed", flags: ["clean"], loadBasis: "perImplement",
+        implementCount: 2, prescriptionBlock: "work" })) }] };
+  evidence.id = keep(db.Sessions, await db.Sessions.save(evidence));
+  const openProposal = async () => {
+    await home.render(host());
+    host().querySelector(".coach-summary").click();
+    const card = [...document.querySelectorAll("#overlays .card")]
+      .find((node) => node.textContent.includes("Build reps before adding dumbbell weight"));
+    ok(!!card && card.textContent.includes("3×5"), "Coach renders the earned dumbbell target and explanation");
+    return [...card.querySelectorAll("button")].find((button) => button.textContent === "Apply");
+  };
+  try {
+    await db.Programs.save(program);
+    await home.render(host());
+    const dayCard = [...host().querySelectorAll(".card")]
+      .find((card) => card.querySelector(".wt-big")
+        && [...card.querySelectorAll("button")].some((button) => button.textContent === `Start ${day.name}`));
+    ok(dayCard?.textContent.includes("85 lb each"), "Today identifies a dumbbell load as per implement");
+    dayCard.querySelector(".row").click();
+    ok(document.getElementById("overlays").textContent.includes("85 lb each"),
+      "the actual workout preview preserves the per-implement load label");
+    document.getElementById("overlays").replaceChildren();
+    const staleApply = await openProposal();
+    evidence.exercises[0].sets[0].reps = 2;
+    await db.Sessions.save(evidence);
+    staleApply.click();
+    await waitFor(() => document.getElementById("toast").textContent.includes("rep progression was not applied"));
+    ok((await db.Programs.get(program.id)).days[0].lifts[0].prescription === "automatic",
+      "Apply reloads corrected history instead of accepting the sheet's stale snapshot");
+    document.getElementById("overlays").replaceChildren();
+    evidence.exercises[0].sets[0].reps = 3;
+    await db.Sessions.save(evidence);
+    (await openProposal()).click();
+    await waitFor(() => document.getElementById("toast").textContent.includes("build to 3×6"));
+    const accepted = await db.Programs.get(program.id);
+    const decisions = (await db.CoachingDecisions.all()).filter((d) => d.ruleId === "program.slot.dumbbell-reps.v1");
+    for (const decision of decisions) keep(db.CoachingDecisions, decision.id);
+    ok(decisions.length === 1 && accepted.days[0].lifts[0].currentReps === 5,
+      "Apply persists the rep window and its audit record together");
+    const historyBefore = JSON.stringify(await db.Sessions.get(evidence.id));
+    const sessionID = keep(db.Sessions, await session.createSessionFromProgramDay(accepted, accepted.days[0]));
+    const workout = await db.Sessions.get(sessionID);
+    const work = workout.exercises[0].sets.filter((set) => !set.isWarmup);
+    ok(work.length === 3 && work.every((set) => set.weightLb === 85 && set.reps === 5),
+      "the real session builder prescribes the accepted dumbbell rep target");
+    await completeAll(workout);
+    const advanced = (await db.Programs.get(program.id)).days[0].lifts[0];
+    ok(advanced.baseWeightLb === 85 && advanced.currentReps === 6,
+      "banking the real session earns reps without adding load");
+    ok(JSON.stringify(await db.Sessions.get(evidence.id)) === historyBefore,
+      "converting and banking preserve the historical prescription and performed work");
+  } finally {
+    document.getElementById("overlays").replaceChildren();
+    await db.Programs.save(original);
+  }
+})();
+
 const serviceWorkerSource = await (await import("node:fs/promises")).readFile(
   new URL("../app/sw.js", import.meta.url), "utf8");
 ok(serviceWorkerSource.includes('"js/coaching-adapter.js"'),
@@ -808,15 +906,30 @@ for (let i = 0; i < 10; i++) {
   {
     const focused = logger.querySelector(".exercise-card.emphasized");
     const segments = focused ? [...focused.querySelectorAll(".set-track .set-track-segment")] : [];
-    ok(segments.length >= 2 && segments.filter((seg) => seg.classList.contains("now")).length === 1,
-      "the focused exercise shows a set track with exactly one current segment");
-    const heroSet = builtProgramSession.exercises[0].sets.find((x) => !x.isWarmup);
+    ok(segments.length >= 2 && segments.every((seg) => seg.classList.contains("upcoming")),
+      "work sets remain upcoming while the warmup ramp is unresolved");
+    const heroSet = builtProgramSession.exercises[0].sets.find((x) => x.isWarmup);
     const hero = focused?.querySelector(".current-set-hero");
     const heroText = hero?.textContent || "";
-    ok(hero && /WORKING SET 1 OF \d+/i.test(heroText) && heroText.includes(`${heroSet.reps} reps`)
+    ok(hero && /WARMUP 1 OF \d+/i.test(heroText) && heroText.includes(`${heroSet.reps} reps`)
         && heroText.includes(C.trim(heroSet.weightLb)) && /\blb\b[\s\S]*\bkg\b/.test(heroText)
         && hero.compareDocumentPosition(focused.querySelector(".setrow")) & Node.DOCUMENT_POSITION_FOLLOWING,
-      "the hero states working-set position, reps, and the set load lb-first with kg, above the set rows");
+      "the hero states the first warmup's position, reps, and load above the set rows");
+    ok(focused.querySelector(".current-set-card")?.classList.contains("warm"),
+      "the first warmup owns the NOW card");
+    const ramp = builtProgramSession.exercises[0].sets.filter((set) => set.isWarmup);
+    for (let i = 0; i < ramp.length; i++) {
+      const card = logger.querySelector(".exercise-card.emphasized");
+      ok(card.querySelector(".current-set-hero")?.getAttribute("aria-label") === `Warmup ${i + 1} of ${ramp.length}`,
+        "each warmup becomes the current action in authored order");
+      card.querySelector('.current-set-card button[aria-label="Set status: planned"]').click();
+      await tick();
+    }
+    const afterRamp = logger.querySelector(".exercise-card.emphasized");
+    ok(/^Working set 1 of /.test(afterRamp.querySelector(".current-set-hero")?.getAttribute("aria-label") || "")
+        && afterRamp.querySelectorAll(".set-track-segment.now").length === 1
+        && !afterRamp.querySelector(".current-set-card").classList.contains("warm"),
+      "only after the warmups resolve do the hero, row, and working-set track advance to work");
   }
   const restBtn = [...document.querySelectorAll("#session-bar button")].find((b) => b.textContent.startsWith("Rest "));
   ok(restBtn && restBtn.textContent === "Rest 4:00", `main squat rest follows the bucket stepper (got ${restBtn && restBtn.textContent})`);

@@ -682,12 +682,7 @@ func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: Ap
 
 /// Compact "how long ago" for the last-session recall line.
 private func agoLabel(_ date: Date) -> String {
-    let days = max(0, Calendar.current.dateComponents([.day], from: date, to: .now).day ?? 0)
-    if days == 0 { return "today" }
-    if days == 1 { return "yesterday" }
-    if days < 14 { return "\(days)d ago" }
-    if days < 70 { return "\(days / 7)w ago" }
-    return "\(days / 30)mo ago"
+    ProgramProgression.historyAgeLabel(exposureDate: date, asOf: .now, calendar: .current)
 }
 
 /// Identifiable wrapper so the summary sheet can drive off .sheet(item:).
@@ -754,7 +749,7 @@ private struct ExerciseSection: View {
     enum SwapScope { case session, cycle, program }
 
     /// Same-movement-pattern lifts you can swap in, constrained to the same
-    /// programming tier and loadability, excluding shelved (SwapRules in
+    /// programming tier and exact load basis, excluding shelved (SwapRules in
     /// CadenceCore — no more Walking Lunges → Back Squat or DB Press → Dips).
     private var alternatives: [Exercise] {
         guard let cur = entry.exercise else { return [] }
@@ -764,20 +759,31 @@ private struct ExerciseSection: View {
                 currentLoadBasis: cur.loadBasis, currentGroup: cur.movementGroup,
                 candidateName: $0.name, candidateCategory: $0.categoryRaw,
                 candidateLoadBasis: $0.loadBasis, candidateGroup: $0.movementGroup,
-                candidateShelved: $0.isShelved
+                candidateShelved: $0.gateStatus == .shelved
             )
         }
     }
 
     private func swap(to newExercise: Exercise, scope: SwapScope) {
+        // Recheck at Apply time: a set can be logged while the dialog is open.
+        // This precedes all program, entry, set, and warmup mutations.
+        guard SwapRules.canReplaceEntry(setStatuses: entry.sets.map(\.status)),
+              alternatives.contains(where: { $0.id == newExercise.id }) else {
+            PersistenceErrorCenter.shared.report(
+                NSError(domain: "Cadence", code: 1,
+                        userInfo: [NSLocalizedDescriptionKey:
+                            "This exercise can no longer be swapped. Keep its logged sets and add the replacement as a separate exercise with its own load."]),
+                operation: "Swapping the exercise", context: context
+            )
+            return
+        }
         let oldName = entry.exercise?.name
         let oldType = entry.exercise?.typeRaw
         // Session scope leaves the program slot alone. Cycle/program scope
         // repoint the slot at the lift you're actually doing (completion
         // matches the durable slot ID, with name+role only for legacy
-        // sessions); the slot keeps its
-        // progression state as the starting load — candidates train the same
-        // pattern at the same tier, so base/e1RM remain the best prior.
+        // sessions). The slot keeps its progression state, which is why
+        // substitutions must preserve the load basis.
         if scope != .session {
             guard let role = entry.programRole, let session = entry.session,
                   let dayIndex = entry.session?.programDayIndex else {
@@ -908,16 +914,18 @@ private struct ExerciseSection: View {
         )
     }
 
-    /// Default between-set presentation: show the next working set first and
+    /// Default between-set presentation: highlight the next authored set and
     /// collapse the already-resolved ramp into one readable progress line.
     /// "Show full set plan" restores every authored row without changing it.
-    private var currentWorkingSet: SetEntry? {
-        entry.orderedSets.first { !$0.isWarmup && $0.status == .planned }
+    private var currentSet: SetEntry? {
+        let ordered = entry.orderedSets
+        let states = ordered.map { SetLifecycle.PresentationState(isWarmup: $0.isWarmup, status: $0.status) }
+        return SetLifecycle.currentPresentationIndex(states).map { ordered[$0] }
     }
 
     private var displayedSets: [SetEntry] {
         let ordered = entry.orderedSets
-        guard emphasized, !showAllSets, currentWorkingSet != nil else { return ordered }
+        guard emphasized, !showAllSets, currentSet != nil else { return ordered }
         let states = ordered.map {
             SetLifecycle.PresentationState(isWarmup: $0.isWarmup, status: $0.status)
         }
@@ -929,12 +937,14 @@ private struct ExerciseSection: View {
         let work = entry.orderedSets.filter { !$0.isWarmup }
         let warmupsDone = warmups.filter { $0.status != .planned }.count
         let workDone = work.filter { $0.status != .planned }.count
-        let currentOrdinal = currentWorkingSet.flatMap { current in
-            work.firstIndex { $0.persistentModelID == current.persistentModelID }
+        let phase = currentSet?.isWarmup == true ? warmups : work
+        let currentOrdinal = currentSet.flatMap { current in
+            phase.firstIndex { $0.persistentModelID == current.persistentModelID }
         }.map { $0 + 1 }
-        let position = currentOrdinal.map { "Work set \($0) of \(work.count)" }
+        let phaseName = currentSet?.isWarmup == true ? "Warmup" : "Work set"
+        let position = currentOrdinal.map { "\(phaseName) \($0) of \(phase.count)" }
             ?? "Work \(workDone) of \(work.count)"
-        return "Warmups \(warmupsDone)/\(warmups.count) · \(position) · \(max(0, work.count - workDone - (currentWorkingSet == nil ? 0 : 1))) after"
+        return "Warmups \(warmupsDone)/\(warmups.count) · \(position) · \(work.count - workDone) work sets remaining"
     }
     private var restBinding: Binding<Int> {
         Binding(get: { entry.exercise?.defaultRestSeconds ?? 0 },
@@ -1018,18 +1028,19 @@ private struct ExerciseSection: View {
                 .accessibilityElement(children: .combine)
             }
             // The approved hierarchy for the lift you're on: the set track,
-            // then the working set's position, reps, and load — stated once,
+            // then the current set's position, reps, and load — stated once,
             // above the set rows. The load is the set's own value, never a
             // re-solve; the diagram under the set row stays the loading truth.
             if emphasized, !entry.plannedWorkingSets.isEmpty {
-                SetTrackView(sets: entry.plannedWorkingSets, currentID: currentWorkingSet?.persistentModelID)
+                SetTrackView(sets: entry.plannedWorkingSets, currentID: currentSet?.persistentModelID)
             }
-            if emphasized, let current = currentWorkingSet,
+            if emphasized, let current = currentSet,
                let type = entry.exercise?.type, type != .conditioning, type != .timed {
+                let phaseSets = entry.orderedSets.filter { $0.isWarmup == current.isWarmup }
                 CurrentSetHero(
                     set: current,
-                    ordinal: (entry.plannedWorkingSets.firstIndex { $0.persistentModelID == current.persistentModelID } ?? 0) + 1,
-                    total: entry.plannedWorkingSets.count
+                    ordinal: (phaseSets.firstIndex { $0.persistentModelID == current.persistentModelID } ?? 0) + 1,
+                    total: phaseSets.count
                 )
             }
             if let complementaryEffortCue {
@@ -1048,10 +1059,8 @@ private struct ExerciseSection: View {
                     .accessibilityLabel("Set progress, \(setStateSummary)")
             }
             ForEach(displayedSets) { set in
-                // The set you're ON — the first WORKING set with no verdict
-                // yet. Unresolved warmups remain visible above it; only the
-                // already-resolved ramp collapses into the progress line.
-                let isCurrent = currentWorkingSet?.persistentModelID == set.persistentModelID
+                // Warmups and work share the same authored next-action order.
+                let isCurrent = currentSet?.persistentModelID == set.persistentModelID
                 let showLoadout = showAllSets || isCurrent || loadChanges(at: set)
                 VStack(alignment: .leading, spacing: 4) {
                     if emphasized && isCurrent {
@@ -1121,7 +1130,7 @@ private struct ExerciseSection: View {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
                 }
-                .opacity(set.isWarmup ? 0.68 : (set.status == .completed ? 0.72 : 1))
+                .opacity(set.isWarmup && !isCurrent ? 0.68 : (set.status == .completed ? 0.72 : 1))
             }
             .onDelete { offsets in
                 let ordered = displayedSets
@@ -1226,6 +1235,10 @@ private struct ExerciseSection: View {
                                 }
                             }
                         } label: { Label("Swap exercise", systemImage: "arrow.left.arrow.right") }
+                        .disabled(!SwapRules.canReplaceEntry(setStatuses: entry.sets.map(\.status)))
+                        if !SwapRules.canReplaceEntry(setStatuses: entry.sets.map(\.status)) {
+                            Text("Sets already logged. Add a separate exercise to change movements.")
+                        }
                     }
                     // Session-only reorder (issue #64): a complementary lift
                     // pulled forward today does not edit the program day.
@@ -1254,7 +1267,7 @@ private struct ExerciseSection: View {
                         Button("For the whole program") { swap(to: alt, scope: .program) }
                         Button("Cancel", role: .cancel) {}
                     } message: { _ in
-                        Text("Just this session leaves the program unchanged. Cycle swaps revert at the next rollover; program swaps rename the slot for good.")
+                        Text("Just this session leaves the program unchanged. Cycle swaps revert at the next rollover; program swaps rename the slot for good. Check the starting weight for the new exercise before logging sets.")
                     }
                 }
             }
@@ -2633,7 +2646,7 @@ private struct CurrentSetHero: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("WORKING SET \(ordinal) OF \(total)")
+            Text("\(set.isWarmup ? "WARMUP" : "WORKING SET") \(ordinal) OF \(total)")
                 .font(.caption.bold())
                 .tracking(0.8)
                 .foregroundStyle(Theme.accent)

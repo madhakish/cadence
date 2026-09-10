@@ -121,7 +121,13 @@ TFH bypasses the legacy percentage-wave, pending-load, stall-counter, and
 calendar-expiry paths. Completion commits the session and next position in the
 existing transaction. Future plans and coaching read canonical corrected sets,
 so they do not need to replay legacy mutable grades. A deliberate uniform load
-adjustment holds that performed load for the following prescription.
+adjustment holds that performed load for the following prescription, even when
+later sets are skipped. Only completed sets establish that adjustment; mixed
+performed loads require review.
+
+Barbell and dumbbell lifts retain the existing warmup ramps and each slot's
+automatic, full, short, or no-warmup policy. Current-set guidance begins with
+the first unfinished warmup.
 
 SwiftData V13 follows a frozen V12 schema through every supported migration
 path. IndexedDB V9 adds opt-in metadata to existing V8 records. Neither upgrade
@@ -139,7 +145,10 @@ claiming that it establishes today's readiness, and never applies a plateau
 cut or exercise rotation automatically.
 
 This controller governs strength-endurance slots. Timed work and conditioning
-retain authored practice targets and their own measurements. It does not infer
+retain authored practice targets and their own measurements in accessory slots.
+Move duration-based exercises out of lift slots and set their duration before
+enabling TFH; setup rejects unsupported lift slots without changing the program.
+It does not infer
 sport skill, optimize all sports, or automate total workload allocation.
 
 ## Verification

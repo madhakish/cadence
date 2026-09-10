@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import 'fake-indexeddb/auto';
 import { JSDOM } from 'jsdom';
 import * as C from '../app/js/core.js';
@@ -92,11 +93,22 @@ workout.exercises = [
 ];
 await db.Sessions.save(workout); await session.openSession(sid); await tick();
 overlay = [...document.querySelectorAll('.overlay')].at(-1);
-overlay.querySelector('.exercise-card.emphasized .setrow.current button[aria-label="Set status: planned"]').click();
+assert.ok(overlay.querySelector('.exercise-card.emphasized .setrow.current.warm'),
+  'the unresolved warmup is current before working sets');
+// Deliberately log work out of order; the remaining warmup must retain focus.
+overlay.querySelector('.exercise-card.emphasized .setrow:not(.warm) button[aria-label="Set status: planned"]').click();
 await tick();
 assert.match(overlay.querySelector('.exercise-card.emphasized').getAttribute('aria-label'), /^Deadlift/);
 assert.equal((await db.Sessions.get(sid)).exercises[0].sets[0].status, 'planned');
 assert.equal(overlay.querySelector('.prior-exercises'), null);
+assert.ok(overlay.querySelector('.exercise-card.emphasized .setrow.current.warm'));
+overlay.querySelector('.exercise-card.emphasized .setrow.current button[aria-label="Set status: planned"]')
+  .dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+const skip = [...document.querySelectorAll('button')].find(button => button.textContent === 'Skipped');
+assert.ok(skip); skip.click(); await tick();
+assert.equal((await db.Sessions.get(sid)).exercises[0].sets[0].status, 'skipped');
+assert.match(overlay.querySelector('.exercise-card.emphasized').getAttribute('aria-label'), /^Overhead Press/,
+  'skipping the remaining warmup advances to the next exercise without changing it to completed');
 overlay.querySelector('.overlay-head button').click(); await db.Sessions.del(sid);
 
 // The new glance display must preserve the stored load meaning and must not
@@ -131,4 +143,6 @@ const moduleURL = new URL('../app/js/core.js', import.meta.url).href;
 const code = `import {historyProvenanceLabel} from ${JSON.stringify(moduleURL)}; process.stdout.write(JSON.stringify(${JSON.stringify(dates)}.map(([a,b])=>historyProvenanceLabel(a,b))));`;
 assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module','-e',code],
   { env: { ...process.env, TZ: 'America/Chicago' }, encoding: 'utf8' })), Array(3).fill('from your last exposure, yesterday'));
+execFileSync(process.execPath, [fileURLToPath(new URL('./session-recall.test.mjs', import.meta.url))],
+  { env: { ...process.env, TZ: 'America/Chicago' }, stdio: 'inherit', timeout: 60_000 });
 console.log('PASS build polish: target accessible unit, no-gym denomination, unresolved warmup focus, DST/calendar labels');

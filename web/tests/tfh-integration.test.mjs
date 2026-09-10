@@ -17,6 +17,14 @@ const program = {uuid:crypto.randomUUID(),name:"TFH integration fixture",templat
     lifts:[{id:crypto.randomUUID(),exerciseName:name,exerciseId:exs.find(e=>e.name===name).id,role:"main",order:0,
       baseWeightLb:order ? 150 : 60,estimatedMaxLb:0,doubleProgressionSets:3,minimumReps:3,maximumReps:5,currentReps:3}],accessories:[]}))};
 program.tfhPolicy=T.tfhDraft(program,exs,[]);
+for(const type of ["timed","conditioning"]) {
+  const invalid=structuredClone(program), exercise={id:crypto.randomUUID(),name:`Synthetic ${type}`,type};
+  invalid.days[0].lifts.push({id:crypto.randomUUID(),exerciseName:exercise.name,exerciseId:exercise.id,role:"complementary",order:1});
+  const before=JSON.stringify(invalid);
+  assert.throws(()=>T.tfhDraft(invalid,[...exs,exercise],[]),/accessory.*duration/i,
+    "TFH setup must reject duration-based lift slots before saving a broken program");
+  assert.equal(JSON.stringify(invalid),before,"rejected setup preserves the program");
+}
 program.tfhPolicy.anchors[program.days[0].lifts[0].id].benchmarkEnabled=true;
 program.id=await db.Programs.save(program);
 let p=await db.Programs.byStableId(program.uuid);
@@ -26,13 +34,16 @@ assert.equal(await S.createSessionFromProgramDay(p,p.days[0]),firstID,"resume th
 const first=await db.Sessions.get(firstID), e=first.exercises[0];
 assert.equal(e.exerciseId,program.days[0].lifts[0].exerciseId);
 assert.equal(e.tfhAnchor.id,p.tfhPolicy.anchors[e.programSlotId].id);
+assert.deepEqual(e.sets.filter(s=>s.isWarmup).map(s=>[s.weightLb,s.reps]),[[25,10],[35,5],[50,2]],
+  "TFH dumbbell mains retain the production warmup ramp");
+assert.equal(e.sets[C.currentSetIndex(e.sets)].isWarmup,true,"current guidance starts with the first warmup");
 assert.deepEqual(e.sets.filter(s=>!s.isWarmup).map(s=>s.reps),[3,3,3]);
 assert.ok(e.sets.every(s=>s.loadBasis==="perImplement" && s.implementCount===2));
 const onlyBonus=structuredClone(first);onlyBonus.isCompleted=true;
 for(const s of onlyBonus.exercises[0].sets)s.status="skipped";
-onlyBonus.exercises[0].sets.push({...onlyBonus.exercises[0].sets[0],order:99,status:"completed"});
+onlyBonus.exercises[0].sets.push({...onlyBonus.exercises[0].sets.find(s=>!s.isWarmup),order:99,status:"completed"});
 assert.equal(T.tfhCohort(p,[onlyBonus]).length,0,"bonus work cannot complete an otherwise skipped day");
-onlyBonus.exercises[0].sets[0].status="completed";
+onlyBonus.exercises[0].sets.find(s=>!s.isWarmup).status="completed";
 assert.equal(T.tfhCohort(p,[onlyBonus]).length,1);
 onlyBonus.tfhExcludedFromProgression=true;
 assert.equal(T.tfhCohort(p,[onlyBonus]).length,0,"off-program work stays outside the cohort");
@@ -54,7 +65,7 @@ let next=T.tfhPrescription(p,e.programSlotId,history,2);
 assert.equal(next.plan.weightLb,60);
 assert.deepEqual(next.plan.reps,[4,3,3],"one total rep, no volume collapse or forced DB increment");
 const bonus=structuredClone(history);
-bonus[0].exercises[0].sets.push({...bonus[0].exercises[0].sets[0],order:99,weightLb:10,reps:20});
+bonus[0].exercises[0].sets.push({...bonus[0].exercises[0].sets.find(s=>!s.isWarmup),order:99,weightLb:10,reps:20});
 assert.deepEqual(T.tfhPrescription(p,e.programSlotId,bonus,2).plan,next.plan,"bonus work does not rewrite the frozen prescription");
 const ruck=exs.find(x=>x.name==="Ruck"), practiceSlot={id:"practice",exerciseName:"Ruck",weightLb:0,sets:2,targetSeconds:600};
 assert.deepEqual(T.tfhPractice(practiceSlot,ruck,4),{weightLb:20,sets:1,seconds:300});
@@ -111,4 +122,13 @@ assert.doesNotMatch(row.textContent,/3×4/);
 const toDelete=(await db.Sessions.all()).find(s=>s.tfhPolicyId===p.tfhPolicy.id && s.programTag.week===4);
 await db.Sessions.del(toDelete.id);
 assert.equal(T.tfhCurrentPosition(restored,await db.Sessions.all()).rotation,4);
+for(const [warmupPolicy,loads] of [["short",[35,50]],["none",[]]]) {
+  const candidate=structuredClone(program);candidate.uuid=crypto.randomUUID();delete candidate.id;
+  candidate.days[0].lifts[0].warmupPolicy=warmupPolicy;
+  candidate.tfhPolicy=T.tfhDraft(candidate,exs,[]);
+  candidate.id=await db.Programs.save(candidate);
+  const session=await db.Sessions.get(await S.createSessionFromProgramDay(candidate,candidate.days[0]));
+  assert.deepEqual(session.exercises[0].sets.filter(s=>s.isWarmup).map(s=>s.weightLb),loads,
+    `TFH respects the explicit ${warmupPolicy} warmup policy`);
+}
 console.log("TFH live builder, correction, recovery, coaching and backup integration passed");

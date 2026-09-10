@@ -40,10 +40,26 @@ final class BuildPolishTests: XCTestCase {
             ("2026-10-31T12:00:00-05:00", "2026-11-01T11:30:00-06:00"),
             ("2026-03-08T23:55:00-05:00", "2026-03-09T00:05:00-05:00")
         ] {
+            XCTAssertEqual(ProgramProgression.historyAgeLabel(
+                exposureDate: try XCTUnwrap(iso.date(from: before)),
+                asOf: try XCTUnwrap(iso.date(from: after)), calendar: calendar), "yesterday")
             XCTAssertEqual(ProgramProgression.historyProvenanceLabel(
                 exposureDate: try XCTUnwrap(iso.date(from: before)),
                 asOf: try XCTUnwrap(iso.date(from: after)), calendar: calendar),
                 "from your last exposure, yesterday")
+        }
+    }
+
+    func testHistoryAgeWordingBoundaries() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Chicago"))
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-03-09T00:05:00-05:00"))
+        for (days, expected) in [(-1, "today"), (0, "today"), (1, "yesterday"), (2, "2d ago"),
+                                 (13, "13d ago"), (14, "2w ago"), (69, "9w ago"), (70, "2mo ago")] {
+            let before = try XCTUnwrap(calendar.date(byAdding: .day, value: -days, to: now))
+            XCTAssertEqual(ProgramProgression.historyAgeLabel(exposureDate: before, asOf: now, calendar: calendar), expected)
+            XCTAssertEqual(ProgramProgression.historyProvenanceLabel(exposureDate: before, asOf: now, calendar: calendar),
+                           "from your last exposure, \(expected)")
         }
     }
 }

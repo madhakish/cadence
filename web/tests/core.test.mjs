@@ -578,11 +578,32 @@ eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → not
   eq(C.swapCompatible(walkingLunges, backSquat), false, "accessory can't jump to a main competition lift");
   eq(C.swapCompatible(dbPress, dips), false, "loaded press can't swap to an unloadable accessory");
   eq(C.swapCompatible(dbPress, bwPress), false, "loadability mismatch alone filters (same tier/group)");
-  eq(C.swapCompatible(dbPress, machinePress), true, "equipment change within loadable types is fine");
+  eq(C.swapCompatible(dbPress, machinePress), false, "per-hand loads cannot become machine totals");
+  eq(C.swapCompatible(machinePress, dbPress), false, "machine totals cannot become per-hand loads");
+  eq(C.swapCompatible(dbPress, { ...benchShelved, isShelved: false }), false, "per-hand loads cannot become bar totals");
+  eq(C.swapCompatible(dbPress, { ...dbPress, name: "Flat DB Press" }), true, "same per-hand basis is compatible");
+  eq(C.swapCompatible(dbPress, { ...dbPress, name: "Shelved DB Press", gateStatus: "shelved", isShelved: false }), false,
+    "the authoritative shelf gate overrides a stale legacy flag");
   eq(C.swapCompatible(dbPress, benchShelved), false, "shelved is never offered");
   eq(C.swapCompatible(backSquat, dbPress), false, "different movement pattern");
   eq(C.swapCompatible(backSquat, backSquat), false, "never itself");
   eq(C.swapCompatible({ ...backSquat, movementGroup: "" }, frontSquat), false, "ungrouped lift offers no swaps");
+  eq(C.canReplaceExerciseEntry([]), true, "an empty entry can be swapped");
+  eq(C.canReplaceExerciseEntry(["planned", "skipped"]), true, "unperformed sets allow a swap");
+  eq(C.canReplaceExerciseEntry(["completed", "planned"]), false, "a completed warmup belongs to the original exercise");
+  eq(C.canReplaceExerciseEntry(["skipped", "completed"]), false, "completed working sets cannot be relabeled");
+}
+
+// The current action follows the authored ramp, including completed/skipped transitions.
+{
+  const states = (statuses) => statuses.map((status, index) => ({ status, isWarmup: index < 3 }));
+  eq(C.currentSetIndex(states(["planned", "planned", "planned", "planned"])), 0, "start at the first warmup");
+  eq(C.currentSetIndex(states(["completed", "planned", "planned", "planned"])), 1, "completing a warmup advances within the ramp");
+  eq(C.currentSetIndex(states(["completed", "skipped", "planned", "planned"])), 2, "skipping a warmup advances to the remaining warmup");
+  eq(C.currentSetIndex(states(["completed", "skipped", "completed", "planned"])), 3, "work becomes current after the ramp resolves");
+  eq(C.currentSetIndex(states(["completed", "skipped", "completed", "completed"])), -1, "no current set after completion");
+  eq(C.currentSetIndex([]), -1, "an empty plan has no current set");
+  eq(C.currentSetIndex([{ isWarmup: false, status: "planned" }]), 0, "work-only plans still start at their first set");
 }
 
 // completionCommit: save-or-rollback boundary for banking (issue 19) —

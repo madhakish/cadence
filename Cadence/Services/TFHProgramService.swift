@@ -126,11 +126,16 @@ enum TFHProgramService {
         let mine = sessions.filter { $0.isCompleted && $0.programID == program.id && $0.tfhExcludedFromProgression != true }
             .sorted { $0.effectiveCompletionDate > $1.effectiveCompletionDate }
         func make(id: String, name: String, weight: Double, sets: Int, reps: Int, min: Int, max: Int,
-                  step: Double) throws {
+                  step: Double, isLift: Bool = false) throws {
             guard let ex = exercises.first(where: { $0.name == name }), let exerciseID = ex.id else {
                 throw Failure.invalid("\(name) needs a stable exercise identity.")
             }
-            if ex.type == .timed || ex.type == .conditioning { return }
+            if ex.type == .timed || ex.type == .conditioning {
+                guard !isLift else {
+                    throw Failure.invalid("Move \(name) to an accessory slot and set its duration before enabling TFH.")
+                }
+                return
+            }
             let previous = mine.lazy.compactMap { s in
                 s.exercises.first { $0.programSlotID == id && $0.exerciseID == exerciseID }
             }.first
@@ -160,7 +165,7 @@ enum TFHProgramService {
             for l in day.orderedLifts {
                 try make(id: l.id, name: l.exerciseName, weight: l.baseWeightLb,
                          sets: l.doubleProgressionSets, reps: l.currentReps,
-                         min: l.minimumReps, max: l.maximumReps, step: program.roundingLb)
+                         min: l.minimumReps, max: l.maximumReps, step: program.roundingLb, isLift: true)
             }
             for a in day.orderedAccessories {
                 try make(id: a.id, name: a.exerciseName, weight: a.weightLb, sets: a.sets,

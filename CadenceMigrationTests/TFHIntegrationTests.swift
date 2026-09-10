@@ -35,12 +35,32 @@ final class TFHIntegrationTests: XCTestCase {
         try context.save()
     }
 
+    func testSetupRejectsDurationBasedLiftSlotsWithoutChangingTheProgram() throws {
+        for type in [ExerciseType.timed, .conditioning] {
+            let c = try container(), context = c.mainContext
+            let p = try fixture(context), originalPolicy = p.tfhPolicyData
+            let ex = Exercise(name: "Synthetic duration exercise", category: .accessory, type: type)
+            ex.id = UUID().uuidString; context.insert(ex)
+            let lift = ProgramLift(exerciseName: ex.name, role: .complementary, baseWeightLb: 0, estimatedMaxLb: 0)
+            lift.exerciseID = ex.id; lift.order = 1; context.insert(lift); p.days[0].lifts.append(lift)
+            try context.save()
+            let exercises = try context.fetch(FetchDescriptor<Exercise>())
+            XCTAssertThrowsError(try TFHProgramService.draft(p, exercises: exercises, sessions: [])) { error in
+                XCTAssertTrue(error.localizedDescription.contains("accessory"))
+                XCTAssertTrue(error.localizedDescription.contains("duration"))
+            }
+            XCTAssertEqual(p.tfhPolicyData, originalPolicy)
+        }
+    }
+
     func testProductionBuilderCompletionCorrectionAndRecovery() throws {
         let c = try container(), context = c.mainContext
         let p = try fixture(context), slot = try XCTUnwrap(p.day(order: 0)?.lifts.first)
         let first = try ProgramSession.make(program: p, day: p.orderedDays[0], context: context)
         XCTAssertTrue(try ProgramSession.make(program: p, day: p.orderedDays[0], context: context) === first)
         let entry = try XCTUnwrap(first.orderedExercises.first)
+        XCTAssertEqual(entry.orderedSets.filter(\.isWarmup).map(\.weightLb), [25,35,50])
+        XCTAssertEqual(entry.orderedSets.filter(\.isWarmup).map(\.reps), [10,5,2])
         XCTAssertEqual(entry.exerciseID, slot.exerciseID)
         XCTAssertEqual(entry.plannedWorkingSets.map(\.reps), [3,3,3])
         XCTAssertTrue(entry.plannedWorkingSets.allSatisfy { $0.loadBasis == .perImplement && $0.resolvedImplementCount == 2 })
@@ -74,6 +94,17 @@ final class TFHIntegrationTests: XCTestCase {
         let restoredHistory = try destination.mainContext.fetch(FetchDescriptor<WorkoutSession>())
         XCTAssertEqual(restoredHistory.count, 8)
         XCTAssertEqual(try TFHProgramService.position(restored, policy: TFHProgramService.policy(restored)!, sessions: restoredHistory).completedCycles, [1])
+    }
+
+    func testTFHDumbbellWarmupsRespectExplicitPolicies() throws {
+        for (policy, loads) in [(WarmupPolicy.short, [35.0,50.0]), (.none, [])] {
+            let c = try container(), ctx = c.mainContext, p = try fixture(ctx)
+            let day = try XCTUnwrap(p.nextDay), lift = try XCTUnwrap(day.orderedLifts.first)
+            lift.warmupPolicy = policy
+            let session = try ProgramSession.make(program: p, day: day, context: ctx)
+            let entry = try XCTUnwrap(session.orderedExercises.first)
+            XCTAssertEqual(entry.orderedSets.filter(\.isWarmup).map(\.weightLb), loads)
+        }
     }
 
     func testMigrationFromShippedV12KeepsHistoryAndAddsOnlyOptionalTFHState() throws {
