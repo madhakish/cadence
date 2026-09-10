@@ -1630,6 +1630,12 @@ private struct SetRow: View {
                 RoundedRectangle(cornerRadius: Theme.cornerRadius)
                     .fill(Theme.accent.opacity(0.10))
                     .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.accent.opacity(0.55)))
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(Theme.edge)
+                            .frame(height: 0.5)
+                            .padding(.horizontal, Theme.cornerRadius)
+                    }
             }
         }
         .sheet(isPresented: $showDetail) {

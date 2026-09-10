@@ -90,8 +90,7 @@ enum Theme {
     static let card = Color(.secondarySystemGroupedBackground)
     static let raised = Color(.tertiarySystemGroupedBackground)
     static let hairline = Color.primary.opacity(0.14)
-    /// One-pixel edge light along the top of a raised surface — the only
-    /// material cue a card carries besides its hairline. Web twin: `--edge`.
+    /// Subtle top edge on the current-set card. Web twin: `--edge`.
     static let edge = Color.primary.opacity(0.07)
     static let forgedSteel = Color(hex: 0xA6ABB2)
 
@@ -158,12 +157,6 @@ extension View {
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.cornerRadius)
                     .stroke(Theme.hairline, lineWidth: 0.5)
-            }
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(Theme.edge)
-                    .frame(height: 0.5)
-                    .padding(.horizontal, Theme.cornerRadius)
             }
     }
 }

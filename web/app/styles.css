@@ -425,9 +425,8 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
 .current-set-hero { display: grid; gap: 4px; margin: 2px 0 12px; }
 .current-set-reps { display: flex; align-items: baseline; gap: 4px; }
 .current-set-reps .count { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
-/* The signature: every stated load — the working set, the achieved total —
-   is the same numeral. Tabular figures so a change of load never reflows the
-   line; the surface sets its size through --load-numeral-size. */
+/* The current-set load and achieved primary total share tabular figures;
+   each surface sets its size through --load-numeral-size. */
 .load-numeral { font-size: var(--load-numeral-size, clamp(40px, 12vw, 56px)); font-weight: 900; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 .dual-weight { --load-numeral-size: clamp(32px, 10vw, 44px); }
 .current-set-load { display: flex; align-items: baseline; gap: 4px; --load-numeral-size: clamp(40px, 12vw, 56px); }
