@@ -521,10 +521,10 @@ export async function openSession(id) {
     const load = ui.h("div", { class: "current-set-load", "aria-label": set.weightLb > 0
       ? `Set load ${C.both(set.weightLb)}${C.loadBasisSuffix(basis)}` : "Bodyweight" });
     if (set.weightLb > 0) {
-      load.append(ui.h("span", { class: "load-primary mono", text: C.trim(set.weightLb) }), ui.h("span", { class: "unit", text: " lb " }),
+      load.append(ui.h("span", { class: "load-primary load-numeral mono", text: C.trim(set.weightLb) }), ui.h("span", { class: "unit", text: " lb " }),
         ui.h("span", { class: "load-secondary mono", text: C.trim(C.kgFromLb(set.weightLb)) }), ui.h("span", { class: "unit", text: " kg " }));
     } else {
-      load.append(ui.h("span", { class: "load-primary mono", text: "BW" }));
+      load.append(ui.h("span", { class: "load-primary load-numeral mono", text: "BW" }));
     }
     return ui.h("div", { class: "current-set-hero", "aria-label": `Working set ${ordinal} of ${workSets.length}` },
       ui.h("span", { class: "eyebrow accent", text: `Working set ${ordinal} of ${workSets.length} ` }),

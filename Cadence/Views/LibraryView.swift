@@ -121,7 +121,7 @@ private struct LibraryRow: View {
                     .font(.caption.bold())
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Theme.hardStop.opacity(0.25), in: Capsule())
+                    .background(Theme.hardStop.opacity(0.25), in: RoundedRectangle(cornerRadius: 2))
                     .foregroundStyle(Theme.hardStop)
             }
             if exercise.isUnilateral {
