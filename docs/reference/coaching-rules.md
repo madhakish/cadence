@@ -141,7 +141,7 @@ are never rotated by this rule.
 The engine names the slot only. Resolving an actual replacement needs the
 exercise library, which lives on the clients, so the swap happens at Apply time
 through the same `SwapRules` compatibility used by the manual swap gesture:
-same movement group, same programming tier, same loadability, not shelved. If
+same movement group, same programming tier, the same exact load basis, not shelved. If
 nothing compatible is available the proposal refuses with that reason rather
 than substituting something that does not fit.
 

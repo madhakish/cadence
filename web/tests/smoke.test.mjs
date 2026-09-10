@@ -452,6 +452,30 @@ await withCleanup(async (keep) => {
     "a stale recommendation never overwrites a manual slot change");
 }
 
+// A stale rotation offer must not carry a machine total into a per-hand slot.
+{
+  const program = { roundingLb: 5, days: [{ name: "Synthetic pull day", accessories: [], lifts: [{
+    id: "synthetic-row-slot", exerciseName: "Synthetic Machine Row", role: "complementary",
+    prescription: "secondary", baseWeightLb: 120, estimatedMaxLb: 160,
+    stallCount: 1, lastIncrementLb: 5, pending: { outcome: "hold" },
+  }] }] };
+  const original = JSON.stringify(program);
+  const exercises = [
+    { name: "Synthetic Machine Row", category: "Main", type: "machine", movementGroup: "pull" },
+    { name: "Synthetic One-arm Row", category: "Main", type: "dumbbell", movementGroup: "pull" },
+  ];
+  let refused = false;
+  try {
+    await coach.applyCoachingRecommendation(program, {
+      id: "synthetic-cross-basis", ruleID: "program.slot.rotate.stalled", title: "Rotate",
+      explanation: "Synthetic regression",
+      change: { type: "rotateExercise", slotID: "synthetic-row-slot", exerciseName: "Synthetic Machine Row" },
+    }, exercises);
+  } catch { refused = true; }
+  ok(refused, "coaching refuses a rotation when only an incompatible load basis is available");
+  ok(JSON.stringify(program) === original, "rejected rotation preserves the entire slot and its progression state");
+}
+
 // A program-level equipment boundary applies to automatic coaching changes.
 // The alphabetically first compatible candidate is deliberately a machine so
 // this proves the adapter filters before its deterministic ranking.
@@ -882,15 +906,30 @@ for (let i = 0; i < 10; i++) {
   {
     const focused = logger.querySelector(".exercise-card.emphasized");
     const segments = focused ? [...focused.querySelectorAll(".set-track .set-track-segment")] : [];
-    ok(segments.length >= 2 && segments.filter((seg) => seg.classList.contains("now")).length === 1,
-      "the focused exercise shows a set track with exactly one current segment");
-    const heroSet = builtProgramSession.exercises[0].sets.find((x) => !x.isWarmup);
+    ok(segments.length >= 2 && segments.every((seg) => seg.classList.contains("upcoming")),
+      "work sets remain upcoming while the warmup ramp is unresolved");
+    const heroSet = builtProgramSession.exercises[0].sets.find((x) => x.isWarmup);
     const hero = focused?.querySelector(".current-set-hero");
     const heroText = hero?.textContent || "";
-    ok(hero && /WORKING SET 1 OF \d+/i.test(heroText) && heroText.includes(`${heroSet.reps} reps`)
+    ok(hero && /WARMUP 1 OF \d+/i.test(heroText) && heroText.includes(`${heroSet.reps} reps`)
         && heroText.includes(C.trim(heroSet.weightLb)) && /\blb\b[\s\S]*\bkg\b/.test(heroText)
         && hero.compareDocumentPosition(focused.querySelector(".setrow")) & Node.DOCUMENT_POSITION_FOLLOWING,
-      "the hero states working-set position, reps, and the set load lb-first with kg, above the set rows");
+      "the hero states the first warmup's position, reps, and load above the set rows");
+    ok(focused.querySelector(".current-set-card")?.classList.contains("warm"),
+      "the first warmup owns the NOW card");
+    const ramp = builtProgramSession.exercises[0].sets.filter((set) => set.isWarmup);
+    for (let i = 0; i < ramp.length; i++) {
+      const card = logger.querySelector(".exercise-card.emphasized");
+      ok(card.querySelector(".current-set-hero")?.getAttribute("aria-label") === `Warmup ${i + 1} of ${ramp.length}`,
+        "each warmup becomes the current action in authored order");
+      card.querySelector('.current-set-card button[aria-label="Set status: planned"]').click();
+      await tick();
+    }
+    const afterRamp = logger.querySelector(".exercise-card.emphasized");
+    ok(/^Working set 1 of /.test(afterRamp.querySelector(".current-set-hero")?.getAttribute("aria-label") || "")
+        && afterRamp.querySelectorAll(".set-track-segment.now").length === 1
+        && !afterRamp.querySelector(".current-set-card").classList.contains("warm"),
+      "only after the warmups resolve do the hero, row, and working-set track advance to work");
   }
   const restBtn = [...document.querySelectorAll("#session-bar button")].find((b) => b.textContent.startsWith("Rest "));
   ok(restBtn && restBtn.textContent === "Rest 4:00", `main squat rest follows the bucket stepper (got ${restBtn && restBtn.textContent})`);

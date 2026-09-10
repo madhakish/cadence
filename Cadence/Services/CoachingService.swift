@@ -50,7 +50,7 @@ enum CoachingService {
                                 currentLoadBasis: current.loadBasis, currentGroup: current.movementGroup,
                                 candidateName: candidate.name, candidateCategory: candidate.categoryRaw,
                                 candidateLoadBasis: candidate.loadBasis, candidateGroup: candidate.movementGroup,
-                                candidateShelved: candidate.isShelved || candidate.gateStatus == .shelved
+                                candidateShelved: candidate.gateStatus == .shelved
                             )
                         }
                     } ?? false
@@ -424,7 +424,7 @@ enum CoachingService {
                     currentLoadBasis: current.loadBasis, currentGroup: current.movementGroup,
                     candidateName: $0.name, candidateCategory: $0.categoryRaw,
                     candidateLoadBasis: $0.loadBasis, candidateGroup: $0.movementGroup,
-                    candidateShelved: $0.isShelved || $0.gateStatus == .shelved
+                    candidateShelved: $0.gateStatus == .shelved
                 )
             }.sorted { $0.name < $1.name }
             let replacement = lift?.prescription == .maxEffort

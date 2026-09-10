@@ -320,6 +320,11 @@ export function focusedSetIndices(sets = []) {
     || (set.isWarmup && (set.status || "planned") === "planned") ? [index] : []));
 }
 
+// Mirrors SetLifecycle.currentPresentationIndex; callers supply authored order.
+export function currentSetIndex(sets = []) {
+  return sets.findIndex((set) => (set.status || "planned") === "planned");
+}
+
 // Whether a set of this kind counts as the slot's prescribed work — the sets
 // that are graded and that supply the cycle's strength sample.
 //
@@ -1868,10 +1873,10 @@ export function canResumeSession(tagCycle, tagWeek, tagDayIndex, cycleNumber, cu
 // ---- Swap rules (issue 20) ----------------------------------------------
 // A candidate is offered only when it trains the same movement pattern
 // (non-empty matching group), sits in the same programming tier
-// (Main/Accessory/Conditioning), matches the current lift's loadability,
+// (Main/Accessory/Conditioning), matches the current lift's exact load basis,
 // isn't the same exercise, and isn't shelved. `current`/`candidate` are
-// exercise records. Loadability follows the resolved load basis, not equipment
-// type: a weighted pull-up is bodyweight-typed but still carries external load.
+// exercise records. Equipment type alone cannot establish the load convention:
+// a weighted pull-up is bodyweight-typed but carries external load.
 // ---- Program slot ordering (one spelling) ----------------------------------
 // Main work always precedes complementary work; authored order is preserved
 // inside each role. Ties break on exerciseName with ORDINAL comparison
@@ -1908,9 +1913,14 @@ export function swapCompatible(current, candidate) {
   return !!current.movementGroup
     && candidate.movementGroup === current.movementGroup
     && candidate.name !== current.name
-    && !candidate.isShelved
+    && !exerciseIsShelved(candidate)
     && candidate.category === current.category
-    && supportsLoadPR(resolvedLoadBasis(candidate)) === supportsLoadPR(resolvedLoadBasis(current));
+    && resolvedLoadBasis(candidate) === resolvedLoadBasis(current);
+}
+
+// Mirrors SwapRules.canReplaceEntry. Warmups are recorded work too.
+export function canReplaceExerciseEntry(setStatuses) {
+  return !setStatuses.includes("completed");
 }
 
 // The transactional boundary for banking a session (issue 19), mirroring

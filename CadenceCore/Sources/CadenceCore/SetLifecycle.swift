@@ -35,6 +35,13 @@ public enum SetLifecycle {
         }
     }
 
+    /// The next action is the first unresolved authored set, including warmups.
+    /// A working-set preview must never skip ahead of the ramp. Mirrors web
+    /// `currentSetIndex`.
+    public static func currentPresentationIndex(_ sets: [PresentationState]) -> Int? {
+        sets.firstIndex { $0.status == .planned }
+    }
+
     /// Returns authored indices for every unresolved warmup plus the first
     /// unresolved working set. With no current working set, return the whole
     /// plan so completed/skipped rows remain correctable. Mirrors web

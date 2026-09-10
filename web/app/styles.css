@@ -273,8 +273,8 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 #session-bar .rest-time { font-size: 22px; font-weight: 800; color: var(--accent); margin-right: 4px; }
 #session-bar .progress { margin-top: 8px; }
 
-/* logger set states: the set you're ON gets the rail; warmups sit quiet */
-.setrow.warm { opacity: 0.72; }
+/* The current warmup gets the same emphasis as the current working set. */
+.setrow.warm:not(.current) { opacity: 0.72; }
 .setrow.warm .wt { font-size: 15px; }
 .setrow.current { border-left: 3px solid var(--accent); padding-left: 9px; margin-left: -12px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%); }
