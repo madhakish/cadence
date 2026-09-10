@@ -1,5 +1,11 @@
 # Run a training day
 
+Rest alerts identify the next unfinished exercise, including its warmups. After
+the last set of a lift, the alert advances to the next lift; it does not repeat
+the completed lift. A running countdown keeps its remaining time when that
+context changes. After all sets are resolved, the alert only reports that rest
+is over.
+
 ## Preview, then start (or resume)
 
 The **Today** screen shows the active program's next day with every

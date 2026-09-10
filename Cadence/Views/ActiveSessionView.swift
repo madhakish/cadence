@@ -155,7 +155,7 @@ struct ActiveSessionView: View {
             SessionBottomBar(
                 sessionStart: isTimingThisSession ? workoutClock.startDate : nil,
                 pausedAt: workoutClock.pausedAt,
-                restLabel: currentOrFirst?.exercise?.name ?? "",
+                restLabel: nextRestExerciseName(after: currentOrFirst),
                 restSeconds: currentRestSeconds,
                 onStart: startWorkout
             )
@@ -248,7 +248,7 @@ struct ActiveSessionView: View {
             }
         }
         .sheet(isPresented: $showExercisePicker) {
-            ExercisePickerSheet { exercise in
+            ExercisePickerSheet(equipmentPolicy: sessionProgram?.equipmentPolicy ?? .any) { exercise in
                 addExercise(exercise)
             }
         }
@@ -443,12 +443,13 @@ struct ActiveSessionView: View {
             settings: settingsList.first,
             gym: gym,
             programFocus: sessionProgram?.focus,
-            allExercises: allExercises,
+            allExercises: allExercises.filter { sessionProgram?.equipmentPolicy.allows(exerciseType: $0.typeRaw) ?? true },
             lastTime: recallLine(for: entry, in: recall),
             adHocExposure: mostRecentTopExposure(for: entry),
             onDropLoad: { autoregEntry = entry },
             onWork: { currentEntry = $0 },
             onResolve: { focusAfterResolving($0) },
+            restTargetName: { nextRestExerciseName(after: entry) },
             onRemove: { removeExercise(entry) },
             onMove: { moveExercise(entry, direction: $0) }
         )
@@ -465,7 +466,17 @@ struct ActiveSessionView: View {
             ordered.map { $0.orderedSets.map(\.status) }, resolvedIndex: resolvedIndex
         ) else { currentEntry = entry; return }
         currentEntry = ordered[next]
+        restTimer.updateExerciseName(nextRestExerciseName(after: currentEntry))
         if next != resolvedIndex { showEarlierExercises = false }
+    }
+
+    private func nextRestExerciseName(after entry: SessionExercise?) -> String {
+        let ordered = session.orderedExercises
+        let index = ordered.firstIndex { $0.persistentModelID == entry?.persistentModelID } ?? -1
+        guard let next = SetLifecycle.nextPendingExerciseIndex(
+            ordered.map { $0.orderedSets.map(\.status) }, after: index
+        ) else { return "" }
+        return ordered[next].exercise?.name ?? ""
     }
 
     private func recallLine(
@@ -499,7 +510,9 @@ struct ActiveSessionView: View {
     }
 
     private func pushActivityContext() {
-        workoutClock.updateContext(currentLift: currentOrFirst?.exercise?.name ?? "",
+        let nextName = nextRestExerciseName(after: currentOrFirst)
+        restTimer.updateExerciseName(nextName)
+        workoutClock.updateContext(currentLift: nextName,
                                    defaultRestSeconds: currentRestSeconds)
     }
 
@@ -734,6 +747,7 @@ private struct ExerciseSection: View {
     let onWork: (SessionExercise) -> Void
     /// Recomputes the active position after a completed or skipped verdict.
     let onResolve: (SessionExercise) -> Void
+    let restTargetName: () -> String
     /// Remove this exercise from the session. Unlike a swap, removal leaves no
     /// performed entry carrying the program slot identity.
     let onRemove: () -> Void
@@ -989,8 +1003,8 @@ private struct ExerciseSection: View {
             .accessibilityLabel("Remove set")
 
             Button {
-                onWork(entry)
-                restTimer.start(seconds: restSeconds, exerciseName: entry.exercise?.name ?? "")
+                onResolve(entry)
+                restTimer.start(seconds: restSeconds, exerciseName: restTargetName())
             } label: {
                 actionLabel("Rest", systemImage: "timer", iconOnly: iconOnly)
             }
@@ -1081,7 +1095,7 @@ private struct ExerciseSection: View {
                         if status == .completed, previous != .completed,
                            settings?.autoStartRest == true, !restTimer.isRunning {
                             restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
-                                            exerciseName: entry.exercise?.name ?? "")
+                                            exerciseName: restTargetName())
                         }
                     }, onRemove: { removeSet(set) })
                     // Discloses where the first working set's ad-hoc history
@@ -2460,10 +2474,12 @@ private struct ExercisePickerSheet: View {
     @State private var search = ""
     @State private var typeFilter: ExerciseType?
     @State private var detailExercise: Exercise?
+    var equipmentPolicy: EquipmentPolicy = .any
     let onPick: (Exercise) -> Void
 
     private var visible: [Exercise] {
-        let pool = typeFilter.map { filter in exercises.filter { $0.type == filter } } ?? exercises
+        let allowed = exercises.filter { equipmentPolicy.allows(exerciseType: $0.typeRaw) }
+        let pool = typeFilter.map { filter in allowed.filter { $0.type == filter } } ?? allowed
         guard !search.isEmpty else { return pool }
         let term = ExerciseSearch.preparedTerm(search)
         return pool.filter { $0.matchesSearch(preparedTerm: term) }

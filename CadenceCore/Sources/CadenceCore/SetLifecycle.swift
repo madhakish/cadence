@@ -16,10 +16,16 @@ public enum SetLifecycle {
     /// Only focus changes; the authored entries and set statuses are untouched.
     public static func focusAfterResolving(_ entries: [[SetStatus]], resolvedIndex: Int) -> Int? {
         guard entries.indices.contains(resolvedIndex) else { return nil }
+        return nextPendingExerciseIndex(entries, after: resolvedIndex) ?? resolvedIndex
+    }
+
+    /// Rest alerts must name actual pending work, never the completed entry
+    /// retained on screen for review after the workout's final set.
+    public static func nextPendingExerciseIndex(_ entries: [[SetStatus]], after resolvedIndex: Int) -> Int? {
+        guard entries.indices.contains(resolvedIndex) else { return nil }
         if entries[resolvedIndex].contains(.planned) { return resolvedIndex }
         return entries.indices.dropFirst(resolvedIndex + 1).first { entries[$0].contains(.planned) }
             ?? entries.indices.first { entries[$0].contains(.planned) }
-            ?? resolvedIndex
     }
 
     /// The lifecycle state needed to choose the focused set rows. This is a

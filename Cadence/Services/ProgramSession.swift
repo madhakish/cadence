@@ -18,8 +18,9 @@ enum ProgramSession {
     }
 
     static func make(program: Program, day: ProgramDay, context: ModelContext) throws -> WorkoutSession {
-        if program.tfhPolicyData != nil { return try TFHSession.make(program: program, context: context) }
         let allExercises = try context.fetch(FetchDescriptor<Exercise>())
+        try ProgramEquipmentService.assertAllowed(program, exercises: allExercises)
+        if program.tfhPolicyData != nil { return try TFHSession.make(program: program, context: context) }
         // The performed log backs the honest-base repair (planningBase): a
         // stale stored base must not keep prescribing the plates the lifter
         // already lifted.

@@ -2,6 +2,7 @@
 // and data export/import (the safety net against Safari storage eviction).
 import * as ui from "../ui.js";
 import * as C from "../core.js";
+import { applyProgramEquipmentPolicy } from "../program-equipment.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES, COPY } from "../constants.js";
 import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, namedRestorePreview, wipeAll, ensureSeeded, syncLibrary, localDayKey, intervalSnapshots } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
@@ -309,6 +310,7 @@ export function openAddProgramSheet(programs) {
           while (names.has(`Program ${number}`)) number += 1;
           await Programs.save({ name: `Program ${number}`, focus: "strength", cycleNumber: 1,
             currentWeek: 1, nextDayIndex: 0, roundingLb: 5,
+            equipmentPolicy: programs.find((program) => program.isActive)?.equipmentPolicy || "any",
             isActive: programs.length === 0, days: [] });
           api.close();
           ui.nav.refresh();
@@ -429,10 +431,10 @@ export function exercisePickerList(all, onPick, { availableOnly = false } = {}) 
   return wrap;
 }
 
-function pickExerciseSheet(onPick) {
+function pickExerciseSheet(onPick, equipmentPolicy = "any") {
   Exercises.all().then((all) => {
     ui.sheet({ title: "Pick exercise", build: (c, api) => {
-      c.append(exercisePickerList(all, (e) => { api.close(); onPick(e); }, { availableOnly: true }));
+      c.append(exercisePickerList(all.filter((exercise) => C.equipmentPolicyAllows(equipmentPolicy, exercise.type)), (e) => { api.close(); onPick(e); }, { availableOnly: true }));
     } });
   });
 }
@@ -646,10 +648,23 @@ export async function programEditor(p) {
           selected: value === (p.equipmentPolicy || "any"),
         })));
         equipment.addEventListener("change", async () => {
-          p.equipmentPolicy = equipment.value;
-          await Programs.save(p);
+          try {
+            const removed = await applyProgramEquipmentPolicy(p, equipment.value);
+            if (removed.length) ui.toast(`Removed from plan: ${removed.join(", ")}. Recorded workouts kept.`);
+            draw();
+          } catch (error) { equipment.value = p.equipmentPolicy || "any"; ui.toast(error.message); }
         });
         body.append(ui.field("Equipment", equipment));
+        body.append(ui.h("div", { class: "sub", text: "Applies to existing slots, new exercises, and future swaps. Excluded slots are removed from the plan; recorded workouts are kept." }));
+        if (p.equipmentPolicy === "freeWeightsOnly") body.append(ui.h("button", {
+          class: "btn wide", text: "Apply equipment restriction", onClick: async () => {
+            try {
+              const removed = await applyProgramEquipmentPolicy(p, p.equipmentPolicy);
+              ui.toast(removed.length ? `Removed from plan: ${removed.join(", ")}.` : "All program exercises match.");
+              draw();
+            } catch (error) { ui.toast(error.message); }
+          },
+        }));
         body.append(ui.h("div", { class: "card" },
           ui.h("div", { class: "row" }, ui.h("span", { text: "Rounding" }),
             ui.stepper(p.roundingLb, { min: 2.5, max: 10, step: 2.5, format: ui.fmtWeight, onChange: async (v) => { p.roundingLb = v; await Programs.save(p); } })),
@@ -933,7 +948,7 @@ async function programDayEditor(p, day) {
             focus: p.focus, roundingLb: p.roundingLb });
           day.lifts.push({ exerciseName: e.name, role: "complementary", order: day.lifts.length, prescription: "automatic", warmupPolicy: "automatic", baseWeightLb: bootstrap.baseWeightLb, estimatedMaxLb: bootstrap.estimatedMaxLb, stallCount: 0, lastIncrementLb: 0 });
           await Programs.save(p); draw();
-        }) }));
+        }, p.equipmentPolicy) }));
 
         body.append(ui.h("div", { class: "section-title", text: "Accessories" }));
         for (const a of orderedSlots(day.accessories)) {
@@ -991,7 +1006,7 @@ async function programDayEditor(p, day) {
             weightLb: bootstrap.weightLb, incrementLb: bootstrap.incrementLb, stallCount: 0, capacityManaged: true, maximumSets: 6,
             conditioningEffort: "easy", targetRPE: 0 });
           await Programs.save(p); draw();
-        }) }));
+        }, p.equipmentPolicy) }));
       };
       draw();
     },

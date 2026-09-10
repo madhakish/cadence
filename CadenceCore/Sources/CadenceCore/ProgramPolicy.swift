@@ -21,9 +21,8 @@ public enum DayTrainingIntent: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// Program-level boundary for automatic exercise selection. Manual library
-/// edits remain available; this policy prevents an evolving free-weight plan
-/// from silently acquiring machine work later.
+/// Program-level equipment boundary. The exercise library and recorded history
+/// remain intact; a restricted plan cannot acquire excluded work later.
 public enum EquipmentPolicy: String, Codable, CaseIterable, Sendable {
     case any
     case freeWeightsOnly

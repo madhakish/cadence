@@ -13,11 +13,18 @@ ground with more explanation.
 |---|---|
 | Name | Display only |
 | Focus | Strength / Hypertrophy / Maintain — sets increment size and the training-max ceiling ([details](../reference/progression-rules.md)) |
+| Equipment | Free weights + bodyweight removes excluded slots from this program and filters additions, swaps, coaching and cycle reverts. Recorded workouts are kept. New programs inherit the active program's choice. |
 | Rounding | Plate granularity; every prescription snaps to it (default 5 lb) |
 | Active | The active program drives the Today screen; exactly one program is active at a time |
 | Rotation | Your position in the 4-week wave — set it if you're migrating mid-cycle |
 
 ## Add days
+
+To clean an existing plan, finish any open workout, then choose **Free weights +
+bodyweight** in its equipment setting. **Apply equipment restriction** also
+repairs an imported plan that already carries that setting. Excluded slots are
+removed without borrowing their loads for a different movement. Add any desired
+replacement separately. A TFH layout change requires reviewing TFH setup.
 
 **+ Add day** for each training day, in rotation order. Name them
 whatever you like ("Upper A", "Snatch Day"). Days rotate in order and

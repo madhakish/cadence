@@ -52,6 +52,7 @@ enum ProgramTemplates {
         // The methodology origin (schema V11): recorded at instantiation,
         // never inferred later. Hand-built programs stay nil.
         program.templateID = template.id
+        program.equipmentPolicy = existingPrograms.first(where: \.isActive)?.equipmentPolicy ?? .any
         for (i, d) in template.days.enumerated() {
             let day = ProgramDay(name: d.name, order: i)
             context.insert(day)   // insert before appending children (Seeder pattern)
@@ -135,6 +136,7 @@ enum ProgramTemplates {
                 day.accessories.append(acc)
             }
         }
+        try ProgramEquipmentService.apply(program.equipmentPolicy, to: program, context: context)
         return program
     }
 

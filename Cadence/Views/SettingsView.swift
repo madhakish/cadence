@@ -636,7 +636,9 @@ struct ProgramCreationSheet: View {
                         "Program \(existingPrograms.count + 1)",
                         existing: existingPrograms.map(\.name)
                     )
-                    context.insert(Program(name: name, isActive: existingPrograms.isEmpty))
+                    let program = Program(name: name, isActive: existingPrograms.isEmpty)
+                    program.equipmentPolicy = existingPrograms.first(where: \.isActive)?.equipmentPolicy ?? .any
+                    context.insert(program)
                     PersistenceErrorCenter.shared.save(context, operation: "Adding the program")
                     dismiss()
                 } label: {
@@ -1051,11 +1053,16 @@ struct ProgramEditorView: View {
                 }
                 Picker("Equipment", selection: Binding(
                     get: { program.equipmentPolicy },
-                    set: { program.equipmentPolicy = $0 }
+                    set: { applyEquipmentPolicy($0) }
                 )) {
                     ForEach(EquipmentPolicy.allCases, id: \.self) { policy in
                         Text(policy.name).tag(policy)
                     }
+                }
+                Text("Applies to existing slots, new exercises, and future swaps. Excluded slots are removed from the plan; recorded workouts are kept.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if program.equipmentPolicy != .any {
+                    Button("Apply equipment restriction") { applyEquipmentPolicy(program.equipmentPolicy) }
                 }
                 Stepper("Rounding: \(settingsList.unitDisplay.format(lb: program.roundingLb))", value: $program.roundingLb, in: 2.5...10, step: 2.5)
                 // Activation is exclusive and owned by one service (epic
@@ -1179,7 +1186,7 @@ struct ProgramEditorView: View {
                 }
             }
         }
-        .alert("Can't switch programs", isPresented: Binding(
+        .alert("Can't update program", isPresented: Binding(
             get: { activationError != nil }, set: { if !$0 { activationError = nil } }
         )) {
             Button("OK") { activationError = nil }
@@ -1188,6 +1195,14 @@ struct ProgramEditorView: View {
         }
         .navigationTitle(program.name)
         .saveChangesOnDisappear(context, operation: "Saving the program")
+    }
+
+    private func applyEquipmentPolicy(_ policy: EquipmentPolicy) {
+        do {
+            try ProgramEquipmentService.applyAndSave(policy, to: program, context: context)
+        } catch {
+            activationError = error.localizedDescription
+        }
     }
 
     /// Move the program to a rotation. Placing at/after Peak (rotation 3) with no
@@ -1392,7 +1407,7 @@ struct ProgramDayEditorView: View {
         .saveChangesOnDisappear(context, operation: "Saving the program day")
         .toolbar { EditButton() }
         .sheet(item: $picking) { target in
-            ExercisePickerSheetView { name in
+            ExercisePickerSheetView(equipmentPolicy: day.program?.equipmentPolicy ?? .any) { name in
                 switch target {
                 case .lift:
                     let exercise = exercises.first { $0.name == name }
@@ -1802,6 +1817,7 @@ private struct ExercisePickerSheetView: View {
     @State private var search = ""
     @State private var typeFilter: ExerciseType?
     @State private var detailExercise: Exercise?
+    var equipmentPolicy: EquipmentPolicy = .any
     let onPick: (String) -> Void
 
     private var visible: [Exercise] {
@@ -1809,7 +1825,7 @@ private struct ExercisePickerSheetView: View {
         // hand-rolled locale-collation predicate — this was the one picker
         // left off the canonical matcher, so "degage" found an accented
         // exercise everywhere except here.
-        let available = exercises.filter(\.isAvailableForProgramming)
+        let available = exercises.filter { $0.isAvailableForProgramming && equipmentPolicy.allows(exerciseType: $0.typeRaw) }
         let pool = typeFilter.map { filter in available.filter { $0.type == filter } } ?? available
         guard !search.isEmpty else { return pool }
         let term = ExerciseSearch.preparedTerm(search)

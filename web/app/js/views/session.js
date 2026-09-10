@@ -2,6 +2,7 @@
 // rest timer, autoregulation, body signals, completion + PR detection.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
+import { assertProgramEquipmentAllowed } from "../program-equipment.js";
 import { tfhCurrentPosition, tfhPrescription, tfhSynchronize, tfhPractice } from "../tfh.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram , Intervals, intervalSnapshots } from "../db.js";
@@ -206,8 +207,7 @@ export async function openSession(id) {
     .filter((s) => s.id !== session.id)
     .sort((a, b) => new Date(b.date) - new Date(a.date)); // newest first, sorted once
   const sessionProgram = session.programTag
-    ? await Programs.byStableId(session.programTag.programId)
-      || (await Programs.all()).find((candidate) => candidate.name === session.programTag.programName)
+    ? (await Programs.all()).find((candidate) => sessionBelongsToProgram(session, candidate))
     : null;
   const sessionDayName = session.programTag
     ? sessionProgram?.days?.find((day) => day.order === session.programTag.dayIndex)?.name
@@ -369,10 +369,15 @@ export async function openSession(id) {
   }
 
   const rest = makeRestTimer(() => paintBar(), () => onRestDone());
-  let restLabel = "";
   let barEls = null;                          // bottom-bar refs, filled after pushScreen
-  function armRest(seconds, label) { if (!(seconds > 0)) return; restLabel = label || ""; rest.start(seconds); paintBar(); } // 0/none (conditioning) arms nothing
-  function onRestDone() { ui.toast(restLabel ? `Rest over · ${restLabel}.` : "Rest over."); beep(settings.haptics !== false); paintBar(); }
+  function armRest(seconds) { if (!(seconds > 0)) return; rest.start(seconds); paintBar(); } // 0/none (conditioning) arms nothing
+  function onRestDone() {
+    const index = C.nextPendingExerciseIndex(session.exercises.map((exercise) =>
+      (exercise.sets || []).map((set) => set.status)), session.exercises.indexOf(currentEntry()));
+    const label = index === null ? "" : session.exercises[index].exerciseName;
+    ui.toast(label ? `Rest over · ${label}.` : "Rest over.");
+    beep(settings.haptics !== false); paintBar();
+  }
 
   function paintBar() {
     if (!barEls) return;
@@ -406,7 +411,7 @@ export async function openSession(id) {
         title: "Remaining rest", seconds: Math.max(0, Math.round(rest.remaining)), zeroLabel: "End rest",
         onSave: (seconds) => { rest.setRemaining(seconds); paintBar(); },
       }) });
-    const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex, currentEntry()?.programRole), ex ? ex.name : ""); } });
+    const restBtn = ui.h("button", { class: "btn sm primary", text: "Rest", onClick: () => { const ex = currentExercise(); armRest(restFor(ex, currentEntry()?.programRole)); } });
     const subBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "−1:00", onClick: () => { rest.add(-60); paintBar(); } });
     const addBtn = ui.h("button", { class: "btn sm", style: { display: "none" }, text: "+1:00", onClick: () => { rest.add(60); paintBar(); } });
     const skipBtn = ui.h("button", { class: "btn sm ghost", style: { display: "none" }, text: "Skip", onClick: () => { rest.stop(); paintBar(); } });
@@ -620,7 +625,7 @@ export async function openSession(id) {
         if (target) removeSet(se, target);
         save(); renderBody(body);
       } }),
-      ui.h("button", { class: "btn sm ghost", text: "Rest", onClick: () => { currentSE = se; armRest(restFor(ex, se.programRole), se.exerciseName); } }),
+      ui.h("button", { class: "btn sm ghost", text: "Rest", onClick: () => { focusAfterVerdict(se, "completed"); armRest(restFor(ex, se.programRole)); } }),
       ui.h("button", { class: "btn sm ghost warn", text: "↓ Dropping load", onClick: () => dropLoad(se, body) }),
       // Session-only reorder (issue #64): pulling a lift forward today does
       // not edit the program day. Mirrors native moveExercise.
@@ -738,7 +743,7 @@ export async function openSession(id) {
         const newlyCompleted = s.status !== "completed";
         s.status = newlyCompleted ? "completed" : "planned";
         focusAfterVerdict(se, s.status);
-        if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole), se.exerciseName);
+        if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole));
         save(); renderBody(body);
       },
       onContextMenu: (event) => { event.preventDefault(); chooseStatus(se, s, body); },
@@ -835,7 +840,7 @@ export async function openSession(id) {
         const newlyCompleted = status === "completed" && s.status !== "completed";
         s.status = status;
         focusAfterVerdict(se, status);
-        if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole), se.exerciseName);
+        if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole));
         save(); renderBody(body);
       },
     })));
@@ -1216,7 +1221,7 @@ export async function openSession(id) {
         // The shared picker surface (issues #63/#66): search, equipment
         // filters, and a detail preview that opens over the sheet so the
         // search/filter state survives the inspection.
-        c.append(exercisePickerList(all, (e) => {
+        c.append(exercisePickerList(all.filter((exercise) => C.equipmentPolicyAllows(sessionProgram?.equipmentPolicy, exercise.type)), (e) => {
           session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null,
             barId: barStamp(e, C.barById(gymState.value?.defaultBarId)),
             plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
@@ -1640,16 +1645,20 @@ function rollOverRecovery(program, exerciseByName, note) {
       }
       if (lift.revertToExerciseName) {
         const original = lift.revertToExerciseName;
-        note(`${original}: cycle swap over — slot reverts from ${lift.exerciseName} for the new cycle.`, original);
-        lift.exerciseName = original;
+        if (C.equipmentPolicyAllows(program.equipmentPolicy, exerciseByName.get(original)?.type)) {
+          note(`${original}: cycle swap over — slot reverts from ${lift.exerciseName} for the new cycle.`, original);
+          lift.exerciseName = original;
+        }
         delete lift.revertToExerciseName;
       }
     }
     for (const acc of d.accessories || []) {
       if (acc.revertToExerciseName) {
         const original = acc.revertToExerciseName;
-        note(`${original}: cycle swap over — slot reverts from ${acc.exerciseName} for the new cycle.`, original);
-        acc.exerciseName = original;
+        if (C.equipmentPolicyAllows(program.equipmentPolicy, exerciseByName.get(original)?.type)) {
+          note(`${original}: cycle swap over — slot reverts from ${acc.exerciseName} for the new cycle.`, original);
+          acc.exerciseName = original;
+        }
         delete acc.revertToExerciseName;
       }
     }
@@ -2194,6 +2203,7 @@ function sessionTargetsMatch(session, program, day, exMap, allSessions) {
 }
 
 export async function createSessionFromProgramDay(program, day) {
+  assertProgramEquipmentAllowed(program, await Exercises.all());
   if (program.tfhPolicy != null) return createTFHSession(program);
   const recovery = await reconcileRecoveryBridge(program);
   if (recovery) {

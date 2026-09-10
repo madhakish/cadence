@@ -64,6 +64,16 @@ final class RestTimer {
         apply(RestClock.add(state, seconds: TimeInterval(seconds)))
     }
 
+    /// Retarget an existing countdown after a verdict advances the session.
+    /// Keep its remaining time and pause state; only the next-action label changes.
+    func updateExerciseName(_ name: String) {
+        guard name != exerciseName else { return }
+        exerciseName = name
+        if let clock {
+            WorkoutActivityController.applyRestDetached(clock, exerciseName: name)
+        }
+    }
+
     /// Direct entry adjusts this countdown, preserving pause and elapsed rest.
     /// An expired timer stays expired if its editor is still open.
     func setRemaining(seconds: Int) {
