@@ -8,7 +8,7 @@ An exercise is offered as a substitute only if **all** of these hold:
 |---|---|
 | Same **movement group** (non-empty): squat, hinge, press, olympic, pull, shoulder, arms, core, conditioning | A swap trains the same pattern |
 | Same **category** (Main / Accessory / Conditioning) | No accessory → competition-lift jumps; prescriptions stay tier-appropriate |
-| Same **load basis** — per implement, bar total, machine/external total, bodyweight, assistance, or duration/distance | A machine total must never become the weight of each dumbbell |
+| Same **load basis** — per implement, bar total, external total, bodyweight, or assistance | A machine total must never become the weight of each dumbbell |
 | Not **shelved** | Shelved means deliberately benched (injury, re-entry test pending) |
 | Not the same exercise | — |
 

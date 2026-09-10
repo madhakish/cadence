@@ -832,15 +832,30 @@ for (let i = 0; i < 10; i++) {
   {
     const focused = logger.querySelector(".exercise-card.emphasized");
     const segments = focused ? [...focused.querySelectorAll(".set-track .set-track-segment")] : [];
-    ok(segments.length >= 2 && segments.filter((seg) => seg.classList.contains("now")).length === 1,
-      "the focused exercise shows a set track with exactly one current segment");
-    const heroSet = builtProgramSession.exercises[0].sets.find((x) => !x.isWarmup);
+    ok(segments.length >= 2 && segments.every((seg) => seg.classList.contains("upcoming")),
+      "work sets remain upcoming while the warmup ramp is unresolved");
+    const heroSet = builtProgramSession.exercises[0].sets.find((x) => x.isWarmup);
     const hero = focused?.querySelector(".current-set-hero");
     const heroText = hero?.textContent || "";
-    ok(hero && /WORKING SET 1 OF \d+/i.test(heroText) && heroText.includes(`${heroSet.reps} reps`)
+    ok(hero && /WARMUP 1 OF \d+/i.test(heroText) && heroText.includes(`${heroSet.reps} reps`)
         && heroText.includes(C.trim(heroSet.weightLb)) && /\blb\b[\s\S]*\bkg\b/.test(heroText)
         && hero.compareDocumentPosition(focused.querySelector(".setrow")) & Node.DOCUMENT_POSITION_FOLLOWING,
-      "the hero states working-set position, reps, and the set load lb-first with kg, above the set rows");
+      "the hero states the first warmup's position, reps, and load above the set rows");
+    ok(focused.querySelector(".current-set-card")?.classList.contains("warm"),
+      "the first warmup owns the NOW card");
+    const ramp = builtProgramSession.exercises[0].sets.filter((set) => set.isWarmup);
+    for (let i = 0; i < ramp.length; i++) {
+      const card = logger.querySelector(".exercise-card.emphasized");
+      ok(card.querySelector(".current-set-hero")?.getAttribute("aria-label") === `Warmup ${i + 1} of ${ramp.length}`,
+        "each warmup becomes the current action in authored order");
+      card.querySelector('.current-set-card button[aria-label="Set status: planned"]').click();
+      await tick();
+    }
+    const afterRamp = logger.querySelector(".exercise-card.emphasized");
+    ok(/^Working set 1 of /.test(afterRamp.querySelector(".current-set-hero")?.getAttribute("aria-label") || "")
+        && afterRamp.querySelectorAll(".set-track-segment.now").length === 1
+        && !afterRamp.querySelector(".current-set-card").classList.contains("warm"),
+      "only after the warmups resolve do the hero, row, and working-set track advance to work");
   }
   const restBtn = [...document.querySelectorAll("#session-bar button")].find((b) => b.textContent.startsWith("Rest "));
   ok(restBtn && restBtn.textContent === "Rest 4:00", `main squat rest follows the bucket stepper (got ${restBtn && restBtn.textContent})`);

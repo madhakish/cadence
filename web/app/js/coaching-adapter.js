@@ -30,7 +30,7 @@ export function coachingReport(program, sessions, exMap, checkins = [], interval
       // Mirrors CoachingService.report.
       const rotationCandidateAvailable = resolvedStyle === "maxEffort"
         ? !!exercise && policyExercises.some((candidate) => C.swapCompatible(
-          exercise, { ...candidate, isShelved: C.exerciseIsShelved(candidate) },
+          exercise, candidate,
         ))
         : null;
       return { id: lift.id, exerciseName: lift.exerciseName, dayIndex: day.order,
@@ -235,7 +235,7 @@ export async function applyCoachingRecommendation(program, recommendation, exerc
     }
     const compatible = automaticExercises.filter((candidate) => C.swapCompatible(
       current,
-      { ...candidate, isShelved: C.exerciseIsShelved(candidate) },
+      candidate,
     ))
       .sort((a, b) => String(a.name) < String(b.name) ? -1 : String(a.name) > String(b.name) ? 1 : 0);
     const isMaxEffortLift = !!lift && (lift.prescription || "automatic") === "maxEffort";

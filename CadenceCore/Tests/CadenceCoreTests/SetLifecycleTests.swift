@@ -2,6 +2,20 @@ import XCTest
 @testable import CadenceCore
 
 final class SetLifecycleTests: XCTestCase {
+    func testCurrentSetFollowsTheAuthoredRampBeforeWorkingSets() {
+        typealias State = SetLifecycle.PresentationState
+        func states(_ statuses: [SetStatus]) -> [State] {
+            statuses.enumerated().map { State(isWarmup: $0.offset < 3, status: $0.element) }
+        }
+        XCTAssertEqual(SetLifecycle.currentPresentationIndex(states([.planned, .planned, .planned, .planned])), 0)
+        XCTAssertEqual(SetLifecycle.currentPresentationIndex(states([.completed, .planned, .planned, .planned])), 1)
+        XCTAssertEqual(SetLifecycle.currentPresentationIndex(states([.completed, .skipped, .planned, .planned])), 2)
+        XCTAssertEqual(SetLifecycle.currentPresentationIndex(states([.completed, .skipped, .completed, .planned])), 3)
+        XCTAssertNil(SetLifecycle.currentPresentationIndex(states([.completed, .skipped, .completed, .completed])))
+        XCTAssertNil(SetLifecycle.currentPresentationIndex([]))
+        XCTAssertEqual(SetLifecycle.currentPresentationIndex([State(isWarmup: false, status: .planned)]), 0)
+    }
+
     func testLegacyResolutionIsConservativeForOpenSessions() {
         XCTAssertEqual(SetLifecycle.resolve(nil, sessionCompleted: false), .planned)
         XCTAssertEqual(SetLifecycle.resolve(nil, sessionCompleted: true), .completed)

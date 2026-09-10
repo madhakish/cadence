@@ -22,6 +22,10 @@ lifts appear under "Next up" with their own suggestions.
   lifts — but remains *planned* until you mark it completed. Mark intentionally
   omitted work as *skipped*. Only completed work counts in history and
   progression.
+- **Follow “Now” through the warmups.** The highlighted row and large load
+  display follow the first unfinished set in the authored plan. Complete or
+  skip each warmup to advance through the ramp; working sets become current
+  after the preceding warmups are resolved.
 - **Check the equipment context.** “Training at” follows the gym captured by
   the session. Changing it updates default bars and warmups; a bar selected on
   one exercise is saved with that session and survives reopening it.

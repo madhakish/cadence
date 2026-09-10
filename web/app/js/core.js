@@ -303,6 +303,11 @@ export function focusedSetIndices(sets = []) {
     || (set.isWarmup && (set.status || "planned") === "planned") ? [index] : []));
 }
 
+// Mirrors SetLifecycle.currentPresentationIndex; callers supply authored order.
+export function currentSetIndex(sets = []) {
+  return sets.findIndex((set) => (set.status || "planned") === "planned");
+}
+
 // Whether a set of this kind counts as the slot's prescribed work — the sets
 // that are graded and that supply the cycle's strength sample.
 //
@@ -1891,7 +1896,7 @@ export function swapCompatible(current, candidate) {
   return !!current.movementGroup
     && candidate.movementGroup === current.movementGroup
     && candidate.name !== current.name
-    && !candidate.isShelved
+    && !exerciseIsShelved(candidate)
     && candidate.category === current.category
     && resolvedLoadBasis(candidate) === resolvedLoadBasis(current);
 }
