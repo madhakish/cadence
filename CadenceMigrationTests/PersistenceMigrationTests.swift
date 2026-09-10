@@ -95,7 +95,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV8PolicyStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         do {
             let container = try ModelContainer(
                 for: schema,
@@ -139,7 +139,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV10IdentityStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let expectedID = StableID.exerciseLegacyID(name: "Legacy Row")
         do {
             let container = try ModelContainer(
@@ -196,7 +196,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV11WoodStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         var woodSessionID = ""
         do {
             let container = try ModelContainer(
@@ -284,7 +284,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// non-finite Double makes JSONEncoder refuse the export outright. An
     /// app must never bank a row whose own backup it cannot restore.
     func testCreatorRejectsValuesItsOwnBackupWouldRefuse() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let container = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -328,7 +328,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// than delete/recreate. Identity matters to history ordering and backup
     /// diffs; the entry denomination matters when a kilogram maul is edited.
     func testActivityQuickEditPreservesIdentityAndOffProgramShape() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let container = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -398,7 +398,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// activity, mutating only the first set would preserve a contradictory
     /// record. Refuse it and leave every row available for explicit recovery.
     func testActivityQuickEditRejectsNoncanonicalSessionShape() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let container = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -472,7 +472,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV9IntervalStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         do {
             let container = try ModelContainer(
                 for: schema,
@@ -521,7 +521,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// same deterministic legacy ids web derives — cross-client identity for
     /// identical content.
     func testBackupRoundTripsIdentityAndDerivesLegacyIDs() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -576,7 +576,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testNativeBackupRoundTripsIntervalsAndManualBarMarker() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -659,7 +659,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// canonical set, and a v11 bundle restores with no detail invented
     /// anywhere [INV-WOOD-WORK-ROUND-TRIPS].
     func testNativeBackupRoundTripsActivityDetail() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -830,7 +830,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testNativeBackupCarriesTitaniumThemeAndRestoresOlderThemeBundles() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         func container() throws -> ModelContainer {
             try ModelContainer(
                 for: schema,
@@ -854,7 +854,7 @@ final class PersistenceMigrationTests: XCTestCase {
         // version and restores verbatim.
         let backup = try ExportService.jsonData(context: context)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
-        XCTAssertEqual(json["schemaVersion"] as? Int, 13)
+        XCTAssertEqual(json["schemaVersion"] as? Int, 14)
         XCTAssertEqual((json["settings"] as? [String: Any])?["theme"] as? String, "titanium")
         let restored = try container()
         try ImportService.load(backup, into: restored.mainContext)
@@ -898,7 +898,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testExactRestDurationsRoundTripThroughTheExistingBackupContract() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         func container() throws -> ModelContainer {
             try ModelContainer(for: schema,
                 configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
@@ -921,7 +921,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testNativeBackupRoundTripsProgrammingPoliciesAndDefaultsLegacyBundles() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -975,7 +975,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testNativeStandaloneProgramRoundTripsProgrammingPolicies() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1028,7 +1028,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV7Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         do {
             let container = try ModelContainer(for: schema, migrationPlan: CadenceV7MigrationPlan.self,
@@ -1071,7 +1071,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV6Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(for: schema, migrationPlan: CadenceV6MigrationPlan.self,
                                            configurations: configuration)
@@ -1142,7 +1142,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// native omits this one, restoring its own post-migration backup promotes
     /// a pull-up the lifter deliberately moved back to Accessory.
     func testNativeBackupRoundTripKeepsVerticalPullPromotionStamp() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1181,7 +1181,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// both restore as "gym inventory", matching web's wholesale-record
     /// replacement.
     func testRestoreClearsAStationPreferenceTheBackupDoesNotContain() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1227,7 +1227,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV4Store(at: storeURL, proteinEntries: 12)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV4MigrationPlan.self, configurations: configuration
@@ -1275,7 +1275,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV5Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV5MigrationPlan.self, configurations: configuration
@@ -1323,7 +1323,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairRestoresIndependentLowerBDayAndIsIdempotent() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -1399,7 +1399,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairDoesNotGuessBetweenIdenticalCollidingSlots() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -1440,7 +1440,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testMirroredLowerBMatrixRestoresRolesFromItsTaggedProgramDay() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -1536,13 +1536,15 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     private func openUsingProductionStrategies(storeURL: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let configuration = {
             ModelConfiguration("migration", schema: schema, url: storeURL)
         }
         let attempts: [() throws -> ModelContainer] = [
             // Same order as AppBootstrap.loadPersistentStore: newest shipped
             // checksum first.
+            { try ModelContainer(for: schema, migrationPlan: CadenceV12MigrationPlan.self,
+                                 configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadenceV11MigrationPlan.self,
                                  configurations: configuration()) },
             { try ModelContainer(for: schema, migrationPlan: CadenceV10MigrationPlan.self,
@@ -1589,7 +1591,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createStore(storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema,

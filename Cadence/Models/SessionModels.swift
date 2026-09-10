@@ -68,6 +68,10 @@ final class WorkoutSession {
     /// unchanged program → resume (preserving session-local removes/swaps);
     /// edited program → rebuild. nil for pre-snapshot sessions (never resumed).
     var programPlanNames: [String]?
+    var tfhPolicyID: String?
+    /// Athlete-declared comparison conditions. Nil means unknown.
+    var tfhContext: String?
+    var tfhExcludedFromProgression: Bool?
     @Relationship(deleteRule: .cascade, inverse: \SessionExercise.session)
     var exercises: [SessionExercise]
     /// Typed metadata for an ad-hoc activity session (schema V12) — wood
@@ -147,6 +151,8 @@ final class SessionExercise {
     /// from the live relationship (or the deterministic legacy derivation)
     /// by the Seeder repair; nil only when the exercise is gone and unnamed.
     var exerciseID: String?
+    /// Immutable Codable TFHAnchor used when this entry was created.
+    var tfhAnchorData: Data?
 
     init(order: Int, exercise: Exercise?, notes: String = "") {
         self.order = order
@@ -176,6 +182,7 @@ final class SessionExercise {
     /// was captured retain their legacy label because there is no evidence to
     /// classify them more precisely.
     var truthfulPhaseLabel: String? {
+        if tfhAnchorData != nil { return phase == .deload ? "TFH Recovery" : "TFH R\(phase?.rawValue ?? 1)" }
         guard let phase else { return nil }
         guard !prescriptionStyleRaw.isEmpty else { return phase.label }
         let style = PrescriptionStyle(rawValue: prescriptionStyleRaw) ?? .automatic
@@ -193,6 +200,12 @@ final class SessionExercise {
     var plannedWorkingSets: [SetEntry] { orderedSets.filter { !$0.isWarmup } }
     /// Only performed work belongs in history, PRs, volume, or progression.
     var workingSets: [SetEntry] { plannedWorkingSets.filter { $0.status == .completed } }
+
+    var prescribedSets: [SetEntry] {
+        let candidates = orderedSets.filter { !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork }
+        return Array(candidates.prefix(plannedSets ?? candidates.count))
+    }
+    var prescribedWork: [SetEntry] { prescribedSets.filter { $0.status == .completed } }
 
     var workingVolumeLb: Double {
         // A carried pack is not tonnage. Twenty pounds for three miles is not
@@ -255,6 +268,8 @@ final class SetEntry {
     var implementCount: Int = 0
     /// Set when this set's load came from a mid-session "dropping load" tap.
     var autoregReasonRaw: String?
+    /// Codable TFHBenchmarkResult, separate from completed/performed work.
+    var tfhBenchmarkData: Data?
     var sessionExercise: SessionExercise?
 
     init(

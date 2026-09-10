@@ -399,6 +399,7 @@ export function slotBadge(lift, rotationWeek, movementGroup = null, focus = "str
 // without a captured style keep their legacy label because they cannot be
 // classified safely after the fact.
 export function sessionPhaseLabel(entry, exercise) {
+  if(entry?.tfhAnchor) return entry.phase === 4 ? "TFH Recovery" : `TFH R${entry.phase || 1}`;
   if (!entry?.phase) return null;
   const style = entry.prescriptionStyle || entry.prescriptionStyleRaw;
   if (!style) return C.phaseLabel(entry.phase);

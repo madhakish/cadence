@@ -16,6 +16,10 @@ no quotes.
 [Build your first program](docs/tutorials/first-program.md) or
 [pick a pre-programmed style](docs/how-to/start-from-a-style.md).
 
+The opt-in [TFH method](docs/explanation/tfh-method.md) connects bounded
+development, maintenance, and practice targets to live programming and coaching
+on native and web. Set it up from your existing program's editor.
+
 ## What it does
 
 - **Plate math calculator** — the killer feature, one tap from anywhere

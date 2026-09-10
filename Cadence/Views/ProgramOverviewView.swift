@@ -107,6 +107,14 @@ struct ProgramOverviewView: View {
                     Text("Next").font(.caption.bold()).foregroundStyle(Theme.accent)
                 }
             }
+            if program.tfhPolicyData != nil {
+                ForEach(day.orderedLifts) { lift in
+                    TFHSlotPlanView(program: program, slotID: lift.id, name: lift.exerciseName)
+                }
+                ForEach(day.orderedAccessories) { acc in
+                    TFHSlotPlanView(program: program, slotID: acc.id, name: acc.exerciseName)
+                }
+            } else {
             ForEach(day.orderedLifts) { lift in
                 let exercise = exercises.first { $0.name == lift.exerciseName }
                 let plan = plan(program, lift, exercise)
@@ -129,6 +137,7 @@ struct ProgramOverviewView: View {
                         .font(.caption.bold()).foregroundStyle(Theme.warn)
                 }
             }
+        }
         }
         .padding(.vertical, 6)
     }

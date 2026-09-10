@@ -30,6 +30,7 @@ enum ExportService {
         let flights: Double?
         let inclinePercent: Double?
         let autoregReason: String?
+        var tfhBenchmark: TFHBenchmarkResult? = nil
     }
 
     struct ExportExercise: Codable {
@@ -51,6 +52,7 @@ enum ExportService {
         let plannedDurationSeconds: Int?
         let fallbackWeightLb: Double?
         let prescriptionStyle: String?
+        var tfhAnchor: TFHAnchor? = nil
         let sets: [ExportSet]
     }
 
@@ -89,6 +91,9 @@ enum ExportService {
         let completedAt: Date?
         let programTag: ExportProgramTag?
         let activity: ExportActivity?
+        var tfhPolicyId: String? = nil
+        var tfhContext: String? = nil
+        var tfhExcludedFromProgression: Bool? = nil
         let exercises: [ExportExercise]
     }
 
@@ -342,6 +347,7 @@ enum ExportService {
         let reliableHistoryStart: Date?
         let preferredSessionSpacingDays: Int
         let maximumAddedSetsPerRotation: Int
+        var tfhPolicy: TFHProgramPolicy? = nil
         let days: [ExportProgramDay]
     }
 
@@ -449,7 +455,7 @@ enum ExportService {
             schemaVersion: BackupContract.currentSchemaVersion,
             exportedAt: .now,
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev",
-            sessions: sessions.map { session in
+            sessions: try sessions.map { session in
                 let resolvedGymID = session.gymID ?? gyms.first(where: { $0.name == session.gymName })?.id
                 let resolvedProgramID = session.programID
                     ?? programs.first(where: { $0.name == session.programName })?.id
@@ -486,7 +492,10 @@ enum ExportService {
                             cordVolume: $0.cordVolume
                         )
                     },
-                    exercises: session.orderedExercises.map { entry in
+                    tfhPolicyId: session.tfhPolicyID,
+                    tfhContext: session.tfhContext,
+                    tfhExcludedFromProgression: session.tfhExcludedFromProgression,
+                    exercises: try session.orderedExercises.map { entry in
                         ExportExercise(
                             name: entry.exercise?.name ?? "Unknown",
                             exerciseId: entry.exerciseID,
@@ -503,7 +512,8 @@ enum ExportService {
                             plannedDurationSeconds: entry.plannedDurationSeconds,
                             fallbackWeightLb: entry.fallbackWeightLb,
                             prescriptionStyle: entry.prescriptionStyleRaw.isEmpty ? nil : entry.prescriptionStyleRaw,
-                            sets: entry.orderedSets.map { set in
+                            tfhAnchor: try TFHProgramService.decode(TFHAnchor.self, entry.tfhAnchorData),
+                            sets: try entry.orderedSets.map { set in
                                 ExportSet(
                                     weightLb: set.weightLb,
                                     reps: set.reps,
@@ -525,7 +535,8 @@ enum ExportService {
                                     distanceMiles: set.distanceMiles,
                                     flights: set.flights,
                                     inclinePercent: set.inclinePercent,
-                                    autoregReason: set.autoregReasonRaw
+                                    autoregReason: set.autoregReasonRaw,
+                                    tfhBenchmark: try TFHProgramService.decode(TFHBenchmarkResult.self, set.tfhBenchmarkData)
                                 )
                             }
                         )
@@ -543,7 +554,7 @@ enum ExportService {
             milestones: milestones.map {
                 ExportMilestone(date: $0.date, exercise: $0.exerciseName, exerciseId: $0.exerciseID, kind: $0.kindRaw, label: $0.label)
             },
-            programs: programs.map { p in
+            programs: try programs.map { p in
                 ExportProgram(
                     // equipmentPolicy/trainingIntent go through the coercing
                     // accessors: import validation rejects out-of-enum values,
@@ -556,6 +567,7 @@ enum ExportService {
                     coachEnabled: p.coachEnabled, reliableHistoryStart: p.reliableHistoryStart,
                     preferredSessionSpacingDays: p.preferredSessionSpacingDays,
                     maximumAddedSetsPerRotation: p.maximumAddedSetsPerRotation,
+                    tfhPolicy: try TFHProgramService.decode(TFHProgramPolicy.self, p.tfhPolicyData),
                     days: p.orderedDays.map { d in
                         ExportProgramDay(
                             name: d.name, order: d.order, trainingIntent: d.trainingIntent.rawValue,

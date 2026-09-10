@@ -8,8 +8,8 @@ import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 8;
-export const BACKUP_SCHEMA_VERSION = 13;
+const DB_VERSION = 9;
+export const BACKUP_SCHEMA_VERSION = 14;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -50,6 +50,9 @@ function open() {
       else if (event.oldVersion < 6) migrateToV6(req.transaction);
       if (event.oldVersion < 5) migrateToV5(req.result);
       if (event.oldVersion < 8) migrateToV8(req.transaction);
+      // Older upgraders already rewrite these stores. Do not race their
+      // cursor writes with a second pass holding pre-normalized documents.
+      if (event.oldVersion === 8) migrateToV9(req.transaction);
     };
     req.onsuccess = () => {
       if (settled) { req.result.close(); return; }
@@ -73,6 +76,19 @@ function open() {
 /// IndexedDB V4 preserves every V3 document and only adds migration-safe
 /// defaults. Historical sets keep nil planned snapshots rather than having a
 /// current program retroactively assigned to them.
+function migrateToV9(transaction) {
+  for (const [name,field] of [["programs","tfhPolicy"],["sessions","tfhPolicyId"]]) {
+    const store = transaction.objectStore(name);
+    store.openCursor().onsuccess = e => {
+      const cursor = e.target.result;
+      if (!cursor) return;
+      // Additive opt-in only. Old records never become TFH evidence.
+      cursor.update({...cursor.value,[field]:cursor.value[field] ?? null});
+      cursor.continue();
+    };
+  }
+}
+
 function migrateToV4(transaction) {
   const rewrite = (storeName, transform) => {
     const store = transaction.objectStore(storeName);
@@ -413,7 +429,7 @@ export const Tracks = {
 export const Sessions = {
   async all() { return (await getAll("sessions")).map(normalizeSession); },
   async get(id) { const session = await get("sessions", id); return session ? normalizeSession(session) : null; },
-  save: (s) => put("sessions", normalizeSession(s)),
+  save: (s) => { C.tfhValidateSession(s); return put("sessions", normalizeSession(s)); },
   // Deleting a session drops its durable stopwatch record here, at the one
   // choke point every deletion path flows through — a leftover record would
   // resurrect the discarded stopwatch onto whatever session reuses the id
@@ -501,7 +517,7 @@ export const Programs = {
     return normalized;
   },
   get: (id) => get("programs", id),
-  save: (p) => put("programs", normalizeProgram(p)),
+  save: (p) => { C.tfhValidateProgram(p); return put("programs", normalizeProgram(p)); },
   saveWithDecision: (p, decision) => {
     const normalized = normalizeProgram(p);
     return runAll(["programs", "coachingDecisions"], "readwrite", (os) => {
@@ -805,6 +821,8 @@ export async function exportBundle() {
       gymId: s.gymId || gymsByName.get(s.gymName)?.id || null, isCompleted: !!s.isCompleted,
       completedAt: s.completedAt || null,
       programTag: exportProgramTag(s.programTag),
+      ...(s.tfhPolicyId != null ? {tfhPolicyId:s.tfhPolicyId,tfhContext:s.tfhContext ?? null,
+        tfhExcludedFromProgression:s.tfhExcludedFromProgression ?? null} : {}),
       // v12 typed ad-hoc activity facts, emitted only when the session has
       // them (like flights): stamping the key onto every record would break
       // byte-stable re-export of older backups. Duration and implement load
@@ -822,6 +840,7 @@ export async function exportBundle() {
         plannedDurationSeconds: e.plannedDurationSeconds ?? null,
         fallbackWeightLb: e.fallbackWeightLb ?? null,
         prescriptionStyle: e.prescriptionStyle || null,
+        ...(e.tfhAnchor != null ? {tfhAnchor:e.tfhAnchor} : {}),
         sets: (e.sets || []).map((x) => ({
           weightLb: x.weightLb, reps: x.reps,
           targetWeightLb: x.targetWeightLb ?? null, plannedWeightLb: x.plannedWeightLb ?? null,
@@ -840,6 +859,7 @@ export async function exportBundle() {
           ...(x.flights != null ? { flights: x.flights } : {}),
           ...(x.inclinePercent != null ? { inclinePercent: x.inclinePercent } : {}),
           autoregReason: x.autoregReason || null,
+          ...(x.tfhBenchmark != null ? {tfhBenchmark:x.tfhBenchmark} : {}),
         })),
       })),
     })),
@@ -847,6 +867,7 @@ export async function exportBundle() {
     checkIns: checkins.map((c) => ({ date: iso(c.date), site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })),
     milestones: milestones.map((m) => ({ date: iso(m.date), exercise: m.exerciseName || null, exerciseId: m.exerciseId || null, kind: m.kind, label: m.label })),
     programs: programs.map((p) => ({
+      ...(p.tfhPolicy != null ? {tfhPolicy:p.tfhPolicy} : {}),
       id: p.uuid, templateId: p.templateId || null, name: p.name, focus: p.focus, equipmentPolicy: p.equipmentPolicy,
       cycleNumber: p.cycleNumber, currentWeek: p.currentWeek,
       nextDayIndex: p.nextDayIndex, roundingLb: p.roundingLb, isActive: !!p.isActive,
@@ -1098,6 +1119,7 @@ export function validateBackup(bundle) {
 
   const sessions = array(bundle, "sessions");
   each(sessions, "sessions", (session, path) => {
+    C.tfhValidateSession(session,schemaVersion);
     if (session.id != null) portableID(session.id, `${path}.id`);
     dateValue(session.date, `${path}.date`, true);
     dateValue(session.completedAt, `${path}.completedAt`);
@@ -1211,6 +1233,7 @@ export function validateBackup(bundle) {
 
   const programs = array(bundle, "programs");
   each(programs, "programs", (program, path) => {
+    C.tfhValidateProgram(program,schemaVersion);
     if (schemaVersion >= 2) portableID(program.id, `${path}.id`);
     textValue(program.name, `${path}.name`, true); enumValue(program.focus, BACKUP_ENUMS.focuses, `${path}.focus`, schemaVersion >= 1);
     enumValue(program.equipmentPolicy, BACKUP_ENUMS.equipmentPolicies, `${path}.equipmentPolicy`, schemaVersion >= 9);
@@ -1394,12 +1417,24 @@ const gymSignature = (g) => [
 // outside `exercises`, so it joins the shallow signature: an edit to RPE or
 // cords on one device must not preview as "unchanged" on the other
 // (INV-WOOD-WORK-ROUND-TRIPS). Mirrors native ImportService.
+const stableTFH = value => {
+  if (Array.isArray(value)) return value.map(stableTFH);
+  if(value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map(k=>[k,stableTFH(value[k])]));
+  return value;
+};
+const tfhSignature = s => s.tfhPolicyId == null ? "" : JSON.stringify(stableTFH({
+  id:s.tfhPolicyId,context:s.tfhContext ?? null,excluded:s.tfhExcludedFromProgression ?? null,
+  anchors:(s.exercises || []).map(e=>e.tfhAnchor ?? null),
+  benchmarks:(s.exercises || []).map(e=>(e.sets || []).map(x=>x.tfhBenchmark ?? null)),
+}));
 const sessionSignature = (s) => [
   strOrEmpty(s.date), strOrEmpty(s.programTag?.programId), numOrZero((s.exercises || []).length),
   s.activity ? JSON.stringify(portableActivity(s.activity)) : "",
+  tfhSignature(s),
 ].join("");
 
 const programSignature = (p) => [
+  p.tfhPolicy == null ? "" : JSON.stringify(stableTFH(p.tfhPolicy)),
   numOrZero((p.days || []).length),
   numOrZero((p.days || []).reduce((sum, day) => sum + (day.lifts || []).length + (day.accessories || []).length, 0)),
 ].join("");
@@ -1576,6 +1611,8 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       programTemplateId: schemaVersion >= 11 ? s.programTemplateId || null : null,
       gymId: s.gymId || null, gymName: s.gym || null,
       programTag: importProgramTag(s.programTag),
+      ...(s.tfhPolicyId != null ? {tfhPolicyId:s.tfhPolicyId,tfhContext:s.tfhContext ?? null,
+        tfhExcludedFromProgression:s.tfhExcludedFromProgression ?? null} : {}),
       // v12 typed ad-hoc activity facts. Values — the kind included —
       // restore verbatim; absence stays absent
       // (INV-WOOD-WORK-DOES-NOT-GUESS). Not gated on the declared version:
@@ -1584,6 +1621,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
       // Mirrors native ImportService.
       ...(s.activity ? { activity: portableActivity(s.activity) } : {}),
       exercises: (s.exercises || []).map((e, oi) => ({
+        ...(e.tfhAnchor != null ? {tfhAnchor:e.tfhAnchor} : {}),
         order: oi, exerciseName: e.name, exerciseId: importedID(e.exerciseId, e.name), notes: e.notes || "", phase: recoverPhase(e.phase),
         programRole: e.role || null, programSlotId: e.programSlotId || null, barId: e.barId || null,
         barIdManual: e.barIdManual === true,
@@ -1593,6 +1631,7 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
         fallbackWeightLb: e.fallbackWeightLb ?? null,
         prescriptionStyle: e.prescriptionStyle || null,
         sets: (e.sets || []).map((x, si) => ({
+          ...(x.tfhBenchmark != null ? {tfhBenchmark:x.tfhBenchmark} : {}),
           order: si, weightLb: x.weightLb, reps: x.reps,
           targetWeightLb: x.targetWeightLb ?? null, plannedWeightLb: x.plannedWeightLb ?? null,
           plannedReps: x.plannedReps ?? null, plannedDurationSeconds: x.plannedDurationSeconds ?? null,
@@ -1615,7 +1654,10 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   // so there is nowhere to put it and nothing that would read it back.
   if (bundle.checkIns) writes.set("checkins", bundle.checkIns.map((c) => ({ date: c.date, site: normalizeBodySite(c.site), response: c.response, note: c.note || "" })));
   if (bundle.milestones) writes.set("milestones", bundle.milestones.map((m) => ({ date: m.date, exerciseName: m.exercise || null, exerciseId: importedID(m.exerciseId, m.exercise), kind: m.kind, label: m.label })));
-  if (importedPrograms) writes.set("programs", importedPrograms);
+  if (importedPrograms) {
+    importedPrograms.forEach(p=>C.tfhValidateProgram(p));
+    writes.set("programs", importedPrograms);
+  }
   if (bundle.tracks) writes.set("tracks", bundle.tracks.map((t) => ({
     ...t, exerciseId: importedID(t.exerciseId, t.exerciseName),
   })));

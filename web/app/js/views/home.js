@@ -6,6 +6,7 @@ import { barbellSVG, dumbbellSVG, prescriptionPlateDetails, stationPlates } from
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, Intervals, intervalSnapshots, topSet, localDayKey } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, openSession, planningBase, previewProgramPlan, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
+import {tfhPlanRow} from "./tfh.js";
 import { gymTagShownOn, markGymTagShown } from "../gym-tag.js";
 import { exerciseDetail } from "./settings.js";
 import { openActivityLog } from "./activity.js";
@@ -212,6 +213,7 @@ export async function render(host) {
     const lifts = C.orderedProgramSlots(day.lifts);
     for (const l of lifts) {
       const ex = exMap.get(l.exerciseName);
+      if(program.tfhPolicy != null) {card.append(tfhPlanRow(program,l,ex,completed,gym));continue;}
       // The shared preview pipeline: honest planningBase, volume-fallback
       // sets, and the same snapped weight the started session will store.
       const { plan, targetWeightLb } = previewProgramPlan(l, ex, program, program.currentWeek, {
@@ -231,7 +233,8 @@ export async function render(host) {
       // The load is stated as a number here. The loaded bar itself belongs to
       // the preview and the logger — equipment imagery stays with loading.
     }
-    if (day.accessories.length) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: `+ ${day.accessories.map((a) => a.exerciseName).join(", ")}` }));
+    if(program.tfhPolicy != null) for(const a of C.orderedProgramSlots(day.accessories)) card.append(tfhPlanRow(program,a,exMap.get(a.exerciseName),completed,gym));
+    else if (day.accessories.length) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: `+ ${day.accessories.map((a) => a.exerciseName).join(", ")}` }));
     card.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "10px" }, text: `Start ${day.name}`, onClick: async () => openSession(await createSessionFromProgramDay(program, day)) }));
     root.append(card);
   }
@@ -357,6 +360,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
       if (!lifts.length) liftCard.append(ui.h("div", { class: "muted", text: "No program lifts this day." }));
       for (const l of lifts) {
         const ex = exMap.get(l.exerciseName);
+        if(program.tfhPolicy != null) {liftCard.append(tfhPlanRow(program,l,ex,completed,gym));continue;}
         // The shared preview pipeline — the preview and the started session
         // must never disagree.
         const { plan, targetWeightLb } = previewProgramPlan(l, ex, program, program.currentWeek, {
@@ -390,6 +394,7 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
         const accCard = ui.h("div", { class: "card" });
         for (const a of C.orderedProgramSlots(day.accessories)) {
           const accessoryExercise = exMap.get(a.exerciseName);
+          if(program.tfhPolicy != null) {accCard.append(tfhPlanRow(program,a,accessoryExercise,completed,gym));continue;}
           const type = accessoryExercise?.type;
           // The target clamped into the window this slot actually runs on — a
           // bodyweight identity has no load step, so its window top is

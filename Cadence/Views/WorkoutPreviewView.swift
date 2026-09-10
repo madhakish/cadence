@@ -62,6 +62,11 @@ struct WorkoutPreviewView: View {
             }
 
             Section("Lifts") {
+                if program.tfhPolicyData != nil {
+                    ForEach(day.orderedLifts) { lift in
+                        TFHSlotPlanView(program: program, slotID: lift.id, name: lift.exerciseName)
+                    }
+                } else {
                 ForEach(day.orderedLifts) { lift in
                     let exercise = exercises.first { $0.name == lift.exerciseName }
                     let target = targetPlan(for: lift)
@@ -111,7 +116,14 @@ struct WorkoutPreviewView: View {
                 }
             }
 
-            if !day.accessories.isEmpty {
+            }
+            if program.tfhPolicyData != nil {
+                Section("Accessories") {
+                    ForEach(day.orderedAccessories) { acc in
+                        TFHSlotPlanView(program: program, slotID: acc.id, name: acc.exerciseName)
+                    }
+                }
+            } else if !day.accessories.isEmpty {
                 Section("Accessories") {
                     ForEach(day.orderedAccessories) { acc in
                         let exercise = exercises.first(where: { $0.name == acc.exerciseName })

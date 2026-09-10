@@ -18,6 +18,7 @@ enum ProgramSession {
     }
 
     static func make(program: Program, day: ProgramDay, context: ModelContext) throws -> WorkoutSession {
+        if program.tfhPolicyData != nil { return try TFHSession.make(program: program, context: context) }
         let allExercises = try context.fetch(FetchDescriptor<Exercise>())
         // The performed log backs the honest-base repair (planningBase): a
         // stale stored base must not keep prescribing the plates the lifter
@@ -374,7 +375,7 @@ enum ProgramSession {
             }
             guard let entry = programmedEntry(for: lift, in: session),
                   entry.exercise?.name == lift.exerciseName else { continue }
-            let top = SessionCompletion.prescribedWork(entry).map(\.weightLb).max() ?? 0
+            let top = entry.prescribedWork.map(\.weightLb).max() ?? 0
             guard top > 0 else { continue }
             let candidates = entry.orderedSets.filter {
                 !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork

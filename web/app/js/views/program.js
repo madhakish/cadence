@@ -2,7 +2,8 @@
 // editor so one engine owns all mutations on both platforms.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
-import { Programs, Exercises, Sessions } from "../db.js";
+import { Programs, Exercises, Sessions, Gyms } from "../db.js";
+import {tfhPlanRow} from "./tfh.js";
 import { openAddProgramSheet, programEditor } from "./settings.js";
 import { planningBase, volumeFallbackSets } from "./session.js";
 
@@ -10,8 +11,8 @@ const ordered = (items = []) => [...items].sort((a, b) => (a.order ?? 0) - (b.or
   || String(a.exerciseName || a.name || "").localeCompare(String(b.exerciseName || b.name || "")));
 
 export async function render(host) {
-  const [programs, exercises, completed] = await Promise.all([
-    Programs.all(), Exercises.all(), Sessions.completed(),
+  const [programs, exercises, completed, gym] = await Promise.all([
+    Programs.all(), Exercises.all(), Sessions.completed(), Gyms.default(),
   ]);
   const exByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
   const root = ui.h("div");
@@ -30,6 +31,11 @@ export async function render(host) {
         ariaLabel: `${day.name}, opens the program editor` },
       ui.h("div", { class: "row" }, ui.h("span", { class: "title", text: day.name }),
         day.order === program.nextDayIndex ? ui.h("span", { class: "pill accent", text: "Next" }) : null));
+      if(program.tfhPolicy != null) {
+        for(const slot of [...ordered(day.lifts),...ordered(day.accessories)])
+          card.append(tfhPlanRow(program,slot,exByName.get(slot.exerciseName),completed,gym));
+        root.append(card);continue;
+      }
       for (const lift of ordered(day.lifts)) {
         const exercise = exByName.get(lift.exerciseName);
         // "next" shows the honest plan (planningBase) beside the stored base,

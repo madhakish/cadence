@@ -405,6 +405,9 @@ struct ExerciseDetailView: View {
                     }
 
                     ForEach(data.cycle) { item in
+                        if item.program.tfhPolicyData != nil {
+                            TFHSlotPlanView(program: item.program, slotID: item.lift.id, name: item.lift.exerciseName)
+                        } else {
                         // Base and fallback sets are phase-invariant: once
                         // per membership row, not once per rotation line.
                         let planningBase = ProgramSession.planningBase(
@@ -450,6 +453,7 @@ struct ExerciseDetailView: View {
                             }
                         }
                         .padding(.vertical, 4)
+                        }
                     }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {

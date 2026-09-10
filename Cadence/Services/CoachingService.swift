@@ -14,6 +14,7 @@ enum CoachingService {
         checkIns: [CheckIn] = [],
         intervals: [TrainingIntervalSnapshot] = []
     ) -> CoachingReport {
+        if program.tfhPolicyData != nil { return tfhReport(program: program, sessions: sessions) }
         let exerciseByName = exercises.indexedByName()
         let phase = CyclePhase(rawValue: program.currentWeek) ?? .volume
         let canChangeDumbbellStyle = phase != .deload && !sessions.contains {
@@ -212,6 +213,9 @@ enum CoachingService {
         evidence: [String],
         context: ModelContext
     ) throws -> String {
+        if program.tfhPolicyData != nil && recommendation.change != .hold {
+            throw TFHProgramService.Failure.invalid("This proposal belongs to the previous method. Review TFH targets first.")
+        }
         let before = programDescription(program)
         var decisionAfterValue: String?
         var result = "Recommendation recorded."
