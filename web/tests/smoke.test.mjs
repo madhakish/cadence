@@ -452,6 +452,30 @@ await withCleanup(async (keep) => {
     "a stale recommendation never overwrites a manual slot change");
 }
 
+// A stale rotation offer must not carry a machine total into a per-hand slot.
+{
+  const program = { roundingLb: 5, days: [{ name: "Synthetic pull day", accessories: [], lifts: [{
+    id: "synthetic-row-slot", exerciseName: "Synthetic Machine Row", role: "complementary",
+    prescription: "secondary", baseWeightLb: 120, estimatedMaxLb: 160,
+    stallCount: 1, lastIncrementLb: 5, pending: { outcome: "hold" },
+  }] }] };
+  const original = JSON.stringify(program);
+  const exercises = [
+    { name: "Synthetic Machine Row", category: "Main", type: "machine", movementGroup: "pull" },
+    { name: "Synthetic One-arm Row", category: "Main", type: "dumbbell", movementGroup: "pull" },
+  ];
+  let refused = false;
+  try {
+    await coach.applyCoachingRecommendation(program, {
+      id: "synthetic-cross-basis", ruleID: "program.slot.rotate.stalled", title: "Rotate",
+      explanation: "Synthetic regression",
+      change: { type: "rotateExercise", slotID: "synthetic-row-slot", exerciseName: "Synthetic Machine Row" },
+    }, exercises);
+  } catch { refused = true; }
+  ok(refused, "coaching refuses a rotation when only an incompatible load basis is available");
+  ok(JSON.stringify(program) === original, "rejected rotation preserves the entire slot and its progression state");
+}
+
 // A program-level equipment boundary applies to automatic coaching changes.
 // The alphabetically first compatible candidate is deliberately a machine so
 // this proves the adapter filters before its deterministic ranking.

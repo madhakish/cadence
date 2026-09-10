@@ -8,7 +8,7 @@ An exercise is offered as a substitute only if **all** of these hold:
 |---|---|
 | Same **movement group** (non-empty): squat, hinge, press, olympic, pull, shoulder, arms, core, conditioning | A swap trains the same pattern |
 | Same **category** (Main / Accessory / Conditioning) | No accessory → competition-lift jumps; prescriptions stay tier-appropriate |
-| Same **loadability** — `bodyweight`/`timed`/`conditioning` types never mix with loaded types | A weight prescription can't follow the swap (no DB Press → Dips) |
+| Same **load basis** — per implement, bar total, machine/external total, bodyweight, assistance, or duration/distance | A machine total must never become the weight of each dumbbell |
 | Not **shelved** | Shelved means deliberately benched (injury, re-entry test pending) |
 | Not the same exercise | — |
 
@@ -33,7 +33,8 @@ session-only and skip the dialog.
 - Equipment change to non-barbell: the warmup ramp is removed (sets
   renumbered). Equipment change to barbell: a ramp is generated from the
   planned weight.
-- Logged working sets are never modified.
+- A swap is blocked once any set, including a warmup, has been completed. Add the replacement as a separate exercise so logged work keeps its original identity.
+- Matching load units do not establish equal strength. Check the starting weight before logging the substitute. To change load basis, add/configure the replacement with its own weight.
 
 ## Platform scope
 

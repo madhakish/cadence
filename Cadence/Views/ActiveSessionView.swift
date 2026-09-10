@@ -753,7 +753,7 @@ private struct ExerciseSection: View {
     enum SwapScope { case session, cycle, program }
 
     /// Same-movement-pattern lifts you can swap in, constrained to the same
-    /// programming tier and loadability, excluding shelved (SwapRules in
+    /// programming tier and exact load basis, excluding shelved (SwapRules in
     /// CadenceCore — no more Walking Lunges → Back Squat or DB Press → Dips).
     private var alternatives: [Exercise] {
         guard let cur = entry.exercise else { return [] }
@@ -769,14 +769,25 @@ private struct ExerciseSection: View {
     }
 
     private func swap(to newExercise: Exercise, scope: SwapScope) {
+        // Recheck at Apply time: a set can be logged while the dialog is open.
+        // This precedes all program, entry, set, and warmup mutations.
+        guard SwapRules.canReplaceEntry(setStatuses: entry.sets.map(\.status)),
+              alternatives.contains(where: { $0.id == newExercise.id }) else {
+            PersistenceErrorCenter.shared.report(
+                NSError(domain: "Cadence", code: 1,
+                        userInfo: [NSLocalizedDescriptionKey:
+                            "This exercise can no longer be swapped. Keep its logged sets and add the replacement as a separate exercise with its own load."]),
+                operation: "Swapping the exercise", context: context
+            )
+            return
+        }
         let oldName = entry.exercise?.name
         let oldType = entry.exercise?.typeRaw
         // Session scope leaves the program slot alone. Cycle/program scope
         // repoint the slot at the lift you're actually doing (completion
         // matches the durable slot ID, with name+role only for legacy
-        // sessions); the slot keeps its
-        // progression state as the starting load — candidates train the same
-        // pattern at the same tier, so base/e1RM remain the best prior.
+        // sessions). The slot keeps its progression state, which is why
+        // substitutions must preserve the load basis.
         if scope != .session {
             guard let role = entry.programRole, let session = entry.session,
                   let dayIndex = entry.session?.programDayIndex else {
@@ -1224,6 +1235,10 @@ private struct ExerciseSection: View {
                                 }
                             }
                         } label: { Label("Swap exercise", systemImage: "arrow.left.arrow.right") }
+                        .disabled(!SwapRules.canReplaceEntry(setStatuses: entry.sets.map(\.status)))
+                        if !SwapRules.canReplaceEntry(setStatuses: entry.sets.map(\.status)) {
+                            Text("Sets already logged. Add a separate exercise to change movements.")
+                        }
                     }
                     // Session-only reorder (issue #64): a complementary lift
                     // pulled forward today does not edit the program day.
@@ -1252,7 +1267,7 @@ private struct ExerciseSection: View {
                         Button("For the whole program") { swap(to: alt, scope: .program) }
                         Button("Cancel", role: .cancel) {}
                     } message: { _ in
-                        Text("Just this session leaves the program unchanged. Cycle swaps revert at the next rollover; program swaps rename the slot for good.")
+                        Text("Just this session leaves the program unchanged. Cycle swaps revert at the next rollover; program swaps rename the slot for good. Check the starting weight for the new exercise before logging sets.")
                     }
                 }
             }

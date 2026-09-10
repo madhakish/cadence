@@ -578,11 +578,18 @@ eq(C.belowPlanWork([100, 100, 100], null, 3, 5), false, "no prescription → not
   eq(C.swapCompatible(walkingLunges, backSquat), false, "accessory can't jump to a main competition lift");
   eq(C.swapCompatible(dbPress, dips), false, "loaded press can't swap to an unloadable accessory");
   eq(C.swapCompatible(dbPress, bwPress), false, "loadability mismatch alone filters (same tier/group)");
-  eq(C.swapCompatible(dbPress, machinePress), true, "equipment change within loadable types is fine");
+  eq(C.swapCompatible(dbPress, machinePress), false, "per-hand loads cannot become machine totals");
+  eq(C.swapCompatible(machinePress, dbPress), false, "machine totals cannot become per-hand loads");
+  eq(C.swapCompatible(dbPress, { ...benchShelved, isShelved: false }), false, "per-hand loads cannot become bar totals");
+  eq(C.swapCompatible(dbPress, { ...dbPress, name: "Flat DB Press" }), true, "same per-hand basis is compatible");
   eq(C.swapCompatible(dbPress, benchShelved), false, "shelved is never offered");
   eq(C.swapCompatible(backSquat, dbPress), false, "different movement pattern");
   eq(C.swapCompatible(backSquat, backSquat), false, "never itself");
   eq(C.swapCompatible({ ...backSquat, movementGroup: "" }, frontSquat), false, "ungrouped lift offers no swaps");
+  eq(C.canReplaceExerciseEntry([]), true, "an empty entry can be swapped");
+  eq(C.canReplaceExerciseEntry(["planned", "skipped"]), true, "unperformed sets allow a swap");
+  eq(C.canReplaceExerciseEntry(["completed", "planned"]), false, "a completed warmup belongs to the original exercise");
+  eq(C.canReplaceExerciseEntry(["skipped", "completed"]), false, "completed working sets cannot be relabeled");
 }
 
 // completionCommit: save-or-rollback boundary for banking (issue 19) —
