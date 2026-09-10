@@ -32,6 +32,51 @@ and body signals. They do not reconstruct history from today's program.
 Conditioning is counted in minutes in its own ledger. It never inflates lifting
 set completion or e1RM deltas.
 
+### Dumbbell waves that repeat the heavy load
+
+`program.slot.dumbbell-reps.v1` offers **Build reps before adding dumbbell
+weight** when a main strength-wave slot's rounded load and peak prescriptions
+use the same per-hand weight while the peak removes reps. Detection runs the
+existing prescription engine, including its dumbbell cap and rounding, rather
+than assuming every 5 lb increment is too large.
+
+After a complete rotation has established coaching, the proposal uses only the
+latest reliable completed exposure for the exact program/day/slot and exercise.
+It must have at least three prescribed working sets completed at the repeated
+load, with the planned reps met, explicit per-implement load semantics, no body
+signal or early stop, and at most one grindy/wobbly work set. Added sets cannot
+earn the transition. Missing identity or prescription stamps, recovery work,
+and newer unsuccessful work cannot be bypassed by finding an older success.
+
+**Apply** changes that slot to the existing double-progression style: three
+sets, a 3–6 rep window, and the demonstrated load. The initial rep target is
+one above the lowest completed working-set reps, capped at six, and high enough
+to preserve the total completed working reps across the three sets. If the
+3–6 window cannot hold that work, no conversion is offered. Thus a
+synthetic 5×3 at 85 lb each becomes 3×5 at 85, then successful hard exposures
+earn 3×6 and finally 3×3 at 90 with a 5 lb step. Three triples become three
+sets of four. Equal total reps do not prove equal difficulty when the work is
+redistributed into longer sets. The range and initial
+transition are Cadence policy choices, not a claim of a physiologically optimal
+sequence. Rep and load progression both have experimental support, with the
+available trial studying lower-body training rather than this dumbbell rule
+([Plotkin et al., 2022](https://pubmed.ncbi.nlm.nih.gov/36199287/)).
+
+The accepted change clears the former wave's stalls, earned increment, and
+pending peak grade. It keeps the exercise/slot identity, estimated max, completed
+workouts, and program position. Recovery retains the existing double-progression
+reduced prescription and never advances reps or load. Each subsequent hard
+exposure follows the ordinary completion rules; a rotation number alone earns
+nothing.
+
+The proposal is withheld during an open program workout or recovery phase,
+for a temporary exercise swap, and for protected technique/explosive days or
+slots that disallow coached set changes. Apply rechecks current settings and
+history, so a stale sheet cannot overwrite a correction or a different style.
+**Not now** keeps the authored wave and records that decision. Barbell waves,
+other explicit methodologies, and new program templates retain their rules.
+No persistence or backup schema changes are involved.
+
 ### When a red rotation does not resolve
 
 One red rotation is noise. **Two consecutive red rotations** mean the temporary

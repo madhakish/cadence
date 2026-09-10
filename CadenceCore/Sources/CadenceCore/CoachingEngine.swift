@@ -157,6 +157,7 @@ public struct CoachingSetSnapshot: Hashable, Sendable {
     public var hasBodyFlag: Bool
     public var quality: CoachingSetQuality
     public var durationSeconds: Int?
+    public var loadBasis: LoadBasis?
 
     public init(
         actualWeightLb: Double,
@@ -169,7 +170,8 @@ public struct CoachingSetSnapshot: Hashable, Sendable {
         stoppedEarly: Bool = false,
         hasBodyFlag: Bool = false,
         quality: CoachingSetQuality = .ungraded,
-        durationSeconds: Int? = nil
+        durationSeconds: Int? = nil,
+        loadBasis: LoadBasis? = nil
     ) {
         self.actualWeightLb = actualWeightLb
         self.actualReps = actualReps
@@ -182,6 +184,7 @@ public struct CoachingSetSnapshot: Hashable, Sendable {
         self.hasBodyFlag = hasBodyFlag
         self.quality = quality
         self.durationSeconds = durationSeconds
+        self.loadBasis = loadBasis
     }
 }
 
@@ -290,6 +293,9 @@ public struct CoachingProgramSlot: Hashable, Sendable {
     /// When `false`, the weekly max-effort rotation is suppressed — a
     /// recommendation guaranteed to fail on Apply must not nag forever.
     public var rotationCandidateAvailable: Bool?
+    /// Present only when the client's current dumbbell wave has identical
+    /// load/peak weights. Derived by ProgramEngine; never persisted.
+    public var collapsedDumbbellWaveLoadLb: Double?
 
     public init(
         id: String,
@@ -308,7 +314,8 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         workingReps: Int = 0,
         stallCount: Int = 0,
         exerciseIsShelved: Bool = false,
-        rotationCandidateAvailable: Bool? = nil
+        rotationCandidateAvailable: Bool? = nil,
+        collapsedDumbbellWaveLoadLb: Double? = nil
     ) {
         self.id = id
         self.exerciseName = exerciseName
@@ -327,6 +334,7 @@ public struct CoachingProgramSlot: Hashable, Sendable {
         self.stallCount = max(0, stallCount)
         self.exerciseIsShelved = exerciseIsShelved
         self.rotationCandidateAvailable = rotationCandidateAvailable
+        self.collapsedDumbbellWaveLoadLb = collapsedDumbbellWaveLoadLb
     }
 }
 
@@ -401,6 +409,8 @@ public enum CoachingChange: Hashable, Sendable {
     /// Keep per-exposure linear loading, but trade 3x5 for 5x3 on one upper
     /// slot after its load has already needed a rebuild.
     case useLinearTriples(slotID: String, exerciseName: String, expectedBaseWeightLb: Double)
+    case useDumbbellRepProgression(slotID: String, exerciseName: String,
+                                  expectedBaseWeightLb: Double, weightLb: Double, currentReps: Int)
     /// Retire a day's accessory-tier vertical pulls (a machine pulldown, a
     /// pull-up accessory) and train the pattern as programmed lift work
     /// instead. The engine names the day and the accessories; the client
@@ -521,7 +531,7 @@ public enum CoachingEngine {
         reliableHistoryStart: Date? = nil,
         intervals: [TrainingIntervalSnapshot] = []
     ) -> CoachingReport {
-        let relevant = sessions.filter { session in
+        let reliable = sessions.filter { session in
             guard session.completed, session.programID == program.id else { return false }
             // A session banked inside an active-recovery span is off-program
             // work (INV-RECOVERY-WORK-IS-OFF-PROGRAM): completion already
@@ -532,7 +542,8 @@ public enum CoachingEngine {
                 session.date.timeIntervalSince1970 * 1000, intervals: intervals
             ) else { return false }
             return reliableHistoryStart.map { session.date >= $0 } ?? true
-        }.map { programmedSnapshot($0, slots: program.slots) }
+        }
+        let relevant = reliable.map { programmedSnapshot($0, slots: program.slots) }
         let grouped = Dictionary(grouping: relevant) {
             RotationKey(programID: $0.programID, cycleNumber: $0.cycleNumber, rotation: $0.rotation)
         }
@@ -603,6 +614,7 @@ public enum CoachingEngine {
             previousReadiness: completed.dropLast().last?.readiness ?? .unknown,
             greenStreak: greenStreak,
             sessions: relevant,
+            dumbbellSessions: reliable,
             intervals: intervals
         )
         return CoachingReport(
@@ -805,6 +817,7 @@ public enum CoachingEngine {
         previousReadiness: ReadinessState,
         greenStreak: Int,
         sessions: [CoachingSessionSnapshot],
+        dumbbellSessions: [CoachingSessionSnapshot],
         intervals: [TrainingIntervalSnapshot] = []
     ) -> [CoachingRecommendation] {
         guard let latest else { return [] }
@@ -817,6 +830,7 @@ public enum CoachingEngine {
         let programChanges = (
             rotationSuggestions(program: program, sessions: sessions, evidenceKey: evidenceKey)
             + linearStageSuggestions(program: program, sessions: sessions, evidenceKey: evidenceKey)
+            + dumbbellRepProgressionSuggestions(program: program, sessions: dumbbellSessions)
             + verticalPullPromotions(program: program)
         )
         func decided(_ recommendation: CoachingRecommendation) -> [CoachingRecommendation] {
@@ -1095,6 +1109,66 @@ public enum CoachingEngine {
             ))
         }
         return result
+    }
+
+    /// Reuse double progression when the rack collapses the heavy wave.
+    /// Only the newest exposure gets a vote: never search past a miss, a
+    /// recovery exposure, a swap, or a different prescription for old success.
+    private static func dumbbellRepProgressionSuggestions(
+        program: CoachingProgramSnapshot, sessions: [CoachingSessionSnapshot]
+    ) -> [CoachingRecommendation] {
+        let candidates = program.slots.filter {
+            $0.collapsedDumbbellWaveLoadLb != nil && $0.isMain && $0.role == "main"
+                && $0.capacityManaged && $0.maximumSets >= 3 && !$0.exerciseIsShelved
+                && supportsAddedCapacity($0)
+                && ($0.prescriptionStyle == .wave || $0.prescriptionStyle == .offsetWave)
+        }
+        guard !candidates.isEmpty else { return [] }
+        let newest = sessions.sorted { ($0.date, $0.id) > ($1.date, $1.id) }
+        return candidates.compactMap { slot in
+            // Legacy/imported entries can be relevant without proving a slot
+            // identity. They must block older success, never earn a target.
+            func potentiallyMatches(_ session: CoachingSessionSnapshot) -> Bool {
+                session.exercises.contains {
+                    $0.slotID == slot.id || (($0.slotID ?? "").isEmpty
+                        && session.dayIndex == slot.dayIndex && $0.exerciseName == slot.exerciseName
+                        && $0.programRole == slot.role)
+                }
+            }
+            guard let weight = slot.collapsedDumbbellWaveLoadLb, weight.isFinite, weight > 0,
+                  let session = newest.first(where: potentiallyMatches),
+                  session.dayIndex == slot.dayIndex,
+                  (1...3).contains(session.rotation), !session.hasHardStopCheckIn else { return nil }
+            let entries = session.exercises.filter { $0.slotID == slot.id }
+            guard entries.count == 1, let entry = entries.first,
+                  entry.exerciseName == slot.exerciseName, entry.programRole == "main",
+                  entry.prescriptionStyle == .wave || entry.prescriptionStyle == .offsetWave
+                    || entry.prescriptionStyle == .automatic,
+                  entry.plannedSets >= 3 else { return nil }
+            let work = Array(entry.sets.filter {
+                !$0.isWarmup && $0.prescriptionBlock.countsAsPrescribedWork
+            }.prefix(entry.plannedSets))
+            guard work.count == entry.plannedSets,
+                  !entry.sets.contains(where: { $0.hasBodyFlag || $0.stoppedEarly }),
+                  work.allSatisfy({ $0.completed && $0.loadBasis == .perImplement && $0.actualWeightLb.isFinite
+                    && abs($0.actualWeightLb - weight) < 0.01 && $0.actualReps >= 3
+                    && $0.plannedWeightLb?.isFinite == true && ($0.plannedReps ?? 0) > 0 && setMeetsPlan($0) }),
+                  work.filter({ $0.quality == .grindy || $0.quality == .wobble }).count <= 1,
+                  let reps = work.map(\.actualReps).min() else { return nil }
+            // Redistributing five triples into three sets must not discard
+            // completed work. Abstain if the rep window cannot hold it.
+            let totalReps = work.reduce(0.0) { $0 + Double($1.actualReps) }
+            guard totalReps <= 3 * 6 else { return nil }
+            let nextReps = max(min(5, reps) + 1, Int(ceil(totalReps / 3)))
+            return CoachingRecommendation(
+                ruleID: "program.slot.dumbbell-reps.v1", priority: 65,
+                title: "Build reps before adding dumbbell weight",
+                explanation: "\(slot.exerciseName)'s load and peak both use \(Weight.trim(weight)) lb each, but the peak drops sets. Start with 3×\(nextReps) at that load, preserving at least the total reps in your latest completed work. Use three sets in a 3–6 rep window; earn reps before adding the configured load step, then return to triples. Recovery stays separate.",
+                change: .useDumbbellRepProgression(slotID: slot.id, exerciseName: slot.exerciseName,
+                    expectedBaseWeightLb: slot.baseWeightLb, weightLb: weight, currentReps: nextReps),
+                evidenceKey: "\(slot.id):c\(session.cycleNumber)-r\(session.rotation)-d\(session.dayIndex):\(Weight.trim(slot.baseWeightLb)):3x\(nextReps)@\(Weight.trim(weight))"
+            )
+        }
     }
 
     /// The first adaptive stage inside Progressive Barbell Strength.
