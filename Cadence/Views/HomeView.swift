@@ -270,12 +270,14 @@ struct HomeView: View {
                             Spacer()
                             if prominentGymTag {
                                 Text(defaultGym?.barcodeImageData == nil ? "Add barcode" : "Ready to scan")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.caption)
                             }
                         }
                         .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
                     }
-                    .primaryActionStyle()
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                    .foregroundStyle(prominentGymTag ? Theme.onAccent : Color.primary)
                     .tint(prominentGymTag ? Theme.accent : Color(.tertiarySystemFill))
                     .accessibilityHint("Shows the default membership barcode at full brightness")
                 }
