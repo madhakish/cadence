@@ -34,6 +34,9 @@
 - Settings — six task-oriented disclosures in one shared order (gym, units, rest & training, appearance, programming, data). Each collapsed face states where the group stands. This supersedes the earlier "no details in Settings" rule; inside a group there are still no nested doors, and no setting keys changed.
 - Focused exercise — leads with a set track (resolved quiet, current in the accent, upcoming neutral), then the working set's position, reps, and load, pounds first then kilograms, above the set rows. The load is the set's own value; the diagram under the set row remains the loading truth.
 - Plate reference — the calculators carry a reference-only guide (colour, denomination, other-unit conversion) per family. It is never inventory: the 55 lb disc is listed for recognition and is not a solver candidate.
+- Material — web cards use a flat ground, a hairline, a one-pixel edge light (`--edge`), and a shadow token that lightens on light themes. The native current-set card renders the matching top-edge treatment (`Theme.edge`) inside its existing accent border.
+- Load numeral — the web current-set load and achieved primary total share a tabular display treatment (`.load-numeral`); each surface chooses its size. Web radii are 4 and 2, matching native's 4-point card corner; steppers and the native shelved tag are squared.
+- Theme safety — web toasts, shadows, and semantic pill tints use theme tokens. Filled verdict controls retain their contrast-tested foreground/fill pair.
 - Out of this pass — the plate renderer's physical-profile geometry (gated on approving persisted equipment dimensions), the HH:MM:SS duration picker (#199), Lock Screen set progression (#200), and the rest-completion bell (#197).
 
 ## Build review, 2026-09-07

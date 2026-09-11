@@ -54,18 +54,23 @@
   --bigtap: 56px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --radius: 5px;
-  --radius-tight: 3px;
+  --radius: 4px;                        /* the industrial corner; native Theme.cornerRadius */
+  --radius-tight: 2px;
   --short-motion: 160ms;
   --forged-steel: #a6abb2;
   --focus: var(--accent);               /* the one focus ring; follows the active theme */
+  --edge: color-mix(in srgb, var(--text) 7%, transparent); /* one-pixel edge light on a raised surface */
+  --shadow: rgba(0, 0, 0, .22);         /* dark themes; the light themes override below */
+  --display: clamp(27px, 8vw, 38px);    /* the one display size for screen headings */
+}
+:root[data-theme="titanium"], :root[data-theme="system"] { --shadow: rgba(17, 24, 31, .10); }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] { --shadow: rgba(0, 0, 0, .22); }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; }
 body {
   background-color: var(--bg); color: var(--text);
-  background-image: radial-gradient(circle at 50% -12rem,
-    color-mix(in srgb, var(--text) 5%, transparent), transparent 38rem);
   font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overscroll-behavior-y: none; -webkit-text-size-adjust: 100%;
 }
@@ -103,13 +108,13 @@ body {
   position: fixed; right: 18px; bottom: calc(74px + var(--safe-bottom)); z-index: 21;
   width: var(--bigtap); height: var(--bigtap); border-radius: 50%; border: 0;
   background: var(--accent); color: var(--on-accent);
-  box-shadow: 0 6px 18px rgba(0,0,0,0.5); cursor: pointer;
+  box-shadow: 0 6px 18px var(--shadow); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
 #fab svg { width: 30px; height: 30px; fill: currentColor; }
 
 /* cards & lists */
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 10px 0; box-shadow: 0 8px 24px rgba(0,0,0,.10); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 10px 0; box-shadow: inset 0 1px 0 var(--edge), 0 8px 24px var(--shadow); }
 .card h2, .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.085em; color: var(--muted); margin: 20px 4px 7px; font-weight: 800; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .row:last-child { border-bottom: 0; }
@@ -146,9 +151,9 @@ button.btn:disabled, .seg button:disabled { cursor: not-allowed; opacity: .45; }
 .btn.sm { min-height: 44px; min-width: 44px; font-size: 14px; padding: 0 12px; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .pill { font-size: 11px; font-weight: 750; padding: 2px 7px; border-radius: var(--radius-tight); border: 1px solid var(--line); background: var(--card2); color: var(--muted); }
-.pill.warn { background: rgba(255,204,0,0.16); color: var(--warn); }
-.pill.hard { background: rgba(255,59,48,0.16); color: var(--hard); }
-.pill.accent { background: rgba(255,149,0,0.16); color: var(--accent); }
+.pill.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.pill.hard { background: color-mix(in srgb, var(--hard) 16%, transparent); color: var(--hard); }
+.pill.accent { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .effort-cue {
   margin: 8px 0 10px; padding: 10px 12px; border-radius: var(--radius);
   border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
@@ -172,7 +177,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .seg button { flex: 1; min-height: 44px; border: 1px solid transparent; background: none; color: var(--muted); padding: 8px 6px; border-radius: var(--radius-tight); font-weight: 700; font-size: 14px; cursor: pointer; }
 .seg button.on { background: color-mix(in srgb, var(--text) 12%, transparent); border-color: color-mix(in srgb, var(--text) 16%, transparent); color: var(--accent); }
 .stepper { display: flex; align-items: center; gap: 12px; }
-.stepper button { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--card2); color: var(--text); font-size: 22px; cursor: pointer; }
+.stepper button { width: 44px; height: 44px; border-radius: var(--radius); border: 0; background: var(--card2); color: var(--text); font-size: 22px; cursor: pointer; }
 .toggle { position: relative; width: 50px; height: 30px; border-radius: 999px; background: var(--card2); border: 0; cursor: pointer; flex: none; }
 .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; }
 .toggle.on { background: var(--good); } .toggle.on::after { transform: translateX(20px); }
@@ -197,7 +202,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 
 /* toast */
 #toast { position: fixed; left: 50%; bottom: calc(90px + var(--safe-bottom)); transform: translateX(-50%);
-  z-index: 60; background: #303036; color: #fff; padding: 11px 16px; border-radius: 12px; font-size: 14px;
+  z-index: 60; background: var(--card2); color: var(--text); border: 1px solid var(--line); padding: 11px 16px; border-radius: var(--radius); font-size: 14px;
   opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 86vw; text-align: center; }
 #toast.show { opacity: 1; }
 
@@ -261,7 +266,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 /* Reps in reserve is an observation, not a verdict — it reads as set, not as
    good or bad, so it takes the accent rather than the good/warn palette. */
 .flagbtn.on-rir { background: var(--accent); color: var(--on-accent); }
-.gym-img { width: 100%; background: #fff; border-radius: 12px; padding: 12px; }
+.gym-img { width: 100%; background: #fff; border-radius: var(--radius); padding: 12px; }
 .annot { font-size: 12px; }
 
 /* sticky session bar (clock + rest) at the bottom of the logger overlay */
@@ -407,11 +412,11 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
    rules, and alignment carry the hierarchy before another container does. */
 .eyebrow { display: block; color: var(--muted); font-size: 10px; line-height: 1.25; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
 .session-now { margin: 4px 0 10px; padding: 16px 4px 14px; border-top: 2px solid var(--accent); border-bottom: 1px solid var(--line); }
-.session-now h2, .exercise-info-hero h2, .activity-intro h2, .activity-detail-hero h2 { margin: 4px 0 2px; font-size: clamp(27px, 8vw, 38px); line-height: 1.05; letter-spacing: -.025em; }
+.session-now h2, .exercise-info-hero h2, .activity-intro h2, .activity-detail-hero h2 { margin: 4px 0 2px; font-size: var(--display); line-height: 1.05; letter-spacing: -.025em; }
 .session-now-prescription { margin: 10px 0 4px; font-size: clamp(20px, 6.6vw, 30px); font-weight: 850; }
 .session-progress { padding: 12px 4px; margin: 4px 0 10px; border-bottom: 1px solid var(--line); }
 .exercise-card { position: relative; }
-.exercise-card.emphasized { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 14px 32px rgba(0,0,0,.20); }
+.exercise-card.emphasized { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: inset 0 1px 0 var(--edge), 0 14px 32px var(--shadow); }
 /* The focused exercise's set track and working-set hero. */
 .set-track { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin: 10px 0 12px; padding: 0; }
 .set-track-segment { display: block; padding-top: 8px; border-top: 3px solid var(--line); color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -420,8 +425,11 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
 .current-set-hero { display: grid; gap: 4px; margin: 2px 0 12px; }
 .current-set-reps { display: flex; align-items: baseline; gap: 4px; }
 .current-set-reps .count { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.current-set-load { display: flex; align-items: baseline; gap: 4px; }
-.current-set-load .load-primary { font-size: clamp(40px, 12vw, 56px); font-weight: 900; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+/* The current-set load and achieved primary total share tabular figures;
+   each surface sets its size through --load-numeral-size. */
+.load-numeral { font-size: var(--load-numeral-size, clamp(40px, 12vw, 56px)); font-weight: 900; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.dual-weight { --load-numeral-size: clamp(32px, 10vw, 44px); }
+.current-set-load { display: flex; align-items: baseline; gap: 4px; --load-numeral-size: clamp(40px, 12vw, 56px); }
 .current-set-load .load-secondary { margin-left: 10px; font-size: clamp(22px, 6vw, 30px); font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .current-set-hero .unit { color: var(--muted); font-size: 16px; }
 .set-state-line { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -496,7 +504,7 @@ details.settings-group[open] > summary .settings-group-mark::before { content: "
    as collapsed groups that state their counts. */
 .eyebrow.accent { color: var(--accent); }
 .library-hero { padding: 4px 4px 12px; }
-.library-hero .display { margin: 4px 0 0; font-size: 30px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+.library-hero .display { margin: 4px 0 0; font-size: var(--display); font-weight: 800; letter-spacing: -.025em; line-height: 1.05; }
 .library-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 4px; }
 .library-filters label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
 .library-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 36px; margin: 4px 0 6px; }
@@ -546,7 +554,6 @@ details.library-group > .card { margin-bottom: 12px; }
 /* ad-hoc work (#166): physically serious, deliberately outside programming.
    Entry and history rows are real <button>s so they are keyboard-reachable;
    the reset keeps them looking like the cards around them. */
-.eyebrow { display: block; color: var(--muted); font-size: 10px; line-height: 1.25; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
 button.adhoc-entry, .activity-history-row > button.row { width: 100%; border: 0; color: inherit; font: inherit; cursor: pointer; }
 button.adhoc-entry { text-align: left; border-left: 3px solid var(--accent); }
 .activity-history-row > button.row { background: none; }
@@ -568,7 +575,7 @@ button.adhoc-entry { text-align: left; border-left: 3px solid var(--accent); }
   position: fixed; left: 12px; right: 12px; bottom: calc(80px + var(--safe-bottom)); z-index: 70;
   display: flex; align-items: center; gap: 10px;
   background: var(--card2); border: 1px solid var(--line); border-radius: 12px;
-  padding: 10px 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  padding: 10px 12px; box-shadow: 0 6px 18px var(--shadow);
 }
 #update-banner span { flex: 1; font-size: 14px; }
 
