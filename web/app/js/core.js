@@ -874,13 +874,38 @@ const RAMP_STEPS = [
   { percent: 0.85, reps: 1 },
 ];
 
-export function warmupRamp(workingLb, barLb = 45, roundingLb = 5, includeEmptyBar = true) {
+// `priorWorkLb` is the heaviest working load already completed earlier in the
+// session on the same movement with the same implement (see priorWorkLb).
+// Every step at or below it — the empty bar included — is a climb the lifter
+// has already made and is dropped. A lift that would otherwise ramp never
+// loses its ramp entirely: when fewer than two steps clear the prior work,
+// the heaviest two of the untrimmed ramp remain — the same bridge a short
+// policy keeps. Mirrored 1:1 in CadenceCore WarmupRamp.ramp.
+export function warmupRamp(workingLb, barLb = 45, roundingLb = 5, includeEmptyBar = true, priorWorkLb = null) {
   const sets = includeEmptyBar ? [{ weightLb: barLb, reps: 10 }] : [];
   for (const step of RAMP_STEPS) {
     const w = roundTo(workingLb * step.percent, roundingLb);
     if (w > barLb + 1e-9 && w < workingLb - 1e-9) sets.push({ weightLb: w, reps: step.reps });
   }
-  return sets.map((s) => ({ ...s, label: `${trim(s.weightLb)} × ${s.reps}` }));
+  const trimmed = priorWorkLb > 0 ? sets.filter((s) => s.weightLb > priorWorkLb + 1e-9) : sets;
+  const kept = priorWorkLb > 0 && trimmed.length < 2 ? sets.slice(-2) : trimmed;
+  return kept.map((s) => ({ ...s, label: `${trim(s.weightLb)} × ${s.reps}` }));
+}
+
+// The heaviest working load already completed EARLIER in the session (lower
+// order) on the same movement group with the same implement — the climb a
+// later ramp need not repeat. The implement matters: a dumbbell's 80 per hand
+// is not 80 on a bar. Entries are { order, movementGroup, exerciseType,
+// completedWorkLbs }; completedWorkLbs holds COMPLETED working loads only —
+// planned and skipped sets, and warmups, prepared nobody. Null when nothing
+// qualifies or the movement group is unknown. Mirrored 1:1 in CadenceCore
+// WarmupRamp.priorWorkLb.
+export function priorWorkLb(order, movementGroup, exerciseType, session) {
+  if (!movementGroup) return null;
+  const heaviest = Math.max(...session
+    .filter((e) => e.order < order && e.movementGroup === movementGroup && e.exerciseType === exerciseType)
+    .flatMap((e) => e.completedWorkLbs));
+  return heaviest > 0 ? heaviest : null;
 }
 
 

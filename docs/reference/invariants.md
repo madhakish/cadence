@@ -102,7 +102,11 @@ wins over both.
 Re-syncing warmups after a bar, gym, or working-weight change refreshes their
 **weights** without changing **how many** a programmed entry owns. An
 equipment-changing swap is the exception: it rebuilds the ramp, because the old
-one described a different implement.
+one described a different implement. So is prior work: while every warmup on
+the entry is still planned, steps at or below a working load already
+**completed** earlier in the session on the same movement group with the same
+implement are dropped (never below two), removing only surplus planned rows. A
+completed or skipped warmup row is never rewritten or removed by a resync.
 
 ### INV-CARDIO-SOLVES-THE-THIRD
 *platforms: core*

@@ -32,6 +32,15 @@ const loadOptions = (exercise) => ({
   loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
   exerciseType: exercise?.type,
 });
+// What each entry has already lifted, in the shape C.priorWorkLb reads:
+// completed working loads only — planned and skipped sets, and warmups,
+// prepared nobody. Mirrors ActiveSessionView's sessionWork.
+const sessionWork = (exercises, exMap) => exercises.map((entry) => {
+  const ex = exMap.get(entry.exerciseName);
+  return { order: entry.order, movementGroup: ex?.movementGroup || "", exerciseType: ex?.type || "",
+    completedWorkLbs: (entry.sets || []).filter((set) => !set.isWarmup && set.status === "completed")
+      .map((set) => set.weightLb) };
+});
 
 const availablePlates = (gym, exercise = null) => {
   const rack = !gym || !Array.isArray(gym.plateToggles) || !gym.plateToggles.length
@@ -294,14 +303,21 @@ export async function openSession(id) {
     const working = (se.sets || []).filter((set) => !set.isWarmup).sort((a, b) => a.order - b.order);
     const workingLb = overrideWorkingLb ?? se.plannedWeightLb ?? working[0]?.weightLb;
     if (!ex || !(workingLb > 0)) return;
+    const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
+    // Work already COMPLETED earlier in the session on this movement with
+    // this implement trims the ramp below it (issue #64) — but only while
+    // every warmup here is still planned: once one is resolved the ramp is
+    // the lifter's record and only its weights refresh. Mirrors native.
+    const priorWorkLb = existing.some((set) => (set.status || "planned") !== "planned")
+      ? null
+      : C.priorWorkLb(se.order, ex.movementGroup, ex.type, sessionWork(session.exercises, exMap));
     const fullRamp = ex.type === "barbell"
       ? achievableWarmups(
-        C.warmupRamp(workingLb, C.barLb(bar), 5, includesEmptyBarWarmup(ex.name)),
+        C.warmupRamp(workingLb, C.barLb(bar), 5, includesEmptyBarWarmup(ex.name), priorWorkLb),
         workingLb, bar, gymState.value, ex,
       )
       : (ex.type === "dumbbell" && se.programRole === "main" ? C.dumbbellWarmupRamp(workingLb, 5) : null);
     if (!fullRamp) return;
-    const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
     // A programmed entry was built under a resolved warmup policy — full ramp,
     // two bridging sets for a complementary lift, or none — possibly refined
     // by the user's own row edits. Resync refreshes the warmup WEIGHTS for the

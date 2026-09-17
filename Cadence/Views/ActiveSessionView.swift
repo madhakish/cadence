@@ -1433,12 +1433,23 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
           let workingLb = overrideWorkingLb ?? entry.plannedWeightLb
             ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb,
           workingLb > 0 else { return }
+    let existing = entry.orderedSets.filter(\.isWarmup)
+    // Work already COMPLETED earlier in the session on this movement with
+    // this implement trims the ramp below it (issue #64) — but only while
+    // every warmup here is still planned: once one is resolved the ramp is
+    // the lifter's record and only its weights refresh. Mirrors web.
+    let priorWorkLb: Double? = {
+        guard !existing.contains(where: { $0.status != .planned }), let session = entry.session else { return nil }
+        return WarmupRamp.priorWorkLb(order: entry.order, movementGroup: exercise.movementGroup,
+                                      exerciseType: exercise.typeRaw, in: sessionWork(session))
+    }()
     var desired: [WarmupSet]
     if exercise.type == .barbell {
         desired = ProgramSession.achievableWarmups(
             WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
                             roundingLb: ProgramEngine.defaultRoundingLb,
-                            includeEmptyBar: ProgramSession.includesEmptyBarWarmup(for: exercise)),
+                            includeEmptyBar: ProgramSession.includesEmptyBarWarmup(for: exercise),
+                            priorWorkLb: priorWorkLb),
             workingLb: workingLb, gym: gym, bar: bar, exercise: exercise)
     } else if exercise.type == .dumbbell && entry.programRole == LiftRole.main.rawValue {
         desired = WarmupRamp.dumbbellRamp(workingLb: workingLb,
@@ -1448,7 +1459,6 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
     } else {
         return
     }
-    let existing = entry.orderedSets.filter(\.isWarmup)
     // A programmed entry was built under a resolved warmup policy — full
     // ramp, two bridging sets for a complementary lift, or none — possibly
     // refined by the user's own row edits. Resync refreshes the warmup
@@ -1499,6 +1509,18 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
     let working = entry.orderedSets.filter { !$0.isWarmup }
     entry.sets = rebuilt + working
     for (index, set) in entry.sets.enumerated() { set.order = index }
+}
+
+/// What each entry has already lifted, in the shape `WarmupRamp.priorWorkLb`
+/// reads: completed working loads only — planned and skipped sets, and
+/// warmups, prepared nobody. Mirrors web `sessionWork`.
+private func sessionWork(_ session: WorkoutSession) -> [WarmupRamp.SessionWork] {
+    session.orderedExercises.map { entry in
+        WarmupRamp.SessionWork(order: entry.order,
+                               movementGroup: entry.exercise?.movementGroup ?? "",
+                               exerciseType: entry.exercise?.typeRaw ?? "",
+                               completedWorkLbs: entry.workingSets.map(\.weightLb))
+    }
 }
 
 // MARK: - Set row

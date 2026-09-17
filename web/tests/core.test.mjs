@@ -183,6 +183,33 @@ r = C.warmupRamp(45);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45]) && r[0].reps === 10, "ramp 45 bar only");
 r = C.warmupRamp(245, 45, 5, false);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([100, 135, 170, 210]), "ramp can omit empty bar");
+{
+  // Work already completed this session trims the climb below it (issue #64).
+  const weights = (ramp) => JSON.stringify(ramp.map((x) => x.weightLb));
+  const reps = (ramp) => JSON.stringify(ramp.map((x) => x.reps));
+  ok(weights(C.warmupRamp(225)) === JSON.stringify([45, 90, 125, 160, 190]), "ramp 225 weights");
+  ok(weights(C.warmupRamp(225, 45, 5, true, 100)) === JSON.stringify([125, 160, 190]), "prior work 100 drops the steps already climbed");
+  ok(reps(C.warmupRamp(225, 45, 5, true, 100)) === JSON.stringify([3, 2, 1]), "trimmed steps keep their reps");
+  ok(weights(C.warmupRamp(225, 45, 5, true, 125)) === JSON.stringify([160, 190]), "a step equal to the prior work is dropped too");
+  ok(weights(C.warmupRamp(225, 45, 5, true, 315)) === JSON.stringify([160, 190]), "prior work above every step keeps the heaviest two");
+  ok(reps(C.warmupRamp(225, 45, 5, true, 315)) === JSON.stringify([2, 1]), "the kept bridge keeps its reps");
+  ok(weights(C.warmupRamp(225, 45, 5, true, null)) === weights(C.warmupRamp(225))
+    && weights(C.warmupRamp(225, 45, 5, true, 0)) === weights(C.warmupRamp(225)), "no prior work leaves the ramp alone");
+  const sessionWork = [
+    { order: 0, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [225, 225, 245] },
+    { order: 1, movementGroup: "squat", exerciseType: "dumbbell", completedWorkLbs: [80] },
+    { order: 2, movementGroup: "hinge", exerciseType: "barbell", completedWorkLbs: [405] },
+    { order: 3, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [] },
+    { order: 5, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [315] },
+  ];
+  eq(C.priorWorkLb(4, "squat", "barbell", sessionWork), 245, "earlier same-group barbell work counts; later work does not");
+  eq(C.priorWorkLb(4, "squat", "dumbbell", sessionWork), 80, "a dumbbell's per-hand load only counts for a dumbbell lift");
+  eq(C.priorWorkLb(4, "press", "barbell", sessionWork), null, "another movement group prepared nobody");
+  eq(C.priorWorkLb(4, "", "barbell", sessionWork), null, "an unknown movement group never matches");
+  eq(C.priorWorkLb(0, "squat", "barbell", sessionWork), null, "nothing earlier means no prior work");
+  eq(C.priorWorkLb(4, "squat", "barbell", [{ order: 3, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [] }]), null,
+    "an earlier entry with nothing completed yet prepared nobody");
+}
 eq(C.programLoadStep(10, "dumbbell"), 5, "dumbbell program step capped per hand");
 eq(C.programLoadStep(2.5, "dumbbell"), 2.5, "fine dumbbell step preserved");
 eq(C.programLoadStep(10, "barbell"), 10, "barbell program step preserved");
