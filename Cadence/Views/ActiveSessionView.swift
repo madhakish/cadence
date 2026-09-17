@@ -1263,6 +1263,9 @@ private struct ExerciseSection: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
+                        // House tap target; the glyph alone audits as too small (#61).
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                         .foregroundStyle(Theme.accent)
                 }
                 .accessibilityLabel("Exercise options")
