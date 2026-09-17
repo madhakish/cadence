@@ -263,8 +263,13 @@ enum WorkoutActivityController {
         String(format: "%d:%02d", max(0, seconds) / 60, max(0, seconds) % 60)
     }
 
-    /// Mirror of NotificationService.scheduleRestDone (kept in sync so the
-    /// widget extension needn't link the app's service layer).
+    /// The bundled completion tone, named here (and not in the app's service
+    /// layer) because this controller is also compiled into the widget
+    /// extension. `CompletionCue` plays the same file in the foreground.
+    static let completionSoundFile = "completion-cue.wav"
+
+    /// The one "Rest over." notification. Scheduled when a rest starts or is
+    /// retargeted, cancelled on skip, pause, and foreground completion.
     private static func scheduleNotification(at endDate: Date, exerciseName: String) {
         let seconds = endDate.timeIntervalSinceNow
         cancelNotification()
@@ -276,7 +281,7 @@ enum WorkoutActivityController {
             let content = UNMutableNotificationContent()
             content.title = "Rest over."
             content.body = exerciseName.isEmpty ? "Rest complete." : "\(exerciseName) — next set."
-            content.sound = .default
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: completionSoundFile))
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
             center.add(UNNotificationRequest(identifier: notificationID, content: content, trigger: trigger))
         }

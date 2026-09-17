@@ -1,7 +1,6 @@
 import SwiftUI
 import SwiftData
 import CadenceCore
-import AudioToolbox
 import UIKit
 
 /// An attempt stays separate from the prefilled set until the athlete logs it.
@@ -107,15 +106,11 @@ struct HoldTimerSheet: View {
         now = Date().timeIntervalSince1970
         guard running, remaining == 0 else { return }
         if let clock { self.clock = HoldClock.stop(clock, now: now) }
-        // A background notification already supplies its sound. On-screen,
-        // give the athlete an audible cue without requiring a clock glance.
+        // A background notification already supplied the cue. On-screen, the
+        // one CompletionCue says it instead — never both.
         if playCue && scenePhase == .active && !wasInactive {
             NotificationService.cancelHoldDone()
-            AudioServicesPlaySystemSound(1005)
-            if settingsList.first?.haptics != false {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-            }
-            UIAccessibility.post(notification: .announcement, argument: "Hold complete")
+            CompletionCue.play(haptics: settingsList.first?.haptics != false, announcement: "Hold complete")
         }
     }
 
