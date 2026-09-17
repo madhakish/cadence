@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
-import { figureSVG, muscleLegend, MUSCLE_NAMES } from "../app/js/anatomy.js";
+import { figureSVG, muscleLegend, MUSCLE_NAMES, ANATOMICAL_ORDER, anatomicalSort } from "../app/js/anatomy.js";
 
 const dom = new JSDOM("<!doctype html><body></body>");
 globalThis.document = dom.window.document;
@@ -167,4 +167,44 @@ test("shared rear-deltoid mask is painted once, with primary priority and alias-
   legend.querySelector('[data-muscle="delts"]').click();
   assert.ok(figure.querySelector('[href="assets/vitruvian-back-delts.svg"]').classList.contains("is-selected"));
   assert.equal(figureSVG(null).querySelectorAll(".anatomy-region-mask").length, 0);
+});
+
+test("legend walks the body head to toe, names regions like native, and announces selection", () => {
+  assert.deepEqual([...ANATOMICAL_ORDER].sort(), Object.keys(MUSCLE_NAMES).sort(), "every muscle has a place in the order");
+  assert.deepEqual(anatomicalSort(["hamstrings", "glutes", "lowerback"]), ["lowerback", "glutes", "hamstrings"]);
+  assert.deepEqual(anatomicalSort(["mystery", "calves", "other", "traps"]), ["traps", "calves", "mystery", "other"]);
+  const profile = { primary: ["hamstrings", "glutes", "lowerback"], secondary: ["forearms", "traps"] };
+  const legend = muscleLegend(profile, figureSVG(profile));
+  const buttons = [...legend.querySelectorAll("button.muscle-key")];
+  assert.deepEqual(buttons.map((button) => button.dataset.muscle), ["lowerback", "glutes", "hamstrings", "traps", "forearms"],
+    "DOM (and therefore tab) order is anatomical within each group");
+  assert.deepEqual(buttons.map((button) => button.getAttribute("aria-label")),
+    ["Lower back, primary muscle", "Glutes, primary muscle", "Hamstrings, primary muscle", "Traps, supporting muscle", "Forearms, supporting muscle"]);
+  const status = legend.querySelector('[role="status"][aria-live="polite"]');
+  assert.ok(status, "a live region announces what a click did");
+  buttons[1].click(); assert.equal(status.textContent, "Glutes selected");
+  buttons[1].click(); assert.equal(status.textContent, "Selection cleared");
+});
+
+// WCAG relative luminance / contrast for the legend's muted labels on the card
+// ground, per theme, from the stylesheet's own tokens.
+const luminance = (hex) => {
+  const channel = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const n = Number.parseInt(hex.slice(1), 16);
+  return 0.2126 * channel(n >> 16 & 255) + 0.7152 * channel(n >> 8 & 255) + 0.0722 * channel(n & 255);
+};
+const contrast = (a, b) => { const [l1, l2] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (l1 + 0.05) / (l2 + 0.05); };
+
+test("legend labels keep AA contrast on the card ground in every theme", async () => {
+  const css = await read("web/app/styles.css");
+  const blocks = [...css.matchAll(/(:root(?:\[data-theme="[a-z]+"\])?(?:,\s*:root\[data-theme="[a-z]+"\])?)\s*\{([^}]*)\}/g)];
+  let checked = 0;
+  for (const [, selector, body] of blocks) {
+    const muted = body.match(/--muted:\s*(#[0-9a-f]{6})/i)?.[1];
+    const card = body.match(/--card:\s*(#[0-9a-f]{6})/i)?.[1];
+    if (!muted || !card) continue;
+    checked += 1;
+    assert.ok(contrast(muted, card) >= 4.5, `${selector}: --muted ${muted} on --card ${card} is ${contrast(muted, card).toFixed(2)}:1`);
+  }
+  assert.ok(checked >= 4, `expected every theme's tokens to be checked, saw ${checked}`);
 });

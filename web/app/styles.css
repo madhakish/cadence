@@ -404,6 +404,7 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
 .muscle-key.supporting i { background: var(--forged-steel); }
 .muscle-key span { font-size: 14px; font-weight: 650; }
 .muscle-key.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card2)); }
+.muscle-key-status { margin: 0; min-height: 1.2em; color: var(--muted); font-size: 12px; }
 .anatomy-region-mask { transition: opacity var(--short-motion), filter var(--short-motion); }
 .anatomy-region-mask.is-muted { opacity: .08; }
 .anatomy-region-mask.is-selected { opacity: .72; }

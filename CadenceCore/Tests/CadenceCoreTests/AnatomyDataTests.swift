@@ -16,6 +16,7 @@ final class AnatomyDataTests: XCTestCase {
 
     private struct Fixture: Codable {
         let names: [String: String]
+        let order: [String]
         let body: [[[Double]]]
         let regions: [AnatomyData.Region]
         let map: [String: AnatomyData.Profile]
@@ -39,6 +40,7 @@ final class AnatomyDataTests: XCTestCase {
         XCTAssertEqual(AnatomyData.regions, fx.regions)
         XCTAssertEqual(AnatomyData.map, fx.map)
         XCTAssertEqual(AnatomyData.groupDefaults, fx.groupDefaults)
+        XCTAssertEqual(AnatomyData.anatomicalOrder, fx.order)
     }
 
     func testEveryProfileReferencesRealRegions() {
@@ -56,6 +58,16 @@ final class AnatomyDataTests: XCTestCase {
                 XCTAssertTrue(regionIds.contains(id), "group \(group) references unknown region \(id)")
             }
         }
+    }
+
+    func testAnatomicalOrderCoversEveryMuscleAndSortsStably() {
+        XCTAssertEqual(Set(AnatomyData.anatomicalOrder), Set(AnatomyData.muscleNames.keys))
+        XCTAssertEqual(AnatomyData.anatomicalOrder.count, AnatomyData.muscleNames.count)
+        // A deadlift's movers are listed by importance; the legend walks the body.
+        XCTAssertEqual(AnatomyData.anatomicalSort(["hamstrings", "glutes", "lowerback"]),
+                       ["lowerback", "glutes", "hamstrings"])
+        XCTAssertEqual(AnatomyData.anatomicalSort(["mystery", "calves", "other", "traps"]),
+                       ["traps", "calves", "mystery", "other"])
     }
 
     func testLookupFallsBackByGroup() {

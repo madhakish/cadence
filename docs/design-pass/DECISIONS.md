@@ -52,3 +52,11 @@
 - Plate guide — add the IWF small denominations using shared plate colour metadata. Explain that IPF fixes colours only for 15/20/25 kg; the guide never adds inventory.
 - Compatibility — retain the public SessionPrescription(mainWork:blocks:) initializer; only engine-produced blocks assert a resolved methodology.
 - Scope correction — #199's duration implementation is now included; its native/UI validation is still pending. Approved physical plate geometry, Lock Screen set completion and the headphone cue remain unfinished; the earlier “out of this pass” note is historical scope, not completion evidence.
+
+## Gorilla integration, 2026-09-17
+
+- Artwork — untouched. Every gorilla source and mask stays byte-identical (the registration test pins the digests); the edge is feathered by a container mask on both clients, never in the raster.
+- Selection — the legend is the region control. The masks are raster images whose hit box is the whole figure, so making them tappable would select whichever mask is painted last wherever the finger lands; tapping the figure is deliberately not offered rather than offered wrong. Hover/focus/tap on a legend entry lights the region; native announces the selected value, web announces it in a live region.
+- Order — legends and VoiceOver walk the body head to toe (`anatomicalOrder` in CadenceCore, `ANATOMICAL_ORDER` on web, fixture-checked), not the map's importance order.
+- Names — one spoken name on both clients: "Quads, primary muscle" / "Traps, supporting muscle".
+- Treatment — primary movers carry the warm tint at higher opacity, supporting work the steel wash at lower opacity, both multiplied over the ink so the figure stays legible. Neither colour is a plate colour. The legend's muted labels keep at least 4.5:1 on the card in every theme (tested from the stylesheet tokens).
