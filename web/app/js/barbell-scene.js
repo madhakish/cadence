@@ -11,6 +11,17 @@ const CHANGE = {
   '2.5-kg': [210, 19], '2-kg': [190, 19], '1.5-kg': [175, 18], '1.25-kg': [160, 16],
   '1-kg': [160, 16], '0.5-kg': [135, 12], '5-lb': [190, 19], '2.5-lb': [160, 16], '1.25-lb': [135, 12],
 };
+// The physical family a denomination belongs to in a style. Names the cell in
+// the loadout summary; never changes geometry or mass. Mirrors CadenceCore
+// PlateGeometry.family / familyLabel.
+export function plateFamily(plate, style = 'steel') {
+  const key = `${plate.value}-${plate.unit}`;
+  if (style === 'bumper' && BUMPER[key]) return 'bumper';
+  if (STEEL[key]) return 'steel';
+  return 'change';
+}
+export const plateFamilyLabel = (family) => ({ bumper: 'Bumpers', steel: 'Steel' })[family] || 'Change';
+
 export function plateGeometry(plate, style = 'steel') {
   const key = `${plate.value}-${plate.unit}`;
   const [diameter, thickness] = (style === 'bumper' ? BUMPER : STEEL)[key] || CHANGE[key] || [200, 20];

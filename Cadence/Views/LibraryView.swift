@@ -348,7 +348,8 @@ struct ExerciseDetailView: View {
                             )
                             LoadoutSummaryView(
                                 requestedLb: set.targetWeightLb ?? sessionEntry?.targetWeightLb,
-                                loadout: contextualSolution.loadout
+                                loadout: contextualSolution.loadout,
+                                plateStyle: style
                             )
                         }
                     }
@@ -624,7 +625,8 @@ struct ExerciseDetailView: View {
                             BarbellInspectionView(solution: solution, plateStyle: style)
                             LoadoutSummaryView(
                                 requestedLb: contextualSet?.targetWeightLb ?? sessionEntry?.targetWeightLb,
-                                loadout: solution.loadout
+                                loadout: solution.loadout,
+                                plateStyle: style
                             )
                             .padding(.horizontal)
                         }

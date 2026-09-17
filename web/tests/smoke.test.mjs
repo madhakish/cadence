@@ -1378,7 +1378,14 @@ ok(targetTotal?.textContent.includes("lb") && targetTotal?.textContent.includes(
 ok((targetHero?.compareDocumentPosition(targetTotal) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
   "target mode puts the physical loadout first, followed immediately by its dual-unit answer");
 ok(plateOverlay.querySelectorAll("svg.plate-badge").length > 0,
-  "target per-side rows expose readable denomination badges");
+  "target per-side cells expose readable denomination badges");
+ok(plateOverlay.querySelector(".calc-hero .display")?.textContent === "Know your load."
+    && /plate loading/i.test(plateOverlay.querySelector(".calc-hero .eyebrow")?.textContent || ""),
+  "the calculator opens on the approved heading");
+ok(plateOverlay.querySelectorAll(".loadout-cell").length > 0 && !plateOverlay.querySelector(".plate-list"),
+  "target mode reads the rack from the summary's cells, not a second per-side list");
+ok(plateOverlay.querySelector(".barbell-stage-footer")?.textContent.includes("Larger view"),
+  "the stage offers the larger view where the approved screen puts it");
 const reverseButton = [...plateOverlay.querySelectorAll(".seg button")].find((button) => button.textContent === "On the bar");
 ok(reverseButton, "plate calculator exposes the reverse-mode control");
 reverseButton?.click(); await tick();

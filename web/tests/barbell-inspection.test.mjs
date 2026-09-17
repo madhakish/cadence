@@ -59,7 +59,8 @@ const mixed = barbellScene(C.enteredPlateSolution(C.BARS.bar20kg,[{plate:five,co
 assert.equal(mixed.discs[0].radius,230*.18);
 let calls=0;
 const stage = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {onExpand:()=>calls++,containerWidth:390});
-assert.equal(stage.querySelector('.barbell-loading-key').textContent, `Per side: ${C.perSideLabel(solution.perSide)}`);
+assert.equal(stage.querySelector('.barbell-stage-footer .sub').textContent, 'Tap to inspect');
+assert.equal(stage.querySelector('.barbell-expand').textContent, 'Larger view ↗');
 stage.querySelector('.barbell-expand').click();
 assert.equal(calls,1);
 const inspector = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {emphasis:'expanded'});

@@ -77,6 +77,20 @@ struct PlateCalculatorView: View {
 
     var body: some View {
         Form {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(gym?.name.uppercased() ?? "YOUR GYM") · PLATE LOADING")
+                        .font(.caption.bold())
+                        .tracking(0.8)
+                        .foregroundStyle(Theme.accent)
+                    Text("Know your load.")
+                        .font(.system(size: 34, weight: .bold))
+                        .tracking(-0.5)
+                }
+                .accessibilityElement(children: .combine)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+            }
             Picker("Mode", selection: $mode) {
                 ForEach(Mode.allCases, id: \.self) { Text($0.rawValue) }
             }
@@ -147,7 +161,7 @@ struct PlateCalculatorView: View {
             }
 
             Section {
-                LoadoutSummaryView(requestedLb: targetLb, loadout: solution.loadout)
+                LoadoutSummaryView(requestedLb: targetLb, loadout: solution.loadout, plateStyle: plateStyle)
                 if let mixed = mixedUnitExplanation(solution.loadout) {
                     Label(mixed, systemImage: "scalemass")
                         .font(.callout)
@@ -174,25 +188,6 @@ struct PlateCalculatorView: View {
                 Text("Load summary")
             }
 
-            Section("Per side") {
-                if solution.loadout.perSide.isEmpty {
-                    Text(solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
-                        .font(.title2.bold())
-                } else {
-                    ForEach(solution.loadout.perSide) { pc in
-                        HStack {
-                            PlateFaceBadge(plate: pc.plate, style: plateStyle)
-                            Text(pc.plate.label)
-                                .font(.title3.bold())
-                                .foregroundStyle(pc.plate.unit == .kg ? Theme.accent : .primary)
-                            Spacer()
-                            Text("× \(pc.count)")
-                                .font(.title3.monospacedDigit())
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-            }
         }
     }
 
@@ -213,7 +208,7 @@ struct PlateCalculatorView: View {
         }
 
         Section {
-            LoadoutSummaryView(requestedLb: nil, loadout: reverseLoadout)
+            LoadoutSummaryView(requestedLb: nil, loadout: reverseLoadout, plateStyle: plateStyle)
             if let mixed = mixedUnitExplanation(reverseLoadout) {
                 Label(mixed, systemImage: "scalemass")
                     .font(.callout)
@@ -388,7 +383,7 @@ struct PlateCalculatorView: View {
                     if let displayedSolution {
                         BarbellInspectionView(solution: displayedSolution, plateStyle: plateStyle)
                         .accessibilityLabel("Expanded loaded bar diagram")
-                        LoadoutSummaryView(requestedLb: requested, loadout: displayedSolution.loadout)
+                        LoadoutSummaryView(requestedLb: requested, loadout: displayedSolution.loadout, plateStyle: plateStyle)
                             .padding(.horizontal)
 
                     }

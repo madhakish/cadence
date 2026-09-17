@@ -54,6 +54,9 @@ export async function openPlateCalculator() {
 
     const draw = () => {
       ui.clear(panel);
+      panel.append(ui.h("header", { class: "calc-hero" },
+        ui.h("span", { class: "eyebrow accent", text: `${gym?.name || "Your gym"} · Plate loading` }),
+        ui.h("h3", { class: "display", text: "Know your load." })));
       panel.append(ui.seg([{ value: "target", label: "Target" }, { value: "reverse", label: "On the bar" }],
         mode, (next) => { mode = next; draw(); }));
       if (mode === "target") drawTarget(); else drawReverse();
@@ -137,19 +140,13 @@ export async function openPlateCalculator() {
         output.append(ui.h("div", { class: "section-heading" },
           ui.h("div", { class: "section-title", text: "Load on the bar" })),
         barbellStage(rendered, {
-          caption: "Mirrored stack · counts are per side", emphasis: "hero",
+          caption: "Tap to inspect", emphasis: "hero",
           onExpand: () => expandedBar(solution, plateStyle, targetLb),
         }),
-        loadoutSummary(targetLb, solution));
+        loadoutSummary(targetLb, solution, { plateStyle }));
         const mixed = mixedEquipmentNote(solution); if (mixed) output.append(mixed);
         if (!solution.satisfiesPolicy) output.append(ui.h("div", { class: "warning-panel", text: `No available plate stack satisfies ${C.loadingPolicyLabel(solution.policy).toLowerCase()}; showing the closest load.` }));
         if (solution.isOffTarget) output.append(ui.h("div", { class: "warning-panel", text: `Closest load differs from the request by ${C.trim(Math.abs(solution.deviationLb), 2)} lb / ${C.trim(Math.abs(C.kgFromLb(solution.deviationLb)), 2)} kg.` }));
-        output.append(ui.h("div", { class: "section-title", text: "Plates per side" }));
-        const list = ui.h("div", { class: "card plate-list" });
-        if (!solution.perSide.length) list.append(ui.h("div", { class: "big", text: solution.collarLb ? "Bar + collars" : "Bar only" }));
-        for (const count of solution.perSide) list.append(ui.h("div", { class: "row plate-row" },
-          plateKey(count.plate, plateStyle), ui.h("strong", { class: "mono", text: `× ${count.count}` })));
-        output.append(list);
       }
       update();
     };
@@ -169,10 +166,10 @@ export async function openPlateCalculator() {
         output.append(ui.h("div", { class: "section-heading" },
           ui.h("div", { class: "section-title", text: "On the bar" })),
         barbellStage(rendered, {
-          caption: "Entered stack · mirrored exactly", emphasis: "hero",
+          caption: "Entered stack · tap to inspect", emphasis: "hero",
           onExpand: () => expandedBar(solution, plateStyle),
         }),
-        loadoutSummary(null, solution));
+        loadoutSummary(null, solution, { plateStyle }));
         const mixed = mixedEquipmentNote(solution); if (mixed) output.append(mixed);
 
         ui.clear(orderEditor);

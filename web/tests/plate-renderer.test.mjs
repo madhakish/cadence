@@ -83,6 +83,29 @@ ok(Number(f7Steel.querySelectorAll('[data-side="right"]')[0].getAttribute("heigh
 ok(B.barbellSVG(fixtures.F8, "full").svg.querySelectorAll(".barbell-lock-collar").length === 2,
   "F8: configured collars render on both mirrored sleeves");
 
+const S = await import("../app/js/barbell-scene.js");
+ok(S.plateFamily({ value: 5, unit: "kg" }, "bumper") === "bumper" && S.plateFamily({ value: 5, unit: "kg" }, "steel") === "steel"
+    && S.plateFamily({ value: 2.5, unit: "kg" }, "bumper") === "change" && S.plateFamily({ value: 45, unit: "lb" }, "steel") === "steel"
+    && S.plateFamily({ value: 5, unit: "lb" }, "bumper") === "change" && S.plateFamilyLabel("bumper") === "Bumpers",
+  "plate family names the summary cell (mirrors PlateGeometry.family)");
+{
+  const summary = B.loadoutSummary(225, fixtures.F2, { plateStyle: "steel" });
+  const cells = [...summary.querySelectorAll(".loadout-cell")];
+  ok(cells.length === 1 && cells[0].textContent.includes("4 × 45 lb") && cells[0].textContent.includes("Steel")
+      && cells[0].querySelector("svg.plate-badge"),
+    "the summary states one cell per denomination, counting both sleeves, with its family");
+  ok(summary.querySelector(".loadout-line")?.textContent.includes("/ side")
+      && summary.querySelector(".loadout-line")?.textContent.includes("45 lb bar"),
+    "the summary names the bar and what is on each side");
+  const collars = B.loadoutSummary(null, fixtures.F8, { plateStyle: "steel" });
+  ok([...collars.querySelectorAll(".loadout-cell")].some((cell) => cell.textContent.includes("2 collars") && cell.textContent.includes("Outermost")),
+    "configured collars are a cell of their own");
+  ok(!collars.querySelector(".loadout-delta"), "with nothing requested there is no delta");
+  const off = B.loadoutSummary(139, fixtures.F3, { plateStyle: "steel" });
+  ok(off.querySelector(".loadout-delta")?.textContent.includes("from 139 lb") && off.querySelector(".loadout-delta.warn"),
+    "an off-target result shows its difference from the request");
+}
+
 for (const value of [1.25, 2.5, 45]) {
   ok(C.plateLabel({ value, unit: "kg" }) === `${value} kg`,
     `formatter preserves exact denomination ${value}`);
@@ -92,8 +115,10 @@ const summary = B.loadoutSummary(fixtures.F3.targetLb, fixtures.F3);
 const measures = [...summary.querySelectorAll(".weight-measure")];
 ok(measures.length === 2 && measures[0].textContent.endsWith("lb") && measures[1].textContent.endsWith("kg"),
   "achieved total always presents pounds first and kilograms second");
-ok(summary.textContent.includes("Requested") && summary.textContent.includes("Bar")
-    && summary.textContent.includes("Plates / side") && summary.textContent.includes("Difference"),
+ok(summary.querySelector(".loadout-delta")?.textContent.includes("from ")
+    && summary.querySelector(".loadout-line")?.textContent.includes(" bar")
+    && summary.querySelector(".loadout-line")?.textContent.includes("/ side")
+    && summary.querySelector(".loadout-delta strong")?.textContent.includes(" lb"),
 "summary distinguishes requested, achieved, bar, plates per side, and difference");
 
 let expanded = false;

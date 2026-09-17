@@ -1,7 +1,7 @@
 // Shared compact/full barbell graphics. Callers resolve the rack through core;
 // this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
-import { barbellScene, plateTintGains } from "./barbell-scene.js";
+import { barbellScene, plateFamily, plateFamilyLabel, plateTintGains } from "./barbell-scene.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const FILL = { red: "#d23b3b", blue: "#2f6fed", green: "#1faa52", yellow: "#e8b008", white: "#ededed", black: "#1c1d22" };
@@ -189,24 +189,27 @@ export function barbellStage(rendered, {
   };
   paint();
   stage.append(track);
-  // The complete-bar overview scales to fit. Its loading key remains real
-  // HTML text; never make someone read shrunken stamping to load the bar.
-  if (!inspection) stage.append(uiText("div", "barbell-loading-key mono",
-    rendered.solution.perSide.length ? `Per side: ${C.perSideLabel(rendered.solution.perSide)}`
-      : rendered.solution.collarLb > 0 ? "Bar + collars" : "Bar only"));
   if (inspection) {
-    const toggle = uiText("button", "btn ghost sm barbell-explode", "Assemble bar");
+    // One quiet line says which view this is and what a tap does; the same
+    // control is the accessible toggle. Tapping the artwork toggles too.
+    const toggle = uiText("button", "btn ghost sm barbell-explode", "38° inspection · tap to collapse");
     toggle.type = "button";
     toggle.setAttribute("aria-pressed", "true");
-    toggle.addEventListener("click", () => {
+    toggle.setAttribute("aria-label", "Assemble bar");
+    const swipe = uiText("span", "sub", "Swipe across · inside → outside");
+    const flip = () => {
       exploded = !exploded;
       paint();
-      toggle.textContent = exploded ? "Assemble bar" : "Explode plates";
+      toggle.textContent = exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect";
+      toggle.setAttribute("aria-label", exploded ? "Assemble bar" : "Explode plates");
       toggle.setAttribute("aria-pressed", String(exploded));
-    });
-    footer.append(toggle, uiText("span", "sub", "Swipe across · inside → outside"));
+      swipe.hidden = !exploded;
+    };
+    toggle.addEventListener("click", flip);
+    track.addEventListener("click", flip);
+    footer.append(toggle, swipe);
   } else if (onExpand) {
-    const button = uiText("button", "btn ghost sm barbell-expand", "Inspect plates");
+    const button = uiText("button", "btn ghost sm barbell-expand", "Larger view ↗");
     button.type = "button";
     button.setAttribute("aria-label", "Inspect loaded bar and explode plates");
     button.addEventListener("click", onExpand);
@@ -214,7 +217,9 @@ export function barbellStage(rendered, {
     track.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onExpand(); }
     });
-    footer.append(uiText("span", "sub", caption), button);
+    footer.append(uiText("span", "sub", caption || "Tap to inspect"), button);
+  } else {
+    footer.append(uiText("span", "sub", caption));
   }
   stage.append(footer);
   if (inspection) {
@@ -252,15 +257,20 @@ const summaryRow = (label, value, warning = false) => {
   return row;
 };
 
-// One totals block for the calculator and every in-session plate preview.
-// Pounds are intentionally first regardless of the entry unit; `solution`
-// is the exact object handed to the renderer, so the numbers and steel can
-// never drift through a second calculation in the view.
-export function loadoutSummary(requestedLb, solution, { compact = false } = {}) {
+// The one totals composition used anywhere Cadence explains a solved or
+// entered bar — the calculator, the current set, the exercise pane, the
+// workout preview. What was achieved, pounds first, kilograms after; how far
+// from what was asked; which bar and what is on each side; and one cell per
+// plate family so the rack is readable at a glance. `solution` is the exact
+// object handed to the renderer, so the numbers and steel can never drift
+// through a second calculation in the view. Mirrors native LoadoutSummaryView.
+export function loadoutSummary(requestedLb, solution, { compact = false, plateStyle = "steel" } = {}) {
   const difference = requestedLb == null ? null : solution.totalLb - requestedLb;
   const sign = difference > .005 ? "+" : "";
   const summary = dom("div", `card load-summary${compact ? " compact" : ""}`);
-  summary.append(dom("span", "eyebrow", "ACHIEVED · BAR INCLUDED"));
+  const hero = dom("div", "loadout-hero");
+  const achieved = dom("div", "loadout-achieved");
+  achieved.append(dom("span", "eyebrow accent", "Achieved with bar"));
   const weights = dom("div", "dual-weight mono");
   weights.setAttribute("role", "group");
   weights.setAttribute("aria-label", `Achieved total, bar included, ${C.both(solution.totalLb)}`);
@@ -272,16 +282,39 @@ export function loadoutSummary(requestedLb, solution, { compact = false } = {}) 
     measure.append(dom("span", primary ? "weight-value load-numeral" : "weight-value", C.trim(value)), dom("span", "weight-unit", unit));
     weights.append(measure);
   }
-  summary.append(weights);
-  const grid = dom("div", "load-summary-grid");
-  if (requestedLb != null) grid.append(summaryRow("Requested", C.both(requestedLb)));
-  grid.append(summaryRow("Bar", C.both(C.barLb(solution.bar))),
-    summaryRow("Plates / side", C.perSideLabel(solution.perSide)));
-  if (solution.collarLb > 0) grid.append(summaryRow("Collars", C.both(solution.collarLb)));
-  if (difference != null) grid.append(summaryRow("Difference",
-    `${sign}${C.trim(difference, 2)} lb / ${sign}${C.trim(C.kgFromLb(difference), 2)} kg`,
-    Math.abs(difference) > .01));
-  summary.append(grid);
+  achieved.append(weights);
+  hero.append(achieved);
+  if (difference != null) {
+    const delta = dom("div", `loadout-delta mono${Math.abs(difference) > .01 ? " warn" : ""}`);
+    delta.append(dom("strong", "", `${sign}${C.trim(difference, 2)} lb`), dom("span", "sub", `from ${C.trim(requestedLb)} lb`));
+    hero.append(delta);
+  }
+  summary.append(hero);
+  const line = dom("div", "loadout-line");
+  line.append(dom("span", "sub", C.barLabel(solution.bar)),
+    dom("strong", "mono", solution.perSide.length ? `${C.perSideLabel(solution.perSide)} / side`
+      : solution.collarLb > 0 ? "Bar + collars" : "Bar only"));
+  summary.append(line);
+  const cells = dom("div", "loadout-cells");
+  cells.setAttribute("role", "list");
+  for (const count of solution.perSide) {
+    const cell = dom("div", "loadout-cell");
+    cell.setAttribute("role", "listitem");
+    const text = dom("div", "loadout-cell-text");
+    text.append(dom("strong", "mono", `${count.count * 2} × ${C.plateLabel(count.plate)}`),
+      dom("span", "sub", plateFamilyLabel(plateFamily(count.plate, plateStyle))));
+    cell.append(plateBadgeSVG(count.plate, plateStyle), text);
+    cells.append(cell);
+  }
+  if (solution.collarLb > 0) {
+    const cell = dom("div", "loadout-cell");
+    cell.setAttribute("role", "listitem");
+    const text = dom("div", "loadout-cell-text");
+    text.append(dom("strong", "mono", "2 collars"), dom("span", "sub", "Outermost"));
+    cell.append(text);
+    cells.append(cell);
+  }
+  if (cells.childElementCount) summary.append(cells);
   return summary;
 }
 
