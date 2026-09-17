@@ -231,6 +231,32 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertFalse(element("current-exercise-Back Squat").exists)
     }
 
+    /// #185: completing a set must not move the dominant block. The set track
+    /// and the current-set hero keep their frames; only their content
+    /// advances to the next set.
+    func test13SetCompletionKeepsDominantBlockStill() {
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        let track = app.otherElements["Working sets"].firstMatch
+        let hero = element("current-set-hero")
+        XCTAssertTrue(track.waitForExistence(timeout: 3))
+        XCTAssertTrue(hero.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["WORKING SET 2 OF 3"].exists)
+        let trackBefore = track.frame
+        let heroBefore = hero.frame
+        capture("after-13-session-before-set-iphone")
+
+        let status = app.buttons["Set status"].firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 3))
+        status.tap()
+        XCTAssertTrue(app.staticTexts["WORKING SET 3 OF 3"].waitForExistence(timeout: 3))
+        capture("after-13-session-after-set-iphone")
+        XCTAssertEqual(track.frame.origin.y, trackBefore.origin.y, accuracy: 0.5, "set track moved on completion")
+        XCTAssertEqual(track.frame.height, trackBefore.height, accuracy: 0.5, "set track resized on completion")
+        XCTAssertEqual(hero.frame.origin.y, heroBefore.origin.y, accuracy: 0.5, "current-set hero moved on completion")
+        XCTAssertEqual(hero.frame.height, heroBefore.height, accuracy: 0.5, "current-set hero resized on completion")
+    }
+
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
     }
