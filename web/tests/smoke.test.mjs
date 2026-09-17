@@ -294,18 +294,19 @@ for (const track of [
   );
   const fullRendered = barbell.barbellSVG(solveAt(135), "full");
   const fullBar = fullRendered.svg;
-  ok(fullBar.classList.contains("full") && fullBar.querySelectorAll("rect").length > 6,
+  ok(fullBar.classList.contains("full") && fullBar.querySelectorAll("image").length > 0,
     "plate calculator can render the solved load across the complete mirrored bar");
-  const fullPlateRects = [...fullBar.querySelectorAll("rect")].filter((rect) => rect.getAttribute("stroke"));
+  const fullPlateRects = [...fullBar.querySelectorAll(".barbell-plate-body")];
   ok(fullPlateRects.length > 0 && fullPlateRects.length % 2 === 0,
     "every solved plate is drawn once on each side");
   const noCollarRack = { ...legacyRack, collarWeightLb: 0 };
   const mixedSolution = solveAt(195, noCollarRack);
   const mixedBar = barbell.barbellSVG(mixedSolution, "full").svg;
-  const leftStack = [...mixedBar.querySelectorAll('.barbell-plate[data-side="left"]')];
-  const rightStack = [...mixedBar.querySelectorAll('.barbell-plate[data-side="right"]')];
-  const plateValues = (stack) => stack.map((plate) => Number(plate.dataset.plateValue));
-  const plateXs = (stack) => stack.map((plate) => Number(plate.getAttribute("x")));
+  const leftStack = [...mixedBar.querySelectorAll('.barbell-plate-body[data-side="left"]')];
+  const rightStack = [...mixedBar.querySelectorAll('.barbell-plate-body[data-side="right"]')];
+  const orderedStack = stack => [...stack].sort((a,b) => Number(a.dataset.stackIndex)-Number(b.dataset.stackIndex));
+  const plateValues = (stack) => orderedStack(stack).map((plate) => Number(plate.dataset.plateValue));
+  const plateXs = (stack) => orderedStack(stack).map((plate) => Number(plate.dataset.centerX));
   ok(JSON.stringify(plateValues(leftStack)) === JSON.stringify([45, 25, 5])
     && JSON.stringify(plateValues(rightStack)) === JSON.stringify([45, 25, 5]),
   "mixed plate stacks are ordered from each collar outward, not copied left to right across the screen");
@@ -313,21 +314,21 @@ for (const track of [
     && plateXs(rightStack).every((x, index, xs) => index === 0 || x > xs[index - 1]),
   "left and right sleeve coordinates mirror while preserving the same collar-first load order");
   const bumperBar = barbell.barbellSVG(mixedSolution, "full", "bumper").svg;
-  const bumperRight = [...bumperBar.querySelectorAll('.barbell-plate[data-side="right"]')];
+  const bumperRight = [...bumperBar.querySelectorAll('.barbell-plate-body[data-side="right"]')];
   ok(Number(bumperRight[0].getAttribute("height")) === Number(bumperRight[1].getAttribute("height"))
     && Number(rightStack[0].getAttribute("height")) > Number(rightStack[1].getAttribute("height")),
   "bumper plates keep competition diameter while calibrated steel steps down by denomination");
-  ok(bumperBar.querySelectorAll("ellipse.barbell-plate-face").length === bumperRight.length * 2
-    && bumperBar.querySelectorAll("ellipse.barbell-plate-hub").length === bumperRight.length * 2
+  ok(bumperBar.querySelectorAll("image.barbell-plate-face").length === bumperRight.length * 2
+    && bumperBar.querySelectorAll("image.barbell-plate-hub").length === bumperRight.length * 2
     && bumperBar.querySelectorAll("text.barbell-plate-label").length >= bumperRight.length * 2,
   "plate bodies have disc faces, steel hubs, rims, and denomination marks rather than flat blocks");
   const mixedLabelYs = [...mixedBar.querySelectorAll("text.barbell-plate-label")]
     .slice(0, 6).map((label) => Number(label.getAttribute("y")));
   ok(new Set(mixedLabelYs).size > 1,
     "adjacent denominations use staggered label rails instead of printing on top of one another");
-  ok(fullBar.querySelector("linearGradient#cadence-bar-steel") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
+  ok(fullBar.querySelector("linearGradient") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
     "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
-  ok(fullBar.getAttribute("viewBox") === `0 0 ${fullRendered.minimumLegibleWidth} 124`
+  ok(fullBar.getAttribute("viewBox") === `0 0 ${fullRendered.scene.width} ${fullRendered.scene.height}`
     && fullRendered.minimumLegibleWidth <= 390,
   "a normal complete bar derives a legible width that fits the primary phone viewport");
   ok([...fullBar.querySelectorAll(".barbell-plate-body")].every((plate) =>
@@ -349,9 +350,9 @@ for (const track of [
     && !collarsOnly.getAttribute("aria-label").includes("bar only"),
   "a collar-only load is labeled as bar plus collars visually and accessibly");
   const compactCollarsOnly = barbell.barbellSVG(collarSolution).svg;
-  ok(compactCollarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 1
+  ok(compactCollarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 2
     && compactCollarsOnly.textContent.includes("bar + collars"),
-  "the compact one-sleeve load also shows its collar instead of claiming bar only");
+  "the compact full-bar scene shows both collars instead of claiming bar only");
   await db.Gyms.save(legacyRack);
   await db.syncLibrary();
   ok((await db.Gyms.default()).plateToggles.length === C.ALL_STANDARD.length,

@@ -118,8 +118,8 @@ ok(/\.flagbtn\.labeled \.microlabel/.test(css),
 
 // ---- Plate calculator / loadout graphics ----
 const barbell = read("app/js/barbell.js");
-ok(/role: "img"/.test(barbell) && /aria-label[^\n]*barbell/i.test(barbell),
-  "the barbell graphic is an image with a spoken load");
+ok(/role: ['"]group['"]/.test(barbell) && /aria-label[^\n]*loaded bar/i.test(barbell),
+  "the barbell graphic groups individually inspectable plates under its spoken load");
 const plateBadgeSource = barbell.slice(barbell.indexOf("export function plateBadgeSVG"), barbell.indexOf("return svg;"));
 ok(/"aria-hidden": "true"/.test(plateBadgeSource) && !/"aria-label"/.test(plateBadgeSource),
   "decorative plate badges leave the adjacent denomination as the single spoken label");
@@ -142,7 +142,7 @@ ok(/Achieved total, bar included/.test(barbell)
   && /loadoutSummary\(targetLb, solution\)/.test(plates),
   "the shared calculator/session total is announced and displayed pounds first, then kilograms");
 ok(/prefers-reduced-motion: reduce/.test(css), "motion can be reduced at the operating-system level");
-ok(/tabindex: "0"[\s\S]*data-plate-denomination/.test(barbell),
+ok(/tabindex:\s*0[\s\S]*data-plate-denomination/.test(barbell),
   "every rendered plate denomination is keyboard inspectable");
 
 // ---- Session lifecycle: destructive discard is confirmed ----

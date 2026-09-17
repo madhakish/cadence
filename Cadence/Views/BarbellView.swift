@@ -74,269 +74,115 @@ struct PlateFaceBadge: View {
     }
 }
 
-/// The actual loaded bar: collar-first mirrored stacks, competition colours,
-/// reflective steel, and distinct bumper/calibrated-steel geometry. Mirrors
-/// web/app/js/barbell.js. The renderer accepts only a solver-owned solution:
-/// it never sorts, sums, substitutes inventory, or solves a target itself.
+/// Renders the solver's exact stack with the approved photographic plate faces.
 struct BarbellView: View {
-    enum Presentation: Equatable {
-        case compactSide
-        case fullBar
-    }
-
+    enum Presentation: Equatable { case compactSide, fullBar }
     let solution: PlateSolution
-    /// Olympic lifts use full-diameter rubber bumpers; strength work and the
-    /// calculator default to thinner, stepped calibrated steel.
     var plateStyle: PlateVisualStyle = .steel
-    /// Compact set rows need one side only. The calculator has room to show
-    /// the complete, mirrored bar so the loading answer cannot be mistaken for
-    /// a count across both sides.
     var presentation: Presentation = .compactSide
+    var exploded = false
 
-    // Geometry shared with the web SVG.
-    private static let height: CGFloat = 46
-    private static let fullHeight: CGFloat = 124
-    private static let sleeve: CGFloat = 18
-
-    private static func drawnPlateWidth(
-        _ plate: Plate,
-        style: PlateVisualStyle,
-        scale: CGFloat = 1
-    ) -> CGFloat {
-        let factor = CGFloat(plate.thicknessFactor(for: style))
-        let base = style == .bumper ? 4.5 + 8.5 * factor : 3.2 + 5 * factor
-        return max(style == .bumper ? 4.2 : 3.1, base) * scale
-    }
-
-    private func drawnPlateWidth(_ plate: Plate, scale: CGFloat = 1) -> CGFloat {
-        Self.drawnPlateWidth(plate, style: plateStyle, scale: scale)
-    }
-
-    /// Natural width at which every plate keeps its metadata thickness and the
-    /// bar retains a useful central shaft. Smaller containers receive a scaled
-    /// stack preview plus an expand affordance from `BarbellStageView`.
-    static func minimumLegibleWidth(
-        for loadout: Loadout,
-        style: PlateVisualStyle
-    ) -> CGFloat {
-        let plates = loadout.perSide.flatMap { Array(repeating: $0.plate, count: $0.count) }
-        let gap: CGFloat = style == .bumper ? 1.05 : 0.75
-        let stackWidth = plates.map { drawnPlateWidth($0, style: style) }.reduce(0, +)
-            + CGFloat(max(0, plates.count - 1)) * gap
-        return max(320, 204 + 2 * stackWidth)
+    static func minimumLegibleWidth(for loadout: Loadout, style: PlateVisualStyle) -> CGFloat {
+        CGFloat(max(320, BarbellScene(loadout: loadout, style: style, exploded: false).width * 0.55))
     }
 
     var body: some View {
-        let bar = solution.loadout.bar
-        let plates = solution.loadout.perSide.flatMap { Array(repeating: $0.plate, count: $0.count) }
-        let compactGap: CGFloat = plateStyle == .bumper ? 1 : 0.7
-        let compactWidths = plates.map { drawnPlateWidth($0, scale: 0.72) }
-        let compactStackWidth = compactWidths.reduce(0, +) + CGFloat(max(0, plates.count - 1)) * compactGap
-        let emptyWidth: CGFloat = solution.loadout.collarLb > 0 ? 96 : 74
-        let width = max(plates.isEmpty ? emptyWidth : 50, Self.sleeve + 11 + compactStackWidth)
-        let accessibilityLoad = plates.isEmpty
-            ? (solution.loadout.collarLb > 0
-               ? "\(bar.label) with collars, no plates"
-               : "\(bar.label), bar only")
-            : "\(solution.loadout.perSideLabel) per side on \(bar.label)\(solution.loadout.collarLb > 0 ? ", including collars" : "")"
-
-        Canvas { ctx, size in
-                let h = presentation == .fullBar ? size.height : Self.height
-                func drawPlate(_ plate: Plate, rect: CGRect, side: String, labelYOffset: CGFloat = 0) {
-                    let token = plate.colorToken(for: plateStyle)
-                    let fill = PlatePalette.fill[token] ?? Color(hex: 0x888888)
-                    let stroke = PlatePalette.stroke[token] ?? .black.opacity(0.3)
-                    let radius: CGFloat = plateStyle == .bumper ? 2.4 : 1.2
-                    let shadow = Path(roundedRect: rect.offsetBy(dx: 1, dy: 2), cornerRadius: radius)
-                    ctx.fill(shadow, with: .color(.black.opacity(0.16)))
-                    let body = Path(roundedRect: rect, cornerRadius: radius)
-                    ctx.fill(body, with: .linearGradient(
-                        Gradient(colors: [stroke, fill, fill, stroke]),
-                        startPoint: CGPoint(x: rect.minX, y: rect.midY),
-                        endPoint: CGPoint(x: rect.maxX, y: rect.midY)
-                    ))
-                    ctx.stroke(body, with: .color(stroke), lineWidth: 0.65)
-
-                    let inset = min(2.2, rect.width * 0.32)
-                    let faceX = side == "left" ? rect.minX + inset : rect.maxX - inset
-                    let faceRX = min(2.5, max(1.05, rect.width * 0.32))
-                    let faceRY = max(2, rect.height / 2 - 1.4)
-                    let faceRect = CGRect(x: faceX - faceRX, y: rect.midY - faceRY,
-                                          width: faceRX * 2, height: faceRY * 2)
-                    let face = Path(ellipseIn: faceRect)
-                    ctx.fill(face, with: .color(fill)); ctx.stroke(face, with: .color(stroke), lineWidth: 0.65)
-                    let ringRY = plateStyle == .bumper ? max(2, faceRY - 1.4) : max(2, rect.height * 0.31)
-                    let ring = Path(ellipseIn: CGRect(x: faceX - max(0.75, faceRX * 0.74),
-                                                      y: rect.midY - ringRY,
-                                                      width: max(1.5, faceRX * 1.48), height: ringRY * 2))
-                    let ringColor: Color = token == "white" || token == "yellow" ? .black.opacity(0.35) : .white.opacity(0.34)
-                    ctx.stroke(ring, with: .color(ringColor), lineWidth: 0.5)
-                    let hubRX = max(0.75, faceRX * 0.62)
-                    let hubRY = max(2.2, min(4.8, rect.height * 0.1))
-                    let hub = Path(ellipseIn: CGRect(x: faceX - hubRX, y: rect.midY - hubRY,
-                                                     width: hubRX * 2, height: hubRY * 2))
-                    let steel = Gradient(colors: [Color(hex: 0x5D626A), Color(hex: 0xD5D8DC), Color(hex: 0x747A83)])
-                    ctx.fill(hub, with: .linearGradient(steel,
-                                                        startPoint: CGPoint(x: faceX, y: rect.midY - hubRY),
-                                                        endPoint: CGPoint(x: faceX, y: rect.midY + hubRY)))
-                    ctx.stroke(hub, with: .color(Color(hex: 0x555B63)), lineWidth: 0.45)
-
-                    // A denomination belongs on the plate itself. Rotate the
-                    // exact metadata label so even a thin calibrated change
-                    // plate can carry "1.25 kg" without view-side rounding.
-                    // The web renderer uses the same metadata and orientation.
-                    let boundedLabelOffset = min(max(labelYOffset, -rect.height * 0.22), rect.height * 0.22)
-                    var labelContext = ctx
-                    labelContext.translateBy(x: rect.midX, y: rect.midY + boundedLabelOffset)
-                    labelContext.rotate(by: .degrees(-90))
-                    labelContext.draw(
-                        Text(plate.label)
-                            .font(.system(
-                                size: presentation == .fullBar ? 9 : 5.6,
-                                weight: .black,
-                                design: .rounded
-                            ))
-                            .foregroundStyle(PlatePalette.labelColor(for: token)),
-                        at: .zero,
-                        anchor: .center
-                    )
+        let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded)
+        Canvas { context, size in
+            let scale = min(size.width / scene.width, size.height / scene.height)
+            context.translateBy(x: size.width / 2, y: size.height / 2)
+            context.scaleBy(x: scale, y: scale)
+            let metal = Gradient(colors: [Color(hex: 0x535B64), Color(hex: 0xC2C9CC),
+                Color(hex: 0xF2F3F0), Color(hex: 0x8B959E), Color(hex: 0x343B43)])
+            func point(_ position: Double) -> CGPoint {
+                CGPoint(x: position * scene.axisX, y: position * scene.axisY)
+            }
+            func shaft(_ from: Double, _ to: Double, _ width: CGFloat) {
+                let a = point(from), b = point(to)
+                var path = Path()
+                path.move(to: a); path.addLine(to: b)
+                context.stroke(path, with: .linearGradient(metal,
+                    startPoint: CGPoint(x: a.x, y: a.y - width / 2),
+                    endPoint: CGPoint(x: a.x, y: a.y + width / 2)),
+                    style: StrokeStyle(lineWidth: width, lineCap: .round))
+            }
+            shaft(-scene.end, scene.end, 7)
+            shaft(-scene.end, -scene.shoulder, 12)
+            shaft(scene.shoulder, scene.end, 12)
+            for side in [-1.0, 1.0] {
+                let p = point(side * scene.shoulder)
+                let rect = CGRect(x: p.x - 4, y: p.y - 18, width: 8, height: 36)
+                context.fill(Path(ellipseIn: rect), with: .linearGradient(metal,
+                    startPoint: CGPoint(x: rect.midX, y: rect.minY),
+                    endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
+            }
+            for x in stride(from: -scene.shoulder + 24, to: scene.shoulder - 24, by: 4) where abs(x) >= 42 {
+                let p = point(x)
+                var line = Path()
+                line.move(to: CGPoint(x: p.x - 1, y: p.y - 3))
+                line.addLine(to: CGPoint(x: p.x + 2, y: p.y + 3))
+                context.stroke(line, with: .color(Color(hex: 0x4C535B)), lineWidth: 0.6)
+            }
+            let image = context.resolve(Image(plateStyle == .bumper ? "PlateBumper" : "PlateSteel"))
+            for disc in scene.discs {
+                let token = disc.plate.colorToken(for: plateStyle)
+                let edge = PlatePalette.stroke[token] ?? .gray
+                let x = disc.x + disc.depth / 2
+                let face = CGRect(x: x - disc.faceRadius, y: disc.y - disc.radius,
+                    width: disc.faceRadius * 2, height: disc.radius * 2)
+                let rear = face.offsetBy(dx: -disc.depth, dy: 0)
+                context.fill(Path(ellipseIn: rear), with: .color(edge))
+                context.fill(Path(CGRect(x: disc.x - disc.depth / 2, y: face.minY,
+                    width: disc.depth, height: face.height)), with: .color(edge))
+                let gains = PlateFaceTint(token: token)
+                var matrix = ColorMatrix()
+                matrix.r1 = Float(gains.red)
+                matrix.g2 = Float(gains.green)
+                matrix.b3 = Float(gains.blue)
+                context.drawLayer { tinted in
+                    tinted.addFilter(.colorMatrix(matrix))
+                    tinted.draw(image, in: face)
                 }
-                if presentation == .fullBar {
-                    let width = max(240, size.width)
-                    let midY = h / 2
-                    let nominalGap: CGFloat = plateStyle == .bumper ? 1.05 : 0.75
-                    let nominalWidths = plates.map { drawnPlateWidth($0) }
-                    let nominal = nominalWidths.reduce(0, +)
-                        + CGFloat(max(0, plates.count - 1)) * nominalGap
-                    // Keep 168pt of central shaft. At or above the computed
-                    // legibility width, the stack is shown at true metadata
-                    // thickness; constrained previews scale only the stack.
-                    let shoulder = min(width / 2 - 84, max(76, nominal + 18))
-                    let rightShoulder = width - shoulder
-                    let shaft = Path(roundedRect: CGRect(x: 8, y: midY - 2, width: width - 16, height: 4), cornerRadius: 2)
-                    let leftSleeve = Path(roundedRect: CGRect(x: 8, y: midY - 3, width: shoulder - 8, height: 6), cornerRadius: 3)
-                    let rightSleeve = Path(roundedRect: CGRect(x: rightShoulder, y: midY - 3,
-                                                              width: shoulder - 8, height: 6), cornerRadius: 3)
-                    let steel = Gradient(colors: [Color(hex: 0x5D626A), Color(hex: 0xD5D8DC), Color(hex: 0x747A83)])
-                    ctx.fill(Path(roundedRect: CGRect(x: 9, y: midY + 3, width: width - 18, height: 5), cornerRadius: 2.5),
-                             with: .color(.black.opacity(0.12)))
-                    ctx.fill(shaft, with: .linearGradient(steel,
-                                                         startPoint: CGPoint(x: 0, y: midY - 2),
-                                                         endPoint: CGPoint(x: 0, y: midY + 2)))
-                    ctx.fill(leftSleeve, with: .linearGradient(steel,
-                                                               startPoint: CGPoint(x: 0, y: midY - 3),
-                                                               endPoint: CGPoint(x: 0, y: midY + 3)))
-                    ctx.fill(rightSleeve, with: .linearGradient(steel,
-                                                                startPoint: CGPoint(x: 0, y: midY - 3),
-                                                                endPoint: CGPoint(x: 0, y: midY + 3)))
-                    let leftCollar = Path(roundedRect: CGRect(x: shoulder - 3, y: midY - 11, width: 6, height: 22), cornerRadius: 2)
-                    let rightCollar = Path(roundedRect: CGRect(x: rightShoulder - 3, y: midY - 11, width: 6, height: 22), cornerRadius: 2)
-                    ctx.fill(leftCollar, with: .linearGradient(steel,
-                                                               startPoint: CGPoint(x: 0, y: midY - 11),
-                                                               endPoint: CGPoint(x: 0, y: midY + 11)))
-                    ctx.fill(rightCollar, with: .linearGradient(steel,
-                                                                startPoint: CGPoint(x: 0, y: midY - 11),
-                                                                endPoint: CGPoint(x: 0, y: midY + 11)))
-
-                    for x in stride(from: shoulder + 14, through: rightShoulder - 14, by: 7) {
-                        var knurl = Path()
-                        knurl.move(to: CGPoint(x: x, y: midY - 1.7))
-                        knurl.addLine(to: CGPoint(x: x + 1.8, y: midY + 1.7))
-                        ctx.stroke(knurl, with: .color(.black.opacity(0.25)), lineWidth: 0.45)
-                    }
-                    ctx.fill(Path(ellipseIn: CGRect(x: 5, y: midY - 3, width: 6, height: 6)),
-                             with: .color(Color(hex: 0x6C727A)))
-                    ctx.fill(Path(ellipseIn: CGRect(x: width - 11, y: midY - 3, width: 6, height: 6)),
-                             with: .color(Color(hex: 0x6C727A)))
-
-                    let available = max(30, shoulder - 18)
-                    let scale = nominal > available ? available / nominal : 1
-                    let widths = plates.map { drawnPlateWidth($0, scale: scale) }
-                    let gap = max(0.45, nominalGap * scale)
-                    var leftCursor = shoulder - 6
-                    var rightCursor = rightShoulder + 6
-                    let labelOffsets: [CGFloat] = [-18, 18, 0]
-                    for (index, plate) in plates.enumerated() {
-                        let plateWidth = widths[index]
-                        let plateHeight = (h - 12) * CGFloat(plate.diameterFactor(for: plateStyle))
-                        let leftRect = CGRect(x: leftCursor - plateWidth, y: (h - plateHeight) / 2,
-                                              width: plateWidth, height: plateHeight)
-                        let rightRect = CGRect(x: rightCursor, y: (h - plateHeight) / 2,
-                                               width: plateWidth, height: plateHeight)
-                        let labelOffset: CGFloat = plates.count == 1 ? 0 : labelOffsets[index % 3]
-                        drawPlate(plate, rect: leftRect, side: "left", labelYOffset: labelOffset)
-                        drawPlate(plate, rect: rightRect, side: "right", labelYOffset: labelOffset)
-                        leftCursor = leftRect.minX - gap
-                        rightCursor = rightRect.maxX + gap
-                    }
-                    if solution.loadout.collarLb > 0 {
-                        for x in [leftCursor - 3.5, rightCursor] {
-                            let collar = Path(roundedRect: CGRect(x: x, y: midY - 8, width: 3.5, height: 16), cornerRadius: 1)
-                            ctx.fill(collar, with: .linearGradient(steel,
-                                                                  startPoint: CGPoint(x: x, y: midY - 8),
-                                                                  endPoint: CGPoint(x: x, y: midY + 8)))
-                            ctx.stroke(collar, with: .color(Color(hex: 0x555B63)), lineWidth: 0.5)
-                        }
-                    }
-                    if plates.isEmpty {
-                        let label = solution.loadout.collarLb > 0 ? "bar + collars" : "bar only"
-                        ctx.draw(Text(label).font(.system(size: 10)).foregroundStyle(.secondary),
-                                 at: CGPoint(x: width / 2, y: midY - 9), anchor: .center)
-                    }
-                } else {
-                    // bar shaft + sleeve face
-                    ctx.fill(Path(roundedRect: CGRect(x: 0, y: h / 2 - 1.5, width: Self.sleeve + 4, height: 3), cornerRadius: 1.5),
-                             with: .color(Color(hex: 0x9AA0AA)))
-                    ctx.fill(Path(roundedRect: CGRect(x: Self.sleeve, y: h / 2 - 6, width: 3, height: 12), cornerRadius: 1),
-                             with: .color(Color(hex: 0x7C828C)))
-
-                    var x = Self.sleeve + 5
-                    let labelOffsets: [CGFloat] = [-7, 7, 0]
-                    for (index, plate) in plates.enumerated() {
-                        let plateWidth = compactWidths[index]
-                        let ph = (h - 4) * CGFloat(plate.diameterFactor(for: plateStyle))
-                        let rect = CGRect(x: x, y: (h - ph) / 2, width: plateWidth, height: ph)
-                        let labelOffset: CGFloat = plates.count == 1 ? 0 : labelOffsets[index % 3]
-                        drawPlate(plate, rect: rect, side: "right", labelYOffset: labelOffset)
-                        x += plateWidth + compactGap
-                    }
-                    if solution.loadout.collarLb > 0 {
-                        let collar = Path(roundedRect: CGRect(x: x, y: h / 2 - 8, width: 3.5, height: 16), cornerRadius: 1)
-                        let steel = Gradient(colors: [Color(hex: 0x5D626A), Color(hex: 0xD5D8DC), Color(hex: 0x747A83)])
-                        ctx.fill(collar, with: .linearGradient(steel,
-                                                              startPoint: CGPoint(x: x, y: h / 2 - 8),
-                                                              endPoint: CGPoint(x: x, y: h / 2 + 8)))
-                        ctx.stroke(collar, with: .color(Color(hex: 0x555B63)), lineWidth: 0.5)
-                    }
-                    if plates.isEmpty {
-                        let label = solution.loadout.collarLb > 0 ? "bar + collars" : "bar only"
-                        ctx.draw(Text(label).font(.system(size: 10)).foregroundStyle(.secondary),
-                                 at: CGPoint(x: solution.loadout.collarLb > 0 ? x + 5 : Self.sleeve + 7,
-                                             y: h / 2), anchor: .leading)
-                    }
+                context.drawLayer { hub in
+                    hub.clip(to: Path(ellipseIn: face.insetBy(dx: face.width * 0.3825,
+                                                             dy: face.height * 0.3825)))
+                    hub.draw(image, in: face)
                 }
-        }
-        .frame(width: presentation == .compactSide ? width : nil,
-               height: presentation == .compactSide ? Self.height : Self.fullHeight)
-        .frame(maxWidth: presentation == .fullBar ? .infinity : nil)
-        .accessibilityChildren {
-            ForEach(Array(plates.enumerated()), id: \.offset) { index, plate in
-                if presentation == .fullBar {
-                    Text("Left plate \(index + 1) of \(plates.count), \(plate.label)")
+                let label = Text(Weight.trim(disc.plate.value, decimals: 2))
+                    .font(.system(size: exploded ? 14 : 10, weight: .heavy))
+                    .foregroundColor(PlatePalette.labelColor(for: token))
+                context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
+            }
+            if solution.loadout.collarLb > 0 {
+                for side in [-1.0, 1.0] {
+                    let p = point(side * scene.collar)
+                    let rect = CGRect(x: p.x - 4, y: p.y - 13, width: 8, height: 26)
+                    context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .linearGradient(metal,
+                        startPoint: CGPoint(x: rect.midX, y: rect.minY),
+                        endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
                 }
-                Text("Right plate \(index + 1) of \(plates.count), \(plate.label)")
             }
         }
-        .accessibilityLabel("Barbell: \(accessibilityLoad)")
+        .frame(height: presentation == .compactSide ? 84 : nil)
+        .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
+        .accessibilityChildren {
+            ForEach([-1, 1], id: \.self) { side in
+                ForEach(scene.discs.filter { $0.side == side }.sorted { $0.index < $1.index }, id: \.index) { disc in
+                    Text("\(side < 0 ? "Left" : "Right") plate \(disc.index + 1) from inside, \(disc.plate.label)")
+                        .accessibilityIdentifier("barbell-plate-\(side < 0 ? "left" : "right")-\(disc.index)")
+                }
+            }
+            if solution.loadout.perSide.isEmpty {
+                Text(solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+            } else if solution.loadout.collarLb > 0 {
+                Text("Collars, \(Weight.both(lb: solution.loadout.collarLb)) total")
+            }
+        }
     }
 }
 
-/// Responsive host for the complete bar. It keeps a normal two-plate stack
-/// readable on a 390pt iPhone without horizontal scrolling, and offers the
-/// focused view only when the solution's physical stack needs more width.
+/// Always offers inspection, even when a typical stack fits the phone.
 struct BarbellStageView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     let solution: PlateSolution
     let unit: WeightUnit
     var plateStyle: PlateVisualStyle = .steel
@@ -344,69 +190,88 @@ struct BarbellStageView: View {
     var onExpand: (() -> Void)?
 
     var body: some View {
-        GeometryReader { proxy in
-            let floor = BarbellView.minimumLegibleWidth(
-                for: solution.loadout,
-                style: plateStyle
-            )
-            let constrained = proxy.size.width + 0.5 < floor
-
-            VStack(alignment: .leading, spacing: 6) {
-                BarbellView(
-                    solution: solution,
-                    plateStyle: plateStyle,
-                    presentation: .fullBar
-                )
-                .frame(width: proxy.size.width, height: 124)
-                .id(solution.loadout)
-                .animation(
-                    reduceMotion ? nil : .easeOut(duration: Theme.shortMotion),
-                    value: solution.loadout
-                )
-
-                HStack(spacing: 8) {
-                    Text(caption)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    if constrained, let onExpand {
-                        Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") {
-                            onExpand()
-                        }
-                        .font(.caption.bold())
-                        .labelStyle(.titleAndIcon)
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("expand-loaded-bar")
-                    }
+        VStack(alignment: .leading, spacing: 6) {
+            if let onExpand {
+                BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
+                    .frame(height: 170)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onExpand)
+                Button(action: onExpand) {
+                        Label("Inspect plates", systemImage: "arrow.up.left.and.arrow.down.right")
+                            .font(.callout.bold())
+                            .frame(minHeight: 44)
                 }
-
-                if abs(solution.deviationLb) > 0.01 {
-                    Text(targetDifferenceLabel)
-                        .font(.caption.bold())
-                        .foregroundStyle(Theme.warn)
-                } else if !solution.satisfiesPolicy {
-                    Text("Closest available · policy not exact")
-                        .font(.caption.bold())
-                        .foregroundStyle(Theme.warn)
-                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Inspect loaded bar and explode plates")
+                .accessibilityIdentifier("expand-loaded-bar")
+            } else {
+                BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
+                    .frame(height: 170)
+            }
+            Text(solution.loadout.perSide.isEmpty
+                 ? (solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+                 : "Per side: \(solution.loadout.perSideLabel)")
+                .font(.body.monospacedDigit())
+            Text(caption).font(.caption).foregroundStyle(.secondary)
+            if abs(solution.deviationLb) > 0.01 {
+                Text("Difference: \(solution.deviationLb > 0 ? "+" : "")\(Weight.trim(solution.deviationLb, decimals: 2)) lb")
+                    .font(.caption.bold()).foregroundStyle(Theme.warn)
+            } else if !solution.satisfiesPolicy {
+                Text("Closest available · policy not exact").font(.caption.bold()).foregroundStyle(Theme.warn)
             }
         }
-        // Reserve the warning rail so changing one plate never shifts the
-        // controls below the bar during a between-set interaction.
-        .frame(height: 194)
-        .accessibilityLabel("Loaded bar diagram")
-    }
-
-    private var targetDifferenceLabel: String {
-        let target = unit == .kg ? Weight.kg(fromLb: solution.targetLb) : solution.targetLb
-        let achieved = unit == .kg ? Weight.kg(fromLb: solution.loadout.totalLb) : solution.loadout.totalLb
-        return "Target \(Weight.trim(target)) \(unit.rawValue) · load \(Weight.trim(achieved)) \(unit.rawValue)"
     }
 }
 
-/// The one totals hierarchy used anywhere Cadence explains a solved or
-/// manually entered bar. Achieved weight is deliberately lb first, then kg,
-/// regardless of entry unit or the mix of denominations on the sleeves.
+/// Shared by calculator, workout, and contextual exercise sheets.
+struct BarbellInspectionView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let solution: PlateSolution
+    var plateStyle: PlateVisualStyle = .steel
+    @State private var exploded = true
+
+    var body: some View {
+        let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded)
+        VStack(alignment: .leading, spacing: 12) {
+            Button(exploded ? "Assemble bar" : "Explode plates") {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { exploded.toggle() }
+            }
+            .buttonStyle(.bordered)
+            .frame(minHeight: 44)
+            .accessibilityValue(exploded ? "Exploded" : "Assembled")
+            .accessibilityIdentifier("barbell-explode-toggle")
+            Text("Swipe across · inside → outside").font(.caption).foregroundStyle(.secondary)
+            GeometryReader { proxy in
+                ScrollView(.horizontal, showsIndicators: true) {
+                    BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded)
+                        .frame(width: exploded ? max(proxy.size.width, scene.width) : proxy.size.width,
+                               height: exploded ? scene.height : 230)
+                }
+            }
+            .frame(height: exploded ? scene.height + 20 : 250)
+            .accessibilityIdentifier("barbell-inspection-artwork")
+            Text("Plates per side").font(.headline)
+            ForEach(Array(solution.loadout.perSide.enumerated()), id: \.offset) { _, count in
+                HStack(spacing: 12) {
+                    PlateFaceBadge(plate: count.plate, style: plateStyle)
+                    Text(count.plate.label).font(.body.monospacedDigit())
+                    Spacer()
+                    Text("× \(count.count)").font(.body.bold().monospacedDigit())
+                }
+                .accessibilityElement(children: .combine)
+            }
+            if solution.loadout.perSide.isEmpty {
+                Text(solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+            }
+            if !solution.satisfiesPolicy {
+                Label("Closest available · policy not exact", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(Theme.warn)
+            }
+        }
+        .padding(.horizontal)
+    }
+}
+
 struct LoadoutSummaryView: View {
     let requestedLb: Double?
     let loadout: Loadout

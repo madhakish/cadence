@@ -71,21 +71,51 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(achieved.isHittable)
         capture("after-07-plate-calculator-iphone")
 
-        // A typical stack fits the phone with no redundant expand control.
-        XCTAssertFalse(element("expand-loaded-bar").exists)
-        for _ in 0..<3 where !target.isHittable { app.swipeDown() }
-        XCTAssertTrue(target.isHittable)
-        target.tap()
-        target.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 3) + "1500")
-        XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
-        keyboardDone.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
-        let expand = element("expand-loaded-bar")
-        for _ in 0..<3 where !expand.isHittable { app.swipeUp() }
-        XCTAssertTrue(expand.isHittable)
-        expand.tap()
+        let inspect = element("expand-loaded-bar")
+        for _ in 0..<3 where !inspect.isHittable { app.swipeUp() }
+        XCTAssertTrue(inspect.isHittable)
+        inspect.tap()
         XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
-        capture("after-08-expanded-bar-iphone")
+        let toggle = app.buttons["barbell-explode-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.value as? String, "Exploded")
+        // The calculator beneath this sheet has its own accessible bar.
+        let artwork = app.scrollViews["barbell-inspection-artwork"]
+        let firstLeft = artwork.staticTexts["barbell-plate-left-0"]
+        XCTAssertTrue(firstLeft.waitForExistence(timeout: 3))
+        XCTAssertTrue(firstLeft.label.contains("Left plate 1 from inside"))
+        XCTAssertTrue(artwork.staticTexts["barbell-plate-right-0"].exists)
+        capture("barbell-exploded-iphone")
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "Assembled")
+        capture("barbell-assembled-iphone")
+
+        app.navigationBars["Loaded bar"].buttons["Done"].tap()
+        let equipment = app.buttons["Equipment & loading"]
+        for _ in 0..<10 where !equipment.isHittable { app.swipeUp() }
+        XCTAssertTrue(equipment.isHittable)
+        equipment.tap()
+        app.segmentedControls.buttons["Bumper"].tap()
+        for _ in 0..<10 where !inspect.isHittable { app.swipeDown() }
+        XCTAssertTrue(inspect.isHittable)
+        inspect.tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        capture("barbell-bumper-exploded-iphone")
+    }
+
+    func test09WorkoutPreviewInspection() {
+        let preview = app.buttons["preview-program-day"]
+        for _ in 0..<10 where !preview.isHittable { app.swipeUp() }
+        XCTAssertTrue(preview.isHittable)
+        preview.tap()
+        XCTAssertTrue(element("workout-preview-screen").waitForExistence(timeout: 5))
+        capture("barbell-workout-preview-iphone")
+        let inspect = app.buttons["expand-loaded-bar"].firstMatch
+        for _ in 0..<5 where !inspect.isHittable { app.swipeUp() }
+        XCTAssertTrue(inspect.isHittable)
+        inspect.tap()
+        XCTAssertTrue(app.buttons["barbell-explode-toggle"].waitForExistence(timeout: 3))
+        capture("barbell-workout-preview-inspection-iphone")
     }
 
     func test05SettingsAndHistory() {

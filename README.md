@@ -162,3 +162,7 @@ You may read it and build it for your own personal use. You may not
 redistribute it or publish a derivative work.
 
 Cadence is a training logbook, not a medical device and not a coach.
+
+The [plate calculator](docs/how-to/plate-calculator.md) and active barbell sets
+include photographic plate inspection with assembled and 38° exploded views.
+See [renderer implementation and verification](docs/design-pass/BARBELL-INSPECTION.md).

@@ -621,21 +621,7 @@ struct ExerciseDetailView: View {
                     ScrollView {
                         let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
                         VStack(alignment: .leading, spacing: 18) {
-                            ScrollView(.horizontal, showsIndicators: true) {
-                                BarbellView(
-                                    solution: solution,
-                                    plateStyle: style,
-                                    presentation: .fullBar
-                                )
-                                .frame(
-                                    width: max(
-                                        360,
-                                        BarbellView.minimumLegibleWidth(for: solution.loadout, style: style)
-                                    ),
-                                    height: 180
-                                )
-                                .padding(.horizontal)
-                            }
+                            BarbellInspectionView(solution: solution, plateStyle: style)
                             LoadoutSummaryView(
                                 requestedLb: contextualSet?.targetWeightLb ?? sessionEntry?.targetWeightLb,
                                 loadout: solution.loadout
