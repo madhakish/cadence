@@ -251,6 +251,9 @@ final class VisualProofUITests: XCTestCase {
     /// through a coordinate once the label's frame sits inside the window.
     private func openDisclosure(_ label: String) {
         let text = app.staticTexts[label]
+        // List rows are lazy: a label far below the fold does not exist in
+        // the hierarchy until the list scrolls near it.
+        for _ in 0..<8 where !text.exists { app.swipeUp() }
         XCTAssertTrue(text.waitForExistence(timeout: 3), "\(label) is on this screen")
         let window = app.windows.firstMatch.frame.insetBy(dx: 0, dy: 120)
         for _ in 0..<6 where !window.contains(text.frame) { app.swipeUp() }
