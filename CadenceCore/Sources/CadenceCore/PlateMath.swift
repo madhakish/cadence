@@ -217,12 +217,12 @@ public enum PlateMath {
     /// Unsolved manual or legacy values fall back to the gym's loading policy.
     public static func solveLoad(
         weightLb: Double, bar: Bar, plates: [Plate],
-        maxPerPlateSide: Int = 10, collarLb: Double = 0, policy: LoadingPolicy = .closest
+        collarLb: Double = 0, policy: LoadingPolicy = .closest, maxPerPlateSide: Int = 10
     ) -> PlateSolution {
         let exact = solve(targetLb: weightLb, bar: bar, plates: plates,
-                          collarLb: collarLb, maxPerPlateSide: maxPerPlateSide, policy: .exact)
+                          collarLb: collarLb, policy: .exact, maxPerPlateSide: maxPerPlateSide)
         return exact.satisfiesPolicy ? exact : solve(targetLb: weightLb, bar: bar, plates: plates,
-                          collarLb: collarLb, maxPerPlateSide: maxPerPlateSide, policy: policy)
+                          collarLb: collarLb, policy: policy, maxPerPlateSide: maxPerPlateSide)
     }
 
     // MARK: - Load quantization (epic #155 Stage 3)
