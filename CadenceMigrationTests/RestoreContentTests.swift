@@ -10,7 +10,10 @@ final class RestoreContentTests: XCTestCase {
         let container = try ModelContainer(for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
         let context = container.mainContext
-        let exercise = Exercise(name: "Synthetic Restore Lift", category: .main, type: .barbell)
+        // Explicit current-format values avoid legacy inference sentinels
+        // producing unrelated exercise-definition changes in the preview.
+        let exercise = Exercise(name: "Synthetic Restore Lift", category: .main, type: .barbell,
+            movementPattern: .squat, loadBasis: .totalBar, implementCount: 1)
         context.insert(exercise)
         let session = WorkoutSession(date: Date(timeIntervalSince1970: 1_700_000_000))
         context.insert(session)
@@ -36,7 +39,7 @@ final class RestoreContentTests: XCTestCase {
         XCTAssertFalse(try ImportService.matchesCurrentData(repaired, context: context))
         XCTAssertEqual(set.weightLb, 100, "Preflight must not mutate stored data")
 
-        try ImportService.load(repaired, into: context)
+        _ = try ImportService.load(repaired, into: context)
         let restored = try context.fetch(FetchDescriptor<WorkoutSession>())
         XCTAssertEqual(restored.count, 1)
         XCTAssertEqual(restored[0].id, id)
@@ -51,7 +54,7 @@ final class RestoreContentTests: XCTestCase {
 
         let intervalOnly = Data(#"{"schemaVersion":14,"intervals":[{"id":"a0000000-0000-4000-8000-000000000002","kind":"rest","startDate":"2025-01-02","endDate":"2025-01-03","enteredAsDays":true,"note":"Synthetic break"}]}"#.utf8)
         XCTAssertFalse(try ImportService.matchesCurrentData(intervalOnly, context: context))
-        try ImportService.load(intervalOnly, into: context)
+        _ = try ImportService.load(intervalOnly, into: context)
         XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutSession>()).count, 1)
         let after = try XCTUnwrap(JSONSerialization.jsonObject(with: ExportService.jsonData(context: context)) as? [String: Any])
         XCTAssertEqual((after["intervals"] as? [[String: Any]])?.count, 1)
