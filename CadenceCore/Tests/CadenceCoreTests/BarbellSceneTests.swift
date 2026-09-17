@@ -11,6 +11,10 @@ final class BarbellSceneTests: XCTestCase {
         XCTAssertEqual(exploded.discs.filter { $0.side == 1 }.map { $0.plate.value }, [45, 10, 25, 2.5])
         XCTAssertEqual(exploded.discs.map(\.radius), assembled.discs.map(\.radius))
         XCTAssertGreaterThan(exploded.width, assembled.width)
+        for (left, right) in zip(exploded.discs, exploded.discs.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(right.x - right.faceRadius - right.depth / 2
+                - (left.x + left.faceRadius + left.depth / 2), 22 - 1e-8)
+        }
         for disc in exploded.discs {
             let mirror = exploded.discs.first { $0.side == -disc.side && $0.index == disc.index }!
             XCTAssertEqual(mirror.x, -disc.x)

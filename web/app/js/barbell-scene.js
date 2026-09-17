@@ -23,17 +23,20 @@ export function barbellScene(solution, style = 'steel', exploded = false, geomet
   const plates = solution.perSide.flatMap(c => Array.from({ length: Math.max(0, c.count) }, () => c.plate));
   const discs = [];
   let cursor = shoulder + 8;
+  let previousFaceRadius = 0;
   plates.forEach((plate, index) => {
     const shape = geometry[`${plate.value}-${plate.unit}`] || plateGeometry(plate, style);
     const radius = Math.max(1, shape.diameter) * .18, depth = Math.max(1, shape.thickness) * .36;
-    const separation = exploded ? radius * faceScale * 2 + 22 : 2;
-    if (exploded) cursor += separation;
+    const faceRadius = radius * faceScale;
+    // Both adjacent faces must fit, especially large plates beside change plates.
+    if (exploded) cursor += (previousFaceRadius + faceRadius + 22) / axisX;
     for (const side of [-1, 1]) {
       const center = side * (cursor + depth / 2);
       discs.push({ plate, side, index, x: center * axisX, y: center * axisY,
-        radius, faceRadius: radius * faceScale, depth: depth * axisX });
+        radius, faceRadius, depth: depth * axisX });
     }
-    cursor += depth + (exploded ? 0 : separation);
+    cursor += depth + (exploded ? 0 : 2);
+    previousFaceRadius = faceRadius;
   });
   const collar = cursor + 8, end = Math.max(shoulder + 150, collar + 28);
   const width = Math.max(end * axisX + 25, ...discs.map(d => Math.abs(d.x) + d.faceRadius + d.depth)) * 2 + 24;

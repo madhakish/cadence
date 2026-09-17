@@ -258,8 +258,10 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     defs.append(clip);
     group.append(el('image', { class:'barbell-plate-hub', href:art, x:x-d.faceRadius, y:d.y-d.radius,
       width:d.faceRadius*2, height:d.radius*2, preserveAspectRatio:'none', 'clip-path':`url(#${clipID})` }));
+    const labelSize = exploded ? 12 : 10;
     const label = el('text', { class:'barbell-plate-label', x, y:d.y-d.radius*.48,
-      'text-anchor':'middle', textLength:Math.max(14,d.faceRadius*1.6), lengthAdjust:'spacingAndGlyphs', 'font-size':exploded ? 12 : 10, 'font-weight':800,
+      'text-anchor':'middle', textLength:Math.min(C.plateLabel(d.plate).length * labelSize * .6, Math.max(14,d.faceRadius*1.6)),
+      lengthAdjust:'spacingAndGlyphs', 'font-size':labelSize, 'font-weight':800,
       fill:['white','yellow','green'].includes(token) ? '#17191c' : '#fff',
       'data-plate-denomination':C.plateLabel(d.plate) });
     label.textContent = C.plateLabel(d.plate);
@@ -281,9 +283,8 @@ function realisticBarbellSVG(solution, style, exploded = false) {
 }
 
 // One responsive shell for every complete-bar presentation. Inline stages fit
-// their container, keep denomination text at a legible physical size, and show
-// Expand only when the solution-derived natural width does not fit. The focused
-// expanded screen alone may scroll at natural scale.
+// their container and always offer inspection. The focused expanded screen
+// alone may scroll at natural scale; its exact stack list stays readable.
 export function barbellStage(rendered, {
   caption = "", emphasis = "standard", onExpand = null, containerWidth = null,
 } = {}) {

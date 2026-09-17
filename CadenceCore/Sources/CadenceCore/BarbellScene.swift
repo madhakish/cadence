@@ -71,20 +71,24 @@ public struct BarbellScene: Sendable {
         shoulder = loadout.bar == .bar15kg || loadout.bar == .bar35lb ? 145 : 165
         let plates = loadout.perSide.flatMap { Array(repeating: $0.plate, count: max(0, $0.count)) }
         var cursor = shoulder + 8.0
+        var previousFaceRadius = 0.0
         var pending: [Disc] = []
         for (index, plate) in plates.enumerated() {
             let shape = geometry[plate.id] ?? PlateGeometry.reference(plate, style: style)
             let radius = max(1, shape.diameter) * 0.18
             let depth = max(1, shape.thickness) * 0.36
-            let separation = exploded ? radius * faceScale * 2 + 22 : 2
-            if exploded { cursor += separation }
+            let faceRadius = radius * faceScale
+            // Reserve both adjacent projected faces, including a large disc
+            // followed by a small change plate. Neither can hide the other.
+            if exploded { cursor += (previousFaceRadius + faceRadius + 22) / axisX }
             for side in [-1, 1] {
                 let center = Double(side) * (cursor + depth / 2)
                 pending.append(Disc(plate: plate, side: side, index: index,
                     x: center * axisX, y: center * axisY, radius: radius,
-                    faceRadius: radius * faceScale, depth: depth * axisX))
+                    faceRadius: faceRadius, depth: depth * axisX))
             }
-            cursor += depth + (exploded ? 0 : separation)
+            cursor += depth + (exploded ? 0 : 2)
+            previousFaceRadius = faceRadius
         }
         collar = cursor + 8
         end = max(shoulder + 150, collar + 28)

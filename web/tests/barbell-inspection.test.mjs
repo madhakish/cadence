@@ -6,6 +6,11 @@ const dom = new JSDOM('<html><body></body></html>', { url:'http://localhost/' })
 global.document = dom.window.document;
 const C = await import('../app/js/core.js');
 const B = await import('../app/js/barbell.js');
+const fixtures = JSON.parse(readFileSync(new URL('./fixtures/barbell-scene.json', import.meta.url), 'utf8'));
+for (const fixture of fixtures) {
+  assert.deepEqual(barbellScene(fixture.loadout, fixture.style, fixture.exploded), fixture.scene,
+    'production web geometry matches the fixture consumed by Swift');
+}
 const counts = [45, 10, 25, 2.5].map(value => ({ plate:{ value,unit:'lb' }, count:1 }));
 const solution = C.enteredPlateSolution(C.BARS.bar45lb, counts, 5);
 const before = JSON.stringify(solution);
@@ -14,6 +19,11 @@ const open = barbellScene(solution, 'bumper', true);
 assert.deepEqual(open.discs.filter(d=>d.side===1).map(d=>d.plate.value), [45,10,25,2.5]);
 assert.deepEqual(open.discs.map(d=>d.radius), closed.discs.map(d=>d.radius));
 assert.ok(open.width > closed.width);
+for (let i = 1; i < open.discs.length; i++) {
+  const left = open.discs[i-1], right = open.discs[i];
+  assert.ok(right.x - right.faceRadius - right.depth/2 - (left.x + left.faceRadius + left.depth/2) >= 22 - 1e-8,
+    'exploded change plates remain visible beside larger plates on either side');
+}
 for (const d of open.discs) {
   const mirror = open.discs.find(m => m.side === -d.side && m.index === d.index);
   assert.equal(mirror.x, -d.x);
