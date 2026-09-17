@@ -45,5 +45,16 @@ final class RestoreContentTests: XCTestCase {
 
         json["schemaVersion"] = BackupContract.currentSchemaVersion + 1
         XCTAssertThrowsError(try ImportService.matchesCurrentData(JSONSerialization.data(withJSONObject: json), context: context))
+        let metadataOnly = Data(#"{"schemaVersion":14,"appVersion":"test"}"#.utf8)
+        XCTAssertThrowsError(try ImportService.matchesCurrentData(metadataOnly, context: context))
+        XCTAssertThrowsError(try ImportService.load(metadataOnly, into: context))
+
+        let intervalOnly = Data(#"{"schemaVersion":14,"intervals":[{"id":"a0000000-0000-4000-8000-000000000002","kind":"rest","startDate":"2025-01-02","endDate":"2025-01-03","enteredAsDays":true,"note":"Synthetic break"}]}"#.utf8)
+        XCTAssertFalse(try ImportService.matchesCurrentData(intervalOnly, context: context))
+        try ImportService.load(intervalOnly, into: context)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutSession>()).count, 1)
+        let after = try XCTUnwrap(JSONSerialization.jsonObject(with: ExportService.jsonData(context: context)) as? [String: Any])
+        XCTAssertEqual((after["intervals"] as? [[String: Any]])?.count, 1)
+        XCTAssertTrue(try ImportService.matchesCurrentData(Data(#"{"schemaVersion":14,"coachingDecisions":[]}"#.utf8), context: context))
     }
 }

@@ -1380,7 +1380,7 @@ export function validateBackup(bundle) {
     }
   }
 
-  if (![sessions, bodyweight, checkIns, milestones, programs, tracks, gyms, exercises, coachingDecisions].some((v) => v !== null) && !("settings" in bundle)) {
+  if (![sessions, bodyweight, checkIns, milestones, programs, tracks, gyms, exercises, coachingDecisions, intervals].some((v) => v !== null) && !("settings" in bundle)) {
     throw new Error("Not a Cadence backup");
   }
 }

@@ -86,5 +86,15 @@ assert.equal(C.backupDataMatches({ schemaVersion: 14 }, sample), false);
 assert.equal(C.backupDataMatches({ settings: { value: false } }, { settings: { value: 0 } }), false);
 assert.equal(C.backupDataMatches({ futureSection: [] }, sample), false, "Unknown content cannot be proven equal");
 await assert.rejects(db.backupMatchesCurrent({ ...stored, schemaVersion: 999 }), /newer|version|schema/i);
+await chooseFile({ schemaVersion: 14, exportedAt: "2025-01-01T00:00:00Z" });
+assert.equal(button("Restore"), undefined, "Metadata-only files never reach confirmation");
+assert.match(document.getElementById("toast").textContent, /Not a Cadence backup/);
+const intervalOnly = { schemaVersion: 14, intervals: [{ id: "a0000000-0000-4000-8000-000000000002",
+  kind: "rest", startDate: "2025-01-02", endDate: "2025-01-03", enteredAsDays: true, note: "Synthetic break" }] };
+assert.equal(await db.backupMatchesCurrent(intervalOnly), false);
+await db.importBundle(intervalOnly, { createCheckpoint: false });
+assert.equal((await db.Intervals.all()).length, 1, "Intervals-only backups restore");
+assert.equal((await db.Sessions.all()).length, 1, "Partial restore preserves omitted sessions");
+assert.equal(await db.backupMatchesCurrent({ schemaVersion: 14, coachingDecisions: [] }), true);
 dom.window.close();
 console.log("Restore content regression: full file-picker flow, exact content gate, and rollback passed.");

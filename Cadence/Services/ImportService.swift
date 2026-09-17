@@ -275,6 +275,11 @@ enum ImportService {
     /// silently coerce to a default. This runs before the first fetch/delete,
     /// so a bad file cannot partially restore or mutate the context.
     private static func validate(_ bundle: Bundle, schemaVersion: Int) throws {
+        let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
+                           bundle.gyms != nil, bundle.exercises != nil, bundle.bodyweight != nil,
+                           bundle.checkIns != nil, bundle.milestones != nil, bundle.settings != nil,
+                           bundle.coachingDecisions != nil, bundle.intervals != nil].contains(true)
+        guard hasAnything else { throw ImportError.notABackup }
         let units: Set<String> = ["lb", "kg"]
         let roles: Set<String> = ["main", "complementary", "accessory"]
         let liftRoles: Set<String> = ["main", "complementary"]
@@ -706,11 +711,6 @@ enum ImportService {
             throw ImportError.unsupportedSchemaVersion(schemaVersion)
         }
 
-        let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
-                           bundle.gyms != nil, bundle.exercises != nil, bundle.bodyweight != nil,
-                           bundle.checkIns != nil, bundle.milestones != nil,
-                           bundle.settings != nil, bundle.coachingDecisions != nil].contains(true)
-        guard hasAnything else { throw ImportError.notABackup }
         try validate(bundle, schemaVersion: schemaVersion)
 
         var repairedSlotIDs = 0
