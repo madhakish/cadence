@@ -117,7 +117,11 @@ final class VisualProofUITests: XCTestCase {
             app.tabBars.buttons[tab].tap()
             assertScrolledEndClearsPlateButton(tab.lowercased(), button: plate)
         }
-        app.buttons["resume-session"].tap()
+        // Today was just scrolled to its end; bring the resume card back.
+        let resume = app.buttons["resume-session"]
+        for _ in 0..<6 where !resume.isHittable { app.swipeDown() }
+        XCTAssertTrue(resume.isHittable)
+        resume.tap()
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
         assertScrolledEndClearsPlateButton("session", button: plate)
     }
