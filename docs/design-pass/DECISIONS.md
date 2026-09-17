@@ -52,3 +52,5 @@
 - Plate guide — add the IWF small denominations using shared plate colour metadata. Explain that IPF fixes colours only for 15/20/25 kg; the guide never adds inventory.
 - Compatibility — retain the public SessionPrescription(mainWork:blocks:) initializer; only engine-produced blocks assert a resolved methodology.
 - Scope correction — #199's duration implementation is now included; its native/UI validation is still pending. Approved physical plate geometry, Lock Screen set completion and the headphone cue remain unfinished; the earlier “out of this pass” note is historical scope, not completion evidence.
+
+- Workout commands — one service changes a set's status and decides what follows (focus, the next rest's lift, whether to arm it), used by the logger's control, the hold timer, and the Lock Screen. A Lock Screen face names its set structurally and the app re-derives, at the moment the tap runs, whether that set is still the one to act on; a stale face is refused, never redirected. Ending the Live Activity remains distinct from banking the workout.

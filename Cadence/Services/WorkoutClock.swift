@@ -121,9 +121,11 @@ final class WorkoutClock {
     /// context; a different session restarts both. On a cold start
     /// (app relaunched mid-workout), the clock adopts the recovered origin —
     /// including a pause in effect — instead of resetting to zero.
-    func begin(for session: WorkoutSession, currentLift: String, defaultRestSeconds: Int) {
+    func begin(for session: WorkoutSession, currentLift: String, defaultRestSeconds: Int,
+               currentSet: CurrentSetProjection? = nil) {
         if sessionID == session.id, startDate != nil {
-            WorkoutActivityController.updateContextDetached(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
+            WorkoutActivityController.updateContextDetached(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds,
+                                                            currentSet: currentSet)
             return
         }
         var start = Date()
@@ -137,7 +139,8 @@ final class WorkoutClock {
         sessionID = session.id
         persist()
         WorkoutActivityController.beginSessionDetached(sessionID: session.id, startDate: start,
-                                                        currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
+                                                        currentLift: currentLift, defaultRestSeconds: defaultRestSeconds,
+                                                        currentSet: currentSet)
         // A shifted origin or live pause re-applies after the (queued) begin.
         if paused != nil {
             WorkoutActivityController.updateStopwatchDetached(origin: start, pausedAt: paused)
@@ -155,13 +158,15 @@ final class WorkoutClock {
     /// elapsed time nobody trained and could not be undone without discarding
     /// the session.
     @discardableResult
-    func resumeIfTracking(for session: WorkoutSession, currentLift: String, defaultRestSeconds: Int) -> Bool {
+    func resumeIfTracking(for session: WorkoutSession, currentLift: String, defaultRestSeconds: Int,
+                          currentSet: CurrentSetProjection? = nil) -> Bool {
         if sessionID == session.id, startDate != nil {
-            WorkoutActivityController.updateContextDetached(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
+            WorkoutActivityController.updateContextDetached(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds,
+                                                            currentSet: currentSet)
             return true
         }
         if sessionID == nil, Self.recoveredState(for: session.id) != nil {
-            begin(for: session, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
+            begin(for: session, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds, currentSet: currentSet)
             return true
         }
         return false
@@ -197,9 +202,10 @@ final class WorkoutClock {
 
     /// The lift being worked (or its smart rest) changed — keep the activity's
     /// elapsed face and quick-rest default honest.
-    func updateContext(currentLift: String, defaultRestSeconds: Int) {
+    func updateContext(currentLift: String, defaultRestSeconds: Int, currentSet: CurrentSetProjection? = nil) {
         guard startDate != nil else { return }
-        WorkoutActivityController.updateContextDetached(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds)
+        WorkoutActivityController.updateContextDetached(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds,
+                                                        currentSet: currentSet)
     }
 
     /// The workout is over (banked, or ended deliberately from the clock

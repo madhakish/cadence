@@ -43,12 +43,14 @@ enum WorkoutActivityController {
     /// screen, or the clock re-adopting after an app relaunch); otherwise tear
     /// down whatever is up and start fresh. A rest running on the torn-down
     /// activity (quick rest armed before the session opened) carries over.
-    static func beginSession(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int) async {
+    static func beginSession(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int,
+                             currentSet: CurrentSetProjection?) async {
         guard isSupported else { return }
         if let a = current, a.content.state.sessionID == sessionID, !a.attributes.isAdHoc {
             var s = a.content.state
             s.currentLift = currentLift
             s.defaultRestSeconds = defaultRestSeconds
+            s.currentSet = currentSet
             await a.update(content(for: s))
             return
         }
@@ -56,7 +58,7 @@ enum WorkoutActivityController {
         await endAllActivities()
         let state = WorkoutActivityAttributes.ContentState(
             sessionID: sessionID, currentLift: currentLift,
-            defaultRestSeconds: defaultRestSeconds, rest: carriedRest
+            defaultRestSeconds: defaultRestSeconds, rest: carriedRest, currentSet: currentSet
         )
         _ = try? Activity.request(
             attributes: WorkoutActivityAttributes(startDate: startDate, isAdHoc: false),
@@ -65,13 +67,15 @@ enum WorkoutActivityController {
         )
     }
 
-    /// The lift being worked changed (or its smart rest did) — keep the
-    /// elapsed face and the quick-rest default honest.
-    static func updateContext(currentLift: String, defaultRestSeconds: Int) async {
+    /// The lift being worked changed (or its smart rest did, or the set the
+    /// lifter is on) — keep the elapsed face, the quick-rest default, and the
+    /// Lock Screen's set face honest.
+    static func updateContext(currentLift: String, defaultRestSeconds: Int, currentSet: CurrentSetProjection?) async {
         guard let a = current else { return }
         var s = a.content.state
         s.currentLift = currentLift
         s.defaultRestSeconds = defaultRestSeconds
+        s.currentSet = currentSet
         await a.update(content(for: s))
     }
 
@@ -208,13 +212,14 @@ enum WorkoutActivityController {
         }
     }
 
-    static func beginSessionDetached(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int) {
-        enqueue { await beginSession(sessionID: sessionID, startDate: startDate,
-                                     currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
+    static func beginSessionDetached(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int,
+                                     currentSet: CurrentSetProjection?) {
+        enqueue { await beginSession(sessionID: sessionID, startDate: startDate, currentLift: currentLift,
+                                     defaultRestSeconds: defaultRestSeconds, currentSet: currentSet) }
     }
 
-    static func updateContextDetached(currentLift: String, defaultRestSeconds: Int) {
-        enqueue { await updateContext(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
+    static func updateContextDetached(currentLift: String, defaultRestSeconds: Int, currentSet: CurrentSetProjection?) {
+        enqueue { await updateContext(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds, currentSet: currentSet) }
     }
 
     static func startRestDetached(_ rest: RestClock.State, exerciseName: String) {

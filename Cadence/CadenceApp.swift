@@ -6,6 +6,11 @@ struct CadenceApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var bootstrap = AppBootstrap()
 
+    init() {
+        // Lock Screen commands run in this process; give them the store.
+        WorkoutCommandHandler.install()
+    }
+
     var body: some Scene {
         WindowGroup {
             if let container = bootstrap.container {
@@ -29,7 +34,12 @@ final class AppBootstrap: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var isTemporary = false
 
+    /// The bootstrap the running app owns, so a Lock Screen command reaching
+    /// this process works on the same container the views observe.
+    private(set) static var current: AppBootstrap?
+
     init() {
+        defer { AppBootstrap.current = self }
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--visual-proof") {
             loadVisualProofStore()
@@ -37,6 +47,13 @@ final class AppBootstrap: ObservableObject {
         }
 #endif
         loadPersistentStore()
+    }
+
+    /// The bootstrap a command should use: the app's own when a scene has
+    /// created it, otherwise one opened the same way (a background relaunch
+    /// to service a Lock Screen tap, before any window exists).
+    static func forCommands() -> AppBootstrap {
+        current ?? AppBootstrap()
     }
 
 #if DEBUG

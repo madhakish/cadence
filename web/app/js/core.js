@@ -307,6 +307,14 @@ export function focusAfterResolving(entries, resolvedIndex) {
 
 // Rest alerts name pending work; the final completed entry is not a next set.
 // Mirrors SetLifecycle.nextPendingExerciseIndex.
+// The one auto-rest rule applied after a verdict, wherever it came from.
+// Mirrors CadenceCore SetLifecycle.restAfterCompleting.
+export function restAfterCompleting({ previous, status, isWarmup, restSeconds, autoStart, restRunning }) {
+  if (status !== "completed" || previous === "completed" || !autoStart || restRunning) return null;
+  const seconds = isWarmup ? 60 : restSeconds;
+  return seconds > 0 ? seconds : null;
+}
+
 export function nextPendingExerciseIndex(entries, resolvedIndex) {
   if (!Number.isInteger(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= entries.length) return null;
   if (entries[resolvedIndex].includes("planned")) return resolvedIndex;

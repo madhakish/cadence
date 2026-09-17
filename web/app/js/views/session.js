@@ -740,10 +740,12 @@ export async function openSession(id) {
       "aria-label": `Set status: ${s.status}`,
       title: "Tap to complete or undo; hold for more set options",
       onClick: () => {
-        const newlyCompleted = s.status !== "completed";
-        s.status = newlyCompleted ? "completed" : "planned";
+        const previous = s.status;
+        s.status = previous !== "completed" ? "completed" : "planned";
         focusAfterVerdict(se, s.status);
-        if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole));
+        const seconds = C.restAfterCompleting({ previous, status: s.status, isWarmup: !!s.isWarmup,
+          restSeconds: restFor(exMap.get(se.exerciseName), se.programRole), autoStart: !!settings.autoStartRest, restRunning: rest.running });
+        if (seconds) armRest(seconds);
         save(); renderBody(body);
       },
       onContextMenu: (event) => { event.preventDefault(); chooseStatus(se, s, body); },
@@ -788,7 +790,9 @@ export async function openSession(id) {
               try { await save(); }
               catch (error) { s.durationSeconds = previousDuration; s.status = previousStatus; throw error; }
               focusAfterVerdict(se, s.status);
-              if (settings.autoStartRest && !rest.running) armRest(restFor(ex, se.programRole));
+              const restToArm = C.restAfterCompleting({ previous: previousStatus, status: s.status, isWarmup: !!s.isWarmup,
+                restSeconds: restFor(ex, se.programRole), autoStart: !!settings.autoStartRest, restRunning: rest.running });
+              if (restToArm) armRest(restToArm);
               renderBody(body); paintBar();
             },
           }),
@@ -853,10 +857,12 @@ export async function openSession(id) {
     ui.actionSheet("Set status", ["planned", "completed", "skipped"].map((status) => ({
       label: status[0].toUpperCase() + status.slice(1),
       onClick: () => {
-        const newlyCompleted = status === "completed" && s.status !== "completed";
+        const previous = s.status;
         s.status = status;
         focusAfterVerdict(se, status);
-        if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole));
+        const seconds = C.restAfterCompleting({ previous, status, isWarmup: !!s.isWarmup,
+          restSeconds: restFor(exMap.get(se.exerciseName), se.programRole), autoStart: !!settings.autoStartRest, restRunning: rest.running });
+        if (seconds) armRest(seconds);
         save(); renderBody(body);
       },
     })));

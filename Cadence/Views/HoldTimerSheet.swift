@@ -129,8 +129,12 @@ struct HoldTimerSheet: View {
         guard !running, elapsed > 0 else { return }
         let previous = set.status
         set.durationSeconds = elapsed
-        set.status = .completed
-        guard PersistenceErrorCenter.shared.save(context, operation: "Logging the timed hold") else { return }
+        do {
+            try WorkoutCommandService.setStatus(.completed, of: set, context: context)
+        } catch {
+            PersistenceErrorCenter.shared.report(error, operation: "Logging the timed hold", context: context)
+            return
+        }
         onStatusChange(previous, .completed)
         dismiss()
     }
