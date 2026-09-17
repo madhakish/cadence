@@ -102,6 +102,11 @@ enum Theme {
 
     /// Minimum touch target for between-sets thumbs.
     static let bigTap: CGFloat = 56
+    /// The band above the tab bar that the floating plate-calculator button
+    /// occupies (its 56-point face plus the 16 points it floats above the
+    /// bar). Every tab root reserves exactly this much so content scrolls
+    /// clear of the button instead of ending underneath it.
+    static let plateButtonClearance: CGFloat = bigTap + 16
 }
 
 extension Color {

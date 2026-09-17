@@ -22,23 +22,30 @@ struct RootView: View {
         ZStack(alignment: .bottomTrailing) {
             TabView(selection: $selection) {
                 HomeView(pendingSessionID: $pendingSessionID)
+                    .plateCalculatorClearance()
                     .tabItem { Label("Today", systemImage: "figure.strengthtraining.traditional") }
                     .tag(0)
                 ProgramOverviewView()
+                    .plateCalculatorClearance()
                     .tabItem { Label("Program", systemImage: "list.bullet.clipboard") }
                     .tag(1)
                 HistoryView()
+                    .plateCalculatorClearance()
                     .tabItem { Label("History", systemImage: "calendar") }
                     .tag(2)
                 BodyView(pendingSignals: $pendingSignals)
+                    .plateCalculatorClearance()
                     .tabItem { Label("Body", systemImage: "scalemass") }
                     .tag(3)
                 SettingsView()
+                    .plateCalculatorClearance()
                     .tabItem { Label("Settings", systemImage: "gearshape") }
                     .tag(4)
             }
 
-            // Plate math is one tap from anywhere. Non-negotiable.
+            // Plate math is one tap from anywhere. Non-negotiable. The button
+            // floats in a band every tab root has already reserved (see
+            // plateCalculatorClearance), so it never covers a control.
             Button {
                 showPlateCalc = true
             } label: {
@@ -51,6 +58,7 @@ struct RootView: View {
             .padding(.trailing, 16)
             .padding(.bottom, 64)
             .accessibilityLabel("Plate calculator")
+            .accessibilityIdentifier("plate-calculator-button")
         }
         .sheet(isPresented: $showPlateCalc) {
             NavigationStack { PlateCalculatorView() }
@@ -106,5 +114,19 @@ struct RootView: View {
         guard defaults.double(forKey: Self.gymTagLastAutoDayKey) != day else { return }
         defaults.set(day, forKey: Self.gymTagLastAutoDayKey)
         showGymTag = true
+    }
+}
+
+extension View {
+    /// Reserve the band the floating plate-calculator button occupies, so a
+    /// tab's lists and forms scroll clear of it. Applied once at each tab
+    /// root; every screen pushed inside that tab inherits the inset, which
+    /// is what keeps this a layout rule rather than per-screen padding.
+    func plateCalculatorClearance() -> some View {
+        safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear
+                .frame(height: Theme.plateButtonClearance)
+                .allowsHitTesting(false)
+        }
     }
 }

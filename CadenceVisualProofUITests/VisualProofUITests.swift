@@ -103,6 +103,28 @@ final class VisualProofUITests: XCTestCase {
         capture("barbell-bumper-exploded-iphone")
     }
 
+    /// #196: the floating plate button must never sit on top of a control.
+    /// Every tab is scrolled to its end, then every hittable control's frame
+    /// is checked against the button's. The reserved band (RootView's
+    /// plateCalculatorClearance) is what makes this hold at large text too.
+    func test08PlateButtonNeverCoversContent() {
+        let plate = app.buttons["Plate calculator"]
+        XCTAssertTrue(plate.waitForExistence(timeout: 5))
+        for tab in ["Settings", "History", "Program", "Body", "Today"] {
+            app.tabBars.buttons[tab].tap()
+            for _ in 0..<6 { app.swipeUp() }
+            let queries = [app.buttons, app.cells, app.switches, app.textFields, app.segmentedControls, app.staticTexts]
+            for query in queries {
+                for control in query.allElementsBoundByIndex
+                where control.isHittable && control.label != "Plate calculator" && !control.frame.isEmpty {
+                    XCTAssertFalse(control.frame.intersects(plate.frame),
+                                   "\(tab): '\(control.label)' sits under the plate calculator button")
+                }
+            }
+            if tab == "Settings" { capture("after-11-settings-end-clears-plate-button-iphone") }
+        }
+    }
+
     func test09WorkoutPreviewInspection() {
         let preview = app.buttons["preview-program-day"]
         for _ in 0..<10 where !preview.isHittable { app.swipeUp() }
