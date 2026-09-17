@@ -47,11 +47,11 @@ struct HoldTimerSheet: View {
                     }
                     if running {
                         Button("Stop hold") { stop() }
-                            .buttonStyle(.borderedProminent).tint(Theme.accent)
+                            .primaryActionStyle().tint(Theme.accent).controlSize(.large)
                             .accessibilityIdentifier("hold-timer-stop")
                     } else if clock != nil {
                         Button("Log \(CardioFormat.durationLabel(seconds: elapsed))") { log() }
-                            .buttonStyle(.borderedProminent).tint(Theme.accent)
+                            .primaryActionStyle().tint(Theme.accent).controlSize(.large)
                             .disabled(elapsed == 0)
                             .accessibilityIdentifier("hold-timer-log")
                         Button("Try again") { start() }.buttonStyle(.bordered)
