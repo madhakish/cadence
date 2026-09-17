@@ -25,6 +25,21 @@ enum NotificationService {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-timer"])
     }
 
+    static func scheduleHoldDone(in seconds: TimeInterval, exerciseName: String) {
+        guard seconds > 0 else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Hold complete."
+        content.body = "\(exerciseName) — target time reached."
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: "hold-timer", content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false))
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    static func cancelHoldDone() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["hold-timer"])
+    }
+
     /// Next morning at 08:00 after a running session: a generic knee check-in.
     static func scheduleKneeCheckIn(afterSessionOn sessionDate: Date) {
         let calendar = Calendar.current

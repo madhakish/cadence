@@ -4428,3 +4428,20 @@ export function tfhValidateProgram(program, version = 14) {
       || !Object.entries(p.anchors).every(([id,a]) => slots.some(s => s.id === id && s.exerciseId === a.exerciseId)))
     throw new Error("TFH program composition changed. Review setup before starting.");
 }
+
+// Continuous hold countdown. Mirrors CadenceCore/HoldClock.swift; no rest
+// timer state or stored prescription is changed by timing an attempt.
+export function holdClockStart(seconds, now) {
+  if (!Number.isInteger(seconds) || seconds < 1 || seconds > 1800 || !Number.isFinite(now)) return null;
+  return { startEpoch: now, targetSeconds: seconds, stoppedEpoch: null };
+}
+export function holdClockElapsed(state, now) {
+  const end = state.stoppedEpoch ?? now;
+  return Number.isFinite(end) ? Math.min(state.targetSeconds, Math.max(0, end - state.startEpoch)) : 0;
+}
+export function holdClockRemaining(state, now) { return Math.ceil(state.targetSeconds - holdClockElapsed(state, now)); }
+export function holdClockLoggedSeconds(state, now) { return Math.floor(holdClockElapsed(state, now)); }
+export function holdClockStop(state, now) {
+  if (state.stoppedEpoch != null || !Number.isFinite(now)) return state;
+  return { ...state, stoppedEpoch: state.startEpoch + holdClockElapsed(state, now) };
+}

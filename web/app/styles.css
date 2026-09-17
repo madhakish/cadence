@@ -604,3 +604,9 @@ svg.barbell.compact.realistic { width: 100%; height: 84px; }
 .barbell-stack-list li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .barbell-stack-list svg { flex: 0 0 52px; width: 52px; height: 52px; }
 .barbell-plate-body:focus-visible { outline: 2px solid var(--focus); }
+
+/* Timed holds keep work distinct from the sticky rest clock. */
+.hold-timer { text-align: center; }
+.hold-countdown { font-size: clamp(3rem, 16vw, 5rem); font-weight: 750; line-height: 1.2; margin: 20px 0; }
+.hold-timer .btn { min-height: 48px; margin-top: 10px; }
+.hold-timer [hidden] { display: none; }

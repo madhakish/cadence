@@ -232,7 +232,7 @@ export function pushScreen({ title, build, actions = [], onClose }) {
 }
 
 // ---- bottom sheets ----
-export function sheet({ title, build, onClose }) {
+export function sheet({ title, build, onClose, canClose = () => true }) {
   const returnFocus = document.activeElement;
   const headingId = `cadence-dialog-title-${++dialogSequence}`;
   const content = h("div", { class: "sheet", role: "dialog", "aria-modal": "true",
@@ -244,7 +244,7 @@ export function sheet({ title, build, onClose }) {
   let closed = false;
   const restoreFocus = dialogKeyboard(content, close, returnFocus);
   function close() {
-    if (closed) return;
+    if (closed || !canClose()) return;
     closed = true; scrim.remove();
     try { onClose?.(); } finally { restoreFocus(); }
   }
