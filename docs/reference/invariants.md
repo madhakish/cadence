@@ -26,6 +26,11 @@ Adding a rule means adding tests on every platform in its `platforms` list.
 Deleting a rule is a deliberate act: say in the commit why the behaviour is no
 longer required.
 
+A pull request whose commits include a `fix:` without touching this file gets
+one advisory comment from the `Invariant nudge` workflow, updated in place,
+listing the fix commits with draft entries. Register the rule or reply why it
+is not one (a one-off, a typo, a build fix); the comment never blocks a merge.
+
 `platforms` values are `core` (CadenceCore + `web/app/js/core.js` parity),
 `web` (JS runtime/UI), and `native` (SwiftUI). Native UI rules cannot be
 asserted in this workspace and are marked `unverifiable` — they are documented
