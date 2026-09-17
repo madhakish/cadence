@@ -104,11 +104,12 @@ final class VisualProofUITests: XCTestCase {
     }
 
     /// #196: the floating plate button must never sit on top of a control.
-    /// Every tab root and the active session are scrolled to their end, then
-    /// every hittable control's frame is checked against the button's. The
-    /// reserved band (plateCalculatorClearance on each root list) is what
-    /// makes this hold at large text too. Failures accumulate so one run
-    /// reports every surface, not just the first.
+    /// Every tab root is scrolled to its end, then every hittable control's
+    /// frame is checked against the button's. The reserved band
+    /// (plateCalculatorClearance on each root list) is what makes this hold
+    /// at large text too. The active session is a cover with its own bottom
+    /// bar and no floating button, which the test states rather than
+    /// measures. Failures accumulate so one run reports every surface.
     func test08PlateButtonNeverCoversContent() {
         continueAfterFailure = true
         let plate = app.buttons["Plate calculator"]
@@ -123,7 +124,9 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(resume.isHittable)
         resume.tap()
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
-        assertScrolledEndClearsPlateButton("session", button: plate)
+        for _ in 0..<6 { app.swipeUp() }
+        capture("after-11-session-end-clears-plate-button-iphone")
+        XCTAssertFalse(plate.isHittable, "the session cover has no floating plate button; its bottom bar owns that band")
     }
 
     private func assertScrolledEndClearsPlateButton(_ surface: String, button plate: XCUIElement) {
