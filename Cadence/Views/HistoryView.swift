@@ -48,6 +48,7 @@ struct HistoryView: View {
             }
             .accessibilityIdentifier("history-screen")
             .navigationTitle("History")
+            .plateCalculatorClearance()
             .alert("Rotation details", isPresented: Binding(
                 get: { rotationDetail != nil }, set: { if !$0 { rotationDetail = nil } }
             )) {

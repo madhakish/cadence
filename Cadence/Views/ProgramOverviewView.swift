@@ -67,6 +67,7 @@ struct ProgramOverviewView: View {
                 }
             }
             .navigationTitle("Program")
+            .plateCalculatorClearance()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showCreator = true } label: {

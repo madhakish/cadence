@@ -104,26 +104,36 @@ final class VisualProofUITests: XCTestCase {
     }
 
     /// #196: the floating plate button must never sit on top of a control.
-    /// Every tab is scrolled to its end, then every hittable control's frame
-    /// is checked against the button's. The reserved band (RootView's
-    /// plateCalculatorClearance) is what makes this hold at large text too.
+    /// Every tab root and the active session are scrolled to their end, then
+    /// every hittable control's frame is checked against the button's. The
+    /// reserved band (plateCalculatorClearance on each root list) is what
+    /// makes this hold at large text too. Failures accumulate so one run
+    /// reports every surface, not just the first.
     func test08PlateButtonNeverCoversContent() {
+        continueAfterFailure = true
         let plate = app.buttons["Plate calculator"]
         XCTAssertTrue(plate.waitForExistence(timeout: 5))
         for tab in ["Settings", "History", "Program", "Body", "Today"] {
             app.tabBars.buttons[tab].tap()
-            for _ in 0..<6 { app.swipeUp() }
-            // Capture BEFORE asserting so the artifact shows the state that
-            // was judged, pass or fail.
-            capture("after-11-\(tab.lowercased())-end-clears-plate-button-iphone")
-            let button = plate.frame
-            let queries = [app.buttons, app.cells, app.switches, app.textFields, app.segmentedControls, app.staticTexts]
-            for query in queries {
-                for control in query.allElementsBoundByIndex
-                where control.isHittable && control.label != "Plate calculator" && !control.frame.isEmpty {
-                    XCTAssertFalse(control.frame.intersects(button),
-                                   "\(tab): '\(control.label)' \(control.frame) sits under the plate calculator button \(button)")
-                }
+            assertScrolledEndClearsPlateButton(tab.lowercased(), button: plate)
+        }
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        assertScrolledEndClearsPlateButton("session", button: plate)
+    }
+
+    private func assertScrolledEndClearsPlateButton(_ surface: String, button plate: XCUIElement) {
+        for _ in 0..<6 { app.swipeUp() }
+        // Capture BEFORE asserting so the artifact shows the state that was
+        // judged, pass or fail.
+        capture("after-11-\(surface)-end-clears-plate-button-iphone")
+        let button = plate.frame
+        let queries = [app.buttons, app.cells, app.switches, app.textFields, app.segmentedControls, app.staticTexts]
+        for query in queries {
+            for control in query.allElementsBoundByIndex
+            where control.isHittable && control.label != "Plate calculator" && !control.frame.isEmpty {
+                XCTAssertFalse(control.frame.intersects(button),
+                               "\(surface): '\(control.label)' \(control.frame) sits under the plate calculator button \(button)")
             }
         }
     }

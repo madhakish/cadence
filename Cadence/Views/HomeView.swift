@@ -493,6 +493,7 @@ struct HomeView: View {
             .listStyle(.plain)
             .accessibilityIdentifier("home-screen")
             .navigationTitle("Cadence")
+            .plateCalculatorClearance()
             .sheet(isPresented: $showProgramSwitcher) {
                 NavigationStack {
                     ProgramSwitcherView(onError: { switcherError = $0 })

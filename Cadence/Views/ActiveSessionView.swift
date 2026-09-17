@@ -180,6 +180,7 @@ struct ActiveSessionView: View {
         .onChange(of: currentOrFirst?.exercise?.name) { pushActivityContext() }
         .onChange(of: currentRestSeconds) { pushActivityContext() }
         .navigationTitle(workoutName)
+        .plateCalculatorClearance()
         .navigationBarTitleDisplayMode(.inline)
         .alert("Couldn't bank the session", isPresented: $showBankError) {
             Button("OK", role: .cancel) {}
