@@ -113,15 +113,18 @@ final class VisualProofUITests: XCTestCase {
         for tab in ["Settings", "History", "Program", "Body", "Today"] {
             app.tabBars.buttons[tab].tap()
             for _ in 0..<6 { app.swipeUp() }
+            // Capture BEFORE asserting so the artifact shows the state that
+            // was judged, pass or fail.
+            capture("after-11-\(tab.lowercased())-end-clears-plate-button-iphone")
+            let button = plate.frame
             let queries = [app.buttons, app.cells, app.switches, app.textFields, app.segmentedControls, app.staticTexts]
             for query in queries {
                 for control in query.allElementsBoundByIndex
                 where control.isHittable && control.label != "Plate calculator" && !control.frame.isEmpty {
-                    XCTAssertFalse(control.frame.intersects(plate.frame),
-                                   "\(tab): '\(control.label)' sits under the plate calculator button")
+                    XCTAssertFalse(control.frame.intersects(button),
+                                   "\(tab): '\(control.label)' \(control.frame) sits under the plate calculator button \(button)")
                 }
             }
-            if tab == "Settings" { capture("after-11-settings-end-clears-plate-button-iphone") }
         }
     }
 
