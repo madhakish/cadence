@@ -268,7 +268,7 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertTrue(suggestion.explanation.contains("another special exercise"))
         XCTAssertTrue(suggestion.id.hasSuffix("-squat"), "one suggestion per slot")
         XCTAssertFalse(suggestion.id.contains(sessions[latestSquatIndex].id),
-                       "the id carries only portable components — a session id is client-local (web autoincrement vs UUID) and rewritten by backup restore, resurfacing dismissed prompts")
+                       "[INV-RECOMMENDATION-ID-IS-PORTABLE] the id carries only portable components — a session id is client-local (web autoincrement vs UUID) and rewritten by backup restore, resurfacing dismissed prompts")
     }
 
     func testAllQualityDaysSurfaceBlockedVolumeFloors() throws {
@@ -279,7 +279,7 @@ final class CoachingEngineTests: XCTestCase {
         let report = CoachingEngine.evaluate(program: protected, sessions: greenRotations())
         let blocked = try XCTUnwrap(report.recommendations.first {
             $0.ruleID == "capacity.rotation-plan.blocked.v\(CoachingEngine.ruleVersion)"
-        }, "an unmet volume floor with no eligible day must be surfaced, not silently dropped")
+        }, "[INV-BLOCKED-FLOOR-IS-SURFACED] an unmet volume floor with no eligible day must be surfaced, not silently dropped")
         XCTAssertEqual(blocked.change, .hold)
         XCTAssertTrue(blocked.explanation.contains("no eligible day (technique/explosive)"))
     }
@@ -307,7 +307,7 @@ final class CoachingEngineTests: XCTestCase {
         )
         XCTAssertFalse(report.recommendations.contains {
             $0.ruleID == "program.slot.rotate.max-effort-weekly.v\(CoachingEngine.ruleVersion)"
-        }, "an unresolvable max-effort rotation is never proposed")
+        }, "[INV-COACH-PROPOSES-ONLY-APPLIABLE] an unresolvable max-effort rotation is never proposed")
     }
 
     func testBlockedFloorsReportEvenWithSpentBudget() throws {
@@ -322,7 +322,7 @@ final class CoachingEngineTests: XCTestCase {
         })
         XCTAssertEqual(
             blocked.explanation.components(separatedBy: "no compatible exercise available").count - 1, 2,
-            "both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings"
+            "[INV-BLOCKED-FLOOR-IS-SURFACED] both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings"
         )
     }
 
@@ -342,12 +342,12 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertFalse(additions.contains { adjustment in
             if case .addPattern(let pattern, _, _) = adjustment { return pattern == .verticalPull }
             return false
-        }, "a pattern with no policy-compatible exercise is never proposed")
+        }, "[INV-COACH-PROPOSES-ONLY-APPLIABLE] a pattern with no policy-compatible exercise is never proposed")
         let blocked = try XCTUnwrap(report.recommendations.first {
             $0.ruleID == "capacity.rotation-plan.blocked.v\(CoachingEngine.ruleVersion)"
         })
         XCTAssertTrue(blocked.explanation.contains("no compatible exercise available"),
-                      "the impossible pattern is reported as blocked instead of re-proposed forever")
+                      "[INV-BLOCKED-FLOOR-IS-SURFACED] the impossible pattern is reported as blocked instead of re-proposed forever")
     }
 
     func testMaxEffortEntryWithoutACompletedWorkSingleDoesNotProposeRotation() {
@@ -437,21 +437,33 @@ final class CoachingEngineTests: XCTestCase {
                 )
             }
         }
-        let report = CoachingEngine.evaluate(
-            program: program(patching: "press-a") {
-                $0.prescriptionStyle = .linearFives
-                $0.baseWeightLb = 90
-                $0.workingSets = 3
-                $0.workingReps = 5
-            },
-            sessions: sessions
-        )
+        let rebuilt = program(patching: "press-a") {
+            $0.prescriptionStyle = .linearFives
+            $0.baseWeightLb = 90
+            $0.workingSets = 3
+            $0.workingReps = 5
+        }
+        let report = CoachingEngine.evaluate(program: rebuilt, sessions: sessions)
         let suggestion = try XCTUnwrap(report.recommendations.first {
             if case .useLinearTriples(let slotID, _, _) = $0.change { return slotID == "press-a" }
             return false
         })
         XCTAssertEqual(suggestion.ruleID, "program.slot.linear-triples.v1")
         XCTAssertTrue(suggestion.explanation.contains("100 to 90 lb"))
+        XCTAssertTrue(suggestion.id.hasSuffix("-press-a"), "one suggestion per slot")
+        XCTAssertFalse(sessions.contains { suggestion.id.contains($0.id) },
+                       "[INV-RECOMMENDATION-ID-IS-PORTABLE] the id carries only portable components — a session id is client-local (web autoincrement vs UUID) and rewritten by backup restore, resurfacing dismissed prompts")
+        // A backup restore re-mints every session id; the same logbook must
+        // yield the same recommendation id on both clients.
+        var restored = sessions
+        for index in restored.indices { restored[index].id = "restored-\(index)" }
+        let restoredSuggestion = CoachingEngine.evaluate(program: rebuilt, sessions: restored)
+            .recommendations.first {
+                if case .useLinearTriples = $0.change { return true }
+                return false
+            }
+        XCTAssertEqual(restoredSuggestion?.id, suggestion.id,
+                       "[INV-RECOMMENDATION-ID-IS-PORTABLE] identical data yields an identical id after a restore re-mints the session ids")
     }
 
     func testLinearTriplesRequiresHistoricalThreeByFiveEvidence() {
