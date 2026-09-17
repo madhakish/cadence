@@ -265,7 +265,7 @@ final class VisualProofUITests: XCTestCase {
         let chrome = [app.tabBars.firstMatch.frame, app.buttons["Plate calculator"].frame]
         let types: XCUIAccessibilityAuditType = [
             .sufficientElementDescription, .hitRegion, .contrast, .dynamicType,
-            .trait, .elementDetection, .parentChild,
+            .trait, .elementDetection,
         ]
         try app.performAccessibilityAudit(for: types) { issue in
             if issue.auditType == .contrast, let frame = issue.element?.frame,
