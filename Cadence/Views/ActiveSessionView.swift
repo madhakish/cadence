@@ -1504,6 +1504,7 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
 // MARK: - Set row
 
 private struct SetRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var set: SetEntry
     let entry: SessionExercise
     let exercise: Exercise?
@@ -1539,7 +1540,10 @@ private struct SetRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+        layout {
             if isCurrent {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(Theme.accent)
@@ -2427,6 +2431,8 @@ private struct SessionBottomBar: View {
                     } label: {
                         Label("Rest \(mmss(restSeconds))", systemImage: "timer")
                             .font(.body.weight(.semibold).monospacedDigit())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
                             .padding(.horizontal, 4)
                     }
                     .primaryActionStyle()
