@@ -9,6 +9,14 @@ final class AthleteHistoryTests: XCTestCase {
         AthleteHistory.CompletedSetSample(exerciseName: name, timestampMs: ts, weightLb: lb, reps: reps)
     }
 
+    func testCapabilityComesOnlyFromPerformedWork() {
+        XCTAssertTrue(AthleteHistory.index([]).isEmpty,
+                      "[INV-PROGRAM-PRESCRIBES-HISTORY-PROVES] no performed work, no capability — a program's base is never an input to the global fold")
+        let onlyDeadlift = AthleteHistory.index([sample("Deadlift", ts: 1000, lb: 315, reps: 5)])
+        XCTAssertNil(onlyDeadlift["Back Squat"],
+                     "[INV-PROGRAM-PRESCRIBES-HISTORY-PROVES] an exercise with no performed sets has no entry, not an estimate")
+    }
+
     func testLatestLoadFollowsRecencyNotMagnitude() {
         let index = AthleteHistory.index([
             sample("Deadlift", ts: 1_000, lb: 315, reps: 5),

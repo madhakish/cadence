@@ -86,7 +86,7 @@ const viaIndex = await new Promise((resolve, reject) => {
     const database = request.result;
     const transaction = database.transaction("exercises");
     const index = transaction.objectStore("exercises").index("byId");
-    check(index.unique === true, "byId index is unique");
+    check(index.unique === true, "[INV-EXERCISE-ID-FIRST] byId index is unique — an exercise that carries an id resolves by that id, not by name");
     const get = index.get(legacyID);
     get.onsuccess = () => { database.close(); resolve(get.result); };
     get.onerror = () => { database.close(); reject(get.error); };

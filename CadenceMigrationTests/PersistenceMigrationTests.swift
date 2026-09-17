@@ -162,7 +162,8 @@ final class PersistenceMigrationTests: XCTestCase {
             XCTAssertEqual(try context.fetch(FetchDescriptor<LiftTrack>()).first?.exerciseID, expectedID)
             XCTAssertEqual(try context.fetch(FetchDescriptor<Milestone>()).first?.exerciseID, expectedID)
             let entry = try XCTUnwrap(try context.fetch(FetchDescriptor<SessionExercise>()).first)
-            XCTAssertEqual(entry.exerciseID, expectedID)
+            XCTAssertEqual(entry.exerciseID, expectedID,
+                           "[INV-EXERCISE-ID-FIRST] a session entry carries the exercise id and is matched on it; the name was only the derivation input")
             XCTAssertNil(try context.fetch(FetchDescriptor<Program>())
                 .first { $0.name == "V10 Identity Program" }?.templateID,
                 "a legacy program's template origin stays unknown — never guessed")

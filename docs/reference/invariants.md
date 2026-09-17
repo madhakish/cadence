@@ -846,6 +846,26 @@ counts, and pending peak results are exactly where the lifter left them, and
 no weight is re-derived or re-prompted. Switching never deletes a session,
 rewrites a historical program tag, or resets a PR.
 
+
+### INV-PROGRAM-PRESCRIBES-HISTORY-PROVES
+*platforms: core*
+
+Global capability is derived only from completed, performed work. The
+shared history fold takes completed set samples and nothing else: a
+program's base weight, a template's estimate, or a seeded starting load is
+never an input, so a program-local estimate can never become global truth.
+With no performed work there is no capability — the fold is empty, not
+guessed.
+
+### INV-EXERCISE-ID-FIRST
+*platforms: native, web*
+
+A non-nil exercise id resolves by id only. The name is the legacy input from
+which a missing id is derived once (`StableID.exerciseLegacyID`), after
+which slots, tracks, milestones, and session entries carry the id and are
+matched on it; a name lookup is the fallback for records that predate
+identity, never the primary key for records that carry one.
+
 ### INV-NEW-BLOCK-USES-CURRENT-HISTORY
 *platforms: native, web*
 
