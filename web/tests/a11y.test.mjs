@@ -80,6 +80,24 @@ ok(/:root\[data-theme="titanium"\]\s*\{[^}]*color-scheme:\s*light/.test(css),
 ok(!/color:\s*#0b0b0c|color:\s*#16090a|color:\s*#041018/.test(css),
   "no accent-filled control hard-codes its foreground; they read --on-accent");
 ok(/button:focus-visible[^{]*\{/.test(css), "buttons have a visible keyboard-focus style");
+
+// ---- Material and type discipline (visual pass) ----
+// One radius scale shared with native (Theme.cornerRadius = 4), one edge light
+// and one shadow token per theme instead of hard-coded blacks, no decorative
+// gradient on the ground, and one signature treatment for every stated load.
+ok(/--radius:\s*4px/.test(css) && /--radius-tight:\s*2px/.test(css), "the radius scale is 4/2, matching native");
+ok(/--edge:/.test(css) && /--shadow:/.test(css) && /\.card \{[^}]*var\(--edge\)[^}]*var\(--shadow\)/.test(css),
+  "cards take their edge light and shadow from theme tokens");
+ok(!/body \{[^}]*gradient/.test(css), "the ground is a flat surface, not a decorative gradient");
+ok((css.match(/^\.eyebrow \{/gm) || []).length === 1, "the eyebrow is defined once");
+ok(!/rgba\(20,20,22|#303036|#16090a|rgba\(255,204,0|rgba\(255,59,48|rgba\(255,149,0/.test(css),
+  "no control paints a hard-coded dark or iOS-system colour that a light theme would expose");
+ok(/\.load-numeral \{[^}]*tabular-nums/.test(css), "the load numeral is one tabular display treatment");
+const sessionSrc = read("app/js/views/session.js");
+const barbellSrc = read("app/js/barbell.js");
+ok(/load-numeral/.test(sessionSrc) && /load-numeral/.test(barbellSrc),
+  "the session hero and the achieved total share the load numeral");
+ok(/prefers-reduced-motion: reduce\)[^}]*\{[^}]*transition-duration/.test(css), "reduced motion collapses transitions");
 ok(/--focus:\s*var\(--accent\)/.test(css), "one --focus token, defined once, follows the active theme's accent");
 ok(!/focus(?:-visible)?[^{]*\{[^}]*var\(--accent\)/.test(css),
   "every focus ring reads --focus, never the accent directly");

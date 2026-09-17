@@ -349,7 +349,7 @@ export function loadoutSummary(requestedLb, solution, { compact = false } = {}) 
     [C.kgFromLb(solution.totalLb), "kg", false],
   ]) {
     const measure = dom("span", `weight-measure${primary ? " primary" : ""}`);
-    measure.append(dom("span", "weight-value", C.trim(value)), dom("span", "weight-unit", unit));
+    measure.append(dom("span", primary ? "weight-value load-numeral" : "weight-value", C.trim(value)), dom("span", "weight-unit", unit));
     weights.append(measure);
   }
   summary.append(weights);
