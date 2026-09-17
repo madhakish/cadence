@@ -18,6 +18,8 @@ struct HoldTimerSheet: View {
     @State private var clock: HoldClock.State?
     @State private var now = Date().timeIntervalSince1970
     @State private var confirmDiscard = false
+    @State private var backgroundAlerts = false
+    @State private var wasInactive = false
     private let ticks = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
     private var running: Bool { clock != nil && clock?.stoppedEpoch == nil }
@@ -30,7 +32,7 @@ struct HoldTimerSheet: View {
             ScrollView {
                 VStack(spacing: 24) {
                     Text(exerciseName).font(.title2.bold())
-                    Text(running ? "HOLD" : (reachedTarget ? "HOLD COMPLETE" : "STOPPED"))
+                    Text(clock == nil ? "PREPARING TIMER" : (running ? "HOLD" : (reachedTarget ? "HOLD COMPLETE" : "STOPPED")))
                         .font(.headline).foregroundStyle(Theme.accent)
                         .accessibilityIdentifier("hold-timer-status")
                     Text(mmss(running ? remaining : elapsed))
@@ -47,7 +49,7 @@ struct HoldTimerSheet: View {
                         Button("Stop hold") { stop() }
                             .buttonStyle(.borderedProminent).tint(Theme.accent)
                             .accessibilityIdentifier("hold-timer-stop")
-                    } else {
+                    } else if clock != nil {
                         Button("Log \(CardioFormat.durationLabel(seconds: elapsed))") { log() }
                             .buttonStyle(.borderedProminent).tint(Theme.accent)
                             .disabled(elapsed == 0)
@@ -56,6 +58,10 @@ struct HoldTimerSheet: View {
                     }
                     Text("Log records this attempt and completes the set. Closing leaves the set unchanged.")
                         .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    if clock != nil && !backgroundAlerts {
+                        Text("Keep Cadence open for the finish sound. Background alerts are off in notification settings.")
+                            .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    }
                 }
                 .frame(maxWidth: .infinity).padding(24)
             }
@@ -72,26 +78,38 @@ struct HoldTimerSheet: View {
             }
         }
         .interactiveDismissDisabled()
-        .onAppear { if clock == nil { start() } }
+        .task {
+            guard clock == nil else { return }
+            backgroundAlerts = await NotificationService.authorizeHoldAlerts()
+            guard !Task.isCancelled else { return }
+            start()
+        }
         .onDisappear { NotificationService.cancelHoldDone() }
         .onReceive(ticks) { _ in refresh() }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                refresh(playCue: false)
+                wasInactive = false
+            } else { wasInactive = true }
+        }
     }
 
     private func start() {
         now = Date().timeIntervalSince1970
         let target = min(1800, max(1, set.durationSeconds ?? set.plannedDurationSeconds ?? 30))
         clock = HoldClock.start(seconds: target, now: now)
-        NotificationService.scheduleHoldDone(in: TimeInterval(target), exerciseName: exerciseName)
+        if backgroundAlerts {
+            NotificationService.scheduleHoldDone(in: TimeInterval(target), exerciseName: exerciseName)
+        }
     }
 
-    private func refresh() {
+    private func refresh(playCue: Bool = true) {
         now = Date().timeIntervalSince1970
         guard running, remaining == 0 else { return }
         stop()
         // A background notification already supplies its sound. On-screen,
         // give the athlete an audible cue without requiring a clock glance.
-        if scenePhase == .active {
+        if playCue && scenePhase == .active && !wasInactive {
             AudioServicesPlaySystemSound(1005)
             if settingsList.first?.haptics != false {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)

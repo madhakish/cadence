@@ -127,6 +127,7 @@ final class VisualProofUITests: XCTestCase {
         let start = app.buttons["start-hold-timer"].firstMatch
         XCTAssertTrue(start.waitForExistence(timeout: 5))
         start.tap()
+        allowHoldNotificationsIfPrompted()
         let log = app.buttons["hold-timer-log"]
         XCTAssertTrue(log.waitForExistence(timeout: 10))
         XCTAssertEqual(element("hold-timer-status").label, "HOLD COMPLETE")
@@ -147,6 +148,7 @@ final class VisualProofUITests: XCTestCase {
         for _ in 0..<6 where !start.isHittable { app.swipeUp() }
         XCTAssertTrue(start.isHittable)
         start.tap()
+        allowHoldNotificationsIfPrompted()
         let stop = app.buttons["hold-timer-stop"]
         XCTAssertTrue(stop.waitForExistence(timeout: 5))
         capture("plank-countdown-accessibility-iphone")
@@ -156,6 +158,13 @@ final class VisualProofUITests: XCTestCase {
         app.navigationBars["Hold timer"].buttons["Close"].tap()
         app.buttons["Discard attempt"].tap()
         XCTAssertTrue(start.waitForExistence(timeout: 5), "Discard keeps the set planned")
+    }
+
+    private func allowHoldNotificationsIfPrompted() {
+        for owner in [app!, XCUIApplication(bundleIdentifier: "com.apple.springboard")] {
+            let allow = owner.alerts.buttons["Allow"].firstMatch
+            if allow.waitForExistence(timeout: 2) { allow.tap(); return }
+        }
     }
 
     func test05SettingsAndHistory() {

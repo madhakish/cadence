@@ -61,6 +61,7 @@ struct RootView: View {
         .environment(restTimer)
         .environment(workoutClock)
         .task {
+            await NotificationService.cancelOrphanedHoldAlerts()
             openPendingGymTagIfNeeded()
             autoPresentGymTagIfNeeded()
         }
