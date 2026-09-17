@@ -46,15 +46,9 @@ final class VisualProofUITests: XCTestCase {
         let prescription = app.staticTexts["CURRENT PRESCRIPTION"]
         XCTAssertTrue(prescription.waitForExistence(timeout: 3))
         let tierOne = prescription.frame
-        let progression = app.staticTexts["Previous performance & programming"]
-        for _ in 0..<4 where !progression.isHittable { app.swipeUp() }
-        XCTAssertTrue(progression.isHittable)
-        progression.tap()
+        openDisclosure("Previous performance & programming")
         XCTAssertTrue(app.staticTexts["Last done"].waitForExistence(timeout: 3))
-        let muscles = app.staticTexts["Muscles & relationship"]
-        for _ in 0..<4 where !muscles.isHittable { app.swipeUp() }
-        XCTAssertTrue(muscles.isHittable)
-        muscles.tap()
+        openDisclosure("Muscles & relationship")
         capture("after-04b-exercise-pane-tiers-open-iphone")
         for _ in 0..<6 where !prescription.isHittable { app.swipeDown() }
         XCTAssertEqual(prescription.frame.origin.y, tierOne.origin.y, accuracy: 1,
@@ -229,10 +223,7 @@ final class VisualProofUITests: XCTestCase {
         complementary.tap()
         XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
         // The relationship is tier 3 context: one expand, never in the prescription.
-        let muscles = app.staticTexts["Muscles & relationship"]
-        for _ in 0..<4 where !muscles.isHittable { app.swipeUp() }
-        XCTAssertTrue(muscles.isHittable)
-        muscles.tap()
+        openDisclosure("Muscles & relationship")
         let focus = element("training-focus-context")
         XCTAssertTrue(focus.waitForExistence(timeout: 3))
         XCTAssertEqual(focus.label, "Complementary lift · Hypertrophy focus")
@@ -253,6 +244,18 @@ final class VisualProofUITests: XCTestCase {
         }
         XCTAssertTrue(element("current-exercise-Romanian Deadlift").waitForExistence(timeout: 5))
         XCTAssertFalse(element("current-exercise-Back Squat").exists)
+    }
+
+    /// Scrolls a DisclosureGroup's label into the window and taps it. XCUI
+    /// never reports SwiftUI disclosure labels as hittable, so the tap goes
+    /// through a coordinate once the label's frame sits inside the window.
+    private func openDisclosure(_ label: String) {
+        let text = app.staticTexts[label]
+        XCTAssertTrue(text.waitForExistence(timeout: 3), "\(label) is on this screen")
+        let window = app.windows.firstMatch.frame.insetBy(dx: 0, dy: 120)
+        for _ in 0..<6 where !window.contains(text.frame) { app.swipeUp() }
+        XCTAssertTrue(window.contains(text.frame), "\(label) scrolled into view")
+        text.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     private func element(_ identifier: String) -> XCUIElement {
