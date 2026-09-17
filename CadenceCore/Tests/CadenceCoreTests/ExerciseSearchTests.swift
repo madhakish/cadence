@@ -35,4 +35,14 @@ final class ExerciseSearchTests: XCTestCase {
             movementPatternName: "Squat", exerciseType: "barbell"
         ))
     }
+
+    func testRecentNamesAreDistinctNewestFirstAndCapped() {
+        let sessions = [["Back Squat", "Bench Press", "Back Squat"], ["Barbell Row", "", "Back Squat", "Overhead Press"], ["Deadlift"]]
+        XCTAssertEqual(ExerciseSearch.recentNames(sessionsNewestFirst: sessions),
+                       ["Back Squat", "Bench Press", "Barbell Row", "Overhead Press", "Deadlift"])
+        XCTAssertEqual(ExerciseSearch.recentNames(sessionsNewestFirst: sessions, limit: 4),
+                       ["Back Squat", "Bench Press", "Barbell Row", "Overhead Press"])
+        XCTAssertEqual(ExerciseSearch.recentNames(sessionsNewestFirst: sessions, limit: 0), [])
+        XCTAssertEqual(ExerciseSearch.recentNames(sessionsNewestFirst: [[String]]()), [])
+    }
 }

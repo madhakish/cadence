@@ -3293,6 +3293,26 @@ export function exerciseMatchesSearch(exercise, query) {
     .some((value) => normalizedExerciseSearchText(value).includes(term));
 }
 
+// The lifter's recent lifts — the browser's entry point above the category
+// groups, never a category of its own. Distinct names from the most recent
+// completed sessions, newest session first and in performed order within a
+// session, capped. A name appears once, at its most recent position. Mirrors
+// ExerciseSearch.recentNames in CadenceCore.
+export function recentExerciseNames(sessionsNewestFirst, limit = 6) {
+  if (limit <= 0) return [];
+  const seen = new Set();
+  const recent = [];
+  for (const names of sessionsNewestFirst) {
+    for (const name of names) {
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      recent.push(name);
+      if (recent.length === limit) return recent;
+    }
+  }
+  return recent;
+}
+
 export const isConditioningPattern = (pattern) =>
   ["easyAerobic", "intervals", "mixedConditioning"].includes(pattern);
 

@@ -2,132 +2,21 @@ import SwiftUI
 import SwiftData
 import CadenceCore
 
-/// The exercise library. Search first, then two composable filters, then the
-/// categories as collapsed groups that state their counts — nobody scrolls the
-/// whole catalog to find one lift. A filter reveals only the groups with
-/// matches, opened; clearing it returns every group, collapsed, except the ones
-/// the user opened themselves. Shelved lifts stay visible — with the re-entry
-/// test spelled out — so coming back to them is a decision, not an accident.
-/// Web twin: `exerciseLibrary` in views/settings.js.
+/// The exercise library: the shared browser (`ExerciseBrowser`) with rows
+/// that navigate to each exercise's detail, plus the toolbar that adds a
+/// custom exercise. Web twin: `exerciseLibrary` in views/settings.js.
 struct LibraryView: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Exercise.name) private var exercises: [Exercise]
-    @State private var search = ""
-    @State private var movementFilter: MovementPattern?
-    @State private var typeFilter: ExerciseType?
-    @State private var openedCategories: Set<ExerciseCategory> = []
     @State private var showNewExercise = false
 
-    private var isFiltering: Bool {
-        !search.isEmpty || movementFilter != nil || typeFilter != nil
-    }
-
-    private var visibleExercises: [Exercise] {
-        let term = search.isEmpty ? nil : ExerciseSearch.preparedTerm(search)
-        return exercises.filter { exercise in
-            if let term, !exercise.matchesSearch(preparedTerm: term) { return false }
-            if !ExerciseSearch.matchesMovement(movementFilter, primary: exercise.movementPattern,
-                                               secondary: exercise.secondaryMovementPattern) { return false }
-            if let typeFilter, exercise.type != typeFilter { return false }
-            return true
-        }
-    }
-
-    /// While filtering, a group is open exactly when it has matches; the
-    /// user's own toggles are remembered only for the unfiltered list.
-    private func isExpanded(_ category: ExerciseCategory, hasMatches: Bool) -> Binding<Bool> {
-        Binding(
-            get: { isFiltering ? hasMatches : openedCategories.contains(category) },
-            set: { open in
-                guard !isFiltering else { return }
-                if open { openedCategories.insert(category) } else { openedCategories.remove(category) }
-            }
-        )
-    }
-
     var body: some View {
-        List {
-            Section {
-                Picker("Movement", selection: $movementFilter) {
-                    Text("All movements").tag(MovementPattern?.none)
-                    ForEach(MovementPattern.allCases, id: \.self) { pattern in
-                        Text(pattern.name).tag(MovementPattern?.some(pattern))
-                    }
-                }
-                Picker("Equipment", selection: $typeFilter) {
-                    Text("All equipment").tag(ExerciseType?.none)
-                    ForEach(ExerciseType.allCases, id: \.self) { type in
-                        Text(type.rawValue).tag(ExerciseType?.some(type))
-                    }
-                }
-                if isFiltering {
-                    Button("Clear filters") {
-                        search = ""
-                        movementFilter = nil
-                        typeFilter = nil
-                    }
+        ExerciseBrowser()
+            .navigationTitle("Library")
+            .toolbar {
+                Button { showNewExercise = true } label: {
+                    Label("New exercise", systemImage: "plus")
                 }
             }
-            ForEach(ExerciseCategory.allCases, id: \.self) { category in
-                let inCategory = visibleExercises.filter { $0.category == category }
-                if !isFiltering || !inCategory.isEmpty {
-                    Section {
-                        DisclosureGroup(isExpanded: isExpanded(category, hasMatches: !inCategory.isEmpty)) {
-                            ForEach(inCategory) { exercise in
-                                NavigationLink {
-                                    ExerciseDetailView(exercise: exercise)
-                                } label: {
-                                    LibraryRow(exercise: exercise)
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                Text(category.rawValue).font(.headline)
-                                Spacer()
-                                Text("\(inCategory.count)")
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Library")
-        .searchable(text: $search, prompt: "Name, equipment or movement")
-        .toolbar {
-            Button { showNewExercise = true } label: {
-                Label("New exercise", systemImage: "plus")
-            }
-        }
-        .sheet(isPresented: $showNewExercise) { NewExerciseView() }
-    }
-}
-
-private struct LibraryRow: View {
-    let exercise: Exercise
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(exercise.name)
-                Text("\(exercise.movementPattern.name) · \(exercise.typeRaw) · \(exercise.loadBasis.label)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if exercise.isShelved {
-                Text(Copy.shelved)
-                    .font(.caption.bold())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Theme.hardStop.opacity(0.25), in: RoundedRectangle(cornerRadius: 2))
-                    .foregroundStyle(Theme.hardStop)
-            }
-            if exercise.isUnilateral {
-                Text("per side").font(.caption).foregroundStyle(.secondary)
-            }
-        }
+            .sheet(isPresented: $showNewExercise) { NewExerciseView() }
     }
 }
 
@@ -651,7 +540,7 @@ struct ExerciseDetailView: View {
     }
 }
 
-private struct NewExerciseView: View {
+struct NewExerciseView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var exercises: [Exercise]

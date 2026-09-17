@@ -1569,6 +1569,15 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(C.exerciseMatchesSearch(searchable, "  ") && !C.exerciseMatchesSearch(searchable, "row"),
     "empty search includes everything and unrelated text is rejected");
 
+  const recentSessions = [["Back Squat", "Bench Press", "Back Squat"], ["Barbell Row", "", "Back Squat", "Overhead Press"], ["Deadlift"]];
+  eq(JSON.stringify(C.recentExerciseNames(recentSessions)),
+    JSON.stringify(["Back Squat", "Bench Press", "Barbell Row", "Overhead Press", "Deadlift"]),
+    "recent lifts are distinct, newest session first, in performed order");
+  eq(JSON.stringify(C.recentExerciseNames(recentSessions, 4)),
+    JSON.stringify(["Back Squat", "Bench Press", "Barbell Row", "Overhead Press"]), "recent lifts honour the cap");
+  ok(C.recentExerciseNames(recentSessions, 0).length === 0 && C.recentExerciseNames([]).length === 0,
+    "a zero cap or no history yields no recent lifts");
+
   const coachingProgram = {
     id: "program", expectedDayIndexes: [0, 1, 2, 3],
     slots: [

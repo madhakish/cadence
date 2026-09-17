@@ -2478,106 +2478,21 @@ private struct SessionBottomBar: View {
 
 private struct ExercisePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Exercise.name) private var exercises: [Exercise]
-    @State private var search = ""
-    @State private var typeFilter: ExerciseType?
-    @State private var detailExercise: Exercise?
     var equipmentPolicy: EquipmentPolicy = .any
     let onPick: (Exercise) -> Void
 
-    private var visible: [Exercise] {
-        let allowed = exercises.filter { equipmentPolicy.allows(exerciseType: $0.typeRaw) }
-        let pool = typeFilter.map { filter in allowed.filter { $0.type == filter } } ?? allowed
-        guard !search.isEmpty else { return pool }
-        let term = ExerciseSearch.preparedTerm(search)
-        return pool.filter { $0.matchesSearch(preparedTerm: term) }
-    }
-
     var body: some View {
         NavigationStack {
-            List {
-                // Equipment filter (issue #63): the catalog is too long for
-                // one flat list; search stays available above at all times.
-                Section {
-                    ExerciseTypeFilterRow(typeFilter: $typeFilter)
-                }
-                ForEach(ExerciseCategory.allCases, id: \.self) { category in
-                    let inCategory = visible.filter { $0.category == category }
-                    if !inCategory.isEmpty {
-                    Section(category.rawValue) {
-                        ForEach(inCategory) { exercise in
-                            HStack {
-                            Button {
-                                onPick(exercise)
-                                dismiss()
-                            } label: {
-                                HStack {
-                                    Text(exercise.name).foregroundStyle(.primary)
-                                    if exercise.isShelved {
-                                        Text(Copy.shelved)
-                                            .font(.caption)
-                                            .foregroundStyle(Theme.hardStop)
-                                    }
-                                    Spacer()
-                                }
-                            }
-                            // Detail preview OVER the picker (issue #66): the
-                            // sheet keeps the search text and active filter, so
-                            // inspecting never restarts the hunt.
-                            Button {
-                                detailExercise = exercise
-                            } label: {
-                                Image(systemName: "info.circle")
-                                    .foregroundStyle(Theme.accent)
-                            }
-                            .accessibilityLabel("\(exercise.name) — muscles, history, and settings")
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                    }
-                }
+            // The library browser with a selection closure (issue #63):
+            // search, Movement and Equipment filters, Recent, and the
+            // collapsed category groups — one surface for every picker.
+            ExerciseBrowser(equipmentPolicy: equipmentPolicy) { exercise in
+                onPick(exercise)
+                dismiss()
             }
             .navigationTitle("Add exercise")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $search, prompt: "Exercise, movement, or equipment")
-            .sheet(item: $detailExercise) { exercise in
-                NavigationStack {
-                    ExerciseDetailView(exercise: exercise)
-                }
-            }
         }
-    }
-}
-
-/// Horizontal equipment-filter chips shared by the pickers. A second tap on
-/// the active chip clears the filter, mirroring the web picker.
-struct ExerciseTypeFilterRow: View {
-    @Binding var typeFilter: ExerciseType?
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                chip(nil, label: "All")
-                ForEach(ExerciseType.allCases, id: \.self) { type in
-                    chip(type, label: type.rawValue)
-                }
-            }
-        }
-    }
-
-    private func chip(_ type: ExerciseType?, label: String) -> some View {
-        let active = typeFilter == type
-        return Button(label) {
-            typeFilter = (type != nil && active) ? nil : type
-        }
-        .font(.caption.bold())
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(active ? Theme.accent.opacity(0.25) : Color(.tertiarySystemFill),
-                    in: Capsule())
-        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 

@@ -1186,6 +1186,11 @@ ok(settingsGroups.every((group) => group.querySelector(":scope > summary") && gr
     .find((button) => button.textContent.includes("Add lift")).click();
   await tick();
   const picker = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  const pickerGroups = [...picker.querySelectorAll("details.library-group")];
+  ok(picker.querySelector("select[aria-label='Movement']") && picker.querySelector("select[aria-label='Equipment']")
+    && pickerGroups.length === 3
+    && pickerGroups.every((g) => !g.open && /\d+\s*$/.test(g.querySelector("summary").textContent.trim())),
+  "the program picker is the library browser: Movement and Equipment filters over collapsed, counted category groups");
   const pickerSearch = picker.querySelector('input[type="search"]');
   pickerSearch.value = addedExercise.name;
   pickerSearch.dispatchEvent(new window.Event("input"));
@@ -1710,6 +1715,42 @@ ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips
     "a group the user opened stays open across a filter round trip");
   screen.querySelector(".overlay-head button").click();
 }
+// Every exercise picker is the library browser (issue #63): the logger's
+// "+ Add exercise" sheet carries the Movement and Equipment filters and the
+// collapsed, counted category groups; a completed session surfaces its lifts
+// as a Recent group above them; a nonsense search says how to widen the
+// hunt or add a custom exercise, with both ways out beside the copy.
+await withCleanup(async (keep) => {
+  keep(db.Sessions, await db.Sessions.save({ date: db.iso(new Date(Date.now() + 1000)), notes: "", isCompleted: true,
+    exercises: [{ order: 0, exerciseName: "Barbell Row", notes: "", sets: [] }] }));
+  const sid = keep(db.Sessions, await db.Sessions.save({ date: db.iso(new Date()), notes: "", isCompleted: false, exercises: [] }));
+  await session.openSession(sid); await tick();
+  const logger = [...document.querySelectorAll(".overlay")].at(-1);
+  [...logger.querySelectorAll("button")].find((button) => button.textContent === "+ Add exercise").click();
+  await tick();
+  const sheet = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  const groups = () => [...sheet.querySelectorAll("details.library-group")];
+  ok(sheet.querySelector('input[type="search"]') && sheet.querySelector("select[aria-label='Movement']")
+    && sheet.querySelector("select[aria-label='Equipment']"),
+  "the logger picker carries the library's search and Movement/Equipment filters");
+  ok(groups().length === 3 && groups().every((g) => !g.open && /\d+\s*$/.test(g.querySelector("summary").textContent.trim())),
+    "the logger picker lists the categories as collapsed groups that state their counts");
+  await waitFor(() => sheet.querySelector(".library-recent"));
+  const recent = sheet.querySelector(".library-recent");
+  ok([...recent.querySelectorAll("button")].some((button) => button.textContent === "Barbell Row")
+    && recent.compareDocumentPosition(groups()[0]) & Node.DOCUMENT_POSITION_FOLLOWING,
+  "a completed session surfaces its lifts as a Recent group above the categories");
+  const search = sheet.querySelector('input[type="search"]');
+  search.value = "zzqx no such lift";
+  search.dispatchEvent(new window.Event("input"));
+  ok(groups().length === 0 && sheet.textContent.includes(
+    "No exercises match. Clear the filters or search by movement, equipment, or alias — or add a custom exercise."),
+  "a nonsense search says how to widen it or add a custom exercise");
+  ok([...sheet.querySelectorAll(".library-empty button")].map((button) => button.textContent).join("|") === "Clear filters|+ New exercise",
+    "the clear-filters and new-exercise actions sit beside the empty-state copy");
+  [...document.querySelectorAll("#overlays .scrim")].at(-1).click();
+  logger.querySelector(".overlay-head button").click(); await tick();
+})();
 // Themes: Foundry leads and keeps the carbon key, Heritage Gold keeps the
 // memento key, and Titanium is the one new value — a version-13 enum
 // addition (v4/v5 pattern). Older bundles keep restoring their own theme; an

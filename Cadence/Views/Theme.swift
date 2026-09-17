@@ -138,6 +138,7 @@ enum Copy {
     static let emptyVolume = "No volume history"
     static let emptyRepPRs = "No rep PRs"
     static let shelved = "Shelved"
+    static let noExercisesMatch = "No exercises match. Clear the filters or search by movement, equipment, or alias — or add a custom exercise."
 }
 
 extension View {
