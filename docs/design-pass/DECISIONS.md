@@ -52,3 +52,10 @@
 - Plate guide — add the IWF small denominations using shared plate colour metadata. Explain that IPF fixes colours only for 15/20/25 kg; the guide never adds inventory.
 - Compatibility — retain the public SessionPrescription(mainWork:blocks:) initializer; only engine-produced blocks assert a resolved methodology.
 - Scope correction — #199's duration implementation is now included; its native/UI validation is still pending. Approved physical plate geometry, Lock Screen set completion and the headphone cue remain unfinished; the earlier “out of this pass” note is historical scope, not completion evidence.
+
+## Exercise pane tiers, 2026-09-17
+
+- Tier 1, always visible — classification eyebrow, current prescription (load × reps, set position, effort cue, rest), the loaded bar, and the achieved-with-bar summary. Nothing in it is recomputed; it is the logger's own entry and solver path.
+- Tier 2, one expand — "Previous performance & programming": last done, the top-set sparkline, program membership, cycle and rotation context, deload phase. Its collapsed face states last-done and the assignment count.
+- Tier 3, one expand — "Muscles & relationship": the complementary/main relationship and its originating focus exactly as the engine labelled it, then the anatomy figure with its primary/supporting legend. The relationship left the prescription block; it is context, not the work in hand.
+- Default state — the library opens on the anatomy; between sets both tiers start collapsed so the work in hand is above the fold. Expanding either tier never moves tier 1; the iPhone suite asserts the prescription's frame after both open.

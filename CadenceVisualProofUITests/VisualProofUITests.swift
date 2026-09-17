@@ -41,6 +41,25 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
         capture("after-04-exercise-pane-iphone")
 
+        // #184: tiers 2 and 3 open beneath tier 1, which does not move. The
+        // list is scrolled back to its top before the frame is compared.
+        let prescription = app.staticTexts["CURRENT PRESCRIPTION"]
+        XCTAssertTrue(prescription.waitForExistence(timeout: 3))
+        let tierOne = prescription.frame
+        let progression = app.staticTexts["Previous performance & programming"]
+        for _ in 0..<4 where !progression.isHittable { app.swipeUp() }
+        XCTAssertTrue(progression.isHittable)
+        progression.tap()
+        XCTAssertTrue(app.staticTexts["Last done"].waitForExistence(timeout: 3))
+        let muscles = app.staticTexts["Muscles & relationship"]
+        for _ in 0..<4 where !muscles.isHittable { app.swipeUp() }
+        XCTAssertTrue(muscles.isHittable)
+        muscles.tap()
+        capture("after-04b-exercise-pane-tiers-open-iphone")
+        for _ in 0..<6 where !prescription.isHittable { app.swipeDown() }
+        XCTAssertEqual(prescription.frame.origin.y, tierOne.origin.y, accuracy: 1,
+                       "tier 1 moved when tiers 2 and 3 opened")
+
         let frontLabel = app.staticTexts["Front"]
         for _ in 0..<4 where !frontLabel.isHittable { app.swipeUp() }
         XCTAssertTrue(frontLabel.waitForExistence(timeout: 3))
@@ -209,6 +228,11 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(complementary.waitForExistence(timeout: 4))
         complementary.tap()
         XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
+        // The relationship is tier 3 context: one expand, never in the prescription.
+        let muscles = app.staticTexts["Muscles & relationship"]
+        for _ in 0..<4 where !muscles.isHittable { app.swipeUp() }
+        XCTAssertTrue(muscles.isHittable)
+        muscles.tap()
         let focus = element("training-focus-context")
         XCTAssertTrue(focus.waitForExistence(timeout: 3))
         XCTAssertEqual(focus.label, "Complementary lift · Hypertrophy focus")

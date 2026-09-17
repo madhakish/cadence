@@ -1521,6 +1521,20 @@ await withCleanup(async (keep) => {
   "exercise pane names the complementary relationship and its originating training focus");
   ok(!pane.textContent.includes("2–3 reps left"),
     "hypertrophy complementary work is not mislabeled with the strength effort contract");
+  // #184 tiers: the prescription (tier 1) stays clear of the relationship,
+  // which lives in the muscles disclosure (tier 3) below previous
+  // performance and programming (tier 2); both tiers start closed between sets.
+  {
+    const tiers = [...pane.querySelectorAll("details.info-disclosure")];
+    const progression = pane.querySelector("details.progression-disclosure");
+    const muscles = pane.querySelector("details.muscles-disclosure");
+    ok(!pane.querySelector(".current-prescription .training-focus-context") && muscles?.contains(focusContext),
+      "the training relationship is tier 3 context, not part of the current prescription");
+    ok(tiers.indexOf(progression) === 0 && tiers.indexOf(muscles) === 1 && !progression.open && !muscles.open,
+      "tier 2 precedes tier 3 and both start collapsed when opened between sets");
+    ok(pane.querySelector(".current-prescription").compareDocumentPosition(progression) & Node.DOCUMENT_POSITION_FOLLOWING,
+      "tier 1 stays above the disclosures");
+  }
   ok(pane.querySelector('.current-prescription .weight-measure.primary .weight-value')?.textContent === "220",
     "exercise detail reconstructs the recorded 220 lb instead of substituting 221.37 lb of kg plates");
   pane.querySelector(".overlay-head button")?.click(); await tick();
