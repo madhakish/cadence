@@ -79,10 +79,12 @@ final class VisualProofUITests: XCTestCase {
         let toggle = app.buttons["barbell-explode-toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
         XCTAssertEqual(toggle.value as? String, "Exploded")
-        let firstLeft = element("barbell-plate-left-0")
+        // The calculator beneath this sheet has its own accessible bar.
+        let artwork = app.scrollViews["barbell-inspection-artwork"]
+        let firstLeft = artwork.staticTexts["barbell-plate-left-0"]
         XCTAssertTrue(firstLeft.waitForExistence(timeout: 3))
         XCTAssertTrue(firstLeft.label.contains("Left plate 1 from inside"))
-        XCTAssertTrue(element("barbell-plate-right-0").exists)
+        XCTAssertTrue(artwork.staticTexts["barbell-plate-right-0"].exists)
         capture("barbell-exploded-iphone")
         toggle.tap()
         XCTAssertEqual(toggle.value as? String, "Assembled")

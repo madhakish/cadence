@@ -388,6 +388,7 @@ struct HomeView: View {
                                     .font(.caption.bold())
                                     .foregroundStyle(.tertiary)
                             }
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("preview-program-day")
