@@ -82,7 +82,8 @@ public enum PlateMath {
         plates: [Plate],
         collarLb: Double = 0,
         policy: LoadingPolicy = .closest,
-        maxPerPlateSide: Int = 10
+        maxPerPlateSide: Int = 10,
+        preferExact: Bool = false
     ) -> PlateSolution {
         let collarLb = max(0, collarLb)
         let perSideTarget = (targetLb - bar.lb - collarLb) / 2.0
@@ -100,6 +101,8 @@ public enum PlateMath {
         var best: Candidate? = nil
         var policyBestCounts = counts
         var policyBest: Candidate? = nil
+        var exactBestCounts = counts
+        var exactBest: Candidate? = nil
         var nodes = 0
 
         func isBetter(_ c: Candidate, than b: Candidate?) -> Bool {
@@ -150,6 +153,10 @@ public enum PlateMath {
             if Self.policyAllows(signed, policy: policy), isBetter(c, than: policyBest) {
                 policyBest = c
                 policyBestCounts = counts
+            }
+            if preferExact, Self.policyAllows(signed, policy: .exact), isBetter(c, than: exactBest) {
+                exactBest = c
+                exactBestCounts = counts
             }
         }
 
@@ -205,24 +212,26 @@ public enum PlateMath {
 
         search(0, perSideTarget, 0, 0, 0, 0)
 
-        let selectedCounts = policyBest == nil ? bestCounts : policyBestCounts
+        let selectedCounts = exactBest != nil ? exactBestCounts
+            : (policyBest == nil ? bestCounts : policyBestCounts)
         let perSide = zip(sorted, selectedCounts).compactMap { plate, count in
             count > 0 ? PlateCount(plate: plate, count: count) : nil
         }
         return PlateSolution(loadout: Loadout(bar: bar, perSide: perSide, collarLb: collarLb),
-                             targetLb: targetLb, policy: policy, satisfiesPolicy: policyBest != nil)
+                             targetLb: targetLb, policy: exactBest != nil ? .exact : policy,
+                             satisfiesPolicy: exactBest != nil || policyBest != nil)
     }
 
     /// Reconstruct an achieved load exactly when the rack can represent it.
     /// Unsolved manual or legacy values fall back to the gym's loading policy.
+    /// Both candidates come from one bounded search, including fallback cases.
     public static func solveLoad(
         weightLb: Double, bar: Bar, plates: [Plate],
         collarLb: Double = 0, policy: LoadingPolicy = .closest, maxPerPlateSide: Int = 10
     ) -> PlateSolution {
-        let exact = solve(targetLb: weightLb, bar: bar, plates: plates,
-                          collarLb: collarLb, policy: .exact, maxPerPlateSide: maxPerPlateSide)
-        return exact.satisfiesPolicy ? exact : solve(targetLb: weightLb, bar: bar, plates: plates,
-                          collarLb: collarLb, policy: policy, maxPerPlateSide: maxPerPlateSide)
+        solve(targetLb: weightLb, bar: bar, plates: plates,
+              collarLb: collarLb, policy: policy, maxPerPlateSide: maxPerPlateSide,
+              preferExact: true)
     }
 
     // MARK: - Load quantization (epic #155 Stage 3)
@@ -281,10 +290,9 @@ public enum PlateMath {
         maxPerPlateSide: Int = 10
     ) -> Double {
         let collarLb = max(0, collarLb)
-        // One unit system only — the bar's. A quantized load is a NUMBER the
-        // lifter reads and the app stores, so a kg stack must not turn an lb
-        // prescription into 211.14: mixed-unit stacks stay what they always
-        // were, loading guidance produced by `solve` under the neat target.
+        // Prefer the bar's unit system when it is stocked. This chooses a
+        // convenient target; materialization still records the selected
+        // stack's actual mass, including fractional lb from kg plates.
         let sameSystem = Array(Set(plates)).filter { $0.unit == bar.unit }
         let pool = sameSystem.isEmpty ? Array(Set(plates)) : sameSystem
         let usable = pool.filter { $0.lb >= options.minimumPlateLb - 1e-9 }

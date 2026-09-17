@@ -504,7 +504,7 @@ const policyAllows = (deviationLb, policy) => {
   return true;
 };
 
-export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0, policy = "closest") {
+export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0, policy = "closest", preferExact = false) {
   collarLb = Math.max(0, collarLb);
   policy = LOADING_POLICIES.includes(policy) ? policy : "closest";
   const perSideTarget = (targetLb - barLb(bar) - collarLb) / 2.0;
@@ -524,6 +524,8 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
   let best = null; // { dev, signed, used, distinct, mixed }
   let policyBestCounts = counts.slice();
   let policyBest = null;
+  let exactBestCounts = counts.slice();
+  let exactBest = null;
   let nodes = 0;
 
   const isBetter = (c, b) => {
@@ -576,6 +578,9 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
     if (policyAllows(signed, policy) && isBetter(c, policyBest)) {
       policyBest = c; policyBestCounts = counts.slice();
     }
+    if (preferExact && policyAllows(signed, "exact") && isBetter(c, exactBest)) {
+      exactBest = c; exactBestCounts = counts.slice();
+    }
   };
 
   const search = (index, remaining, used, distinct, kg, lb) => {
@@ -621,19 +626,19 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
 
   search(0, perSideTarget, 0, 0, 0, 0);
 
-  const selectedCounts = policyBest ? policyBestCounts : bestCounts;
+  const selectedCounts = exactBest ? exactBestCounts : (policyBest ? policyBestCounts : bestCounts);
   const perSide = [];
   for (let i = 0; i < sorted.length; i += 1) {
     if (selectedCounts[i] > 0) perSide.push({ plate: sorted[i], count: selectedCounts[i] });
   }
-  return makeSolution(bar, perSide, targetLb, collarLb, policy, !!policyBest);
+  return makeSolution(bar, perSide, targetLb, collarLb, exactBest ? "exact" : policy, !!(exactBest || policyBest));
 }
 
 // Reconstruct a recorded/achieved load exactly when the rack can represent it.
 // Only unsolved manual or legacy values fall back to the gym's loading policy.
+// Both candidates come from one bounded search, including fallback cases.
 export function solveLoad(weightLb, bar, plates, maxPerPlateSide = 10, collarLb = 0, policy = "closest") {
-  const exact = solve(weightLb, bar, plates, maxPerPlateSide, collarLb, "exact");
-  return exact.satisfiesPolicy ? exact : solve(weightLb, bar, plates, maxPerPlateSide, collarLb, policy);
+  return solve(weightLb, bar, plates, maxPerPlateSide, collarLb, policy, true);
 }
 
 // ---- Training-anchor resolution (epic #155 Stage 3) ----
@@ -750,10 +755,9 @@ export const QUANTIZE_WARMUP = { bandLb: 10, minimumPlateLb: 10, bias: "nearest"
 export function quantizeLoad(targetLb, bar, plates, collarLb = 0, options = quantizeWorkingSet("nearest"), maxPerPlateSide = 10) {
   if (!(targetLb > 0)) return targetLb;
   const collar = Math.max(0, collarLb || 0);
-  // One unit system only — the bar's. A quantized load is a NUMBER the lifter
-  // reads and the app stores, so a kg stack must not turn an lb prescription
-  // into 211.14: mixed-unit stacks stay what they always were, loading
-  // guidance produced by solve() under the neat target.
+  // Prefer the bar's unit system when it is stocked. This chooses a convenient
+  // target; materialization still records the selected stack's actual mass,
+  // including fractional lb from kg plates.
   const sameSystem = plates.filter((p) => p.unit === bar.unit);
   const pool = sameSystem.length ? sameSystem : plates;
   const usable = [...new Set(pool.map((p) => plateLb(p)))]

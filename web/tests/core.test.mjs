@@ -2541,6 +2541,13 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
 {
   near(C.solveLoad(220,C.BARS.bar45lb,C.ALL_STANDARD).totalLb,220,1e-8,
     "reconstructing a recorded 220 lb never substitutes a near-miss kg stack");
+  for (const [policy, total, satisfies] of [
+    ["closest",45,true],["under",45,true],["over",65,true],["exact",45,false]]) {
+    const solution = C.solveLoad(50,C.BARS.bar45lb,[{value:10,unit:"lb"}],10,0,policy);
+    near(solution.totalLb,total,1e-8,`${policy} reconstruction fallback keeps its mass`);
+    eq(solution.policy,policy,"reconstruction fallback preserves the requested policy");
+    eq(solution.satisfiesPolicy,satisfies,"reconstruction fallback reports feasibility");
+  }
   for (const bar of C.ALL_BARS) near(C.barLabelLb(bar),C.barLb(bar),1e-9,"bar labels retain actual mass");
   const stack = [{plate:{value:20,unit:"kg"},count:2}, {plate:{value:10,unit:"kg"},count:1}];
   const actual = C.totalOnBar(C.BARS.bar45lb, stack);

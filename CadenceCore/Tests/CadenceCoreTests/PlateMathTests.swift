@@ -34,6 +34,20 @@ final class PlateMathTests: XCTestCase {
         }
     }
 
+    func testRecordedMassFallbackKeepsTheRequestedLoadingPolicy() {
+        let plates = [Plate(value: 10, unit: .lb)]
+        let cases: [(LoadingPolicy, Double, Bool)] = [
+            (.closest, 45, true), (.under, 45, true), (.over, 65, true), (.exact, 45, false)
+        ]
+        for (policy, total, satisfies) in cases {
+            let solution = PlateMath.solveLoad(weightLb: 50, bar: .bar45lb,
+                                               plates: plates, policy: policy)
+            XCTAssertEqual(solution.loadout.totalLb, total, accuracy: 1e-8)
+            XCTAssertEqual(solution.policy, policy)
+            XCTAssertEqual(solution.satisfiesPolicy, satisfies)
+        }
+    }
+
     // A station preference filters the gym inventory to its own denomination,
     // falling back to that denomination's full standard set when the gym
     // stocks none of it; no preference is the gym inventory unchanged.

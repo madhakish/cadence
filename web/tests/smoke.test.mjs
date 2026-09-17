@@ -1500,12 +1500,13 @@ await withCleanup(async (keep) => {
 
 {
   const deadlift = await db.Exercises.byName("Deadlift");
-  const gym = await db.Gyms.default();
-  settings.exerciseDetail(deadlift, {
+  const gym = { ...await db.Gyms.default(), defaultBarId: C.barId(C.BARS.bar45lb),
+    plateToggles: C.ALL_STANDARD.map((plate) => ({ ...plate, enabled: true })), loadingPolicy: "closest" };
+  settings.exerciseDetail({ ...deadlift, stationDenomination: null }, {
     sessionEntry: {
       exerciseName: "Deadlift", programRole: "complementary", prescriptionStyle: "automatic",
-      barId: gym.defaultBarId, targetWeightLb: 185,
-      sets: [{ order: 0, weightLb: 185, targetWeightLb: 185, enteredUnit: "lb",
+      barId: gym.defaultBarId, targetWeightLb: 220,
+      sets: [{ order: 0, weightLb: 220, targetWeightLb: 220, enteredUnit: "lb",
         reps: 8, isWarmup: false, status: "planned" }],
     },
     sessionGym: gym,
@@ -1520,6 +1521,8 @@ await withCleanup(async (keep) => {
   "exercise pane names the complementary relationship and its originating training focus");
   ok(!pane.textContent.includes("2–3 reps left"),
     "hypertrophy complementary work is not mislabeled with the strength effort contract");
+  ok(pane.querySelector('.current-prescription .weight-measure.primary .weight-value')?.textContent === "220",
+    "exercise detail reconstructs the recorded 220 lb instead of substituting 221.37 lb of kg plates");
   pane.querySelector(".overlay-head button")?.click(); await tick();
 }
 

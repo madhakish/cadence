@@ -1358,7 +1358,7 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
               : C.barById(sessionGym?.defaultBarId || C.barId(C.BARS.bar45lb));
             const style = e.movementGroup === "olympic" ? "bumper" : "steel";
             const enteredUnit = current.enteredUnit || "lb";
-            const solution = C.solve(current.weightLb, selectedBar,
+            const solution = C.solveLoad(current.weightLb, selectedBar,
               stationPlates(enteredUnit, sessionGym, e.stationDenomination ?? null), 10,
               sessionGym?.collarWeightLb || 0, sessionGym?.loadingPolicy || "closest");
             const rendered = barbellSVG(solution, "full", style);
