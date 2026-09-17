@@ -838,6 +838,16 @@ enum ImportService {
 
     // MARK: - Restore preview
 
+    /// Full payload check for the restore UI's no-change gate. Validation
+    /// still precedes the comparison, including for unsupported versions.
+    static func matchesCurrentData(_ data: Data, context: ModelContext) throws -> Bool {
+        guard let bundle = try? makeDecoder().decode(Bundle.self, from: data) else { throw ImportError.notABackup }
+        let version = bundle.schemaVersion ?? 0
+        guard BackupContract.supports(schemaVersion: version) else { throw ImportError.unsupportedSchemaVersion(version) }
+        try validate(bundle, schemaVersion: version)
+        return try BackupContract.dataMatches(incoming: data, current: ExportService.jsonData(context: context))
+    }
+
     /// Named-entity restore preview: per-item new/changed/unchanged/removed
     /// for the backup's exercises, lift tracks, gyms, sessions, and programs
     /// against the current store. Reads the bundle's own field values

@@ -4001,12 +4001,25 @@ export function namedRestorePreview({
   };
 }
 
-// True only when every classified item across all five collections is
-// unchanged — the signal a restore UI uses to skip its destructive confirm
-// gate entirely.
+// Every classified item is unchanged in the shallow named summary. This
+// cannot prove payload equality; use backupDataMatches to skip a restore.
 export function isNamedRestoreNoOp(preview) {
   return [preview.exercises, preview.tracks, preview.gyms, preview.sessions, preview.programs]
     .every((collection) => collection.every((item) => item.status === "unchanged"));
+}
+
+// Compare every supplied payload field, excluding export metadata. Omitted
+// sections are not restored. Keep array order significant: uncertainty must
+// show confirmation rather than silently suppress a possible correction.
+// Mirrors BackupContract.dataMatches; callers validate the backup first.
+export function backupDataMatches(incoming, current) {
+  const keys = Object.keys(incoming).filter(k => !["schemaVersion", "appVersion", "exportedAt"].includes(k));
+  const canonical = value => JSON.stringify(value, (_, item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    return Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]]));
+  });
+  return keys.length > 0 && keys.every(key => Object.hasOwn(current, key)
+    && canonical(incoming[key]) === canonical(current[key]));
 }
 
 // The registered ad-hoc activity kinds (#166) — real physical work logged as

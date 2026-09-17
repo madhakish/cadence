@@ -47,6 +47,11 @@ removes them too.
 - Mid-cycle program state survives the round trip — pending peak
   results apply at the next rollover and cycle-scoped swaps still revert
   on schedule, whichever platform finishes the cycle.
+- The no-change check compares every supplied data field, including set
+  weights, reps, pending progression, milestones, and settings. Matching
+  session IDs and exercise counts alone never blocks a corrected backup.
+  Export timestamps and app-version labels do not count as data changes.
+  If names and counts match but recorded values differ, confirmation says so.
 
 One safety rule on restore: gym barcode images are only accepted as
 inline image data, never as remote URLs, so a tampered backup can't make

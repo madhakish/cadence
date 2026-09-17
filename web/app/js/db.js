@@ -1047,7 +1047,11 @@ export const BACKUP_ENUMS = {
 // dates, unknown enum values, or plausible-looking records that would silently
 // default to something else on iOS.
 export function validateBackup(bundle) {
+  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) throw new Error("Not a Cadence backup");
   const schemaVersion = bundle.schemaVersion ?? 0;
+  if (!Number.isInteger(schemaVersion) || schemaVersion < 0 || schemaVersion > BACKUP_SCHEMA_VERSION) {
+    throw new Error(`Unsupported Cadence backup schema version: ${schemaVersion}`);
+  }
   const invalid = (path, message) => { throw new Error(`Backup validation failed at ${path}: ${message}. Nothing was changed.`); };
   const array = (owner, key, path = key) => {
     if (!(key in owner)) return null;
@@ -1442,6 +1446,12 @@ const programSignature = (p) => [
 const namedEntity = (id, name, signature) => ({ id, name, signature });
 const trimmedName = (v) => (typeof v === "string" ? v.trim() : "");
 
+// Only a validated, complete payload comparison may suppress confirmation.
+export async function backupMatchesCurrent(bundle) {
+  validateBackup(bundle);
+  return C.backupDataMatches(bundle, await exportBundle());
+}
+
 // Named-entity restore preview: per-collection new/changed/unchanged/removed
 // entries for a parsed bundle's exercises, tracks, gyms, sessions, and
 // programs against the current store. Pure read — no write, no checkpoint.
@@ -1526,12 +1536,8 @@ export async function namedRestorePreview(bundle) {
 // touched (an old backup without e.g. `gyms` leaves current gyms alone), and a
 // malformed bundle aborts wholesale instead of leaving stores cleared.
 export async function importBundle(bundle, { createCheckpoint = true } = {}) {
-  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) throw new Error("Not a Cadence backup");
-  const schemaVersion = bundle.schemaVersion ?? 0;
-  if (!Number.isInteger(schemaVersion) || schemaVersion < 0 || schemaVersion > BACKUP_SCHEMA_VERSION) {
-    throw new Error(`Unsupported Cadence backup schema version: ${schemaVersion}`);
-  }
   validateBackup(bundle);
+  const schemaVersion = bundle.schemaVersion ?? 0;
   if (createCheckpoint) await Checkpoints.create("before-import");
 
   const writes = new Map(); // store name -> records to clear+put
