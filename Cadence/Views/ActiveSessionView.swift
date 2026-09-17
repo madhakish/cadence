@@ -1504,6 +1504,7 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
 // MARK: - Set row
 
 private struct SetRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var set: SetEntry
     let entry: SessionExercise
     let exercise: Exercise?
@@ -1519,6 +1520,7 @@ private struct SetRow: View {
     var onRemove: () -> Void
 
     @State private var showDetail = false
+    @State private var showHoldTimer = false
 
     /// Steady-state cardio (Walk/Bike/Ruck…) logs distance/time/incline, not
     /// weight×reps. Keyed on the exercise TYPE — rep-based conditioning like
@@ -1538,7 +1540,10 @@ private struct SetRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+        layout {
             if isCurrent {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(Theme.accent)
@@ -1619,6 +1624,15 @@ private struct SetRow: View {
 
             Spacer()
 
+            if isTimed && set.status == .planned {
+                Button { showHoldTimer = true } label: {
+                    Label("Start", systemImage: "play.fill")
+                        .font(.callout.bold()).frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Start \(exercise?.name ?? "hold") timer")
+                .accessibilityIdentifier("start-hold-timer")
+            }
             SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onStatusChange: onStatusChange)
         }
         .padding(isCurrent ? 12 : 0)
@@ -1634,6 +1648,9 @@ private struct SetRow: View {
                             .padding(.horizontal, Theme.cornerRadius)
                     }
             }
+        }
+        .sheet(isPresented: $showHoldTimer) {
+            HoldTimerSheet(set: set, exerciseName: exercise?.name ?? "Hold", onStatusChange: onStatusChange)
         }
         .sheet(isPresented: $showDetail) {
             if isCardio {
@@ -2414,6 +2431,8 @@ private struct SessionBottomBar: View {
                     } label: {
                         Label("Rest \(mmss(restSeconds))", systemImage: "timer")
                             .font(.body.weight(.semibold).monospacedDigit())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
                             .padding(.horizontal, 4)
                     }
                     .primaryActionStyle()

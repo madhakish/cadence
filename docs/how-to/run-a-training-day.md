@@ -23,6 +23,16 @@ lifts appear under "Next up" with their own suggestions.
 
 ## During the session
 
+- **Time planks and other holds.** Tap **Start** beside a planned timed set.
+  The hold countdown is separate from rest and gives a finish cue. **Stop hold**
+  ends an attempt early; **Log** saves whole seconds held and completes that
+  set, keeping its original prescribed duration for progression. Reaching zero
+  alone never logs work. **Try again** starts a fresh continuous attempt; closing
+  discards the unsaved attempt. Adjust the target by tapping the set's hold time
+  before starting. On iOS, allow notifications for a background finish alert;
+  on web, keep Cadence visible for a timely sound. Both clocks catch up after
+  backgrounding without counting time beyond the target. An app restart or
+  page reload discards the unsaved attempt, leaving the set unchanged.
 - **Confirm sets as you do them.** Everything predictable is pre-filled
   — weight, sets, reps, and a warmup ramp for barbell lifts and main dumbbell
   lifts — but remains *planned* until you mark it completed. Mark intentionally

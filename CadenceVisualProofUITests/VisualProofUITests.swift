@@ -118,6 +118,55 @@ final class VisualProofUITests: XCTestCase {
         capture("barbell-workout-preview-inspection-iphone")
     }
 
+    func test10PlankCountdownAndLog() {
+        app.terminate()
+        app.launchArguments += ["--hold-timer-proof", "--hold-short-proof"]
+        app.launch()
+        XCTAssertTrue(app.buttons["resume-session"].waitForExistence(timeout: 20))
+        app.buttons["resume-session"].tap()
+        let start = app.buttons["start-hold-timer"].firstMatch
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        start.tap()
+        allowHoldNotificationsIfPrompted()
+        let log = app.buttons["hold-timer-log"]
+        XCTAssertTrue(log.waitForExistence(timeout: 10))
+        XCTAssertEqual(element("hold-timer-status").label, "HOLD COMPLETE")
+        XCTAssertEqual(element("hold-timer-clock").value as? String, "3 seconds")
+        capture("plank-target-complete-iphone")
+        log.tap()
+        XCTAssertTrue(app.navigationBars["Hold timer"].waitForNonExistence(timeout: 5))
+    }
+
+    func test11PlankTimerAtAccessibilityTextSize() {
+        app.terminate()
+        app.launchArguments += ["--hold-timer-proof",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["resume-session"].waitForExistence(timeout: 20))
+        app.buttons["resume-session"].tap()
+        let start = app.buttons["start-hold-timer"].firstMatch
+        for _ in 0..<6 where !start.isHittable { app.swipeUp() }
+        XCTAssertTrue(start.isHittable)
+        start.tap()
+        allowHoldNotificationsIfPrompted()
+        let stop = app.buttons["hold-timer-stop"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 5))
+        capture("plank-countdown-accessibility-iphone")
+        for _ in 0..<3 where !stop.isHittable { app.swipeUp() }
+        stop.tap()
+        XCTAssertEqual(element("hold-timer-status").label, "STOPPED")
+        app.navigationBars["Hold timer"].buttons["Close"].tap()
+        app.buttons["Discard attempt"].tap()
+        XCTAssertTrue(start.waitForExistence(timeout: 5), "Discard keeps the set planned")
+    }
+
+    private func allowHoldNotificationsIfPrompted() {
+        for owner in [app!, XCUIApplication(bundleIdentifier: "com.apple.springboard")] {
+            let allow = owner.alerts.buttons["Allow"].firstMatch
+            if allow.waitForExistence(timeout: 2) { allow.tap(); return }
+        }
+    }
+
     func test05SettingsAndHistory() {
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))

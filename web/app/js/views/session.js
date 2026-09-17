@@ -2,6 +2,7 @@
 // rest timer, autoregulation, body signals, completion + PR detection.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
+import { openHoldTimer } from "../hold-timer.js";
 import { assertProgramEquipmentAllowed } from "../program-equipment.js";
 import { tfhCurrentPosition, tfhPrescription, tfhSynchronize, tfhPractice } from "../tfh.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
@@ -775,7 +776,23 @@ export async function openSession(id) {
     // The first unresolved authored set gets the accent rail, warmup or work.
     const row = ui.h("div", { class: "setrow" + (s.isWarmup ? " warm" : "")
       + (isCurrent ? " current current-set-card" : "") + (compact ? " compact" : "") }, wt, tags,
-      ui.h("div", { class: "flagbtns" }, statusButton,
+      ui.h("div", { class: "flagbtns" },
+        isTimed && s.status === "planned" ? ui.h("button", {
+          class: "btn sm", text: "▶ Start", "aria-label": `Start ${se.exerciseName} timer`,
+          onClick: () => openHoldTimer({
+            exerciseName: se.exerciseName, seconds: s.durationSeconds ?? s.plannedDurationSeconds ?? 30,
+            onStart: () => beep(false), onDone: () => beep(settings.haptics !== false),
+            onSave: async (seconds) => {
+              const previousDuration = s.durationSeconds, previousStatus = s.status;
+              s.durationSeconds = seconds; s.status = "completed";
+              try { await save(); }
+              catch (error) { s.durationSeconds = previousDuration; s.status = previousStatus; throw error; }
+              focusAfterVerdict(se, s.status);
+              if (settings.autoStartRest && !rest.running) armRest(restFor(ex, se.programRole));
+              renderBody(body); paintBar();
+            },
+          }),
+        }) : null, statusButton,
         (isCardio || isTimed) ? null : qualityButton,
         // Duration and conditioning work has no rep count, so reps-in-reserve
         // is meaningless there — same exclusion the quality button uses.

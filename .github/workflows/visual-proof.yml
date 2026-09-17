@@ -94,6 +94,8 @@ jobs:
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test03ExercisePaneAndPreservedAnatomy
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test04PlateCalculatorHero
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test09WorkoutPreviewInspection
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test10PlankCountdownAndLog
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test11PlankTimerAtAccessibilityTextSize
       - name: Export screenshot attachments
         if: always()
         run: |

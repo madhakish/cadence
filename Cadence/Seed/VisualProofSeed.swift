@@ -106,6 +106,21 @@ enum VisualProofSeed {
             context: context
         )
         try addWoodSplittingActivity(context: context)
+        if ProcessInfo.processInfo.arguments.contains("--hold-timer-proof"),
+           let plank = exercises.first(where: { $0.name == "Plank" }),
+           let session = try context.fetch(FetchDescriptor<WorkoutSession>()).first(where: { !$0.isCompleted }) {
+            for entry in session.exercises {
+                for set in entry.sets { set.status = .completed }
+            }
+            let entry = SessionExercise(order: 2, exercise: plank)
+            entry.exerciseID = plank.id
+            context.insert(entry)
+            session.exercises.append(entry)
+            let seconds = ProcessInfo.processInfo.arguments.contains("--hold-short-proof") ? 3 : 30
+            let set = SetEntry(order: 0, weightLb: 0, reps: 1, durationSeconds: seconds)
+            set.plannedDurationSeconds = seconds
+            appendSet(set, to: entry, context: context)
+        }
         try context.save()
     }
 
