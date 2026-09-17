@@ -9,6 +9,39 @@ public enum PlateVisualStyle: String, CaseIterable, Sendable, Identifiable {
     public var id: String { rawValue }
 }
 
+/// The one token → colour table for every plate face, edge, and label ink on
+/// every renderer of either client. Plate metadata names the token
+/// (`colorToken(for:)`); this names the hex, once. Mirrored 1:1 by core.js
+/// `PLATE_COLOURS` / `plateColour`.
+public struct PlateColour: Equatable, Sendable {
+    public let fill: UInt32
+    public let edge: UInt32
+    public let ink: UInt32
+
+    public init(fill: UInt32, edge: UInt32, ink: UInt32) {
+        self.fill = fill
+        self.edge = edge
+        self.ink = ink
+    }
+}
+
+public enum PlatePalette {
+    public static let colours: [String: PlateColour] = [
+        "red": PlateColour(fill: 0xD23B3B, edge: 0x7A1F1F, ink: 0xFFFFFF),
+        "blue": PlateColour(fill: 0x2F6FED, edge: 0x1B3F8F, ink: 0xFFFFFF),
+        "green": PlateColour(fill: 0x1FAA52, edge: 0x10632F, ink: 0x24262A),
+        "yellow": PlateColour(fill: 0xE8B008, edge: 0x8A6A04, ink: 0x24262A),
+        "white": PlateColour(fill: 0xEDEDED, edge: 0x9A9A9A, ink: 0x24262A),
+        "black": PlateColour(fill: 0x1C1D22, edge: 0x3A3B42, ink: 0xFFFFFF),
+    ]
+    public static let fallback = PlateColour(fill: 0x888888, edge: 0x333333, ink: 0xFFFFFF)
+
+    public static func colour(for token: String) -> PlateColour { colours[token] ?? fallback }
+
+    /// "#d23b3b" — the web spelling of the same value.
+    public static func hex(_ value: UInt32) -> String { String(format: "#%06x", value) }
+}
+
 /// A plate denomination in its native unit. Gyms toggle these on/off per inventory.
 public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
     public let value: Double

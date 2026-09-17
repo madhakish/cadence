@@ -133,8 +133,8 @@ ok(/if !referenceInitialized\s*\{\s*referenceUnit = preferredUnit; referenceInit
 ok(/\.accessibilityLabel\("\\\(plate\.label\) plates per side"\)/.test(nativePlates)
   && /\.accessibilityValue\("\\\(reverseCounts\[plate\.id\] \?\? 0\)"\)/.test(nativePlates),
   "native reverse steppers expose one denomination label and the current count separately");
-ok(/\["white", "yellow", "green"\]\.includes\(token\) \? "#24262a" : "#fff"/.test(barbell),
-  "yellow, white, and green plates use the high-contrast dark denomination ink");
+ok(/C\.plateColour\(/.test(barbell) && !/#24262a|#17191c|#d23b3b|#7a1f1f/i.test(barbell),
+  "plate fill, edge, and denomination ink come from the shared core palette, not literals in the renderer");
 ok(/aria-label[^\n]*Dumbbell/.test(barbell), "the dumbbell graphic carries a spoken load");
 const plates = read("app/js/views/plates.js");
 ok(/Achieved total, bar included/.test(barbell)

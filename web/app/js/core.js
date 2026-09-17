@@ -406,6 +406,19 @@ export function plateColorToken(plate, style = "bumper") {
   return "black"; // 1.25 + misc
 }
 
+// The one token → colour table for every plate face, edge, and label ink on
+// every renderer of either client. Mirrors CadenceCore PlatePalette.
+export const PLATE_COLOURS = {
+  red: { fill: "#d23b3b", edge: "#7a1f1f", ink: "#ffffff" },
+  blue: { fill: "#2f6fed", edge: "#1b3f8f", ink: "#ffffff" },
+  green: { fill: "#1faa52", edge: "#10632f", ink: "#24262a" },
+  yellow: { fill: "#e8b008", edge: "#8a6a04", ink: "#24262a" },
+  white: { fill: "#ededed", edge: "#9a9a9a", ink: "#24262a" },
+  black: { fill: "#1c1d22", edge: "#3a3b42", ink: "#ffffff" },
+};
+export const PLATE_COLOUR_FALLBACK = { fill: "#888888", edge: "#333333", ink: "#ffffff" };
+export const plateColour = (token) => PLATE_COLOURS[token] || PLATE_COLOUR_FALLBACK;
+
 // Diameter relative to a 450 mm competition disc. Bumper competition plates
 // keep the same diameter; calibrated steel steps down with denomination.
 export function plateDiameterFactor(plate, style = "steel") {
