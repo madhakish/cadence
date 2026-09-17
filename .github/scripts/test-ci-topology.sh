@@ -134,3 +134,4 @@ if [[ "${test_command%% && *}" != "node ../.github/scripts/check-invariants.mjs"
 fi
 
 echo "CI topology contract tests passed"
+node .github/scripts/test-visual-ci.mjs

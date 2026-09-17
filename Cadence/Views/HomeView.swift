@@ -390,6 +390,7 @@ struct HomeView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("preview-program-day")
                         if let note = spacingNote(program) {
                             Text(note)
                                 .font(.caption)

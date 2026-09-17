@@ -134,19 +134,22 @@ struct BarbellView: View {
                 context.fill(Path(ellipseIn: rear), with: .color(edge))
                 context.fill(Path(CGRect(x: disc.x - disc.depth / 2, y: face.minY,
                     width: disc.depth, height: face.height)), with: .color(edge))
-                context.draw(image, in: face)
-                if token != "black" {
-                    // Preserve the source texture and untinted steel hub.
-                    context.drawLayer { tint in
-                        var ring = Path(ellipseIn: face.insetBy(dx: face.width * 0.02, dy: face.height * 0.02))
-                        ring.addEllipse(in: face.insetBy(dx: face.width * 0.3825, dy: face.height * 0.3825))
-                        tint.blendMode = .screen
-                        tint.fill(ring, with: .color((PlatePalette.fill[token] ?? .gray).opacity(0.62)),
-                                  style: FillStyle(eoFill: true))
-                    }
+                let gains = PlateFaceTint(token: token)
+                var matrix = ColorMatrix()
+                matrix.r1 = Float(gains.red)
+                matrix.g2 = Float(gains.green)
+                matrix.b3 = Float(gains.blue)
+                context.drawLayer { tinted in
+                    tinted.addFilter(.colorMatrix(matrix))
+                    tinted.draw(image, in: face)
                 }
-                let label = Text(disc.plate.label)
-                    .font(.system(size: exploded ? 12 : 10, weight: .heavy))
+                context.drawLayer { hub in
+                    hub.clip(to: Path(ellipseIn: face.insetBy(dx: face.width * 0.3825,
+                                                             dy: face.height * 0.3825)))
+                    hub.draw(image, in: face)
+                }
+                let label = Text(Weight.trim(disc.plate.value, decimals: 2))
+                    .font(.system(size: exploded ? 14 : 10, weight: .heavy))
                     .foregroundColor(PlatePalette.labelColor(for: token))
                 context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
             }
@@ -161,7 +164,20 @@ struct BarbellView: View {
             }
         }
         .frame(height: presentation == .compactSide ? 84 : nil)
-        .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb)), \(solution.loadout.perSideLabel) per side")
+        .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
+        .accessibilityChildren {
+            ForEach([-1, 1], id: \.self) { side in
+                ForEach(scene.discs.filter { $0.side == side }.sorted { $0.index < $1.index }, id: \.index) { disc in
+                    Text("\(side < 0 ? "Left" : "Right") plate \(disc.index + 1) from inside, \(disc.plate.label)")
+                        .accessibilityIdentifier("barbell-plate-\(side < 0 ? "left" : "right")-\(disc.index)")
+                }
+            }
+            if solution.loadout.perSide.isEmpty {
+                Text(solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+            } else if solution.loadout.collarLb > 0 {
+                Text("Collars, \(Weight.both(lb: solution.loadout.collarLb)) total")
+            }
+        }
     }
 }
 
@@ -176,15 +192,14 @@ struct BarbellStageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let onExpand {
+                BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
+                    .frame(height: 170)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onExpand)
                 Button(action: onExpand) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
-                            .frame(height: 170)
                         Label("Inspect plates", systemImage: "arrow.up.left.and.arrow.down.right")
                             .font(.callout.bold())
                             .frame(minHeight: 44)
-                    }
-                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Inspect loaded bar and explode plates")
@@ -193,6 +208,10 @@ struct BarbellStageView: View {
                 BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
                     .frame(height: 170)
             }
+            Text(solution.loadout.perSide.isEmpty
+                 ? (solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+                 : "Per side: \(solution.loadout.perSideLabel)")
+                .font(.body.monospacedDigit())
             Text(caption).font(.caption).foregroundStyle(.secondary)
             if abs(solution.deviationLb) > 0.01 {
                 Text("Difference: \(solution.deviationLb > 0 ? "+" : "")\(Weight.trim(solution.deviationLb, decimals: 2)) lb")
@@ -221,15 +240,15 @@ struct BarbellInspectionView: View {
             .frame(minHeight: 44)
             .accessibilityValue(exploded ? "Exploded" : "Assembled")
             .accessibilityIdentifier("barbell-explode-toggle")
-            Text("38° inspection · inside → outside").font(.caption).foregroundStyle(.secondary)
+            Text("Swipe across · inside → outside").font(.caption).foregroundStyle(.secondary)
             GeometryReader { proxy in
                 ScrollView(.horizontal, showsIndicators: true) {
                     BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded)
-                        .frame(width: exploded ? max(proxy.size.width, scene.width * 0.7) : proxy.size.width,
-                               height: 230)
+                        .frame(width: exploded ? max(proxy.size.width, scene.width) : proxy.size.width,
+                               height: exploded ? scene.height : 230)
                 }
             }
-            .frame(height: 250)
+            .frame(height: exploded ? scene.height + 20 : 250)
             .accessibilityIdentifier("barbell-inspection-artwork")
             Text("Plates per side").font(.headline)
             ForEach(Array(solution.loadout.perSide.enumerated()), id: \.offset) { _, count in

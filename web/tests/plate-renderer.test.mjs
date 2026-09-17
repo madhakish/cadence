@@ -50,8 +50,9 @@ for (const [name, solution] of Object.entries(fixtures)) {
       && body.getAttribute("aria-label")?.includes(body.dataset.plateDenomination)
       && body.tabIndex === 0),
   `${name}: every plate is focusable and named with its exact denomination`);
-  ok(labels.every((label) => label.textContent === label.dataset.plateDenomination),
-    `${name}: denomination text comes from authoritative plate metadata`);
+  ok(labels.every((label) => label.textContent === C.trim(Number(label.parentNode.dataset.plateValue), 2)
+      && label.dataset.plateDenomination === label.parentNode.dataset.plateDenomination),
+    `${name}: printed value and accessible unit come from authoritative plate metadata`);
 }
 
 ok(fixtures.F1.bar.unit === "kg" && fixtures.F1.perSide.every((count) => count.plate.unit === "kg")

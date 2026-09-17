@@ -1,5 +1,23 @@
 import Foundation
 
+/// Photographic face channel gains, mirrored by plateTintGains on web.
+/// The renderer applies these only to the face, then restores the metal hub.
+public struct PlateFaceTint: Equatable, Sendable {
+    public let red, green, blue: Double
+
+    public init(token: String) {
+        let colors = ["red": 0xD23B3B, "blue": 0x2F6FED, "green": 0x1FAA52,
+                      "yellow": 0xE8B008, "white": 0xEDEDED]
+        if let hex = colors[token] {
+            red = Double((hex >> 16) & 255) / 255 * 3.2
+            green = Double((hex >> 8) & 255) / 255 * 3.2
+            blue = Double(hex & 255) / 255 * 3.2
+        } else {
+            red = 1; green = 1; blue = 1
+        }
+    }
+}
+
 /// Presentation-only equipment dimensions. These reference profiles do not
 /// change a Plate's identity, inventory, recorded mass, or backup encoding.
 /// An explicit 5 kg training bumper is full size; a change disc is a different

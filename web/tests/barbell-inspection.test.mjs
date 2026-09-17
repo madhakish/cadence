@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { plateGeometry, barbellScene } from '../app/js/barbell-scene.js';
+import { plateGeometry, barbellScene, plateTintGains } from '../app/js/barbell-scene.js';
 const dom = new JSDOM('<html><body></body></html>', { url:'http://localhost/' });
 global.document = dom.window.document;
 const C = await import('../app/js/core.js');
@@ -16,6 +16,27 @@ const solution = C.enteredPlateSolution(C.BARS.bar45lb, counts, 5);
 const before = JSON.stringify(solution);
 const closed = barbellScene(solution, 'bumper', false);
 const open = barbellScene(solution, 'bumper', true);
+const compact = B.barbellSVG(solution, 'compact', 'bumper');
+assert.deepEqual(compact.scene, closed, 'compact and full presentations use identical physical geometry');
+assert.equal(compact.svg.querySelectorAll('image.barbell-plate-face').length, closed.discs.length);
+assert.equal(compact.svg.querySelectorAll('[data-side="left"]').length, counts.length);
+assert.equal(compact.svg.getAttribute('role'), 'group', 'the SVG does not hide its plate accessibility children');
+assert.match(compact.svg.getAttribute('aria-label'), /Assembled loaded bar,.*per side/);
+for (const plate of compact.svg.querySelectorAll('.barbell-plate-body')) {
+  assert.equal(plate.getAttribute('tabindex'), '0');
+  assert.equal(plate.getAttribute('role'), 'img');
+  assert.equal(plate.getAttribute('aria-label'),
+    `${plate.dataset.plateDenomination} plate, ${Number(plate.dataset.stackIndex)+1} from inside, ${plate.dataset.side} side`);
+}
+const tints = JSON.parse(readFileSync(new URL('./fixtures/plate-tints.json', import.meta.url), 'utf8'));
+for (const {token, gains} of tints) assert.deepEqual(plateTintGains(token), gains);
+for (const matrix of compact.svg.querySelectorAll('feColorMatrix')) {
+  const token = matrix.parentNode.id.split('-').at(-1);
+  const values = matrix.getAttribute('values').split(' ').map(Number);
+  assert.deepEqual([values[0],values[6],values[12]], plateTintGains(token));
+}
+assert.ok([...compact.svg.querySelectorAll('.barbell-plate-hub')].every(hub=>!hub.hasAttribute('filter')),
+  'the photographic hub keeps its original metal color');
 assert.deepEqual(open.discs.filter(d=>d.side===1).map(d=>d.plate.value), [45,10,25,2.5]);
 assert.deepEqual(open.discs.map(d=>d.radius), closed.discs.map(d=>d.radius));
 assert.ok(open.width > closed.width);
@@ -38,10 +59,16 @@ const mixed = barbellScene(C.enteredPlateSolution(C.BARS.bar20kg,[{plate:five,co
 assert.equal(mixed.discs[0].radius,230*.18);
 let calls=0;
 const stage = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {onExpand:()=>calls++,containerWidth:390});
+assert.equal(stage.querySelector('.barbell-loading-key').textContent, `Per side: ${C.perSideLabel(solution.perSide)}`);
 stage.querySelector('.barbell-expand').click();
 assert.equal(calls,1);
 const inspector = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {emphasis:'expanded'});
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true');
+assert.equal(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'), `${open.width}px`);
+for (const label of inspector.querySelectorAll('.barbell-plate-label')) {
+  assert.equal(label.getAttribute('font-size'), '14');
+  assert.equal(label.hasAttribute('textLength'), false);
+}
 assert.equal(inspector.querySelectorAll('.barbell-stack-list li').length,4);
 const toggle = inspector.querySelector('.barbell-explode');
 toggle.click();

@@ -90,6 +90,8 @@ enum Theme {
     static let card = Color(.secondarySystemGroupedBackground)
     static let raised = Color(.tertiarySystemGroupedBackground)
     static let hairline = Color.primary.opacity(0.14)
+    /// Subtle top edge on the current-set card. Web twin: `--edge`.
+    static let edge = Color.primary.opacity(0.07)
     static let forgedSteel = Color(hex: 0xA6ABB2)
 
     /// Industrial geometry: almost square, but not sharp enough to snag a

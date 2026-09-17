@@ -11,6 +11,14 @@ struct WorkoutPreviewView: View {
     let program: Program
     let day: ProgramDay
     let onStart: () -> Void
+    @State private var plateDetail: PreviewPlateDetail?
+
+    private struct PreviewPlateDetail: Identifiable {
+        let id = UUID()
+        let solution: PlateSolution
+        let style: PlateVisualStyle
+        let requestedLb: Double
+    }
 
     @Query private var exercises: [Exercise]
     @Query private var gyms: [Gym]
@@ -98,16 +106,17 @@ struct WorkoutPreviewView: View {
                             let type = previewExercise?.type
                             if type == .barbell {
                                 let bar = defaultGym?.defaultBar ?? .bar45lb
-                                BarbellView(
-                                    solution: authoritativePlateSolution(
+                                let solution = authoritativePlateSolution(
                                         targetLb: p.weightLb,
                                         fallbackUnit: unitDisplay.primaryUnit,
                                         bar: bar,
                                         gym: defaultGym,
                                         stationDenomination: previewExercise?.stationDenomination
-                                    ),
-                                    plateStyle: previewExercise?.movementGroup == "olympic" ? .bumper : .steel
-                                )
+                                    )
+                                let style: PlateVisualStyle = previewExercise?.movementGroup == "olympic" ? .bumper : .steel
+                                BarbellStageView(solution: solution, unit: unitDisplay.primaryUnit, plateStyle: style) {
+                                    plateDetail = PreviewPlateDetail(solution: solution, style: style, requestedLb: target.weightLb)
+                                }
                             } else if type == .dumbbell {
                                 DumbbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit)
                             }
@@ -154,6 +163,23 @@ struct WorkoutPreviewView: View {
         }
         .navigationTitle(day.name)
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("workout-preview-screen")
+        .sheet(item: $plateDetail) { detail in
+            NavigationStack {
+                ScrollView {
+                    BarbellInspectionView(solution: detail.solution, plateStyle: detail.style)
+                    LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.solution.loadout)
+                        .padding(.horizontal)
+                }
+                .navigationTitle("Loaded bar")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { plateDetail = nil }
+                    }
+                }
+            }
+        }
         // Start lives up top, pinned — browsing the workout never scrolls it away.
         .safeAreaInset(edge: .top, spacing: 0) {
             Button(action: onStart) {

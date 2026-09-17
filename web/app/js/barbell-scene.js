@@ -16,6 +16,11 @@ export function plateGeometry(plate, style = 'steel') {
   const [diameter, thickness] = (style === 'bumper' ? BUMPER : STEEL)[key] || CHANGE[key] || [200, 20];
   return { diameter, thickness };
 }
+export function plateTintGains(token) {
+  const colors = { red:0xD23B3B, blue:0x2F6FED, green:0x1FAA52, yellow:0xE8B008, white:0xEDEDED };
+  const hex = colors[token];
+  return hex == null ? [1,1,1] : [16,8,0].map(shift => ((hex >> shift) & 255) / 255 * 3.2);
+}
 export function barbellScene(solution, style = 'steel', exploded = false, geometry = {}) {
   const angle = (exploded ? 38 : 18) * Math.PI / 180;
   const axisX = Math.cos(angle), axisY = -Math.sin(angle) * .24, faceScale = Math.sin(angle);

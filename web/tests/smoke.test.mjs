@@ -350,9 +350,9 @@ for (const track of [
     && !collarsOnly.getAttribute("aria-label").includes("bar only"),
   "a collar-only load is labeled as bar plus collars visually and accessibly");
   const compactCollarsOnly = barbell.barbellSVG(collarSolution).svg;
-  ok(compactCollarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 1
+  ok(compactCollarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 2
     && compactCollarsOnly.textContent.includes("bar + collars"),
-  "the compact one-sleeve load also shows its collar instead of claiming bar only");
+  "the compact full-bar scene shows both collars instead of claiming bar only");
   await db.Gyms.save(legacyRack);
   await db.syncLibrary();
   ok((await db.Gyms.default()).plateToggles.length === C.ALL_STANDARD.length,

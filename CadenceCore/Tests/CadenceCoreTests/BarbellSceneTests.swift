@@ -2,6 +2,18 @@ import XCTest
 @testable import CadenceCore
 
 final class BarbellSceneTests: XCTestCase {
+    func testPhotographicTintMatchesWeb() throws {
+        struct Tint: Decodable { let token: String; let gains: [Double] }
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let data = try Data(contentsOf: root.appendingPathComponent("web/tests/fixtures/plate-tints.json"))
+        for expected in try JSONDecoder().decode([Tint].self, from: data) {
+            let actual = PlateFaceTint(token: expected.token)
+            for (value, gain) in zip([actual.red, actual.green, actual.blue], expected.gains) {
+                XCTAssertEqual(value, gain, accuracy: 1e-8)
+            }
+        }
+    }
     func testInspectionPreservesDimensionsOrderAndMirrors() {
         let loadout = Loadout(bar: .bar45lb, perSide: [45, 10, 25, 2.5].map {
             PlateCount(plate: Plate(value: $0, unit: .lb), count: 1)

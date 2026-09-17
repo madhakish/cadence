@@ -31,6 +31,10 @@ retain an untinted metal hub. SVG paint-server identifiers are unique per view.
 - The enlarged exploded scene scrolls inside its own track. Exact per-side
   denomination/count rows remain readable below it.
 - Native transition respects Reduce Motion. Web changes states immediately.
+- Compact rows use the same photographic scene as full views on both clients.
+- Native and web tint the full face with matching channel gains and restore
+  the original metal hub. Native accessibility exposes each plate's side,
+  position and exact denomination independently of the inspection button.
 - Existing plate references, inventory, and solving policy are unchanged.
 
 These illustrative dimensions are not a new physical inventory contract.
@@ -49,7 +53,26 @@ or backup schema and needs no migration.
   renderer proofs, not iPhone app screenshots.
 - `CadenceVisualProofUITests.test04PlateCalculatorHero` opens inspection for a
   normal load and captures both exploded and assembled native states. Use the
-  existing manual iPhone visual-proof workflow to capture it.
+  iPhone visual-proof workflow to capture it.
+
+## Opt-in iPhone capture
+
+Add the `visual-proof` label to a same-repository PR to capture the current-set,
+exercise-detail, calculator (steel and bumper), and workout-preview screens.
+The workflow waits for the latest CI attempt for that exact head to succeed
+before starting the simulator. New commits cancel stale captures. Removing
+the label stops captures on future updates. Ordinary PRs keep one native build.
+Manual dispatch remains available.
+
+Each screenshot artifact includes `commit.txt` and includes its source SHA in
+the artifact name. Inspect the images before declaring visual verification.
+XCTest also checks individual plate accessibility and the inspect/toggle path;
+this does not claim a manual spoken VoiceOver session.
 
 CI and actual capture results belong in the PR. Compilation alone does not
 claim device rendering or VoiceOver verification.
+
+The assembled overview keeps a 16px/body-size loading key inside the figure.
+Exploded artwork scrolls at natural scale with 14px/pt denomination numerals;
+unit and count remain in the adjacent exact load list. Text is never compressed
+with SVG textLength, and expanding never changes the solver result.
