@@ -50,6 +50,7 @@ enum NotificationService {
         let request = UNNotificationRequest(identifier: id, content: content,
             trigger: UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false))
         holdRequestTask = Task {
+            guard !Task.isCancelled else { return }
             let center = UNUserNotificationCenter.current()
             do { try await center.add(request) }
             catch { return } // The visible timer and foreground cue still work.

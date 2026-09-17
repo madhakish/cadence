@@ -106,10 +106,11 @@ struct HoldTimerSheet: View {
     private func refresh(playCue: Bool = true) {
         now = Date().timeIntervalSince1970
         guard running, remaining == 0 else { return }
-        stop()
+        if let clock { self.clock = HoldClock.stop(clock, now: now) }
         // A background notification already supplies its sound. On-screen,
         // give the athlete an audible cue without requiring a clock glance.
         if playCue && scenePhase == .active && !wasInactive {
+            NotificationService.cancelHoldDone()
             AudioServicesPlaySystemSound(1005)
             if settingsList.first?.haptics != false {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
