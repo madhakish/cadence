@@ -4,7 +4,7 @@ import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { applyProgramEquipmentPolicy } from "../program-equipment.js";
 import { CATEGORIES, EX_TYPES, BODY_SITES, COPY } from "../constants.js";
-import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, namedRestorePreview, wipeAll, ensureSeeded, syncLibrary, localDayKey, intervalSnapshots } from "../db.js";
+import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BACKUP_ENUMS, exportJSON, exportCSV, importBundle, namedRestorePreview, backupMatchesCurrent, wipeAll, ensureSeeded, syncLibrary, localDayKey, intervalSnapshots } from "../db.js";
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
@@ -1516,15 +1516,11 @@ function importData() {
       try { bundle = JSON.parse(r.result); }
       catch (error) { ui.toast(`Import failed: ${error?.message || error}`); return; }
       try {
-        const preview = await namedRestorePreview(bundle);
-        // Every previewed collection already matches — skip the destructive
-        // confirm gate entirely rather than confirm a restore that changes
-        // nothing.
-        if (C.isNamedRestoreNoOp(preview)) {
+        if (await backupMatchesCurrent(bundle)) {
           ui.toast("Nothing to restore — bundle matches your current data");
           return;
         }
-        confirmRestore(preview, bundle);
+        confirmRestore(await namedRestorePreview(bundle), bundle);
       }
       catch (error) {
         console.error("Cadence restore preview failed", error);
@@ -1565,7 +1561,9 @@ function restorePreviewLines(preview) {
 
 function confirmRestore(preview, bundle) {
   ui.sheet({ title: "Restore this backup?", build: (c, api) => {
-    for (const text of restorePreviewLines(preview)) c.append(ui.h("div", { class: "muted", text }));
+    const lines = restorePreviewLines(preview);
+    if (!lines.length) lines.push("Recorded values or settings differ. Restoring replaces the sections included in this backup.");
+    for (const text of lines) c.append(ui.h("div", { class: "muted", text }));
     c.append(ui.h("button", {
       class: "btn wide danger", style: { marginTop: "12px" }, text: "Restore",
       onClick: () => { api.close(); commitRestore(bundle); },

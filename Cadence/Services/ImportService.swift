@@ -275,6 +275,11 @@ enum ImportService {
     /// silently coerce to a default. This runs before the first fetch/delete,
     /// so a bad file cannot partially restore or mutate the context.
     private static func validate(_ bundle: Bundle, schemaVersion: Int) throws {
+        let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
+                           bundle.gyms != nil, bundle.exercises != nil, bundle.bodyweight != nil,
+                           bundle.checkIns != nil, bundle.milestones != nil, bundle.settings != nil,
+                           bundle.coachingDecisions != nil, bundle.intervals != nil].contains(true)
+        guard hasAnything else { throw ImportError.notABackup }
         let units: Set<String> = ["lb", "kg"]
         let roles: Set<String> = ["main", "complementary", "accessory"]
         let liftRoles: Set<String> = ["main", "complementary"]
@@ -706,11 +711,6 @@ enum ImportService {
             throw ImportError.unsupportedSchemaVersion(schemaVersion)
         }
 
-        let hasAnything = [bundle.sessions != nil, bundle.programs != nil, bundle.tracks != nil,
-                           bundle.gyms != nil, bundle.exercises != nil, bundle.bodyweight != nil,
-                           bundle.checkIns != nil, bundle.milestones != nil,
-                           bundle.settings != nil, bundle.coachingDecisions != nil].contains(true)
-        guard hasAnything else { throw ImportError.notABackup }
         try validate(bundle, schemaVersion: schemaVersion)
 
         var repairedSlotIDs = 0
@@ -837,6 +837,16 @@ enum ImportService {
     }
 
     // MARK: - Restore preview
+
+    /// Full payload check for the restore UI's no-change gate. Validation
+    /// still precedes the comparison, including for unsupported versions.
+    static func matchesCurrentData(_ data: Data, context: ModelContext) throws -> Bool {
+        guard let bundle = try? makeDecoder().decode(Bundle.self, from: data) else { throw ImportError.notABackup }
+        let version = bundle.schemaVersion ?? 0
+        guard BackupContract.supports(schemaVersion: version) else { throw ImportError.unsupportedSchemaVersion(version) }
+        try validate(bundle, schemaVersion: version)
+        return try BackupContract.dataMatches(incoming: data, current: ExportService.jsonData(context: context))
+    }
 
     /// Named-entity restore preview: per-item new/changed/unchanged/removed
     /// for the backup's exercises, lift tracks, gyms, sessions, and programs

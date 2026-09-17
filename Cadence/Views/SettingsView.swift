@@ -381,7 +381,7 @@ struct SettingsView: View {
                     importAlert = "That file isn't a Cadence backup."
                     return
                 }
-                guard !preview.isNoOp else {
+                guard try !ImportService.matchesCurrentData(data, context: context) else {
                     importAlert = "Nothing to restore — bundle matches your current data"
                     return
                 }
@@ -416,7 +416,9 @@ struct SettingsView: View {
             line("Sessions", pending.preview.sessions),
             line("Programs", pending.preview.programs),
         ].compactMap { $0 }
-        return lines.joined(separator: "\n")
+        return lines.isEmpty
+            ? "Recorded values or settings differ. Restoring replaces the sections included in this backup."
+            : lines.joined(separator: "\n")
     }
 
     private func commitRestore(_ data: Data) -> String {

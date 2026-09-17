@@ -1,3 +1,5 @@
+import Foundation
+
 /// Version boundary for the cross-platform JSON backup contract.
 ///
 /// Version 0 is the unversioned legacy shape. Version 1 adds explicit session
@@ -71,6 +73,26 @@ public enum BackupContract {
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0
         return version >= 0 && version <= currentSchemaVersion
+    }
+
+    /// Compare all supplied payload fields before suppressing a restore. The
+    /// named preview is deliberately shallow and cannot prove data equality.
+    /// Omitted sections are not restored; export metadata is not user data.
+    /// Array order remains significant, so uncertain equivalence asks for
+    /// confirmation rather than silently discarding a possible correction.
+    public static func dataMatches(incoming: Data, current: Data) throws -> Bool {
+        guard let source = try JSONSerialization.jsonObject(with: incoming) as? [String: Any],
+              let stored = try JSONSerialization.jsonObject(with: current) as? [String: Any] else { return false }
+        let keys = source.keys.filter { !["schemaVersion", "appVersion", "exportedAt"].contains($0) }
+        guard !keys.isEmpty else { return false }
+        for key in keys {
+            guard let old = stored[key], let new = source[key] else { return false }
+            let options: JSONSerialization.WritingOptions = [.sortedKeys, .fragmentsAllowed]
+            let oldData = try JSONSerialization.data(withJSONObject: old, options: options)
+            let newData = try JSONSerialization.data(withJSONObject: new, options: options)
+            if oldData != newData { return false }
+        }
+        return true
     }
 
     /// One named entity as seen on either side of a restore preview: its
@@ -163,9 +185,9 @@ public enum BackupContract {
         }
 
         /// True only when every classified item across all five collections
-        /// is unchanged — the signal a restore UI uses to skip its
-        /// destructive confirm gate entirely. A `removed` or `new`/`changed`
-        /// entry both count as "not a no-op", same as before.
+        /// is unchanged in the named summary. This does not compare all
+        /// recorded values or collections; use dataMatches before skipping
+        /// a restore. A removed or new/changed entry makes the summary differ.
         public var isNoOp: Bool {
             [exercises, tracks, gyms, sessions, programs].allSatisfy { collection in
                 collection.allSatisfy { $0.status == .unchanged }
