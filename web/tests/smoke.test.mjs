@@ -5448,6 +5448,11 @@ await withCleanup(async (keep) => {
     const result=await session.completeSession(workout);
     ok(Math.abs(result.lines[0].volumeLb-expectedVolume)<1e-6,
       "completion volume uses the loaded mass rather than 275 lb");
+    if (tfh) {
+      const next=T.tfhPrescription(program,program.days[0].lifts[0].id,await db.Sessions.all(),2).plan;
+      ok(Math.abs(next.weightLb-actual)<1e-8 && next.state==="progress" && next.reps.join(",")==="4,3,3",
+        "TFH credits clean physical work with one rep without resurrecting the nominal 275 lb");
+    }
     const saved=await db.Sessions.get(id);
     ok(saved.exercises[0].sets.filter(x=>!x.isWarmup).every(x=>Math.abs(x.weightLb-actual)<1e-8),
       "completion does not relabel kilograms as nominal pounds");

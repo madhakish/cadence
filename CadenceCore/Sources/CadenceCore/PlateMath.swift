@@ -220,9 +220,9 @@ public enum PlateMath {
         maxPerPlateSide: Int = 10, collarLb: Double = 0, policy: LoadingPolicy = .closest
     ) -> PlateSolution {
         let exact = solve(targetLb: weightLb, bar: bar, plates: plates,
-                          maxPerPlateSide: maxPerPlateSide, collarLb: collarLb, policy: .exact)
+                          collarLb: collarLb, maxPerPlateSide: maxPerPlateSide, policy: .exact)
         return exact.satisfiesPolicy ? exact : solve(targetLb: weightLb, bar: bar, plates: plates,
-                          maxPerPlateSide: maxPerPlateSide, collarLb: collarLb, policy: policy)
+                          collarLb: collarLb, maxPerPlateSide: maxPerPlateSide, policy: policy)
     }
 
     // MARK: - Load quantization (epic #155 Stage 3)
