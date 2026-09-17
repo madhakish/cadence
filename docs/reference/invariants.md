@@ -36,18 +36,16 @@ gate rather than being silently absent.
 
 ## Prescription and loading
 
-### INV-LOAD-STORED-NEAT
+### INV-LOAD-STORED-ACTUAL
 *platforms: core*
 
-When the closest achievable rack load lands within `PlateMath.toleranceLb` of
-the programmed target — or is the plate-for-plate **denomination twin** of it
-(`INV-PLATES-ARE-THE-CURRENCY`) — the session stores the **programmed** number,
-not the achieved one. Only a genuinely unreachable, non-twin target stores what
-the rack can do.
+Generated barbell sets store the physical mass returned by the rack solver in
+`weightLb` and `plannedWeightLb`. Keep the theoretical program target separately
+in `targetWeightLb`. Display rounding never changes stored mass. History, volume,
+estimated maxima, and PR detection consume performed mass.
 
-> Rack near-misses used to overwrite the prescription, so a kg clean stack
-> turned 220 lb into 221.4 lb, and the fraction then compounded through the
-> stepper and into progression.
+> A 45 lb bar plus 50 kg per side weighs 265.462262 lb. It never becomes
+> 275 lb by replacing plate denominations with their approximate lb classes.
 
 ### INV-STATION-OWNS-ITS-PLATES
 *platforms: core*
@@ -65,29 +63,21 @@ land as `nil`.
 > racks carry lb — a stable fact about the gym's stations, fixed by exercise.
 > Configured once, the deadlift prescribes kg stacks natively (221.4 → 232.4 →
 > 243.4…), the performed-based advance rides them without fraction drift, and
-> the denomination twin keeps the canonical number on the card.
+> the actual mass stays on the card.
 
-### INV-PLATES-ARE-THE-CURRENCY
+### INV-PLATES-USE-MASS
 *platforms: core*
 
-A performed load that is the plate-for-plate **kg twin** of its lb plan — the
-greedy stack's plates swapped for their kg denominations (20↔45, 15↔35,
-10↔25, 5↔10, 2.5↔5, 1.25↔2.5), on the same bar or the bar's own twin — IS the
-plan. It grades at plan, never as a below-plan miss, and stores the canonical
-programmed number. The equivalence is a **barbell concept**: it invents a
-bar-and-plates reading of the number, so only total-bar work may claim it —
-machine and dumbbell loads grade on the numbers alone — and it maths against
-the bar's **denomination label** (`Bar.labelLb` / `barLabelLb`: a 35 bar is 35,
-a 20 kg bar is the 45), never the bar's converted mass. A non-twin shortfall
-still grades below plan, and an overshoot is not an equivalence — it belongs to
-`INV-PROGRESSION-RIDES-PERFORMED`.
+Bar and plate masses retain their own units: convert each actual kg value to lb,
+then add the bar, both sides, and configured collar mass. A 20 kg bar is not a
+45 lb bar; a 20 kg plate is not a 45 lb plate; a 10 kg plate is not a 25 lb plate.
+Grade performed work against the achievable prescription, using the existing
+numeric tolerance, without denomination substitution. Completing all prescribed
+sets at the suggested physical load must not create a false below-plan failure.
 
-> Lifters switching racks go by plates, not decimals: 2×20 kg a side on a 45
-> bar is "225" in every sense that matters below a max attempt. The flat 2 lb
-> tolerance died exactly as plates stacked — each 20 kg pair is 1.8 lb light,
-> so a four-pair deadlift was ~7 lb "adrift" — and the app graded honestly
-> loaded sessions as misses, stalling cycles for training that happened
-> exactly as prescribed.
+This deliberately replaces the former denomination-twin rule, which invented
+performed pounds and inflated progression. Existing historical records cannot
+be reconstructed from today's inventory; do not silently rewrite them.
 
 ### INV-COMP-IS-VOLUME
 *platforms: core*
@@ -633,13 +623,10 @@ the number as a bar-and-plates stack, which machines and dumbbells never get):
   evidence more than one increment above the base or for a hand-set base
   (manual base edits and coaching rotations clear `lastIncrementLb`; holds
   and deloads already carry zero).
-- **Canonical labels are constructive**: `performedLabel` decomposes the
-  performed side into kg denominations and reads their lb twin labels back —
-  221.4 → 225, 838.7 → 855, and 67.05 → **65** (a 5 kg pair outweighs its
-  10-a-side label, so the label can sit below the raw mass — no directional
-  search can name that stack, and no search window survives a plate-table
-  edit). Every label must survive `plateEquivalent`, so labeling and grading
-  can never disagree.
+- **Future targets round physical mass**: `performedLabel` rounds a measured
+  load to the nearest program step only when planning the next exposure. It
+  never substitutes denomination classes and never overwrites performed work.
+  For example, 265.46 lb rounds to a 265 lb planning anchor, not 275 lb.
 - **Advance-time resync**: the graded advance rides the graded cycle's own
   performed volume exposure (its canonical label, under its own bar) upward —
   on **every** grade, not only success. A hold or fail zeroes
@@ -658,8 +645,8 @@ the number as a bar-and-plates stack, which machines and dumbbells never get):
 
 > "My 5×5 deadlift today still has me at 225 — this should be 235, or 232
 > with kg plates." The 215→225 advance moved the label and zero plates; the
-> honest plan is label(221.4) + 10 = 235, whose kg twin stack (2×20 kg +
-> 2.5 kg a side = 232.4) is finally a heavier bar.
+> next target is rounded mass 220 + 10 = 230 lb, resolved against the available
+> rack before its physical load is stored.
 
 ## Grading
 

@@ -33,27 +33,19 @@ final class ProgramProgressionTests: XCTestCase {
         ), 275, "missing estimates fall back without carrying a different PR")
     }
 
-    // [INV-PLATES-ARE-THE-CURRENCY] The twin stack grades AT plan — closing
-    // the stall trap where a kg gym's honest session read as a below-plan miss.
-    func testTwinStackGradesAtPlan() {
-        XCTAssertFalse(P.belowPlanLoad(actualLb: 221.37, plannedLb: 225, roundingLb: 5))
-        XCTAssertFalse(P.belowPlanWork(weightsLb: [221.37, 221.37, 221.37],
-                                       plannedLb: 225, prescribedSets: 3, roundingLb: 5))
-        XCTAssertTrue(P.belowPlanLoad(actualLb: 210.3, plannedLb: 225, roundingLb: 5),
-                      "a genuinely lighter stack still grades below plan")
-    }
-
-    func testTwinForgivenessIsBarbellOnly() {
-        // 100 kg happens to match a fake "20 kg bar + 2×20 kg plates" reading
-        // of a 225 plan. On a real bar that IS the plan; a machine or dumbbell
-        // has no bar to read, so the same number stays a below-plan miss.
-        let hundredKg = 100 * WeightUnit.lbPerKg
-        XCTAssertFalse(P.belowPlanLoad(actualLb: hundredKg, plannedLb: 225, roundingLb: 5, barLb: 45),
-                       "on the bar, 100 kg is the 225 plan on the bar's own kg twin")
-        XCTAssertTrue(P.belowPlanLoad(actualLb: hundredKg, plannedLb: 225, roundingLb: 5, barLb: nil),
-                      "off the bar, no plate reading exists and the miss stands")
-        XCTAssertTrue(P.belowPlanWork(weightsLb: [hundredKg, hundredKg, hundredKg],
-                                      plannedLb: 225, prescribedSets: 3, roundingLb: 5, barLb: nil))
+    // [INV-PLATES-USE-MASS]
+    func testPhysicalLoadGradesAgainstTheAchievablePrescription() {
+        let actual = 45 + 100 * WeightUnit.lbPerKg
+        XCTAssertTrue(P.belowPlanLoad(actualLb: actual, plannedLb: 275, roundingLb: 5))
+        XCTAssertFalse(P.belowPlanWork(weightsLb: [actual, actual, actual],
+            plannedLb: actual, prescribedSets: 3, roundingLb: 5),
+            "completing the rack-adjusted prescription must not create a false stall")
+        XCTAssertTrue(P.belowPlanWork(weightsLb: [actual - 10, actual - 10, actual - 10],
+            plannedLb: actual, prescribedSets: 3, roundingLb: 5))
+        for bar in [Double(45), nil] {
+            XCTAssertTrue(P.belowPlanLoad(actualLb: 100 * WeightUnit.lbPerKg,
+                plannedLb: 225, roundingLb: 5, barLb: bar))
+        }
     }
 
     // The grade fires at the Peak, whose top set is base-multiplied by design —
@@ -109,8 +101,8 @@ final class ProgramProgressionTests: XCTestCase {
         // The motivating log: 2×20 kg a side on a 45 bar (221.4 raw), advance
         // wrote 215 + 10 = 225 — the same stack again. Honest: 225 + 10.
         XCTAssertEqual(P.honestBase(baseWeightLb: 225, lastIncrementLb: 10, lastVolumePerformedLb: 221.37,
-                                    roundingLb: 5, barLb: 45), 235,
-                       "label(221.4) + 10 = 235 — the kg twin stack 232.4 is finally a heavier bar")
+                                    roundingLb: 5, barLb: 45), 230,
+                       "rounded mass 220 + 10 = 230 before rack resolution")
         XCTAssertEqual(P.honestBase(baseWeightLb: 225, lastIncrementLb: 10, lastVolumePerformedLb: 225,
                                     roundingLb: 5, barLb: 45), 235,
                        "a canonically-stored volume exposure repairs identically")

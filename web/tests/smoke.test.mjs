@@ -1500,12 +1500,13 @@ await withCleanup(async (keep) => {
 
 {
   const deadlift = await db.Exercises.byName("Deadlift");
-  const gym = await db.Gyms.default();
-  settings.exerciseDetail(deadlift, {
+  const gym = { ...await db.Gyms.default(), defaultBarId: C.barId(C.BARS.bar45lb),
+    plateToggles: C.ALL_STANDARD.map((plate) => ({ ...plate, enabled: true })), loadingPolicy: "closest" };
+  settings.exerciseDetail({ ...deadlift, stationDenomination: null }, {
     sessionEntry: {
       exerciseName: "Deadlift", programRole: "complementary", prescriptionStyle: "automatic",
-      barId: gym.defaultBarId, targetWeightLb: 185,
-      sets: [{ order: 0, weightLb: 185, targetWeightLb: 185, enteredUnit: "lb",
+      barId: gym.defaultBarId, targetWeightLb: 220,
+      sets: [{ order: 0, weightLb: 220, targetWeightLb: 220, enteredUnit: "lb",
         reps: 8, isWarmup: false, status: "planned" }],
     },
     sessionGym: gym,
@@ -1520,6 +1521,8 @@ await withCleanup(async (keep) => {
   "exercise pane names the complementary relationship and its originating training focus");
   ok(!pane.textContent.includes("2–3 reps left"),
     "hypertrophy complementary work is not mislabeled with the strength effort contract");
+  ok(pane.querySelector('.current-prescription .weight-measure.primary .weight-value')?.textContent === "220",
+    "exercise detail reconstructs the recorded 220 lb instead of substituting 221.37 lb of kg plates");
   pane.querySelector(".overlay-head button")?.click(); await tick();
 }
 
@@ -2530,9 +2533,9 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const builtId = await session.createSessionFromProgramDay(program, program.days[0]);
   const built = await db.Sessions.get(builtId);
   const deadlift = built.exercises.find((entry) => entry.exerciseName === "Deadlift");
-  ok(deadlift.plannedWeightLb === 235,
-    `[INV-ADVANCE-BUYS-PLATES] the stale 225 plans as the honest 235 (got ${deadlift.plannedWeightLb})`);
-  ok(deadlift.targetWeightLb === 235,
+  ok(deadlift.plannedWeightLb === 230,
+    `[INV-ADVANCE-BUYS-PLATES] the stale 225 plans from physical mass at 230 (got ${deadlift.plannedWeightLb})`);
+  ok(deadlift.targetWeightLb === 230,
     "and the resume comparison sees the same honest target, not the stale label");
   // A hand-set base is its own truth: clearing the earned increment (what the
   // editor does on a manual edit) switches the repair off.
@@ -5406,6 +5409,69 @@ await withCleanup(async (keep) => {
   // which program is active appears anywhere in it.
   eq(inScope("all"), 4, "switching the active program cannot change history");
 }
+// Physical mass survives the real builder, completion, renderer and backup.
+// [INV-LOAD-STORED-ACTUAL] [INV-PLATES-USE-MASS]
+{
+  const T = await import("../app/js/tfh.js");
+  const previousGym = await db.Gyms.default();
+  const gym = {...previousGym, defaultBarId:"45-lb", collarWeightLb:0, loadingPolicy:"closest",
+    plateToggles:[{value:20,unit:"kg",enabled:true},{value:10,unit:"kg",enabled:true}]};
+  await db.Gyms.save(gym);
+  const exercise = {...await db.Exercises.byName("Deadlift"),name:"Synthetic Physical Barbell",id:crypto.randomUUID(),type:"barbell",
+    loadBasis:"totalBar",implementCount:1,movementGroup:"hinge",stationDenomination:"kg"};
+  await db.Exercises.save(exercise);
+  const actual = 45 + C.lbFromKg(100);
+  const builtIDs = [];
+  for (const tfh of [false, true]) {
+    const program = {uuid:crypto.randomUUID(),name:`Synthetic physical mass ${tfh ? "TFH" : "wave"}`,
+      templateId:"upper-lower-4",focus:"strength",equipmentPolicy:"any",cycleNumber:1,currentWeek:1,
+      nextDayIndex:0,roundingLb:5,isActive:false,days:[{name:"Synthetic Pull",order:0,accessories:[],
+        lifts:[{id:crypto.randomUUID(),exerciseName:exercise.name,exerciseId:exercise.id,role:"main",order:0,
+          prescription:"wave",baseWeightLb:275,estimatedMaxLb:0,doubleProgressionSets:3,
+          minimumReps:3,maximumReps:5,currentReps:3}]}]};
+    if (tfh) {
+      program.days.push({name:"Synthetic Second Day",order:1,lifts:[],accessories:[]});
+      program.tfhPolicy = T.tfhDraft(program,await db.Exercises.all(),[]);
+    }
+    program.id = await db.Programs.save(program);
+    const id = await session.createSessionFromProgramDay(program,program.days[0]);
+    builtIDs.push(id);
+    const workout = await db.Sessions.get(id), entry = workout.exercises[0];
+    const work = entry.sets.filter(x=>!x.isWarmup);
+    ok(entry.targetWeightLb === 275 && work.every(x=>x.targetWeightLb===275),
+      "original theoretical target remains independently recorded");
+    ok(work.every(x=>Math.abs(x.weightLb-actual)<1e-8 && Math.abs(x.plannedWeightLb-actual)<1e-8),
+      "both program builders prescribe the physical 265.46 lb stack");
+    for (const set of entry.sets) {
+      const solution = session.plateSolutionForSet(set,C.BARS.bar45lb,gym,exercise);
+      ok(Math.abs(solution.totalLb-set.weightLb)<1e-8,"every displayed warmup/work stack sums to its recorded mass");
+      set.status="completed"; set.flags=["clean"];
+    }
+    const expectedVolume=work.reduce((total,x)=>total+x.weightLb*x.reps,0);
+    const result=await session.completeSession(workout);
+    ok(Math.abs(result.lines[0].volumeLb-expectedVolume)<1e-6,
+      "completion volume uses the loaded mass rather than 275 lb");
+    if (tfh) {
+      const next=T.tfhPrescription(program,program.days[0].lifts[0].id,await db.Sessions.all(),2).plan;
+      ok(Math.abs(next.weightLb-actual)<1e-8 && next.state==="progress" && next.reps.join(",")==="4,3,3",
+        "TFH credits clean physical work with one rep without resurrecting the nominal 275 lb");
+    }
+    const saved=await db.Sessions.get(id);
+    ok(saved.exercises[0].sets.filter(x=>!x.isWarmup).every(x=>Math.abs(x.weightLb-actual)<1e-8),
+      "completion does not relabel kilograms as nominal pounds");
+  }
+  await db.Gyms.save(previousGym);
+  const bundle=await db.exportBundle();
+  db.validateBackup(bundle);
+  await db.importBundle(bundle,{createCheckpoint:false});
+  const restored=(await db.Sessions.all()).filter(x=>x.exercises.some(e=>e.exerciseName===exercise.name));
+  ok(restored.length===builtIDs.length,"both generated sessions survive restore");
+  for (const workout of restored) {
+    ok(workout.exercises[0].sets.filter(x=>!x.isWarmup).every(x=>Math.abs(x.weightLb-actual)<1e-8),
+      "physical mass survives export and restore");
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
 

@@ -104,13 +104,11 @@ eq(s.perSide[1].plate.value, 15, "220 fills with the 15kg");
 ok(!s.isOffTarget, "220 within tolerance");
 eq(new Set(s.perSide.map((pc) => pc.plate.unit)).size, 1, "220 no unit mix");
 
-// The clean stack is loading guidance, not a new prescription: within the
-// band the programmed number is what gets stored; only genuinely unreachable
-// targets store the achieved load.
-eq(C.storedPrescription(90, 89.1), 90, "[INV-LOAD-STORED-NEAT] in-band kg stack keeps the neat 90");
-eq(C.storedPrescription(220, s.totalLb), 220, "220 card stays 220 despite the kg stack");
+// The achievable prescription always stores physical mass; target is separate.
+eq(C.storedPrescription(90, 89.1), 89.1, "[INV-LOAD-STORED-ACTUAL] in-band load stays physical");
+eq(C.storedPrescription(220, s.totalLb), s.totalLb, "storage agrees with the loaded stack");
 eq(C.storedPrescription(155, 155), 155, "exact load passes through");
-eq(C.storedPrescription(90, 85), 85, "[INV-LOAD-STORED-NEAT] unreachable target stores the honest load");
+eq(C.storedPrescription(90, 85), 85, "[INV-LOAD-STORED-ACTUAL] unreachable target stores the honest load");
 eq(C.storedPrescription(50, 65), 65, "sparse-rack overshoot stays honest");
 
 // Heaviest-first beats fewest-plates: 255 is 45+45+10+5 per side, never 35×3
@@ -2479,21 +2477,13 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
 {
   const near = (a, b, msg) => ok(Math.abs(a - b) < 0.0001, `${msg} (got ${a}, want ${b})`);
 
-  eq(C.performedLabel(221.37), 225, "[INV-ADVANCE-BUYS-PLATES] 2×20 kg a side on a 45 bar goes by 225");
-  eq(C.performedLabel(232.39), 235, "[INV-ADVANCE-BUYS-PLATES] 20+20+2.5 kg a side goes by 235");
-  eq(C.performedLabel(226.87), 230, "[INV-ADVANCE-BUYS-PLATES] 20+20+1.25 kg a side goes by 230");
-  eq(C.performedLabel(397.74), 405,
-    "[INV-ADVANCE-BUYS-PLATES] four 20 kg pairs drift past one grid step and still find their 405 label");
-  eq(C.performedLabel(838.66), 855,
-    "[INV-ADVANCE-BUYS-PLATES] nine 20 kg pairs drift three grid steps up and still find their label");
-  eq(C.performedLabel(67.05), 65,
-    "[INV-ADVANCE-BUYS-PLATES] a 5 kg pair outweighs its 10-a-side label — the true label sits BELOW the raw mass");
-  eq(C.performedLabel(225), 225, "[INV-ADVANCE-BUYS-PLATES] a grid-clean load is its own label");
-  eq(C.performedLabel(223), 225, "[INV-ADVANCE-BUYS-PLATES] no twin label → the next grid step up, never understating");
-  eq(C.performedLabel(0), 0, "no load, no label");
+  for (const [mass, label] of [[221.37,220],[232.39,230],[226.87,225],[397.74,400],
+    [838.66,840],[67.05,65],[225,225],[223,225],[265.46,265],[0,0]]) {
+    eq(C.performedLabel(mass), label, `[INV-ADVANCE-BUYS-PLATES] next target grid follows ${mass} lb`);
+  }
 
-  eq(C.honestBase(225, 10, 221.37, 5, 45), 235,
-    "[INV-ADVANCE-BUYS-PLATES] label(221.4) + 10 = 235 — the kg twin stack 232.4 is finally a heavier bar");
+  eq(C.honestBase(225, 10, 221.37, 5, 45), 230,
+    "[INV-ADVANCE-BUYS-PLATES] rounded mass 220 + 10 = 230; rack resolution selects the actual next load");
   eq(C.honestBase(225, 10, 225, 5, 45), 235,
     "[INV-ADVANCE-BUYS-PLATES] a canonically-stored volume exposure repairs identically");
   eq(C.honestBase(225, 10, 215, 5, 45), 225,
@@ -2546,78 +2536,40 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     "[INV-ADVANCE-BUYS-PLATES] lighter volume evidence never drags a held base down");
 }
 
-// The kg↔lb denomination twins: the plate is the currency, the number is its
-// label. Mirrors CadenceCore PlateMathTests/ProgramProgressionTests — same
-// stacks, same masses.
+// [INV-LOAD-STORED-ACTUAL] [INV-PLATES-USE-MASS]
+// Synthetic regression: identical blue/green plate classes are not equal masses.
 {
-  // The greedy decomposition names the stack a lifter actually builds.
-  ok(Math.abs(C.kgTwinSideMassLb(90) - 2 * 20 / C.KG_PER_LB) < 1e-6,
-    "[INV-PLATES-ARE-THE-CURRENCY] 90/side is two 45s, twinned to two 20 kg");
-  ok(C.kgTwinSideMassLb(91) === null,
-    "[INV-PLATES-ARE-THE-CURRENCY] a non-stack side has no twin");
-  ok(C.kgTwinSideMassLb(Infinity) === null,
-    "[INV-PLATES-ARE-THE-CURRENCY] a non-finite side refuses instead of looping the greedy solver");
-  ok(C.kgTwinSideMassLb(NaN) === null,
-    "[INV-PLATES-ARE-THE-CURRENCY] NaN has no twin");
-  ok(C.plateEquivalent(Infinity, 221.37) === false,
-    "[INV-PLATES-ARE-THE-CURRENCY] a non-finite target cannot claim equivalence");
-
-  // The motivating session: a 225 plan loaded as 2×20 kg per side on a 45 bar.
-  ok(C.plateEquivalent(225, 221.37),
-    "[INV-PLATES-ARE-THE-CURRENCY] the kg stack IS the 225 plan");
-  // The same plates on the bar's own twin (20 kg bar) also count.
-  ok(C.plateEquivalent(225, 20 / C.KG_PER_LB + 4 * (20 / C.KG_PER_LB)),
-    "[INV-PLATES-ARE-THE-CURRENCY] a 20 kg bar twins the 45 the same way the plates do");
-  // 221.4 against a 215 plan is an OVERSHOOT, not a twin — that case belongs
-  // to the performed-overshoot advance, not to equivalence.
-  ok(!C.plateEquivalent(215, 221.37),
-    "[INV-PLATES-ARE-THE-CURRENCY] an overshoot is not an equivalence");
-  // The flat 2 lb band dies as plates stack; the twin does not. Four pairs a
-  // side is ~7.3 lb adrift and still the same plates.
-  const heavyTwin = 45 + 8 * (20 / C.KG_PER_LB);
-  ok(C.plateEquivalent(405, heavyTwin),
-    "[INV-PLATES-ARE-THE-CURRENCY] a four-pair side twins despite ~7 lb of drift");
-
-  // Grading: the twin stack is AT plan — this is the stall trap, closed.
-  ok(!C.belowPlanLoad(221.37, 225, 5),
-    "[INV-PLATES-ARE-THE-CURRENCY] the twin stack does not grade below plan");
-  ok(!C.belowPlanWork([221.37, 221.37, 221.37], 225, 3, 5),
-    "[INV-PLATES-ARE-THE-CURRENCY] a twin session keeps its prescribed-set count");
-  ok(C.belowPlanLoad(210.3, 225, 5),
-    "[INV-PLATES-ARE-THE-CURRENCY] a genuinely lighter stack still grades below plan");
-
-  // Storing: the canonical number stays on the card past the absolute band.
-  eq(C.storedPrescription(405, heavyTwin), 405,
-    "[INV-PLATES-ARE-THE-CURRENCY] the twin stores the programmed number, not the drift");
-  eq(C.storedPrescription(405, 380), 380,
-    "[INV-PLATES-ARE-THE-CURRENCY] a non-twin unreachable target still stores what the rack can do");
-  eq(C.storedPrescription(220, 221.37), 220,
-    "[INV-LOAD-STORED-NEAT] the absolute band is untouched underneath");
-
-  // The bar's denomination label, not its converted mass, is what the twin
-  // maths against — and threading it is what lets a 35-class plan twin at all.
-  eq(C.barLabelLb(C.BARS.bar35lb), 35,
-    "[INV-PLATES-ARE-THE-CURRENCY] an lb bar is its own label");
-  eq(C.barLabelLb(C.BARS.bar20kg), 45,
-    "[INV-PLATES-ARE-THE-CURRENCY] a 20 kg bar labels under the 45");
-  eq(C.barLabelLb(C.BARS.bar15kg), 35,
-    "[INV-PLATES-ARE-THE-CURRENCY] a 15 kg bar labels under the 35");
-  const thirtyFiveTwin = 35 + 8 * (20 / C.KG_PER_LB);
-  eq(C.storedPrescription(395, thirtyFiveTwin, 35), 395,
-    "[INV-PLATES-ARE-THE-CURRENCY] a 35-bar plan twins when its own bar is threaded through");
-  eq(C.storedPrescription(395, thirtyFiveTwin), thirtyFiveTwin,
-    "[INV-PLATES-ARE-THE-CURRENCY] without the bar the decomposition is wrong and the achieved load stays");
-
-  // Equivalence is a barbell concept: 100 kg happens to match a fake
-  // "20 kg bar + 2×20 kg plates" reading of a 225 plan. On a real bar that
-  // IS the plan; a machine or dumbbell has no bar to read.
-  const hundredKg = 100 / C.KG_PER_LB;
-  ok(!C.belowPlanLoad(hundredKg, 225, 5, 45),
-    "[INV-PLATES-ARE-THE-CURRENCY] on the bar, 100 kg is the 225 plan on the bar's own kg twin");
-  ok(C.belowPlanLoad(hundredKg, 225, 5, null),
-    "[INV-PLATES-ARE-THE-CURRENCY] off the bar, no plate reading exists and the miss stands");
-  ok(C.belowPlanWork([hundredKg, hundredKg, hundredKg], 225, 3, 5, null),
-    "[INV-PLATES-ARE-THE-CURRENCY] a non-barbell lift graded light stays below plan");
+  near(C.solveLoad(220,C.BARS.bar45lb,C.ALL_STANDARD).totalLb,220,1e-8,
+    "reconstructing a recorded 220 lb never substitutes a near-miss kg stack");
+  for (const [policy, total, satisfies] of [
+    ["closest",45,true],["under",45,true],["over",65,true],["exact",45,false]]) {
+    const solution = C.solveLoad(50,C.BARS.bar45lb,[{value:10,unit:"lb"}],10,0,policy);
+    near(solution.totalLb,total,1e-8,`${policy} reconstruction fallback keeps its mass`);
+    eq(solution.policy,policy,"reconstruction fallback preserves the requested policy");
+    eq(solution.satisfiesPolicy,satisfies,"reconstruction fallback reports feasibility");
+  }
+  for (const bar of C.ALL_BARS) near(C.barLabelLb(bar),C.barLb(bar),1e-9,"bar labels retain actual mass");
+  const stack = [{plate:{value:20,unit:"kg"},count:2}, {plate:{value:10,unit:"kg"},count:1}];
+  const actual = C.totalOnBar(C.BARS.bar45lb, stack);
+  near(actual, 265.46226218487755, 1e-6, "50 kg per side plus a 45 lb bar");
+  near(C.storedPrescription(275, actual), actual, 1e-6, "never store the 275 lb denomination label");
+  eq(C.performedLabel(actual), 265, "future target grid rounds mass, not plate classes");
+  ok(C.belowPlanLoad(actual, 275, 5), "265.46 lb does not meet a 275 lb physical prescription");
+  ok(!C.belowPlanWork([actual, actual, actual], actual, 3, 5),
+    "completing the achievable rack prescription is not a failed lift");
+  ok(C.belowPlanWork([actual - 10, actual - 10, actual - 10], actual, 3, 5),
+    "a real reduction below the achievable prescription still counts");
+  near(C.totalOnBar(C.BARS.bar20kg, stack), C.lbFromKg(120), 1e-6, "20 kg bar retains its actual mass");
+  near(C.totalOnBar(C.BARS.bar45lb, stack, 5), actual + 5, 1e-6, "collars are added once");
+  for (const target of [265, 275]) {
+    const solution = C.prescriptionPlateOptions(target, C.BARS.bar45lb,
+      [{value:20,unit:"kg"},{value:10,unit:"kg"}]).selected;
+    near(solution.totalLb, actual, 1e-6, "sparse kg rack chooses its physical load");
+    near(C.storedPrescription(target, solution.totalLb), actual, 1e-6, "storage agrees with solver");
+    eq(solution.targetLb, target, "the requested target stays separate");
+  }
+  for (const bar of [45, null]) ok(C.belowPlanLoad(C.lbFromKg(100), 225, 5, bar),
+    "load grading never invents a bar-and-plate twin");
 }
 
 // A station preference filters the gym inventory to its own denomination,

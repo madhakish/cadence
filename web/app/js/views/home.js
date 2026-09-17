@@ -13,7 +13,7 @@ import { openActivityLog } from "./activity.js";
 
 const barbellPrescriptionView = (achievedLb, targetLb, unit, gym, stationDenomination = null, movementGroup = null) => {
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
-  const solution = C.solve(achievedLb, bar, stationPlates(unit, gym, stationDenomination), 10,
+  const solution = C.solveLoad(achievedLb, bar, stationPlates(unit, gym, stationDenomination), 10,
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
   const wrap = ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
     barbellSVG(solution, "compact",

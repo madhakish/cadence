@@ -351,8 +351,8 @@ enum ProgramSession {
     /// (planned-set window, completed, non-warmup), so user-added bonus rows
     /// never grade a cycle — they surface separately as `bonusLb`, the
     /// planning-only catch-up signal. Returns the heaviest qualifying
-    /// working weight and the BAR IT WAS LIFTED UNDER — the label the twin
-    /// math must use, not whatever bar today's gym defaults to. Nil means no
+    /// working weight and the BAR IT WAS LIFTED UNDER — the physical mass the
+    /// planner must use, not whatever bar today's gym defaults to. Nil means no
     /// evidence. Mirrors web `lastVolumeEvidence`.
     /// `bonusLb` is the heaviest completed working set BEYOND the planned-set
     /// window — work the lifter added on purpose. Grading never sees it;
@@ -516,11 +516,9 @@ enum ProgramSession {
         (!isMain && isBarbell) ? Weight.barLoadable(weightLb, barLb: barLb, stepLb: stepLb) : weightLb
     }
 
-    /// Resolve the prescription to equipment that exists at this gym. When
-    /// the rack lands within the good-enough band the neat programmed number
-    /// is what gets stored and the plate hint explains the actual stack; only
-    /// a genuinely unreachable target stores the achieved total, so sparse
-    /// racks keep the logged set, history, and progression honest.
+    /// Resolve the prescription to equipment that exists at this gym. Store
+    /// the achieved mass for grading and logging; preserve the theoretical
+    /// target separately so equipment rounding never invents performed work.
     static func achievableWeight(_ weightLb: Double, exercise: Exercise?, isMain: Bool,
                                  gym: Gym?, bar: Bar, stepLb: Double,
                                  phase: CyclePhase? = nil) -> Double {
@@ -558,8 +556,7 @@ enum ProgramSession {
             policy: gym?.loadingPolicy ?? .closest,
             preferOverOnTie: phase == .volume
         )
-        // A near-miss clean stack (e.g. kg plates on a lb prescription) stays
-        // loading guidance — the neat programmed number is what gets stored.
+        // The chosen stack's physical mass is the achievable prescription.
         return PlateMath.storedPrescription(
             targetLb: quantized, achievedLb: options.selected.loadout.totalLb,
             barLb: bar.labelLb

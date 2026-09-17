@@ -47,7 +47,7 @@ const availablePlates = (gym, exercise = null) => {
 export function plateSolutionForSet(set, bar, gym = null, exercise = null) {
   const rack = gym ? availablePlates(gym, exercise)
     : C.stationPlates(exercise?.stationDenomination || set.enteredUnit || "lb", C.ALL_STANDARD);
-  return C.solve(set.weightLb, bar, rack, 10,
+  return C.solveLoad(set.weightLb, bar, rack, 10,
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
 }
 
@@ -65,8 +65,7 @@ export function achievableWarmups(ramp, workingLb, bar, gym = null, exercise = n
     // loads first (epic #155 Stage 3): nobody builds a 130 lb warmup out of
     // 25s, 10s and a change plate.
     const target = C.quantizeLoad(warmup.weightLb, bar, plates, collarLb, C.QUANTIZE_WARMUP);
-    // A near-miss clean stack (e.g. kg plates on a lb ramp) stays loading
-    // guidance — the neat theoretical step is what gets stored.
+    // Store the physical mass of this ramp rung.
     const weightLb = C.storedPrescription(
       target, C.solve(target, bar, plates, 10, collarLb, policy).totalLb,
       C.barLabelLb(bar),
@@ -110,7 +109,7 @@ export async function createSessionFromTrack(track) {
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const barLb = C.barLb(bar);
   const sug = track.mode === "cycle" ? C.planFor(trackState(track)) : C.linearPlan(track.baseWeightLb);
-  const workingLb = ex?.type === "barbell" && gym
+  const workingLb = ex?.type === "barbell"
     ? neatProgramWeight(sug.weightLb, ex, true, barLb, track.roundingLb, gym, sug.phase)
     : sug.weightLb;
   const sets = [];
@@ -957,7 +956,7 @@ export async function openSession(id) {
         plan.forEach((p) => {
           const x = se.sets[p.index];
           x.weightLb = ex?.type === "barbell" && gymState.value
-            ? C.solve(p.weightLb, bar, availablePlates(gymState.value, ex), 10,
+            ? C.solveLoad(p.weightLb, bar, availablePlates(gymState.value, ex), 10,
               gymState.value.collarWeightLb || 0, "under").totalLb : p.weightLb;
           x.autoregReason = reason;
         });
@@ -1488,13 +1487,9 @@ function completedProgramInstructionsMatch(session, day) {
   });
 }
 
-// Twin equivalence is a barbell concept — only total-bar work may read its
-// number as a bar-and-plates stack; everything else grades on the numbers
-// alone (null). The label bar rides along so a 35-class bar twins against its
-// own denomination family. Mirrors SessionCompletion.twinBarLb; native
-// resolves a legacy set's basis through its linked exercise, web sets have
-// carried the basis since creation (older records grade strictly).
-function twinBarLb(se, work) {
+// Only total-bar work participates in barbell volume-based planning. Return
+// the recorded bar's physical mass; other modalities return null.
+function totalBarLb(se, work) {
   if (work[0]?.loadBasis !== "totalBar") return null;
   return C.barLabelLb(se.barId ? C.barById(se.barId) : C.BARS.bar45lb);
 }
@@ -1544,7 +1539,7 @@ function cyclePerf(se, roundingLb) {
     anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
     anyDroppedLoad: w.some((s) => !!s.autoregReason),
     anyBelowPlanLoad: C.belowPlanWork(w.map((s) => s.weightLb), se.plannedWeightLb, se.plannedSets ?? w.length, roundingLb,
-      twinBarLb(se, w)),
+      totalBarLb(se, w)),
     grindyOrWobbleSets: w.filter((s) => (s.flags || []).some((f) => f === "grindy" || f === "wobble")).length,
     topSetWeightLb: top ? top.weightLb : 0, topSetReps: top ? top.reps : 0,
     // The strength sample's own plan, so the advance can ride a performed
@@ -1559,7 +1554,7 @@ function accPerf(se, roundingLb = 5) {
     minRepsAchieved: w.length ? Math.min(...w.map((s) => s.reps)) : 0,
     anyStoppedEarly: w.some((s) => (s.flags || []).includes("stopped early")),
     performedAtPlannedLoad: w.every((s) => !C.belowPlanLoad(
-      s.weightLb, s.plannedWeightLb ?? se.plannedWeightLb, roundingLb, twinBarLb(se, w))),
+      s.weightLb, s.plannedWeightLb ?? se.plannedWeightLb, roundingLb, totalBarLb(se, w))),
     grindyOrWobbleSets: w.filter((s) => (s.flags || []).some((f) => f === "grindy" || f === "wobble")).length,
     bodyFlagSets: w.filter((s) => !!s.bodyFlagSite).length,
   };
@@ -1957,7 +1952,7 @@ async function advanceProgram(session, milestones) {
         // only — the ride reasons about the number as a bar-and-plates
         // stack, which machines and dumbbells must never get. Mirrors
         // SessionCompletion.
-        const rideEvidence = twinBarLb(se, prescribedWork(se)) == null ? null
+        const rideEvidence = totalBarLb(se, prescribedWork(se)) == null ? null
           : lastVolumeEvidence(lift, program, history, { inCycle: tag.cycleNumber });
         lift.pending = C.advanceProgramLift(lift, cyclePerf(se, loadStep), program.focus,
           lift.prescription || "automatic", exerciseByName.get(se.exerciseName)?.movementGroup, loadStep,
@@ -2035,8 +2030,7 @@ async function advanceProgram(session, milestones) {
 export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym = null, phase = null) {
   if (!exercise || exercise.type !== "barbell" || !(weightLb > 0)) return weightLb;
   const rounded = !isMain ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
-  if (!gym) return rounded;
-  const bar = C.barById(gym.defaultBarId);
+  const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const plates = availablePlates(gym, exercise);
   // Quantize BEFORE solving (epic #155 Stage 3): trade a change plate for a
   // clean neighbour within one step, erring up while the cycle is building
@@ -2049,12 +2043,11 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
   // program's deliberate arithmetic (wave multiplier, deload fraction, e1RM
   // feedback), so quantizing it would silently rewrite progression.
   const onStep = stepLb > 0 && Math.abs(rounded / stepLb - Math.round(rounded / stepLb)) < 1e-9;
-  const target = onStep ? rounded : C.quantizeLoad(rounded, bar, plates, gym.collarWeightLb || 0,
+  const target = onStep ? rounded : C.quantizeLoad(rounded, bar, plates, gym?.collarWeightLb || 0,
     C.quantizeWorkingSet(phase === 4 ? "down" : "up"));
-  // A near-miss clean stack (e.g. kg plates on a lb prescription) stays
-  // loading guidance — the neat programmed number is what gets stored.
+  // Preserve the physical mass selected for this rack.
   return C.storedPrescription(target, C.prescriptionPlateOptions(target, bar, plates, 10,
-    gym.collarWeightLb || 0, gym.loadingPolicy || "closest", phase === 1).selected.totalLb,
+    gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest", phase === 1).selected.totalLb,
   C.barLabelLb(bar));
 }
 
@@ -2072,7 +2065,7 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
 // (planned-set window, completed, non-warmup), so user-added bonus rows
 // never grade a cycle — they surface separately as bonusLb, the
 // planning-only catch-up signal. Returns the heaviest qualifying working
-// weight and the BAR IT WAS LIFTED UNDER — the label the twin math must use,
+// weight and the physical BAR IT WAS LIFTED UNDER,
 // not whatever bar today's gym defaults to. Null means no evidence. Mirrors
 // ProgramSession.lastVolumeEvidence.
 export function lastVolumeEvidence(lift, program, sessions, { beforeCycle = null, inCycle = null } = {}) {

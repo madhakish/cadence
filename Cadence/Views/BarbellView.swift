@@ -16,8 +16,8 @@ func authoritativePlateSolution(
         preference: stationDenomination,
         gymPlates: gym?.availablePlates ?? fallback
     )
-    return PlateMath.solve(
-        targetLb: targetLb,
+    return PlateMath.solveLoad(
+        weightLb: targetLb,
         bar: bar,
         plates: rack,
         collarLb: gym?.collarWeightLb ?? 0,
