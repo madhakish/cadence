@@ -71,21 +71,18 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(achieved.isHittable)
         capture("after-07-plate-calculator-iphone")
 
-        // A typical stack fits the phone with no redundant expand control.
-        XCTAssertFalse(element("expand-loaded-bar").exists)
-        for _ in 0..<3 where !target.isHittable { app.swipeDown() }
-        XCTAssertTrue(target.isHittable)
-        target.tap()
-        target.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 3) + "1500")
-        XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
-        keyboardDone.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
-        let expand = element("expand-loaded-bar")
-        for _ in 0..<3 where !expand.isHittable { app.swipeUp() }
-        XCTAssertTrue(expand.isHittable)
-        expand.tap()
+        let inspect = element("expand-loaded-bar")
+        for _ in 0..<3 where !inspect.isHittable { app.swipeUp() }
+        XCTAssertTrue(inspect.isHittable)
+        inspect.tap()
         XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
-        capture("after-08-expanded-bar-iphone")
+        let toggle = app.buttons["barbell-explode-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        XCTAssertEqual(toggle.value as? String, "Exploded")
+        capture("barbell-exploded-iphone")
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "Assembled")
+        capture("barbell-assembled-iphone")
     }
 
     func test05SettingsAndHistory() {

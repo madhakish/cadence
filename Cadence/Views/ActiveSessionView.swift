@@ -1294,24 +1294,7 @@ private struct ExerciseSection: View {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            BarbellView(
-                                solution: detail.solution,
-                                plateStyle: detail.style,
-                                presentation: .fullBar
-                            )
-                            .frame(
-                                width: max(
-                                    360,
-                                    BarbellView.minimumLegibleWidth(
-                                        for: detail.solution.loadout,
-                                        style: detail.style
-                                    )
-                                ),
-                                height: 180
-                            )
-                            .padding(.horizontal)
-                        }
+                        BarbellInspectionView(solution: detail.solution, plateStyle: detail.style)
                         LoadoutSummaryView(
                             requestedLb: detail.requestedLb,
                             loadout: detail.solution.loadout

@@ -16,10 +16,11 @@ const CACHE = `${CACHE_PREFIX}__BUILD__`;
 const ownedByThisWorker = (key) => key.startsWith(CACHE_PREFIX);
 const ASSETS = [
   "./", "index.html", "styles.css", "manifest.webmanifest",
-  "js/app.js", "js/core.js", "js/db.js", "js/seed.js", "js/templates.js", "js/programming-defaults.js", "js/program-file.js", "js/program-equipment.js", "js/anatomy.js", "js/ui.js", "js/charts.js", "js/constants.js", "js/barbell.js", "js/coaching-adapter.js", "js/workout-clock.js", "js/gym-tag.js",
+  "js/app.js", "js/core.js", "js/db.js", "js/seed.js", "js/templates.js", "js/programming-defaults.js", "js/program-file.js", "js/program-equipment.js", "js/anatomy.js", "js/ui.js", "js/charts.js", "js/constants.js", "js/barbell.js", "js/barbell-scene.js", "js/coaching-adapter.js", "js/workout-clock.js", "js/gym-tag.js",
   "js/views/home.js", "js/views/program.js", "js/views/history.js", "js/views/activity.js", "js/views/body.js",
   "js/views/signals.js", "js/views/settings.js", "js/views/session.js", "js/views/plates.js",
   "js/tfh.js", "js/views/tfh.js",
+  "assets/plate-steel.png", "assets/plate-bumper.png",
   "assets/vitruvian-front.jpeg", "assets/vitruvian-back.jpeg",
   "assets/vitruvian-front-traps.svg", "assets/vitruvian-front-delts.svg", "assets/vitruvian-front-chest.svg",
   "assets/vitruvian-front-biceps.svg", "assets/vitruvian-front-forearms.svg", "assets/vitruvian-front-obliques.svg",

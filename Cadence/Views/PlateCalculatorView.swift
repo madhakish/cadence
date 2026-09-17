@@ -386,45 +386,11 @@ struct PlateCalculatorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if let displayedSolution {
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            BarbellView(
-                                solution: displayedSolution,
-                                plateStyle: plateStyle,
-                                presentation: .fullBar
-                            )
-                            .frame(
-                                width: max(
-                                    360,
-                                    BarbellView.minimumLegibleWidth(
-                                        for: displayedSolution.loadout,
-                                        style: plateStyle
-                                    )
-                                ),
-                                height: 180
-                            )
-                            .padding(.horizontal)
-                        }
+                        BarbellInspectionView(solution: displayedSolution, plateStyle: plateStyle)
                         .accessibilityLabel("Expanded loaded bar diagram")
                         LoadoutSummaryView(requestedLb: requested, loadout: displayedSolution.loadout)
                             .padding(.horizontal)
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Plates per side")
-                                .font(.headline)
-                            if displayedSolution.loadout.perSide.isEmpty {
-                                Text(displayedSolution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
-                            } else {
-                                ForEach(displayedSolution.loadout.perSide) { plateCount in
-                                    HStack {
-                                        PlateFaceBadge(plate: plateCount.plate, style: plateStyle)
-                                        Text(plateCount.plate.label).font(.title3.bold())
-                                        Spacer()
-                                        Text("× \(plateCount.count)").font(.title3.bold().monospacedDigit())
-                                    }
-                                    .accessibilityElement(children: .combine)
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
+
                     }
                 }
                 .padding(.vertical)

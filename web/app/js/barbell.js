@@ -1,6 +1,7 @@
 // Shared compact/full barbell graphics. Callers resolve the rack through core;
 // this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
+import { barbellScene } from "./barbell-scene.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const FILL = { red: "#d23b3b", blue: "#2f6fed", green: "#1faa52", yellow: "#e8b008", white: "#ededed", black: "#1c1d22" };
@@ -150,72 +151,7 @@ export function barbellSVG(solution, presentation = "compact", plateStyle = "ste
     ? `${C.perSideLabel(solution.perSide)} per side on ${barLabel}${solution.collarLb > 0 ? ", including collars" : ""}`
     : solution.collarLb > 0 ? `${barLabel} with collars, no plates` : `${barLabel}, bar only`;
 
-  if (presentation === "full") {
-    const nominalGap = plateStyle === "bumper" ? 1.05 : .75;
-    const nominalWidths = plates.map((plate) => plateWidth(plate, plateStyle));
-    const nominalTotal = nominalWidths.reduce((sum, width) => sum + width, 0)
-      + Math.max(0, plates.length - 1) * nominalGap;
-    const minimumLegibleWidth = Math.max(320, 204 + 2 * nominalTotal);
-    const W = minimumLegibleWidth, H = 124, midY = H / 2;
-    const shoulder = Math.min(W / 2 - 84, Math.max(76, nominalTotal + 18));
-    const rightShoulder = W - shoulder;
-    const svg = el("svg", { class: `barbell full ${plateStyle}`, viewBox: `0 0 ${W} ${H}`,
-      preserveAspectRatio: "xMidYMid meet", role: "img",
-      "aria-label": `${plateStyle === "bumper" ? "Bumper" : "Steel"} barbell: ${accessibilityLoad}` });
-    const defs = el("defs");
-    const steel = el("linearGradient", { id: "cadence-bar-steel", x1: "0", y1: "0", x2: "0", y2: "1" });
-    steel.append(el("stop", { offset: "0", "stop-color": "#5d626a" }),
-      el("stop", { offset: ".48", "stop-color": "#d5d8dc" }),
-      el("stop", { offset: "1", "stop-color": "#747a83" }));
-    defs.append(steel);
-    addPlateGradients(defs, plateStyle);
-    svg.append(defs);
-    svg.append(el("rect", { class: "barbell-shadow", x: 9, y: midY + 3, width: W - 18, height: 5, rx: 2.5 }));
-    svg.append(el("rect", { x: 8, y: midY - 2, width: W - 16, height: 4, rx: 2, fill: "url(#cadence-bar-steel)" }));
-    svg.append(el("rect", { x: 8, y: midY - 3, width: shoulder - 8, height: 6, rx: 3, fill: "url(#cadence-bar-steel)" }));
-    svg.append(el("rect", { x: rightShoulder, y: midY - 3, width: shoulder - 8, height: 6, rx: 3, fill: "url(#cadence-bar-steel)" }));
-    svg.append(el("rect", { x: shoulder - 3, y: midY - 11, width: 6, height: 22, rx: 2, fill: "url(#cadence-bar-steel)" }));
-    svg.append(el("rect", { x: rightShoulder - 3, y: midY - 11, width: 6, height: 22, rx: 2, fill: "url(#cadence-bar-steel)" }));
-    for (let x = shoulder + 14; x <= rightShoulder - 14; x += 7) {
-      svg.append(el("line", { class: "barbell-knurl", x1: x, y1: midY - 1.7, x2: x + 1.8, y2: midY + 1.7 }));
-    }
-    svg.append(el("circle", { cx: 8, cy: midY, r: 3, fill: "#6c727a" }),
-      el("circle", { cx: W - 8, cy: midY, r: 3, fill: "#6c727a" }));
-
-    const available = shoulder - 18;
-    const scale = nominalTotal > available ? available / nominalTotal : 1;
-    const widths = plates.map((plate) => plateWidth(plate, plateStyle, scale));
-    const gap = Math.max(.45, nominalGap * scale);
-    let leftCursor = shoulder - 6, rightCursor = rightShoulder + 6;
-    for (const [stackIndex, p] of plates.entries()) {
-      const width = widths[stackIndex];
-      const h = (H - 18) * C.plateDiameterFactor(p, plateStyle);
-      const leftX = leftCursor - width;
-      const rightX = rightCursor;
-      // `plates` is collar → sleeve (heaviest first). Screen coordinates move
-      // in opposite directions, so the right stack is not a copied left-to-
-      // right list: both sides start at their collar and grow outboard.
-      for (const { side, x } of [{ side: "left", x: leftX }, { side: "right", x: rightX }]) {
-        const y = (H - h) / 2;
-        appendPlate(svg, p, { x, y, width, height: h, side, style: plateStyle,
-          stackIndex, stackCount: plates.length, prominent: true });
-      }
-      leftCursor = leftX - gap;
-      rightCursor = rightX + width + gap;
-    }
-    if (solution.collarLb > 0) {
-      for (const x of [leftCursor - 3.5, rightCursor]) {
-        svg.append(el("rect", { class: "barbell-lock-collar", x, y: midY - 8, width: 3.5, height: 16,
-          rx: 1, fill: "url(#cadence-bar-steel)", stroke: "#555b63", "stroke-width": .5 }));
-      }
-    }
-    if (!plates.length) {
-      const t = el("text", { x: W / 2, y: midY - 9, fill: "#98989f", "font-size": "10", "text-anchor": "middle" });
-      t.textContent = solution.collarLb > 0 ? "bar + collars" : "bar only";
-      svg.append(t);
-    }
-    return { svg, solution, bar, minimumLegibleWidth, baseLabelSize: 9 };
-  }
+  if (presentation === "full") return realisticBarbellSVG(solution, plateStyle);
 
   const H = 46, gap = plateStyle === "bumper" ? 1 : .7, sleeve = 18;
   const widths = plates.map((plate) => plateWidth(plate, plateStyle, .72));
@@ -256,6 +192,94 @@ export function barbellSVG(solution, presentation = "compact", plateStyle = "ste
   return { svg, solution, bar, minimumLegibleWidth: W, baseLabelSize: 5.2 };
 }
 
+let sceneID = 0;
+function realisticBarbellSVG(solution, style, exploded = false) {
+  const scene = barbellScene(solution, style, exploded);
+  const id = `bar-art-${++sceneID}`;
+  const stackLabel = solution.perSide.length ? `${C.perSideLabel(solution.perSide)} per side` : solution.collarLb > 0 ? "with collars, no plates" : "bar only";
+  const svg = el('svg', { class: `barbell full ${style} realistic`,
+    viewBox: `0 0 ${scene.width} ${scene.height}`, role: 'img',
+    'aria-label': `${exploded ? 'Exploded' : 'Assembled'} loaded bar, ${C.both(solution.totalLb)}, ${stackLabel}`,
+    'data-exploded': exploded });
+  const defs = el('defs');
+  const metal = el('linearGradient', { id: `${id}-metal`, x1: 0, y1: 0, x2: 0, y2: 1 });
+  for (const [offset, color] of [[0,'#535b64'],[.22,'#c2c9cc'],[.43,'#f2f3f0'],[.6,'#8b959e'],[1,'#343b43']])
+    metal.append(el('stop', { offset, 'stop-color': color }));
+  defs.append(metal);
+  const art = new URL(`../assets/plate-${style === 'bumper' ? 'bumper' : 'steel'}.png`, import.meta.url).href;
+  for (const [token, color] of Object.entries(FILL)) {
+    const filter = el('filter', { id: `${id}-${token}`, 'color-interpolation-filters': 'sRGB' });
+    const rgb = [1,3,5].map(i => parseInt(color.slice(i, i+2), 16) / 255);
+    // Tint the approved photographic texture; the hub is redrawn unfiltered.
+    const gain = token === 'black' ? [1,1,1] : rgb.map(c => c * 3.2);
+    filter.append(el('feColorMatrix', { type:'matrix', values:
+      `${gain[0]} 0 0 0 0 0 ${gain[1]} 0 0 0 0 0 ${gain[2]} 0 0 0 0 0 1 0` }));
+    defs.append(filter);
+  }
+  svg.append(defs);
+  const root = el('g', { transform: `translate(${scene.width/2} ${scene.height/2})` });
+  svg.append(root);
+  const point = x => ({ x: x * scene.axisX, y: x * scene.axisY });
+  const shaft = (from, to, diameter, className = '') => {
+    const a = point(from), b = point(to);
+    root.append(el('line', { x1:a.x, y1:a.y, x2:b.x, y2:b.y,
+      stroke:`url(#${id}-metal)`, 'stroke-width':diameter, 'stroke-linecap':'round', class:className }));
+  };
+  shaft(-scene.end, scene.end, 7);
+  shaft(-scene.end, -scene.shoulder, 12);
+  shaft(scene.shoulder, scene.end, 12);
+  for (const side of [-1,1]) {
+    const p = point(side * scene.shoulder);
+    root.append(el('ellipse', { cx:p.x, cy:p.y, rx:4, ry:18, fill:`url(#${id}-metal)` }));
+  }
+  for (let x = -scene.shoulder + 24; x < scene.shoulder - 24; x += 4) {
+    if (Math.abs(x) < 42) continue;
+    const p = point(x);
+    root.append(el('line', { x1:p.x-1, y1:p.y-3, x2:p.x+2, y2:p.y+3,
+      class:'barbell-knurl', stroke:'#4c535b', 'stroke-width':.6, opacity:.8 }));
+  }
+  for (const d of scene.discs) {
+    const token = C.plateColorToken(d.plate, style);
+    const side = d.side < 0 ? 'left' : 'right';
+    const group = el('g', { class:'barbell-plate-body', tabindex:0, role:'img',
+      'data-side':side, 'data-plate-value':d.plate.value, 'data-plate-denomination':C.plateLabel(d.plate),
+      'data-stack-index':d.index, 'data-center-x':d.x, height:d.radius*2,
+      'aria-label':`${C.plateLabel(d.plate)} plate, ${d.index+1} from inside, ${side} side` });
+    const x = d.x + d.depth/2;
+    // Extruded edge and recessed photographic face share the same diameter.
+    group.append(el('ellipse', { cx:d.x-d.depth/2, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:STROKE[token] }),
+      el('rect', { x:d.x-d.depth/2, y:d.y-d.radius, width:d.depth, height:d.radius*2, fill:STROKE[token] }));
+    const face = el('image', { class:'barbell-plate-face', href:art, x:x-d.faceRadius, y:d.y-d.radius,
+      width:d.faceRadius*2, height:d.radius*2, preserveAspectRatio:'none', filter:`url(#${id}-${token})` });
+    group.append(face);
+    const clipID = `${id}-hub-${side}-${d.index}`;
+    const clip = el('clipPath', { id:clipID });
+    clip.append(el('ellipse', { cx:x, cy:d.y, rx:d.faceRadius*.235, ry:d.radius*.235 }));
+    defs.append(clip);
+    group.append(el('image', { class:'barbell-plate-hub', href:art, x:x-d.faceRadius, y:d.y-d.radius,
+      width:d.faceRadius*2, height:d.radius*2, preserveAspectRatio:'none', 'clip-path':`url(#${clipID})` }));
+    const label = el('text', { class:'barbell-plate-label', x, y:d.y-d.radius*.48,
+      'text-anchor':'middle', textLength:Math.max(14,d.faceRadius*1.6), lengthAdjust:'spacingAndGlyphs', 'font-size':exploded ? 12 : 10, 'font-weight':800,
+      fill:['white','yellow','green'].includes(token) ? '#17191c' : '#fff',
+      'data-plate-denomination':C.plateLabel(d.plate) });
+    label.textContent = C.plateLabel(d.plate);
+    group.append(label);
+    root.append(group);
+  }
+  if (solution.collarLb > 0) for (const side of [-1,1]) {
+    const p = point(side * scene.collar);
+    root.append(el('rect', { class:'barbell-lock-collar', x:p.x-4, y:p.y-13,
+      width:8, height:26, rx:2, fill:`url(#${id}-metal)`, stroke:'#515b65' }));
+  }
+  if (!scene.discs.length) {
+    const label = el('text', { x:0, y:35, fill:'currentColor', 'font-size':14, 'text-anchor':'middle' });
+    label.textContent = solution.collarLb > 0 ? 'bar + collars' : 'bar only';
+    root.append(label);
+  }
+  return { svg, solution, bar:solution.bar, plateStyle:style, scene,
+    minimumLegibleWidth: Math.max(320, scene.width * .55), baseLabelSize: exploded ? 12 : 10 };
+}
+
 // One responsive shell for every complete-bar presentation. Inline stages fit
 // their container, keep denomination text at a legible physical size, and show
 // Expand only when the solution-derived natural width does not fit. The focused
@@ -265,49 +289,55 @@ export function barbellStage(rendered, {
 } = {}) {
   const stage = document.createElement("div");
   stage.className = `barbell-stage ${emphasis}`;
-  stage.tabIndex = 0;
   stage.setAttribute("role", "group");
-  stage.setAttribute("aria-label", "Barbell loading diagram");
+  stage.setAttribute("aria-label", "Loaded bar inspection");
   const track = document.createElement("div");
   track.className = "barbell-stage-track";
-  track.style.setProperty("--barbell-natural-width", `${rendered.minimumLegibleWidth}px`);
-  track.append(rendered.svg);
-  stage.append(track);
-
-  const footer = document.createElement("div");
-  footer.className = "barbell-stage-footer";
-  if (caption) footer.append(uiText("div", "sub barbell-caption", caption));
-  const expand = onExpand ? uiText("button", "btn ghost sm barbell-expand", "Expand") : null;
-  if (expand) {
-    expand.type = "button";
-    expand.hidden = true;
-    expand.setAttribute("aria-label", "Expand loaded bar");
-    expand.addEventListener("click", onExpand);
-    footer.append(expand);
-  }
-  if (footer.childNodes.length) stage.append(footer);
-
-  const syncLegibility = (measuredWidth = null) => {
-    const width = Number.isFinite(measuredWidth) ? measuredWidth : stage.getBoundingClientRect().width;
-    if (!(width > 0)) return;
-    const expanded = emphasis === "expanded";
-    const scale = expanded ? 1 : Math.min(1, width / rendered.minimumLegibleWidth);
-    for (const label of rendered.svg.querySelectorAll(".barbell-plate-label")) {
-      label.setAttribute("font-size", String(rendered.baseLabelSize / scale));
-    }
-    const constrained = !expanded && width + .5 < rendered.minimumLegibleWidth;
-    stage.classList.toggle("constrained", constrained);
-    if (expand) expand.hidden = !constrained;
-    stage.setAttribute("aria-label", constrained
-      ? "Barbell loading diagram; expanded view available"
-      : "Barbell loading diagram");
+  const footer = uiText("div", "barbell-stage-footer", "");
+  const inspection = emphasis === "expanded";
+  let exploded = inspection;
+  const paint = () => {
+    const drawing = realisticBarbellSVG(rendered.solution, rendered.plateStyle || "steel", exploded);
+    track.replaceChildren(drawing.svg);
+    track.style.setProperty("--barbell-natural-width", `${exploded ? drawing.scene.width * .7 : 0}px`);
+    stage.classList.toggle("exploded", exploded);
   };
-  syncLegibility(containerWidth);
-  if (typeof ResizeObserver !== "undefined" && containerWidth == null) {
-    const observer = new ResizeObserver((entries) => {
-      syncLegibility(entries[0]?.contentRect?.width ?? null);
+  paint();
+  stage.append(track);
+  if (inspection) {
+    const toggle = uiText("button", "btn ghost sm barbell-explode", "Assemble bar");
+    toggle.type = "button";
+    toggle.setAttribute("aria-pressed", "true");
+    toggle.addEventListener("click", () => {
+      exploded = !exploded;
+      paint();
+      toggle.textContent = exploded ? "Assemble bar" : "Explode plates";
+      toggle.setAttribute("aria-pressed", String(exploded));
     });
-    observer.observe(stage);
+    footer.append(toggle, uiText("span", "sub", "38° inspection · inside → outside"));
+  } else if (onExpand) {
+    const button = uiText("button", "btn ghost sm barbell-expand", "Inspect plates");
+    button.type = "button";
+    button.setAttribute("aria-label", "Inspect loaded bar and explode plates");
+    button.addEventListener("click", onExpand);
+    track.addEventListener("click", onExpand);
+    track.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onExpand(); }
+    });
+    footer.append(uiText("span", "sub", caption), button);
+  }
+  stage.append(footer);
+  if (inspection) {
+    const list = uiText("ol", "barbell-stack-list", "");
+    list.setAttribute("aria-label", "Plates per side, inside to outside");
+    for (const count of rendered.solution.perSide) {
+      const row = uiText("li", "", "");
+      row.append(plateBadgeSVG(count.plate, rendered.plateStyle || "steel"),
+        uiText("span", "mono", `${C.plateLabel(count.plate)} × ${count.count} per side`));
+      list.append(row);
+    }
+    if (!rendered.solution.perSide.length) list.append(uiText("li", "", rendered.solution.collarLb > 0 ? "Bar + collars" : "Bar only"));
+    stage.append(list);
   }
   return stage;
 }

@@ -100,8 +100,8 @@ const typical = B.barbellSVG(fixtures.F2, "full");
 const typicalStage = B.barbellStage(typical, {
   caption: "Mirrored", onExpand: () => { expanded = true; }, containerWidth: 390,
 });
-ok(typical.minimumLegibleWidth <= 390 && typicalStage.querySelector(".barbell-expand").hidden,
-  "typical two-plate-per-side stack fits 390pt without an expand control");
+ok(!typicalStage.querySelector(".barbell-expand").hidden,
+  "typical two-plate stack exposes inspection without waiting for overflow");
 
 const heavy = C.enteredPlateSolution(C.BARS.bar20kg, C.STANDARD_KG.map((plate) => ({ plate, count: 8 })));
 const heavyRendered = B.barbellSVG(heavy, "full", "bumper");
@@ -109,9 +109,8 @@ const heavyStage = B.barbellStage(heavyRendered, {
   caption: "Mirrored", onExpand: () => { expanded = true; }, containerWidth: 390,
 });
 const expandButton = heavyStage.querySelector(".barbell-expand");
-ok(heavyRendered.minimumLegibleWidth > 390 && !expandButton.hidden
-    && heavyStage.classList.contains("constrained"),
-"dense stack uses its computed legibility floor and exposes focused expansion");
+ok(heavyRendered.minimumLegibleWidth > 390 && !expandButton.hidden,
+"dense stack retains its computed geometry and inspection action");
 expandButton.click();
 ok(expanded, "expanded-view affordance is immediate and wired to its caller");
 ok([...heavyStage.querySelectorAll(".barbell-plate-label")]

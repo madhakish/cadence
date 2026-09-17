@@ -62,48 +62,13 @@ public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
     /// Backwards-compatible IWF/colour-bumper token.
     public var colorToken: String { colorToken(for: .bumper) }
 
-    /// Diameter relative to a 450 mm competition disc. Bumpers 10 kg and up
-    /// (and colour-coded 10 lb and up) remain full diameter; calibrated steel
-    /// follows the common stepped competition profile.
+    /// Camera-independent reference geometry; explicit profiles, not cutoffs.
     public func diameterFactor(for style: PlateVisualStyle) -> Double {
-        if style == .bumper {
-            if unit == .kg {
-                if value >= 10 { return 1.0 }
-                if value >= 5 { return 0.70 }
-                if value >= 2.5 { return 0.55 }
-                return 0.45
-            }
-            if value >= 10 { return 1.0 }
-            if value >= 5 { return 0.55 }
-            return 0.45
-        }
-        if lb >= 44 { return 1.0 }
-        if lb >= 33 { return 0.89 }
-        if lb >= 22 { return 0.72 }
-        if lb >= 11 { return 0.51 }
-        if lb >= 5 { return 0.42 }
-        return 0.36
+        PlateGeometry.reference(self, style: style).diameter / 450
     }
 
-    /// Relative axial thickness. Rubber bumpers consume substantially more
-    /// sleeve than calibrated steel at the same denomination.
     public func thicknessFactor(for style: PlateVisualStyle) -> Double {
-        if style == .bumper {
-            if lb >= 50 { return 1.0 }
-            if lb >= 44 { return 0.84 }
-            if lb >= 33 { return 0.70 }
-            if lb >= 22 { return 0.56 }
-            if lb >= 11 { return 0.38 }
-            if lb >= 5 { return 0.28 }
-            return 0.22
-        }
-        if lb >= 50 { return 0.55 }
-        if lb >= 44 { return 0.47 }
-        if lb >= 33 { return 0.40 }
-        if lb >= 22 { return 0.33 }
-        if lb >= 11 { return 0.25 }
-        if lb >= 5 { return 0.19 }
-        return 0.15
+        PlateGeometry.reference(self, style: style).thickness / 75
     }
 
     public var sizeFactor: Double { diameterFactor(for: .steel) }

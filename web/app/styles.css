@@ -584,3 +584,14 @@ button.adhoc-entry { text-align: left; border-left: 3px solid var(--accent); }
   .duration-fields { gap: 8px; }
   .duration-fields input { padding-inline: 6px; }
 }
+
+/* The actual approved plate faces are projected by the shared scene. */
+.barbell-stage-track svg.barbell.realistic { width: 100%; height: auto; display: block; }
+.barbell-stage.expanded { overflow: visible; }
+.barbell-stage.expanded .barbell-stage-track { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.barbell-stage.expanded.exploded .barbell-stage-track svg { width: max(100%, var(--barbell-natural-width)); }
+.barbell-stage-footer { flex-wrap: wrap; }
+.barbell-stack-list { padding: 0; list-style: none; }
+.barbell-stack-list li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.barbell-stack-list svg { flex: 0 0 52px; width: 52px; height: 52px; }
+.barbell-plate-body:focus-visible { outline: 2px solid var(--focus); }

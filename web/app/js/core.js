@@ -1,3 +1,4 @@
+import { plateGeometry } from "./barbell-scene.js";
 // CadenceCore, ported to JS. Pure functions, no DOM, no storage.
 // This mirrors CadenceCore/Sources/CadenceCore/*.swift exactly; the
 // companion test (web/tests/core.test.mjs) re-runs the Swift suite's
@@ -408,44 +409,11 @@ export function plateColorToken(plate, style = "bumper") {
 // Diameter relative to a 450 mm competition disc. Bumper competition plates
 // keep the same diameter; calibrated steel steps down with denomination.
 export function plateDiameterFactor(plate, style = "steel") {
-  if (style === "bumper") {
-    if (plate.unit === "kg") {
-      if (plate.value >= 10) return 1.0;
-      if (plate.value >= 5) return 0.70;
-      if (plate.value >= 2.5) return 0.55;
-      return 0.45;
-    }
-    if (plate.value >= 10) return 1.0;
-    if (plate.value >= 5) return 0.55;
-    return 0.45;
-  }
-  const lb = plateLb(plate);
-  if (lb >= 44) return 1.0;
-  if (lb >= 33) return 0.89;
-  if (lb >= 22) return 0.72;
-  if (lb >= 11) return 0.51;
-  if (lb >= 5) return 0.42;
-  return 0.36;
+  return plateGeometry(plate, style).diameter / 450;
 }
 
 export function plateThicknessFactor(plate, style = "steel") {
-  const lb = plateLb(plate);
-  if (style === "bumper") {
-    if (lb >= 50) return 1.0;
-    if (lb >= 44) return 0.84;
-    if (lb >= 33) return 0.70;
-    if (lb >= 22) return 0.56;
-    if (lb >= 11) return 0.38;
-    if (lb >= 5) return 0.28;
-    return 0.22;
-  }
-  if (lb >= 50) return 0.55;
-  if (lb >= 44) return 0.47;
-  if (lb >= 33) return 0.40;
-  if (lb >= 22) return 0.33;
-  if (lb >= 11) return 0.25;
-  if (lb >= 5) return 0.19;
-  return 0.15;
+  return plateGeometry(plate, style).thickness / 75;
 }
 
 export const plateSizeFactor = (plate) => plateDiameterFactor(plate, "steel");

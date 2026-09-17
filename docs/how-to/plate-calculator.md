@@ -28,3 +28,21 @@ number is rounded.
 Face-on plate badges keep the denomination and unit visible. Their adjacent
 text supplies the spoken label once; reverse-mode controls identify which
 plate they add or remove **per side** and expose the current count.
+
+Tap the bar or **Inspect plates** to open its photographic plate inspection.
+It opens with the plates separated at a 38° viewing angle. **Assemble bar**
+puts them back together; **Explode plates** separates them again. On a phone,
+scroll the exploded bar horizontally to inspect the sleeve. The ordered list
+below always gives exact denominations and counts **per side**.
+
+The same inspection is available from the current barbell set during a workout
+and from its exercise information pane. Opening it never changes your load,
+sets, selected equipment, or recorded workout.
+
+The visual reference profiles distinguish full-diameter training bumpers
+(including 5 kg and 10 lb) from smaller steel and change plates. A plate keeps
+its diameter in both camera views. These are illustrative equipment profiles,
+not manufacturer measurements or a sleeve-capacity calculation. Unknown custom
+denominations use a neutral reference shape while retaining their exact weight
+label. Editing gym inventory and solving loads continue to use the existing
+weight model.
