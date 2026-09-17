@@ -8,7 +8,7 @@ import XCTest
 @MainActor
 final class WorkoutCommandTests: XCTestCase {
     private func makeContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV12.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         return try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
