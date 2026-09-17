@@ -42,6 +42,7 @@ struct GymCardView: View {
                         .background(Color.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .padding()
+                        .accessibilityLabel("\(current?.name ?? "Gym") membership barcode")
                     Text(current?.barcodeLabel ?? "")
                         .font(.caption)
                         .foregroundStyle(.secondary)

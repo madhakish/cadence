@@ -231,6 +231,41 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertFalse(element("current-exercise-Back Squat").exists)
     }
 
+    /// Xcode's accessibility audit over the surfaces a lifter touches most.
+    /// Every issue on a surface is collected and reported together, so one
+    /// run names the whole list instead of the first unlabeled control (#61).
+    func test12AccessibilityAudit() throws {
+        try auditSurface("today")
+
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
+        try auditSurface("settings")
+
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        try auditSurface("current-session")
+
+        let calculator = app.buttons["Plate calculator"]
+        XCTAssertTrue(calculator.waitForExistence(timeout: 3))
+        calculator.tap()
+        XCTAssertTrue(element("plate-calculator-screen").waitForExistence(timeout: 6))
+        try auditSurface("plate-calculator")
+    }
+
+    private func auditSurface(_ name: String) throws {
+        var issues: [String] = []
+        try app.performAccessibilityAudit(for: .all) { issue in
+            let element = issue.element.map { "\($0)" } ?? "(no element)"
+            issues.append("\(issue.auditType): \(issue.compactDescription) — \(element)")
+            return true // keep collecting; the assertion below reports the full list
+        }
+        capture("after-12-audit-\(name)-iphone")
+        XCTAssertTrue(issues.isEmpty,
+                      "\(name) failed the accessibility audit:\n" + issues.joined(separator: "\n"))
+    }
+
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
     }
