@@ -235,6 +235,7 @@ final class VisualProofUITests: XCTestCase {
     /// Every issue on a surface is collected and reported together, so one
     /// run names the whole list instead of the first unlabeled control (#61).
     func test12AccessibilityAudit() throws {
+        continueAfterFailure = true
         try auditSurface("today")
 
         app.tabBars.buttons["Settings"].tap()
@@ -258,7 +259,7 @@ final class VisualProofUITests: XCTestCase {
         var issues: [String] = []
         try app.performAccessibilityAudit(for: .all) { issue in
             let element = issue.element.map { "\($0)" } ?? "(no element)"
-            issues.append("\(issue.auditType): \(issue.compactDescription) — \(element)")
+            issues.append("\(issue.auditType): \(issue.detailedDescription) — \(element)")
             return true // keep collecting; the assertion below reports the full list
         }
         capture("after-12-audit-\(name)-iphone")
