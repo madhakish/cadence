@@ -381,11 +381,9 @@ enum SessionCompletion {
         return (best, standing)
     }
 
-    /// Twin equivalence is a barbell concept — only total-bar work may read
-    /// its number as a bar-and-plates stack; everything else grades on the
-    /// numbers alone (nil). The label bar rides along so a 35-class bar twins
-    /// against its own denomination family. Mirrors web `twinBarLb`.
-    private static func twinBarLb(_ entry: SessionExercise, _ work: [SetEntry]) -> Double? {
+    /// Only total-bar work participates in barbell volume-based planning.
+    /// Return the recorded bar's physical mass; other modalities return nil.
+    private static func totalBarLb(_ entry: SessionExercise, _ work: [SetEntry]) -> Double? {
         guard work.first?.loadBasis == .totalBar else { return nil }
         return (entry.barID.map { Bar.by(id: $0) } ?? .bar45lb).labelLb
     }
@@ -410,7 +408,7 @@ enum SessionCompletion {
             anyBelowPlanLoad: ProgramProgression.belowPlanWork(
                 weightsLb: w.map(\.weightLb), plannedLb: entry.plannedWeightLb,
                 prescribedSets: entry.plannedSets ?? w.count, roundingLb: roundingLb,
-                barLb: twinBarLb(entry, w)
+                barLb: totalBarLb(entry, w)
             ),
             grindyOrWobbleSets: w.filter { $0.flags.contains(.grindy) || $0.flags.contains(.wobble) }.count,
             topSetWeightLb: top?.weightLb ?? 0,
@@ -432,7 +430,7 @@ enum SessionCompletion {
                     actualLb: $0.weightLb,
                     plannedLb: $0.plannedWeightLb ?? entry.plannedWeightLb,
                     roundingLb: roundingLb,
-                    barLb: twinBarLb(entry, w)
+                    barLb: totalBarLb(entry, w)
                 )
             },
             grindyOrWobbleSets: w.filter { $0.quality == .grindy || $0.quality == .wobble }.count,
@@ -1005,7 +1003,7 @@ enum SessionCompletion {
                     // dumbbells must never get. Evidence is THIS cycle's own
                     // volume exposure and is labeled under the bar that
                     // session actually used, not the peak session's.
-                    let rideEligible = twinBarLb(entry, prescribedWork(entry)) != nil
+                    let rideEligible = totalBarLb(entry, prescribedWork(entry)) != nil
                     let result = ProgramProgression.advanceProgramLift(
                         lift.coreState,
                         perf: cyclePerf(entry, roundingLb: loadStep),

@@ -107,3 +107,17 @@ What banking advances:
 | Every bank | At week-3 peak | At week-4's end |
 |---|---|---|
 | Day pointer, accessory double progression | Each lift graded; result stashed | Stashed results applied: increments, stalls, deloads; cycle rolls to week 1 |
+
+### Barbell targets and actual weight
+
+Cadence keeps the program target separate from the load your rack can build.
+Sets and history record the actual bar, plate and collar mass. Kilogram plates
+are converted by mass, never renamed as pound plates: a 45 lb bar plus 50 kg
+on each side totals **265.46 lb (120.41 kg)**, not 275 lb. The plate summary
+shows both units and the difference from the requested target.
+
+Completing the suggested achievable load counts against that prescription.
+The original target remains available for comparison. This change does not
+rewrite old workouts: older logs may contain nominal weights, and today's gym
+inventory cannot establish which plates were actually used. Correct a past set
+only from your record of what was on the bar.

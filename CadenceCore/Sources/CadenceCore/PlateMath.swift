@@ -213,27 +213,18 @@ public enum PlateMath {
                              targetLb: targetLb, policy: policy, satisfiesPolicy: policyBest != nil)
     }
 
-    /// What a session stores for a solved rack load. Inside the good-enough
-    /// band the clean stack is loading GUIDANCE, not a new prescription — the
-    /// programmed number stays on the card (90, not the 89.1 lb a 10 kg pair
-    /// happens to weigh), and the barbell hint explains the actual plates.
-    /// Only a genuinely unreachable target stores the achieved load, so the
-    /// log stays honest on sparse racks. Mirrored 1:1 in web/app/js/core.js
-    /// The kg↔lb denomination twins. Lifters switching racks stop going by
-    /// exact numbers and go by plates — a 20 kg plate stands in for a 45, a
-    /// 5 kg pair for a 10 lb pair — not because the masses match (a 10 kg
-    /// plate is 22 lb standing in for a 25) but because the plates are, for
-    /// training purposes, the same object. Below maximal loads the drift is a
-    /// rounding error; the plate is the currency, the number is its label.
-    public static let plateTwinKg: [Double: Double] = [
-        45: 20, 35: 15, 25: 10, 10: 5, 5: 2.5, 2.5: 1.25,
-    ]
+    /// Reconstruct an achieved load exactly when the rack can represent it.
+    /// Unsolved manual or legacy values fall back to the gym's loading policy.
+    public static func solveLoad(
+        weightLb: Double, bar: Bar, plates: [Plate],
+        maxPerPlateSide: Int = 10, collarLb: Double = 0, policy: LoadingPolicy = .closest
+    ) -> PlateSolution {
+        let exact = solve(targetLb: weightLb, bar: bar, plates: plates,
+                          maxPerPlateSide: maxPerPlateSide, collarLb: collarLb, policy: .exact)
+        return exact.satisfiesPolicy ? exact : solve(targetLb: weightLb, bar: bar, plates: plates,
+                          maxPerPlateSide: maxPerPlateSide, collarLb: collarLb, policy: policy)
+    }
 
-    /// The mass, in lb, of the kg-twin stack for one side loaded to `sideLb`
-    /// with standard lb denominations — or nil when `sideLb` is not a clean
-    /// lb stack. Decomposition is GREEDY (biggest plates first): that is the
-    /// stack a lifter actually builds, and it pins down which of several
-    /// equal-total loadings the twins are taken from.
     // MARK: - Load quantization (epic #155 Stage 3)
 
     /// A plate below this is a change plate: real to load, annoying to chase,
@@ -349,105 +340,23 @@ public enum PlateMath {
         return best?.total ?? targetLb
     }
 
-    public static func kgTwinSideMassLb(_ sideLb: Double) -> Double? {
-        guard sideLb.isFinite, sideLb >= 0 else { return nil }
-        var remaining = sideLb
-        var twinLb = 0.0
-        for plate in [45.0, 35, 25, 10, 5, 2.5] {
-            while remaining >= plate - 1e-9 {
-                remaining -= plate
-                guard let twin = plateTwinKg[plate] else { return nil }
-                twinLb += twin * WeightUnit.lbPerKg
-            }
-        }
-        return abs(remaining) < 1e-6 ? twinLb : nil
-    }
-
-    /// Whether `performedLb` is the plate-for-plate kg twin of the lb-clean
-    /// `targetLb` — same plates, kg denominations, on the same bar or on the
-    /// bar's own twin (a 45 lb bar and a 20 kg bar are the same object in the
-    /// same sense the plates are). This is what makes a kg-gym session read
-    /// as AT its lb plan instead of a below-plan miss that stalls the cycle.
-    public static func plateEquivalent(
-        targetLb: Double, performedLb: Double, barLb: Double = 45
-    ) -> Bool {
-        guard targetLb > barLb, performedLb > 0 else { return false }
-        let side = (targetLb - barLb) / 2
-        guard let twinSide = kgTwinSideMassLb(side) else { return false }
-        let barTwinLb = plateTwinKg[barLb].map { $0 * WeightUnit.lbPerKg } ?? barLb
-        return [barLb + 2 * twinSide, barTwinLb + 2 * twinSide]
-            .contains { abs(performedLb - $0) <= 0.15 }
-    }
-
-    /// `storedPrescription`.
+    /// Persist physical mass; retain the theoretical target separately in
+    /// targetWeightLb and use the achievable load for plannedWeightLb.
     public static func storedPrescription(
         targetLb: Double, achievedLb: Double, barLb: Double = 45
     ) -> Double {
-        if abs(achievedLb - targetLb) <= toleranceLb + 1e-9 { return targetLb }
-        // Beyond the absolute band, the denomination twin still stores the
-        // canonical number: the flat 2 lb tolerance dies exactly as plates
-        // stack (a four-pair side is ~7 lb adrift), which is precisely where
-        // the lifter says the drift matters least. The plates are the loading
-        // guidance; the number is its label.
-        if plateEquivalent(targetLb: targetLb, performedLb: achievedLb, barLb: barLb) { return targetLb }
-        return achievedLb
+        achievedLb
     }
 
-    /// The canonical grid label of a PERFORMED load — the number the stack on
-    /// the bar goes by, not the number its mass happens to be. A load already
-    /// on the rounding grid snaps to it exactly (never returns float noise);
-    /// a kg stack labels CONSTRUCTIVELY: decompose each side into kg
-    /// denominations (greedy, heaviest first — the stack a lifter actually
-    /// builds) and read each plate's lb twin label back off the twin table.
-    /// The label can sit above the raw mass (221.4 → 225, 838.7 → 855: 20 kg
-    /// pairs run light) or BELOW it (67.05 → 65: a 5 kg pair masses 22.05
-    /// but reads 10 a side) — which is why this is a decomposition, not a
-    /// directional search, and why it carries no window constant that a
-    /// plate-table edit could silently invalidate. The same bar-or-bar-twin
-    /// reading `plateEquivalent` uses applies, and every candidate must
-    /// survive that same predicate, so labeling and grading can never
-    /// disagree about a stack. Only when no twin label exists does it fall
-    /// back to the next grid step up. Mirrored 1:1 in web/app/js/core.js
-    /// `performedLabel`.
+    /// Round measured mass onto the next prescription's grid, never into a
+    /// denomination twin. This planning label is not a performed-set weight.
     public static func performedLabel(
         _ performedLb: Double, barLb: Double = 45,
         roundingLb: Double = ProgramEngine.defaultRoundingLb
     ) -> Double {
-        guard performedLb > 0, roundingLb > 0 else { return performedLb }
-        let nearest = (performedLb / roundingLb).rounded() * roundingLb
-        if abs(nearest - performedLb) < 1e-6 { return nearest }
-        let barTwinLb = plateTwinKg[barLb].map { $0 * WeightUnit.lbPerKg } ?? barLb
-        for barMass in [barLb, barTwinLb] {
-            if let side = kgSideLabelLb((performedLb - barMass) / 2) {
-                let label = barLb + 2 * side
-                if plateEquivalent(targetLb: label, performedLb: performedLb, barLb: barLb) {
-                    return label
-                }
-            }
-        }
-        return (performedLb / roundingLb).rounded(.up) * roundingLb
-    }
-
-    /// The lb label of one side's kg stack: greedy decomposition of
-    /// `sideMassLb` into kg denominations by their true masses, summed as
-    /// their lb twin labels — the inverse of `kgTwinSideMassLb`. Nil when
-    /// the mass is not a clean kg stack. The greedy epsilon absorbs the
-    /// rounding of stored weights; the remainder bound is half of
-    /// `plateEquivalent`'s total band, and the caller re-verifies through
-    /// that predicate anyway.
-    static func kgSideLabelLb(_ sideMassLb: Double) -> Double? {
-        guard sideMassLb.isFinite, sideMassLb >= 0 else { return nil }
-        var remaining = sideMassLb
-        var labelLb = 0.0
-        for lbLabel in [45.0, 35, 25, 10, 5, 2.5] {
-            guard let kg = plateTwinKg[lbLabel] else { return nil }
-            let mass = kg * WeightUnit.lbPerKg
-            while remaining >= mass - 0.05 {
-                remaining -= mass
-                labelLb += lbLabel
-            }
-        }
-        return abs(remaining) < 0.075 ? labelLb : nil
+        guard performedLb.isFinite, performedLb > 0,
+              roundingLb.isFinite, roundingLb > 0 else { return performedLb }
+        return (performedLb / roundingLb).rounded() * roundingLb
     }
 
     /// The plate inventory a lift's STATION actually stocks. A station

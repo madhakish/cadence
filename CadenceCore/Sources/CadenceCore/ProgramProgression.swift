@@ -337,15 +337,8 @@ public enum ProgramProgression {
     ) -> Bool {
         guard let planned = plannedLb, planned > 0 else { return false }
         guard actualLb < planned - roundingLb / 2 else { return false }
-        // A stack that is the plate-for-plate kg twin of the plan IS the plan
-        // — heavier bars drift further under their lb label (each 20 kg pair
-        // is 1.8 lb light), and grading that drift as a miss stalled cycles
-        // for work the lifter performed exactly as loaded. The equivalence is
-        // a barbell concept: it invents a bar-and-plates reading of the
-        // number, so only total-bar work may claim it. Machines and dumbbells
-        // grade on the numbers alone (barLb: nil).
-        guard let barLb else { return true }
-        return !PlateMath.plateEquivalent(targetLb: planned, performedLb: actualLb, barLb: barLb)
+        // Compare against the achievable prescription, never a fictional lb twin.
+        return true
     }
 
     /// Aggregate for a whole lift: the prescription is met when at least
@@ -698,8 +691,8 @@ public enum ProgramProgression {
     /// label moved and the plates did not, and the lifter repeats the same
     /// bar for a third cycle while the app reports progress. The honest base
     /// is the canonical label of the last performed volume exposure plus the
-    /// increment that advance earned: label(221.4) + 10 = 235, whose kg twin
-    /// stack (232.4) is finally a heavier bar.
+    /// increment that advance earned: rounded mass 220 + 10 = 230,
+    /// resolved against the rack before storage.
     ///
     /// Guards, in order:
     /// - `lastIncrementLb > 0` — only a machine-earned advance is repaired;
@@ -715,7 +708,7 @@ public enum ProgramProgression {
     ///   or off-program heavy work, and both are left alone.
     /// - Capped at one increment above the stored base and floored at the
     ///   stored base. The floor is LOAD-BEARING: performedLabel can sit
-    ///   below the raw mass (small kg plates outweigh their labels), so
+    ///   below the raw mass when rounded to the target grid, so
     ///   without it a label deficit could drag the plan under the base.
     ///
     /// `lastVolumePerformedLb` is the lift's most recent completed
