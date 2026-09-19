@@ -99,6 +99,7 @@ jobs:
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test11PlankTimerAtAccessibilityTextSize
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test12AccessibilityAudit
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test13SetCompletionKeepsDominantBlockStill
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize
       - name: Export screenshot attachments
         if: always()
         run: |

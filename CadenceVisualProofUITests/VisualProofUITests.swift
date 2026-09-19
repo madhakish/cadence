@@ -349,7 +349,13 @@ final class VisualProofUITests: XCTestCase {
             let line = "\(issue.auditType): \(issue.detailedDescription) — \(element.map { "\($0)" } ?? "(no element)")"
             // A finding with no element names nothing a fix could target; it
             // is recorded with the advisories rather than failing the surface.
-            if issue.auditType == .dynamicType || element == nil { advisories.append(line) } else { issues.append(line) }
+            if issue.auditType == .dynamicType && identifier == "plate-target" {
+                issues.append(line) // #238: the calculator input must scale.
+            } else if issue.auditType == .dynamicType || element == nil {
+                advisories.append(line)
+            } else {
+                issues.append(line)
+            }
             return true // keep collecting; the assertion below reports the full list
         }
         capture("after-12-audit-\(name)-iphone")
@@ -388,6 +394,52 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertEqual(track.frame.height, trackBefore.height, accuracy: 0.5, "set track resized on completion")
         XCTAssertEqual(hero.frame.origin.y, heroBefore.origin.y, accuracy: 0.5, "current-set hero moved on completion")
         XCTAssertEqual(hero.frame.height, heroBefore.height, accuracy: 0.5, "current-set hero resized on completion")
+    }
+
+    /// #238: the editable load follows Dynamic Type without pushing its unit
+    /// control offscreen or changing the entered value when units switch.
+    func test14CalculatorTargetAtAccessibilityTextSize() {
+        var standardHeight: CGFloat = 0
+        for (category, name) in [
+            ("UICTContentSizeCategoryL", "standard"),
+            ("UICTContentSizeCategoryAccessibilityXXXL", "accessibility")
+        ] {
+            app.terminate()
+            app.launchArguments[app.launchArguments.count - 1] = category
+            app.launch()
+            XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+            app.buttons["Plate calculator"].tap()
+            XCTAssertTrue(element("plate-calculator-screen").waitForExistence(timeout: 6))
+            let target = app.textFields["plate-target"]
+            for _ in 0..<4 where !target.isHittable { app.swipeUp() }
+            XCTAssertTrue(target.isHittable)
+            target.tap()
+            target.typeText("139")
+            let done = app.buttons["plate-target-done"]
+            XCTAssertTrue(done.waitForExistence(timeout: 3))
+            done.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+
+            let units = app.segmentedControls["plate-target-unit"]
+            for _ in 0..<4 where !units.isHittable { app.swipeUp() }
+            XCTAssertTrue(target.isHittable)
+            XCTAssertTrue(units.buttons["lb"].isHittable)
+            XCTAssertTrue(units.buttons["kg"].isHittable)
+            XCTAssertTrue(app.windows.firstMatch.frame.contains(target.frame))
+            XCTAssertEqual(target.value as? String, "139")
+            if name == "standard" {
+                standardHeight = target.frame.height
+            } else {
+                XCTAssertGreaterThan(target.frame.height, standardHeight * 1.25,
+                                     "the target must grow with accessibility text size")
+                XCTAssertGreaterThanOrEqual(units.frame.minY, target.frame.maxY,
+                                           "units must flow below the enlarged input")
+            }
+            capture("after-14-calculator-target-\(name)-iphone")
+            units.buttons["kg"].tap()
+            XCTAssertTrue(units.buttons["kg"].isSelected)
+            XCTAssertEqual(target.value as? String, "139", "switching units preserves the entered number")
+        }
     }
 
     /// Scrolls a DisclosureGroup's label into the window and taps it. XCUI

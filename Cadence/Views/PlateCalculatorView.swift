@@ -7,7 +7,9 @@ import CadenceCore
 struct PlateCalculatorView: View {
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 34
+    @ScaledMetric(relativeTo: .largeTitle) private var targetSize: CGFloat = 40
 
     @State private var mode: Mode = .target
     @State private var targetText = ""
@@ -135,18 +137,23 @@ struct PlateCalculatorView: View {
     @ViewBuilder
     private var targetSections: some View {
         Section("Requested target") {
-            HStack {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                : AnyLayout(HStackLayout())
+            layout {
                 TextField("0", text: $targetText)
                     .keyboardType(.decimalPad)
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .font(.system(size: targetSize, weight: .bold, design: .rounded))
                     .focused($targetFieldFocused)
+                    .accessibilityLabel("Requested target")
                     .accessibilityIdentifier("plate-target")
-                Picker("", selection: $targetUnit) {
+                Picker("Target unit", selection: $targetUnit) {
                     Text("lb").tag(WeightUnit.lb)
                     Text("kg").tag(WeightUnit.kg)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 120)
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 120)
+                .accessibilityIdentifier("plate-target-unit")
             }
         }
 
