@@ -93,3 +93,9 @@ read-only work or prepare an isolated patch for later reconciliation; never
 pretend coordination succeeded. A comment is durable storage, not guaranteed
 delivery or a wake-up signal. Do not claim background monitoring without an
 actual running process or configured integration.
+
+## Discussions
+
+For session attribution, questions and replies, read the
+[Discussion protocol](.github/actions/agent-directory/PROTOCOL.md). Claims stay
+on the task issue. This repository and its Discussions are public.

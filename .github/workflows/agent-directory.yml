@@ -1,0 +1,31 @@
+name: Agent session directory
+
+on:
+  discussion:
+    types: [created, edited, deleted, category_changed]
+  discussion_comment:
+    types: [created, edited, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  discussions: read
+
+concurrency:
+  group: agent-directory-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  directory:
+    # Event content never chooses executable code. Dispatch also uses default-branch code.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: ./.github/actions/agent-directory
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ github.token }}

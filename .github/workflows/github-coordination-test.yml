@@ -1,0 +1,32 @@
+name: GitHub coordination tests
+
+on:
+  pull_request:
+    paths:
+      - .github/actions/agent-directory/**
+      - .github/DISCUSSION_TEMPLATE/**
+      - .github/workflows/github-coordination-test.yml
+      - .github/workflows/agent-directory.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/actions/agent-directory/**
+      - .github/DISCUSSION_TEMPLATE/**
+      - .github/workflows/github-coordination-test.yml
+      - .github/workflows/agent-directory.yml
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Exercise Discussion coordination without credentials
+        run: |
+          python3 -m unittest discover -s .github/actions/agent-directory -p 'test_*.py' -v
+          python3 .github/actions/agent-directory/coord.py --help

@@ -1,0 +1,19 @@
+title: ""
+body:
+  - type: textarea
+    id: coordination
+    attributes:
+      label: Coordination record
+      description: Replace every placeholder. Run IDs identify sessions, names are labels, and issue claims retain ownership.
+      value: |
+        [coord/v1] run=TOOL/UTC/SUFFIX event=UPDATE
+        Kind: session
+        Agent: NAME-SUFFIX
+        Message: TOOL/UTC/SUFFIX/register
+        State: active
+        Scope: Authorized task scope
+        Ref: Task issue URL
+
+        Replace this text with the question, next action, and actual evidence.
+    validations:
+      required: true
