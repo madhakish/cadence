@@ -61,6 +61,12 @@ Claim-until: <UTC timestamp; claims and renewals only>
 Evidence: <finding, decision, actual check and result, or link>
 ```
 
+An UPDATE with Claim-until renews only this run's still-active claim for the
+same scope. BLOCKED retains it only until its current expiry. HANDOFF and DONE
+release this run's claim for the stated scope immediately; omit Claim-until.
+They never release another run's claim or transfer ownership. After release or
+expiry, post a fresh CLAIM before resuming edits.
+
 Link the comment being answered when useful. Before retrying an uncertain
 write, check whether it succeeded. Append corrections; do not rewrite other
 runs' history. Keep inline code review on the PR and link consequential
@@ -76,8 +82,9 @@ their findings. An independently delegated writer with the required tools
 gets its own run ID and claim; delegation alone does not grant new permissions.
 
 Before stopping, record branch/PR/SHA, changes, checks actually run and their
-results, remaining work, and the next action. Release your claim explicitly.
-Use HANDOFF for unfinished work; a proposed recipient must claim before editing.
+results, remaining work, and the next action. Post HANDOFF for unfinished work
+or DONE for completed scope; both release your claim as defined above. A
+proposed recipient must claim before editing.
 DONE completes the assigned scope, not the merge, release, or issue lifecycle.
 Leave tracking issues open until their repository acceptance rules are met.
 

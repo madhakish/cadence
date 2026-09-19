@@ -81,4 +81,6 @@ section that matches what you're trying to do.
   reasoning inside the adaptive engine
 
 Developer docs live elsewhere: [TESTFLIGHT.md](TESTFLIGHT.md) covers the
-release pipeline, and `CLAUDE.md` at the repo root covers architecture.
+release pipeline. [AGENTS.md](../AGENTS.md) is the contributor and agent entry
+point; the [engineering guide](AGENT-GUIDE.md) covers architecture, persistence,
+parity, and verification.
